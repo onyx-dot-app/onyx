@@ -24,12 +24,3 @@ class MCPOAuthOwner(BaseModel):
     user_id: UUID
     email: str
     oauth_identities: tuple[tuple[str, str], ...]
-
-
-class MCPOAuthIntrospection(BaseModel):
-    client_id: str
-    scopes: list[str]
-    resource: str
-    expires_at: int
-    subject: str
-    grant_id: UUID

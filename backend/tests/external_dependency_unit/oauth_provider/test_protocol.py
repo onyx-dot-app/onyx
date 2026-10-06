@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi_users.jwt import generate_jwt
 from fastmcp.server.auth import cimd
 from fastmcp.server.auth.ssrf import SSRFFetchError, SSRFFetchResponse
@@ -17,7 +17,6 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
 from onyx.auth.pkce import generate_pkce_pair
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.users import (
@@ -35,7 +34,6 @@ from onyx.db.enums import Permission
 from onyx.db.models import OAuthProviderClient, OAuthProviderGrant, User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.mcp_oauth import attempts as oauth_attempts
-from onyx.mcp_oauth import auth as oauth_auth
 from onyx.mcp_oauth.config import get_mcp_oauth_settings
 from onyx.server.auth_check import check_router_auth
 from onyx.server.mcp_oauth import api as oauth_api
@@ -53,7 +51,6 @@ pytestmark = [
 _ORIGIN = "http://localhost:3000"
 _RESOURCE = f"{_ORIGIN}/mcp/"
 _REDIRECT = "http://127.0.0.1:9876/callback"
-_UNKNOWN_OAUTH_ACCESS_TOKEN = "onyx_oat_public." + "a" * 43
 _UNKNOWN_OAUTH_REFRESH_TOKEN = "onyx_ort_public." + "a" * 43
 
 
@@ -143,18 +140,6 @@ async def protocol_client(
     app.dependency_overrides[auth_backend.get_strategy] = lambda: (
         protocol_session_strategy
     )
-
-    @app.post("/search")
-    def search(
-        user: User = Depends(require_permission(Permission.READ_SEARCH)),
-    ) -> dict[str, str]:
-        return {"user_id": str(user.id)}
-
-    @app.get("/unrelated")
-    def unrelated(
-        user: User = Depends(require_permission(Permission.READ_SEARCH)),
-    ) -> dict[str, str]:
-        return {"user_id": str(user.id)}
 
     check_router_auth(app)
     strategy = protocol_session_strategy
@@ -267,6 +252,11 @@ async def _exchange(
     )
 
 
+async def _access_token_is_live(token: str) -> bool:
+    provider = oauth_provider.OnyxMCPOAuthProvider(get_mcp_oauth_settings())
+    return await provider.load_access_token(token) is not None
+
+
 async def test_complete_consent_exchange_refresh_and_revoke(
     protocol_client: httpx.AsyncClient,
 ) -> None:
@@ -277,19 +267,12 @@ async def test_complete_consent_exchange_refresh_and_revoke(
         assert response.status_code == 200, response.text
         tokens = response.json()
         assert tokens["scope"] == "read:search"
-        bearer = {"Authorization": f"Bearer {tokens['access_token']}"}
-        introspected = await protocol_client.get(
-            "/mcp-oauth/introspect", headers=bearer
-        )
-        assert introspected.status_code == 200, introspected.text
-        assert introspected.json()["resource"] == _RESOURCE
-        assert "token" not in introspected.json()
-        searched = await protocol_client.post("/search", headers=bearer)
-        assert searched.status_code == 200, searched.text
-        assert searched.json()["user_id"] == protocol_client.headers["X-Mcp-Test-Owner"]
-        assert (
-            await protocol_client.get("/unrelated", headers=bearer)
-        ).status_code == 403
+        access = await oauth_provider.OnyxMCPOAuthProvider(
+            get_mcp_oauth_settings()
+        ).load_access_token(tokens["access_token"])
+        assert access is not None
+        assert access.resource == _RESOURCE
+        assert access.subject == protocol_client.headers["X-Mcp-Test-Owner"]
         refreshed = await protocol_client.post(
             "/mcp-oauth/token",
             data={
@@ -309,9 +292,7 @@ async def test_complete_consent_exchange_refresh_and_revoke(
             },
         )
         assert revoked.status_code == 200, revoked.text
-        assert (
-            await protocol_client.get("/mcp-oauth/introspect", headers=bearer)
-        ).status_code == 401
+        assert not await _access_token_is_live(tokens["access_token"])
     finally:
         with get_catalog_session() as session:
             session.execute(
@@ -449,12 +430,7 @@ async def test_invalid_client_remains_401_without_revoking_grant(
     assert rejected.headers["pragma"] == "no-cache"
     assert rejected.headers["access-control-allow-origin"] == "*"
     assert rejected.json()["error"] == "invalid_client"
-    assert (
-        await protocol_client.get(
-            "/mcp-oauth/introspect",
-            headers={"Authorization": f"Bearer {tokens['access_token']}"},
-        )
-    ).status_code == 200
+    assert await _access_token_is_live(tokens["access_token"])
 
 
 async def test_metadata_and_duplicate_parameter_rejection(
@@ -512,21 +488,7 @@ async def test_refresh_replay_revokes_new_tokens(
     assert replayed.status_code == 400
     assert replayed.json()["error"] == "invalid_grant"
     for token in [tokens["access_token"], refreshed.json()["access_token"]]:
-        assert (
-            await protocol_client.get(
-                "/mcp-oauth/introspect", headers={"Authorization": f"Bearer {token}"}
-            )
-        ).status_code == 401
-
-
-async def test_cookie_cannot_override_invalid_oauth_bearer(
-    protocol_client: httpx.AsyncClient,
-) -> None:
-    assert (await protocol_client.get("/mcp-oauth/introspect")).status_code == 401
-    response = await protocol_client.post(
-        "/search", headers={"Authorization": f"Bearer {_UNKNOWN_OAUTH_ACCESS_TOKEN}"}
-    )
-    assert response.status_code == 401
+        assert not await _access_token_is_live(token)
 
 
 async def test_connected_apps_are_owner_only_and_disconnect_revokes_tokens(
@@ -539,7 +501,6 @@ async def test_connected_apps_are_owner_only_and_disconnect_revokes_tokens(
     exchange = await _exchange(protocol_client, client_id, code, verifier)
     assert exchange.status_code == 200, exchange.text
     tokens = exchange.json()
-    bearer = {"Authorization": f"Bearer {tokens['access_token']}"}
     listed = await protocol_client.get("/mcp-oauth/grants")
     assert listed.status_code == 200, listed.text
     assert listed.headers["cache-control"] == "no-store"
@@ -548,9 +509,6 @@ async def test_connected_apps_are_owner_only_and_disconnect_revokes_tokens(
     assert grants[0]["client_id"] == client_id
     assert grants[0]["user_id"] == protocol_client.headers["X-Mcp-Test-Owner"]
     grant_path = f"/mcp-oauth/grants/{grants[0]['id']}"
-    assert (
-        await protocol_client.get("/mcp-oauth/grants", headers=bearer)
-    ).status_code == 403
     assert (await protocol_client.delete(grant_path)).status_code == 403
     assert (
         await protocol_client.delete(
@@ -576,9 +534,7 @@ async def test_connected_apps_are_owner_only_and_disconnect_revokes_tokens(
         assert (
             await protocol_client.delete(grant_path, headers=other_headers)
         ).status_code == 404
-        assert (
-            await protocol_client.get("/mcp-oauth/introspect", headers=bearer)
-        ).status_code == 200
+        assert await _access_token_is_live(tokens["access_token"])
     finally:
         await strategy.destroy_token(other_session, other_user)
         await redis_client.delete(f"{strategy.key_prefix}{other_session}")
@@ -589,9 +545,7 @@ async def test_connected_apps_are_owner_only_and_disconnect_revokes_tokens(
     assert disconnected.status_code == 200, disconnected.text
     assert disconnected.json() == {"revoked": True}
     assert (await protocol_client.get("/mcp-oauth/grants")).json() == []
-    assert (
-        await protocol_client.get("/mcp-oauth/introspect", headers=bearer)
-    ).status_code == 401
+    assert not await _access_token_is_live(tokens["access_token"])
     refresh = await protocol_client.post(
         "/mcp-oauth/token",
         data={
@@ -613,7 +567,6 @@ async def test_catalog_outage_does_not_consume_refresh_or_revoke_grant(
     exchange = await _exchange(protocol_client, client_id, code, verifier)
     assert exchange.status_code == 200, exchange.text
     tokens = exchange.json()
-    bearer = {"Authorization": f"Bearer {tokens['access_token']}"}
     refresh_request = {
         "client_id": client_id,
         "grant_type": "refresh_token",
@@ -623,24 +576,16 @@ async def test_catalog_outage_does_not_consume_refresh_or_revoke_grant(
     unavailable = Mock(side_effect=SQLAlchemyError("catalog unavailable"))
     with monkeypatch.context() as outage:
         outage.setattr(oauth_provider, "mcp_oauth_owner_is_member", unavailable)
-        outage.setattr(oauth_auth, "mcp_oauth_owner_is_member", unavailable)
-        access = await protocol_client.get("/mcp-oauth/introspect", headers=bearer)
-        assert access.status_code == 503, access.text
-        assert "www-authenticate" not in access.headers
         refresh = await protocol_client.post("/mcp-oauth/token", data=refresh_request)
         assert refresh.status_code == 503, refresh.text
         assert refresh.json()["error"] == "server_error"
         assert "www-authenticate" not in refresh.headers
-    assert unavailable.call_count == 2
-    assert (
-        await protocol_client.get("/mcp-oauth/introspect", headers=bearer)
-    ).status_code == 200
+    unavailable.assert_called_once()
+    assert await _access_token_is_live(tokens["access_token"])
     recovered = await protocol_client.post("/mcp-oauth/token", data=refresh_request)
     assert recovered.status_code == 200, recovered.text
     assert recovered.json()["refresh_token"] != tokens["refresh_token"]
-    assert (
-        await protocol_client.get("/mcp-oauth/introspect", headers=bearer)
-    ).status_code == 200
+    assert await _access_token_is_live(tokens["access_token"])
 
 
 async def test_refresh_by_retired_owner_revokes_grant(
@@ -666,12 +611,7 @@ async def test_refresh_by_retired_owner_revokes_grant(
         assert rejected.json()["error"] == "invalid_grant"
     restored = await protocol_client.post("/mcp-oauth/token", data=refresh_request)
     assert restored.status_code == 400, restored.text
-    assert (
-        await protocol_client.get(
-            "/mcp-oauth/introspect",
-            headers={"Authorization": f"Bearer {tokens['access_token']}"},
-        )
-    ).status_code == 401
+    assert not await _access_token_is_live(tokens["access_token"])
 
 
 async def test_consent_rejects_redirect_removed_from_client_metadata(

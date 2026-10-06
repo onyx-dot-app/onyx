@@ -35,11 +35,9 @@ from onyx.mcp_oauth.attempts import (
     get_authorization_request,
     store_authorization_code,
 )
-from onyx.mcp_oauth.auth import get_mcp_oauth_token_info
 from onyx.mcp_oauth.config import get_mcp_oauth_settings
 from onyx.mcp_oauth.models import (
     MCPOAuthGrantInfo,
-    MCPOAuthIntrospection,
     StoredMCPOAuthCode,
 )
 from onyx.server.mcp_oauth.provider import OnyxMCPOAuthProvider
@@ -147,26 +145,6 @@ async def _authorization_session(request: Request, user: User) -> str:
             OnyxErrorCode.UNAUTHORIZED, "Workspace membership is no longer active"
         )
     return session_hash
-
-
-@router.get("/introspect")
-def introspect(
-    request: Request,
-    response: Response,
-    user: User = Depends(require_permission(Permission.READ_SEARCH)),
-) -> MCPOAuthIntrospection:
-    info = get_mcp_oauth_token_info(request)
-    if info is None:
-        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
-    _no_store(response)
-    return MCPOAuthIntrospection(
-        client_id=info.grant.client_id,
-        scopes=list(info.grant.scopes),
-        resource=info.grant.resource,
-        expires_at=int(info.expires_at.timestamp()),
-        subject=str(user.id),
-        grant_id=info.grant.id,
-    )
 
 
 @router.get("/consent")
