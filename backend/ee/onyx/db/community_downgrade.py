@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import and_, delete, null, or_, select, update
+from sqlalchemy import ColumnElement, Select, and_, delete, null, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -140,11 +140,11 @@ def _make_group_shared_resources_public__no_commit(
     """Whatever these groups can read becomes readable by everyone, so removing
     the groups takes no read access away. Edit rights a group share gave go
     with the group."""
-    shared_persona_ids = select(Persona__UserGroup.persona_id).where(
-        Persona__UserGroup.user_group_id.in_(group_ids)
-    )
+    shared_persona_ids: Select[tuple[int]] = select(
+        Persona__UserGroup.persona_id
+    ).where(Persona__UserGroup.user_group_id.in_(group_ids))
     # A group's members read a persona shared with the group or owned by it.
-    newly_public_persona = and_(
+    newly_public_persona: ColumnElement[bool] = and_(
         or_(
             Persona.id.in_(shared_persona_ids),
             Persona.owner_group_id.in_(group_ids),
@@ -240,7 +240,7 @@ def _keep_members_in_default_groups__no_commit(
     left in no default group joins Basic. API keys count like users."""
     user_id = User.__table__.c.id
     # The account types that take their permissions from groups.
-    in_group_system = User.account_type.in_(
+    in_group_system: ColumnElement[bool] = User.account_type.in_(
         (AccountType.STANDARD, AccountType.SERVICE_ACCOUNT)
     )
     admin_ids: Sequence[UUID] = db_session.scalars(
@@ -283,10 +283,15 @@ def remove_custom_user_groups__no_commit(db_session: Session) -> int:
     resources public and every connector already public, the groups gate
     nothing a sync would need to rewrite."""
     lock_group_membership(db_session)
-    # No row lock here: a share edit locks its resource and then the group, so
-    # the groups are locked last too, by their delete.
+    # Row-locked so a share edit that races this waits and then fails on the
+    # missing group. Unlocked, it could commit a share this run then drops.
     group_ids: list[int] = list(
-        db_session.scalars(select(UserGroup.id).where(UserGroup.is_default.is_(False)))
+        db_session.scalars(
+            select(UserGroup.id)
+            .where(UserGroup.is_default.is_(False))
+            .order_by(UserGroup.id)
+            .with_for_update()
+        )
     )
     if not group_ids:
         return 0
