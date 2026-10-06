@@ -1,8 +1,7 @@
 ### Reusable "agent performs a repo task and opens a reviewed PR" workflow.
 ###
-### A caller workflow supplies a task script (backend/scripts/*.py) that
-### regenerates repo files using the OpenAI Responses API, plus an optional
-### deterministic fallback script. This workflow owns the shared machinery:
+### A caller supplies a Python task or a trusted prompt for a coding harness,
+### plus an optional deterministic fallback. This workflow owns the shared machinery:
 ### App credentials, checkout, the agent-vs-fallback dance, commit + PR
 ### mechanics, and self-repair — when the caller's validation workflow fails
 ### on the task branch, the caller's workflow_run trigger re-invokes this
@@ -27,8 +26,34 @@ on:
         type: string
       script:
         description: "Task script to run (repo-relative path)"
-        required: true
+        required: false
         type: string
+        default: ""
+      task-runner:
+        description: "Execution adapter: script or claude-code"
+        required: false
+        type: string
+        default: script
+      prompt-file:
+        description: "Trusted prompt path for a coding harness"
+        required: false
+        type: string
+        default: ""
+      validation-script:
+        description: "Trusted Python validation script; required for a coding harness"
+        required: false
+        type: string
+        default: ""
+      agent-max-turns:
+        description: "Maximum coding harness turns"
+        required: false
+        type: number
+        default: 60
+      agent-timeout-seconds:
+        description: "Wall-clock limit for a coding harness"
+        required: false
+        type: number
+        default: 1200
       script-args:
         description: "Extra args for the task script"
         required: false
@@ -72,7 +97,7 @@ on:
         type: string
         default: ""
       agent-model:
-        description: "OPENAI_MODEL override for the agent call (empty = script default)"
+        description: "Agent model override (empty = adapter default)"
         required: false
         type: string
         default: ""
@@ -95,6 +120,9 @@ on:
       # the fallback script.
       OPENAI_API_KEY:
         description: "OpenAI API key for the agent call"
+        required: false
+      ANTHROPIC_API_KEY:
+        description: "Anthropic key for the Claude Code adapter"
         required: false
       SLACK_BOT_TOKEN:
         description: "Slack bot token for PR review notifications"
@@ -189,6 +217,46 @@ jobs:
           fi
           echo "proceed=${proceed}" >> "${GITHUB_OUTPUT}"
 
+      - name: Validate task configuration
+        if: >-
+          github.event_name != 'workflow_run' ||
+          steps.repair-guard.outputs.proceed == 'true'
+        env:
+          TASK_RUNNER: ${{ inputs.task-runner }}
+          SCRIPT: ${{ inputs.script }}
+          PROMPT_FILE: ${{ inputs.prompt-file }}
+          VALIDATION_SCRIPT: ${{ inputs.validation-script }}
+        run: |
+          case "${TASK_RUNNER}" in
+            script)
+              test -f "${SCRIPT}"
+              ;;
+            claude-code)
+              test -f "${PROMPT_FILE}"
+              test -f "${VALIDATION_SCRIPT}"
+              python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          protected = [
+              Path(os.environ["VALIDATION_SCRIPT"]).resolve(),
+              Path(os.environ["PROMPT_FILE"]).resolve(),
+          ]
+          names = os.environ["FILES"].split()
+          if not names:
+              raise SystemExit("Coding harness tasks require approved output paths")
+          for name in names:
+              output = Path(name).resolve()
+              if any(path == output or output in path.parents for path in protected):
+                  raise SystemExit("The prompt and validator must be outside the approved output paths")
+          PY
+              ;;
+            *)
+              echo "::error::Unknown task runner: ${TASK_RUNNER}"
+              exit 1
+              ;;
+          esac
+
       - name: Collect failing validation context
         if: >-
           github.event_name == 'workflow_run' &&
@@ -210,21 +278,18 @@ jobs:
           } > /tmp/failure_context.txt
           wc -c /tmp/failure_context.txt
 
-      - name: Run task
+      - name: Run script task
+        id: script-task
+        continue-on-error: true
         if: >-
-          github.event_name != 'workflow_run' ||
-          steps.repair-guard.outputs.proceed == 'true'
+          inputs.task-runner == 'script' &&
+          (github.event_name != 'workflow_run' ||
+           steps.repair-guard.outputs.proceed == 'true')
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ inputs.agent-model }}
           SCRIPT: ${{ inputs.script }}
           SCRIPT_ARGS: ${{ inputs.script-args }}
-          FALLBACK_SCRIPT: ${{ inputs.fallback-script }}
-          FALLBACK_ARGS: ${{ inputs.fallback-args }}
-        # Task scripts take --write/--rationale-file/--failure-context-file
-        # (see header). The agent path is preferred; the deterministic
-        # fallback keeps the task landing when there's no key or the agent
-        # call fails.
         run: |
           set -o pipefail
 
@@ -233,15 +298,67 @@ jobs:
             args="${args} --failure-context-file /tmp/failure_context.txt"
           fi
 
-          if [ -n "${OPENAI_API_KEY:-}" ] && python3 "${SCRIPT}" ${args}; then
-            echo "Agent task succeeded."
-          elif [ -n "${FALLBACK_SCRIPT}" ]; then
-            echo "::warning::Agent path unavailable or failed; running deterministic fallback."
-            python3 "${FALLBACK_SCRIPT}" ${FALLBACK_ARGS}
-          else
+          test -n "${OPENAI_API_KEY:-}"
+          python3 "${SCRIPT}" ${args}
+
+      - name: Checkout harness action
+        if: >-
+          inputs.task-runner != 'script' &&
+          (github.event_name != 'workflow_run' ||
+           steps.repair-guard.outputs.proceed == 'true')
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          path: .agent-actions
+          sparse-checkout: |
+            .github/actions/run-coding-agent
+            .github/scripts
+
+      - name: Run coding harness task
+        id: harness-task
+        continue-on-error: true
+        if: >-
+          inputs.task-runner != 'script' &&
+          (github.event_name != 'workflow_run' ||
+           steps.repair-guard.outputs.proceed == 'true')
+        uses: ./.agent-actions/.github/actions/run-coding-agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          harness: ${{ inputs.task-runner }}
+          prompt-file: ${{ inputs.prompt-file }}
+          allowed-files: ${{ inputs.files }}
+          model: ${{ inputs.agent-model || 'claude-opus-5-5' }}
+          max-turns: ${{ inputs.agent-max-turns }}
+          timeout-seconds: ${{ inputs.agent-timeout-seconds }}
+          rationale-file: /tmp/agent_rationale.md
+          failure-context-file: ${{ github.event_name == 'workflow_run' && '/tmp/failure_context.txt' || '' }}
+
+      - name: Run deterministic fallback
+        if: >-
+          (github.event_name != 'workflow_run' ||
+           steps.repair-guard.outputs.proceed == 'true') &&
+          (steps.script-task.outcome == 'failure' ||
+           steps.harness-task.outcome == 'failure')
+        env:
+          FALLBACK_SCRIPT: ${{ inputs.fallback-script }}
+          FALLBACK_ARGS: ${{ inputs.fallback-args }}
+        run: |
+          if [ -z "${FALLBACK_SCRIPT}" ]; then
             echo "::error::Agent task failed and no fallback is configured."
             exit 1
           fi
+          python3 "${FALLBACK_SCRIPT}" ${FALLBACK_ARGS}
+
+      - name: Validate task output
+        if: >-
+          inputs.validation-script != '' &&
+          (github.event_name != 'workflow_run' ||
+           steps.repair-guard.outputs.proceed == 'true')
+        env:
+          VALIDATION_SCRIPT: ${{ inputs.validation-script }}
+        run: python3 "${VALIDATION_SCRIPT}"
 
       - name: Open or update PR
         id: pr
@@ -259,13 +376,14 @@ jobs:
         # Fixed branch + force-push: the content changes run over run, so an
         # already-open PR should be refreshed, not left stale.
         run: |
-          if git diff --quiet -- ${FILES}; then
+          changes="$(git status --porcelain -- ${FILES})"
+          if [ -z "${changes}" ]; then
             echo "No changes to ${FILES}. Nothing to do."
             exit 0
           fi
 
           git switch -C "${BRANCH}"
-          git add ${FILES}
+          git add -- ${FILES}
           git commit -m "${PR_TITLE}"
           # Repair runs push on top of the sha the guard verified; refuse to
           # clobber the branch if someone pushed in between.
