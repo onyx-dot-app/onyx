@@ -185,7 +185,10 @@ def test_paid_features_are_switched_off(db_session: Session) -> None:
 
 
 @pytest.fixture
-def restore_settings() -> Generator[None, None, None]:
+def restore_settings(
+    # Initializes the engine the stores read through.
+    db_session: Session,  # noqa: ARG001
+) -> Generator[None, None, None]:
     """The settings stores commit on their own, so put back what was there.
     Logo files are not restored: run this against a disposable file store."""
     settings = load_settings()
