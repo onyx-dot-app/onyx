@@ -30,7 +30,7 @@ from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.credentials import backend_update_credential_json, fetch_credential_by_id
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
-from onyx.db.models import Credential
+from onyx.db.models import ConnectorCredentialPair, Credential
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
@@ -537,7 +537,7 @@ def validate_ccpair_for_user(
 
     if use_named_checks:
         # An applied edit reuses fresh results of the pair's dry runs.
-        edited_cc_pair = (
+        edited_cc_pair: ConnectorCredentialPair | None = (
             get_connector_credential_pair(db_session, connector_id, credential_id)
             if trigger == CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE
             else None

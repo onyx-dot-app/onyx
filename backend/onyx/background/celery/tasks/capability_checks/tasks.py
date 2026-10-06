@@ -21,6 +21,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_CHECK_TIMEOUT_SECONDS,
     DraftCheckStateKind,
+    DraftRunPairScope,
     DraftRunStatus,
     apply_check_result,
     cache_draft_result,
@@ -262,7 +263,7 @@ def run_draft_capability_checks_task(
             return
         mark_next_running()
         save_draft_run(run)
-        pair_scope = run.pair_scope
+        pair_scope: DraftRunPairScope | None = run.pair_scope
         generate_capability_report(
             credential,
             source=snapshot.source,

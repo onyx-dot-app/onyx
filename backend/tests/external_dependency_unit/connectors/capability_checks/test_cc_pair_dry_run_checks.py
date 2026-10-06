@@ -146,6 +146,7 @@ def _dry_run(
     cc_pair: ConnectorCredentialPair,
     user_id: UUID,
     credential: Credential | None = None,
+    config: dict[str, Any] = _PROPOSED_CONFIG,
 ) -> DraftCheckRunSnapshot:
     return start_cc_pair_draft_check_run(
         db_session,
@@ -153,7 +154,7 @@ def _dry_run(
         cc_pair_id=cc_pair.id,
         proposed_credential=credential,
         access_type=AccessType.PUBLIC,
-        connector_specific_config=_PROPOSED_CONFIG,
+        connector_specific_config=config,
     )
 
 
@@ -189,6 +190,28 @@ def test_dry_run_uses_the_proposed_state_and_the_pairs_connector(
         )
         is None
     )
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_dry_run_of_an_all_default_config_runs_the_config_checks(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    # {} is a complete Slack config: every field takes its default.
+    user_id = uuid4()
+    started = _dry_run(db_session, slack_pair, user_id, config={})
+    assert _states(started) == {
+        _TOKEN: DraftCheckStateKind.PENDING,
+        _CHANNELS: DraftCheckStateKind.PENDING,
+    }
+    harness.run_last_task()
+
+    assert harness.configs == [{}, {}]
+    snapshot = read_draft_run_for_user(started.run_id, user_id)
+    assert snapshot is not None
+    assert _states(snapshot) == {
+        _TOKEN: DraftCheckStateKind.PASSED,
+        _CHANNELS: DraftCheckStateKind.PASSED,
+    }
 
 
 @pytest.mark.usefixtures("tenant_context")

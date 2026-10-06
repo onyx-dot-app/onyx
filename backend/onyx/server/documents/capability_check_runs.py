@@ -52,7 +52,7 @@ from onyx.connectors.capability_checks.runner import (
     capability_check_run_stale_after,
 )
 from onyx.connectors.connector_config import ConnectorConfig
-from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.credential_capability import (
     mark_capability_report_running,
@@ -171,7 +171,7 @@ def start_capability_checks_for_new_credential(
 @dataclass(frozen=True)
 class _PlannedDraft:
     form_state: FormState[Any]
-    # None for a form with no values: config-reading checks wait.
+    # None for a config-less create form: config-reading checks wait.
     connector_specific_config: dict[str, Any] | None
     checks: list[tuple[CapabilityCheck[Any], DraftCheckState]]
 
@@ -182,12 +182,19 @@ def _plan_draft(
     config_class: type[ConnectorConfig],
     access_type: AccessType | None,
     form_values: dict[str, Any],
+    config_is_complete: bool = False,
 ) -> _PlannedDraft:
     """Decides each check's state before it runs. Reads no credential and does
-    no I/O to the source."""
+    no I/O to the source.
+
+    A create form with no values is config-less: config-reading checks wait.
+    With ``config_is_complete`` (a pair's proposed config), {} selects the
+    defaults."""
     form_state = validate_form_state(config_class, form_values)
-    connector_specific_config = (
-        form_values if form_state.provided or form_state.errors else None
+    connector_specific_config: dict[str, Any] | None = (
+        form_values
+        if config_is_complete or form_state.provided or form_state.errors
+        else None
     )
     context = CapabilityCheckContext(
         source=source,
@@ -258,6 +265,7 @@ def start_draft_capability_check_run(
             lock for too long.
     """
     plan = _plan_draft(
+        config_is_complete=pair_scope is not None,
         source=source,
         config_class=config_class,
         access_type=access_type,
@@ -386,7 +394,7 @@ def start_cc_pair_draft_check_run(
             f"Connector-credential pair {cc_pair_id} does not exist.",
         )
     connector = cc_pair.connector
-    mapping = CONNECTOR_CLASS_MAP.get(connector.source)
+    mapping: ConnectorMapping | None = CONNECTOR_CLASS_MAP.get(connector.source)
     if mapping is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

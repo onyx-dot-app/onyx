@@ -1,7 +1,8 @@
 """widen capability report trigger column
 
-The trigger column is a non-native enum (VARCHAR sized to the longest value).
-"connector_config_update" is longer than the values that sized it.
+The trigger column is a non-native enum without values_callable, so rows hold
+member names (VARCHAR sized to the longest name). CONNECTOR_CONFIG_UPDATE is
+longer than the names that sized it.
 
 Revision ID: bcf79eb7d0a8
 Revises: 14846d586881
@@ -21,9 +22,9 @@ depends_on = None
 
 _TABLE = "credential_capability_report"
 _COLUMN = "trigger"
-# len("connector_config_update")
+# len("CONNECTOR_CONFIG_UPDATE")
 _NEW_LENGTH = 23
-# len("credential_created"), the longest value before this revision.
+# len("CREDENTIAL_CREATED"), the longest name before this revision.
 _OLD_LENGTH = 18
 
 
@@ -42,8 +43,8 @@ def downgrade() -> None:
     # closest to a pairing validation.
     op.execute(
         sa.text(
-            f"UPDATE {_TABLE} SET {_COLUMN} = 'cc_pair_validation' "
-            f"WHERE {_COLUMN} = 'connector_config_update'"
+            f"UPDATE {_TABLE} SET {_COLUMN} = 'CC_PAIR_VALIDATION' "
+            f"WHERE {_COLUMN} = 'CONNECTOR_CONFIG_UPDATE'"
         )
     )
     op.alter_column(
