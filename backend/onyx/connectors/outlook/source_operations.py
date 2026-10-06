@@ -472,7 +472,7 @@ class OutlookSourceOperations(SourceOperations):
 
         Needs ``GroupMember.Read.All``.
         """
-        object_id = _object_id(identifier)
+        object_id: str | None = _object_id(identifier)
         if object_id is not None:
             try:
                 data = self._get(

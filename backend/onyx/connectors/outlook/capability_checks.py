@@ -21,7 +21,7 @@ mailboxes those grants reach. A mailbox outside that scope answers 403 exactly
 like a missing grant, so the remediation text names both causes.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
 from typing import TypeVar
 
@@ -35,6 +35,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError as OutlookAuthError,
 )
@@ -133,19 +134,72 @@ _NO_MAILBOX_TO_PROBE = (
 )
 
 
+class _Candidates:
+    """The mailboxes the checks may probe, as pages: the members of every
+    configured group, or the tenant's users when no group is configured. The
+    checks must not read a mailbox outside the configured scope."""
+
+    def __init__(
+        self, gateway: OutlookSourceOperations, config: OutlookConnectorConfig
+    ) -> None:
+        self._gateway = gateway
+        self._group_names: list[str] = configured_groups(config)
+
+    @property
+    def from_groups(self) -> bool:
+        return bool(self._group_names)
+
+    def _group_ids(self) -> list[str]:
+        group_ids: list[str] = []
+        for name in self._group_names:
+            matches: list[EntraGroup] = self._gateway.resolve_groups(identifier=name)
+            if len(matches) != 1:
+                raise ConnectorValidationError(
+                    f"{describe_group_mismatch(name, len(matches))}. "
+                    f"{GROUP_UNAVAILABLE_REMEDIATION}"
+                )
+            group_ids.append(matches[0].id)
+        return group_ids
+
+    def pages(self) -> Generator[OutlookMailboxPage, None, None]:
+        """At most _CANDIDATE_PAGES pages in all, so a huge scope stays bounded."""
+        budget = _CANDIDATE_PAGES
+        if not self.from_groups:
+            next_link: str | None = None
+            while budget > 0:
+                budget -= 1
+                page = self._gateway.list_mailbox_users(
+                    page_size=_PROBE_PAGE_SIZE, next_link=next_link
+                )
+                yield page
+                next_link = page.next_link
+                if next_link is None:
+                    return
+            return
+        for group_id in self._group_ids():
+            next_link = None
+            while budget > 0:
+                budget -= 1
+                page = self._gateway.list_group_mailbox_users(
+                    group_id=group_id, page_size=_PROBE_PAGE_SIZE, next_link=next_link
+                )
+                yield page
+                next_link = page.next_link
+                if next_link is None:
+                    break
+
+
 def _first_mailbox_that(
-    gateway: OutlookSourceOperations,
+    candidates: _Candidates,
     opens: Callable[[OutlookMailbox], T | None],
     denied_one: Callable[[OutlookMailbox], str],
     denied_all: str,
     remediation: str = EXCHANGE_SCOPE_REMEDIATION,
     nothing_to_probe: str = _NO_MAILBOX_TO_PROBE,
-    list_page: Callable[[str | None], OutlookMailboxPage] | None = None,
 ) -> tuple[OutlookMailbox, T]:
-    """Walk a mailbox listing, the tenant's users unless ``list_page`` gives
-    another, one user at a time until ``opens`` returns something on a
-    mailbox, and return that mailbox with what it opened. ``opens`` returning
-    None means the mailbox proves nothing, keep walking.
+    """Walk the candidates one user at a time until ``opens`` returns
+    something on a mailbox, and return that mailbox with what it opened.
+    ``opens`` returning None means the mailbox proves nothing, keep walking.
 
     Enabled users without a mailbox, such as directory sync service accounts,
     are common and indexing skips them too, so they must not fail the check.
@@ -153,62 +207,35 @@ def _first_mailbox_that(
     still refuse its calendar. A 403 is remembered: when nothing opens it is
     the likelier cause.
     """
-    if list_page is None:
-
-        def list_page(next_link: str | None) -> OutlookMailboxPage:
-            return gateway.list_mailbox_users(
-                page_size=_PROBE_PAGE_SIZE, next_link=next_link
-            )
-
     denied: OutlookGraphError | None = None
-    next_link: str | None = None
-    for _ in range(_CANDIDATE_PAGES):
+    pages = candidates.pages()
+    while True:
         try:
-            page = list_page(next_link)
+            page = next(pages, None)
         except OutlookGraphError as e:
+            if candidates.from_groups:
+                raise_for_graph_error(
+                    e, GROUP_LISTING_DENIED, GROUP_LISTING_REMEDIATION
+                )
             raise_for_graph_error(e, USER_LISTING_DENIED)
-        if page.mailboxes:
-            mailbox = page.mailboxes[0]
-            try:
-                opened = opens(mailbox)
-            except OutlookGraphError as e:
-                if not e.is_permanent_refusal:
-                    raise_for_graph_error(e, denied_one(mailbox), remediation)
-                if e.status == 403:
-                    denied = e
-            else:
-                if opened is not None:
-                    return mailbox, opened
-        next_link = page.next_link
-        if next_link is None:
+        if page is None:
             break
+        if not page.mailboxes:
+            continue
+        mailbox = page.mailboxes[0]
+        try:
+            opened = opens(mailbox)
+        except OutlookGraphError as e:
+            if not e.is_permanent_refusal:
+                raise_for_graph_error(e, denied_one(mailbox), remediation)
+            if e.status == 403:
+                denied = e
+            continue
+        if opened is not None:
+            return mailbox, opened
     if denied is not None:
         raise_for_graph_error(denied, denied_all, remediation)
     raise UnexpectedValidationError(nothing_to_probe)
-
-
-def _candidate_lister(
-    gateway: OutlookSourceOperations, config: OutlookConnectorConfig
-) -> Callable[[str | None], OutlookMailboxPage] | None:
-    """Pages of the mailboxes indexing would walk: the first configured
-    group's members when groups are set, else None for the tenant's users.
-    The checks must not read a mailbox outside the configured scope."""
-    groups = configured_groups(config)
-    if not groups:
-        return None
-    try:
-        matches = gateway.resolve_groups(identifier=groups[0])
-    except OutlookGraphError as e:
-        raise_for_graph_error(e, GROUP_LISTING_DENIED, GROUP_LISTING_REMEDIATION)
-    if len(matches) != 1:
-        raise ConnectorValidationError(
-            f"{describe_group_mismatch(groups[0], len(matches))}. "
-            f"{GROUP_UNAVAILABLE_REMEDIATION}"
-        )
-    group_id = matches[0].id
-    return lambda next_link: gateway.list_group_mailbox_users(
-        group_id=group_id, page_size=_PROBE_PAGE_SIZE, next_link=next_link
-    )
 
 
 def _open_sample_mailbox(
@@ -220,11 +247,10 @@ def _open_sample_mailbox(
     if addresses:
         return _open_configured_mailbox(gateway, addresses[0])
     return _first_mailbox_that(
-        gateway,
+        _Candidates(gateway, config),
         lambda mailbox: gateway.probe_mailbox(mailbox_id=mailbox.id),
         _denied,
         "The app cannot read mail in the first mailboxes it would index.",
-        list_page=_candidate_lister(gateway, config),
     )
 
 
@@ -419,7 +445,7 @@ class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
                 )
             return
         _first_mailbox_that(
-            gateway,
+            _Candidates(gateway, config),
             calendar_with_event,
             _calendar_denied,
             "The app cannot read the calendar of the first mailboxes it would index.",
@@ -428,7 +454,6 @@ class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
                 "None of the first mailboxes it would index holds an event to "
                 "probe. List a mailbox that has events to verify it."
             ),
-            list_page=_candidate_lister(gateway, config),
         )
 
 

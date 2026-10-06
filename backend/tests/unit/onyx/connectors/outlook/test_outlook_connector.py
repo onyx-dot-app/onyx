@@ -10,6 +10,7 @@ from typing import Any
 from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
+from pydantic import ValidationError
 
 from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.connector_runner import ConnectorRunner
@@ -34,6 +35,7 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.outlook import connector as connector_module
+from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.connector import (
     ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
     CONVERSATION_FETCH_LIMIT,
@@ -355,6 +357,11 @@ def test_mail_history_cutoff_never_widens_a_later_poll_window() -> None:
 
     received_after = gateway.fetch_folder_delta_page.call_args.kwargs["received_after"]
     assert received_after == datetime.fromtimestamp(START, tz=timezone.utc)
+
+
+def test_config_rejects_a_non_positive_mail_history() -> None:
+    with pytest.raises(ValidationError):
+        OutlookConnectorConfig(mail_history_days=0)
 
 
 def test_mail_history_days_must_be_positive() -> None:

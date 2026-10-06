@@ -1,3 +1,5 @@
+from pydantic import Field
+
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.microsoft_utils.config import MicrosoftCloudBinding
@@ -12,7 +14,7 @@ DEFAULT_CALENDAR_FUTURE_DAYS = 180
 class OutlookConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
     mailboxes: list[str] | None = None
     mailbox_groups: list[str] | None = None
-    mail_history_days: int | None = None
+    mail_history_days: int | None = Field(default=None, gt=0)
     excluded_folders: list[str] | None = None
     include_attachments: bool = False
     include_calendar: bool = False

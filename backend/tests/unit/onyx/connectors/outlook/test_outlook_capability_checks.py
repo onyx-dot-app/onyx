@@ -237,6 +237,39 @@ def test_mail_read_check_samples_from_the_configured_groups() -> None:
     assert gateway.probe_mailbox.call_args.kwargs["mailbox_id"] == "member"
 
 
+def test_mail_read_check_moves_on_to_the_next_group_when_the_first_is_denied() -> None:
+    gateway = _gateway()
+    gateway.resolve_groups.side_effect = [
+        [EntraGroup(id="g-1")],
+        [EntraGroup(id="g-2")],
+    ]
+    gateway.list_group_mailbox_users.side_effect = [
+        OutlookMailboxPage(mailboxes=[mailbox(id="denied")]),
+        OutlookMailboxPage(mailboxes=[mailbox(id="readable")]),
+    ]
+    gateway.probe_mailbox.side_effect = lambda *, mailbox_id: (
+        folder()
+        if mailbox_id == "readable"
+        else (_ for _ in ()).throw(graph_error(403))
+    )
+
+    _run(
+        "outlook_mail_read",
+        _context(gateway, {"mailbox_groups": ["Sales", "Onyx Users"]}),
+    )
+
+    assert gateway.read_any_message.call_args.kwargs["mailbox_id"] == "readable"
+
+
+def test_mail_read_check_names_the_group_permission_when_members_are_denied() -> None:
+    gateway = _gateway()
+    gateway.resolve_groups.return_value = [EntraGroup(id="g-1")]
+    gateway.list_group_mailbox_users.side_effect = graph_error(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="GroupMember.Read.All"):
+        _run("outlook_mail_read", _context(gateway, {"mailbox_groups": ["Sales"]}))
+
+
 def test_mail_read_check_falls_back_to_the_first_tenant_user() -> None:
     gateway = _gateway()
 
