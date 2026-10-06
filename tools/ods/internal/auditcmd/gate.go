@@ -1,6 +1,7 @@
 package auditcmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -18,7 +19,7 @@ type AuditGateOptions struct {
 }
 
 // gateComponents are the images whose OS layer ships, in scan order.
-var gateComponents = []string{"web", "model-server", "backend"}
+var gateComponents = []string{"web", "model-server", "backend", "sandbox"}
 
 // The scans behind the gate, swapped for canned results in tests.
 var (
@@ -36,8 +37,8 @@ func newAuditGateCommand() *cobra.Command {
 
 Scans what deployment.yml's audit-gate scans: the lockfiles, the open Dependabot
 alerts, the pinned Actions, and the OS layer each shipped image carries (the
-pinned runtime base for web and model-server, the backend apt stage built from
-backend/Dockerfile). Run it from the repository root on the commit you are
+pinned runtime base for web and model-server, the apt stages of backend and
+the sandbox built from their Dockerfiles). Run it from the repository root on the commit you are
 about to tag; a critical here is the one that would fail the tag build. Every
 scan is strict, so a source that cannot be read (gh not signed in, no
 docker login dhi.io) fails the gate instead of passing silently.
@@ -73,6 +74,13 @@ func runAuditGate(opts *AuditGateOptions, stdout, stderr io.Writer) error {
 		resolve := exec.Command(opts.Script, component)
 		resolve.Stderr = stderr
 		out, err := resolve.Output()
+		// The resolver exits 2 for a component it does not know: a release
+		// branch from before that component joined the gate ships without it.
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 2 {
+			_, _ = fmt.Fprintf(stderr, "\nSkipping %s: this branch's gate does not scan it\n", component)
+			continue
+		}
 		if err != nil {
 			return failf("Failed to resolve the %s image: %v", component, err)
 		}
