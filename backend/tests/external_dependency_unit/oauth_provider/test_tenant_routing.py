@@ -15,10 +15,10 @@ from onyx.auth.session_tokens import build_session_token_value
 from onyx.auth.users import auth_backend, get_redis_strategy
 from onyx.configs import app_configs
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.db import oauth_provider as oauth_provider_db
 from onyx.db.engine import async_sql_engine, sql_engine
 from onyx.db.enums import AccountType, Permission
 from onyx.db.models import Base, PublicBase, User, UserTenantMapping
+from onyx.db.oauth_provider import create_oauth_provider_grant__no_commit
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.oauth_provider.api import router
 from onyx.utils.logger import setup_logger
@@ -116,7 +116,7 @@ async def test_cloud_token_tenant_wins_over_cookie_without_membership_bypass(
                 )
                 session.add(user)
                 session.commit()
-                pair = oauth_provider_db.create_mcp_oauth_grant__no_commit(
+                pair = create_oauth_provider_grant__no_commit(
                     session,
                     user_id=user.id,
                     client_id="tenant-test-client",
