@@ -7,6 +7,7 @@ from typing import Any, Literal
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import (
     build_python_chat_files_from_search_docs,
+    count_message_replay_tokens,
     create_tool_call_failure_messages,
     create_tool_call_failure_response,
 )
@@ -41,7 +42,6 @@ from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
 from onyx.db.models import Persona
-from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity
@@ -53,7 +53,6 @@ from onyx.llm.tool_parsing import looks_like_xml_tool_call_payload
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,
-    NON_VISION_IMAGE_MARKER,
     OPEN_URL_REMINDER,
 )
 from onyx.prompts.prompt_utils import substitute_user_placeholders
@@ -90,10 +89,6 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
 
 logger = setup_logger()
-
-# Used when no token_counter is available to measure the non-vision image
-# marker; intentionally generous so budgeting stays conservative.
-_NON_VISION_MARKER_TOKEN_FALLBACK = 40
 
 
 class EmptyLLMResponseError(ClassifiedLLMError):
@@ -327,29 +322,6 @@ def _build_project_message(
     if not context_files or not context_files.file_texts:
         return []
     return [_create_context_files_message(context_files, token_counter=None)]
-
-
-def count_message_replay_tokens(
-    msg: ChatMessageSimple,
-    *,
-    image_files_replayed_as_markers: bool = False,
-    token_counter: Callable[[str], int] | None = None,
-) -> int:
-    if not image_files_replayed_as_markers:
-        return msg.token_count
-    # Include images whose stored cost is zero, such as project images.
-    num_images = sum(
-        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-    )
-    if not num_images:
-        return msg.token_count
-    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-    marker_tokens = (
-        token_counter(sample_marker)
-        if token_counter
-        else _NON_VISION_MARKER_TOKEN_FALLBACK
-    )
-    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
 
 
 def construct_message_history(

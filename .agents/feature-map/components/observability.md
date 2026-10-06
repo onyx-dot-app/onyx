@@ -233,6 +233,11 @@ tagged operation, grouped by area (chat/agent, secondary LLM flows, Craft,
 `[[llm-providers]]` covers the LLM-provider-side detail of resolution and
 retries; this file covers what happens to a span once it is opened.
 
+Chat generation spans also record the prompt-cache flag, prefix message count,
+estimated prefix tokens, and history message count in `model_config`. On span
+end, Langfuse exports these fields as generation metadata. This accepts any
+non-null mapping, including read-only mappings.
+
 ### 4.5 The untagged fallback flows
 
 `LitellmLLM.invoke` and `LitellmLLM.stream` (`onyx/llm/multi_llm.py`) open their

@@ -190,6 +190,11 @@ The reasoning behind each position is in `backend/onyx/chat/README.md` and in
 Token-budget truncation drops the oldest history first and emits a "forgotten files"
 notice so the model knows content was removed rather than silently losing it.
 
+Before each inference, `llm_step.py:_resolve_history_image_replay` resolves image
+support and the provider image cap once. Translation and cache telemetry reuse
+the same `HistoryImageReplay`. Non-vision models receive text markers. Capped
+images contribute no tokens to the estimated cacheable prefix.
+
 ### 4.5 Persistence
 
 `_persist_model_outcome` is the single entry point for every completion path:

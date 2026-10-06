@@ -5,10 +5,11 @@ from collections.abc import Callable, Generator, Mapping, Sequence
 from typing import Any, cast
 
 from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.chat_utils import count_message_replay_tokens
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.incognito import current_turn_persists_content
-from onyx.chat.models import ChatMessageSimple, LlmStepResult
+from onyx.chat.models import ChatMessageSimple, HistoryImageReplay, LlmStepResult
 from onyx.chat.tool_call_args_streaming import (
     ParsedToolArguments,
     maybe_emit_argument_delta,
@@ -501,9 +502,97 @@ def _select_recent_image_indices(
     return keep, max(0, total - cap)
 
 
+_CACHEABLE_HISTORY_MESSAGE_TYPES: set[MessageType] = {
+    MessageType.SYSTEM,
+    MessageType.USER,
+    MessageType.USER_REMINDER,
+    MessageType.ASSISTANT,
+    MessageType.TOOL_CALL_RESPONSE,
+}
+
+
+def _cacheable_history_prefix_length(history: list[ChatMessageSimple]) -> int:
+    """Messages in the cacheable prompt prefix — the split point
+    translate_history_to_llm_format applies. Messages of non-cacheable
+    types can sit inside the prefix but never extend it."""
+    prefix_len: int = 0
+    all_previous_msgs_cacheable: bool = True
+    if PROMPT_CACHE_CHAT_HISTORY:
+        for idx, msg in enumerate(history):
+            if msg.message_type in _CACHEABLE_HISTORY_MESSAGE_TYPES:
+                all_previous_msgs_cacheable = (
+                    all_previous_msgs_cacheable and msg.should_cache
+                )
+                if all_previous_msgs_cacheable:
+                    prefix_len = idx + 1
+    return prefix_len
+
+
+def _resolve_history_image_replay(
+    history: list[ChatMessageSimple], llm_config: LLMConfig
+) -> HistoryImageReplay:
+    supports_image_input: bool = True
+    if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
+        supports_image_input = model_supports_image_input(
+            llm_config.model_name,
+            llm_config.model_provider,
+            llm_config.deployment_name,
+        )
+    image_cap: int | None = (
+        resolve_image_cap(llm_config.model_provider) if supports_image_input else None
+    )
+    keep_image_indices: set[tuple[int, int]] | None = None
+    dropped_image_count: int = 0
+    if image_cap is not None:
+        keep_image_indices, dropped_image_count = _select_recent_image_indices(
+            history, image_cap
+        )
+    return HistoryImageReplay(
+        supports_image_input=supports_image_input,
+        image_cap=image_cap,
+        keep_image_indices=keep_image_indices,
+        dropped_image_count=dropped_image_count,
+    )
+
+
+def _cache_split_stats(
+    history: list[ChatMessageSimple], image_replay: HistoryImageReplay
+) -> dict[str, str]:
+    """Estimate prefix tokens using the request's resolved image replay decisions."""
+    prefix_len: int = _cacheable_history_prefix_length(history)
+    prefix_msgs: list[ChatMessageSimple] = history[:prefix_len]
+    keep_image_indices: set[tuple[int, int]] | None = image_replay.keep_image_indices
+
+    prefix_tokens: int = 0
+    for idx, msg in enumerate(prefix_msgs):
+        if not image_replay.supports_image_input:
+            prefix_tokens += count_message_replay_tokens(
+                msg, image_files_replayed_as_markers=True
+            )
+        elif keep_image_indices is not None and msg.image_files:
+            dropped_image_cost: int = sum(
+                f.token_count
+                for img_idx, f in enumerate(msg.image_files)
+                if f.file_type == ChatFileType.IMAGE
+                and (idx, img_idx) not in keep_image_indices
+            )
+            prefix_tokens += msg.token_count - dropped_image_cost
+        else:
+            prefix_tokens += msg.token_count
+
+    return {
+        "prompt_cache_chat_history": "on" if PROMPT_CACHE_CHAT_HISTORY else "off",
+        "cacheable_prefix_msgs": str(prefix_len),
+        "cacheable_prefix_tokens": str(prefix_tokens),
+        "history_msgs": str(len(history)),
+    }
+
+
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
+    *,
+    image_replay: HistoryImageReplay | None = None,
 ) -> list[ChatCompletionMessage]:
     """Convert a list of ChatMessageSimple to list[ChatCompletionMessage] format.
 
@@ -515,20 +604,14 @@ def translate_history_to_llm_format(
     # Note: cacheability is computed from pre-translation ChatMessageSimple types.
     # Some providers flatten tool history into plain assistant/user text, so this split
     # may be less semantically meaningful, but it remains safe and order-preserving.
-    last_cacheable_msg_idx = -1
-    all_previous_msgs_cacheable = True
+    last_cacheable_msg_idx = _cacheable_history_prefix_length(history) - 1
 
     # History can contain images even when the current model cannot accept
     # them (e.g. the user switched models mid-session). Sending them yields a
     # provider 400, so replay a text marker instead. Admins can mark custom
     # vision models with the VISION flow type to keep images flowing.
-    supports_image_input = True
-    if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
-        supports_image_input = model_supports_image_input(
-            llm_config.model_name,
-            llm_config.model_provider,
-            llm_config.deployment_name,
-        )
+    image_replay = image_replay or _resolve_history_image_replay(history, llm_config)
+    supports_image_input: bool = image_replay.supports_image_input
 
     # Per-request image cap (provider-aware). When the cap is enforced and
     # images are dropped, we emit a system-reminder UserMessage at the end of
@@ -536,15 +619,11 @@ def translate_history_to_llm_format(
     # The cap bounds image payloads, so it only applies when images are
     # actually sent — markers for a non-vision model are plain text and must
     # never be capped away.
-    image_cap = (
-        resolve_image_cap(llm_config.model_provider) if supports_image_input else None
-    )
-    keep_image_indices: set[tuple[int, int]] | None = None
+    image_cap: int | None = image_replay.image_cap
+    keep_image_indices: set[tuple[int, int]] | None = image_replay.keep_image_indices
     image_drop_notice: str | None = None
     if image_cap is not None:
-        keep_image_indices, dropped_image_count = _select_recent_image_indices(
-            history, image_cap
-        )
+        dropped_image_count: int = image_replay.dropped_image_count
         if dropped_image_count > 0:
             logger.warning(
                 "Image cap enforced: provider=%s model=%s cap=%d dropped=%d",
@@ -558,20 +637,6 @@ def translate_history_to_llm_format(
             )
 
     for idx, msg in enumerate(history):
-        # if the message is being added to the history
-        if PROMPT_CACHE_CHAT_HISTORY and msg.message_type in [
-            MessageType.SYSTEM,
-            MessageType.USER,
-            MessageType.USER_REMINDER,
-            MessageType.ASSISTANT,
-            MessageType.TOOL_CALL_RESPONSE,
-        ]:
-            all_previous_msgs_cacheable = (
-                all_previous_msgs_cacheable and msg.should_cache
-            )
-            if all_previous_msgs_cacheable:
-                last_cacheable_msg_idx = idx
-
         if msg.message_type == MessageType.SYSTEM:
             system_msg = SystemMessage(
                 role="system",
@@ -808,7 +873,12 @@ def run_llm_step_pkt_generator(
             sub_turn_index=sub_turn_index,
         )
 
-    llm_msg_history = translate_history_to_llm_format(history, llm.config)
+    image_replay: HistoryImageReplay = _resolve_history_image_replay(
+        history, llm.config
+    )
+    llm_msg_history = translate_history_to_llm_format(
+        history, llm.config, image_replay=image_replay
+    )
     has_reasoned = False
 
     if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
@@ -840,6 +910,10 @@ def run_llm_step_pkt_generator(
             "model_impl": "litellm",
         },
     ) as span_generation:
+        span_generation.span_data.model_config = {
+            **(span_generation.span_data.model_config or {}),
+            **_cache_split_stats(history, image_replay),
+        }
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
         )
