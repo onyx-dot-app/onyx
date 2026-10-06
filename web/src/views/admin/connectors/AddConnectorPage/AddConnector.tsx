@@ -284,6 +284,9 @@ export default function AddConnector({
           restriction_group_ids,
         });
         const access_type = wireAccess.access_type;
+        // A private connector's readers; its `groups` are its editors.
+        const dataAccess =
+          access_type === "private" ? data_access_group_ids : undefined;
 
         // Apply special transforms according to application logic
         const transformedConnectorSpecificConfig = Object.entries(
@@ -343,7 +346,8 @@ export default function AddConnector({
             advancedConfiguration.indexingStart,
             values.access_type,
             groups,
-            name
+            name,
+            dataAccess
           );
           if (response) {
             onSuccess();
@@ -358,7 +362,8 @@ export default function AddConnector({
               selectedFiles,
               name,
               access_type,
-              groups
+              groups,
+              dataAccess
             );
             if (response) {
               onSuccess();
@@ -432,9 +437,7 @@ export default function AddConnector({
                 undefined,
                 access_type === SYNC_RESTRICTED_ACCESS_TYPE
                   ? wireAccess.restriction_group_ids
-                  : access_type === "private"
-                    ? data_access_group_ids
-                    : undefined
+                  : dataAccess
               );
               if (linkCredentialResponse.ok) {
                 onSuccess();
