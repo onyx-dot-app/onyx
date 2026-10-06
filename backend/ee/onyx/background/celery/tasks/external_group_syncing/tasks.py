@@ -150,8 +150,10 @@ def is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     if last_ext_group_sync is None:
         return True
 
-    # A sync that started before the pair began to wait for its first
+    # A sync that completed before the pair began to wait for its first
     # permission sync does not count, so the pair is not hidden for a period.
+    # This value is the completion time: a sync that started before the wait
+    # and completed after it counts. That narrow race is accepted.
     pending_since = cc_pair.perm_sync_pending_since
     if pending_since is not None and last_ext_group_sync < pending_since:
         return True
