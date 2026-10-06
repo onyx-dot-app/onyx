@@ -52,7 +52,7 @@ jobs:
       branch: auto/update-recommended-models
       pr-title: "chore(llms): update recommended models"
       reviewer: rohoswagger
-      slack-channel: C0C6T9W2U3X # #slop-factory
+      slack-channel: C0C6T9W2U3X # #ai-pr-reviews
       slack-mention: rohoswagger
       agent-model: ${{ github.event.inputs.agent_model }}
 
