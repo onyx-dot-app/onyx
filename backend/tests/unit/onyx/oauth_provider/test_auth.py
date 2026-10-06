@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -19,7 +19,6 @@ from onyx.mcp_server import api as mcp_api
 from onyx.mcp_server import auth as mcp_auth
 from onyx.oauth_provider.auth import extract_oauth_provider_bearer
 from onyx.oauth_provider.models import OAuthProviderIntrospection
-from onyx.server.oauth_provider import protocol as oauth_protocol
 from onyx.server.oauth_provider.api import _session_hash
 from shared_configs.contextvars import UsageCredentialIdentity
 from shared_configs.enums import UsageCredentialType
