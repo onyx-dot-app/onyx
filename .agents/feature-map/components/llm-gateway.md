@@ -545,8 +545,9 @@ See `backend/AGENTS.md` for required env and secrets.
    same user and confirm token counts for that model increased; the tracing
    drain thread flushes on a roughly 2-second interval, so poll for up to
    ~45 seconds (see `test_gateway_usage_tracking.py:_POLL_TIMEOUT_SECONDS`).
-6. Repeat as a user on a sub-Business tier (or with `LICENSE_ENFORCEMENT_ENABLED`
-   simulating a Community license) and confirm every `/gateway/*` call
+6. Repeat on a deployment below the Business tier (a self-hosted deployment
+   with no license resolves `Tier.COMMUNITY`,
+   `ee/onyx/utils/tier.py:_self_hosted_tier`) and confirm every `/gateway/*` call
    returns 402 with `error_code: "FEATURE_NOT_AVAILABLE"` before touching
    any provider.
 

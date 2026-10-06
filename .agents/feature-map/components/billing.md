@@ -90,7 +90,6 @@ throw if `NEXT_PUBLIC_CLOUD_ENABLED` is true.
 
 | Variable | Read in | Effect |
 |---|---|---|
-| `LICENSE_ENFORCEMENT_ENABLED` | `ee/onyx/configs/app_configs.py`, read by `tier.py` and `license_enforcement.py` | Default `true`. See [[editions-and-gating]] §2 for the full dispatch story. When false, self-hosted tier resolves to `Tier.ENTERPRISE` if EE code loaded, else `Tier.COMMUNITY` (`ee/onyx/utils/tier.py:_self_hosted_tier`), a legacy escape hatch. |
 | `MULTI_TENANT` | `shared_configs/configs.py` | Selects the cloud vs. self-hosted branch throughout this component. |
 | `CLOUD_DATA_PLANE_URL` | `ee/onyx/configs/app_configs.py` | Default `https://cloud.onyx.app/api`. Self-hosted proxy target for `/proxy/claim-license`, `/proxy/create-checkout-session`, etc. |
 | `CONTROL_PLANE_API_BASE_URL` | `onyx/configs/app_configs.py` | Default `http://localhost:8082`. Cloud's direct billing target. |
@@ -138,10 +137,10 @@ throw if `NEXT_PUBLIC_CLOUD_ENABLED` is true.
 ```
 get_tier(tenant_id=None)
   not MULTI_TENANT -> _self_hosted_tier()
-      LICENSE_ENFORCEMENT_ENABLED is false -> ENTERPRISE if EE code loaded else COMMUNITY
-      else: get_cached_license_metadata() -> Redis hit -> tier_from_license_metadata()
-            Redis miss/error -> refresh_license_cache() from DB
-            DB error (missing table, etc.) -> Tier.COMMUNITY
+      get_cached_license_metadata() -> Redis hit -> tier_from_license_metadata()
+      Redis miss/error -> refresh_license_cache() from DB
+      DB error (missing table, etc.) -> Tier.COMMUNITY
+      no license in Redis or the DB -> Tier.COMMUNITY
   MULTI_TENANT -> tenant_id == POSTGRES_DEFAULT_SCHEMA -> Tier.BUSINESS (public schema floor)
       get_cached_tier(tid) hit -> _cloud_tier(customer_tier)
       recent miss marker set -> Tier.BUSINESS
@@ -286,10 +285,11 @@ calls `web/src/lib/billing/svc.ts:downgradeToCommunity` and reloads the page.
    (`ee/onyx/utils/tier.py:get_tier`), which is the cloud floor tier (cloud
    has no `Tier.COMMUNITY`; the public schema itself resolves to `BUSINESS`
    unconditionally). Neither path can fail toward `ENTERPRISE`.
-3. **`check_ee_features_enabled` fails closed on cache failure, explicitly.**
-   `ee/onyx/server/settings/api.py:check_ee_features_enabled` catches
-   `RedisError` and returns `False` with the comment "Fail closed - if Redis
-   is down, other things will break anyway." This is a different failure
+3. **`apply_license_status_to_settings` fails closed on cache failure, explicitly.**
+   `ee/onyx/server/settings/api.py:apply_license_status_to_settings` catches
+   `CACHE_TRANSIENT_ERRORS`, sets `ee_features_enabled` to `False` and `tier`
+   to `Tier.COMMUNITY`, with the comment "Fail closed - disable EE features if
+   we can't verify license." This is a different failure
    mode from point 4 below; do not conflate the two.
 4. **The self-hosted license-enforcement middleware fails *open* on cache
    transient errors, deliberately.** `ee/onyx/server/middleware/license_enforcement.py`
@@ -317,11 +317,12 @@ calls `web/src/lib/billing/svc.ts:downgradeToCommunity` and reloads the page.
    only guard.
 8. **EE code loading, license validity, and tier are three separate
    questions.** Per [[editions-and-gating]]: `global_version.is_ee_version()`
-   only says `ee.<module>` imported. `check_ee_features_enabled()` says
+   only says `ee.<module>` imported. `ee_features_enabled` on `GET /settings`
+   (`ee/onyx/server/settings/api.py:apply_license_status_to_settings`) says
    whether the deployment may use paid features at all (a boolean gate).
    `get_tier()` says *which* tier, for tier-specific behavior
    (`tier_at_least`). A change must not conflate these, e.g. gating a
-   Business-only feature on `check_ee_features_enabled()` alone would let an
+   Business-only feature on `ee_features_enabled` alone would let an
    Enterprise-license-holding Community-intent deployment through
    incorrectly if such a state existed; always use `tier_at_least(get_tier(),
    Tier.X)` for tier-specific gates.
@@ -336,11 +337,10 @@ calls `web/src/lib/billing/svc.ts:downgradeToCommunity` and reloads the page.
 ## 6. Relationships
 
 **Depends on**
-- [[editions-and-gating]]: owns the EE-code-loading dispatch and
-  `LICENSE_ENFORCEMENT_ENABLED`/`ENABLE_PAID_ENTERPRISE_EDITION_FEATURES`
-  semantics this component's tier resolution builds on; `check_ee_features_enabled`
-  and `get_tier` are the two functions that component's §1 point to as "the
-  commercial half" of the picture.
+- [[editions-and-gating]]: owns the EE-code-loading dispatch this component's
+  tier resolution builds on; `apply_license_status_to_settings`
+  and `get_tier` are the two functions that component's §4.4 names as the
+  license half of the picture.
 - [[multi-tenancy]]: `MULTI_TENANT` is the fork point for nearly every
   function in `service.py`, `tier.py`, and `billing_cache.py`.
 - [[auth-and-identity]]: every authenticated endpoint here gates on
@@ -356,7 +356,7 @@ calls `web/src/lib/billing/svc.ts:downgradeToCommunity` and reloads the page.
   limit enforcement.
 - Nothing in the chat/search/ingestion path calls into billing directly;
   its effect on the rest of the product is entirely mediated through
-  `get_tier()` / `tier_at_least()` / `check_ee_features_enabled()` calls made
+  `get_tier()` / `tier_at_least()` calls made
   elsewhere, per [[editions-and-gating]].
 
 ---

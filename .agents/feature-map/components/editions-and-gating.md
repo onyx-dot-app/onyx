@@ -22,11 +22,13 @@
 
 ## 1. What the user experiences
 
-An operator who clones the repository and runs the MIT build with no license
-and no `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES` still gets **Enterprise code
-running underneath**, because `backend/Dockerfile:COPY --chown=onyx:onyx ./ee /app/ee`
-ships the `ee` package in every standard image, and license enforcement
-defaults on. What changes with a license is not which code runs but which
+An operator who clones the repository and runs a standard build with no license
+still gets **Enterprise code running underneath**, because
+`backend/Dockerfile:COPY --chown=onyx:onyx ./ee /app/ee` ships the `ee` package
+in every standard image, and
+`backend/onyx/utils/variable_functionality.py:set_is_ee_if_available` loads it
+whenever the build ships it. No environment variable turns Enterprise code off.
+What changes with a license is not which code runs but which
 paths are unlocked: `backend/ee/onyx/server/middleware/license_enforcement.py`
 blocks or allows requests, and `backend/ee/onyx/utils/tier.py:get_tier` decides
 which tier-gated features respond instead of 402/403.
@@ -44,7 +46,8 @@ external, through the control plane:
 `backend/ee/onyx/server/tenants/product_gating.py:is_tenant_gated`. For a gated
 tenant it returns 402 (`SUBSCRIPTION_INACTIVE`) before the handler runs. `/license`
 is not in `backend/ee/onyx/configs/multi_tenant_gating_config.py:MULTI_TENANT_GATING_ALLOWED_PREFIXES`.
-`check_ee_features_enabled` returns true for cloud.
+`backend/ee/onyx/server/settings/api.py:apply_license_status_to_settings` sets
+`ee_features_enabled` to true for cloud.
 
 An admin building a custom OpenAPI action or MCP tool also sees per-action
 gating: each action defaults to a policy (`ALWAYS`, `ASK`, `DENY` in
@@ -59,16 +62,12 @@ tables, independent of CE/EE at all.
 
 | Variable | Read in | Default | Effect |
 |---|---|---|---|
-| `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES` | `backend/onyx/configs/app_configs.py:ENTERPRISE_EDITION_ENABLED` | `false` | Legacy/rollout flag. `true` forces EE code loading. |
-| `LICENSE_ENFORCEMENT_ENABLED` | `backend/onyx/utils/variable_functionality.py:_LICENSE_ENFORCEMENT_ENABLED` and, separately, `backend/ee/onyx/configs/app_configs.py:LICENSE_ENFORCEMENT_ENABLED` | **`true`** | When true, EE code loads (see §4), and `backend/ee/onyx/server/middleware/license_enforcement.py` actively enforces license state on self-hosted deployments. When false, EE code still loads if `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true`, and the middleware is disabled (legacy: EE features gated by `ENTERPRISE_EDITION_ENABLED` alone). |
 | `MULTI_TENANT` | `backend/shared_configs/configs.py` | `false` | Cloud mode. Selects control-plane gating (`add_api_server_tenant_id_middleware`) over the self-hosted license middleware in `backend/ee/onyx/main.py:get_application`. Also gates whether `backend/onyx/feature_flags/factory.py:get_default_feature_flag_provider` even attempts the PostHog provider. |
 
-`_LICENSE_ENFORCEMENT_ENABLED` in `variable_functionality.py` and
-`LICENSE_ENFORCEMENT_ENABLED` in `ee/onyx/configs/app_configs.py` are two
-separate reads of the same env var with the same `"true"` default. The
-duplication is deliberate: `variable_functionality.py` cannot import `ee`
-configs, since doing so would force-load the `ee` package before EE-ness has
-been decided (comment at `variable_functionality.py`).
+No environment variable selects the edition. On a self-hosted deployment, none
+turns license enforcement off.
+The build decides the edition (`variable_functionality.py:is_ee_available`, §4.1),
+and the license decides the tier (§4.4).
 
 ### License endpoints (`backend/ee/onyx/server/license/api.py`, router prefix `/license`, self-hosted only)
 
@@ -138,13 +137,11 @@ This component is mostly code dispatch, not data, with two exceptions:
 
 ```
 process start (onyx.main, or one of background/celery/versioned_apps/*.py)
-  └─ set_is_ee_based_on_env_variable()        onyx/utils/variable_functionality.py
-       if ENTERPRISE_EDITION_ENABLED:            (ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true)
-         global_version.set_ee()
-       elif _LICENSE_ENFORCEMENT_ENABLED:        (LICENSE_ENFORCEMENT_ENABLED, defaults "true")
+  └─ set_is_ee_if_available()                 onyx/utils/variable_functionality.py
+       if is_ee_available():                     (find_spec("ee.onyx") names a real package)
          global_version.set_ee()
        else:
-         (stays CE; only reachable if BOTH flags are explicitly false)
+         (stays CE; only reachable in a build without the `ee.onyx` package)
 
 later, at any call site:
   fetch_versioned_implementation(module, attribute)
@@ -161,18 +158,18 @@ Because `backend/Dockerfile` always copies `./ee` into the image
 (`COPY --chown=onyx:onyx ./ee /app/ee`), the "on ModuleNotFoundError while
 is_ee" branch is not the path a standard deployment takes: `ee.<module>`
 resolves successfully essentially every time EE is set, which per the flow
-above is essentially every time, because `LICENSE_ENFORCEMENT_ENABLED`
-defaults `"true"`. The CE branch above (`module_full = module`, no `ee.`
-prefix) is reached only when `global_version.is_ee_version()` is `False`,
-which requires an operator to have set both `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false`
-(the default) and `LICENSE_ENFORCEMENT_ENABLED=false` (not the default).
-Stripping `./ee` from the image does not set `global_version` to CE. With the
-default flags, `is_ee_version()` stays `True`. The missing top-level `ee`
-import raises `ModuleNotFoundError: No module named 'ee'`, which does not name
-`ee.onyx`, so `fetch_versioned_implementation` re-raises it instead of using
-the CE fallback.
+above is every build that ships `backend/ee/onyx`. The CE branch above
+(`module_full = module`, no `ee.` prefix) is reached only when
+`global_version.is_ee_version()` is `False`, which requires a build without
+the `ee.onyx` package. `variable_functionality.py:is_ee_available` calls
+`importlib.util.find_spec("ee.onyx")` and returns false in three cases: there
+is no `ee` package (`find_spec` raises `ModuleNotFoundError`), there is a bare
+`ee` package with no `onyx` inside (the MIT-only mirror, per the function's
+docstring), or `ee/onyx` is a directory with no `__init__.py` (a namespace
+package, whose spec has no origin). Such a build resolves every versioned
+symbol to CE.
 
-`set_is_ee_based_on_env_variable()` runs at module level (not lazily) in
+`set_is_ee_if_available()` runs at module level (not lazily) in
 `backend/onyx/main.py` (before `app = fetch_versioned_implementation(module="onyx.main", attribute="get_application")`)
 and in every `backend/onyx/background/celery/versioned_apps/*.py`
 (`beat.py`, `client.py`, `docfetching.py`, `docprocessing.py`, `heavy.py`,
@@ -249,25 +246,27 @@ Self-hosted only. `/license/claim` and `/license/upload`
 (`backend/ee/onyx/server/license/api.py`) both reject on `MULTI_TENANT`, since
 cloud licensing is driven by the control plane and the `gated_tenants` Redis
 key instead. `backend/ee/onyx/server/middleware/license_enforcement.py`
-enforces license state (`GATED_ACCESS`, seat limits) only when
-`LICENSE_ENFORCEMENT_ENABLED` is true and only for self-hosted; MULTI_TENANT
+enforces license state (`GATED_ACCESS`, seat limits) on every self-hosted
+deployment; MULTI_TENANT
 deployments get `add_api_server_tenant_id_middleware` instead
 (`backend/ee/onyx/main.py:get_application`). Whether EE *features* (as
 opposed to EE *code*) are actually unlocked is a separate question, answered
-by `backend/ee/onyx/server/settings/api.py:check_ee_features_enabled` and
-`backend/ee/onyx/utils/tier.py:get_tier`: EE code loading is necessary but not
-sufficient for a paid feature to respond.
+by `backend/ee/onyx/utils/tier.py:get_tier` and, for the UI, by the
+`ee_features_enabled` field that
+`backend/ee/onyx/server/settings/api.py:apply_license_status_to_settings` sets:
+EE code loading is necessary but not sufficient for a paid feature to respond.
+With no license, `tier.py:_self_hosted_tier` resolves `Tier.COMMUNITY`.
 
 `GET /settings` reports the license state through
 `backend/ee/onyx/server/settings/api.py:apply_license_status_to_settings`
-(self-hosted, license enforcement on). With no license in the cache or the DB,
-it sets `application_status` to `GATED_ACCESS` only when
-`ENTERPRISE_EDITION_ENABLED` is true and a perm-synced cc-pair exists
+(self-hosted). With no license in the cache or the DB, it sets
+`ee_features_enabled` to false and `tier` to `Tier.COMMUNITY`. It sets
+`application_status` to `GATED_ACCESS` only when a perm-synced cc-pair exists
 (`_has_perm_synced_cc_pairs`, which calls
 `backend/onyx/db/connector_credential_pair.py:has_perm_synced_cc_pairs`). A DB
 error in that check counts as true, so it fails closed. The Community downgrade
-([[billing]] §4.5) leaves no perm-synced pair, so a downgraded deployment with
-the legacy flag is not gated.
+([[billing]] §4.5) leaves no perm-synced pair, so a downgraded deployment is
+not gated.
 
 ---
 
@@ -275,8 +274,8 @@ the legacy flag is not gated.
 
 1. **EE code loading is the default in a standard deployment.** A CE-only
    code path (`global_version.is_ee_version() is False`) is not the normal
-   case; it requires both edition flags to be explicitly off. A build with
-   `ee` stripped fails at import instead of resolving to CE. Do not write or review code as if CE resolution is the
+   case; it requires a build without the `ee.onyx` package (§4.1). No
+   environment variable turns EE code off. Do not write or review code as if CE resolution is the
    common path; assume `ee.<module>` unless proven otherwise for the target
    deployment.
 2. **A CE stub that "does nothing" is not evidence Onyx does nothing.** The
@@ -316,10 +315,10 @@ the legacy flag is not gated.
 7. **`global_version` is process-local, not deployment-wide.** It is set once
    at import time per process (`onyx.main`, each Celery `versioned_apps/*.py`
    entry point). Different processes in the same deployment can resolve
-   differently if built from different images or given different env vars;
+   differently if built from different images;
    do not assume the API server and a worker agree.
 8. **EE code loaded is not the same as EE features unlocked.** Gating a new
-   paid feature must go through `check_ee_features_enabled` / `get_tier` (or
+   paid feature must go through `get_tier` (or
    equivalent tier/license checks), not through `global_version.is_ee_version()`
    alone; the latter only tells you which code is importable, not whether the
    deployment is licensed for it.
@@ -345,7 +344,7 @@ the legacy flag is not gated.
   symbol; see §9.
 - [[background-jobs]]: every Celery app variant under
   `backend/onyx/background/celery/versioned_apps/` calls
-  `set_is_ee_based_on_env_variable()` before building its app.
+  `set_is_ee_if_available()` before building its app.
 - [[observability]]: license and tier decisions are logged via
   `global_version`/`get_tier` state, useful when diagnosing which code path a
   request actually took.
@@ -357,10 +356,10 @@ the legacy flag is not gated.
 | If your change... | Also check |
 |---|---|
 | adds a new versioned symbol (new `fetch_versioned_implementation` call) | both a CE and an `ee.` implementation exist at the mirrored path with an identical signature; add the `# IMPORTANT DO NOT DELETE` comment on the CE side; decide `fetch_versioned_implementation` vs. `_with_fallback` vs. `_or_noop` deliberately, per §4.2 |
-| changes an EE flag's default (`ENABLE_PAID_ENTERPRISE_EDITION_FEATURES`, `LICENSE_ENFORCEMENT_ENABLED`) | every place that reads the flag directly rather than through `global_version` (`beat_schedule.py`, `ee/onyx/server/middleware/license_enforcement.py`, `ee/onyx/utils/tier.py`, `ee/onyx/server/settings/api.py`, `ee/onyx/server/tenants/proxy.py`); the unit-suite `_reset_leaked_ee_state` fixture assumption in `backend/tests/unit/conftest.py` |
+| changes how EE code is detected (`is_ee_available`, `set_is_ee_if_available`) | every place that calls `is_ee_available` directly rather than through `global_version` (`backend/onyx/background/celery/tasks/beat_schedule.py`); the unit-suite `_reset_leaked_ee_state` fixture assumption in `backend/tests/unit/conftest.py`; `backend/tests/unit/onyx/utils/test_ee_detection.py` |
 | changes the Dockerfile's `ee` copy or the `ee` requirements split | `backend/Dockerfile:COPY ./ee`, `backend/requirements/ee.txt`; a build that stops shipping `ee` flips every standard deployment's default resolution from EE to CE, which is the whole safety story in §5 point 2 |
 | adds a feature flag | whether it is a per-user boolean (`feature_enabled_for_user_tenant`) or a tenant-wide variant (`feature_variant_for_tenant`); what an unresolvable flag must do, since the first returns `False` when it cannot resolve; whether `MULTI_TENANT` gating on the PostHog provider is the intended scope, since self-hosted always gets `NoOpFeatureFlagProvider` unless `DEV_MODE` |
-| changes licensing (claim/upload/refresh/delete/downgrade, or `get_tier`) | `MULTI_TENANT` rejection branches in `ee/onyx/server/license/api.py`; `check_ee_features_enabled` and `apply_license_status_to_settings` in `ee/onyx/server/settings/api.py`; seat-limit and `GATED_ACCESS` behaviour in `license_enforcement.py` |
+| changes licensing (claim/upload/refresh/delete/downgrade, or `get_tier`) | `MULTI_TENANT` rejection branches in `ee/onyx/server/license/api.py`; `apply_license_status_to_settings` in `ee/onyx/server/settings/api.py`; seat-limit and `GATED_ACCESS` behaviour in `license_enforcement.py` |
 | changes `gated_app`/`GatedActionPolicy` policy resolution | every consumer: `server/features/mcp/api.py`, `server/features/build/external_apps/api.py`, `sandbox_proxy/addons/gate.py`, `external_apps/matching/engine.py`; this is unrelated to CE/EE dispatch and must not be conflated with it |
 
 ---
@@ -369,10 +368,10 @@ the legacy flag is not gated.
 
 ### Telling which implementation is live at runtime
 
-- Log line: `set_is_ee_based_on_env_variable()` calls `logger.notice(...)`
-  with either "Enterprise Edition enabled via ENABLE_PAID_ENTERPRISE_EDITION_FEATURES"
-  or the license-enforcement notice; grep `backend/log/api_server_debug.log`
-  for either string, or for "Running Enterprise Edition" logged in
+- Log line: `set_is_ee_if_available()` calls `logger.notice(...)`
+  with "Enterprise Edition code is loaded" when it sets the flag; grep
+  `backend/log/api_server_debug.log`
+  for that string, or for "Running Enterprise Edition" logged in
   `backend/onyx/main.py`'s `__main__` block.
 - Programmatically: `from onyx.utils.variable_functionality import global_version; global_version.is_ee_version()`.
 - Per-symbol: `fetch_versioned_implementation` logs
@@ -383,6 +382,7 @@ the legacy flag is not gated.
 
 ```bash
 cd backend && uv run pytest tests/unit -k "variable_functionality or license or tier or feature_flag"
+cd backend && uv run pytest tests/unit/onyx/utils/test_ee_detection.py
 cd backend && uv run pytest tests/unit/ee/onyx/server/middleware/test_license_enforcement.py
 cd backend && uv run pytest tests/unit/ee/onyx/utils/test_tier.py
 cd backend && uv run pytest tests/integration -k license
@@ -390,8 +390,8 @@ cd backend && uv run pytest tests/integration -k license
 
 `backend/tests/unit/conftest.py:_reset_leaked_ee_state` is an autouse fixture
 that undoes EE state leaked by import side effects: because
-`set_is_ee_based_on_env_variable()` runs at module level in `onyx.main` and
-every `versioned_apps/*.py`, and license enforcement defaults to `True`, any
+`set_is_ee_if_available()` runs at module level in `onyx.main` and
+every `versioned_apps/*.py`, and the repository ships the EE code, any
 unit test whose import chain reaches one of those modules silently flips
 `global_version` to EE for every later test in the same worker. The fixture
 calls `global_version.unset_ee()` and `fetch_versioned_implementation.cache_clear()`
@@ -401,27 +401,30 @@ takes the opposite stance for integration tests: it imports `onyx.main` first,
 deliberately, before any dispatcher call, to avoid a re-entrant
 `fetch_versioned_implementation` recursion while `ee.onyx.main` is mid-import
 (see the comment above the import in that file). `backend/tests/daily/conftest.py`
-sets `LICENSE_ENFORCEMENT_ENABLED=false` directly in `os.environ` before
-import, for a suite that wants CE-only resolution by construction (assuming
-`ENABLE_PAID_ENTERPRISE_EDITION_FEATURES` also stays unset in that env).
+calls `global_version.unset_ee()` and `fetch_versioned_implementation.cache_clear()`
+at module level, after it imports `onyx.main`, for a suite that wants CE-only
+resolution by construction.
 
-To exercise the CE path directly instead of relying on env vars, patch or
-call `global_version.unset_ee()` and clear
-`fetch_versioned_implementation.cache_clear()` in a test, matching what
-`_reset_leaked_ee_state` does.
+To exercise the CE path in a test, call `global_version.unset_ee()` and
+`fetch_versioned_implementation.cache_clear()`, matching what
+`_reset_leaked_ee_state` does. No environment variable gives CE resolution.
 
 ### Manual reproduction
 
-1. `grep -n "Enterprise Edition\|License enforcement" backend/log/api_server_debug.log`
-   at server startup to see which branch of `set_is_ee_based_on_env_variable`
-   fired.
+1. `grep -n "Enterprise Edition" backend/log/api_server_debug.log`
+   at server startup to see whether `set_is_ee_if_available` loaded the EE
+   code.
 2. Confirm `GET http://localhost:3000/api/license` and
    `GET http://localhost:3000/api/admin/settings` behave as expected for the
    current tier.
-3. To test the CE-only path locally, set both `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false`
-   and `LICENSE_ENFORCEMENT_ENABLED=false`, restart the API server, and
-   confirm the encryption self-test or a versioned symbol resolves to the
-   non-`ee.` module (see §9 for what changes).
+3. To unlock paid features locally, seed a license. Set `ONYX_DEV_LICENSE` to a
+   signed license and run `python -m scripts.seed_dev_license` from `backend/`
+   (`backend/scripts/seed_dev_license.py:main`). The script verifies the
+   signature, then stores the license. With an empty `ONYX_DEV_LICENSE` it does
+   nothing.
+4. A standard checkout cannot run the CE-only path, because it ships
+   `backend/ee/onyx`. Use the test approach above to confirm that a versioned
+   symbol resolves to the non-`ee.` module (see §9 for what changes).
 
 ---
 
@@ -430,17 +433,17 @@ call `global_version.unset_ee()` and clear
 - **Reading `backend/onyx/utils/encryption.py:_encrypt_string` alone gives
   the wrong answer about whether Onyx encrypts credentials.** That function
   returns `input_str.encode()` unchanged; it is a real no-op. But because
-  `LICENSE_ENFORCEMENT_ENABLED` defaults to `"true"` and `backend/Dockerfile`
-  always ships `./ee`, the implementation that actually runs in a standard
+  `backend/Dockerfile` always ships `./ee` and `set_is_ee_if_available` loads
+  it, the implementation that actually runs in a standard
   deployment is `backend/ee/onyx/utils/encryption.py:_encrypt_string`, which
   performs real AES-CBC encryption keyed by `ENCRYPTION_KEY_SECRET`. This
   project has already made this exact mistake once: concluding "Onyx never
   encrypts credentials" from the CE file alone. It normally does. Always
   check which implementation `global_version.is_ee_version()` resolves to for
   the deployment in question before drawing a conclusion from a CE-only file.
-- **`LICENSE_ENFORCEMENT_ENABLED` defaulting to `"true"` is easy to miss.**
-  It reads like a feature you'd expect to opt into, not a default-on
-  behaviour that silently makes EE the default edition.
+- **No configuration selects the edition.** `is_ee_available` reads the build,
+  not the environment. An operator cannot switch a standard image to CE code.
+  A self-hosted operator cannot turn license enforcement off.
 - **Symbols reached only via `fetch_versioned_implementation` look unused to
   static analysis.** `importlib.import_module` + `getattr` with string
   arguments is invisible to "find references" tooling and to naive
@@ -453,14 +456,8 @@ call `global_version.unset_ee()` and clear
   called with and simply hands back that captured list. This is intentional
   (it's an identity fallback) but easy to misread as "the function actually
   runs with these arguments."
-- **`ENTERPRISE_EDITION_ENABLED` (CE config) and `LICENSE_ENFORCEMENT_ENABLED`
-  (read twice, once directly by `variable_functionality.py` and once via
-  `ee.onyx.configs.app_configs`) look like they could drift, but both read
-  the same env var with the same default.** They are duplicated for import-
-  ordering reasons (§2), not because they can disagree by design; if you
-  change one default you must change the other.
 - **EE code loaded does not mean EE features are unlocked.** `global_version.is_ee_version()`
   being `True` only means `ee.<module>` resolved. Whether a paid feature
   actually responds is a separate, license/tier-driven decision
-  (`check_ee_features_enabled`, `get_tier`). Do not gate a new paid feature on
+  (`get_tier`, `apply_license_status_to_settings`). Do not gate a new paid feature on
   `global_version.is_ee_version()` alone.
