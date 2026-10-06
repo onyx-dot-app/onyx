@@ -2147,8 +2147,7 @@
           "tooltip": "{name} 제거"
         },
         "table": {
-          "group": "그룹",
-          "members": "멤버"
+          "group": "그룹"
         },
         "toggle": {
           "description": "선택한 그룹의 멤버로 접근을 제한합니다. 동기화된 권한은 계속 적용됩니다.",

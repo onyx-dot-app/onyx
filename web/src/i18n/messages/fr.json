@@ -2147,8 +2147,7 @@
           "tooltip": "Retirer {name}"
         },
         "table": {
-          "group": "Groupe",
-          "members": "Membres"
+          "group": "Groupe"
         },
         "toggle": {
           "description": "Limite l'accès aux membres des groupes sélectionnés. Les permissions synchronisées s'appliquent toujours.",

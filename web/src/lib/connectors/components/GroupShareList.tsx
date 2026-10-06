@@ -6,7 +6,6 @@ import {
   Button,
   InputSingleComboBox,
   Table,
-  Text,
   type TableColumn,
 } from "@opal/components";
 import { Content, InputErrorText, Section } from "@opal/layouts";
@@ -107,28 +106,21 @@ export default function GroupShareList({
       kind: "data",
       field: "name",
       title: t("table.group"),
-      weight: 40,
+      weight: 60,
       sortable: false,
       hideable: false,
-      cell: (groupName) => (
-        <Text font="main-ui-body" color="text-04">
-          {groupName}
-        </Text>
+      cell: (groupName, row) => (
+        <Content
+          title={groupName}
+          description={
+            row.memberCount === undefined
+              ? undefined
+              : t("memberCount", { count: row.memberCount })
+          }
+          sizePreset="main-ui"
+          variant="section"
+        />
       ),
-    },
-    {
-      kind: "data",
-      field: "memberCount",
-      title: t("table.members"),
-      weight: 20,
-      sortable: false,
-      hideable: false,
-      cell: (count) =>
-        count === undefined ? null : (
-          <Text font="secondary-body" color="text-03">
-            {t("memberCount", { count })}
-          </Text>
-        ),
     },
     ...(hasLockedRows
       ? [

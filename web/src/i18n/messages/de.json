@@ -2147,8 +2147,7 @@
           "tooltip": "{name} entfernen"
         },
         "table": {
-          "group": "Gruppe",
-          "members": "Mitglieder"
+          "group": "Gruppe"
         },
         "toggle": {
           "description": "Zugriff auf Mitglieder der ausgewählten Gruppen beschränken. Synchronisierte Berechtigungen gelten weiterhin.",
