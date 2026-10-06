@@ -170,12 +170,12 @@ export function Table<TData>(props: DataTableProps<TData>) {
 
   // Whether the qualifier column should exist in the DOM.
   // Derived from the column definitions: if a qualifier column exists with
-  // content !== "simple", always show it. If content === "simple" (or no
+  // content !== "checkbox", always show it. If content === "checkbox" (or no
   // qualifier column defined), show only for multi-select (checkboxes).
   const qualifierColDef = columns.find((c) => c.kind === "qualifier");
   const hasQualifierColumn =
     (qualifierColDef != null &&
-      (qualifierColDef.content ?? "simple") !== "simple") ||
+      (qualifierColDef.content ?? "checkbox") !== "checkbox") ||
     selectionBehavior === "multi-select";
 
   // 1. Process columns (memoized on columns + size)

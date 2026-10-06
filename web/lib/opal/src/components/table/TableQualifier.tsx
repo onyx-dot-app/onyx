@@ -83,14 +83,14 @@ function TableQualifier({
           />
         ) : null;
 
-      case "simple":
+      case "checkbox":
       default:
         return null;
     }
   }
 
   const inner = renderContent();
-  const showBackground = background && content !== "simple";
+  const showBackground = background && content !== "checkbox";
 
   return (
     <div
@@ -125,7 +125,7 @@ function TableQualifier({
         <div
           className={cn(
             "absolute inset-0 items-center justify-center rounded-08",
-            content === "simple" ? "flex" : overlayStyles
+            content === "checkbox" ? "flex" : overlayStyles
           )}
         >
           <InputCheckbox

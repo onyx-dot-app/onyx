@@ -41,7 +41,7 @@ function resolveQualifier<TData>(
     id: "qualifier",
     def,
     width: (size: TableSize) => (size === 2.25 ? { fixed: 36 } : { fixed: 44 }),
-    content: col.content ?? "simple",
+    content: col.content ?? "checkbox",
     getContent: col.icon,
     getImageSrc: col.imageSrc,
     getImageAlt: col.imageAlt,

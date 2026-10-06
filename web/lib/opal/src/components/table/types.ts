@@ -30,7 +30,7 @@ export type ColumnWidth = DataColumnWidth | FixedColumnWidth;
 // Column kind discriminant
 // ---------------------------------------------------------------------------
 
-export type QualifierContentType = "simple" | "icon" | "image";
+export type QualifierContentType = "checkbox" | "icon" | "image";
 
 export type OnyxColumnKind = "qualifier" | "data" | "display" | "actions";
 
@@ -41,7 +41,12 @@ export type OnyxColumnKind = "qualifier" | "data" | "display" | "actions";
 /** The leading cell: a checkbox, icon or image per row. */
 export interface TableQualifierColumn<TData> {
   kind: "qualifier";
-  /** What the cell shows besides the selection checkbox. @default "simple" */
+  /**
+   * What the cell shows: an icon, an image, or only the selection checkbox.
+   * A "checkbox" qualifier exists only in a multi-select table.
+   *
+   * @default "checkbox"
+   */
   content?: QualifierContentType;
   /** The row's icon, for `content: "icon"`. */
   icon?: (row: TData) => IconFunctionComponent;
