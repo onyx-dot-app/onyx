@@ -407,7 +407,11 @@ export default function AddConnector({
                   refresh_freq: advancedConfiguration.refreshFreq || null,
                   prune_freq: advancedConfiguration.pruneFreq || null,
                   indexing_start: advancedConfiguration.indexingStart || null,
-                  groups: groups,
+                  // Without a credential, no link request follows: the
+                  // placeholder-credential create takes both access lists.
+                  ...(credentialActivated
+                    ? { groups }
+                    : { manage_access: manageAccess, data_access: dataAccess }),
                 },
                 undefined,
                 credentialActivated ? false : true
