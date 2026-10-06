@@ -30,21 +30,15 @@ GoogleDriveFileType = dict[str, Any]
 TOKEN_EXPIRATION_TIME = 3600  # 1 hour
 
 
-# These correspond to The major stages of retrieval for google drive.
-# The stages for the oauth flow are:
+# Stages of the OAuth flow:
 # get_all_files_for_oauth(),
 # get_all_drive_ids(),
 # get_files_in_shared_drive(),
 # crawl_folders_for_files()
 #
-# The stages for the service account flow are roughly:
-# get_all_user_emails(),
-# get_all_drive_ids(),
-# get_files_in_shared_drive(),
-# Then for each user:
-#   get_files_in_my_drive()
-#   get_files_in_shared_drive()
-#   crawl_folders_for_files()
+# The service account flow advances through DriveRetrievalPhase instead. It
+# still labels each RetrievedDriveFile with a stage, for error reporting, and
+# sets completion_stage to DONE when its last phase ends.
 class DriveRetrievalStage(str, Enum):
     START = "start"
     DONE = "done"
@@ -114,8 +108,10 @@ class PhaseProgress(BaseModel):
     # same partitions in the same sequence.
     partition_keys: list[str] = []
     partition_index: int = Field(default=0, ge=0)
+    # Resume point inside the current partition. The listing that produced it
+    # must be repeated with the same query, so resumes reuse the run's range.
     next_page_token: str | None = None
-    # Frontier within the current partition, reset when the partition changes.
+    # Latest modifiedTime yielded in the current partition. Diagnostic only.
     completed_until: SecondsSinceUnixEpoch = 0
 
     @property
@@ -137,6 +133,21 @@ class PhaseProgress(BaseModel):
         self.partition_index += 1
         self.next_page_token = None
         self.completed_until = 0
+
+
+# Requested target partitions pair a target id with the email that crawls it.
+# Drive file ids never contain the separator, so splitting on the first one is
+# safe for any email.
+_TARGET_KEY_SEPARATOR = "|"
+
+
+def target_partition_key(target_id: str, email: str) -> str:
+    return f"{target_id}{_TARGET_KEY_SEPARATOR}{email}"
+
+
+def split_target_partition_key(key: str) -> tuple[str, str]:
+    target_id, email = key.split(_TARGET_KEY_SEPARATOR, 1)
+    return target_id, email
 
 
 class StageCompletion(BaseModel):
@@ -224,20 +235,29 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # cached user emails
     user_emails: list[str] | None = None
 
-    # --- Phased retrieval state. Not yet driving retrieval; the phase PRs wire
-    # it in. Held as flat values so the persisted checkpoint stays easy to
-    # migrate.
+    # --- Phased retrieval state, used by the service account flow. Sized by
+    # drives and users, never by documents.
 
+    # None until the first phased run; a checkpoint written by the per-user
+    # stage loop also has None here and restarts at INVENTORY.
     phase_progress: PhaseProgress | None = None
 
-    # Drive id -> the email to impersonate for that drive. Sized by drives, not
-    # by documents.
+    # Drive id -> the email that listed it. Once the shared drive phase is
+    # over, a drive here and not in incomplete_drive_ids is fully covered.
     organizer_email_by_drive_id: dict[str, str] = {}
 
-    # Drives listed by someone who is not an organizer, so limited-access
-    # folders may be missing. Pruning must not delete documents for a drive in
-    # here on the basis of absence.
+    # Drives listed by someone who is not an organizer, or by nobody, so
+    # limited-access folders may be missing.
     incomplete_drive_ids: set[str] = set()
+
+    # Users whose impersonation failed this run. Their files are not covered by
+    # an owner pass, so other users' listings must not drop them.
+    failed_impersonation_emails: set[str] = set()
+
+    # Requested drives and folders that no impersonable user could reach.
+    # Pruning refuses to run while this is non-empty, because absence from the
+    # listing would delete every document indexed from them.
+    unreachable_target_ids: set[str] = set()
 
     # Hierarchy node raw IDs that have already been yielded.
     # Used to avoid yielding duplicate hierarchy nodes across checkpoints.

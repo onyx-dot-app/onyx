@@ -2,10 +2,8 @@ import copy
 import json
 import os
 import sys
-import threading
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Generator, Iterator
 from datetime import datetime
-from enum import Enum
 from typing import Any, Protocol, cast
 from urllib.parse import ParseResult, parse_qs, urlparse
 
@@ -19,7 +17,6 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
     GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD,
     INDEX_BATCH_SIZE,
-    MAX_DRIVE_WORKERS,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
@@ -36,6 +33,14 @@ from onyx.connectors.google_drive.doc_conversion import (
     convert_drive_item_to_document,
     onyx_document_id_from_drive_file,
 )
+from onyx.connectors.google_drive.drive_access import (
+    can_list_drive,
+    internal_principals_of,
+    list_drive_members,
+    list_group_member_emails,
+    probe_target,
+    select_drive_organizer,
+)
 from onyx.connectors.google_drive.file_retrieval import (
     DriveFileFieldType,
     crawl_folders_for_files,
@@ -50,11 +55,16 @@ from onyx.connectors.google_drive.file_retrieval import (
     has_link_only_permission,
 )
 from onyx.connectors.google_drive.models import (
+    DriveRetrievalPhase,
     DriveRetrievalStage,
     GoogleDriveCheckpoint,
     GoogleDriveFileType,
+    PhaseProgress,
     RetrievedDriveFile,
     StageCompletion,
+    next_phase,
+    split_target_partition_key,
+    target_partition_key,
 )
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import (
@@ -103,7 +113,6 @@ from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import (
     ThreadSafeDict,
     ThreadSafeSet,
-    parallel_yield,
     run_functions_tuples_in_parallel,
 )
 
@@ -121,6 +130,8 @@ SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
 OAUTH_PAGES_PER_CHECKPOINT = 2
 FOLDERS_PER_CHECKPOINT = 1
+# Partitions (drives or users) started per service account checkpoint call.
+PARTITIONS_PER_CHECKPOINT = 4
 
 # Upper bound on the dedup set. Drive file ids measure ~119 bytes per entry with
 # deep_getsizeof, so this holds it near 95 MB, well under
@@ -231,6 +242,33 @@ def _resume_start(
     return max(completed_until, start) if start is not None else completed_until
 
 
+def _owner_email(drive_file: GoogleDriveFileType) -> str | None:
+    """Lowercased owner of a My Drive file. Drive allows one owner; shared
+    drive files have none."""
+    owners = drive_file.get("owners") or []
+    if not owners:
+        return None
+    email = owners[0].get("emailAddress")
+    return email.lower() if isinstance(email, str) else None
+
+
+def _note_modified_time(
+    progress: PhaseProgress, drive_file: GoogleDriveFileType
+) -> None:
+    modified_time = drive_file.get(GoogleFields.MODIFIED_TIME.value)
+    if not isinstance(modified_time, str):
+        return
+    try:
+        timestamp = datetime.fromisoformat(modified_time).timestamp()
+    except ValueError:
+        return
+    progress.completed_until = max(progress.completed_until, timestamp)
+
+
+def _ignore_traversed_id(_folder_id: str) -> None:
+    """The phased flow tracks coverage by partition, not by traversed folder."""
+
+
 def _public_access() -> ExternalAccess:
     return ExternalAccess(
         external_user_emails=set(),
@@ -267,10 +305,8 @@ def add_retrieval_info(
         )
 
 
-class DriveIdStatus(Enum):
-    AVAILABLE = "available"
-    IN_PROGRESS = "in_progress"
-    FINISHED = "finished"
+class UnreachableTargetsError(RuntimeError):
+    """A requested drive or folder could not be listed by anyone."""
 
 
 class GoogleDriveConnector(
@@ -858,505 +894,662 @@ class GoogleDriveConnector(
 
         return all_drive_ids
 
-    def make_drive_id_getter(
-        self, drive_ids: list[str], checkpoint: GoogleDriveCheckpoint
-    ) -> Callable[[str], str | None]:
-        status_lock = threading.Lock()
-
-        in_progress_drive_ids = {
-            completion.current_folder_or_drive_id: user_email
-            for user_email, completion in checkpoint.completion_map.items()
-            if completion.stage == DriveRetrievalStage.SHARED_DRIVE_FILES
-            and completion.current_folder_or_drive_id is not None
-        }
-        drive_id_status: dict[str, DriveIdStatus] = {}
-        for drive_id in drive_ids:
-            if drive_id in self._retrieved_folder_and_drive_ids:
-                drive_id_status[drive_id] = DriveIdStatus.FINISHED
-            elif drive_id in in_progress_drive_ids:
-                drive_id_status[drive_id] = DriveIdStatus.IN_PROGRESS
-            else:
-                drive_id_status[drive_id] = DriveIdStatus.AVAILABLE
-
-        def get_available_drive_id(thread_id: str) -> str | None:
-            completion = checkpoint.completion_map[thread_id]
-            with status_lock:
-                future_work = None
-                for drive_id, status in drive_id_status.items():
-                    if drive_id in self._retrieved_folder_and_drive_ids:
-                        drive_id_status[drive_id] = DriveIdStatus.FINISHED
-                        continue
-                    if drive_id in completion.processed_drive_ids:
-                        continue
-
-                    if status == DriveIdStatus.AVAILABLE:
-                        # add to processed drive ids so if this user fails to retrieve once
-                        # they won't try again on the next checkpoint run
-                        completion.processed_drive_ids.add(drive_id)
-                        return drive_id
-                    elif status == DriveIdStatus.IN_PROGRESS:
-                        logger.debug("Drive id in progress: %s", drive_id)
-                        future_work = drive_id
-
-                if future_work:
-                    # in this case, all drive ids are either finished or in progress.
-                    # This thread will pick up one of the in progress ones in case it fails.
-                    # This is a much simpler approach than waiting for a failure picking it up,
-                    # at the cost of some repeated work until all shared drives are retrieved.
-                    # we avoid apocalyptic cases like all threads focusing on one huge drive
-                    # because the drive id is added to _retrieved_folder_and_drive_ids after any thread
-                    # manages to retrieve any file from it (unfortunately, this is also the reason we currently
-                    # sometimes fail to retrieve restricted access folders/files)
-                    completion.processed_drive_ids.add(future_work)
-                    return future_work
-            return None  # no work available, return None
-
-        return get_available_drive_id
-
-    def _make_fresh_emails_callback(
-        self, checkpoint: GoogleDriveCheckpoint
-    ) -> Callable[[], list[str]]:
-        def _callback() -> list[str]:
-            fresh_emails = self._get_all_user_emails()
-            checkpoint.user_emails = fresh_emails
-            return fresh_emails
-
-        return _callback
-
-    def _post_validation_retrieval(
-        self,
-        curr_stage: StageCompletion,
-        drive_service: GoogleDriveService,
-        user_email: str,
-        field_type: DriveFileFieldType,
-        checkpoint: GoogleDriveCheckpoint,
-        get_new_drive_id: Callable[[str], str | None],
-        sorted_filtered_folder_ids: list[str],
-        resuming: bool,
-        start: SecondsSinceUnixEpoch | None,
-        end: SecondsSinceUnixEpoch | None,
-    ) -> Iterator[RetrievedDriveFile]:
-        # if we are including my drives, try to get the current user's my
-        # drive if any of the following are true:
-        # - include_my_drives is true
-        # - the current user's email is in the requested emails
-        if curr_stage.stage == DriveRetrievalStage.MY_DRIVE_FILES:
-            if self.include_my_drives or user_email in self._requested_my_drive_emails:
-                logger.info(
-                    "Getting all files in my drive as '%s. Resuming: %s. Stage completed until: %s. Next page token: %s",
-                    user_email,
-                    resuming,
-                    curr_stage.completed_until,
-                    curr_stage.next_page_token,
-                )
-
-                for file_or_token in add_retrieval_info(
-                    get_all_files_in_my_drive_and_shared(
-                        service=drive_service,
-                        update_traversed_ids_func=self._update_traversed_parent_ids,
-                        field_type=field_type,
-                        include_shared_with_me=self.include_files_shared_with_me,
-                        max_num_pages=MY_DRIVE_PAGES_PER_CHECKPOINT,
-                        start=(
-                            _resume_start(curr_stage.completed_until, start)
-                            if resuming
-                            else start
-                        ),
-                        end=end,
-                        cache_folders=not bool(curr_stage.completed_until),
-                        page_token=curr_stage.next_page_token,
-                    ),
-                    user_email,
-                    DriveRetrievalStage.MY_DRIVE_FILES,
-                ):
-                    if isinstance(file_or_token, str):
-                        logger.debug("Done with max num pages for user %s", user_email)
-                        checkpoint.completion_map[
-                            user_email
-                        ].next_page_token = file_or_token
-                        return  # done with the max num pages, return checkpoint
-                    yield file_or_token
-
-            checkpoint.completion_map[user_email].next_page_token = None
-            curr_stage.stage = DriveRetrievalStage.SHARED_DRIVE_FILES
-            curr_stage.current_folder_or_drive_id = None
-            return  # resume from next stage on the next run
-
-        if curr_stage.stage == DriveRetrievalStage.SHARED_DRIVE_FILES:
-
-            def _yield_from_drive(
-                drive_id: str, drive_start: SecondsSinceUnixEpoch | None
-            ) -> Iterator[RetrievedDriveFile | str]:
-                yield from add_retrieval_info(
-                    get_files_in_shared_drive(
-                        service=drive_service,
-                        drive_id=drive_id,
-                        field_type=field_type,
-                        max_num_pages=SHARED_DRIVE_PAGES_PER_CHECKPOINT,
-                        update_traversed_ids_func=self._update_traversed_parent_ids,
-                        cache_folders=not bool(
-                            drive_start
-                        ),  # only cache folders for 0 or None
-                        start=drive_start,
-                        end=end,
-                        page_token=curr_stage.next_page_token,
-                    ),
-                    user_email,
-                    DriveRetrievalStage.SHARED_DRIVE_FILES,
-                    parent_id=drive_id,
-                )
-
-            # resume from a checkpoint
-            if resuming:
-                drive_id = curr_stage.current_folder_or_drive_id
-                if drive_id:
-                    resume_start = _resume_start(curr_stage.completed_until, start)
-                    for file_or_token in _yield_from_drive(drive_id, resume_start):
-                        if isinstance(file_or_token, str):
-                            checkpoint.completion_map[
-                                user_email
-                            ].next_page_token = file_or_token
-                            return  # done with the max num pages, return checkpoint
-                        yield file_or_token
-
-            drive_id = get_new_drive_id(user_email)
-            if drive_id:
-                logger.info(
-                    "Getting files in shared drive '%s' as '%s. Resuming: %s",
-                    drive_id,
-                    user_email,
-                    resuming,
-                )
-                curr_stage.completed_until = 0
-                curr_stage.current_folder_or_drive_id = drive_id
-                for file_or_token in _yield_from_drive(drive_id, start):
-                    if isinstance(file_or_token, str):
-                        checkpoint.completion_map[
-                            user_email
-                        ].next_page_token = file_or_token
-                        return  # done with the max num pages, return checkpoint
-                    yield file_or_token
-                curr_stage.current_folder_or_drive_id = None
-                return  # get a new drive id on the next run
-
-            checkpoint.completion_map[user_email].next_page_token = None
-            curr_stage.stage = DriveRetrievalStage.FOLDER_FILES
-            curr_stage.current_folder_or_drive_id = None
-            return  # resume from next stage on the next run
-
-        # In the folder files section of service account retrieval we take extra care
-        # to not retrieve duplicate docs. In particular, we only add a folder to
-        # retrieved_folder_and_drive_ids when all users are finished retrieving files
-        # from that folder, and maintain a set of all file ids that have been retrieved
-        # for each folder. This might get rather large; in practice we assume that the
-        # specific folders users choose to index don't have too many files.
-        if curr_stage.stage == DriveRetrievalStage.FOLDER_FILES:
-
-            def _yield_from_folder_crawl(
-                folder_id: str, folder_start: SecondsSinceUnixEpoch | None
-            ) -> Iterator[RetrievedDriveFile]:
-                yield from crawl_folders_for_files(
-                    service=drive_service,
-                    parent_id=folder_id,
-                    field_type=field_type,
-                    user_email=user_email,
-                    traversed_parent_ids=self._retrieved_folder_and_drive_ids,
-                    update_traversed_ids_func=self._update_traversed_parent_ids,
-                    start=folder_start,
-                    end=end,
-                )
-
-            # resume from a checkpoint
-            last_processed_folder = None
-            if resuming:
-                folder_id = curr_stage.current_folder_or_drive_id
-                if folder_id is None:
-                    logger.warning(
-                        "folder id not set in checkpoint for user %s. This happens occasionally when the connector is interrupted and resumed.",
-                        user_email,
-                    )
-                else:
-                    resume_start = _resume_start(curr_stage.completed_until, start)
-                    yield from _yield_from_folder_crawl(folder_id, resume_start)
-                last_processed_folder = folder_id
-
-            skipping_seen_folders = last_processed_folder is not None
-            # NOTE: this assumes a small number of folders to crawl. If someone
-            # really wants to specify a large number of folders, we should use
-            # binary search to find the first unseen folder.
-            num_completed_folders = 0
-            for folder_id in sorted_filtered_folder_ids:
-                if skipping_seen_folders:
-                    skipping_seen_folders = folder_id != last_processed_folder
-                    continue
-
-                if folder_id in self._retrieved_folder_and_drive_ids:
-                    continue
-
-                curr_stage.completed_until = 0
-                curr_stage.current_folder_or_drive_id = folder_id
-
-                if num_completed_folders >= FOLDERS_PER_CHECKPOINT:
-                    return  # resume from this folder on the next run
-
-                logger.info(
-                    "Getting files in folder '%s' as '%s'", folder_id, user_email
-                )
-                yield from _yield_from_folder_crawl(folder_id, start)
-                num_completed_folders += 1
-
-        curr_stage.stage = DriveRetrievalStage.DONE
-
-    def _impersonate_user_for_retrieval(
-        self,
-        user_email: str,
-        field_type: DriveFileFieldType,
-        checkpoint: GoogleDriveCheckpoint,
-        get_new_drive_id: Callable[[str], str | None],
-        sorted_filtered_folder_ids: list[str],
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
-    ) -> Iterator[RetrievedDriveFile]:
-        logger.info("Impersonating user %s", user_email)
-        curr_stage = checkpoint.completion_map[user_email]
-        resuming = True
-        if curr_stage.stage == DriveRetrievalStage.START:
-            logger.info("Setting stage to %s", DriveRetrievalStage.MY_DRIVE_FILES.value)
-            curr_stage.stage = DriveRetrievalStage.MY_DRIVE_FILES
-            resuming = False
-        drive_service = get_drive_service(self.creds, user_email)
-        is_user_removed = make_user_removal_checker(
-            user_email, self._make_fresh_emails_callback(checkpoint)
-        )
-
-        # validate that the user has access to the drive APIs by performing a simple
-        # request and checking for a 401
-        try:
-            logger.debug("Getting root folder id for user %s", user_email)
-            # default is ~17mins of retries, don't do that here for cases so we don't
-            # waste 17mins everytime we run into a user without access to drive APIs
-            retry_builder(tries=3, delay=1)(get_root_folder_id)(drive_service)
-        except HttpError as e:
-            if e.status_code == 401:
-                # fail gracefully, let the other impersonations continue
-                # one user without access shouldn't block the entire connector
-                logger.warning(
-                    "User '%s' does not have access to the drive APIs.", user_email
-                )
-                # mark this user as done so we don't try to retrieve anything for them
-                # again
-                curr_stage.stage = DriveRetrievalStage.DONE
-                return
-            raise
-        except RefreshError as e:
-            if is_user_removed():
-                logger.warning(
-                    "User '%s' confirmed removed from workspace, skipping.", user_email
-                )
-                curr_stage.stage = DriveRetrievalStage.DONE
-                return
-            logger.warning(
-                "User '%s' impersonation failed at validation gate. Error: %s",
-                user_email,
-                e,
-            )
-            curr_stage.stage = DriveRetrievalStage.DONE
-            yield RetrievedDriveFile(
-                completion_stage=DriveRetrievalStage.DONE,
-                drive_file={},
-                user_email=user_email,
-                error=ImpersonationError(user_email, e),
-            )
-            return
-
-        try:
-            yield from self._post_validation_retrieval(
-                curr_stage=curr_stage,
-                drive_service=drive_service,
-                user_email=user_email,
-                field_type=field_type,
-                checkpoint=checkpoint,
-                get_new_drive_id=get_new_drive_id,
-                sorted_filtered_folder_ids=sorted_filtered_folder_ids,
-                resuming=resuming,
-                start=start,
-                end=end,
-            )
-        except RefreshError as e:
-            if is_user_removed():
-                logger.warning(
-                    "User '%s' removed mid-run, skipping remaining files.", user_email
-                )
-                curr_stage.stage = DriveRetrievalStage.DONE
-            else:
-                logger.warning(
-                    "User '%s' impersonation failed mid-run. Error: %s", user_email, e
-                )
-                curr_stage.stage = DriveRetrievalStage.DONE
-                yield RetrievedDriveFile(
-                    completion_stage=DriveRetrievalStage.DONE,
-                    drive_file={},
-                    user_email=user_email,
-                    error=ImpersonationError(user_email, e),
-                )
-
-    def _manage_service_account_retrieval(
+    def _phased_retrieval(
         self,
         field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[RetrievedDriveFile]:
+        """Service account retrieval: one pass per phase over exact partitions.
+
+        Each item belongs to one partition with one principal guaranteed to see
+        it (a drive's organizer, a file's owner), so the checkpoint is a cursor
+        into the partition list plus a page token, never a per-document set.
+        Returns whenever a page token is saved or the partition budget for this
+        call is spent; the next call resumes from `checkpoint.phase_progress`.
         """
-        The current implementation of the service account retrieval does some
-        initial setup work using the primary admin email, then runs MAX_DRIVE_WORKERS
-        concurrent threads, each of which impersonates a different user and retrieves
-        files for that user. Technically, the actual work each thread does is "yield the
-        next file retrieved by the user", at which point it returns to the thread pool;
-        see parallel_yield for more details.
-        """
-        if checkpoint.completion_stage == DriveRetrievalStage.START:
-            checkpoint.completion_stage = DriveRetrievalStage.USER_EMAILS
+        if checkpoint.phase_progress is None:
+            if checkpoint.completion_stage is not DriveRetrievalStage.START:
+                logger.info(
+                    "Checkpoint was written by the per-user stage loop; "
+                    "restarting with phased retrieval."
+                )
+            checkpoint.phase_progress = PhaseProgress(
+                phase=DriveRetrievalPhase.INVENTORY
+            )
 
-        if checkpoint.completion_stage == DriveRetrievalStage.USER_EMAILS:
-            all_org_emails: list[str] = self._get_all_user_emails()
-            checkpoint.user_emails = all_org_emails
-            checkpoint.completion_stage = DriveRetrievalStage.DRIVE_IDS
-        else:
-            if checkpoint.user_emails is None:
-                raise ValueError("user emails not set")
-            all_org_emails = checkpoint.user_emails
+        budget: int = PARTITIONS_PER_CHECKPOINT
+        while True:
+            progress = checkpoint.phase_progress
+            if progress is None:
+                raise RuntimeError("phase_progress is unset during phased retrieval")
+            if progress.phase is DriveRetrievalPhase.DONE:
+                checkpoint.completion_stage = DriveRetrievalStage.DONE
+                return
 
-        sorted_drive_ids, sorted_folder_ids = self._determine_retrieval_ids(
-            checkpoint, DriveRetrievalStage.MY_DRIVE_FILES
-        )
-
-        # Setup initial completion map on first connector run
-        for email in all_org_emails:
-            # don't overwrite existing completion map on resuming runs
-            if email in checkpoint.completion_map:
+            if progress.phase is DriveRetrievalPhase.INVENTORY:
+                self._run_inventory(checkpoint)
+                self._enter_phase(checkpoint, next_phase(progress.phase))
                 continue
-            checkpoint.completion_map[email] = StageCompletion(
-                stage=DriveRetrievalStage.START,
-                completed_until=0,
-                processed_drive_ids=set(),
-            )
 
-        # we've found all users and drives, now time to actually start
-        # fetching stuff
-        logger.info("Found %s users to impersonate", len(all_org_emails))
-        logger.debug("Users: %s", all_org_emails)
-        logger.info("Found %s drives to retrieve", len(sorted_drive_ids))
-        logger.debug("Drives: %s", sorted_drive_ids)
-        logger.info("Found %s folders to retrieve", len(sorted_folder_ids))
-        logger.debug("Folders: %s", sorted_folder_ids)
+            while not progress.is_complete:
+                if budget <= 0:
+                    return
+                budget -= self._partition_cost(progress.phase)
+                partition: str = progress.remaining_partitions[0]
+                paused: bool = yield from self._list_partition(
+                    progress, partition, field_type, checkpoint, start, end
+                )
+                if paused:
+                    return
+                progress.advance_partition()
 
-        drive_id_getter = self.make_drive_id_getter(sorted_drive_ids, checkpoint)
+            self._finish_phase(checkpoint)
+            self._enter_phase(checkpoint, next_phase(progress.phase))
 
-        # only process emails that we haven't already completed retrieval for
-        non_completed_org_emails = [
-            user_email
-            for user_email, stage_completion in checkpoint.completion_map.items()
-            if stage_completion.stage != DriveRetrievalStage.DONE
-        ]
+    @staticmethod
+    def _partition_cost(phase: DriveRetrievalPhase) -> int:
+        # A folder crawl has no page cursor, so it takes a whole call.
+        if phase is DriveRetrievalPhase.REQUESTED_TARGETS:
+            return PARTITIONS_PER_CHECKPOINT
+        return 1
 
-        logger.debug("Non-completed users remaining: %s", len(non_completed_org_emails))
+    def _run_inventory(self, checkpoint: GoogleDriveCheckpoint) -> None:
+        checkpoint.user_emails = self._get_all_user_emails()
+        drive_ids, folder_ids = self._compute_retrieval_ids()
+        checkpoint.drive_ids_to_retrieve = drive_ids
+        checkpoint.folder_ids_to_retrieve = folder_ids
+        logger.info(
+            "Phased retrieval inventory: %s users, %s drives, %s folders",
+            len(checkpoint.user_emails),
+            len(drive_ids),
+            len(folder_ids),
+        )
 
-        # don't process too many emails before returning a checkpoint. This is
-        # to resolve the case where there are a ton of emails that don't have access
-        # to the drive APIs. Without this, we could loop through these emails for
-        # more than 3 hours, causing a timeout and stalling progress.
-        email_batch_takes_us_to_completion = True
-        MAX_EMAILS_TO_PROCESS_BEFORE_CHECKPOINTING = MAX_DRIVE_WORKERS
-        if len(non_completed_org_emails) > MAX_EMAILS_TO_PROCESS_BEFORE_CHECKPOINTING:
-            non_completed_org_emails = non_completed_org_emails[
-                :MAX_EMAILS_TO_PROCESS_BEFORE_CHECKPOINTING
+    def _enter_phase(
+        self, checkpoint: GoogleDriveCheckpoint, phase: DriveRetrievalPhase
+    ) -> None:
+        partition_keys: list[str] = []
+        if phase is DriveRetrievalPhase.SHARED_DRIVES:
+            partition_keys = list(checkpoint.drive_ids_to_retrieve or [])
+        elif phase is DriveRetrievalPhase.MY_DRIVES:
+            partition_keys = self._my_drive_partition_emails(checkpoint)
+        elif phase is DriveRetrievalPhase.REQUESTED_TARGETS:
+            partition_keys = self._plan_requested_targets(checkpoint)
+        elif (
+            phase is DriveRetrievalPhase.EXTERNAL_SHARES
+            and self.include_files_shared_with_me
+        ):
+            # Shared files were only ever listed for users whose My Drive is
+            # in scope, so this phase walks the same users.
+            partition_keys = [
+                email
+                for email in self._my_drive_partition_emails(checkpoint)
+                if email not in checkpoint.failed_impersonation_emails
             ]
-            email_batch_takes_us_to_completion = False
+        logger.info("Entering phase %s with %s partitions", phase, len(partition_keys))
+        checkpoint.phase_progress = PhaseProgress(
+            phase=phase, partition_keys=partition_keys
+        )
 
-        user_retrieval_gens = [
-            self._impersonate_user_for_retrieval(
-                email,
-                field_type,
-                checkpoint,
-                drive_id_getter,
-                sorted_folder_ids,
-                start,
-                end,
-            )
-            for email in non_completed_org_emails
-        ]
-        yield from parallel_yield(user_retrieval_gens, max_workers=MAX_DRIVE_WORKERS)
-
-        # Free per-user cache entries now that this batch is done.
-        # Skip the admin email — it is shared across all user batches and must
-        # persist for the duration of the run.
-        for email in non_completed_org_emails:
+    def _finish_phase(self, checkpoint: GoogleDriveCheckpoint) -> None:
+        # The orphan-folder cache is per impersonated email; the next phase
+        # impersonates a different set. Keep the admin's, which every phase uses.
+        for email in list(checkpoint.failed_folder_ids_by_email.keys()):
             if email != self.primary_admin_email:
                 checkpoint.failed_folder_ids_by_email.pop(email, None)
 
-        # if there are more emails to process, don't mark as complete
-        if not email_batch_takes_us_to_completion:
+    def _list_partition(
+        self,
+        progress: PhaseProgress,
+        partition: str,
+        field_type: DriveFileFieldType,
+        checkpoint: GoogleDriveCheckpoint,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+    ) -> Generator[RetrievedDriveFile, None, bool]:
+        """Yield one partition's files. Returns True when it paused on a page
+        token, so the same partition resumes on the next call."""
+        if progress.phase is DriveRetrievalPhase.SHARED_DRIVES:
+            return (
+                yield from self._list_shared_drive(
+                    progress, partition, field_type, checkpoint, start, end
+                )
+            )
+        if progress.phase is DriveRetrievalPhase.MY_DRIVES:
+            return (
+                yield from self._list_my_drive(
+                    progress, partition, field_type, checkpoint, start, end
+                )
+            )
+        if progress.phase is DriveRetrievalPhase.REQUESTED_TARGETS:
+            yield from self._crawl_requested_target(
+                progress, partition, field_type, checkpoint, start, end
+            )
+            return False
+        if progress.phase is DriveRetrievalPhase.EXTERNAL_SHARES:
+            return (
+                yield from self._list_external_shares(
+                    progress, partition, field_type, checkpoint, start, end
+                )
+            )
+        raise ValueError(f"Phase {progress.phase} has no partitions to list")
+
+    def _list_shared_drive(
+        self,
+        progress: PhaseProgress,
+        drive_id: str,
+        field_type: DriveFileFieldType,
+        checkpoint: GoogleDriveCheckpoint,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+    ) -> Generator[RetrievedDriveFile, None, bool]:
+        email = checkpoint.organizer_email_by_drive_id.get(drive_id)
+        if progress.next_page_token is None or email is None:
+            progress.next_page_token = None
+            checkpoint.incomplete_drive_ids.discard(drive_id)
+            email, complete = self._choose_drive_principal(drive_id, checkpoint)
+            if email is None:
+                checkpoint.incomplete_drive_ids.add(drive_id)
+                if drive_id in self._requested_shared_drive_ids:
+                    checkpoint.unreachable_target_ids.add(drive_id)
+                return False
+            checkpoint.organizer_email_by_drive_id[drive_id] = email
+            if not complete:
+                checkpoint.incomplete_drive_ids.add(drive_id)
+
+        complete = drive_id not in checkpoint.incomplete_drive_ids
+        logger.info("Listing shared drive %s as %s", drive_id, email)
+        try:
+            for item in get_files_in_shared_drive(
+                service=get_drive_service(self.creds, email),
+                drive_id=drive_id,
+                field_type=field_type,
+                max_num_pages=SHARED_DRIVE_PAGES_PER_CHECKPOINT,
+                cache_folders=False,
+                start=start,
+                end=end,
+                page_token=progress.next_page_token,
+            ):
+                if isinstance(item, str):
+                    progress.next_page_token = item
+                    return True
+                # Only an organizer listing is a complete record of the drive;
+                # anything else may also arrive through another partition.
+                exact = complete and item.get("driveId") == drive_id
+                if not self._admit_file(checkpoint, item, exact):
+                    continue
+                _note_modified_time(progress, item)
+                yield RetrievedDriveFile(
+                    completion_stage=DriveRetrievalStage.SHARED_DRIVE_FILES,
+                    drive_file=item,
+                    user_email=email,
+                    parent_id=drive_id,
+                )
+        except RefreshError as error:
+            # Relist the drive from the start with another principal; the
+            # failed email is excluded from the next selection.
+            yield from self._impersonation_failed(email, error, checkpoint)
+            checkpoint.organizer_email_by_drive_id.pop(drive_id, None)
+            progress.next_page_token = None
+            return True
+        return False
+
+    def _choose_drive_principal(
+        self, drive_id: str, checkpoint: GoogleDriveCheckpoint
+    ) -> tuple[str | None, bool]:
+        """The email to list a drive as, and whether its listing is complete."""
+        admin_drive_service = get_drive_service(self.creds, self.primary_admin_email)
+        try:
+            members = list_drive_members(admin_drive_service, drive_id)
+        except HttpError as error:
+            logger.warning("Cannot read members of drive %s: %s", drive_id, error)
+            members = []
+
+        def _can_list(email: str) -> bool:
+            if not self._may_impersonate(email, checkpoint):
+                return False
+            return can_list_drive(get_drive_service(self.creds, email), drive_id)
+
+        choice = select_drive_organizer(
+            drive_id=drive_id,
+            members=members,
+            google_domain=self.google_domain,
+            expand_group=self._expand_group,
+            can_list_drive=_can_list,
+        )
+        if choice.email is not None:
+            return choice.email, choice.complete
+
+        # Membership was unreadable or names nobody we can impersonate. The
+        # admin may still be able to list it, as the old per-user loop did.
+        if _can_list(self.primary_admin_email):
+            logger.warning(
+                "Drive %s: no impersonable member; listing as the admin. "
+                "Limited-access folders may be missed.",
+                drive_id,
+            )
+            return self.primary_admin_email, False
+        logger.warning("Drive %s: no principal can list it; skipping.", drive_id)
+        return None, False
+
+    def _expand_group(self, group_email: str) -> list[str]:
+        admin_service = get_admin_service(
+            creds=self.creds, user_email=self.primary_admin_email
+        )
+        return list_group_member_emails(admin_service, group_email)
+
+    def _list_my_drive(
+        self,
+        progress: PhaseProgress,
+        email: str,
+        field_type: DriveFileFieldType,
+        checkpoint: GoogleDriveCheckpoint,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+    ) -> Generator[RetrievedDriveFile, None, bool]:
+        if progress.next_page_token is None:
+            usable: bool = yield from self._impersonation_gate(email, checkpoint)
+            if not usable:
+                return False
+
+        covered_drive_ids = self._covered_drive_ids(checkpoint)
+        # Owners whose own partition already finished cleanly. A shortcut to
+        # their file adds nothing; a later owner might still fail, so it does.
+        finished_owners = {
+            owner.lower()
+            for owner in progress.partition_keys[: progress.partition_index]
+            if owner not in checkpoint.failed_impersonation_emails
+        }
+        logger.info("Listing My Drive of %s", email)
+        try:
+            for item in get_all_files_in_my_drive_and_shared(
+                service=get_drive_service(self.creds, email),
+                update_traversed_ids_func=_ignore_traversed_id,
+                field_type=field_type,
+                include_shared_with_me=False,
+                max_num_pages=MY_DRIVE_PAGES_PER_CHECKPOINT,
+                start=start,
+                end=end,
+                cache_folders=False,
+                page_token=progress.next_page_token,
+            ):
+                if isinstance(item, str):
+                    progress.next_page_token = item
+                    return True
+                owner = _owner_email(item)
+                exact = owner == email.lower() and not item.get("driveId")
+                # A non-exact file is a shortcut target owned by someone else.
+                if not exact and (
+                    item.get("driveId") in covered_drive_ids or owner in finished_owners
+                ):
+                    continue
+                if not self._admit_file(checkpoint, item, exact):
+                    continue
+                _note_modified_time(progress, item)
+                yield RetrievedDriveFile(
+                    completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
+                    drive_file=item,
+                    user_email=email,
+                )
+        except RefreshError as error:
+            # The rest of this owner's files are no longer covered, so the
+            # shared-file phase will keep them when other users see them.
+            yield from self._impersonation_failed(email, error, checkpoint)
+        return False
+
+    def _list_external_shares(
+        self,
+        progress: PhaseProgress,
+        email: str,
+        field_type: DriveFileFieldType,
+        checkpoint: GoogleDriveCheckpoint,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+    ) -> Generator[RetrievedDriveFile, None, bool]:
+        """Everything this user can see that no exact partition covered: files
+        owned outside the org, by users out of scope, or by users whose
+        impersonation failed."""
+        if progress.next_page_token is None:
+            usable: bool = yield from self._impersonation_gate(email, checkpoint)
+            if not usable:
+                return False
+
+        covered_drive_ids = self._covered_drive_ids(checkpoint)
+        covered_owners = {
+            owner.lower()
+            for owner in self._my_drive_partition_emails(checkpoint)
+            if owner not in checkpoint.failed_impersonation_emails
+        }
+        suppressed: int = 0
+        try:
+            for item in get_all_files_in_my_drive_and_shared(
+                service=get_drive_service(self.creds, email),
+                update_traversed_ids_func=_ignore_traversed_id,
+                field_type=field_type,
+                include_shared_with_me=True,
+                max_num_pages=MY_DRIVE_PAGES_PER_CHECKPOINT,
+                start=start,
+                end=end,
+                cache_folders=False,
+                page_token=progress.next_page_token,
+            ):
+                if isinstance(item, str):
+                    progress.next_page_token = item
+                    return True
+                if (
+                    item.get("driveId") in covered_drive_ids
+                    or _owner_email(item) in covered_owners
+                ):
+                    suppressed += 1
+                    continue
+                if not self._claim_file(checkpoint, item):
+                    continue
+                _note_modified_time(progress, item)
+                yield RetrievedDriveFile(
+                    completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
+                    drive_file=item,
+                    user_email=email,
+                )
+        except RefreshError as error:
+            yield from self._impersonation_failed(email, error, checkpoint)
+        finally:
+            logger.info(
+                "Shared-file listing for %s dropped %s files covered elsewhere",
+                email,
+                suppressed,
+            )
+        return False
+
+    def _plan_requested_targets(self, checkpoint: GoogleDriveCheckpoint) -> list[str]:
+        """Choose who crawls each requested folder (and each requested drive
+        that drives.list did not return).
+
+        In order: a target in a drive already listed in full is skipped; a
+        target in an in-domain shared drive goes to that drive's organizer; a
+        target in an in-domain user's My Drive goes to its owner. Anything else
+        has no guaranteed principal, so it is crawled by every in-domain user
+        on its permission list, which is best effort.
+        """
+        covered_drive_ids = self._covered_drive_ids(checkpoint)
+        partition_keys: list[str] = []
+        for target_id in checkpoint.folder_ids_to_retrieve or []:
+            if target_id in covered_drive_ids:
+                continue
+            found = self._find_target_viewer(target_id, checkpoint)
+            if found is None:
+                logger.warning(
+                    "Requested target %s is not visible to any user; it will "
+                    "not be indexed and pruning is blocked until it is.",
+                    target_id,
+                )
+                checkpoint.unreachable_target_ids.add(target_id)
+                continue
+            viewer, metadata = found
+            if metadata.get("driveId") in covered_drive_ids:
+                continue
+            partition_keys.extend(
+                target_partition_key(target_id, email)
+                for email in self._target_principals(
+                    target_id, viewer, metadata, checkpoint
+                )
+            )
+        return partition_keys
+
+    def _find_target_viewer(
+        self, target_id: str, checkpoint: GoogleDriveCheckpoint
+    ) -> tuple[str, GoogleDriveFileType] | None:
+        candidates = [self.primary_admin_email, *(checkpoint.user_emails or [])]
+        seen: set[str] = set()
+        for email in candidates:
+            if email in seen or not self._may_impersonate(email, checkpoint):
+                continue
+            seen.add(email)
+            metadata = probe_target(get_drive_service(self.creds, email), target_id)
+            if metadata is not None:
+                return email, metadata
+        return None
+
+    def _target_principals(
+        self,
+        target_id: str,
+        viewer: str,
+        metadata: GoogleDriveFileType,
+        checkpoint: GoogleDriveCheckpoint,
+    ) -> list[str]:
+        drive_id = metadata.get("driveId")
+        if drive_id:
+            email, _complete = self._choose_drive_principal(drive_id, checkpoint)
+            if email is not None:
+                return [email]
+        else:
+            owner = _owner_email(metadata)
+            if (
+                owner is not None
+                and owner.endswith(f"@{self.google_domain.lower()}")
+                and self._may_impersonate(owner, checkpoint)
+            ):
+                return [owner]
+
+        logger.info(
+            "Requested target %s has no guaranteed principal; crawling it as "
+            "each in-domain user on its permission list (best effort).",
+            target_id,
+        )
+        principals = internal_principals_of(
+            get_drive_service(self.creds, viewer),
+            target_id,
+            self.google_domain,
+            self._expand_group,
+        )
+        if principals is None:
+            principals = list(checkpoint.user_emails or [])
+        return sorted(
+            email
+            for email in set(principals) | {viewer}
+            if self._may_impersonate(email, checkpoint)
+        )
+
+    def _crawl_requested_target(
+        self,
+        progress: PhaseProgress,
+        partition: str,
+        field_type: DriveFileFieldType,
+        checkpoint: GoogleDriveCheckpoint,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+    ) -> Generator[RetrievedDriveFile, None, None]:
+        target_id, email = split_target_partition_key(partition)
+        # Losing one principal of a best-effort union leaves the others; losing
+        # the only principal leaves the target unlisted, so it must not prune.
+        sole_principal = (
+            sum(
+                1
+                for key in progress.partition_keys
+                if split_target_partition_key(key)[0] == target_id
+            )
+            == 1
+        )
+        usable: bool = yield from self._impersonation_gate(email, checkpoint)
+        if not usable:
+            if sole_principal:
+                checkpoint.unreachable_target_ids.add(target_id)
             return
 
-        remaining_folders = (
-            set(sorted_drive_ids) | set(sorted_folder_ids)
-        ) - self._retrieved_folder_and_drive_ids
-        if remaining_folders:
-            logger.warning(
-                "Some folders/drives were not retrieved. IDs: %s", remaining_folders
+        logger.info("Crawling requested target %s as %s", target_id, email)
+        try:
+            # A fresh traversed set per principal: a folder another principal
+            # crawled may hold limited-access children only this one can see.
+            for retrieved in crawl_folders_for_files(
+                service=get_drive_service(self.creds, email),
+                parent_id=target_id,
+                field_type=field_type,
+                user_email=email,
+                traversed_parent_ids=set(),
+                update_traversed_ids_func=_ignore_traversed_id,
+                start=start,
+                end=end,
+            ):
+                if (
+                    retrieved.error is None
+                    and retrieved.drive_file
+                    and not self._claim_file(checkpoint, retrieved.drive_file)
+                ):
+                    continue
+                yield retrieved
+        except RefreshError as error:
+            yield from self._impersonation_failed(email, error, checkpoint)
+            if sole_principal:
+                checkpoint.unreachable_target_ids.add(target_id)
+
+    def _impersonation_gate(
+        self, email: str, checkpoint: GoogleDriveCheckpoint
+    ) -> Generator[RetrievedDriveFile, None, bool]:
+        """Check that `email` can call the Drive API before listing as them.
+
+        A user without Drive access (401) or removed from the workspace is
+        skipped quietly; any other impersonation failure is reported. Either
+        way the user is recorded as failed so no phase relies on their pass.
+        """
+        try:
+            # The default retry runs ~17 minutes; a user without Drive access
+            # should not cost that on every run.
+            retry_builder(tries=3, delay=1)(get_root_folder_id)(
+                get_drive_service(self.creds, email)
             )
-        if any(
-            checkpoint.completion_map[user_email].stage != DriveRetrievalStage.DONE
-            for user_email in all_org_emails
-        ):
-            logger.info(
-                "some users did not complete retrieval, returning checkpoint for another run"
+        except HttpError as error:
+            if error.status_code != 401:
+                raise
+            logger.warning("User '%s' does not have access to the drive APIs.", email)
+            checkpoint.failed_impersonation_emails.add(email)
+            return False
+        except RefreshError as error:
+            yield from self._impersonation_failed(email, error, checkpoint)
+            return False
+        return True
+
+    def _impersonation_failed(
+        self, email: str, error: RefreshError, checkpoint: GoogleDriveCheckpoint
+    ) -> Iterator[RetrievedDriveFile]:
+        checkpoint.failed_impersonation_emails.add(email)
+        is_user_removed = make_user_removal_checker(email, self._get_all_user_emails)
+        if is_user_removed():
+            logger.warning(
+                "User '%s' confirmed removed from workspace, skipping.", email
             )
             return
-        checkpoint.completion_stage = DriveRetrievalStage.DONE
+        logger.warning("User '%s' impersonation failed. Error: %s", email, error)
+        yield RetrievedDriveFile(
+            completion_stage=DriveRetrievalStage.DONE,
+            drive_file={},
+            user_email=email,
+            error=ImpersonationError(email, error),
+        )
+
+    def _may_impersonate(self, email: str, checkpoint: GoogleDriveCheckpoint) -> bool:
+        """Whether a principal may be used this run. specific_user_emails
+        limits the connector to acting as those users, so an organizer or
+        owner outside that list is not a candidate, the admin included."""
+        if email in checkpoint.failed_impersonation_emails:
+            return False
+        if not self._specific_user_emails:
+            return True
+        allowed = {user.lower() for user in checkpoint.user_emails or []}
+        return email.lower() in allowed
+
+    def _my_drive_partition_emails(
+        self, checkpoint: GoogleDriveCheckpoint
+    ) -> list[str]:
+        users = checkpoint.user_emails or []
+        if self.include_my_drives:
+            return list(users)
+        requested = {email.lower() for email in self._requested_my_drive_emails}
+        return [email for email in users if email.lower() in requested]
+
+    @staticmethod
+    def _covered_drive_ids(checkpoint: GoogleDriveCheckpoint) -> set[str]:
+        """Drives an organizer listed in full during the shared drive phase."""
+        return {
+            drive_id
+            for drive_id in checkpoint.organizer_email_by_drive_id
+            if drive_id not in checkpoint.incomplete_drive_ids
+        }
+
+    @classmethod
+    def _admit_file(
+        cls,
+        checkpoint: GoogleDriveCheckpoint,
+        drive_file: GoogleDriveFileType,
+        exact: bool,
+    ) -> bool:
+        """Whether to yield a file. An exact file (listed by the partition that
+        owns it) is never added to the dedup set, but it is still skipped if a
+        shortcut already brought it in earlier in the run."""
+        if exact:
+            return drive_file.get("id") not in checkpoint.retrieved_drive_file_ids
+        return cls._claim_file(checkpoint, drive_file)
+
+    @staticmethod
+    def _claim_file(
+        checkpoint: GoogleDriveCheckpoint, drive_file: GoogleDriveFileType
+    ) -> bool:
+        """Record a file in the dedup set. False if it was already yielded.
+
+        Only files without an exact partition go through here. Past the cap
+        the set stops growing and duplicates are yielded again; each costs a
+        re-download, which is cheaper than failing the sync.
+        """
+        file_id = drive_file.get("id") or drive_file.get(WEB_VIEW_LINK_KEY)
+        if not isinstance(file_id, str):
+            return True
+        seen_file_ids: set[str] = checkpoint.retrieved_drive_file_ids
+        if file_id in seen_file_ids:
+            return False
+        if len(seen_file_ids) < MAX_DEDUP_DRIVE_FILE_IDS:
+            seen_file_ids.add(file_id)
+            if len(seen_file_ids) == MAX_DEDUP_DRIVE_FILE_IDS:
+                logger.warning(
+                    "Reached the %s file dedup cap; later duplicates will be "
+                    "re-yielded to indexing.",
+                    MAX_DEDUP_DRIVE_FILE_IDS,
+                )
+        return True
+
+    def _compute_retrieval_ids(self) -> tuple[list[str], list[str]]:
+        """Sorted shared drive ids and folder ids this connector should list.
+
+        A requested drive id that drives.list does not return is treated as a
+        folder, since the user may have pasted a folder URL as a drive.
+        """
+        if self._requested_shared_drive_ids or self._requested_folder_ids:
+            return _clean_requested_drive_ids(
+                requested_drive_ids=self._requested_shared_drive_ids,
+                requested_folder_ids=self._requested_folder_ids,
+                all_drive_ids_available=self.get_all_drive_ids(),
+            )
+        if self.include_shared_drives:
+            return sorted(self.get_all_drive_ids()), []
+        return [], []
 
     def _determine_retrieval_ids(
         self,
         checkpoint: GoogleDriveCheckpoint,
         next_stage: DriveRetrievalStage,
     ) -> tuple[list[str], list[str]]:
-        needs_all_drive_ids = (
-            bool(self._requested_shared_drive_ids)
-            or bool(self._requested_folder_ids)
-            or self.include_shared_drives
-        )
-        all_drive_ids: set[str] = (
-            self.get_all_drive_ids() if needs_all_drive_ids else set()
-        )
-        sorted_drive_ids: list[str] = []
-        sorted_folder_ids: list[str] = []
         if checkpoint.completion_stage == DriveRetrievalStage.DRIVE_IDS:
-            if self._requested_shared_drive_ids or self._requested_folder_ids:
-                (
-                    sorted_drive_ids,
-                    sorted_folder_ids,
-                ) = _clean_requested_drive_ids(
-                    requested_drive_ids=self._requested_shared_drive_ids,
-                    requested_folder_ids=self._requested_folder_ids,
-                    all_drive_ids_available=all_drive_ids,
-                )
-            elif self.include_shared_drives:
-                sorted_drive_ids = sorted(all_drive_ids)
-
+            sorted_drive_ids, sorted_folder_ids = self._compute_retrieval_ids()
             checkpoint.drive_ids_to_retrieve = sorted_drive_ids
             checkpoint.folder_ids_to_retrieve = sorted_folder_ids
             checkpoint.completion_stage = next_stage
-        else:
-            if checkpoint.drive_ids_to_retrieve is None:
-                raise ValueError("drive ids to retrieve not set in checkpoint")
-            if checkpoint.folder_ids_to_retrieve is None:
-                raise ValueError("folder ids to retrieve not set in checkpoint")
-            # When loading from a checkpoint, load the previously cached drive and folder ids
-            sorted_drive_ids = checkpoint.drive_ids_to_retrieve
-            sorted_folder_ids = checkpoint.folder_ids_to_retrieve
+            return sorted_drive_ids, sorted_folder_ids
 
-        return sorted_drive_ids, sorted_folder_ids
+        if checkpoint.drive_ids_to_retrieve is None:
+            raise ValueError("drive ids to retrieve not set in checkpoint")
+        if checkpoint.folder_ids_to_retrieve is None:
+            raise ValueError("folder ids to retrieve not set in checkpoint")
+        # When loading from a checkpoint, load the previously cached drive and folder ids
+        return checkpoint.drive_ids_to_retrieve, checkpoint.folder_ids_to_retrieve
 
     def _oauth_retrieval_all_files(
         self,
@@ -1606,7 +1799,7 @@ class GoogleDriveConnector(
                 continue
 
             try:
-                document_id = onyx_document_id_from_drive_file(drive_file)
+                onyx_document_id_from_drive_file(drive_file)
             except KeyError as exc:
                 logger.warning(
                     "Drive file missing id/webViewLink (stage=%s user=%s). Skipping.",
@@ -1618,31 +1811,8 @@ class GoogleDriveConnector(
                 yield file
                 continue
 
-            # Dedup on the Drive file id rather than the document URL. The URL
-            # costs ~159 bytes per entry under deep_getsizeof (what the
-            # checkpoint size guard measures) against ~119 for the id.
-            dedup_key: str = drive_file.get("id") or document_id
-            seen_file_ids: set[str] = checkpoint.retrieved_drive_file_ids
-            logger.debug(
-                "Updating checkpoint for file: %s. Seen: %s",
-                drive_file.get("name"),
-                dedup_key in seen_file_ids,
-            )
-            if dedup_key in seen_file_ids:
+            if not self._claim_file(checkpoint, drive_file):
                 continue
-
-            # Past the cap, stop tracking and let duplicates through. Each one
-            # costs a re-download; indexing skips it on content hash once an
-            # earlier copy is persisted, and otherwise re-upserts the same
-            # document id. Both are cheaper than failing the sync.
-            if len(seen_file_ids) < MAX_DEDUP_DRIVE_FILE_IDS:
-                seen_file_ids.add(dedup_key)
-                if len(seen_file_ids) == MAX_DEDUP_DRIVE_FILE_IDS:
-                    logger.warning(
-                        "Reached the %s file dedup cap; later duplicates will be "
-                        "re-yielded to indexing.",
-                        MAX_DEDUP_DRIVE_FILE_IDS,
-                    )
             yield file
 
     def _manage_oauth_retrieval(
@@ -1741,14 +1911,16 @@ class GoogleDriveConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[RetrievedDriveFile]:
-        retrieval_method = (
-            self._manage_service_account_retrieval
-            if isinstance(self.creds, ServiceAccountCredentials)
-            else self._manage_oauth_retrieval
-        )
+        if isinstance(self.creds, ServiceAccountCredentials):
+            return self._phased_retrieval(
+                field_type=field_type,
+                checkpoint=checkpoint,
+                start=start,
+                end=end,
+            )
 
         return self._checkpointed_retrieval(
-            retrieval_method=retrieval_method,
+            retrieval_method=self._manage_oauth_retrieval,
             field_type=field_type,
             checkpoint=checkpoint,
             start=start,
@@ -2178,6 +2350,7 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
+        fail_on_unreachable_targets: bool = False,
     ) -> GenerateSlimDocumentOutput:
         try:
             checkpoint = self.build_dummy_checkpoint()
@@ -2188,6 +2361,14 @@ class GoogleDriveConnector(
                     end=end,
                     callback=callback,
                     include_permissions=include_permissions,
+                )
+            if fail_on_unreachable_targets and checkpoint.unreachable_target_ids:
+                # Pruning deletes whatever this listing lacks, which for an
+                # unreachable target is every document indexed from it.
+                raise UnreachableTargetsError(
+                    "Refusing to report a complete listing: requested targets "
+                    f"{sorted(checkpoint.unreachable_target_ids)} are not visible "
+                    "to any user."
                 )
             logger.info("Drive slim doc retrieval complete")
         except Exception as e:
@@ -2203,7 +2384,11 @@ class GoogleDriveConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         return self._retrieve_all_slim_docs_impl(
-            start=start, end=end, callback=callback, include_permissions=False
+            start=start,
+            end=end,
+            callback=callback,
+            include_permissions=False,
+            fail_on_unreachable_targets=True,
         )
 
     def retrieve_all_slim_docs_perm_sync(
