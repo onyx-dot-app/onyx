@@ -475,13 +475,17 @@ they can never disagree about which server owns a request; see
    breaks this.
 5. **An unmatched request's default depends on *what* went unmatched, and
    the two cases differ:**
-   - A request that matches **no connected app/MCP server at all**
-     (`resolve_app_for_url` finds nothing, or no MCP `server_url` prefix
-     claims it) is **not evaluated by this gate at all**
+   - A request that matches **no connected app and no MCP host at all**
+     (`resolve_app_for_url` finds nothing, and no MCP server host claims
+     it) is **not evaluated by this gate at all**
      (`matched_actions is None` in `request_evaluator.py`). It is governed
      only by the sandbox's own iptables egress lockdown
      (`firewall-init.sh`), which allows general outbound HTTPS. See
      `[[craft-admin]]` §5.4 for why this is intentional, not a leak.
+   - A request to a **configured MCP host** whose path is outside every
+     `server_url` prefix is not pass-through. `MCPServerResolver.claims`
+     still claims the host, and `MCPServerResolver.resolve` blocks the
+     request with `CredentialUnavailableError` (`credential_error`).
    - A request that matches a **connected, available app** but no specific
      catalog action defaults to a synthesized whole-domain `ASK`
      (`WHOLE_DOMAIN_ACTION_TYPE = "unspecified"`,
@@ -644,7 +648,8 @@ that arbiter without extending it.
   upstream's own limit, not just this proxy's number in isolation.
 - **General internet reachability from a sandbox is intentional, not a gap
   this proxy should close.** Only requests attributed to a connected
-  app/MCP server are policy-gated; everything else is governed by the
+  app/MCP server are policy-gated; everything else (except requests to a
+  configured MCP host, which `MCPServerResolver` still claims) is governed by the
   sandbox's iptables lockdown (all outbound traffic dropped except to the
   proxy, which forwards unmatched public traffic). Do not conflate "the sandbox can reach
   `example.com`" with "policy was bypassed." See `[[craft-admin]]` §5.4 and

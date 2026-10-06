@@ -328,8 +328,9 @@ Authorization: Bearer <token>  or raw key (API keys only, historically)
     ├─ get_hashed_pat_from_request → resolve_pat → sets request.state.token_scopes
     │    (Bearer-only; api_key.py additionally accepts a raw, non-Bearer key)
     └─ get_hashed_api_key_from_request → fetch_api_key_auth_result
-  → user = the PAT's or key's owning User; request.state.usage_credential set
-    for billing/audit attribution
+  → user = the PAT's owning User, or for an API key its synthetic
+    SERVICE_ACCOUNT user (db/api_key.py:insert_api_key), not the creator;
+    request.state.usage_credential set for billing/audit attribution
 ```
 
 SCIM is a separate lane: `verify_scim_token` (`ee/onyx/server/scim/auth.py`)
@@ -419,7 +420,7 @@ is marked as such.
    `Permission.BASIC_ACCESS` and is only reachable through
    `current_chat_accessible_user`, never `current_user`; CE's ungated
    permission auto-grant (`CE_UNGATED_PERMISSIONS`) explicitly excludes
-   `AccountType.ANONYMOUS` (`auth/permission_projection.py:get_effective_
+   `AccountType.ANONYMOUS` (`auth/permissions.py:get_effective_
    permissions`). [[access-control]] §5.7 covers the document-visibility
    half (anonymous users see `PUBLIC_DOC_PAT` documents only); this
    component covers the endpoint-reachability half. A new

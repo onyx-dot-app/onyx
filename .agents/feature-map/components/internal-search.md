@@ -211,7 +211,8 @@ The functional replacement for a reranker is the LLM selection stage in 4.5.
 `weighted_reciprocal_rank_fusion` (`search_utils.py`) combines the per-lane
 ranked chunk lists: `score(item) = sum(weight / (RRF_K_VALUE + rank))` across
 lanes, `RRF_K_VALUE = 50`, deduped by `f"{document_id}_{chunk_id}"`. Ties break
-by rank-within-source then round-robin source order.
+by rank-within-source, then by the index of the source list where the item
+first appeared (fixed first-seen order, not round-robin).
 
 `merge_individual_chunks` (`context/search/pipeline.py`) then joins chunks from
 the same document whose `chunk_id`s differ by exactly 1 into one

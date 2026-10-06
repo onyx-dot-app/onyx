@@ -94,8 +94,8 @@ own storage, managed by the OS webview engine, not by Tauri code.
 history, not a credential. `identity` is the JWT `sub` or `email` claim, or a fixed
 shared value for an API key (`widget/src/config/config.ts:deriveCredentialIdentity`).
 `loadSession` discards a stored session whose identity differs, so a second person on the
-same tab never sees the first person's messages. **The API key itself is not stored by the widget
-code**; it lives only in the customer page's HTML (an attribute on
+same tab never sees the first person's messages. **The widget does not persist the API key**; it holds the value
+in memory only (`config.apiKey`). The key comes from the customer page's HTML (an attribute on
 `<onyx-chat-widget>`) or, for self-hosted builds, gets compiled directly into
 the published `dist/onyx-widget.js` (`widget/vite.config.ts`'s `define`
 block). Either way it is plain text, readable by anyone who views the

@@ -230,8 +230,8 @@ either directly (loose image) or via captioning (embedded image).
 a hard failure.
 
 `extract_text_and_images`'s outer `except Exception` (`_extract_text_and_images`)
-silently returns an empty `ExtractionResult` on any unexpected parser crash.
-This is the one place extraction failure is *not* surfaced (see §5 and §9);
+logs the exception (`logger.exception`) and returns an empty `ExtractionResult`
+on any unexpected parser crash. This is the one place extraction failure is *not* surfaced to the caller (see §5 and §9);
 the upload-time path (`categorize_uploaded_files`) is stricter and rejects
 instead.
 

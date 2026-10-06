@@ -45,10 +45,12 @@ a "last successful index" timestamp on the connector status page. From then on,
 a background job polls for new and changed documents on a schedule the admin
 sets, and a separate job prunes documents that were deleted at the source.
 
-If credentials are wrong or a permission is missing, the admin sees a
-validation error at connector-creation time rather than a silent empty index
-later; that error comes from the capability-check machinery in §4, not from
-watching an index run fail.
+For connectors that implement `validate_connector_settings` or named capability
+checks (§4), the admin sees a validation error at connector-creation time if
+credentials are wrong or a permission is missing. The base
+`validate_connector_settings` is a no-op. A connector that does not override
+it, for example Asana, can pass creation with bad credentials. The problem then
+shows only when an index run fails or returns nothing.
 
 ---
 
@@ -205,7 +207,9 @@ as satisfying an `InputType.POLL` request).
 **Slim connectors exist so pruning can list document IDs cheaply.** Confirmed:
 `retrieve_all_slim_docs`/`_perm_sync` return `SlimDocument` (just `id`,
 `external_access`, `parent_hierarchy_raw_node_id`, `doc_created_at`), never full
-content, and the only consumer is the pruning diff in §4.4. A slim connector
+content. `retrieve_all_slim_docs` is consumed only by the pruning diff in §4.4.
+`retrieve_all_slim_docs_perm_sync` is also consumed by EE permission-sync jobs
+(`ee/onyx/external_permissions/utils.py`). A slim connector
 does the same enumeration as the full connector without downloading bodies.
 
 ### 4.2 Registry and factory: source to running instance

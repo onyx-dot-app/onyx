@@ -42,7 +42,7 @@ A logged-out viewer is redirected to `/auth/login`.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| GET | `/build/sessions/{session_id}/webapp` and `/webapp/{path:path}` | `get_webapp` | Proxies to the session's Next.js dev server. Public endpoint spec (exempt from the global auth middleware); auth is enforced inside the handler. |
+| GET | `/build/sessions/{session_id}/webapp` and `/build/sessions/{session_id}/webapp/{path:path}` | `get_webapp` | Proxies to the session's Next.js dev server. Public endpoint spec (exempt from the global auth middleware); auth is enforced inside the handler. |
 | WS | `/build/sessions/{session_id}/webapp/_next/webpack-hmr` | `websocket_webapp_hmr` | Proxies the Next.js Hot Module Replacement websocket. |
 
 `backend/onyx/server/features/build/session/api.py:get_webapp_info` (GET

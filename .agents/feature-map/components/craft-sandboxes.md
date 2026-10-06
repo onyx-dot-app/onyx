@@ -107,7 +107,7 @@ scheduled every `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS`
   `LABEL_SANDBOX_ID` / `LABEL_TENANT_ID` (stamped onto the K8s Pod/Service, and
   used as the Docker manager's equivalent tag), `LABEL_PROVISIONING_ATTEMPT`
   (operator-facing only, never read programmatically), `LABEL_K8S_COMPONENT`
-  (`"sandbox"`, the NetworkPolicy/RBAC pod selector).
+  (`"sandbox"`, the NetworkPolicy pod selector).
 - Snapshot storage layout (FileStore, `FileOrigin.SANDBOX_SNAPSHOT`,
   `backend/onyx/server/features/build/sandbox/snapshot_manager.py`):
   - Session snapshot: `sandbox-snapshots/{tenant_id}/{sandbox_id}/{snapshot_id}.tar.gz`

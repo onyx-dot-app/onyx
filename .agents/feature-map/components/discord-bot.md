@@ -95,7 +95,9 @@ OnyxDiscordClient.on_message                                    client.py
 
 1. `DiscordCacheManager` (`cache.py`) refreshes every `CACHE_REFRESH_INTERVAL`
    (60s, `constants.py`), loading every tenant's enabled guild ids and
-   provisioning a service API key per tenant if one is missing.
+   provisioning a service API key only for a tenant that has at least one
+   enabled, registered guild and no cached key
+   (`cache.py:_load_tenant_data`).
 2. `on_message` (`client.py:OnyxDiscordClient.on_message`) resolves the guild's
    tenant purely from this in-memory cache, not a per-request DB lookup.
 3. `should_respond` (`handle_message.py:should_respond`) looks up the
@@ -255,9 +257,10 @@ has no e2e coverage since it requires a live Discord connection).
   refresh (up to 60s).
 - **DMs are explicitly unsupported.** `handle_commands.py:handle_dm` always
   replies that it cannot respond in DMs and points to the public Onyx Discord.
-- **`!sync-channels` only adds/removes/renames; it never re-enables anything.**
-  Newly discovered channels are always created disabled
-  (`db/discord_bot.py:sync_channel_configs`).
+- **`!sync-channels` never re-enables anything.** It adds new channels
+  (always disabled), removes deleted channels, and refreshes the stored name,
+  `channel_type`, and `is_private` of existing channels. It does not change
+  `enabled` (`db/discord_bot.py:sync_channel_configs`).
 
 ---
 

@@ -336,7 +336,8 @@ not replace ACL enforcement. `_build_index_filters`
 `persona_document_sets` or user-supplied names, and separately resolves
 `attached_document_ids` / `hierarchy_node_ids` for assistant-knowledge scoping.
 All of these become additional AND-ed clauses inside `_get_search_filters`
-alongside, never instead of, `_get_acl_visibility_filter`. A user who can see a
+alongside, never instead of, the active visibility filter (ACL, or cc-pair in
+`ENFORCE` mode). A user who can see a
 document set's *name* is not thereby granted access to documents inside it that
 their own ACL would otherwise exclude; the ACL clause still applies to every
 result.
@@ -403,9 +404,10 @@ These are the rules whose violation is silent: nothing crashes, a user just sees
    entry point that hand-builds a query instead of going through
    `DocumentQuery._get_search_filters` bypasses ACL enforcement entirely.
 2. **`access_control_list=None` means "no ACL restriction applied", not "public
-   only".** This is deliberate at exactly three call sites, each with an
-   established, narrow justification: `_retrieve_adjacent_chunks` and
-   `inference_sections_from_ids` (`search_utils.py`) fetch chunks of a document
+   only".** This is deliberate at exactly four call sites, each with an
+   established, narrow justification: `_retrieve_adjacent_chunks`
+   (`tools/tool_implementations/search/search_utils.py`) and
+   `inference_sections_from_ids` (`context/search/retrieval/search_runner.py`) fetch chunks of a document
    the caller already retrieved through an ACL-filtered search moments earlier;
    `_run_slack_search` (`search_tool.py`) relies on Slack's own token scope
    (§5.5); and `delete_from_document_id_query`

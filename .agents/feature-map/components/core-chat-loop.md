@@ -68,8 +68,8 @@ answers side by side, then mark one as preferred.
 | `CHAT_STREAM_BUFFER_DONE_TTL_S` | 600 | Buffer lifetime after the turn completes. |
 | `CHAT_STREAM_BUFFER_MAX_BYTES` | 16 MiB | Buffer cap. |
 | `HARD_DELETE_CHATS` |  | Session delete is a hard delete. |
-| `GEN_AI_INPUT_TOKEN_SAFETY_MARGIN` |  | (`configs/model_configs.py`) Shrinks the usable input window. |
-| `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS` |  | (`configs/model_configs.py`) Output allowance. |
+| `GEN_AI_INPUT_TOKEN_SAFETY_MARGIN` | 0.05 | (`configs/model_configs.py`) Shrinks the usable input window. |
+| `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS` | 1024 | (`configs/model_configs.py`) Output allowance. |
 | `INTEGRATION_TESTS_MODE` |  | Makes `llm_loop.py` emit `ToolCallDebug` packets. |
 | `DEV_MODE` |  | Includes stack traces in `StreamingError`. |
 

@@ -35,7 +35,9 @@ A connector configured with a refresh interval indexes on that schedule without
 anyone triggering it by hand. Pruning removes documents deleted at the source on
 its own cadence. Permission and group syncs pick up ACL changes from the external
 system without a user action. A user-uploaded file starts processing within
-seconds of the upload finishing.
+seconds of the upload finishing. Code for each claim: schedules in §4.1,
+pruning and the checker pattern in §4.2, user-file enqueue in
+`db/projects.py` and `background/celery/tasks/user_file_processing/tasks.py`.
 
 Connector indexing, pruning, and permission and group sync are periodic scans
 run by Celery Beat. User-file uploads enqueue processing directly
@@ -217,7 +219,7 @@ family in `onyx/redis/` (`redis_connector_prune.py`, `redis_connector_delete.py`
 | `da_lock:check_prune_beat`, `da_lock:check_vespa_sync_beat`, etc. | `OnyxRedisLocks.*` | short | Per-checker-task locks (`lock_beat` in `check_for_pruning`) so overlapping beat firings of the same checker don't run concurrently. |
 | `signal:block_validate_indexing_fences`, `signal:block_validate_pruning_fences` | `OnyxRedisSignals.*` | a few minutes | Rate-limits the (expensive) fence-validation pass to run less often than the checker task itself. |
 | `onyx:celery:beat:heartbeat` | `ONYX_CELERY_BEAT_HEARTBEAT_KEY` | short | Touched by the `celery_beat_heartbeat` task (dispatched by Beat, run on Primary) so an external watchdog can detect a dead Beat process. |
-| `da_lock:try_creating_prune_generator_task` (via `DANSWER_REDIS_FUNCTION_LOCK_PREFIX`) | `pruning/tasks.py:try_creating_prune_generator_task` | 30s | A short-lived mutual-exclusion lock (not a fence) guarding the create-generator-task critical section, since pruning can be triggered by both Beat and a direct API call. |
+| `da_function_lock:try_creating_prune_generator_task` (via `DANSWER_REDIS_FUNCTION_LOCK_PREFIX`) | `pruning/tasks.py:try_creating_prune_generator_task` | 30s | A short-lived mutual-exclusion lock (not a fence) guarding the create-generator-task critical section, since pruning can be triggered by both Beat and a direct API call. |
 
 ---
 

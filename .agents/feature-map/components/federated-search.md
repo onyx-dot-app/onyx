@@ -26,14 +26,16 @@ indexed-side ACL, which this component deliberately bypasses).
 ## 1. What the user experiences
 
 For most connected sources, the user gets results from documents Onyx already
-crawled and indexed. Slack is different: Onyx does not index Slack messages at
-all. When the user asks a question, if they have connected their own Slack
+crawled and indexed. Federated Slack is different: this path does not index
+Slack messages. (The separate indexed Slack connector is covered in
+[[connectors]].) When the user asks a question, if they have connected their own Slack
 account (or the Slack bot's tenant-wide token is usable), Onyx searches Slack
 live, over the Slack API, and folds the results into the same document cards and
 numbered citations as everything else. The user cannot tell, from the answer,
 which documents came from the index and which came from a live Slack call.
 
-If the user has never connected Slack, the search runs without a Slack lane.
+If the user has no Slack OAuth token and no eligible Slack bot token is
+available, the search runs without a Slack lane.
 Nothing tells the user Slack was skipped, unless a source-scoped filter note
 mentions Slack explicitly. Onyx does not check token expiry before the search.
 An expired token still starts the Slack lane. The Slack call fails,

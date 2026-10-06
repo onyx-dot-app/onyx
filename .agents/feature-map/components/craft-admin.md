@@ -157,10 +157,12 @@ storing a redundant explicit value
 
 An admin action on `/admin/craft/apps` is one of: enable/disable an app,
 edit its `auth_template` and `organization_credentials` (self-hosted only),
-edit its per-action policy, or associate/detach a skill. All of these route
-through `backend/onyx/db/external_app.py` (`update_external_app`,
+edit its per-action policy, or associate/detach a skill. External-app changes
+route through `backend/onyx/db/external_app.py` (`update_external_app`,
 `_write_policies__no_commit`) and, for policy, into the shared `gated_app`
-tables in §3.
+tables in §3. MCP availability and tool-policy updates use
+`backend/onyx/server/features/mcp/api.py` (`update_mcp_server_with_tools`),
+which also writes policy to the `gated_app` tables.
 
 Enforcement is a separate runtime, the sandbox egress proxy, which reads what
 the admin configured:
@@ -431,7 +433,7 @@ there.
   `is_craft_enabled_for_user`, evaluated per request on the backend. Testing
   only the frontend flag gives false confidence.
 - **An unset action is not "no policy."** It resolves to the catalog's
-  `default_state` at read time (`get_action_policies` only returns explicit
+  `default_policy` at read time (`get_action_policies` only returns explicit
   overrides). A new catalog action changes behavior for every existing app
   with no backfill and no visible DB row change.
 - **General internet reachability from a sandbox is intentional, not a
