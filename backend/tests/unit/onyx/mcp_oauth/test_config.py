@@ -13,23 +13,20 @@ def _patch_oauth_config(
     monkeypatch: pytest.MonkeyPatch,
     *,
     web_domain: str = "https://onyx.example",
-    enabled: bool = False,
     resource_url: str | None = None,
 ) -> None:
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", web_domain)
-    monkeypatch.setattr(app_configs, "MCP_SERVER_OAUTH_ENABLED", enabled)
     monkeypatch.setattr(app_configs, "MCP_SERVER_OAUTH_RESOURCE_URL", resource_url)
 
 
 def test_get_mcp_oauth_settings_derives_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_oauth_config(monkeypatch, web_domain="https://onyx.example/", enabled=True)
+    _patch_oauth_config(monkeypatch, web_domain="https://onyx.example/")
 
     settings = get_mcp_oauth_settings()
 
     assert settings == MCPOAuthSettings(
-        enabled=True,
         issuer_url="https://onyx.example/api/mcp-oauth",
         resource_url="https://onyx.example/mcp/",
         web_url="https://onyx.example",
@@ -161,7 +158,6 @@ def test_get_mcp_oauth_settings_rejects_invalid_resource_url(
 
 def test_canonical_mcp_resource_accepts_exact_and_missing_final_slash_only() -> None:
     settings = MCPOAuthSettings(
-        enabled=True,
         issuer_url="https://onyx.example/api/mcp-oauth",
         resource_url="https://onyx.example/mcp/",
         web_url="https://onyx.example",
@@ -192,7 +188,6 @@ def test_canonical_mcp_resource_accepts_exact_and_missing_final_slash_only() -> 
 )
 def test_canonical_mcp_resource_rejects_prefix_widening(resource: str) -> None:
     settings = MCPOAuthSettings(
-        enabled=True,
         issuer_url="https://onyx.example/api/mcp-oauth",
         resource_url="https://onyx.example/mcp/",
         web_url="https://onyx.example",

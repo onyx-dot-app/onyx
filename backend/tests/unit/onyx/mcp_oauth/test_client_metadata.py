@@ -17,7 +17,6 @@ from onyx.server.mcp_oauth.provider import (
 
 CLIENT_ID = "https://client.example/oauth.json"
 SETTINGS = MCPOAuthSettings(
-    enabled=True,
     issuer_url="https://onyx.example/api/mcp-oauth",
     resource_url="https://onyx.example/mcp/",
     web_url="https://onyx.example",

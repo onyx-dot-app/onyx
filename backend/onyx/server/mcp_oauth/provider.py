@@ -1,6 +1,7 @@
 import re
 import socket
 import time
+from collections.abc import Callable
 from functools import lru_cache
 from urllib.parse import urlencode, urlsplit
 
@@ -25,36 +26,37 @@ from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.mcp_oauth import (
-    create_mcp_oauth_grant__no_commit,
-    get_mcp_oauth_client,
     get_mcp_oauth_owner,
     get_mcp_oauth_token_owner,
-    load_mcp_oauth_refresh__no_commit,
     mcp_oauth_owner_is_member,
     mcp_oauth_owner_snapshot,
-    register_mcp_oauth_client,
-    resolve_mcp_oauth_access_token,
-    revoke_mcp_oauth_token__no_commit,
-    rotate_mcp_oauth_refresh__no_commit,
+)
+from onyx.db.oauth_provider import (
+    create_oauth_provider_grant__no_commit,
+    get_oauth_provider_client,
+    load_oauth_provider_refresh__no_commit,
+    register_oauth_provider_client,
+    resolve_oauth_provider_access_token,
+    revoke_oauth_provider_token__no_commit,
+    rotate_oauth_provider_refresh__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.mcp_oauth.attempts import (
-    consume_authorization_code,
-    get_authorization_code,
-    store_authorization_request,
-)
 from onyx.mcp_oauth.config import (
     MCPOAuthSettings,
     canonical_mcp_resource,
     validate_mcp_redirect_uri,
 )
-from onyx.mcp_oauth.models import (
-    MCPOAuthAuthorizationCode,
-    MCPOAuthTokenInfo,
-    MCPOAuthTokenPair,
-    PendingMCPOAuthAuthorization,
-    StoredMCPOAuthCode,
+from onyx.mcp_oauth.models import MCPOAuthAuthorizationCode
+from onyx.oauth_provider.attempts import (
+    consume_authorization_code,
+    get_authorization_code,
+    store_authorization_request,
+)
+from onyx.oauth_provider.models import (
+    OAuthProviderTokenPair,
+    PendingOAuthProviderAuthorization,
+    StoredOAuthProviderCode,
 )
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -107,8 +109,8 @@ def validate_public_mcp_client(client: OAuthClientInformationFull) -> None:
 
 
 def _create_grant(
-    record: StoredMCPOAuthCode, *, issue_refresh: bool
-) -> MCPOAuthTokenPair | None:
+    record: StoredOAuthProviderCode, *, issue_refresh: bool
+) -> OAuthProviderTokenPair | None:
     with get_session_with_current_tenant() as session:
         owner = get_mcp_oauth_owner(session, record.user_id)
     if owner is None or not mcp_oauth_owner_is_member(
@@ -116,7 +118,7 @@ def _create_grant(
     ):
         return None
     with get_session_with_current_tenant() as session:
-        pair = create_mcp_oauth_grant__no_commit(
+        pair = create_oauth_provider_grant__no_commit(
             session,
             user_id=record.user_id,
             client_id=record.authorization.client_id,
@@ -128,56 +130,35 @@ def _create_grant(
         return pair
 
 
-def _refresh_owner_is_authorized(token: str, *, client_id: str, resource: str) -> bool:
+def _with_authorized_refresh[T](
+    operation: Callable[..., T | None], token: str, *, client_id: str, resource: str
+) -> T | None:
     with get_session_with_current_tenant() as session:
         owner = get_mcp_oauth_token_owner(
             session, token, client_id=client_id, resource=resource
         )
     if owner is None:
-        return False
-    if mcp_oauth_owner_is_member(
+        return None
+    if not mcp_oauth_owner_is_member(
         get_current_tenant_id(), owner.email, owner.oauth_identities
     ):
-        return True
-    _revoke_token(token, client_id=client_id, resource=resource)
-    return False
-
-
-def _load_refresh(
-    token: str, *, client_id: str, resource: str
-) -> MCPOAuthTokenInfo | None:
-    if not _refresh_owner_is_authorized(token, client_id=client_id, resource=resource):
+        _revoke_token(token, client_id=client_id, resource=resource)
         return None
     with get_session_with_current_tenant() as session:
-        info = load_mcp_oauth_refresh__no_commit(
-            session, token, client_id=client_id, resource=resource
-        )
+        result = operation(session, token, client_id=client_id, resource=resource)
         session.commit()
-        return info
-
-
-def _rotate_refresh(
-    token: str, *, client_id: str, resource: str
-) -> MCPOAuthTokenPair | None:
-    if not _refresh_owner_is_authorized(token, client_id=client_id, resource=resource):
-        return None
-    with get_session_with_current_tenant() as session:
-        pair = rotate_mcp_oauth_refresh__no_commit(
-            session, token, client_id=client_id, resource=resource
-        )
-        session.commit()
-        return pair
+        return result
 
 
 def _revoke_token(token: str, *, client_id: str, resource: str) -> None:
     with get_session_with_current_tenant() as session:
-        revoke_mcp_oauth_token__no_commit(
+        revoke_oauth_provider_token__no_commit(
             session, token, client_id=client_id, resource=resource
         )
         session.commit()
 
 
-def _token_response(pair: MCPOAuthTokenPair) -> OAuthToken:
+def _token_response(pair: OAuthProviderTokenPair) -> OAuthToken:
     return OAuthToken(
         access_token=pair.access_token,
         token_type="Bearer",
@@ -215,7 +196,7 @@ class OnyxMCPOAuthProvider(OAuthProvider):
         if len(client_id) > 2048:
             return None
         if not client_id.startswith("https://"):
-            return await run_in_threadpool(get_mcp_oauth_client, client_id)
+            return await run_in_threadpool(get_oauth_provider_client, client_id)
         try:
             validate_mcp_redirect_uri(client_id)
             document = await _cimd_fetcher(client_id).fetch(client_id)
@@ -252,7 +233,7 @@ class OnyxMCPOAuthProvider(OAuthProvider):
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         try:
             validate_public_mcp_client(client_info)
-            await run_in_threadpool(register_mcp_oauth_client, client_info)
+            await run_in_threadpool(register_oauth_provider_client, client_info)
         except ValueError as error:
             raise RegistrationError("invalid_client_metadata", str(error)) from error
 
@@ -278,7 +259,7 @@ class OnyxMCPOAuthProvider(OAuthProvider):
             update={"resource": resource, "scopes": [Permission.READ_SEARCH.value]}
         )
         request_id = await store_authorization_request(
-            PendingMCPOAuthAuthorization(
+            PendingOAuthProviderAuthorization(
                 client_id=client.client_id,
                 client_name=client.client_name or "MCP client",
                 params=normalized,
@@ -335,13 +316,16 @@ class OnyxMCPOAuthProvider(OAuthProvider):
     async def load_refresh_token(
         self, client: OAuthClientInformationFull, refresh_token: str
     ) -> RefreshToken | None:
-        if not client.client_id:
+        client_id = client.client_id
+        if not client_id:
             return None
         info = await run_in_threadpool(
-            _load_refresh,
-            refresh_token,
-            client_id=client.client_id,
-            resource=self.settings.resource_url,
+            lambda: _with_authorized_refresh(
+                load_oauth_provider_refresh__no_commit,
+                refresh_token,
+                client_id=client_id,
+                resource=self.settings.resource_url,
+            )
         )
         if info is None:
             return None
@@ -359,13 +343,16 @@ class OnyxMCPOAuthProvider(OAuthProvider):
         refresh_token: RefreshToken,
         scopes: list[str],
     ) -> OAuthToken:
-        if not client.client_id or set(scopes) != {Permission.READ_SEARCH.value}:
+        client_id = client.client_id
+        if not client_id or set(scopes) != {Permission.READ_SEARCH.value}:
             raise TokenError("invalid_scope", "Only read:search access is supported")
         pair = await run_in_threadpool(
-            _rotate_refresh,
-            refresh_token.token,
-            client_id=client.client_id,
-            resource=self.settings.resource_url,
+            lambda: _with_authorized_refresh(
+                rotate_oauth_provider_refresh__no_commit,
+                refresh_token.token,
+                client_id=client_id,
+                resource=self.settings.resource_url,
+            )
         )
         if pair is None:
             raise TokenError("invalid_grant", "Invalid or expired refresh token")
@@ -373,7 +360,7 @@ class OnyxMCPOAuthProvider(OAuthProvider):
 
     async def load_access_token(self, token: str) -> AccessToken | None:
         async with get_async_session_context_manager() as session:
-            result = await resolve_mcp_oauth_access_token(
+            result = await resolve_oauth_provider_access_token(
                 session, token, resource=self.settings.resource_url
             )
         if result is None:

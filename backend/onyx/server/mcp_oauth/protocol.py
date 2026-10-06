@@ -1,4 +1,3 @@
-import ipaddress
 import json
 import re
 import secrets
@@ -25,9 +24,11 @@ from starlette.types import Message
 
 from onyx.auth.oauth_provider import OAuthProviderTokenKind, parse_oauth_provider_token
 from onyx.db.enums import Permission
-from onyx.db.mcp_oauth import MCP_OAUTH_STORAGE_ERRORS, mcp_oauth_tenant_has_members
-from onyx.mcp_oauth.attempts import allow_mcp_oauth_request, get_authorization_code
+from onyx.db.mcp_oauth import mcp_oauth_tenant_has_members
+from onyx.db.oauth_provider import OAUTH_PROVIDER_STORAGE_ERRORS
+from onyx.mcp_oauth.attempts import allow_mcp_oauth_request
 from onyx.mcp_oauth.config import MCPOAuthSettings, canonical_mcp_resource
+from onyx.oauth_provider.attempts import get_authorization_code
 from onyx.server.mcp_oauth.provider import (
     AuthorizationClientSnapshot,
     MCPClientMetadataUnavailable,
@@ -43,12 +44,17 @@ logger = setup_logger()
 _MAX_BODY_BYTES = 16 * 1024
 _MAX_FORM_FIELDS = 16
 _PKCE_VERIFIER = re.compile(r"[A-Za-z0-9._~-]{43,128}")
-_NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+NO_STORE_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 _CORS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, MCP-Protocol-Version",
 }
+_UNAVAILABLE_ERRORS = (
+    *OAUTH_PROVIDER_STORAGE_ERRORS,
+    RedisError,
+    MCPClientMetadataUnavailable,
+)
 
 
 def _oauth_error(
@@ -57,7 +63,15 @@ def _oauth_error(
     return JSONResponse(
         {"error": error, "error_description": description},
         status_code=status,
-        headers={**_NO_STORE, **_CORS},
+        headers={**NO_STORE_HEADERS, **_CORS},
+    )
+
+
+def _service_unavailable() -> JSONResponse:
+    return _oauth_error(
+        "server_error",
+        "Authorization service unavailable",
+        HTTPStatus.SERVICE_UNAVAILABLE,
     )
 
 
@@ -113,21 +127,13 @@ async def _form(request: Request) -> dict[str, str]:
 async def _rate_limit(request: Request, operation: str) -> Response | None:
     if request.method == "OPTIONS":
         return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
-    peer = request.client.host if request.client is not None else "unknown"
-    address = get_client_ip(request)
-    if address is None:
-        try:
-            private_peer = ipaddress.ip_address(peer).is_private
-        except ValueError:
-            private_peer = False
-        if private_peer:
-            for hop in reversed(request.headers.get("x-forwarded-for", "").split(",")):
-                try:
-                    address = str(ipaddress.ip_address(hop.strip()))
-                except ValueError:
-                    continue
-                break
-    address = address or peer
+    # Without a public address the client is on a private network, where the
+    # last forwarded hop is the client as seen by our proxy.
+    address = (
+        get_client_ip(request)
+        or request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
+        or (request.client.host if request.client is not None else "unknown")
+    )
     per_minute = 300 if operation == "register" else 3000
     try:
         allowed = await allow_mcp_oauth_request(
@@ -136,11 +142,7 @@ async def _rate_limit(request: Request, operation: str) -> Response | None:
             f"{operation}:global", limit=per_minute * 10, window_seconds=60
         )
     except RedisError:
-        return _oauth_error(
-            "server_error",
-            "Authorization service unavailable",
-            HTTPStatus.SERVICE_UNAVAILABLE,
-        )
+        return _service_unavailable()
     if not allowed:
         response = _oauth_error(
             "temporarily_unavailable",
@@ -224,16 +226,12 @@ class MCPOAuthProtocol:
             )
         except (ValueError, ValidationError):
             return _oauth_error("invalid_client_metadata", "Invalid client metadata")
-        except (*MCP_OAUTH_STORAGE_ERRORS, RedisError, MCPClientMetadataUnavailable):
-            return _oauth_error(
-                "server_error",
-                "Authorization service unavailable",
-                HTTPStatus.SERVICE_UNAVAILABLE,
-            )
+        except _UNAVAILABLE_ERRORS:
+            return _service_unavailable()
         return JSONResponse(
             client.model_dump(mode="json", exclude_none=True),
             status_code=HTTPStatus.CREATED,
-            headers={**_NO_STORE, **_CORS},
+            headers={**NO_STORE_HEADERS, **_CORS},
         )
 
     async def authorize(self, request: Request) -> Response:
@@ -273,12 +271,8 @@ class MCPOAuthProtocol:
                 response = await AuthorizationHandler(provider).handle(prepared)
         except ValueError:
             return _oauth_error("invalid_request", "Invalid authorization parameters")
-        except (*MCP_OAUTH_STORAGE_ERRORS, RedisError, MCPClientMetadataUnavailable):
-            return _oauth_error(
-                "server_error",
-                "Authorization service unavailable",
-                HTTPStatus.SERVICE_UNAVAILABLE,
-            )
+        except _UNAVAILABLE_ERRORS:
+            return _service_unavailable()
         location = response.headers.get("location")
         if location and not location.startswith(
             f"{self.settings.web_url}/oauth/mcp/authorize?"
@@ -286,7 +280,7 @@ class MCPOAuthProtocol:
             response.headers["location"] = construct_redirect_uri(
                 location, iss=self.settings.issuer_url
             )
-        response.headers.update(_NO_STORE)
+        response.headers.update(NO_STORE_HEADERS)
         return response
 
     async def token(self, request: Request) -> Response:
@@ -328,14 +322,10 @@ class MCPOAuthProtocol:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
         except (ValueError, UnicodeError):
             return _oauth_error("invalid_request", "Invalid token parameters")
-        except (*MCP_OAUTH_STORAGE_ERRORS, RedisError, MCPClientMetadataUnavailable):
+        except _UNAVAILABLE_ERRORS:
             logger.warning("MCP OAuth token storage is unavailable")
-            return _oauth_error(
-                "server_error",
-                "Authorization service unavailable",
-                HTTPStatus.SERVICE_UNAVAILABLE,
-            )
-        response.headers.update({**_NO_STORE, **_CORS})
+            return _service_unavailable()
+        response.headers.update({**NO_STORE_HEADERS, **_CORS})
         return response
 
     async def revoke(self, request: Request) -> Response:
@@ -366,21 +356,15 @@ class MCPOAuthProtocol:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
         except (ValueError, UnicodeError):
             return _oauth_error("invalid_request", "Invalid revocation parameters")
-        except (*MCP_OAUTH_STORAGE_ERRORS, RedisError, MCPClientMetadataUnavailable):
+        except _UNAVAILABLE_ERRORS:
             logger.warning("MCP OAuth revocation storage is unavailable")
-            return _oauth_error(
-                "server_error",
-                "Authorization service unavailable",
-                HTTPStatus.SERVICE_UNAVAILABLE,
-            )
-        response.headers.update({**_NO_STORE, **_CORS})
+            return _service_unavailable()
+        response.headers.update({**NO_STORE_HEADERS, **_CORS})
         return response
 
 
 def create_mcp_oauth_protocol_router(settings: MCPOAuthSettings) -> APIRouter:
     router = APIRouter(prefix="/mcp-oauth")
-    if not settings.enabled:
-        return router
     endpoints = MCPOAuthProtocol(settings)
     router.add_api_route("/metadata", endpoints.metadata, methods=["GET", "OPTIONS"])
     router.add_api_route("/register", endpoints.register, methods=["POST", "OPTIONS"])

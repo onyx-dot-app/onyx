@@ -1,12 +1,10 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from mcp.shared.auth import OAuthClientInformationFull
 from sqlalchemy import or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_provider import parse_oauth_provider_token
-from onyx.db import oauth_provider as _oauth_provider
 from onyx.db.engine.sql_engine import get_catalog_session
 from onyx.db.models import (
     OAuthProviderGrant,
@@ -18,10 +16,6 @@ from onyx.db.models import (
 from onyx.mcp_oauth.models import MCPOAuthOwner
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
-
-MCP_OAUTH_ACCESS_LIFETIME = _oauth_provider.OAUTH_PROVIDER_ACCESS_LIFETIME
-MCP_OAUTH_GRANT_LIFETIME = _oauth_provider.OAUTH_PROVIDER_GRANT_LIFETIME
-MCP_OAUTH_STORAGE_ERRORS = _oauth_provider.OAUTH_PROVIDER_STORAGE_ERRORS
 
 
 def mcp_oauth_tenant_has_members(tenant_id: str) -> bool:
@@ -123,30 +117,3 @@ def get_mcp_oauth_token_owner(
     if user is None:
         return None
     return mcp_oauth_owner_snapshot(user)
-
-
-def register_mcp_oauth_client(client: OAuthClientInformationFull) -> None:
-    _oauth_provider.register_oauth_provider_client(client)
-
-
-def get_mcp_oauth_client(client_id: str) -> OAuthClientInformationFull | None:
-    return _oauth_provider.get_oauth_provider_client(client_id)
-
-
-create_mcp_oauth_grant__no_commit = (
-    _oauth_provider.create_oauth_provider_grant__no_commit
-)
-load_mcp_oauth_refresh__no_commit = (
-    _oauth_provider.load_oauth_provider_refresh__no_commit
-)
-rotate_mcp_oauth_refresh__no_commit = (
-    _oauth_provider.rotate_oauth_provider_refresh__no_commit
-)
-resolve_mcp_oauth_access_token = _oauth_provider.resolve_oauth_provider_access_token
-revoke_mcp_oauth_token__no_commit = (
-    _oauth_provider.revoke_oauth_provider_token__no_commit
-)
-list_mcp_oauth_grants = _oauth_provider.list_oauth_provider_grants
-revoke_mcp_oauth_grant__no_commit = (
-    _oauth_provider.revoke_oauth_provider_grant__no_commit
-)

@@ -18,41 +18,32 @@ from onyx.configs import app_configs
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType, Permission
-from onyx.db.mcp_oauth import (
-    MCP_OAUTH_STORAGE_ERRORS,
-    list_mcp_oauth_grants,
-    mcp_oauth_owner_is_member,
-    mcp_oauth_owner_snapshot,
-    revoke_mcp_oauth_grant__no_commit,
-)
+from onyx.db.mcp_oauth import mcp_oauth_owner_is_member, mcp_oauth_owner_snapshot
 from onyx.db.models import User
+from onyx.db.oauth_provider import (
+    OAUTH_PROVIDER_STORAGE_ERRORS,
+    list_oauth_provider_grants,
+    revoke_oauth_provider_grant__no_commit,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.mcp_oauth.attempts import (
+from onyx.mcp_oauth.config import get_mcp_oauth_settings
+from onyx.oauth_provider.attempts import (
     AUTHORIZATION_CODE_TTL_SECONDS,
     bind_authorization_request,
     consume_authorization_request,
     get_authorization_request,
     store_authorization_code,
 )
-from onyx.mcp_oauth.config import get_mcp_oauth_settings
-from onyx.mcp_oauth.models import (
-    MCPOAuthGrantInfo,
-    StoredMCPOAuthCode,
-)
+from onyx.oauth_provider.models import OAuthProviderGrantInfo, StoredOAuthProviderCode
+from onyx.server.mcp_oauth.protocol import NO_STORE_HEADERS
 from onyx.server.mcp_oauth.provider import OnyxMCPOAuthProvider
 from onyx.server.settings.store import load_settings
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import UsageCredentialIdentity, get_current_tenant_id
 from shared_configs.enums import UsageCredentialType
 
-
-def _require_enabled() -> None:
-    if not app_configs.MCP_SERVER_OAUTH_ENABLED:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND)
-
-
-router = APIRouter(prefix="/mcp-oauth", dependencies=[Depends(_require_enabled)])
+router = APIRouter(prefix="/mcp-oauth")
 
 
 class MCPOAuthConsentInfo(BaseModel):
@@ -121,11 +112,6 @@ def _session_hash(request: Request, user: User) -> str:
     return hashlib.sha256(credentials.encode("utf-8")).hexdigest()
 
 
-def _no_store(response: Response) -> None:
-    response.headers["Cache-Control"] = "no-store"
-    response.headers["Pragma"] = "no-cache"
-
-
 async def _authorization_session(request: Request, user: User) -> str:
     session_hash = _session_hash(request, user)
     if not has_global_permission(user, Permission.READ_SEARCH):
@@ -138,7 +124,7 @@ async def _authorization_session(request: Request, user: User) -> str:
             owner.email,
             owner.oauth_identities,
         )
-    except MCP_OAUTH_STORAGE_ERRORS as error:
+    except OAUTH_PROVIDER_STORAGE_ERRORS as error:
         raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE) from error
     if not member:
         raise OnyxError(
@@ -173,7 +159,7 @@ async def consent_details(
         )
     settings = await run_in_threadpool(load_settings)
     destination = urlsplit(str(pending.params.redirect_uri))
-    _no_store(response)
+    response.headers.update(NO_STORE_HEADERS)
     return MCPOAuthConsentInfo(
         client_name=pending.client_name,
         redirect_origin=f"{destination.scheme}://{destination.netloc}",
@@ -207,7 +193,7 @@ async def decide_consent(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, "Invalid or expired authorization request"
         )
-    _no_store(response)
+    response.headers.update(NO_STORE_HEADERS)
     if payload.decision == "deny":
         return MCPOAuthConsentResult(
             redirect_url=construct_redirect_uri(
@@ -230,7 +216,7 @@ async def decide_consent(
             "Client redirect changed; restart authorization",
         ) from error
     code = await store_authorization_code(
-        StoredMCPOAuthCode(
+        StoredOAuthProviderCode(
             authorization=pending,
             user_id=user.id,
             tenant_id=get_current_tenant_id(),
@@ -252,11 +238,11 @@ def connected_clients(
     request: Request,
     response: Response,
     user: User = Depends(current_limited_user),
-) -> list[MCPOAuthGrantInfo]:
+) -> list[OAuthProviderGrantInfo]:
     _session_hash(request, user)
-    _no_store(response)
+    response.headers.update(NO_STORE_HEADERS)
     with get_session_with_current_tenant() as session:
-        return list_mcp_oauth_grants(session, user.id)
+        return list_oauth_provider_grants(session, user.id)
 
 
 @router.delete("/grants/{grant_id}")
@@ -270,11 +256,11 @@ def disconnect_client(
     if request.headers.get("origin") != get_mcp_oauth_settings().web_origin:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Invalid authorization origin")
     with get_session_with_current_tenant() as session:
-        revoked = revoke_mcp_oauth_grant__no_commit(
+        revoked = revoke_oauth_provider_grant__no_commit(
             session, grant_id=grant_id, user_id=user.id
         )
         session.commit()
     if not revoked:
         raise OnyxError(OnyxErrorCode.NOT_FOUND)
-    _no_store(response)
+    response.headers.update(NO_STORE_HEADERS)
     return {"revoked": True}
