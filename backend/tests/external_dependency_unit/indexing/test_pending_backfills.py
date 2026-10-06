@@ -1,9 +1,10 @@
 """Backfills an applied edit leaves on a cc-pair: the indexing beat creates
 them one at a time, only while the pair is ACTIVE with no active attempt and
-no pending trigger, and drops each request once its attempt succeeds. A
-failed attempt is retried after a backoff. A full re-index covers the
-backfills requested before it, and a restart releases a stopped backfill
-without a backoff."""
+no pending trigger or request, and drops each request once its attempt
+succeeds. A failed attempt is retried after a backoff; an interrupted one at
+once. A full re-index tracks the backfills requested before it, and a
+restart releases a stopped backfill without a backoff. A full re-index an
+edit requested runs again until one succeeds."""
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
@@ -15,11 +16,19 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.docprocessing.tasks import _kickoff_indexing_tasks
+from onyx.background.celery.tasks.docfetching.task_creation_utils import (
+    try_creating_pending_backfill_attempt,
+)
+from onyx.background.celery.tasks.docprocessing.tasks import (
+    _kickoff_indexing_tasks,
+    _try_creating_pending_backfill,
+)
 from onyx.db.backfill_models import BackfillSpec
 from onyx.db.connector_edit_requests import (
+    clear_full_reindex_request__no_commit,
     request_attempt_restart__no_commit,
     request_backfills__no_commit,
+    request_full_reindex__no_commit,
 )
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexingMode, IndexingStatus
@@ -275,8 +284,145 @@ def test_a_full_reindex_covers_earlier_backfills(
     [reindex] = _attempts(db_session, cc_pair.id)
     assert reindex.from_beginning
     assert not reindex.is_backfill
-    [kept] = cc_pair.pending_backfills
+    [covered, kept] = cc_pair.pending_backfills
+    assert covered.attempt_id == reindex.id
+    assert kept.attempt_id is None
     assert kept.backfill.connector_config_override is None
+
+    # The success of the re-index removes the covered request.
+    _finish(db_session, reindex)
+    _run_beat(db_session, cc_pair, search_settings)
+    [_, backfill] = _attempts(db_session, cc_pair.id)
+    assert backfill.is_backfill
+    assert backfill.connector_config_override is None
+    [running] = cc_pair.pending_backfills
+    assert running.request_id == kept.request_id
+    assert running.attempt_id == backfill.id
+
+
+def test_a_failed_full_reindex_runs_again_and_keeps_its_backfills(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> None:
+    # No refresh_freq: only the request keeps the pair due.
+    _index_once(db_session, cc_pair, search_settings)
+    cc_pair.connector.refresh_freq = None
+    _request(db_session, cc_pair, _scoped())
+    request_full_reindex__no_commit(db_session, cc_pair.id)
+    db_session.commit()
+    requested_at = cc_pair.full_reindex_requested_at
+    assert requested_at is not None
+
+    _run_beat(db_session, cc_pair, search_settings)
+    [_, first] = _attempts(db_session, cc_pair.id)
+    assert first.from_beginning
+    assert first.full_reindex_requested_at == requested_at
+    assert cc_pair.pending_backfills[0].attempt_id == first.id
+
+    # A failed re-index leaves the request, so the next run is a full
+    # re-index too, and it covers the backfill again.
+    _finish(db_session, first, IndexingStatus.FAILED)
+    _run_beat(db_session, cc_pair, search_settings)
+    [_, _, second] = _attempts(db_session, cc_pair.id)
+    assert second.from_beginning
+    assert not second.is_backfill
+    [covered] = cc_pair.pending_backfills
+    assert covered.attempt_id == second.id
+
+    # What the indexing monitor does when the re-index succeeds.
+    _finish(db_session, second)
+    clear_full_reindex_request__no_commit(
+        db_session, cc_pair.id, served_request_at=requested_at
+    )
+    db_session.commit()
+    _run_beat(db_session, cc_pair, search_settings)
+    assert cc_pair.full_reindex_requested_at is None
+    assert cc_pair.pending_backfills == []
+    assert len(_attempts(db_session, cc_pair.id)) == 3
+
+
+def test_an_interrupted_backfill_runs_again_without_a_backoff(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> None:
+    _index_once(db_session, cc_pair, search_settings)
+    _request(db_session, cc_pair, _scoped())
+    _run_beat(db_session, cc_pair, search_settings)
+    [first] = _backfills(db_session, cc_pair.id)
+
+    _finish(db_session, first, IndexingStatus.INTERRUPTED)
+    _run_beat(db_session, cc_pair, search_settings)
+
+    [_, rerun] = _backfills(db_session, cc_pair.id)
+    [tracked] = cc_pair.pending_backfills
+    assert tracked.attempt_id == rerun.id
+    assert tracked.failure_count == 0
+    assert tracked.retry_after is None
+
+
+def test_a_paused_pair_creates_no_backfill(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> None:
+    _request(db_session, cc_pair, _scoped())
+    cc_pair.status = ConnectorCredentialPairStatus.PAUSED
+    db_session.commit()
+
+    assert not _try_creating_pending_backfill(
+        MagicMock(),
+        db_session,
+        cc_pair=cc_pair,
+        search_settings=search_settings,
+        secondary_index_building=False,
+        redis_client=get_redis_client(),
+        tenant_id=get_current_tenant_id(),
+    )
+
+    assert _attempts(db_session, cc_pair.id) == []
+    [pending] = cc_pair.pending_backfills
+    assert pending.attempt_id is None
+
+
+@pytest.mark.parametrize(
+    "edit_request",
+    ["indexing_trigger", "full_reindex", "attempt_exists"],
+)
+def test_backfill_creation_rechecks_under_the_pair_lock(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+    edit_request: str,
+) -> None:
+    """An edit that commits after the beat chose the backfill wins: the
+    creation sees its request under the row lock and creates nothing."""
+    _request(db_session, cc_pair, _scoped())
+    [pending] = cc_pair.pending_backfills
+    if edit_request == "indexing_trigger":
+        cc_pair.indexing_trigger = IndexingMode.REINDEX
+    elif edit_request == "full_reindex":
+        request_full_reindex__no_commit(db_session, cc_pair.id)
+        cc_pair.indexing_trigger = None
+    else:
+        cc_pair.pending_backfills = [pending.model_copy(update={"attempt_id": 0})]
+    db_session.commit()
+    celery_app = MagicMock()
+
+    attempt_id = try_creating_pending_backfill_attempt(
+        celery_app,
+        cc_pair,
+        search_settings,
+        pending.request_id,
+        db_session,
+        get_redis_client(),
+        get_current_tenant_id(),
+    )
+
+    assert attempt_id is None
+    assert _attempts(db_session, cc_pair.id) == []
+    celery_app.send_task.assert_not_called()
 
 
 def test_a_restart_puts_a_running_backfill_back(

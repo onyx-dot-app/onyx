@@ -1,6 +1,7 @@
 from typing import Any
 
 from sqlalchemy import Select, exists, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_, or_
 
@@ -195,19 +196,30 @@ def swap_cc_pair_credential__no_commit(
             f"Connector {cc_pair.connector_id} already uses credential "
             f"{new_credential.id} in another connection.",
         )
-    db_session.execute(
-        update(DocumentByConnectorCredentialPair)
-        .where(
-            and_(
-                DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == cc_pair.credential_id,
+    # The check above cannot see a pair that an uncommitted transaction moves
+    # to the credential; the unique key catches that one.
+    try:
+        db_session.execute(
+            update(DocumentByConnectorCredentialPair)
+            .where(
+                and_(
+                    DocumentByConnectorCredentialPair.connector_id
+                    == cc_pair.connector_id,
+                    DocumentByConnectorCredentialPair.credential_id
+                    == cc_pair.credential_id,
+                )
             )
+            .values(credential_id=new_credential.id)
         )
-        .values(credential_id=new_credential.id)
-    )
-    cc_pair.credential_id = new_credential.id
-    cc_pair.credential = new_credential
+        cc_pair.credential_id = new_credential.id
+        cc_pair.credential = new_credential
+        db_session.flush()
+    except IntegrityError as e:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Connector {cc_pair.connector_id} already uses credential "
+            f"{new_credential.id} in another connection.",
+        ) from e
 
 
 def swap_credentials_connector(

@@ -23,8 +23,8 @@ from onyx.background.celery.celery_redis import (
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
-    try_creating_backfill_attempt,
     try_creating_docfetching_task,
+    try_creating_pending_backfill_attempt,
     try_dispatching_waiting_attempt,
 )
 from onyx.background.celery.tasks.docprocessing.heartbeat import (
@@ -77,10 +77,10 @@ from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
 from onyx.db.connector_edit_requests import (
-    clear_backfills_covered_by_attempt__no_commit,
+    clear_full_reindex_request__no_commit,
     promote_prune_after_reindex_request__no_commit,
     resolve_backfill_attempts__no_commit,
-    track_backfill_attempt__no_commit,
+    track_backfills_covered_by_attempt__no_commit,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
@@ -665,6 +665,14 @@ def check_indexing_completion(
                     in_error=False,
                 )
 
+            if attempt.full_reindex_requested_at is not None:
+                clear_full_reindex_request__no_commit(
+                    db_session,
+                    cc_pair.id,
+                    served_request_at=attempt.full_reindex_requested_at,
+                )
+                db_session.commit()
+
             if attempt.prune_after_reindex_requested_at is not None:
                 promote_prune_after_reindex_request__no_commit(
                     db_session,
@@ -844,14 +852,16 @@ def _try_creating_pending_backfill(
     """Settles the pair's ended backfill attempts, then creates the attempt of
     its oldest ready backfill on the current index. The caller checked that no
     attempt is active there. The backfill waits while the pair is not ACTIVE,
-    and while an indexing trigger or a prune-after-reindex request is pending:
-    that run goes first, and a full re-index covers the backfill."""
+    and while an indexing trigger, a prune-after-reindex or a full re-index
+    request is pending: that run goes first, and a full re-index covers the
+    backfill. The creation checks these again under the pair's row lock."""
     if not search_settings.status.is_current() or not cc_pair.pending_backfills:
         return False
     if (
         cc_pair.status != ConnectorCredentialPairStatus.ACTIVE
         or cc_pair.indexing_trigger is not None
         or cc_pair.prune_after_reindex_requested_at is not None
+        or cc_pair.full_reindex_requested_at is not None
         or (DISABLE_INDEX_UPDATE_ON_SWAP and secondary_index_building)
     ):
         return False
@@ -863,6 +873,11 @@ def _try_creating_pending_backfill(
         task_logger.info(
             f"Pending backfill succeeded: index_attempt={pending.attempt_id} "
             f"cc_pair={cc_pair.id} request_id={pending.request_id}"
+        )
+    for released in resolution.interrupted:
+        task_logger.info(
+            f"Pending backfill attempt was interrupted, released: "
+            f"cc_pair={cc_pair.id} request_id={released.request_id}"
         )
     for failed in resolution.failed:
         task_logger.warning(
@@ -877,23 +892,17 @@ def _try_creating_pending_backfill(
     pending = _next_ready_backfill(cc_pair.pending_backfills, now)
     if pending is None:
         return False
-    attempt_id = try_creating_backfill_attempt(
+    attempt_id = try_creating_pending_backfill_attempt(
         celery_app,
         cc_pair,
         search_settings,
-        pending.backfill,
+        pending.request_id,
         db_session,
         redis_client,
         tenant_id,
     )
     if attempt_id is None:
         return False
-    # After the attempt commits: a crash in between runs the backfill twice,
-    # which is harmless, instead of never.
-    track_backfill_attempt__no_commit(
-        db_session, cc_pair.id, pending.request_id, attempt_id
-    )
-    db_session.commit()
     task_logger.info(
         f"Pending backfill queued: index_attempt={attempt_id} cc_pair={cc_pair.id} "
         f"request_id={pending.request_id} failure_count={pending.failure_count}"
@@ -1003,10 +1012,10 @@ def _kickoff_indexing_tasks(
             mark_ccpair_with_indexing_trigger(cc_pair.id, None, db_session)
 
         # Until a full re-index succeeds, each run serves the pending request
-        # to prune after one.
-        if (
-            search_settings.status.is_current()
-            and cc_pair.prune_after_reindex_requested_at is not None
+        # for one, or to prune after one.
+        if search_settings.status.is_current() and (
+            cc_pair.prune_after_reindex_requested_at is not None
+            or cc_pair.full_reindex_requested_at is not None
         ):
             reindex = True
 
@@ -1032,13 +1041,13 @@ def _kickoff_indexing_tasks(
                 and search_settings.status.is_current()
                 and cc_pair.pending_backfills
             ):
-                dropped = clear_backfills_covered_by_attempt__no_commit(
+                covered = track_backfills_covered_by_attempt__no_commit(
                     db_session, cc_pair.id, attempt_id
                 )
                 db_session.commit()
                 task_logger.info(
                     f"Full re-index covers pending backfills: index_attempt={attempt_id} "
-                    f"cc_pair={cc_pair.id} dropped={dropped}"
+                    f"cc_pair={cc_pair.id} covered={covered}"
                 )
         else:
             task_logger.error(

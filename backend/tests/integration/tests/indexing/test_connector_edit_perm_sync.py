@@ -15,7 +15,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.edit_plan.models import EditStepKind
 from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, IndexingStatus
 from tests.integration.common_utils.constants import (
     API_SERVER_URL,
     MAX_DELAY,
@@ -32,8 +32,6 @@ from tests.integration.common_utils.test_document_utils import create_test_docum
 from tests.integration.common_utils.test_models import DATestUser
 
 _POLL_SECONDS = 3
-# The initial run, the full re-index on entering sync, and spare runs.
-_MOCK_RUNS = 6
 
 
 def _wait_until(condition: Callable[[], bool], what: str, timeout: float) -> None:
@@ -42,6 +40,18 @@ def _wait_until(condition: Callable[[], bool], what: str, timeout: float) -> Non
         if time.monotonic() > deadline:
             raise TimeoutError(f"Timed out waiting for {what}")
         time.sleep(_POLL_SECONDS)
+
+
+def _set_next_run(mock_server_client: httpx.Client, text: str) -> None:
+    """The mock server serves its behavior to one connector run and then
+    clears it, so each run the test needs posts it again."""
+    run = {
+        "documents": [create_test_document(text=text).model_dump(mode="json")],
+        "checkpoint": MockConnectorCheckpoint(has_more=False).model_dump(mode="json"),
+        "failures": [],
+    }
+    response = mock_server_client.post("/set-behavior", json=[run])
+    assert response.status_code == 200
 
 
 def _can_find(text: str, user: DATestUser) -> bool:
@@ -64,14 +74,7 @@ def test_entering_and_leaving_perm_sync_changes_visibility(
     basic_user: DATestUser,
 ) -> None:
     text = f"perm sync edit {uuid.uuid4().hex} marker"
-    test_doc = create_test_document(text=text)
-    run = {
-        "documents": [test_doc.model_dump(mode="json")],
-        "checkpoint": MockConnectorCheckpoint(has_more=False).model_dump(mode="json"),
-        "failures": [],
-    }
-    response = mock_server_client.post("/set-behavior", json=[run] * _MOCK_RUNS)
-    assert response.status_code == 200
+    _set_next_run(mock_server_client, text)
 
     cc_pair = CCPairManager.create_from_scratch(
         name=f"edit-perm-sync-{uuid.uuid4()}",
@@ -99,7 +102,27 @@ def test_entering_and_leaving_perm_sync_changes_visibility(
     synced.access_type = AccessType.SYNC
     plan = ConnectorEditManager.plan(cc_pair.id, synced, admin_user)
     assert EditStepKind.ENTER_PERM_SYNC in [step.kind for step in plan.plan.steps]
+    _set_next_run(mock_server_client, text)
     ConnectorEditManager.apply(cc_pair.id, plan.plan_id, admin_user)
+
+    # The source gets permissions only while it indexes: a full re-index.
+    reindex = IndexAttemptManager.wait_for_index_attempt_start(
+        cc_pair_id=cc_pair.id,
+        index_attempts_to_ignore=[first.id],
+        user_performing_action=admin_user,
+    )
+    IndexAttemptManager.wait_for_index_attempt_completion(
+        index_attempt_id=reindex.id,
+        cc_pair_id=cc_pair.id,
+        user_performing_action=admin_user,
+    )
+    reindexed = IndexAttemptManager.get_index_attempt_by_id(
+        index_attempt_id=reindex.id,
+        cc_pair_id=cc_pair.id,
+        user_performing_action=admin_user,
+    )
+    assert reindexed.from_beginning
+    assert reindexed.status == IndexingStatus.SUCCESS
     _wait_until(
         lambda: not _can_find(text, basic_user), "the document to close", MAX_DELAY
     )

@@ -18,12 +18,9 @@ from onyx.configs.constants import DocumentSource, NotificationType
 from onyx.connectors.capability_checks.models import ProposedPairingValidation
 from onyx.connectors.edit_plan import apply as apply_module
 from onyx.connectors.edit_plan import orchestration
-from onyx.connectors.edit_plan.apply import (
-    AppliedConnectorEdit,
-    apply_connector_edit,
-    load_plan_for_user,
-)
+from onyx.connectors.edit_plan.apply import apply_connector_edit, load_plan_for_user
 from onyx.connectors.edit_plan.models import (
+    AppliedConnectorEdit,
     CredentialPath,
     EditPlanChoices,
     EditStepKind,
@@ -61,10 +58,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.connector_edit import (
     _authorize_pair_edit,
     _authorize_proposed_state,
-)
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation,
-    global_version,
 )
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
@@ -167,14 +160,6 @@ def other_credential(
     db_session.rollback()
     db_session.execute(delete(Credential).where(Credential.id == credential_id))
     db_session.commit()
-
-
-@pytest.fixture
-def ee(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
-    fetch_versioned_implementation.cache_clear()
-    monkeypatch.setattr(global_version, "is_ee_version", lambda: True)
-    yield
-    fetch_versioned_implementation.cache_clear()
 
 
 @pytest.fixture
@@ -574,7 +559,7 @@ def test_access_change_is_applied(
     group: UserGroup,
     admin: User,
     validation: _Validation,  # noqa: ARG001
-    ee: None,  # noqa: ARG001
+    enable_ee: None,  # noqa: ARG001
 ) -> None:
     stored = _plan(
         db_session,

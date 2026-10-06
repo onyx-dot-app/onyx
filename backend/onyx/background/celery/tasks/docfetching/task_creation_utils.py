@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from celery import Celery
 from redis.lock import Lock as RedisLock
@@ -12,7 +12,9 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
-from onyx.db.backfill_models import BackfillSpec
+from onyx.db.connector_edit_requests import (
+    create_pending_backfill_attempt__no_commit,
+)
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexModelStatus
 from onyx.db.index_attempt import (
     claim_waiting_index_attempt,
@@ -116,32 +118,78 @@ def try_creating_docfetching_task(
         r,
         tenant_id,
         from_beginning=reindex,
-        backfill=None,
     )
 
 
-def try_creating_backfill_attempt(
+def try_creating_pending_backfill_attempt(
     celery_app: Celery,
     cc_pair: ConnectorCredentialPair,
     search_settings: SearchSettings,
-    backfill: BackfillSpec,
+    request_id: UUID,
     db_session: Session,
     r: TenantRedisClient,
     tenant_id: str,
 ) -> int | None:
-    """Creates a backfill attempt and sends its docfetching task. Returns None
-    when the pair skips indexing, its first attempt is held for the capability
-    checks, or another attempt is active for these search settings."""
-    return _try_creating_attempt(
-        celery_app,
-        cc_pair,
-        search_settings,
-        db_session,
-        r,
-        tenant_id,
-        from_beginning=False,
-        backfill=backfill,
-    )
+    """Creates the attempt of the pair's pending backfill ``request_id`` and
+    records it on the request in one transaction, then sends its docfetching
+    task. Returns None when the pair skips indexing, its first attempt is
+    held for the capability checks, or the backfill must wait (see
+    ``create_pending_backfill_attempt__no_commit``)."""
+    lock: RedisLock = r.lock(_CREATION_LOCK_NAME, timeout=_LOCK_TIMEOUT)
+    if not lock.acquire(blocking_timeout=_LOCK_TIMEOUT / 2):
+        return None
+
+    committed_attempt_id: int | None = None
+    try:
+        db_session.refresh(cc_pair)
+        if _skips_indexing(cc_pair, search_settings):
+            return None
+        # A backfill never waits: until the first full run is sent, it has
+        # nothing to add to.
+        if get_first_indexing_hold(db_session, cc_pair) is not None:
+            task_logger.info(
+                f"Skipping backfill while the first attempt is held: cc_pair={cc_pair.id}"
+            )
+            return None
+
+        custom_task_id = _new_docfetching_task_id(cc_pair, search_settings)
+        index_attempt_id: int | None = create_pending_backfill_attempt__no_commit(
+            db_session,
+            cc_pair_id=cc_pair.id,
+            search_settings_id=search_settings.id,
+            request_id=request_id,
+            celery_task_id=custom_task_id,
+        )
+        if index_attempt_id is None:
+            db_session.rollback()
+            return None
+        # The task is sent only after the commit, so an edit that commits
+        # first sees the attempt and stops it.
+        db_session.commit()
+        committed_attempt_id = index_attempt_id
+
+        _send_docfetching_task(
+            celery_app,
+            cc_pair=cc_pair,
+            search_settings=search_settings,
+            index_attempt_id=index_attempt_id,
+            custom_task_id=custom_task_id,
+            tenant_id=tenant_id,
+        )
+        return index_attempt_id
+    except Exception:
+        task_logger.exception(
+            f"try_creating_pending_backfill_attempt - Unexpected exception: "
+            f"cc_pair={cc_pair.id} search_settings={search_settings.id}"
+        )
+        db_session.rollback()
+        # The next beat releases the request of a failed attempt.
+        if committed_attempt_id is not None:
+            mark_attempt_failed(committed_attempt_id, db_session)
+        return None
+    finally:
+        if lock.owned():
+            lock.release()
 
 
 def _try_creating_attempt(
@@ -153,7 +201,6 @@ def _try_creating_attempt(
     tenant_id: str,
     *,
     from_beginning: bool,
-    backfill: BackfillSpec | None,
 ) -> int | None:
     # we need to serialize any attempt to trigger indexing since it can be triggered
     # either via celery beat or manually (API call)
@@ -177,13 +224,6 @@ def _try_creating_attempt(
         # A first attempt that waits for the capability checks is created
         # without its task; the beat sends it once the checks pass.
         held = get_first_indexing_hold(db_session, cc_pair) is not None
-        # A backfill never waits: until the first full run is sent, it has
-        # nothing to add to.
-        if held and backfill is not None:
-            task_logger.info(
-                f"Skipping backfill while the first attempt is held: cc_pair={cc_pair.id}"
-            )
-            return None
         custom_task_id = (
             None if held else _new_docfetching_task_id(cc_pair, search_settings)
         )
@@ -196,7 +236,6 @@ def _try_creating_attempt(
             search_settings_id=search_settings.id,
             celery_task_id=custom_task_id,
             from_beginning=from_beginning,
-            backfill=backfill,
         )
 
         if index_attempt_id is None:

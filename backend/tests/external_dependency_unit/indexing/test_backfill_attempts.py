@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
-    try_creating_backfill_attempt,
+    try_creating_pending_backfill_attempt,
 )
 from onyx.background.celery.tasks.docprocessing.tasks import check_indexing_completion
 from onyx.background.indexing.run_docfetching import (
@@ -30,7 +30,9 @@ from onyx.db.connector_credential_pair import (
     get_last_successful_attempt_poll_range_end,
     resync_cc_pair,
 )
+from onyx.db.connector_edit_requests import request_backfills__no_commit
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
+from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexingStatus
 from onyx.db.index_attempt import (
     cc_pair_has_dispatched_index_attempts,
@@ -296,7 +298,7 @@ def test_backfill_and_normal_attempts_fence_each_other(
         (ConnectorCredentialPairStatus.DELETING, False, False),
     ],
 )
-def test_try_creating_backfill_attempt(
+def test_try_creating_pending_backfill_attempt(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
     search_settings: SearchSettings,
@@ -304,19 +306,26 @@ def test_try_creating_backfill_attempt(
     held: bool,
     expect_created: bool,
 ) -> None:
+    request_backfills__no_commit(
+        db_session,
+        cc_pair.id,
+        [_backfill_spec(_OVERRIDE_CONFIG)],
+        get_db_current_time(db_session),
+    )
     cc_pair.status = pair_status
     db_session.commit()
+    [requested] = cc_pair.pending_backfills
     celery_app = MagicMock()
 
     with patch(
         f"{_TASK_CREATION}.get_first_indexing_hold",
         return_value=MagicMock() if held else None,
     ):
-        attempt_id = try_creating_backfill_attempt(
+        attempt_id = try_creating_pending_backfill_attempt(
             celery_app=celery_app,
             cc_pair=cc_pair,
             search_settings=search_settings,
-            backfill=_backfill_spec(_OVERRIDE_CONFIG),
+            request_id=requested.request_id,
             db_session=db_session,
             r=MagicMock(),
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
@@ -327,11 +336,17 @@ def test_try_creating_backfill_attempt(
         .filter(IndexAttempt.connector_credential_pair_id == cc_pair.id)
         .all()
     )
+    db_session.refresh(cc_pair)
+    [pending] = cc_pair.pending_backfills
     if not expect_created:
         assert attempt_id is None
         assert attempts == []
+        assert pending.attempt_id is None
         celery_app.send_task.assert_not_called()
         return
+
+    # Recorded in the transaction that created the attempt.
+    assert pending.attempt_id == attempt_id
 
     assert attempt_id is not None
     assert [a.id for a in attempts] == [attempt_id]

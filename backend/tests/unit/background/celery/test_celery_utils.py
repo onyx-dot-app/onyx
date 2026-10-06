@@ -303,9 +303,11 @@ def test_prune_listing_honors_indexing_start(
         (DocumentSource.GOOGLE_DRIVE, True),
         (DocumentSource.JIRA, True),
         (DocumentSource.SHAREPOINT, True),
-        (DocumentSource.SLACK, True),
-        # Slim listing ignores the start.
+        # Slim listing ignores the start, for some document types at least.
         (DocumentSource.NOTION, False),
+        (DocumentSource.SLACK, False),
+        (DocumentSource.TEAMS, False),
+        (DocumentSource.CANVAS, False),
         # A load connector lists all documents.
         (DocumentSource.WEB, False),
         # No slim listing: the prune runs the checkpoint as indexing does.

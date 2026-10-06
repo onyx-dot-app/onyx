@@ -824,7 +824,9 @@ class SlackConnector(
     CredentialsConnector,
     CheckpointedConnectorWithPermSync[SlackCheckpoint],
 ):
-    slim_listing_honors_indexing_start = True
+    # A thread whose root is older than `start` is indexed through a newer
+    # broadcast reply, but the slim listing lists only the reply.
+    slim_listing_honors_indexing_start = False
 
     MAX_CHANNELS_TO_LOG = 50
 

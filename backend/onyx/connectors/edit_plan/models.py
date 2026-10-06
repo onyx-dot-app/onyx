@@ -11,6 +11,7 @@ from onyx.connectors.capability_checks.models import (
     ProposedPairingValidation,
 )
 from onyx.connectors.config_diff import ConfigFieldChange
+from onyx.connectors.field_policy import FieldClass, ScopeDirection
 from onyx.connectors.models import InputType
 from onyx.connectors.planning_rule import PlanningData
 from onyx.db.backfill_models import BackfillSpec
@@ -54,6 +55,8 @@ class CurrentPairState(PairState):
     cc_pair_id: int
     connector_id: int
     status: ConnectorCredentialPairStatus
+    # The pairs that share the connector, this one included.
+    connector_pair_count: int
 
 
 class EditStepKind(str, Enum):
@@ -217,3 +220,39 @@ class StoredEditPlan(BaseModel):
     proposed: ProposedPairState
     plan: EditPlan
     created_at: datetime
+
+
+class ConnectorEditAuditFieldChange(BaseModel):
+    """One changed config field, without its values."""
+
+    field_name: str
+    field_class: FieldClass
+    scope_direction: ScopeDirection
+    added_item_count: int
+    removed_item_count: int
+
+
+class ConnectorEditAudit(BaseModel):
+    """The field-level diff of an applied edit. Config values are left out:
+    free-form fields (queries, URLs, paths) can carry sensitive text."""
+
+    plan_id: UUID
+    field_changes: list[ConnectorEditAuditFieldChange]
+    changed_settings: list[str]
+    indexing_start_changed: bool
+    old_access_type: AccessType
+    new_access_type: AccessType
+    old_data_access_group_ids: list[int]
+    new_data_access_group_ids: list[int]
+    old_credential_id: int
+    new_credential_id: int
+    steps: list[EditStepKind]
+    reactivated: bool
+
+
+class AppliedConnectorEdit(BaseModel):
+    steps: list[EditStep]
+    reactivated: bool
+    # Revoke these after the commit (``revoke_restarted_attempt_tasks``).
+    restarted_task_ids: list[str]
+    audit: ConnectorEditAudit

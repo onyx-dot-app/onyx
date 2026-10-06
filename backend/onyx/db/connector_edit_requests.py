@@ -21,8 +21,11 @@ from onyx.db.enums import (
     IndexingMode,
     IndexingStatus,
 )
-from onyx.db.index_attempt import cancel_waiting_index_attempt__no_commit
-from onyx.db.models import ConnectorCredentialPair, IndexAttempt
+from onyx.db.index_attempt import (
+    cancel_waiting_index_attempt__no_commit,
+    create_index_attempt__no_commit,
+)
+from onyx.db.models import Connector, ConnectorCredentialPair, IndexAttempt
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -66,18 +69,26 @@ class BackfillAttemptResolution(BaseModel):
     attempt_active: bool = False
     succeeded: list[PendingBackfill] = []
     failed: list[FailedBackfillAttempt] = []
+    # Released with no failure.
+    interrupted: list[PendingBackfill] = []
 
 
-def _lock_cc_pair_for_request(
+def _lock_cc_pair_row(
     db_session: Session, cc_pair_id: int
-) -> ConnectorCredentialPair:
-    cc_pair = db_session.execute(
+) -> ConnectorCredentialPair | None:
+    return db_session.execute(
         select(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
         .with_for_update()
         # Read the locked row, not a stale copy from the identity map.
         .execution_options(populate_existing=True)
     ).scalar_one_or_none()
+
+
+def _lock_cc_pair_for_request(
+    db_session: Session, cc_pair_id: int
+) -> ConnectorCredentialPair:
+    cc_pair = _lock_cc_pair_row(db_session, cc_pair_id)
     if cc_pair is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, f"Connector credential pair {cc_pair_id} not found"
@@ -93,11 +104,18 @@ def _lock_cc_pair_for_request(
 
 
 def lock_cc_pair_for_edit__no_commit(db_session: Session, cc_pair_id: int) -> None:
-    """Row-locks the pair and reloads its state, so concurrent applies run one
-    after the other and each reads what the previous one committed. Raises
-    ``OnyxError`` (CONFLICT) for a DELETING pair."""
+    """Row-locks the pair and then its connector, and reloads their state.
+    Concurrent applies on any pair of the connector run one after the other,
+    and each reads what the previous one committed. The connector lock also
+    blocks a new pair on the connector until the commit. Raises ``OnyxError``
+    (CONFLICT) for a DELETING pair."""
     db_session.expire_all()
-    _lock_cc_pair_for_request(db_session, cc_pair_id)
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    db_session.execute(
+        select(Connector.id)
+        .where(Connector.id == cc_pair.connector_id)
+        .with_for_update()
+    )
 
 
 def write_edited_pair_state__no_commit(
@@ -170,6 +188,21 @@ def has_restartable_attempt(db_session: Session, cc_pair_id: int) -> bool:
     )
 
 
+def _released(
+    pending_backfills: list[PendingBackfill], attempt_ids: set[int]
+) -> list[PendingBackfill]:
+    """The requests, with those tracked by ``attempt_ids`` released to run
+    again and their failure state kept."""
+    return [
+        (
+            pending.model_copy(update={"attempt_id": None})
+            if pending.attempt_id in attempt_ids
+            else pending
+        )
+        for pending in pending_backfills
+    ]
+
+
 def request_attempt_restart__no_commit(
     db_session: Session, cc_pair_id: int, indexing_mode: IndexingMode
 ) -> list[str]:
@@ -180,8 +213,8 @@ def request_attempt_restart__no_commit(
 
     Unlike pause, it leaves the stop fence alone: the fence blocks every new
     attempt until it is cleared. A pending REINDEX trigger is kept. On a
-    paused pair the trigger waits and fires on resume. A stopped backfill's
-    request is released to run again, without a failure."""
+    paused pair the trigger waits and fires on resume. A backfill request
+    whose attempt stops is released to run again, without a failure."""
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
     if cc_pair.indexing_trigger != IndexingMode.REINDEX:
         cc_pair.indexing_trigger = indexing_mode
@@ -191,10 +224,9 @@ def request_attempt_restart__no_commit(
     ).all()
 
     task_ids: list[str] = []
-    restarted_backfill_ids: set[int] = set()
+    restarted_ids: set[int] = set()
     for attempt in attempts:
-        if attempt.is_backfill:
-            restarted_backfill_ids.add(attempt.id)
+        restarted_ids.add(attempt.id)
         # A first attempt held for the capability checks has no task to see a
         # cancel request. Ending it keeps it undispatched, so the next attempt
         # still waits for the checks.
@@ -207,24 +239,22 @@ def request_attempt_restart__no_commit(
         attempt.cancellation_requested = True
         if attempt.celery_task_id is not None:
             task_ids.append(attempt.celery_task_id)
-    if restarted_backfill_ids:
-        # A restart is not a failure: the beat runs the request again with no
-        # backoff.
-        cc_pair.pending_backfills = [
-            (
-                pending.model_copy(update={"attempt_id": None})
-                if pending.attempt_id in restarted_backfill_ids
-                else pending
-            )
-            for pending in cc_pair.pending_backfills
-        ]
+    # A restart is not a failure: the beat runs a stopped backfill, or one a
+    # stopped full re-index covered, again with no backoff.
+    if any(
+        pending.attempt_id in restarted_ids for pending in cc_pair.pending_backfills
+    ):
+        cc_pair.pending_backfills = _released(cc_pair.pending_backfills, restarted_ids)
     return task_ids
 
 
 def request_full_reindex__no_commit(db_session: Session, cc_pair_id: int) -> None:
-    """Sets the REINDEX trigger: the beat's next attempt on the current index
-    runs from the beginning. On a paused pair it fires on resume."""
+    """Asks for a full re-index of the current index. Until one succeeds, the
+    pair stays due there, even without refresh_freq, and every new attempt
+    there is a full re-index, so a failed or canceled one passes the request
+    on. On a paused pair it waits for the resume."""
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    cc_pair.full_reindex_requested_at = func.now()
     cc_pair.indexing_trigger = IndexingMode.REINDEX
 
 
@@ -249,20 +279,65 @@ def request_backfills__no_commit(
     ]
 
 
-def track_backfill_attempt__no_commit(
-    db_session: Session, cc_pair_id: int, request_id: UUID, attempt_id: int
-) -> None:
-    """Records the attempt the beat created for a pending backfill. The
-    request stays until an attempt of it succeeds."""
-    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+def create_pending_backfill_attempt__no_commit(
+    db_session: Session,
+    *,
+    cc_pair_id: int,
+    search_settings_id: int,
+    request_id: UUID,
+    celery_task_id: str,
+) -> int | None:
+    """Creates the attempt of a pending backfill and records it on the
+    request, under the pair's row lock, which apply takes too. Returns None,
+    with nothing written, when the backfill must wait: the pair is not ACTIVE,
+    an indexing trigger, a prune-after-reindex or a full re-index request is
+    pending, the request is gone or has an attempt, or another attempt is
+    active on these search settings. The caller commits, then sends the
+    task."""
+    cc_pair = _lock_cc_pair_row(db_session, cc_pair_id)
+    if (
+        cc_pair is None
+        or cc_pair.status != ConnectorCredentialPairStatus.ACTIVE
+        or cc_pair.indexing_trigger is not None
+        or cc_pair.prune_after_reindex_requested_at is not None
+        or cc_pair.full_reindex_requested_at is not None
+    ):
+        return None
+    pending = next(
+        (
+            request
+            for request in cc_pair.pending_backfills
+            if request.request_id == request_id
+        ),
+        None,
+    )
+    if pending is None or pending.attempt_id is not None:
+        return None
+    if db_session.scalar(
+        select(
+            _restartable_attempts_select(cc_pair_id)
+            .where(IndexAttempt.search_settings_id == search_settings_id)
+            .exists()
+        )
+    ):
+        return None
+
+    attempt = create_index_attempt__no_commit(
+        cc_pair_id,
+        search_settings_id,
+        db_session,
+        celery_task_id=celery_task_id,
+        backfill=pending.backfill,
+    )
     cc_pair.pending_backfills = [
         (
-            pending.model_copy(update={"attempt_id": attempt_id})
-            if pending.request_id == request_id
-            else pending
+            request.model_copy(update={"attempt_id": attempt.id})
+            if request.request_id == request_id
+            else request
         )
-        for pending in cc_pair.pending_backfills
+        for request in cc_pair.pending_backfills
     ]
+    return attempt.id
 
 
 def _backfill_retry_delay(failure_count: int) -> timedelta:
@@ -278,9 +353,10 @@ def resolve_backfill_attempts__no_commit(
     db_session: Session, cc_pair_id: int, now: datetime
 ) -> BackfillAttemptResolution:
     """Settles the pending backfills whose attempt ended. A successful attempt
-    removes its request. Any other ended attempt, or one that no longer
-    exists, releases its request for a retry after a capped exponential
-    backoff from ``now`` (DB time)."""
+    removes its request. An INTERRUPTED attempt releases its request with no
+    failure. Any other ended attempt, or one that no longer exists, releases
+    its request for a retry after a capped exponential backoff from ``now``
+    (DB time). A full re-index that covers a request tracks it too."""
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
     tracked_ids = [
         pending.attempt_id
@@ -313,6 +389,12 @@ def resolve_backfill_attempts__no_commit(
         if status is not None and status.is_successful():
             resolution.succeeded.append(pending)
             continue
+        # A worker shutdown is not a failure of the request.
+        if status == IndexingStatus.INTERRUPTED:
+            released = pending.model_copy(update={"attempt_id": None})
+            resolution.interrupted.append(released)
+            kept.append(released)
+            continue
         failure_count = pending.failure_count + 1
         failed = pending.model_copy(
             update={
@@ -324,29 +406,32 @@ def resolve_backfill_attempts__no_commit(
         resolution.failed.append(FailedBackfillAttempt(pending=failed, status=status))
         kept.append(failed)
 
-    if resolution.succeeded or resolution.failed:
+    if resolution.succeeded or resolution.failed or resolution.interrupted:
         cc_pair.pending_backfills = kept
     return resolution
 
 
-def clear_backfills_covered_by_attempt__no_commit(
+def track_backfills_covered_by_attempt__no_commit(
     db_session: Session, cc_pair_id: int, index_attempt_id: int
 ) -> int:
-    """Drops the pending backfills that a full re-index covers: those
-    requested before the attempt was created. Returns how many it dropped."""
+    """Points the pending backfills that a full re-index covers, those
+    requested before the attempt was created, at that attempt. Its success
+    removes them and its failure releases them. Returns how many it covers."""
     attempt = db_session.get(IndexAttempt, index_attempt_id)
     if attempt is None:
         raise ValueError(f"Index attempt {index_attempt_id} does not exist")
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
-    kept = [
-        pending
-        for pending in cc_pair.pending_backfills
-        if pending.requested_at > attempt.time_created
-    ]
-    dropped = len(cc_pair.pending_backfills) - len(kept)
-    if dropped:
-        cc_pair.pending_backfills = kept
-    return dropped
+    covered = 0
+    tracked: list[PendingBackfill] = []
+    for pending in cc_pair.pending_backfills:
+        if pending.requested_at > attempt.time_created:
+            tracked.append(pending)
+            continue
+        covered += 1
+        tracked.append(pending.model_copy(update={"attempt_id": index_attempt_id}))
+    if covered:
+        cc_pair.pending_backfills = tracked
+    return covered
 
 
 def has_scoped_backfill_outstanding(db_session: Session, cc_pair_id: int) -> bool:
@@ -442,6 +527,21 @@ def get_reindex_request_backoff(
     return ReindexRequestBackoff(
         failure_count=failure_count,
         retry_after=last_failed_at + request_retry_delay(failure_count),
+    )
+
+
+def clear_full_reindex_request__no_commit(
+    db_session: Session, cc_pair_id: int, served_request_at: datetime
+) -> None:
+    """For a successful full re-index that served a full re-index request:
+    clears the pair's request unless a newer one replaced it."""
+    db_session.execute(
+        update(ConnectorCredentialPair)
+        .where(
+            ConnectorCredentialPair.id == cc_pair_id,
+            ConnectorCredentialPair.full_reindex_requested_at == served_request_at,
+        )
+        .values(full_reindex_requested_at=None)
     )
 
 

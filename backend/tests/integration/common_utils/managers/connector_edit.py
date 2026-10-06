@@ -5,7 +5,7 @@ import httpx
 
 from onyx.connectors.edit_plan.models import EditPlanChoices
 from onyx.db.enums import AccessType
-from onyx.server.documents.connector_edit import (
+from onyx.server.documents.connector_edit_models import (
     ConnectorEditApplyResponse,
     ConnectorEditPlanResponse,
     ConnectorEditProposal,

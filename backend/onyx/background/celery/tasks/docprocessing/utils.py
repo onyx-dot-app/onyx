@@ -300,9 +300,13 @@ def should_index(
             # if a manual indexing trigger is on the cc pair, honor it for live search settings
             return True
         # The first attempt spends the trigger. A pending prune-after-reindex
-        # request keeps the pair due until a full re-index succeeds, even
-        # without refresh_freq, with a backoff after failed attempts.
-        if cc_pair.prune_after_reindex_requested_at is not None:
+        # or full re-index request keeps the pair due until a full re-index
+        # succeeds, even without refresh_freq, with a backoff after failed
+        # attempts.
+        if (
+            cc_pair.prune_after_reindex_requested_at is not None
+            or cc_pair.full_reindex_requested_at is not None
+        ):
             return _is_reindex_request_due(
                 cc_pair.id, search_settings_instance.id, db_session
             )

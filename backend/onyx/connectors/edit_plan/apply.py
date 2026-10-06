@@ -11,12 +11,14 @@ must follow the commit (task revokes, the indexing kick, the audit event).
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.scoped_permissions import get_visible_user_group_ids
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.edit_plan.models import (
+    AppliedConnectorEdit,
+    ConnectorEditAudit,
+    ConnectorEditAuditFieldChange,
     CurrentPairState,
     EditPlanChoices,
     EditStep,
@@ -37,7 +39,6 @@ from onyx.connectors.edit_plan.store import (
 )
 from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import validate_and_record_pairing
-from onyx.connectors.field_policy import FieldClass, ScopeDirection
 from onyx.connectors.file.config import LocalFileConnectorConfig
 from onyx.connectors.file.edit_staging import claim_staged_files__no_commit
 from onyx.connectors.pairing_access import validate_pairing_access
@@ -61,7 +62,7 @@ from onyx.db.credentials import (
     swap_cc_pair_credential__no_commit,
 )
 from onyx.db.engine.time_utils import get_db_current_time
-from onyx.db.enums import AccessType, CapabilityCheckTrigger, IndexingMode
+from onyx.db.enums import CapabilityCheckTrigger, IndexingMode
 from onyx.db.models import Credential, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -70,42 +71,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _PLAN_NOT_FOUND_MESSAGE = "The edit plan does not exist or has expired."
-
-
-class ConnectorEditAuditFieldChange(BaseModel):
-    """One changed config field, without its values."""
-
-    field_name: str
-    field_class: FieldClass
-    scope_direction: ScopeDirection
-    added_item_count: int
-    removed_item_count: int
-
-
-class ConnectorEditAudit(BaseModel):
-    """The field-level diff of an applied edit. Config values are left out:
-    free-form fields (queries, URLs, paths) can carry sensitive text."""
-
-    plan_id: UUID
-    field_changes: list[ConnectorEditAuditFieldChange]
-    changed_settings: list[str]
-    indexing_start_changed: bool
-    old_access_type: AccessType
-    new_access_type: AccessType
-    old_data_access_group_ids: list[int]
-    new_data_access_group_ids: list[int]
-    old_credential_id: int
-    new_credential_id: int
-    steps: list[EditStepKind]
-    reactivated: bool
-
-
-class AppliedConnectorEdit(BaseModel):
-    steps: list[EditStep]
-    reactivated: bool
-    # Revoke these after the commit (``revoke_restarted_attempt_tasks``).
-    restarted_task_ids: list[str]
-    audit: ConnectorEditAudit
 
 
 def load_plan_for_user(plan_id: UUID, cc_pair_id: int, user: User) -> StoredEditPlan:
@@ -377,6 +342,7 @@ def apply_connector_edit(
         if load_edit_plan(stored.plan_id, cc_pair_id) is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, _PLAN_NOT_FOUND_MESSAGE)
         current = fetch_current_pair_state(db_session, cc_pair_id)
+        ensure_edit_is_plannable(current, proposed)
         ensure_base_state_matches(stored, current)
 
         credential = _proposed_credential(db_session, current, proposed)

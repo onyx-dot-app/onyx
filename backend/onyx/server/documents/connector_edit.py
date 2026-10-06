@@ -11,12 +11,9 @@ rules, and the GATE 2 scope rule for an access change. A plan is private to
 the user who computed it.
 """
 
-from datetime import datetime, timedelta
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -24,22 +21,15 @@ from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.attempt_restart import revoke_restarted_attempt_tasks
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
-from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckRunSnapshot,
-    DraftRerunMode,
-)
+from onyx.connectors.capability_checks.draft_runs import DraftCheckRunSnapshot
 from onyx.connectors.edit_plan.apply import (
     apply_connector_edit,
     load_plan_for_user,
 )
-from onyx.connectors.edit_plan.constants import EDIT_PLAN_TTL_SECONDS
 from onyx.connectors.edit_plan.models import (
     CurrentPairState,
-    EditPlan,
     EditPlanChoices,
-    EditStep,
     ProposedPairState,
-    StoredEditPlan,
 )
 from onyx.connectors.edit_plan.orchestration import (
     plan_connector_edit,
@@ -65,6 +55,13 @@ from onyx.server.documents.capability_check_runs import (
     CapabilityRunEnqueueError,
     start_cc_pair_draft_check_run,
 )
+from onyx.server.documents.connector_edit_models import (
+    ConnectorEditApplyRequest,
+    ConnectorEditApplyResponse,
+    ConnectorEditChecksRequest,
+    ConnectorEditPlanResponse,
+    ConnectorEditProposal,
+)
 from onyx.server.documents.file_connector_staging import stage_file_connector_upload
 from onyx.server.documents.models import FileUploadResponse
 from onyx.server.utils_vector_db import require_vector_db
@@ -84,77 +81,6 @@ router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 # The indexing beat runs every 15 s, so a late kick has no value.
 _CHECK_FOR_INDEXING_EXPIRES_SECONDS = 60
-
-
-class ConnectorEditProposal(BaseModel):
-    """The full proposed state of the pair. Source and input type cannot
-    change, so they are not part of it."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    connector_specific_config: dict[str, Any]
-    access_type: AccessType
-    data_access_group_ids: list[int] = []
-    credential_id: int
-    indexing_start: datetime | None = None
-    name: str
-    refresh_freq: int | None = None
-    prune_freq: int | None = None
-
-
-class ConnectorEditPlanResponse(BaseModel):
-    plan_id: UUID
-    cc_pair_id: int
-    created_at: datetime
-    expires_at: datetime
-    proposed: ProposedPairState
-    # Steps, notes, the choices to make, validation, dry-run results and the
-    # indexed document count.
-    plan: EditPlan
-    validation_blocks_apply: bool
-    # POST here to run the slow checks on the proposed state, then GET the
-    # plan again for their results.
-    dry_run_checks_path: str
-
-    @classmethod
-    def from_stored(cls, stored: StoredEditPlan) -> "ConnectorEditPlanResponse":
-        return cls(
-            plan_id=stored.plan_id,
-            cc_pair_id=stored.cc_pair_id,
-            created_at=stored.created_at,
-            expires_at=stored.created_at + timedelta(seconds=EDIT_PLAN_TTL_SECONDS),
-            proposed=stored.proposed,
-            plan=stored.plan,
-            validation_blocks_apply=stored.plan.validation_blocks_apply,
-            dry_run_checks_path=(
-                f"/manage/admin/cc-pair/{stored.cc_pair_id}/edit/checks"
-            ),
-        )
-
-
-class ConnectorEditApplyRequest(EditPlanChoices):
-    model_config = ConfigDict(extra="forbid")
-
-    plan_id: UUID
-
-
-class ConnectorEditApplyResponse(BaseModel):
-    cc_pair_id: int
-    plan_id: UUID
-    # The steps that ran or are requested, in apply order.
-    steps: list[EditStep]
-    # The pair was INVALID and the validation of the new state passed.
-    reactivated: bool
-
-
-class ConnectorEditChecksRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    connector_specific_config: dict[str, Any]
-    access_type: AccessType
-    # None keeps the pair's credential.
-    credential_id: int | None = None
-    rerun: DraftRerunMode = DraftRerunMode.NONE
 
 
 def _authorize_pair_edit(db_session: Session, user: User, cc_pair_id: int) -> None:
@@ -251,6 +177,29 @@ def _proposed_state(
     )
 
 
+def _kick_off_applied_edit(
+    tenant_id: str, cc_pair_id: int, restarted_task_ids: list[str]
+) -> None:
+    """Revokes the restarted attempts' tasks and wakes the indexing beat. A
+    failure only logs: the beats pick up the committed edit on their own, and
+    a stopped attempt sees its cancel request."""
+    try:
+        revoke_restarted_attempt_tasks(client_app, restarted_task_ids)
+        # Lets the work-gated beats see the pair at once (indexing, and the
+        # perm sync of a pair that entered sync).
+        maybe_mark_tenant_active(tenant_id, caller="connector_edit")
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_INDEXING,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+            expires=_CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+        )
+    except Exception:
+        logger.exception(
+            "Could not kick off the work of an applied edit: cc_pair=%s", cc_pair_id
+        )
+
+
 @router.post("/admin/cc-pair/{cc_pair_id}/edit/plan")
 def plan_cc_pair_edit(
     cc_pair_id: int,
@@ -321,16 +270,7 @@ def apply_cc_pair_edit(
         user=user,
     )
 
-    revoke_restarted_attempt_tasks(client_app, applied.restarted_task_ids)
-    # Lets the work-gated beats see the pair at once (indexing, and the perm
-    # sync of a pair that entered sync).
-    maybe_mark_tenant_active(tenant_id, caller="connector_edit")
-    client_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_INDEXING,
-        kwargs={"tenant_id": tenant_id},
-        priority=OnyxCeleryPriority.HIGH,
-        expires=_CHECK_FOR_INDEXING_EXPIRES_SECONDS,
-    )
+    # The edit is committed: audit it before the calls below, which can fail.
     emit_audit_event(
         AuditAction.CC_PAIR_UPDATE,
         AuditOutcome.SUCCESS,
@@ -339,6 +279,7 @@ def apply_cc_pair_edit(
         resource_id=cc_pair_id,
         extra=applied.audit.model_dump(mode="json"),
     )
+    _kick_off_applied_edit(tenant_id, cc_pair_id, applied.restarted_task_ids)
     return ConnectorEditApplyResponse(
         cc_pair_id=cc_pair_id,
         plan_id=stored.plan_id,

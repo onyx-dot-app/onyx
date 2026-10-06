@@ -167,33 +167,48 @@ def get_connector_config_hash_for_cc_pair(
     return compute_connector_config_hash(connector_specific_config)
 
 
-def _get_prune_after_reindex_request(
+def _get_served_reindex_requests(
     db_session: Session, cc_pair_id: int, search_settings_id: int
-) -> datetime | None:
-    """The pair's pending prune-after-reindex request, when the search
-    settings are current. A re-index of another index does not serve it."""
-    return db_session.scalar(
-        select(ConnectorCredentialPair.prune_after_reindex_requested_at).where(
+) -> tuple[datetime | None, datetime | None]:
+    """The pair's pending prune-after-reindex and full re-index requests,
+    which a full re-index serves when the search settings are current. A
+    re-index of another index serves neither."""
+    row = db_session.execute(
+        select(
+            ConnectorCredentialPair.prune_after_reindex_requested_at,
+            ConnectorCredentialPair.full_reindex_requested_at,
+        ).where(
             ConnectorCredentialPair.id == cc_pair_id,
             exists().where(
                 SearchSettings.id == search_settings_id,
                 SearchSettings.status == IndexModelStatus.PRESENT,
             ),
         )
-    )
+    ).one_or_none()
+    if row is None:
+        return None, None
+    return row.prune_after_reindex_requested_at, row.full_reindex_requested_at
 
 
-def create_index_attempt(
+def create_index_attempt__no_commit(
     connector_credential_pair_id: int,
     search_settings_id: int,
     db_session: Session,
     from_beginning: bool = False,
     celery_task_id: str | None = None,
     backfill: BackfillSpec | None = None,
-) -> int:
+) -> IndexAttempt:
+    """Adds and flushes the attempt, so it has its id."""
     if backfill is not None and from_beginning:
         raise ValueError("A backfill attempt cannot run from the beginning.")
     config_override = backfill.connector_config_override if backfill else None
+    served_prune_after_reindex, served_full_reindex = (
+        _get_served_reindex_requests(
+            db_session, connector_credential_pair_id, search_settings_id
+        )
+        if from_beginning
+        else (None, None)
+    )
     new_attempt = IndexAttempt(
         connector_credential_pair_id=connector_credential_pair_id,
         search_settings_id=search_settings_id,
@@ -211,15 +226,30 @@ def create_index_attempt(
         connector_config_override=config_override,
         poll_range_start=backfill.window_start if backfill else None,
         poll_range_end=backfill.window_end if backfill else None,
-        prune_after_reindex_requested_at=(
-            _get_prune_after_reindex_request(
-                db_session, connector_credential_pair_id, search_settings_id
-            )
-            if from_beginning
-            else None
-        ),
+        prune_after_reindex_requested_at=served_prune_after_reindex,
+        full_reindex_requested_at=served_full_reindex,
     )
     db_session.add(new_attempt)
+    db_session.flush()
+    return new_attempt
+
+
+def create_index_attempt(
+    connector_credential_pair_id: int,
+    search_settings_id: int,
+    db_session: Session,
+    from_beginning: bool = False,
+    celery_task_id: str | None = None,
+    backfill: BackfillSpec | None = None,
+) -> int:
+    new_attempt = create_index_attempt__no_commit(
+        connector_credential_pair_id,
+        search_settings_id,
+        db_session,
+        from_beginning=from_beginning,
+        celery_task_id=celery_task_id,
+        backfill=backfill,
+    )
     db_session.commit()
 
     return new_attempt.id

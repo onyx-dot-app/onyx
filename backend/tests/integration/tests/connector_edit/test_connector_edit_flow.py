@@ -20,7 +20,7 @@ from onyx.connectors.edit_plan.models import (
 )
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
-from onyx.server.documents.connector_edit import ConnectorEditProposal
+from onyx.server.documents.connector_edit_models import ConnectorEditProposal
 from onyx.server.documents.models import FileUploadResponse
 from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
@@ -176,12 +176,9 @@ def test_edit_of_a_paused_pair_waits_for_resume(admin_user: DATestUser) -> None:
         admin_user,
     )
     assert EditNoteKind.PAUSED in [note.kind for note in plan.plan.notes]
+    # That the paused pair starts no backfill is covered by
+    # test_pending_backfills.py.
     ConnectorEditManager.apply(cc_pair.id, plan.plan_id, admin_user)
-
-    # Two indexing beats.
-    time.sleep(35)
-    assert _backfill_count(cc_pair, admin_user) == 0
-    assert not _can_find(text_c, admin_user)
 
     CCPairManager.unpause_cc_pair(cc_pair, admin_user)
     _wait_until(lambda: _can_find(text_c, admin_user), "c.txt backfilled", MAX_DELAY)

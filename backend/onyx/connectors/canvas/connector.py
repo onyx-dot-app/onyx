@@ -346,7 +346,8 @@ class CanvasConnector(
     CheckpointedConnectorWithPermSync[CanvasConnectorCheckpoint],
     SlimConnectorWithPermSync,
 ):
-    slim_listing_honors_indexing_start = True
+    # The slim listings of pages and assignments ignore `start`.
+    slim_listing_honors_indexing_start = False
 
     def __init__(
         self,

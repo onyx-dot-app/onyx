@@ -1,4 +1,4 @@
-"""add pending backfills to cc_pair
+"""add pending backfills and full re-index requests
 
 Revision ID: 078171a436f9
 Revises: 90dceb6cd426
@@ -29,7 +29,22 @@ def upgrade() -> None:
             server_default=sa.text("'[]'::jsonb"),
         ),
     )
+    # Nullable: NULL means no request is pending.
+    op.add_column(
+        "connector_credential_pair",
+        sa.Column(
+            "full_reindex_requested_at", sa.DateTime(timezone=True), nullable=True
+        ),
+    )
+    op.add_column(
+        "index_attempt",
+        sa.Column(
+            "full_reindex_requested_at", sa.DateTime(timezone=True), nullable=True
+        ),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("index_attempt", "full_reindex_requested_at")
+    op.drop_column("connector_credential_pair", "full_reindex_requested_at")
     op.drop_column("connector_credential_pair", "pending_backfills")
