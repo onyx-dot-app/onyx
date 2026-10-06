@@ -140,6 +140,7 @@
     "whatwg-fetch": "^3.6.20"
   },
   "overrides": {
-    "react-is": "^19.0.0-rc-69d4b800-20241021"
+    "react-is": "^19.0.0-rc-69d4b800-20241021",
+    "tinypool": "2.1.2"
   }
 }
