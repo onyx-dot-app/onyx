@@ -84,3 +84,12 @@ class OAuthProviderSettings(BaseModel):
     mcp_resource_url: str
     web_url: str
     web_origin: str
+
+
+class OAuthProviderIntrospection(BaseModel):
+    client_id: str
+    scopes: list[str]
+    resource: str
+    expires_at: int
+    subject: str
+    grant_id: UUID
