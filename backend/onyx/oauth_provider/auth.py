@@ -2,7 +2,10 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
-from onyx.auth.constants import OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX
+from onyx.auth.constants import (
+    OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX,
+    OAUTH_PROVIDER_REFRESH_TOKEN_PREFIX,
+)
 from onyx.auth.oauth_provider import OAuthProviderTokenKind, parse_oauth_provider_token
 from onyx.auth.permissions import has_global_permission
 from onyx.configs import app_configs
@@ -42,7 +45,9 @@ def extract_oauth_provider_bearer(request: Request) -> str | None:
     alternate = request.headers.getlist("x-onyx-authorization")
     values = authorization + alternate
     if not any(
-        part.startswith(OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX)
+        part.startswith(
+            (OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX, OAUTH_PROVIDER_REFRESH_TOKEN_PREFIX)
+        )
         for value in values
         for part in value.split()
     ):

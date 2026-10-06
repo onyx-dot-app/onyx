@@ -483,10 +483,11 @@ async def test_cookie_cannot_override_invalid_oauth_bearer(
     protocol_client: httpx.AsyncClient,
 ) -> None:
     assert (await protocol_client.get("/oauth-provider/introspect")).status_code == 401
-    response = await protocol_client.post(
-        "/search", headers={"Authorization": f"Bearer {_UNKNOWN_OAUTH_ACCESS_TOKEN}"}
-    )
-    assert response.status_code == 401
+    for token in (_UNKNOWN_OAUTH_ACCESS_TOKEN, _UNKNOWN_OAUTH_REFRESH_TOKEN):
+        response = await protocol_client.post(
+            "/search", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 401, token
 
 
 async def test_connected_apps_are_owner_only_and_disconnect_revokes_tokens(
