@@ -36,12 +36,13 @@ runs:
         fi
 
         # Resolve {mention}: user-mappings.json is shared with the slack-notify
-        # action. An unmapped username stays plain text — <@login> only works
+        # action (GITHUB_ACTION_PATH works whichever checkout loaded this
+        # action). An unmapped username stays plain text — <@login> only works
         # for Slack IDs.
         if [ -n "${MENTION_USER}" ]; then
           slack_id="$(jq -r --arg gh "${MENTION_USER}" \
             'to_entries[] | select(.value | ascii_downcase == ($gh | ascii_downcase)) | .key' \
-            "${GITHUB_WORKSPACE}/.github/actions/slack-notify/user-mappings.json" 2>/dev/null | head -1)"
+            "${GITHUB_ACTION_PATH}/../slack-notify/user-mappings.json" 2>/dev/null | head -1)"
           if [ -n "${slack_id}" ]; then
             mention="<@${slack_id}>"
           else
@@ -57,4 +58,10 @@ runs:
               -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
               -H 'Content-type: application/json; charset=utf-8' --data-binary @- \
           | jq -e '.ok' > /dev/null \
-          || { echo "::warning::Slack post to ${SLACK_CHANNEL} failed (is the bot in the channel?)"; [ "${FAIL_ON_ERROR}" = "true" ] && exit 1; }
+          || {
+            echo "::warning::Slack post to ${SLACK_CHANNEL} failed (is the bot in the channel?)"
+            if [ "${FAIL_ON_ERROR}" = "true" ]; then
+              exit 1
+            fi
+            exit 0
+          }

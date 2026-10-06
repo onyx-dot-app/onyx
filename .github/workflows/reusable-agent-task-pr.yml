@@ -306,13 +306,30 @@ jobs:
 
       # Ping the reviewer in Slack when the task produced or refreshed a PR.
       # Non-fatal: the PR is the artifact; a Slack hiccup must not fail the run.
+      #
+      # The action loads from a checkout of this workflow's own sha, not the
+      # working tree: a workflow_run repair checks out the task PR's head,
+      # which can predate the action.
+      - name: Checkout Slack actions
+        if: >-
+          inputs.slack-channel != '' &&
+          (github.event_name != 'workflow_run' ||
+           steps.repair-guard.outputs.proceed == 'true') &&
+          steps.pr.outputs.pr_number != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          path: .ci-actions
+          sparse-checkout: .github/actions
+
       - name: Post PR to Slack for review
         if: >-
           inputs.slack-channel != '' &&
           (github.event_name != 'workflow_run' ||
            steps.repair-guard.outputs.proceed == 'true') &&
           steps.pr.outputs.pr_number != ''
-        uses: ./.github/actions/slack-post-message
+        uses: ./.ci-actions/.github/actions/slack-post-message
         with:
           bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
           channel: ${{ inputs.slack-channel }}
