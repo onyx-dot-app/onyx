@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "OneDrive コネクタを設定",
         "indexingScope": {
-          "label": "Onyx でインデックスを作成する OneDrive ファイルの所有者",
+          "label": "インデックスする OneDrive ファイル",
           "general": {
             "label": "一般",
             "description": "Microsoft アプリケーションがアクセスできるすべての対象ユーザーをインデックス化します。"
@@ -2927,7 +2927,6 @@
         "siteUrl": "サイトの URL またはサブドメインを貼り付けてください。そこで {connectorName} の REST API にアクセスできる必要があります。"
       },
       "boundFields": {
-        "advancedOptions": "詳細オプション",
         "errors": {
           "missing": "値を入力してください。",
           "invalid": "この値は無効です: {detail}"

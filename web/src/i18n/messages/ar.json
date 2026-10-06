@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "تهيئة موصل OneDrive",
         "indexingScope": {
-          "label": "ملفات OneDrive الخاصة بمن يجب أن يفهرسها Onyx؟",
+          "label": "ملفات OneDrive المراد فهرستها",
           "general": {
             "label": "عام",
             "description": "فهرسة جميع المستخدمين المؤهلين الذين يمكن لتطبيق Microsoft الوصول إليهم."
@@ -2927,7 +2927,6 @@
         "siteUrl": "الصق عنوان URL لموقعك أو النطاق الفرعي. يجب أن تكون واجهة REST API الخاصة بـ {connectorName} قابلة للوصول هناك."
       },
       "boundFields": {
-        "advancedOptions": "خيارات متقدمة",
         "errors": {
           "missing": "أدخل قيمة.",
           "invalid": "هذه القيمة غير صالحة: {detail}"

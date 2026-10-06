@@ -7,6 +7,7 @@ import {
 } from "formik";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
+import { markdown } from "@opal/utils";
 import { InputErrorText, InputVertical, Section } from "@opal/layouts";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -45,7 +46,7 @@ export default function ListInput({
   return (
     <InputVertical
       title={label}
-      description={description}
+      subDescription={description ? markdown(description) : undefined}
       suffix={optional ? "optional" : undefined}
       disabled={disabled}
     >

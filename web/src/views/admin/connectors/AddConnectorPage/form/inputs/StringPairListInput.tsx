@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { Button, Spacer, Text } from "@opal/components";
 import { InputErrorText, InputVertical, Section } from "@opal/layouts";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
+import { markdown } from "@opal/utils";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { useStableRowKeys } from "@/views/admin/connectors/AddConnectorPage/form/inputs/useStableRowKeys";
 
@@ -49,7 +50,10 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
   const rowKeys = useStableRowKeys(pairs.length);
 
   return (
-    <InputVertical title={label} description={description}>
+    <InputVertical
+      title={label}
+      subDescription={description ? markdown(description) : undefined}
+    >
       <FieldArray
         name={name}
         render={(arrayHelpers: ArrayHelpers) => (

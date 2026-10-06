@@ -4,7 +4,7 @@ import { useDropzone } from "react-dropzone";
 import { Button, Text } from "@opal/components";
 import { InputErrorText, InputVertical, Section } from "@opal/layouts";
 import { SvgUploadCloud } from "@opal/icons";
-import { cn } from "@opal/utils";
+import { cn, markdown } from "@opal/utils";
 
 interface FileInputProps {
   name: string;
@@ -104,7 +104,7 @@ export default function FileInput({
       withLabel={hideError ? false : name}
       disabled={disabled}
       title={label}
-      description={description}
+      subDescription={description ? markdown(description) : undefined}
       suffix={optional ? "optional" : undefined}
     >
       {dropzone}

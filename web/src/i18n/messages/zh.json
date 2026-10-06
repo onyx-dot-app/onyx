@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "配置 OneDrive 连接器",
         "indexingScope": {
-          "label": "Onyx 应为哪些用户的 OneDrive 文件建立索引？",
+          "label": "要索引的 OneDrive 文件",
           "general": {
             "label": "常规",
             "description": "为 Microsoft 应用程序可以访问的所有符合条件的用户建立索引。"
@@ -2927,7 +2927,6 @@
         "siteUrl": "粘贴你的站点 URL 或子域名。{connectorName} 的 REST API 必须能在该地址访问。"
       },
       "boundFields": {
-        "advancedOptions": "高级选项",
         "errors": {
           "missing": "请输入一个值。",
           "invalid": "此值无效：{detail}"

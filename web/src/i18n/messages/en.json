@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "Configure OneDrive connector",
         "indexingScope": {
-          "label": "Whose OneDrive files should Onyx index?",
+          "label": "OneDrive files to index",
           "general": {
             "label": "General",
             "description": "Index all eligible users that the Microsoft application can access."
@@ -2927,7 +2927,6 @@
         "siteUrl": "Paste your site URL or subdomain. {connectorName}'s REST API must be reachable there."
       },
       "boundFields": {
-        "advancedOptions": "Advanced Options",
         "errors": {
           "missing": "Enter a value.",
           "invalid": "This value is not valid: {detail}"

@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useMemo } from "react";
+import React, { FC, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import type {
   BooleanOption,
@@ -17,9 +17,8 @@ import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { Tabs, Text as OpalText } from "@opal/components";
 import { useField, useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Content, InputVertical, Label } from "@opal/layouts";
-import { InputCheckboxField } from "@opal/form";
-import type { IconFunctionComponent } from "@opal/types";
+import { Content, InputHorizontal, InputVertical } from "@opal/layouts";
+import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { getSourceDisplayName } from "@/lib/sources";
@@ -179,47 +178,24 @@ function CheckboxTabsField({
   );
 }
 
-interface CheckboxContentFieldProps {
+interface ToggleFieldProps {
   name: string;
   label: string;
   description: string | undefined;
   disabled: boolean;
 }
 
-/**
- * A checkbox option with the checkbox in the icon slot, left of the title.
- * The label around it hands a click on the title or description to the
- * checkbox.
- */
-function CheckboxContentField({
-  name,
-  label,
-  description,
-  disabled,
-}: CheckboxContentFieldProps) {
-  // A stable component identity keeps React from remounting the checkbox.
-  const checkboxIcon = useMemo<IconFunctionComponent>(() => {
-    function CheckboxIcon() {
-      return (
-        <InputCheckboxField
-          name={name}
-          aria-label={label}
-          disabled={disabled}
-        />
-      );
-    }
-    return CheckboxIcon;
-  }, [name, label, disabled]);
+/** A boolean option as a switch, with its title and description on the left. */
+function ToggleField({ name, label, description, disabled }: ToggleFieldProps) {
   return (
-    <Label disabled={disabled}>
-      <Content
-        icon={checkboxIcon}
-        title={label}
-        description={description}
-        sizePreset="main-ui"
-        variant="section"
-      />
-    </Label>
+    <InputHorizontal
+      withLabel
+      disabled={disabled}
+      title={label}
+      description={description ? markdown(description) : undefined}
+    >
+      <SwitchField name={name} disabled={disabled} />
+    </InputHorizontal>
   );
 }
 
@@ -352,7 +328,7 @@ export const RenderField: FC<RenderFieldProps> = ({
       ) : field.type === "checkbox" && field.tabLabels ? (
         <CheckboxTabsField option={field} label={label} disabled={disabled} />
       ) : field.type === "checkbox" ? (
-        <CheckboxContentField
+        <ToggleField
           name={field.name}
           label={label}
           description={description}
@@ -364,13 +340,12 @@ export const RenderField: FC<RenderFieldProps> = ({
         <InputVertical
           withLabel={field.name}
           title={label}
-          description={richDescription}
           subDescription={
             subDescriptionKey
               ? t(`subDescriptions.${subDescriptionKey}`, {
                   connectorName: getSourceDisplayName(connector) ?? connector,
                 })
-              : undefined
+              : richDescription
           }
           suffix={field.optional ? t("field.optionalSuffix.label") : undefined}
         >

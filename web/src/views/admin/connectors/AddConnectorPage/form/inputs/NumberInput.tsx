@@ -1,4 +1,5 @@
 import { InputNumber } from "@opal/components";
+import { markdown } from "@opal/utils";
 import { InputVertical } from "@opal/layouts";
 import { FormikField } from "@/refresh-components/form/FormikField";
 
@@ -25,7 +26,7 @@ export default function NumberInput({
       withLabel={name}
       disabled={disabled}
       title={label}
-      description={description}
+      subDescription={description ? markdown(description) : undefined}
       suffix={optional ? "optional" : undefined}
     >
       <FormikField<number | undefined>

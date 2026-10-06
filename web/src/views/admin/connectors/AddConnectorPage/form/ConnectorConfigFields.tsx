@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import CredentialSubText from "@/lib/credentials/components/CredentialFields";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { Credential } from "@/lib/credentials/types";
 import { RenderField } from "./FieldRendering";
@@ -22,7 +21,6 @@ export default function ConnectorConfigFields({
 }: ConnectorConfigFieldsProps) {
   const { setFieldValue } = useFormikContext<any>(); // Get Formik's context functions
 
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [connectorNameInitialized, setConnectorNameInitialized] =
     useState(false);
 
@@ -59,28 +57,21 @@ export default function ConnectorConfigFields({
           )
       )}
 
-      {config.advanced_values.length > 0 &&
-        (!config.advancedValuesVisibleCondition ||
-          config.advancedValuesVisibleCondition(values, currentCredential)) && (
-          <>
-            <AdvancedOptionsToggle
-              showAdvancedOptions={showAdvancedOptions}
-              setShowAdvancedOptions={setShowAdvancedOptions}
-            />
-            {showAdvancedOptions &&
-              config.advanced_values.map(
-                (field) =>
-                  !field.hidden && (
-                    <RenderField
-                      key={field.name}
-                      field={field}
-                      values={values}
-                      connector={connector}
-                      currentCredential={currentCredential}
-                    />
-                  )
-              )}
-          </>
+      {/* Advanced fields are all optional, so they sit in the same flat
+        list instead of behind a toggle. */}
+      {(!config.advancedValuesVisibleCondition ||
+        config.advancedValuesVisibleCondition(values, currentCredential)) &&
+        config.advanced_values.map(
+          (field) =>
+            !field.hidden && (
+              <RenderField
+                key={field.name}
+                field={field}
+                values={values}
+                connector={connector}
+                currentCredential={currentCredential}
+              />
+            )
         )}
     </>
   );

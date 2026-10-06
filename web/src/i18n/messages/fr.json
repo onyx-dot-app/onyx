@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "Configurer le connecteur OneDrive",
         "indexingScope": {
-          "label": "Quels fichiers OneDrive Onyx doit-il indexer ?",
+          "label": "Fichiers OneDrive à indexer",
           "general": {
             "label": "Général",
             "description": "Indexer tous les utilisateurs admissibles auxquels l’application Microsoft peut accéder."
@@ -2927,7 +2927,6 @@
         "siteUrl": "Collez l'URL ou le sous-domaine de votre site. L'API REST de {connectorName} doit y être accessible."
       },
       "boundFields": {
-        "advancedOptions": "Options avancées",
         "errors": {
           "missing": "Saisissez une valeur.",
           "invalid": "Cette valeur n’est pas valide : {detail}"

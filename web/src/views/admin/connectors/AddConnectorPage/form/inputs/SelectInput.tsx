@@ -1,5 +1,6 @@
 import { useTranslations } from "next-intl";
 import { InputSingleSelectField } from "@opal/form";
+import { markdown } from "@opal/utils";
 import { InputVertical } from "@opal/layouts";
 import type { StringWithDescription } from "@/lib/connectors/types";
 
@@ -30,7 +31,7 @@ export default function SelectInput({
       withLabel={name}
       disabled={disabled}
       title={label}
-      description={description}
+      subDescription={description ? markdown(description) : undefined}
       suffix={optional ? "optional" : undefined}
     >
       <InputSingleSelectField

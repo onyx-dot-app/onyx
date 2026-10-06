@@ -313,7 +313,7 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "github_mode",
-        label: "What should we index from GitHub?",
+        label: "GitHub content to index",
         optional: true,
         tabs: [
           {
@@ -348,8 +348,8 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        query: "Include pull requests?",
-        label: "Include pull requests?",
+        query: "Include pull requests",
+        label: "Include pull requests",
         description: "Index pull requests from repositories",
         name: "include_prs",
         optional: true,
@@ -357,7 +357,7 @@ export const connectorConfigs: Record<
       {
         type: "checkbox",
         query: "Include issues?",
-        label: "Include Issues?",
+        label: "Include Issues",
         name: "include_issues",
         description: "Index issues from repositories",
         optional: true,
@@ -365,7 +365,7 @@ export const connectorConfigs: Record<
       {
         type: "checkbox",
         query: "Include documents?",
-        label: "Include Documents?",
+        label: "Include Documents",
         name: "include_files",
         description:
           "Index text-based documents (markdown, text, etc.) from repositories",
@@ -475,7 +475,7 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "bitbucket_mode",
-        label: "What should be indexed from Bitbucket?",
+        label: "Bitbucket content to index",
         optional: true,
         tabs: [
           {
@@ -556,7 +556,7 @@ export const connectorConfigs: Record<
             fields: [
               {
                 type: "checkbox",
-                label: "Include shared drives?",
+                label: "Include shared drives",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
                     ? "This will allow Onyx to index everything in the shared drives you have access to."
@@ -569,8 +569,8 @@ export const connectorConfigs: Record<
                 type: "checkbox",
                 label: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "Include My Drive?"
-                    : "Include Everyone's My Drive?";
+                    ? "Include My Drive"
+                    : "Include Everyone's My Drive";
                 },
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
@@ -584,7 +584,7 @@ export const connectorConfigs: Record<
                 type: "checkbox",
                 description:
                   "This will allow Onyx to index all files shared with you.",
-                label: "Include All Files Shared With You?",
+                label: "Include All Files Shared With You",
                 name: "include_files_shared_with_me",
                 visibleCondition: (values, currentCredential) =>
                   currentCredential?.credential_json?.google_tokens,
@@ -649,7 +649,7 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        label: "Hide domain link-only files?",
+        label: "Hide domain link-only files",
         description:
           "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
         name: "exclude_domain_link_only",
@@ -989,7 +989,7 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        label: "Treat sharing links as public?",
+        label: "Treat sharing links as public",
         description:
           "When enabled, documents with a sharing link (anonymous or organization-wide) " +
           "are treated as public (visible to all Onyx users). " +
@@ -1284,7 +1284,7 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "indexing_scope",
-        label: "What should we index from Drupal Wiki?",
+        label: "Drupal Wiki content to index",
         optional: true,
         tabs: [
           {
@@ -2136,7 +2136,7 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       {
         type: "tab",
         name: "airtable_scope",
-        label: "What should we index from Airtable?",
+        label: "Airtable content to index",
         optional: true,
         tabs: [
           {
@@ -2195,7 +2195,7 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       {
         type: "tab",
         name: "highspot_scope",
-        label: "What should we index from Highspot?",
+        label: "Highspot content to index",
         optional: true,
         tabs: [
           {
