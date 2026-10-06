@@ -22,7 +22,10 @@ from onyx.db.models import Base, PublicBase, User, UserTenantMapping
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.oauth_provider.api import router
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="module"),
@@ -147,6 +150,11 @@ async def test_cloud_token_tenant_wins_over_cookie_without_membership_bypass(
         app = FastAPI()
         register_onyx_exception_handlers(app)
         app.include_router(router)
+
+        @app.get("/public")
+        def public_route() -> str:
+            return get_current_tenant_id()
+
         app.dependency_overrides[auth_backend.get_strategy] = get_redis_strategy
         tenant_tracking.add_api_server_tenant_id_middleware(app, setup_logger())
         async with httpx.AsyncClient(
@@ -161,6 +169,11 @@ async def test_cloud_token_tenant_wins_over_cookie_without_membership_bypass(
             assert response.status_code == 200, response.text
             assert response.json()["subject"] == str(users[0].id)
             tampered = access_tokens[0].replace(tenant_ids[0], tenant_ids[1])
+            public_response = await client.get(
+                "/public",
+                headers={"Authorization": f"Bearer {tampered}"},
+            )
+            assert public_response.status_code == 403, public_response.text
             assert (
                 await client.get(
                     "/oauth-provider/introspect",

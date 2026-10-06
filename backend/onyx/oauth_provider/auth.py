@@ -40,6 +40,10 @@ _ACCESS_ROUTES = frozenset(
 _TOKEN_INFO_SCOPE_KEY = "onyx.mcp_oauth"
 
 
+def _is_mcp_oauth_access_route(request: Request) -> bool:
+    return (request.method, strip_api_prefix(request.url.path)) in _ACCESS_ROUTES
+
+
 def extract_oauth_provider_bearer(request: Request) -> str | None:
     authorization = request.headers.getlist("authorization")
     alternate = request.headers.getlist("x-onyx-authorization")
@@ -74,6 +78,8 @@ async def oauth_provider_tenant_from_request(request: Request) -> str | None:
         or parsed.kind != OAuthProviderTokenKind.ACCESS
     ):
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
+    if not _is_mcp_oauth_access_route(request):
+        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
     try:
         known = await run_in_threadpool(
             oauth_provider_tenant_has_members, parsed.tenant_id
@@ -95,7 +101,7 @@ async def authenticate_oauth_provider_request(
 ) -> User:
     if not app_configs.OAUTH_PROVIDER_ENABLED:
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
-    if (request.method, strip_api_prefix(request.url.path)) not in _ACCESS_ROUTES:
+    if not _is_mcp_oauth_access_route(request):
         raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
     try:
         result = await resolve_oauth_provider_access_token(
