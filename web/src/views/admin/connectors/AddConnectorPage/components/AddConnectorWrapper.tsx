@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import AddConnector from "./AddConnector";
+import AddConnector from "@/views/admin/connectors/AddConnectorPage/AddConnector";
 import { Button } from "@opal/components";
 import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
 import { SvgAlertCircle } from "@opal/icons";
@@ -10,11 +10,13 @@ import { isValidSource, getSourceMetadata } from "@/lib/sources";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export interface ConnectorWrapperProps {
+export interface AddConnectorWrapperProps {
   connector: ConfigurableSources;
 }
 
-export default function ConnectorWrapper({ connector }: ConnectorWrapperProps) {
+export default function AddConnectorWrapper({
+  connector,
+}: AddConnectorWrapperProps) {
   const t = useTranslations("admin.connectorsList");
   const router = useRouter();
   const searchParams = useSearchParams();
