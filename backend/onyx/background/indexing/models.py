@@ -44,6 +44,11 @@ class IndexAttemptErrorPydantic(BaseModel):
         )
 
 
+def _is_aware(value: datetime) -> bool:
+    # A tzinfo whose utcoffset() returns None still makes a naive datetime.
+    return value.tzinfo is not None and value.utcoffset() is not None
+
+
 class BackfillSpec(BaseModel):
     """A one-off run over a fixed window that leaves the pair's incremental
     cursor alone, optionally with a config other than the saved one."""
@@ -54,7 +59,7 @@ class BackfillSpec(BaseModel):
 
     @model_validator(mode="after")
     def _validate_window(self) -> "BackfillSpec":
-        if self.window_start.tzinfo is None or self.window_end.tzinfo is None:
+        if not (_is_aware(self.window_start) and _is_aware(self.window_end)):
             raise ValueError("Backfill window bounds must be timezone-aware.")
         if self.window_start >= self.window_end:
             raise ValueError("Backfill window start must be before its end.")

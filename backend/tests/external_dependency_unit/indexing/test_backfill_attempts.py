@@ -3,7 +3,7 @@ and stays out of the pair's incremental cursor, checkpoint reuse, status and
 first-attempt hold. It still fences other attempts like a full run."""
 
 from collections.abc import Generator
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -162,12 +162,24 @@ def test_backfill_creation_stamps_window_and_override_hash(
     assert saved_config.connector_config_hash == compute_connector_config_hash(_CONFIG)
 
 
+class _NoOffset(tzinfo):
+    """Set but naive: Python treats a None offset as no timezone."""
+
+    def utcoffset(self, dt: datetime | None) -> timedelta | None:  # noqa: ARG002
+        return None
+
+
 def test_backfill_window_must_be_ordered_and_aware() -> None:
     with pytest.raises(ValueError):
         BackfillSpec(window_start=_BACKFILL_END, window_end=_BACKFILL_START)
     with pytest.raises(ValueError):
         BackfillSpec(
             window_start=_BACKFILL_START.replace(tzinfo=None),
+            window_end=_BACKFILL_END,
+        )
+    with pytest.raises(ValueError):
+        BackfillSpec(
+            window_start=_BACKFILL_START.replace(tzinfo=_NoOffset()),
             window_end=_BACKFILL_END,
         )
 
