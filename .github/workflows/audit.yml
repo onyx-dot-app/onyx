@@ -73,6 +73,9 @@ jobs:
       # the checked-out lockfiles, and a bump landing on a PR fails on main
       # first), so the alerts run on main now instead of at the next nightly.
       # A fork's token cannot dispatch, so those PRs leave it to the nightly.
+      # One advisory fails every open PR at once, and GitHub cancels the older
+      # pending run of a concurrency group when a newer one lands, so a main
+      # run already queued or running stands for all of them.
       - name: Dispatch CVE Alerts on main
         if: failure() && steps.gate.outcome == 'failure' && github.event.pull_request.head.repo.full_name == github.repository
         env:
@@ -80,7 +83,13 @@ jobs:
           REPO: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
           RUN_ID: ${{ github.run_id }}
-        run: gh workflow run cve-alerts.yml --repo "${REPO}" --ref main -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+        run: |
+          active="$(gh run list --repo "${REPO}" -w cve-alerts.yml -b main --json status --jq '[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting")] | length')"
+          if [ "${active}" != "0" ]; then
+            echo "A CVE Alerts run on main is already queued or running, leaving it to that one"
+            exit 0
+          fi
+          gh workflow run cve-alerts.yml --repo "${REPO}" --ref main -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
 
       - name: Run audit (SARIF report)
         if: github.event_name != 'pull_request'
