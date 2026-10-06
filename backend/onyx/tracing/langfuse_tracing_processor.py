@@ -353,7 +353,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                     generation_metadata["reasoning"] = data.reasoning
                 if data.tools:
                     generation_metadata["tools"] = data.tools
-                if isinstance(data.model_config, dict):
+                if data.model_config is not None:
                     for key in [
                         "prompt_cache_chat_history",
                         "cacheable_prefix_msgs",
