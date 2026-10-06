@@ -15,22 +15,24 @@ from onyx.background.celery.tasks.docfetching.task_creation_utils import (
     try_creating_backfill_attempt,
 )
 from onyx.background.celery.tasks.docprocessing.tasks import check_indexing_completion
+from onyx.background.indexing.models import BackfillSpec
 from onyx.background.indexing.run_docfetching import (
     _get_connector_runner,
     connector_document_extraction,
 )
 from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, OnyxCeleryTask
 from onyx.connectors.config_hash import compute_connector_config_hash
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import source_supports_windowed_runs
-from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorCheckpoint, Document, TextSection
 from onyx.db.connector_credential_pair import (
     get_last_successful_attempt_poll_range_end,
     resync_cc_pair,
 )
+from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexingStatus
 from onyx.db.index_attempt import (
-    BackfillSpec,
     cc_pair_has_dispatched_index_attempts,
     get_last_attempt_for_cc_pair,
     get_recent_attempts_for_cc_pair,
@@ -338,17 +340,19 @@ def _run_extraction(
     search_settings_id: int,
     attempt: IndexAttempt,
     mock_get_connector_runner: MagicMock,
+    app: MagicMock | None = None,
+    documents: list[Document] | None = None,
 ) -> None:
     connector_runner = MagicMock()
     connector_runner.run.return_value = iter(
-        [([], None, None, MagicMock(has_more=False))]
+        [(documents or [], None, None, MagicMock(has_more=False))]
     )
     connector_runner.connector.build_dummy_checkpoint.return_value = MagicMock(
         has_more=True
     )
     mock_get_connector_runner.return_value = connector_runner
     connector_document_extraction(
-        app=MagicMock(),
+        app=app or MagicMock(),
         index_attempt_id=attempt.id,
         cc_pair_id=cc_pair_id,
         search_settings_id=search_settings_id,
@@ -445,6 +449,138 @@ def test_backfill_and_normal_runs_keep_separate_windows_and_checkpoints(
         failed_normal.id
     )
     assert mock_get_batch_storage.call_args.kwargs["is_backfill"] is False
+
+
+def _docprocessing_kwargs(app: MagicMock) -> list[dict[str, Any]]:
+    return [
+        send_call.kwargs["kwargs"]
+        for send_call in app.send_task.call_args_list
+        if send_call.args[0] == OnyxCeleryTask.DOCPROCESSING_TASK
+    ]
+
+
+@patch(f"{_RUN_DOCFETCHING}.get_source_node_id_from_cache", return_value=None)
+@patch(f"{_RUN_DOCFETCHING}.get_document_batch_storage")
+@patch(f"{_RUN_DOCFETCHING}.MemoryTracer")
+@patch(f"{_RUN_DOCFETCHING}._get_connector_runner")
+@patch(f"{_RUN_DOCFETCHING}.save_checkpoint")
+@patch(f"{_RUN_DOCFETCHING}.get_redis_client")
+@patch(f"{_RUN_DOCFETCHING}.ensure_source_node_exists")
+def test_only_backfill_batches_send_is_backfill(
+    mock_ensure_source_node_exists: MagicMock,  # noqa: ARG001
+    mock_get_redis_client: MagicMock,  # noqa: ARG001
+    mock_save_checkpoint: MagicMock,  # noqa: ARG001
+    mock_get_connector_runner: MagicMock,
+    mock_memory_tracer_class: MagicMock,  # noqa: ARG001
+    mock_get_batch_storage: MagicMock,  # noqa: ARG001
+    mock_get_source_node_id: MagicMock,  # noqa: ARG001
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> None:
+    """A worker from before backfills rejects an unknown kwarg, so a normal
+    batch does not send ``is_backfill``."""
+    document = Document(
+        id=f"backfill_kwargs_{uuid4().hex[:8]}",
+        sections=[TextSection(text="text")],
+        source=DocumentSource.MOCK_CONNECTOR,
+        semantic_identifier="doc",
+        metadata={},
+    )
+    normal = IndexAttempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=search_settings.id,
+        from_beginning=True,
+        status=IndexingStatus.IN_PROGRESS,
+        celery_task_id=f"test_kwargs_normal_{uuid4().hex[:8]}",
+    )
+    db_session.add(normal)
+    db_session.commit()
+    normal_app = MagicMock()
+    _run_extraction(
+        db_session,
+        cc_pair.id,
+        search_settings.id,
+        normal,
+        mock_get_connector_runner,
+        app=normal_app,
+        documents=[document],
+    )
+    _finish(db_session, normal, IndexingStatus.SUCCESS)
+
+    backfill = _create_backfill(db_session, cc_pair.id, search_settings.id)
+    backfill.status = IndexingStatus.IN_PROGRESS
+    db_session.commit()
+    backfill_app = MagicMock()
+    _run_extraction(
+        db_session,
+        cc_pair.id,
+        search_settings.id,
+        backfill,
+        mock_get_connector_runner,
+        app=backfill_app,
+        documents=[document],
+    )
+
+    normal_kwargs = _docprocessing_kwargs(normal_app)
+    backfill_kwargs = _docprocessing_kwargs(backfill_app)
+    assert len(normal_kwargs) == 1
+    assert "is_backfill" not in normal_kwargs[0]
+    assert len(backfill_kwargs) == 1
+    assert backfill_kwargs[0]["is_backfill"] is True
+
+
+@patch(f"{_RUN_DOCFETCHING}.get_document_batch_storage")
+@patch(f"{_RUN_DOCFETCHING}.MemoryTracer")
+@patch(f"{_RUN_DOCFETCHING}._get_connector_runner")
+@patch(f"{_RUN_DOCFETCHING}.save_checkpoint")
+@patch(f"{_RUN_DOCFETCHING}.get_redis_client")
+@patch(f"{_RUN_DOCFETCHING}.ensure_source_node_exists")
+def test_backfill_validation_error_does_not_mark_pair_invalid(
+    mock_ensure_source_node_exists: MagicMock,  # noqa: ARG001
+    mock_get_redis_client: MagicMock,  # noqa: ARG001
+    mock_save_checkpoint: MagicMock,  # noqa: ARG001
+    mock_get_connector_runner: MagicMock,
+    mock_memory_tracer_class: MagicMock,  # noqa: ARG001
+    mock_get_batch_storage: MagicMock,  # noqa: ARG001
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> None:
+    cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
+    db_session.commit()
+    # Enough recent validation failures that one more normal failure would
+    # mark the pair invalid.
+    for _ in range(5):
+        failed = _add_normal_attempt(
+            db_session,
+            cc_pair.id,
+            search_settings.id,
+            IndexingStatus.CANCELED,
+            poll_range_end=_NORMAL_END,
+        )
+        failed.error_msg = f"{CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX}bad scope"
+    db_session.commit()
+    backfill = _create_backfill(db_session, cc_pair.id, search_settings.id)
+    backfill.status = IndexingStatus.IN_PROGRESS
+    db_session.commit()
+    connector_runner = MagicMock()
+    connector_runner.run.side_effect = ConnectorValidationError("bad scope")
+    mock_get_connector_runner.return_value = connector_runner
+
+    with pytest.raises(ConnectorValidationError):
+        connector_document_extraction(
+            app=MagicMock(),
+            index_attempt_id=backfill.id,
+            cc_pair_id=cc_pair.id,
+            search_settings_id=search_settings.id,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            callback=None,
+        )
+
+    db_session.expire_all()
+    db_session.refresh(cc_pair)
+    assert cc_pair.status == ConnectorCredentialPairStatus.ACTIVE
 
 
 @patch(f"{_RUN_DOCFETCHING}.record_blocking_validation_outcome")

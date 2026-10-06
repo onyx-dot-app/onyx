@@ -904,8 +904,11 @@ def connector_document_extraction(
                     "tenant_id": tenant_id,
                     "batch_num": batch_num,  # 0-indexed
                     "enqueue_time_ms": int(time.time() * 1000),
-                    "is_backfill": is_backfill,
                 }
+                # Sent only when set, so a worker from before backfills still
+                # accepts normal batches during a rolling upgrade.
+                if is_backfill:
+                    processing_batch_data["is_backfill"] = True
 
                 # Queue document processing task
                 with time_stage(IndexAttemptStage.DOC_BATCH_ENQUEUE, index_attempt_id):
@@ -995,7 +998,9 @@ def connector_document_extraction(
                     reason=f"{CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX}{str(e)}",
                 )
 
-                if is_primary:
+                # A backfill may run a partial config, so its failure never
+                # marks the pair invalid.
+                if is_primary and not is_backfill:
                     if not index_attempt:
                         # should always be set by now
                         raise RuntimeError("Should never happen.")

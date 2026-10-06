@@ -1,8 +1,7 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any, TypeVarTuple
+from typing import TypeVarTuple
 
-from pydantic import BaseModel, model_validator
 from sqlalchemy import (
     ColumnElement,
     Select,
@@ -17,6 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session, joinedload
 
+from onyx.background.indexing.models import BackfillSpec
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -39,23 +39,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import RecordType, optional_telemetry
 
 logger = setup_logger()
-
-
-class BackfillSpec(BaseModel):
-    """A one-off run over a fixed window that leaves the pair's incremental
-    cursor alone, optionally with a config other than the saved one."""
-
-    window_start: datetime
-    window_end: datetime
-    connector_config_override: dict[str, Any] | None = None
-
-    @model_validator(mode="after")
-    def _validate_window(self) -> "BackfillSpec":
-        if self.window_start.tzinfo is None or self.window_end.tzinfo is None:
-            raise ValueError("Backfill window bounds must be timezone-aware.")
-        if self.window_start >= self.window_end:
-            raise ValueError("Backfill window start must be before its end.")
-        return self
 
 
 def get_last_attempt_for_cc_pair(

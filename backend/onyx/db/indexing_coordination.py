@@ -5,9 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from onyx.background.indexing.models import BackfillSpec
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import (
-    BackfillSpec,
     count_error_rows_for_index_attempt,
     create_index_attempt,
     get_index_attempt,
