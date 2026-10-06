@@ -48,11 +48,6 @@ LICENSE_ENFORCEMENT_ALLOWED_PREFIXES: frozenset[str] = frozenset(
         # Proxy endpoints for self-hosted billing (no tenant context)
         "/proxy",
         "/mcp/oauth/client-metadata",
-        "/oauth-provider/metadata",
-        "/oauth-provider/register",
-        "/oauth-provider/authorize",
-        "/oauth-provider/token",
-        "/oauth-provider/revoke",
         # Legacy tenant billing endpoints (kept for backwards compatibility)
         "/tenants/billing-information",
         "/tenants/create-customer-portal-session",
