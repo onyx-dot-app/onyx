@@ -300,40 +300,30 @@ def _contextual_chunks(
     )
 
 
-def _failing_summary_invoke(*_args: Any, **kwargs: Any) -> AssistantMessage:
-    if kwargs["context"].flow == LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY:
-        raise RuntimeError("Your input exceeds the context window of this model.")
-    return AssistantMessage(content=[TextContent(text="chunk context")])
+def _invoke_failing_for(flow: LLMFlow) -> Callable[..., AssistantMessage]:
+    def invoke(*_args: Any, **kwargs: Any) -> AssistantMessage:
+        if kwargs["context"].flow == flow:
+            raise RuntimeError(f"{flow.value} call failed")
+        return AssistantMessage(content=[TextContent(text="llm text")])
+
+    return invoke
 
 
+@pytest.mark.parametrize(
+    "flow", [LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY, LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT]
+)
 @patch("onyx.llm.model_capabilities.GEN_AI_MAX_TOKENS", 4096)
-def test_contextual_rag_keeps_chunk_context_when_summary_fails(
-    embedder: DefaultIndexingEmbedder,
+def test_contextual_rag_raises_when_a_call_fails(
+    embedder: DefaultIndexingEmbedder, flow: LLMFlow
 ) -> None:
-    """A document short enough to be quoted whole needs no summary for its
-    chunk contexts, so a failed summary costs only the summary."""
-    chunks = _contextual_chunks(
-        embedder, _failing_summary_invoke, "A sentence to fill the document. " * 200
-    )
-
-    assert len(chunks) > 1
-    assert all(chunk.doc_summary == "" for chunk in chunks)
-    assert all(chunk.chunk_context == "chunk context" for chunk in chunks)
-
-
-@patch("onyx.llm.model_capabilities.GEN_AI_MAX_TOKENS", 4096)
-def test_contextual_rag_indexes_long_document_without_context_when_summary_fails(
-    embedder: DefaultIndexingEmbedder,
-) -> None:
-    """A document too long to quote is described to the chunk prompt by its
-    summary, so without one the chunks are left bare instead of raising."""
-    chunks = _contextual_chunks(
-        embedder, _failing_summary_invoke, "A sentence to fill the document. " * 2000
-    )
-
-    assert len(chunks) > 1
-    assert all(chunk.doc_summary == "" for chunk in chunks)
-    assert all(chunk.chunk_context == "" for chunk in chunks)
+    """A failed summary or chunk-context call fails the document instead of
+    indexing it without context, so the batch handler reports it per document."""
+    with pytest.raises(RuntimeError, match="call failed"):
+        _contextual_chunks(
+            embedder,
+            _invoke_failing_for(flow),
+            "A sentence to fill the document. " * 2000,
+        )
 
 
 def _failed_ids(result: IndexingPipelineResult) -> list[str]:
