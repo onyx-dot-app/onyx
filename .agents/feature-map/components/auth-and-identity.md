@@ -389,8 +389,7 @@ resource) through authorization codes with S256 PKCE. Routes are under
 
 ```
 metadata | register | authorize | token | revoke     server/oauth_provider/protocol.py
-  public, tenantless (TENANT_RESOLUTION_SKIP_PATHS); rate limited per client
-  address and globally through cache/rate_limit.py:within_rate_limit
+  public, tenantless (TENANT_RESOLUTION_SKIP_PATHS)
   authorize → stores a pending request (oauth_provider/attempts.py) and
               redirects to the web consent page {WEB_DOMAIN}/oauth-provider/authorize
   token     → reads the tenant from the code record or the refresh token,

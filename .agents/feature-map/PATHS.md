@@ -131,7 +131,7 @@ so verify the callers rather than a single component.
 
 | Path | What it is |
 |---|---|
-| `backend/onyx/cache/`, `backend/onyx/redis/`, `backend/onyx/key_value_store/` | Cache and KV abstractions. Used by fences, rate limits (`cache/rate_limit.py:within_rate_limit`), and the stream buffer. |
+| `backend/onyx/cache/`, `backend/onyx/redis/`, `backend/onyx/key_value_store/` | Cache and KV abstractions. Used by fences, rate limits, and the stream buffer. |
 | `backend/onyx/error_handling/` | `OnyxError` and the error-code taxonomy surfaced to clients. |
 | `backend/onyx/utils/` | Shared helpers. `utils/variable_functionality.py` holds `fetch_versioned_implementation` and `fetch_ee_implementation_or_noop`, the CE-to-EE dispatch mechanism. |
 

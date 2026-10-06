@@ -19,7 +19,6 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import (
     TTL_KEY_NOT_FOUND,
     TTL_NO_EXPIRY,
-    CacheBackend,
     CacheBackendType,
 )
 from onyx.cache.postgres_backend import (
@@ -116,31 +115,6 @@ class TestKV:
 # ------------------------------------------------------------------
 # TTL
 # ------------------------------------------------------------------
-
-
-class TestIncr:
-    def test_counts_up_and_keeps_first_expiry(self, cache: CacheBackend) -> None:
-        key = f"incr-{uuid4().hex}"
-        assert cache.incr(key, ex=60) == 1
-        assert cache.incr(key, ex=60) == 2
-        assert cache.incr(key, ex=60) == 3
-        assert 0 < cache.ttl(key) <= 60
-        cache.delete(key)
-
-    def test_expired_counter_restarts(self, cache: CacheBackend) -> None:
-        key = f"incr-{uuid4().hex}"
-        assert cache.incr(key, ex=1) == 1
-        assert cache.incr(key, ex=1) == 2
-        time.sleep(1.5)
-        assert cache.incr(key, ex=1) == 1
-        cache.delete(key)
-
-    def test_concurrent_increments_are_not_lost(self, cache: CacheBackend) -> None:
-        key = f"incr-{uuid4().hex}"
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            counts = list(pool.map(lambda _: cache.incr(key, ex=60), range(40)))
-        assert sorted(counts) == list(range(1, 41))
-        cache.delete(key)
 
 
 class TestTTL:

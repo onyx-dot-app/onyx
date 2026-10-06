@@ -179,7 +179,6 @@ compensating-decremented by `release_trial_invites` on downstream failure.
 | `ratelimit:invite_put:tenant:{tenant_id}:day` | 86400s | same | Tenant-wide invite volume per day. |
 | `ratelimit:invite_remove:admin:{user_id}:min` / `:day` | 60s / 86400s | same | Per-admin remove-invited-user cadence. |
 | `_any_rate_limit_exists_cache` (in-process `TTLCache`, not Redis) | 60s | `token_limit.py` | Per-tenant "does any enabled TokenRateLimit exist" fast-path. |
-| `rate_limit:{sha256(bucket)}:{window}` | the window | `cache/rate_limit.py:within_rate_limit` | Shared fixed-window counter through `CacheBackend.incr`, so it works on Redis and on the PostgreSQL cache. The OAuth provider counts `oauth_provider:{operation}:ip:{address}` and `oauth_provider:{operation}:global` ([[auth-and-identity]] §4.9). |
 
 The FastAPI-limiter buckets for `get_auth_rate_limiters` /
 `get_feedback_rate_limiters` live in Redis under keys `fastapi_limiter`

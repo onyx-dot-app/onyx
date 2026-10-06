@@ -23,7 +23,6 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import Message
 
 from onyx.auth.oauth_provider import OAuthProviderTokenKind, parse_oauth_provider_token
-from onyx.cache.rate_limit import within_rate_limit
 from onyx.db.enums import Permission
 from onyx.db.oauth_provider import (
     OAUTH_PROVIDER_STORAGE_ERRORS,
@@ -39,7 +38,6 @@ from onyx.server.oauth_provider.provider import (
     OAuthClientMetadataUnavailable,
     OnyxOAuthProvider,
 )
-from onyx.utils.client_ip import get_client_ip
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -129,42 +127,6 @@ async def _form(request: Request) -> dict[str, str]:
     return values
 
 
-async def _rate_limit(request: Request, operation: str) -> Response | None:
-    if request.method == "OPTIONS":
-        return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
-    # Without a public address the client is on a private network, where the
-    # last forwarded hop is the client as seen by our proxy.
-    address = (
-        get_client_ip(request)
-        or request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
-        or (request.client.host if request.client is not None else "unknown")
-    )
-    per_minute = 300 if operation == "register" else 3000
-    try:
-        allowed = await run_in_threadpool(
-            within_rate_limit,
-            f"oauth_provider:{operation}:ip:{address}",
-            limit=per_minute,
-            window_seconds=60,
-        ) and await run_in_threadpool(
-            within_rate_limit,
-            f"oauth_provider:{operation}:global",
-            limit=per_minute * 10,
-            window_seconds=60,
-        )
-    except _UNAVAILABLE_ERRORS:
-        return _service_unavailable()
-    if not allowed:
-        response = _oauth_error(
-            "temporarily_unavailable",
-            "Too many OAuth requests",
-            HTTPStatus.TOO_MANY_REQUESTS,
-        )
-        response.headers["Retry-After"] = "60"
-        return response
-    return None
-
-
 def _no_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
@@ -206,8 +168,8 @@ async def metadata(request: Request) -> Response:
 @router.api_route("/register", methods=["POST", "OPTIONS"])
 async def register(request: Request) -> Response:
     settings = get_oauth_provider_settings()
-    if limited := await _rate_limit(request, "register"):
-        return limited
+    if request.method == "OPTIONS":
+        return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
     try:
         if (
             request.headers.get("content-type", "").split(";", 1)[0].lower()
@@ -248,8 +210,6 @@ async def register(request: Request) -> Response:
 @router.api_route("/authorize", methods=["GET", "POST"])
 async def authorize(request: Request) -> Response:
     settings = get_oauth_provider_settings()
-    if limited := await _rate_limit(request, "authorize"):
-        return limited
     try:
         if request.method == "GET":
             if len(request.url.query.encode("utf-8")) > _MAX_BODY_BYTES:
@@ -304,8 +264,8 @@ async def authorize(request: Request) -> Response:
 @router.api_route("/token", methods=["POST", "OPTIONS"])
 async def token(request: Request) -> Response:
     settings = get_oauth_provider_settings()
-    if limited := await _rate_limit(request, "token"):
-        return limited
+    if request.method == "OPTIONS":
+        return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
     try:
         values = await _form(request)
         canonical_mcp_resource(values.get("resource", ""), settings)
@@ -354,8 +314,8 @@ async def token(request: Request) -> Response:
 @router.api_route("/revoke", methods=["POST", "OPTIONS"])
 async def revoke(request: Request) -> Response:
     settings = get_oauth_provider_settings()
-    if limited := await _rate_limit(request, "revoke"):
-        return limited
+    if request.method == "OPTIONS":
+        return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
     try:
         values = await _form(request)
         if "resource" in values:

@@ -11,7 +11,7 @@ import uuid
 from contextlib import AbstractContextManager
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import BigInteger, Text, case, cast, delete, func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -264,37 +264,6 @@ class PostgresCacheBackend(CacheBackend):
             stored_key = session.execute(stmt).scalar_one_or_none()
             session.commit()
         return stored_key is not None
-
-    def incr(self, key: str, ex: int) -> int:
-        from onyx.db.engine.sql_engine import get_session_with_tenant
-
-        insert_stmt = pg_insert(CacheStore).values(
-            key=key,
-            value=b"1",
-            expires_at=datetime.now(timezone.utc) + timedelta(seconds=ex),
-        )
-        live = or_(CacheStore.expires_at.is_(None), CacheStore.expires_at > func.now())
-        incremented = func.convert_to(
-            cast(
-                cast(func.convert_from(CacheStore.value, "UTF8"), BigInteger) + 1, Text
-            ),
-            "UTF8",
-        )
-        stmt = insert_stmt.on_conflict_do_update(
-            index_elements=[CacheStore.key],
-            set_={
-                "value": case((live, incremented), else_=insert_stmt.excluded.value),
-                "expires_at": case(
-                    (live, CacheStore.expires_at),
-                    else_=insert_stmt.excluded.expires_at,
-                ),
-            },
-        ).returning(CacheStore.value)
-        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
-            _set_statement_timeout(session, self._statement_timeout_ms)
-            value = session.execute(stmt).scalar_one()
-            session.commit()
-        return int(value or b"0")
 
     def delete(self, key: str) -> None:
         from onyx.db.engine.sql_engine import get_session_with_tenant
