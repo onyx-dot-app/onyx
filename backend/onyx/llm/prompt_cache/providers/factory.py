@@ -76,9 +76,10 @@ def _adapter_for_bedrock(llm_config: LLMConfig) -> PromptCacheProvider:
             ):
                 cacheable = True
                 break
+        except ValueError:
+            # Absent from the model-cost map — treated as not cache-capable.
+            continue
         except Exception as e:
-            # Models absent from the model-cost map raise here; anything else
-            # is a real lookup failure worth surfacing.
             logger.warning(
                 "Prompt-caching capability lookup failed for Bedrock model: %s — %s",
                 name,
