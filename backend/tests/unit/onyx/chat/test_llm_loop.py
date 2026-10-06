@@ -292,6 +292,73 @@ class TestConstructMessageHistory:
         assert result[4] == user_msg2  # Last user message
         assert result[5] == assistant_with_tool  # After last user message
 
+    def test_cacheable_flags_cover_stable_prefix(self) -> None:
+        """System, kept history, custom agent, project files, last user
+        message, and tool rounds after it are all byte-stable within a turn
+        and must carry should_cache. The trailing reminder is rebuilt per
+        turn and stays uncached."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        old_user = create_message("Previous turn", MessageType.USER, 5)
+        old_answer = create_message("Previous answer", MessageType.ASSISTANT, 5)
+        custom_agent = create_message("Custom agent task", MessageType.USER, 10)
+        user_msg = create_message("Search for X", MessageType.USER, 5)
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "search", 5)
+        tool_response = create_tool_response("tc_1", "Search results...", 10)
+        reminder = create_message("Remember to cite", MessageType.USER, 5)
+
+        simple_chat_history = [
+            old_user,
+            old_answer,
+            user_msg,
+            assistant_with_tool,
+            tool_response,
+        ]
+        context_files = create_context_files(num_files=1, tokens_per_file=50)
+
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=custom_agent,
+            simple_chat_history=simple_chat_history,
+            reminder_message=reminder,
+            context_files=context_files,
+            available_tokens=1000,
+        )
+
+        assert all(msg.should_cache for msg in result[:-1])
+        assert result[-1] is reminder
+        assert not result[-1].should_cache
+
+    def test_cacheable_flags_exclude_truncated_history(self) -> None:
+        """History messages evicted by the token budget must not be marked
+        cacheable; kept history and the tail segments still are."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        dropped_user = create_message("Ancient turn", MessageType.USER, 100)
+        kept_user = create_message("Recent turn", MessageType.USER, 5)
+        kept_answer = create_message("Recent answer", MessageType.ASSISTANT, 5)
+        user_msg = create_message("Latest question", MessageType.USER, 5)
+
+        simple_chat_history = [
+            dropped_user,
+            kept_user,
+            kept_answer,
+            user_msg,
+        ]
+        context_files = create_context_files()
+
+        # Budget fits system + last user + one kept pair, not the ancient turn.
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=None,
+            simple_chat_history=simple_chat_history,
+            reminder_message=None,
+            context_files=context_files,
+            available_tokens=35,
+        )
+
+        assert dropped_user not in result
+        assert not dropped_user.should_cache
+        assert all(msg.should_cache for msg in result)
+
     def test_construct_message_history_does_not_duplicate_project_images(
         self,
     ) -> None:
@@ -677,13 +744,16 @@ class TestConstructMessageHistory:
             available_tool_names={"read_file"},
         )
 
-        # Should have: system, tool_metadata_message, user
+        # Should have: system, user, tool_metadata_message — the notice names
+        # the tools offered this cycle, so it lives in the uncached tail.
         assert len(result) == 3
-        metadata_msg = result[1]
+        metadata_msg = result[2]
         assert metadata_msg.message_type == MessageType.USER
         assert "report.xlsx" in metadata_msg.message
         # read_file is offered, so the listing carries the id it consumes.
         assert "xlsx-1" in metadata_msg.message
+        assert user_msg.should_cache
+        assert not metadata_msg.should_cache
 
     def test_metadata_only_and_text_files_both_present(self) -> None:
         """When both text content and tool metadata are present, both messages
@@ -723,14 +793,16 @@ class TestConstructMessageHistory:
             token_counter=_simple_token_counter,
         )
 
-        # Should have: system, context_files_message, tool_metadata_message, user
+        # Should have: system, context_files_message, user,
+        # tool_metadata_message — the tool-dependent notice sits in the tail.
         assert len(result) == 4
         # Context files message (text content)
         assert "documents" in result[1].message
         assert "Text file content here" in result[1].message
         # Tool metadata message
-        assert "data.xlsx" in result[2].message
-        assert result[3] == user_msg
+        assert result[2] == user_msg
+        assert "data.xlsx" in result[3].message
+        assert not result[3].should_cache
 
 
 def _simple_token_counter(text: str) -> int:
@@ -1019,6 +1091,47 @@ class TestForgottenFileMetadata:
             for m in result
             if m is not forgotten
         )
+
+    def test_forgotten_message_stays_out_of_cacheable_prefix(self) -> None:
+        """The forgotten-files message is rebuilt whenever eviction grows the
+        dropped set, so it must sit outside the cacheable prefix — after the
+        tool rounds and before the reminder — instead of breaking contiguity
+        before the last user message.
+        """
+        file_meta = _make_file_metadata("file-abc", "moby_dick.txt")
+        file_msg = create_message("x" * 2000, MessageType.USER, 500)
+        file_msg.file_id = "file-abc"
+
+        history = [
+            file_msg,
+            create_message("Got it", MessageType.ASSISTANT, 10),
+            create_message("Tell me about ch1", MessageType.USER, 10),
+        ]
+        reminder = create_message("Remember to cite", MessageType.USER, 5)
+
+        result = construct_message_history(
+            system_prompt=create_message("system", MessageType.SYSTEM, 5),
+            custom_agent_prompt=None,
+            simple_chat_history=history,
+            reminder_message=reminder,
+            context_files=create_context_files(),
+            available_tokens=100,
+            token_counter=_simple_token_counter,
+            all_injected_file_metadata={"file-abc": file_meta},
+            available_tool_names={FILE_READER_TOOL_NAME},
+        )
+
+        forgotten = self._find_forgotten_message(result)
+        assert forgotten is not None
+
+        forgotten_idx = result.index(forgotten)
+        # Everything before the forgotten message is the stable cacheable
+        # prefix; the forgotten message and the trailing reminder are not.
+        assert all(msg.should_cache for msg in result[:forgotten_idx])
+        assert not forgotten.should_cache
+        assert result[-1] is reminder
+        assert not result[-1].should_cache
+        assert result.index(reminder) == forgotten_idx + 1
 
     # ------------------------------------------------------------------
     # Case 3: file message removed by summary truncation ("orphaned" metadata)
