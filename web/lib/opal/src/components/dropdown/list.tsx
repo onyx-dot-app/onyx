@@ -356,24 +356,28 @@ function liveCard(root: HTMLElement | null): HTMLElement | null {
  * Like `scrollIntoView`, "nearest" keeps the row's `scroll-margin-block`
  * clear of the edge, so a stop never parks under the mask fade.
  */
-function scrollWithinList(
+export function scrollWithinList(
   row: Element | null | undefined,
   block: "nearest" | "center"
 ): void {
-  const scroller = row?.closest<HTMLElement>(".opal-dropdown-scroll");
+  const scroller: HTMLElement | null | undefined = row?.closest<HTMLElement>(
+    ".opal-dropdown-scroll"
+  );
   if (!row || !scroller) return;
-  const rowRect = row.getBoundingClientRect();
-  const viewTop = scroller.getBoundingClientRect().top + scroller.clientTop;
-  const viewBottom = viewTop + scroller.clientHeight;
+  const rowRect: DOMRect = row.getBoundingClientRect();
+  const viewTop: number =
+    scroller.getBoundingClientRect().top + scroller.clientTop;
+  const viewBottom: number = viewTop + scroller.clientHeight;
   // The row's top in the scroller's content coordinates.
-  const rowTop = rowRect.top - viewTop + scroller.scrollTop;
+  const rowTop: number = rowRect.top - viewTop + scroller.scrollTop;
   if (block === "center") {
     scroller.scrollTop = rowTop - (scroller.clientHeight - rowRect.height) / 2;
     return;
   }
-  const style = window.getComputedStyle(row);
-  const marginStart = Number.parseFloat(style.scrollMarginBlockStart) || 0;
-  const marginEnd = Number.parseFloat(style.scrollMarginBlockEnd) || 0;
+  const style: CSSStyleDeclaration = window.getComputedStyle(row);
+  const marginStart: number =
+    Number.parseFloat(style.scrollMarginBlockStart) || 0;
+  const marginEnd: number = Number.parseFloat(style.scrollMarginBlockEnd) || 0;
   if (rowRect.top - marginStart < viewTop) {
     scroller.scrollTop = rowTop - marginStart;
   } else if (rowRect.bottom + marginEnd > viewBottom) {
