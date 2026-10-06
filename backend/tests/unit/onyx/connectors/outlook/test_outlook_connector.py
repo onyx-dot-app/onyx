@@ -731,6 +731,32 @@ def test_failure_in_one_mailbox_leaves_the_whole_step_to_be_retried() -> None:
     assert checkpoint.mailboxes is not None and len(checkpoint.mailboxes) == 2
 
 
+def test_failure_in_an_opened_mailbox_keeps_its_siblings_progress_out_of_the_checkpoint() -> (
+    None
+):
+    gateway = _many_mailbox_gateway(2)
+    connector = _connector(gateway)
+    _, checkpoint = _step(connector, connector.build_dummy_checkpoint())
+    _, checkpoint = _step(connector, checkpoint)
+    assert [cursor.opened for cursor in checkpoint.active] == [True, True]
+    before = checkpoint.model_copy(deep=True)
+
+    def delta(*, mailbox_id: str, **_: object) -> OutlookDeltaPage:
+        if mailbox_id == "user-1":
+            raise graph_error(503, "ServiceUnavailable")
+        return OutlookDeltaPage(changes=[change()])
+
+    gateway.fetch_folder_delta_page.side_effect = delta
+    escaped: list[object] = []
+    generator = connector.load_from_checkpoint(START, END, checkpoint)
+    with pytest.raises(OutlookGraphError):
+        while True:
+            escaped.append(next(generator))
+
+    assert escaped == []
+    assert checkpoint == before
+
+
 def test_finished_mailbox_leaves_the_step_while_its_siblings_stay_active() -> None:
     gateway = _many_mailbox_gateway(2)
 
