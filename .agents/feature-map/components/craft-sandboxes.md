@@ -186,7 +186,7 @@ external I/O (module docstring):
      is idempotent: if a healthy pod already exists it is reused. Otherwise it:
      a. Provisions a per-pod opencode-serve auth Secret
         (`_provision_opencode_secret`).
-     b. Reads the Helm **PodTemplate** named `sandbox-pod` and overlays the four
+     b. Reads the Helm **PodTemplate** named `sandbox-pod` and overlays the
         dynamic fields (see §4.3) to build the `V1Pod`
         (`_create_sandbox_pod`, `_overlay_dynamic_fields`).
      c. Creates the Pod, then the ClusterIP Service
@@ -252,14 +252,15 @@ raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
 
 **The pod spec comes from a Helm-rendered `core/v1` `PodTemplate` object**, not
 from Python. `KubernetesSandboxManager._create_sandbox_pod`
-(`kubernetes_sandbox_manager.py:463`) calls
+(`kubernetes_sandbox_manager.py`) calls
 `read_namespaced_pod_template(name="sandbox-pod", namespace=SANDBOX_NAMESPACE)`,
-deep-copies `.template.spec`, and overlays only four dynamic fields
-(`_overlay_dynamic_fields`, `kubernetes_sandbox_manager.py:508`):
+deep-copies `.template.spec`, and overlays only a few dynamic fields
+(`_overlay_dynamic_fields`):
 `spec.host_aliases` (the resolved proxy ClusterIP; DNS is blocked by the
 firewall so the pod can't resolve it itself), the two `secretKeyRef` env entries
-on the sandbox container (the per-pod opencode-auth Secret name), the sidecar's
-push public key env var, and (separately, at pod-creation time) the object's
+on the sandbox container (the per-pod opencode-auth Secret name), the sandbox
+container's `ONYX_WEBAPP_ALLOWED_DEV_ORIGINS` env value (from
+`allowed_dev_origins()`), the sidecar's push public key env var, and (separately, at pod-creation time) the object's
 name and `LABEL_SANDBOX_ID`/`LABEL_TENANT_ID`/`LABEL_PROVISIONING_ATTEMPT`
 labels. Everything else, including the container images, resource
 requests/limits, security contexts, node selector/tolerations, volumes, and
@@ -291,9 +292,10 @@ mutating endpoint verifies an Ed25519 signature over
 `{timestamp}|{path}|{sha256}` (`server.py:_verify_signature`), keyed against
 `ONYX_SANDBOX_PUSH_PUBLIC_KEY`, the public half of the api-server's
 `SANDBOX_PUSH_PRIVATE_KEY` (`kubernetes/sidecar_client.py:get_push_key_pair`).
-The main container and the sidecar **share state only through the two mounted
-volumes** (`workspace` at `/workspace/sessions` and `opencode-data` at
-`/workspace/opencode-data`); there is no other IPC (`shareProcessNamespace:
+The main container and the sidecar **share state only through the three mounted
+volumes** (`workspace` at `/workspace/sessions`, `opencode-data` at
+`/workspace/opencode-data`, and `managed` at `/workspace/managed`, read-write in
+the sidecar and read-only in the sandbox); there is no other IPC (`shareProcessNamespace:
 false`), which is exactly why the Next.js dev-server process itself must stay a
 `kubectl exec` into the main container rather than move to the sidecar
 (`docs/craft/sandbox/sandbox-exec-sidecar.md`, "Residual exec is exactly the
@@ -452,8 +454,8 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    to a temp dir and atomically renames into place
    (`sandbox_daemon/extract.py:safe_extract_then_atomic_swap`).
 3. **The pod spec lives in Helm, not in Python.** `_create_sandbox_pod` reads
-   the `sandbox-pod` PodTemplate and overlays exactly four dynamic fields
-   (§4.3). A change to resources, images, volumes, or security context belongs
+   the `sandbox-pod` PodTemplate and overlays only the dynamic fields
+   Python owns (§4.3). A change to resources, images, volumes, or security context belongs
    in `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`; adding
    it in Python instead will be silently overwritten by the next
    `read_namespaced_pod_template` call or, worse, drift from what the chart
@@ -461,8 +463,8 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
 4. **The sandbox must not reach internal cluster/host addresses.** Enforced at
    two layers: the in-pod iptables lockdown
    (`image/firewall-init.sh:step_apply_iptables`, applied by the `sandbox-init`
-   init container, blocking RFC1918 and the cloud metadata endpoint while
-   allowing outbound HTTPS) is authoritative; the `onyx-sandbox-egress`
+   init container, dropping all outbound traffic except to the proxy) is
+   authoritative; the `onyx-sandbox-egress`
    NetworkPolicy (`network-policy-sandbox-egress.yaml`) is a CNI-layer
    backstop that only takes effect where the cluster's CNI enforces
    NetworkPolicy, and allows only the proxy and DNS. See §9 and `[[craft-admin]]`
@@ -542,10 +544,10 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
 | If your change… | Also check |
 |---|---|
 | changes the sandbox image (`image/Dockerfile`, `initial-requirements.txt`) | the app-image/sandbox-image tag coupling (`docs/craft/infra/image-architecture.md`); the prepuller DaemonSet's pinned tag (`sandbox-image-prepuller.yaml`); `ENABLE_SKILLS` build-arg gating; re-run the spinup benchmark (`kubernetes/scripts/bench-sandbox-spinup.sh`) |
-| changes the pod template (`sandbox-podtemplate.yaml`) | `_overlay_dynamic_fields`/`_require_container` (version-skew handling); the four fields Python still owns; resource requests vs the CI/localdev values overlays; the Service's port range staying in sync with the template's container ports |
+| changes the pod template (`sandbox-podtemplate.yaml`) | `_overlay_dynamic_fields`/`_require_container` (version-skew handling); the dynamic fields Python still owns; resource requests vs the CI/localdev values overlays; the Service's port range staying in sync with the template's container ports |
 | changes the snapshot format (what's included/excluded, archive layout) | `sandbox_daemon/snapshot.py`'s `_SNAPSHOT_ROOTS`/`_SNAPSHOT_GENERATED_*` sets; `restore_snapshot`'s webapp-restore path; existing snapshots in FileStore become unreadable by a format change unless restore stays backward-compatible |
 | changes the sidecar contract (`contract.py`, `server.py` routes) | both `sidecar_client.py` (api-server side) and every route in `sandbox_daemon/server.py`; the image must ship the updated daemon in the same release as the api-server that calls it (version skew is a real risk, no negotiation exists) |
-| changes RBAC (`sandbox-rbac.yaml`) | `_wait_for_pod_ready`'s `watch.Watch()` usage needs `pods:watch`, silently and without a Python-side error if removed (see §9); `pods/exec` is still needed for the many residual exec call sites; `_create_sandbox_pod`'s `podtemplates:get` |
+| changes RBAC (`sandbox-rbac.yaml`) | `_wait_for_pod_ready`'s `watch.Watch()` usage needs `pods:watch`; removing it makes every provision fail with an `ApiException`, and no unit test catches it (see §9); `pods/exec` is still needed for the many residual exec call sites; `_create_sandbox_pod`'s `podtemplates:get` |
 | changes network policy (`network-policy-sandbox-*.yaml`) | the in-pod iptables lockdown (`firewall-init.sh`) stays authoritative regardless of CNI enforcement; keep the allow-list in sync with whichever worker consumes the `sandbox` Celery queue (currently `celery-worker-heavy`) |
 | changes idle timeout or snapshot cadence | the `SNAPSHOT_INTERVAL_DIVISOR` relationship between idle timeout and background-snapshot freshness bound; opencode-history durability exposure scales with this gap |
 | adds a new sandbox-wide (not per-session) persisted artifact | it needs its own capture point like opencode history's, since only `outputs/`+`attachments/` ride the per-session snapshot |
@@ -615,19 +617,20 @@ set.
 ## 9. Footguns
 
 - **The pod spec is Helm-owned; don't add fields in Python.** Anything beyond
-  the four dynamic fields `_overlay_dynamic_fields` sets belongs in
+  the dynamic fields `_overlay_dynamic_fields` sets belongs in
   `sandbox-podtemplate.yaml`. `docs/craft/sandbox/sandbox-podtemplate.md` reads
   like an open plan but the migration it describes is **already done** in this
   tree; don't redo it or "restore" the old field-by-field Python construction.
-- **`pods:watch` is a silent RBAC trap.** `_wait_for_pod_ready` uses
-  `kubernetes.watch.Watch()` (`kubernetes_sandbox_manager.py:886`), which needs
+- **`pods:watch` is an easy-to-miss RBAC trap.** `_wait_for_pod_ready` uses
+  `kubernetes.watch.Watch()` (`kubernetes_sandbox_manager.py`), which needs
   the `watch` verb on `pods` in `sandbox-rbac.yaml`. Nothing in the Python
   code names the verb explicitly (it calls `list_namespaced_pod` through the
   watch wrapper), so `grep`-ing the manager for RBAC requirements will miss
   it; the RBAC template's own comment ("watch is required: `_wait_for_pod_ready`
   streams pod events during provision") is the only place this is spelled out.
-  A trimmed-down Role that looks unused-but-safe will make every provision
-  silently fall back to polling failure/timeout, not an immediate error.
+  A trimmed-down Role that looks unused-but-safe makes every provision fail:
+  `_wait_for_pod_ready` re-raises the authorization `ApiException` from the
+  watch request. There is no polling fallback.
 - **Opencode-history durability is snapshot-dependent, and the only automatic
   capture points are idle reap and a ~15-minute-cadence background sweep
   (itself gated on a session output snapshot also succeeding that tick).**
@@ -647,8 +650,8 @@ set.
   the signed HTTP path.
 - **General internet egress from a sandbox is allowed by design; only
   connected-app traffic is policy-gated.** The iptables lockdown
-  (`firewall-init.sh`) blocks RFC1918/metadata but otherwise allows outbound
-  HTTPS (needed for `npm`/`pip`); the NetworkPolicy is a CNI-dependent backstop
+  (`firewall-init.sh`) drops all outbound traffic except to the proxy, which
+  forwards public HTTPS (needed for `npm`/`pip`); the NetworkPolicy is a CNI-dependent backstop
   restricted to the proxy and DNS only, which is stricter-looking but inert on
   non-enforcing clusters. Neither of these is the same control as the
   egress-proxy's action-policy gate (`[[craft-admin]]` §5.4), which only

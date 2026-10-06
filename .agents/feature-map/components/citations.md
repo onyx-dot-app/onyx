@@ -55,7 +55,7 @@ Citations have no HTTP endpoints of their own. They ride the same turn described
 |---|---|---|
 | `include_citations` | `SendMessageRequest.include_citations` (`server/query_and_chat/models.py`), default `True` | Per-request switch. `llm_loop.py:run_llm_loop` maps it to `CitationMode.HYPERLINK` (default) or `CitationMode.REMOVE`. Callers that must not expose links to the end surface (for example a public bot) set it `False`. |
 | `CitationMode` | `chat/citation_processor.py:CitationMode` | `HYPERLINK` (format and emit `CitationInfo`), `KEEP_MARKERS` (preserve `[1]` verbatim, emit no `CitationInfo`, used by the research agent's intermediate reports, `tools/fake_tools/research_agent.py`, ahead of `collapse_citations`), `REMOVE` (strip markers entirely, emit no `CitationInfo`, driven by `include_citations=False`). All three still track every citation seen via `get_seen_citations`. |
-| `CitationInfo` packet | `server/query_and_chat/streaming_models.py:CitationInfo` | The only wire-visible citation surface. Carries `citation_number` and `document_id`. See [[streaming-protocol]] §4.1. |
+| `CitationInfo` packet | `server/query_and_chat/streaming_models.py:CitationInfo` | The wire-visible surface for ordinary inline citations. Research-agent reports also emit `IntermediateReportCitedDocs` (`tools/fake_tools/research_agent.py`). Carries `citation_number` and `document_id`. See [[streaming-protocol]] §4.1. |
 
 ---
 
@@ -403,7 +403,7 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 - **Citation numbers are per tool call, not per turn.** `starting_citation_num`
   resets its base for every citeable tool call in a batch (§4.3). Do not assume a
   single monotonic counter spans the whole conversation turn.
-- **The model sees expanded queries, not what it typed**, and the documents it
+- **History keeps the model's original query arguments**, but the documents it
   cites come from whatever actually ran after expansion (see [[internal-search]]
   §9). The citation numbering is tied to that expanded, executed search, not to
   the user's literal question.

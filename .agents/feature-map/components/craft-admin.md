@@ -68,7 +68,8 @@ permission. See §5 for why the flag alone is not the real gate.
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | PATCH | `/api/manage/admin/users/craft-enabled` | `set_user_craft_access` (`backend/onyx/server/manage/users.py:201`) | Sets or clears `User.craft_enabled` for one or more emails. `Permission.FULL_ADMIN_PANEL_ACCESS`. Emits `AuditAction.USER_CRAFT_ACCESS_CHANGE`. |
-| GET/PUT | `/api/manage/admin/settings` | `backend/onyx/server/settings/api.py` | Reads/writes `craft_default_enabled` and `craft_instructions` as part of the general `Settings` blob. |
+| PATCH | `/api/admin/settings` | `admin_patch_settings` (`backend/onyx/server/settings/api.py`) | Writes `craft_default_enabled` and `craft_instructions` as part of the general `Settings` blob. |
+| GET | `/api/settings` | `fetch_settings` (`backend/onyx/server/settings/api.py`) | Returns the settings, including `craft_default_enabled` and `craft_instructions`. |
 | GET | `/api/build/admin/base-instructions` | `get_base_instructions` (`backend/onyx/server/features/build/api.py:56`) | Returns the raw `AGENTS.template.md`, for the Preferences page's read-only preview. |
 | GET/PATCH/POST/DELETE | `/api/build/admin/apps*` | `backend/onyx/server/features/build/external_apps/api.py` (`admin_router`) | Built-in create/patch (`/apps/built-in`, `/apps/{id}`), custom create (`/apps/custom`), list, catalog options, delete. Gated by `Permission.FULL_ADMIN_PANEL_ACCESS` only, **not** by `require_onyx_craft_enabled` (see §9). |
 | POST/DELETE | `/api/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` (`backend/onyx/server/manage/llm/api.py`, `Permission.MANAGE_LLMS`; see `[[llm-providers]]`) | The Craft default-model picker on the Preferences page. |
@@ -254,8 +255,9 @@ not cover:
 
 1. **Craft access gating is enforced server side, on every `/build` request,
    not only by hiding the sidebar link.** `require_onyx_craft_enabled`
-   (`build/api.py:34`) is a router-level FastAPI dependency on the whole
-   `/build` prefix. The frontend's `craftAvailable` flag only controls whether
+   (`build/api.py:require_onyx_craft_enabled`) is a router-level FastAPI
+   dependency on the user-facing `/build` router. The separate `/build/admin`
+   router does not use it (item 5). The frontend's `craftAvailable` flag only controls whether
    the nav item and page render; it grants nothing by itself.
 2. **An app not connected/enabled cannot have its credentials injected.**
    `credential_injection.py` resolvers only claim requests for apps a user has
@@ -268,10 +270,10 @@ not cover:
 4. **General internet egress from a sandbox is not the same guarantee as
    "admin-approved."** Requests that match no connected app's
    `upstream_url_patterns` are not evaluated by the action-policy gate at all
-   (`matched_actions is None`); they are governed by the sandbox's iptables
-   egress lockdown (`firewall-init.sh`), which blocks internal/RFC1918
-   destinations and the metadata endpoint but otherwise allows outbound HTTPS
-   (needed for `npm`, `pip`, etc.). **The admin-configured app policy governs
+   (`matched_actions is None`); the proxy forwards them unchanged. The
+   sandbox's iptables lockdown (`firewall-init.sh`) drops all outbound traffic
+   except to the proxy. Public-host access (needed for `npm`, `pip`, etc.)
+   therefore goes through the proxy. **The admin-configured app policy governs
    only requests attributed to a connected app or MCP server; it is not a
    general internet allowlist.** State this precisely when reasoning about
    "can a sandbox reach an unapproved service": it can reach arbitrary public
@@ -297,8 +299,9 @@ not cover:
 
 **Depends on**
 - [[access-control]]: `Permission.FULL_ADMIN_PANEL_ACCESS` gates every admin
-  endpoint in this document; `Permission.BASIC_ACCESS` gates the underlying
-  `/build` user-facing router.
+  endpoint in this document except the Craft default-model endpoints, which
+  use `Permission.MANAGE_LLMS` (see `[[llm-providers]]`).
+  `Permission.BASIC_ACCESS` gates the underlying `/build` user-facing router.
 - [[auth-and-identity]]: `AccountType.ANONYMOUS` is excluded from Craft
   entirely; per-user OAuth credentials for external apps depend on the acting
   user's identity.
@@ -330,7 +333,7 @@ not cover:
 
 | If your change… | Also check |
 |---|---|
-| changes the access gate (`is_craft_enabled_for_user`, the PostHog flag, or `ENABLE_CRAFT`) | every `/build` route (they all sit behind `require_onyx_craft_enabled`); the Access page's `enabledCount` math (`CraftPage/index.tsx`); anonymous-user exclusion |
+| changes the access gate (`is_craft_enabled_for_user`, the PostHog flag, or `ENABLE_CRAFT`) | every user-facing `/build` route (they all sit behind `require_onyx_craft_enabled`; `/build/admin` routes do not); the Access page's `enabledCount` math (`CraftPage/index.tsx`); anonymous-user exclusion |
 | adds an external app (built-in or custom) | the egress ruleset the proxy reads (`sandbox_proxy/request_evaluator.py`); the app's `default_policy` seed (`DENY` for built-in, admin-chosen for custom); its `upstream_url_patterns` regex correctness (a bad regex is silently skipped, not rejected); the skill it may be associated with, see [[mcp-and-custom-tools]] |
 | changes the egress policy (an action's `ALWAYS/ASK/DENY`, or `default_policy`) | `sandbox_proxy/addons/gate.py`'s three branches; the credential-injection path for `ALWAYS` (a token refresh failure there still blocks); the `external-app-skill-action-availability` doc, since `DENY`d actions are meant to be fenced out of the pushed `SKILL.md` |
 | changes admin instructions (`craft_instructions` or the base template) | `agent_instructions.py:generate_agent_instructions` and both sandbox managers (`docker_sandbox_manager.py`, `kubernetes_sandbox_manager.py`) that call it; the Preferences page's base-instructions preview (`GET /build/admin/base-instructions`) must still reflect the template a change touches |

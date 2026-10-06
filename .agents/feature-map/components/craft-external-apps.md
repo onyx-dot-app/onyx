@@ -2,11 +2,12 @@
 
 > The security core of Craft. Every outbound HTTPS call a Craft sandbox makes
 > is relayed through `sandbox-proxy`, a `mitmproxy`-based man-in-the-middle
-> that terminates TLS with its own CA, resolves which user and session made
-> the call, matches it against connected external apps and MCP servers,
-> enforces an admin policy (`ALWAYS`/`ASK`/`DENY`), injects the real
-> credential in place of a sandbox-visible placeholder, and only then forwards
-> the request upstream.
+> that terminates TLS with its own CA and identifies the sandbox and user.
+> It matches each call against connected external apps and MCP servers. For
+> a matched call it enforces an admin policy (`ALWAYS`/`ASK`/`DENY`) and
+> injects the real credential in place of a sandbox-visible placeholder. It
+> resolves the session only for `ASK` actions. It forwards unmatched traffic
+> upstream unchanged, under the sandbox egress rules.
 
 **Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
@@ -432,7 +433,8 @@ result in a tool call forwarding with credentials but no policy check.
 parsing, not just URL routing. A client library that changes framing (batches
 differently, adds an unrecognized top-level field, streams the body so
 `raw_content` is `None`) can turn a previously-gated tool call into a denied
-one, or trip the 32 MiB body cap on a legitimately large tool payload/response.
+one, or trip the 32 MiB request-body cap on a legitimately large tool call
+payload.
 Both evaluator and resolver import the same pure matching primitives
 (`resolvers/mcp_matching.py:match_request`, `parse_target`) specifically so
 they can never disagree about which server owns a request; see
@@ -501,12 +503,14 @@ they can never disagree about which server owns a request; see
    new path that can end an approval (a new UI action, a new grant source)
    must go through it, not write `ActionApproval.decision` directly, or the
    proxy's wake/expire race arbiter breaks.
-9. **Matcher exceptions are fail-open to "off-catalog", by design; credential
-   resolution and destination blocking are the actual security boundary, not
-   the matcher.** A bug in `recognize_actions`/`classify_mcp_request` must
+9. **External-app matcher exceptions are fail-open to "off-catalog", by
+   design; credential resolution and destination blocking are the actual
+   security boundary, not the matcher.** A bug in `recognize_actions` must
    not become a way to reach an internal address or bypass the CA/identity
    layers; it only affects whether a request looks like an app action versus
-   general internet traffic.
+   general internet traffic. MCP is different. After `McpRequestEvaluator`
+   attributes a request to a server, an exception from
+   `classify_mcp_request` becomes a synthetic `DENY` (fail closed).
 
 ---
 
@@ -629,14 +633,14 @@ that arbiter without extending it.
   (`PARSER_MAX_BODY_BYTES = 32 * 1024 * 1024`, deliberately set to match
   Anthropic's own Messages API limit so the proxy is never the *more*
   restrictive party for a normal LLM call, per `gate.py`'s own comment). Any
-  future change to this cap, or the addition of a new large-payload flow
-  (file uploads, big tool outputs), must re-check it against the relevant
+  future change to this cap, or the addition of a new large request flow
+  (file uploads, big tool-call payloads), must re-check it against the relevant
   upstream's own limit, not just this proxy's number in isolation.
 - **General internet reachability from a sandbox is intentional, not a gap
   this proxy should close.** Only requests attributed to a connected
   app/MCP server are policy-gated; everything else is governed by the
-  sandbox's iptables lockdown (public internet allowed, internal/RFC1918
-  and the metadata endpoint blocked). Do not conflate "the sandbox can reach
+  sandbox's iptables lockdown (all outbound traffic dropped except to the
+  proxy, which forwards unmatched public traffic). Do not conflate "the sandbox can reach
   `example.com`" with "policy was bypassed." See `[[craft-admin]]` §5.4 and
   §5 item 5 above.
 - **A streamed request body (`raw_content is None`) is treated as oversize,
@@ -645,8 +649,9 @@ that arbiter without extending it.
   enabling request streaming anywhere in the chain will start blocking
   requests that previously worked, with `body_too_large`, not a clearer
   error.
-- **Matcher exceptions fail *open* to off-catalog, not closed.** A bug in
-  `recognize_actions` or the URL/glob matching does not deny the request; it
+- **External-app matcher exceptions fail *open* to off-catalog, not closed.**
+  MCP classification failures on an attributed server fail closed (`DENY`).
+  A bug in `recognize_actions` or the URL/glob matching does not deny the request; it
   makes the request look like ordinary (ungated) traffic to a host-claiming
   resolver. This is a deliberate trade-off (the matcher is a heuristic
   classifier, not the security boundary) but it means a matching bug is

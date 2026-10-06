@@ -452,7 +452,7 @@ cd backend && uv run pytest -xv tests/external_dependency_unit/db/test_index_att
 
 # Tracing
 cd backend && uv run pytest -xv tests/unit/onyx/tracing tests/unit/onyx/llm/test_client_tracing.py
-cd backend && uv run --env-file .vscode/.env pytest -xv tests/external_dependency_unit/tracing
+uv run --env-file .vscode/.env pytest -xv backend/tests/external_dependency_unit/tracing
 
 # Hooks
 cd backend && uv run pytest -k hook tests/unit tests/external_dependency_unit
@@ -511,11 +511,6 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 - **A hook's `is_reachable` update and its failure log are written in
   separate sessions on purpose**, so a concurrent hook deletion (which makes
   the `is_reachable` write raise `NOT_FOUND`) cannot suppress the failure log.
-- **`llm-providers.md` documents the tracing admin endpoints as
-  `/admin/tracing/provider` (singular).** The live router mounts them at
-  `/admin/tracing/providers` (plural: `list_tracing_providers`,
-  `upsert_tracing_provider_endpoint`, etc., `server/manage/tracing/api.py`).
-  Trust this file's §2 table for the exact paths.
 
 ---
 

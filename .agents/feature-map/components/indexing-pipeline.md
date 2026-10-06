@@ -1,8 +1,8 @@
 # Indexing Pipeline
 
 > Turns a fetched document into indexed chunks. A two-phase Celery flow (docfetching,
-> then docprocessing) chunks, embeds, and writes each document to every configured
-> document index, then tracks the run as an `IndexAttempt`.
+> then docprocessing) chunks, embeds, and writes each document to the index of the
+> attempt's own `SearchSettings`, then tracks the run as an `IndexAttempt`.
 
 **Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** indexing
@@ -39,12 +39,13 @@ watches document counts climb as batches complete, sees the run finish with a
 document and chunk count, and can drill into individual failures with a document
 link and an error message. If the connector supports incremental pulls, later runs
 only touch documents that changed. A run that dies mid-flight (a worker restart, a
-deploy) resumes from where it left off on the next scheduled attempt rather than
-starting over; the admin sees the interrupted run in history and a fresh one pick
-up automatically.
+deploy) can resume from its checkpoint on the next scheduled attempt when the
+connector supports checkpointing. Other connectors restart extraction. The admin
+sees the interrupted run in history and a fresh attempt picks up automatically.
 
-If a document vanishes from the source, the next scheduled prune removes it from
-search results. Deleting a connector entirely, or removing a cc-pair, removes every
+For an active cc-pair whose connector has `prune_freq` set
+(`pruning/tasks.py:_is_pruning_due`), the next scheduled prune removes a vanished
+source document from search results. Deleting a connector entirely, or removing a cc-pair, removes every
 document that connector uniquely owned and clears the reference from documents
 still held by another connector.
 
@@ -77,7 +78,7 @@ is already local.
 | `INDEX_BATCH_SIZE` | 16 | Documents per connector-fetch batch, and thus per `docprocessing` task. |
 | `MAX_CHUNKS_PER_DOC_BATCH` | 1000 | Sub-batch size for the embed step inside one docprocessing task; see §4.4. |
 | `MAX_DOCUMENT_CHARS` | set | A document above this char count is skipped with a `ConnectorFailure`, not chunked. |
-| `PERSISTENT_INDEXING` | see configs | When true, an unhandled batch/connector exception is converted into per-doc failures and the attempt still finishes (`COMPLETED_WITH_ERRORS`) instead of `FAILED`. See `indexing/persistent_indexing.py` and §4.5. |
+| `PERSISTENT_INDEXING` | see configs | When true, an unhandled docprocessing batch exception is converted into per-doc failures and the attempt can finish (`COMPLETED_WITH_ERRORS`) instead of `FAILED`. Unhandled connector-generator exceptions in docfetching still mark the attempt `FAILED`. See `indexing/persistent_indexing.py` and §4.5. |
 | `ENABLE_CONTEXTUAL_RAG` | see configs | Global fallback; a `SearchSettings.enable_contextual_rag` per-model override wins when set. |
 | `USE_DOCUMENT_SUMMARY` / `USE_CHUNK_SUMMARY` (`onyx/configs/app_configs.py`) | see configs | Which contextual-RAG LLM calls run; at least one must be true for `enable_contextual_rag`. |
 | `CONTEXTUAL_RAG_LLM_TIMEOUT` (`chat_configs.py`) | see configs | Timeout for each contextual-RAG LLM call. |
@@ -597,10 +598,10 @@ cd backend && uv run pytest tests/unit/onyx/indexing -x
 cd backend && uv run pytest tests/unit -k "chunker or chunking or embedder"
 
 # External dependency unit tests (real Postgres/Redis/OpenSearch, connector mocked)
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/indexing
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/indexing
 
 # Integration tests for the full docfetching -> docprocessing -> index flow
-cd backend && uv run --env-file .vscode/.env pytest tests/integration -k "indexing or pruning or connector_deletion"
+uv run --env-file .vscode/.env pytest backend/tests/integration -k "indexing or pruning or connector_deletion"
 ```
 
 See `backend/AGENTS.md` for the authoritative commands and required env.

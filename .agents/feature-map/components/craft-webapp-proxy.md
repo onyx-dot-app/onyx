@@ -29,7 +29,8 @@ starts the first time the agent (or the user, via a documented fallback
 script) needs it.
 
 Only the session's owner, or someone the session is shared with, can open the
-preview. Anyone else gets a 404, not a broken frame.
+preview. A logged-in viewer without access gets a 404, not a broken frame.
+A logged-out viewer is redirected to `/auth/login`.
 
 ---
 
@@ -116,10 +117,11 @@ and before the websocket is accepted:
 **The security answer:** a preview is reachable only by the session owner,
 or by anyone else if and only if the session's sharing scope is not
 `PRIVATE`. There is no separate "preview link" credential; the same
-session-sharing rule that gates the transcript gates the live app. Anyone
-without a valid grant, cookie, or the right sharing scope gets a 404, which
-also means an unauthenticated prober cannot distinguish "session does not
-exist" from "session exists but is private."
+session-sharing rule that gates the transcript gates the live app. A
+logged-in viewer without the right sharing scope gets a 404. An authenticated non-owner
+cannot distinguish "session does not exist" from "session exists but is
+private." An unauthenticated viewer can: a missing session returns 404, and
+an existing session returns a redirect to `/auth/login`.
 
 ### 4.3 Proxying a request
 
@@ -274,8 +276,8 @@ Use manual reproduction for the cache and hot-reload behaviour below.
    `_next/webpack-hmr` in the browser's network panel for a failed
    upgrade.
 4. Open the same session URL as a second, unrelated user account (or in an
-   incognito window with no session). Confirm the preview 404s rather than
-   rendering.
+   incognito window with no session). Confirm the second user gets a 404
+   and the logged-out window is redirected to `/auth/login`, not rendered.
 5. Edit a file that changes a CSS class or a JS chunk's content, then
    reload the preview without restarting the dev server. Confirm the new
    styling/behavior shows immediately, not a stale cached version.
@@ -284,7 +286,8 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
 
 ### What "working" looks like
 
-- A logged-out or unauthorized viewer gets a 404, never a rendered frame.
+- An unauthorized logged-in viewer gets a 404 and a logged-out viewer gets a
+  redirect to `/auth/login`. Neither sees a rendered frame.
 - Hot reload works after a file edit without a manual page reload.
 - No stale JS/CSS after an edit, confirmed by a hard content check, not
   just "the page still looks fine."

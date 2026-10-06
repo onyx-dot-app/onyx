@@ -405,10 +405,11 @@ is marked as such.
    (`auth/permissions.py:require_permission`) and
    `_scoped_pat_permitted_on_route` (`auth/users.py`) both fail closed:
    a PAT with `scopes` set can only reach routes whose required permission is
-   implied by those scopes, or that are marked `scope_exempt()`. Adding a new
-   sensitive route without a `require_permission` guard silently makes it
-   reachable by *every* scoped PAT (the fail-closed check has nothing to
-   check against).
+   implied by those scopes, or that are marked `scope_exempt()`.
+   `_resolve_optional_user` rejects a scoped PAT with `INSUFFICIENT_PERMISSIONS`
+   on any route that has neither dependency. A new route without a
+   `require_permission` guard is therefore blocked for scoped PATs. It still
+   admits unscoped PATs (`scopes` is `None`), which are not capped.
 5. **Anonymous access must stay limited to the routes and documents intended
    for it.** `get_anonymous_user()` (`auth/users.py`) grants only
    `Permission.BASIC_ACCESS` and is only reachable through
@@ -518,7 +519,7 @@ cd backend && uv run pytest tests/integration/tests/mobile_auth
 cd backend && uv run pytest tests/integration/tests/anonymous_user
 cd backend && uv run pytest tests/integration/tests/users
 cd backend && uv run pytest tests/integration/tests/permissions tests/integration/tests/permissions_membership
-cd web && bunx playwright test tests/e2e/auth
+cd web && bun run playwright tests/e2e/auth
 ```
 
 `backend/tests/integration/tests/auth/test_saml_user_conversion.py` is the
@@ -592,10 +593,11 @@ secrets/env.
   route is actually safe for a scoped manager; you have to find the GATE 2
   check inside the handler. Its absence is a live vulnerability class, not
   a style nit.
-- **A PAT's scopes cap `require_permission`, but only for the permission
-  named on the route.** A route with no `require_permission` dependency at
-  all (in violation of §5.2/§5.4) is not capped by anything: `token_scopes`
-  is only consulted inside `require_permission`'s own dependency function.
+- **A PAT's scopes cap `require_permission` only for the permission named on
+  the route.** A scoped PAT cannot reach a route with neither
+  `require_permission` nor `scope_exempt()`, because
+  `_scoped_pat_permitted_on_route` fails closed in `_resolve_optional_user`.
+  An unscoped PAT (`scopes` is `None`) is not capped on any route.
 - **The deprecated API key hash path still exists and is weaker.**
   `hash_api_key` branches on the key's prefix and falls back to salted
   `sha256_crypt` for `DEPRECATED_API_KEY_PREFIX` keys. Do not assume every

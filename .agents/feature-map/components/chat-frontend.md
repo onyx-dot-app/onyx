@@ -130,8 +130,11 @@ the tree immutably.
 `isComplete` and `error` flags. `updateCurrentMessageFIFO` drives `sendMessage` and
 pushes every yielded packet onto the queue, so the consumer (`useChatController.ts`) can
 drain it on its own animation cadence instead of reacting to every network chunk
-directly. An `AbortError` is treated as a clean stop; any other thrown error is recorded
-in `stack.error`.
+directly. A caught error with `error.name === "AbortError"` (for example the
+`DOMException` from an aborted `fetch`) is a clean stop. Any other thrown error is
+recorded in `stack.error`. The loop's own check on `params.signal?.aborted` throws
+`new Error("AbortError")`. That error has `name === "Error"`, so it lands in
+`stack.error` with the message `AbortError`. It is not a clean stop.
 
 ### Packets (`services/streamingModels.ts`)
 
@@ -167,10 +170,11 @@ reach the FIFO.
 
 Reads the response body with a `ReadableStreamDefaultReader`, decodes it, and splits the
 buffer on `\n`. Each line is `JSON.parse`d individually. If a line fails to parse, a
-regex fallback (`/\{[^{}]*\}/g`) extracts and parses any complete `{...}` object
-substrings out of that line (`streamingUtils.ts:handleSSEStream`). This is a best-effort
-recovery for a line that arrived split across two chunks; it is not a full NDJSON parser
-and can silently drop or mis-parse a malformed line. See §9.
+regex fallback (`/\{[^{}]*\}/g`) extracts and parses any flat `{...}` object
+substrings out of that line (`streamingUtils.ts:handleSSEStream`). The buffer keeps the
+trailing partial line, so a line split across chunks is joined before parsing. The
+fallback runs only for a complete line that is not valid JSON. It cannot recover a
+nested object from such a line, and it can drop or mis-parse the line. See §9.
 
 ### 4.3 Resuming a stream
 
@@ -488,11 +492,12 @@ hoc for a one-off check.
   `NODE_ENV=development` unless `OVERRIDE_API_PRODUCTION=true`. Do not assume `/api/...`
   calls in this component are proxied the same way in production; something else (nginx)
   handles that path there.
-- **The SSE regex fallback can silently mis-parse.** `handleSSEStream`'s
-  `/\{[^{}]*\}/g` recovery only handles a flat, single-level JSON object; a packet with
-  a nested object in its payload that gets split across chunks can be dropped or
-  corrupted without an obvious error, because both the `JSON.parse` failure and the
-  fallback failure are only `console.error`ed, never surfaced to the user.
+- **The SSE regex fallback can silently mis-parse.** Chunk boundaries do not cause it,
+  because `handleSSEStream` joins lines before parsing. It runs when a complete line
+  fails `JSON.parse`. Its `/\{[^{}]*\}/g` recovery only handles a flat, single-level
+  JSON object, so it cannot reliably recover a nested packet from a malformed line. Both
+  the `JSON.parse` failure and the fallback failure are only `console.error`ed, never
+  surfaced to the user.
 - **`noClick noPaste` on the page-level `Dropzone` is deliberate**, not a bug. The input
   bar already handles click-to-upload and paste itself; without `noPaste` the dropzone
   and the input bar would both attach a pasted image, duplicating it.

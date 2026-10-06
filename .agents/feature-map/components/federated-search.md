@@ -33,14 +33,17 @@ live, over the Slack API, and folds the results into the same document cards and
 numbered citations as everything else. The user cannot tell, from the answer,
 which documents came from the index and which came from a live Slack call.
 
-If the user has never connected Slack, or their token has expired, the search
-simply runs without a Slack lane. Nothing errors and nothing tells the user
-Slack was skipped, unless a source-scoped filter note mentions Slack explicitly.
+If the user has never connected Slack, the search runs without a Slack lane.
+Nothing tells the user Slack was skipped, unless a source-scoped filter note
+mentions Slack explicitly. Onyx does not check token expiry before the search.
+An expired token still starts the Slack lane. The Slack call fails,
+`SearchTool._run_slack_search` logs the error, and the lane returns no results.
+The turn does not fail.
 
 An admin connects Slack for the whole workspace once (app credentials), after
-which each individual user separately authorizes their own Slack account (or
-the tenant's Slack bot, if one is already installed with a usable token, covers
-everyone without per-user connection).
+which each individual user separately authorizes their own Slack account. In a
+Slack bot context only, the tenant's Slack bot token is used instead. Web users
+always need their own OAuth token.
 
 ---
 
@@ -195,7 +198,9 @@ single DB session opened at the top of `run()`, before any parallel lane starts:
    (`db/federated.py:list_federated_connector_oauth_tokens`) and takes the
    Slack row's `token`.
 3. If neither yields a token, returns `(None, None, {})`. `_prefetch_slack_data`
-   swallows every exception in each branch and logs a warning; it never raises.
+   catches exceptions in its two token-fetch branches and logs a warning. The
+   document-set lookup in the bot branch runs outside those `try` blocks and can
+   still raise.
 
 The prefetch runs only when `SearchTool.enable_slack_search` is true or the call has a
 `slack_context`. In chat, `process_message._should_enable_slack_search` sets the flag. It is
@@ -404,8 +409,9 @@ than launching Playwright ad hoc.
 
 - A Slack federated citation opens the real Slack message/thread.
 - Disconnecting Slack degrades to "no Slack results", never a turn-ending error.
-- A persona whose document sets are not linked to the Slack connector never
-  produces Slack citations, even for a user who has connected Slack personally.
+- In a Slack bot context, a persona whose document sets are not linked to the
+  Slack connector never produces Slack citations. The web-user branch does not
+  check document sets.
 
 ---
 

@@ -29,9 +29,9 @@ A user picks a model per chat session, or leaves it on the assistant's default,
 or leaves that on the workspace default. Whichever call actually reaches the
 model, the user experience is the same: streamed tokens, and (if the provider
 supports it) streamed reasoning. If a request to the provider times out or the
-connection drops before any content has streamed back, the user sees a short
-retry delay rather than an error; if it drops mid-answer, they see a stream cut
-off.
+connection drops before the provider yields any chunk, the user sees a short
+retry delay rather than an error; once any chunk has been yielded, the error
+propagates and a drop mid-answer shows as a stream cut off.
 
 An admin with usage tracking enabled can see LLM cost and per-user usage in the
 observability surfaces. An admin can connect Braintrust or Langfuse to see full
@@ -62,7 +62,7 @@ Admin router, prefix `/admin/llm`:
 | GET | `/admin/llm/auto-config` | `get_auto_config` | |
 | GET | `/admin/llm/vision-providers` | `get_vision_capable_providers` | |
 | GET | `/admin/llm/provider-contextual-cost` | `get_provider_contextual_cost` | |
-| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each hits the vendor's model-list API live; none touch the DB. |
+| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
 
 Non-admin router, prefix `/llm`:
 
@@ -193,11 +193,9 @@ It then constructs `onyx.llm.multi_llm.LitellmLLM`.
 
 Other entry points, all funneling through `llm_from_provider`:
 - `get_default_llm()`: fetches `db/llm.py:fetch_default_llm_model` (CHAT flow).
-- `get_default_llm_with_vision()`: prefers `fetch_default_vision_model`, and
-  if that model no longer supports image input or does not exist, falls back
-  to scanning `fetch_existing_models(flow_types=[VISION, CHAT])`, sorted so
-  VISION-flow models are tried before CHAT-flow ones, checking
-  `model_supports_image_input` on each.
+- `get_default_llm_with_vision()`: uses `fetch_default_vision_model`. If that
+  model is absent or does not support image input, it returns `None` and image
+  summarization is off. It has no fallback and does not scan other models.
 - `get_llm_for_contextual_rag(model_configuration_id)` and
   `get_contextual_rag_llm_for_search_settings(search_settings)`: the latter
   uses the search settings' explicit `contextual_rag_model_configuration_id`
@@ -268,7 +266,7 @@ trailing usage-only chunk with empty `choices`, handled explicitly in
 LiteLLM exceptions: `Timeout`, `APIConnectionError`, `ServiceUnavailableError`,
 `InternalServerError`. It retries **only if nothing has been yielded yet**
 (`yielded_any` is `False`), up to `1 + LLM_FIRST_CHUNK_MAX_RETRIES` total
-attempts. Once any chunk has reached the caller, the same exception class
+attempts. The boundary is the first yielded chunk, even an empty or role-only one. Once any chunk has reached the caller, the same exception class
 propagates immediately; the stream is not restarted mid-answer.
 
 ### 4.7 Tracing
@@ -313,7 +311,7 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 
 ## 5. Contracts and invariants
 
-1. **Exactly one default per flow type**, enforced by the DB partial unique
+1. **At most one default per flow type**, enforced by the DB partial unique
    index `ix_one_default_per_llm_model_flow` (`db/models.py:LLMModelFlow`),
    not by application logic alone. `_update_default_model` clears the old
    default and sets the new one in one transaction so this index is never

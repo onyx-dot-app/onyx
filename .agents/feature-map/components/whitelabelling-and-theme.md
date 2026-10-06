@@ -305,7 +305,7 @@ cd backend && uv run pytest tests/external_dependency_unit/ee/onyx/server/enterp
 Playwright e2e:
 
 ```bash
-cd web && bunx playwright test tests/e2e/admin/theme/appearance_theme_settings.spec.ts
+cd web && bun run playwright tests/e2e/admin/theme/appearance_theme_settings.spec.ts
 ```
 
 This spec (`web/tests/e2e/admin/theme/appearance_theme_settings.spec.ts`) logs

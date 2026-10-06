@@ -50,8 +50,9 @@ never appear in this search or anywhere else in the owner's own history.
 
 Incognito hides a chat from the owner's own surfaces. Depending on a
 workspace-wide admin setting, it may still store the full conversation
-(hidden from that surface only) or store nothing at all, only anonymous
-usage counters, closing the moment the tab does.
+(hidden from that surface only) or store no conversation content. In the
+second case the session keeps blank message rows and token counts for usage
+accounting, and the live conversation ends when the tab closes.
 
 If an admin sets a maximum chat retention window, chats older than that
 window are deleted automatically, with no user-visible warning beyond the
@@ -268,8 +269,10 @@ not re-run the turn. It loads every `ChatMessage` for the session
 converts each to a `ChatMessageDetail`
 (`translate_db_message_to_chat_message_detail`), and for every assistant
 message calls `translate_assistant_message_to_packets`
-(`session_loading.py`) to rebuild the exact `Packet` sequence the live stream
-would have emitted: tool calls grouped by `turn_number` (with per-turn
+(`session_loading.py`) to rebuild a `Packet` sequence from the persisted state. It is
+not a byte-for-byte replay of the live stream: the saved answer text is one
+`AgentResponseDelta`, where the live loop emits many streamed deltas. The
+sequence is: tool calls grouped by `turn_number` (with per-turn
 reasoning inserted just before the group, see §5), then the answer, then
 citations, then an `OverallStop`. Which packet-builder runs is dispatched
 per-tool by `tool.in_code_tool_id` (search, web search, open URL, image
@@ -285,9 +288,10 @@ processing fence shows an unfinished stream. The client uses it to reconnect thr
 
 ## 5. Contracts and invariants
 
-1. **Messages alternate user and assistant.** `SYSTEM` (root only),
-   `USER_REMINDER`, and any custom-agent-prompt injection are never persisted;
-   they are constructed at load time (`db/README.md`, `chat/README.md`,
+1. **Messages alternate user and assistant.** The empty `SYSTEM` root row is
+   persisted (`get_or_create_root_message`). Prompt-time `SYSTEM`,
+   `USER_REMINDER`, and custom-agent-prompt messages are never persisted. They
+   are constructed at load time (`db/README.md`, `chat/README.md`,
    [[context-assembly]]).
 2. **The empty root message must exist exactly once per session.**
    `get_or_create_root_message` enforces this; `MultipleResultsFound` is
@@ -383,9 +387,9 @@ processing fence shows an unfinished stream. The client uses it to reconnect thr
 ### Tests
 
 ```bash
-# Integration (preferred)
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/chat
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/chat_retention
+# Integration (preferred). Run the env-file commands from the repo root.
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/chat
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/chat_retention
 
 # Unit
 cd backend && uv run pytest tests/unit/onyx/chat/test_save_chat.py
@@ -393,8 +397,8 @@ cd backend && uv run pytest tests/unit/onyx/db/test_chat_sessions.py tests/unit/
 cd backend && uv run pytest tests/unit/onyx/chat/test_incognito_record_mode.py tests/unit/onyx/chat/test_incognito_liveness_predicates.py
 
 # External dependency unit (incognito, needs Postgres/Redis up)
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/chat/test_incognito_persistence.py
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/db/test_incognito_history_exclusion.py
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/chat/test_incognito_persistence.py
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/db/test_incognito_history_exclusion.py
 ```
 
 ### Manual reproduction

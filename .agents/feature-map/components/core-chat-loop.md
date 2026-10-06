@@ -127,7 +127,8 @@ Three layers, three responsibilities. This separation is the load-bearing idea:
 
 1. **`process_message.py` does setup, orchestration, and persistence.** It validates the
    request, loads history, resolves files and tools, reserves message IDs, runs the
-   workers, and owns every database write. It never talks to an LLM.
+   workers, and owns the persistence of the turn (messages, tool calls, search docs).
+It never talks to an LLM.
 2. **`llm_loop.py` runs the turn.** A `while` loop: assemble context, run one inference,
    execute the tools it asked for, repeat until the LLM answers or `MAX_LLM_CYCLES`
    is hit.
@@ -203,7 +204,8 @@ document links, and the citation mapping, then commits once.
 
 After the save, one model's completion "claims" history compression via a
 `compression_claimed` flag, and runs `compress_chat_history` if
-`get_compression_params(...).should_compress`.
+`get_compression_params(...).should_compress`. Content-free incognito turns
+return after `append_incognito_message` and skip compression.
 
 ### 4.6 Stop, resume, heartbeat
 
@@ -227,9 +229,12 @@ After the save, one model's completion "claims" history compression via a
 Break one of these and the symptom appears somewhere far away. Check each one
 whenever you touch this component.
 
-1. **`process_message.py` owns every DB write in a turn.** `llm_loop.py` and
-   `llm_step.py` must not write to the database. Persistence happens on the main or
-   writer thread, after workers finish.
+1. **`process_message.py` owns the persistence of the turn.** `llm_loop.py` and
+   `llm_step.py` must not save chat messages, tool calls, or search docs. That
+   persistence happens on the main or writer thread, after workers finish. One
+   exception exists: when the LLM calls the memory tool, `llm_loop.py` writes the
+   memory itself through `add_memory` or `update_memory_at_index` (`db/memory.py`),
+   unless the session is incognito.
 2. **`ChatTurnSetup` is frozen and detached.** No ORM object may cross into a worker
    thread. Passing a live SQLAlchemy object is a `DetachedInstanceError` waiting for
    production load.
@@ -338,9 +343,10 @@ launching Playwright ad hoc.
 - **Tool responses are discarded from history.** They are replaced by a fixed
   placeholder string. Only the tool-call *arguments* survive. If a later cycle needs
   a fact, it must be in the arguments or re-fetched.
-- **Search tool arguments in history are the expanded queries, not what the LLM
-  wrote.** Query expansion rewrites them before execution, and history shows the
-  expanded set deliberately, so the model learns what was actually run.
+- **Search tool arguments in history are the LLM's original arguments, not the
+  expanded queries.** Query expansion happens inside `SearchTool.run`. It emits
+  the expanded set in `SearchToolQueriesDelta` and does not change
+  `tool_call.tool_args`.
 - **`turn_index` is not a backend turn.** It is a frontend rendering block. One LLM
   inference that produces reasoning plus a tool call is one backend step but two
   frontend turns.

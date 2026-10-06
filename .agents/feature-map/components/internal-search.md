@@ -258,17 +258,21 @@ the LLM, assigning one citation number per unique `document_id` starting at
 1. **ACL prefetch happens once per `run()`, before any parallel work, and is not
    optional.** `build_access_filters_for_user(self.user, db_session)` runs inside
    the single DB session opened at the top of `run()`. It returns a `UserAccessFilters`
-   object: the ACL list plus an optional `CCPairAccessFilter` (`cc_pair_access`, set
-   only when the cc-pair filter flag is on). There is no flag that skips
+   object: the ACL list plus an optional `CCPairAccessFilter` (`cc_pair_access`).
+   The filter is set when the cc-pair flag is on. It is also set in `OFF` mode when
+   the user cannot see a `SYNC_RESTRICTED` pair, so the pair stays hidden
+   (`_build_cc_pair_access_filter`). There is no flag that skips
    it: the only input that decides document access is the `user` the caller passes
    to `SearchTool`. A caller that wants a narrower scope passes a narrower user (the
    Slack bot passes the anonymous user in shared channels). Do not add a skip flag;
    see [[access-control]] §5.3.
-2. **Document-set names supplied by a user are access-checked twice**: once in
-   `SearchTool.run` and again in `_build_index_filters` via
-   `filter_document_set_names_by_user_access`. Both must stay in place; removing
-   either reopens the bypass where a user overrides the persona's configured
-   document sets with arbitrary names. Unauthorized names raise
+2. **Document-set names supplied by a user are access-checked in `SearchTool.run`**
+   with `filter_document_set_names_by_user_access`. `SearchTool` calls
+   `search_pipeline` with prefetched `acl_filters` and no `db_session`, so the
+   matching check in `_build_index_filters` is skipped on this path. That second
+   check applies only to callers that pass a session. Both checks must stay in
+   place; removing either reopens the bypass where a user overrides the persona's
+   configured document sets with arbitrary names. Unauthorized names raise
    `OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)`.
 3. **`llm_facing_response` and `rich_response` serve different audiences.**
    `llm_facing_response` is the compact, trimmed, citation-tagged string the
@@ -395,10 +399,10 @@ than launching Playwright ad hoc.
   constructed inside dead code (`warm_up_cross_encoder`). Anyone reading
   `search_nlp_models.py` and assuming a cross-encoder scores results is wrong;
   the LLM selection stage (4.5) is what actually narrows the result set.
-- **The LLM sees expanded queries in history, not what it wrote.** Query
-  expansion rewrites the queries before they run, and the arguments recorded in
-  chat history are the expanded set, deliberately, so the model learns what was
-  actually searched. See also [[core-chat-loop]] §9.
+- **Chat history keeps the LLM's original query arguments.** `SearchTool.run`
+  emits the expanded queries in `SearchToolQueriesDelta` for the UI. It does not
+  replace `tool_call.tool_args`, so history shows what the model wrote. See also
+  [[core-chat-loop]] §9.
 - **Scope and time decisions are cached per turn**, not per call.
   `_scope_decision_settled` latches once `decide_search_scope` returns `None`
   (no source directive), and `_time_filter_computed` latches after the first

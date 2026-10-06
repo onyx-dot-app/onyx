@@ -29,7 +29,7 @@ provider (OpenAI, Azure, or Vertex AI), supply credentials, and choose it as
 default. The model list in the admin form includes the GPT Image 2.5 variants
 (`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`) next to `gpt-image-2`, `gpt-image-1.5`, and
 `gpt-image-1` (`web/src/views/admin/ImageGenerationPage/constants.ts`).
-Until an admin does this, the tool does not appear at all; the model
+Until an admin does this, the tool does not appear at all. The exception is EE tenant provisioning, which creates a default config from the OpenAI key (`ee/onyx/server/tenants/provisioning.py`). The tool does not appear in a deployment without a default config; the model
 never sees an image generation tool it cannot use, and a user is never told
 "image generation failed" for a capability that was simply never turned on.
 
@@ -66,10 +66,11 @@ credentials (§4, §5).
 
 - `ImageGenerationConfig` (`db/models.py`, owned here via `db/image_generation.py`):
   primary key `image_provider_id` (a static string like `openai_gpt_image_1`), a
-  foreign key to `ModelConfiguration`, and `is_default`. Only one row can have
-  `is_default=True`; `create_image_generation_config__no_commit` and
+  foreign key to `ModelConfiguration`, and `is_default`. The intended invariant is
+  one default row. `create_image_generation_config__no_commit` and
   `set_default_image_generation_config` both clear every other default in one
-  atomic `UPDATE` before setting the new one.
+  `UPDATE` before setting the new one. No database uniqueness constraint backs
+  this, so concurrent updates can leave several defaults (see §7).
 - Credentials are not stored on `ImageGenerationConfig` itself. Each config
   points at a `ModelConfiguration`, which points at an `LLMProvider`
   (`db/models.py`), whose `api_key` is an `EncryptedString`/`SensitiveValue`. This
@@ -94,7 +95,7 @@ implement it, registered in `image_gen/factory.py:PROVIDERS`:
 
 | `ImageGenerationProviderName` | Class | Reference-image support |
 |---|---|---|
-| `openai` | `providers/openai_img_gen.py:OpenAIImageGenerationProvider` | Yes, up to 16 (`gpt-image-*` and `dall-e-2`, the latter capped at 1) |
+| `openai` | `providers/openai_img_gen.py:OpenAIImageGenerationProvider` | Yes, up to 16 for `gpt-image-*`. `dall-e-2` rejects more than one reference image with a `ValueError` |
 | `azure` | `providers/azure_img_gen.py:AzureImageGenerationProvider` | Same as OpenAI, via an Azure deployment name |
 | `vertex_ai` | `providers/vertex_img_gen.py:VertexImageGenerationProvider` | Yes, up to 14, via Gemini image editing (`genai.Client`) instead of LiteLLM's `image_edit` |
 

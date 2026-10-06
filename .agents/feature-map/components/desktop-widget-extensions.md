@@ -164,14 +164,17 @@ the `tokenProvider` result when one is set, else the `api-key`. In passthrough m
 backend verifies the JWT in `auth/users.py:_check_for_saml_and_jwt` and
 `auth/jwt.py:verify_jwt_token` (RS256 only).
 `origin: "widget"` on the send-message body maps to
-`MessageOrigin.WIDGET` (`backend/onyx/server/query_and_chat/models.py:MessageOrigin`),
-which the backend uses for telemetry only.
+`MessageOrigin.WIDGET` (`backend/onyx/server/query_and_chat/models.py:MessageOrigin`).
+The backend uses it for telemetry only. When the request uses an API key or PAT,
+`chat_backend.py:handle_send_chat_message` overrides it to `MessageOrigin.API`.
+JWT-passthrough requests keep `WIDGET`.
 
 ### 4.3 Chrome extension: side panel to answer
 
 ```
-user clicks the toolbar icon or presses the "openSidePanel" command
-  └─ chrome.sidePanel.open()                      service_worker.js:openSidePanel
+user clicks the toolbar icon (its popup opens) and picks the side panel button,
+or presses the "openSidePanel" command
+  └─ chrome.sidePanel.open()                      popup.js, service_worker.js:openSidePanel
        └─ panel.html loads panel.js
             ├─ loadOnyxDomain()                    reads onyxExtensionDomain from storage
             └─ iframe.src = {domain}/nrf/side-panel
@@ -216,9 +219,11 @@ frame.
    compromised or malicious remote page can do, since the same grant applies
    to every origin the webview loads.
 2. **Only `http`, `https`, `mailto`, `tel` may reach the OS opener.**
-   `desktop/src-tauri/src/window.rs:is_externally_openable` is the single
-   gate for both `window.open`/`target="_blank"` (`open_new_window_externally`)
-   and the external-navigation handler in `main.rs`. Loosening it (adding
+   `desktop/src-tauri/src/window.rs:is_externally_openable` gates
+   `window.open`/`target="_blank"` (`open_new_window_externally`). The
+   external-navigation handler in `main.rs` uses
+   `window.rs:should_open_in_external_browser`, which has its own scheme match
+   for the same four schemes. Change both together. Loosening either (adding
    `file:` or a custom scheme) turns a link click on a compromised page into
    local code or file execution.
 3. **External navigation only redirects away from an active chat
@@ -367,7 +372,7 @@ repository. Verification below is manual.
 1. Visit `chrome://extensions`, enable Developer Mode, "Load unpacked",
    select `extensions/chrome/`.
 2. Set the Onyx domain in the options page to `http://localhost:3000`.
-3. Open the side panel (toolbar icon or `Ctrl+O`/`⌘⇧O`) and confirm it loads
+3. Open the side panel (toolbar icon popup, or the `openSidePanel` shortcut: `Ctrl+O`, `Alt+O` on Windows, `MacCtrl+O` on Mac) and confirm it loads
    `/nrf/side-panel` and shows a logged-in Onyx session if one exists in that
    browser profile.
 4. Select text on any page, click the injected icon, and confirm the side

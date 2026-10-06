@@ -59,7 +59,7 @@ admin panel (`discord_bot/api.py:_check_bot_config_api_access`).
 `DiscordBotConfig` (`backend/onyx/db/models.py:DiscordBotConfig`): one row per tenant, fixed
 `id='SINGLETON'`, holds the encrypted bot token when not set via env var.
 
-`DiscordGuildConfig` (`models.py:DiscordGuildConfig`): one row per Discord server. `guild_id` is
+`DiscordGuildConfig` (`models.py:DiscordGuildConfig`): one row per Discord server in that tenant. `guild_id` is
 `NULL` until the `!register` command completes it; `registration_key` is the
 one-time key embedding the tenant id (`discord_bot/utils.py:generate_discord_registration_key`).
 Holds `default_persona_id` and `enabled`.
@@ -143,8 +143,12 @@ OnyxDiscordClient.on_message                                    client.py
 4. **A registration key is single-use and tenant-bound.** `register_guild`
    requires the guild's `guild_id` to still be `NULL`
    (`handle_commands.py:_register_guild`); a second `!register` with the same
-   key is refused. One Discord guild can only ever map to one tenant
-   (`cache.py:DiscordCacheManager` keys `_guild_tenants` by `guild_id`).
+   key is refused. The cache keeps one tenant per `guild_id`
+   (`cache.py:DiscordCacheManager._guild_tenants`), and `_register_guild`
+   refuses a guild that the cache already maps to a tenant. The database does
+   not enforce this across tenants, because each tenant has its own
+   `DiscordGuildConfig` table. Two tenants can register the same guild if the
+   cache is stale or not shared. The last cache refresh decides the routing.
 5. **New channels are disabled by default.** `create_channel_config` and
    `bulk_create_channel_configs` (`db/discord_bot.py`) never set `enabled=True`;
    an admin must opt a channel in explicitly after `!sync-channels` or initial

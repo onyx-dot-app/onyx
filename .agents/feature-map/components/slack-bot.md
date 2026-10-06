@@ -404,15 +404,15 @@ cd backend && uv run pytest tests/unit/onyx/onyxbot
 
 # External dependency unit: real Slack bot CRUD against a live-ish Slack API surface,
 # and federated search wiring
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/slack_bot
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/slack_bot
 
 # Slack-as-connector integration tests (permission sync, pruning). These exercise
 # Slack as a document source, not the bot, but changes to Slack API usage in
 # onyxbot/slack/utils.py can affect both
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/connector_job_tests/slack
+uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/slack
 
 # Slack user deactivation / seat interaction
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/users/test_slack_user_deactivation.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/users/test_slack_user_deactivation.py
 ```
 
 See `backend/AGENTS.md` for required env and secrets.

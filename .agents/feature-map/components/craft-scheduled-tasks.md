@@ -194,7 +194,8 @@ per tenant every 30 s):
 
 `cleanup_stuck_scheduled_runs` (hourly, primary queue) sweeps runs that
 have been `queued` too long or `running` past budget and marks them
-`failed`, catching a run whose worker died without updating the row.
+`failed`, catching a run whose worker died without updating the row. The
+sweeper does not send a notification.
 
 ### 4.4 Pre-approvals: unattended egress without a human in the loop
 
@@ -273,7 +274,8 @@ separate choice.
    path in `executor.py` calls `_notify` with
    `NotificationType.SCHEDULED_TASK_FAILED`; a new failure exit added to the
    executor that skips this call is a silent failure from the user's
-   perspective.
+   perspective. The one exception is `cleanup_stuck_scheduled_runs`. It marks
+   a stuck run `failed` and does not notify the owner.
 4. **The dispatcher and the executor must not double-fire the same tick.**
    `FOR UPDATE SKIP LOCKED` in `claim_due_scheduled_tasks` is the
    concurrency guard; `next_run_at` must be advanced in the same
@@ -294,7 +296,7 @@ separate choice.
 - [[background-jobs]]: the Celery app/queue/Beat machinery this feature's
   dispatcher, executor, and sweeper all run on; this document does not
   duplicate that machinery.
-- [[craft-sessions]]: `create_session__no_commit`, `BuildSession.origin`,
+- [[craft-sessions]]: `SessionManager.create_session`, `BuildSession.origin`,
   and the session view that renders both interactive and scheduled runs.
 - [[craft-sandboxes]]: sandbox provisioning happens unchanged for a
   scheduled session; `[[craft-webapp-proxy]]` documents the one thing that
@@ -343,7 +345,7 @@ cd backend && uv run pytest tests/unit/onyx/server/features/craft/scheduled_task
 # Integration: the HTTP API surface end to end.
 cd backend && uv run pytest tests/integration/tests/craft/test_scheduled_tasks_api.py
 # Playwright smoke: dispatcher -> executor -> run-history wiring.
-cd web && npx playwright test scheduled-tasks
+cd web && bun run playwright scheduled-tasks
 ```
 
 `docs/craft/features/scheduled-tasks/tests.md` documents the Playwright

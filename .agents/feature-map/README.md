@@ -44,8 +44,9 @@ Onyx overloads several words (persona/agent, chunk/section, cc-pair). Read
 
 ## The component document schema
 
-Every file in `components/` uses the same nine sections, in the same order, so an
-agent can jump straight to the section it needs.
+Every file in `components/` has the same header (§0) and nine numbered sections
+(`## 1.` to `## 9.`), in the same order, so an agent can jump straight to the section
+it needs.
 
 | § | Section | Answers |
 |---|---|---|

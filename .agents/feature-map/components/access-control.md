@@ -75,8 +75,8 @@ and §9).
 | GET | `/user-groups/minimal` | same file | `Permission.BASIC_ACCESS`; any authenticated user can list group names (not membership) for persona/document-set configuration UIs. |
 | PUT | `/admin/user-group/{id}/permissions` | same file | `Permission.MANAGE_USER_GROUPS` / `FULL_ADMIN_PANEL_ACCESS` depending on the specific route; sets what a group's members can do, not document access. |
 | CRUD | `/document-set*` | `backend/onyx/server/features/document_set/api.py` | Creating/editing a set with `is_public=False` requires naming the owning user or group(s); `filter_document_set_names_by_user_access`/`filter_document_set_ids_by_user_access` (`db/document_set.py`) are the read-side access check reused everywhere a caller supplies set names or IDs. |
-| GET/PUT | `/admin/cc-pair/{id}/data-access`, `/admin/cc-pair/{id}/manage-access` | `ee/onyx/server/documents/cc_pair.py` | EE only. Data-access groups decide who reads a connector's documents. Manage-access groups (with an `EDITOR` or `OPERATOR` role) decide who administers the connector. |
-| PUT | `/admin/user-group/{id}/data-access-cc-pairs`, `/admin/user-group/{id}/managed-cc-pairs` | `ee/onyx/server/user_group/api.py` | EE only. The same two relations, set from the group side. |
+| GET/PUT | `/manage/admin/cc-pair/{id}/data-access`, `/manage/admin/cc-pair/{id}/manage-access` | `ee/onyx/server/documents/cc_pair.py` | EE only. Data-access groups decide who reads a connector's documents. Manage-access groups (with an `EDITOR` or `OPERATOR` role) decide who administers the connector. |
+| PUT | `/manage/admin/user-group/{id}/data-access-cc-pairs`, `/manage/admin/user-group/{id}/managed-cc-pairs` | `ee/onyx/server/user_group/api.py` | EE only. The same two relations, set from the group side. |
 | GET | `/hierarchy/*` | `backend/onyx/server/features/hierarchy/api.py` | Folder/space browsing scoped by `get_user_external_group_ids` and `get_accessible_hierarchy_nodes_for_source` (see §4). |
 | SCIM | `backend/ee/onyx/server/scim/*.py` | | Provisions users and groups from an external IdP; writes the same `UserGroup`/`User__UserGroup` rows the manual admin UI writes. |
 
@@ -167,7 +167,7 @@ OpenSearch chunk document
   read query applies: public, or owned, or shared via a managed/member group.
 - `Document.external_user_emails` / `external_user_group_ids` / `is_public`: the
   raw permission-sync output, written by [[permission-sync]] connectors, read by
-  `access.access.py` to build the indexed ACL. `ExternalUserGroup`
+  `access/access.py` to build the indexed ACL. `ExternalUserGroup`
   (`ee/onyx/db/external_perm.py`) maps a synced external group ID to member
   emails; `fetch_public_external_group_ids` marks certain external groups (for
   example, a Google Drive domain-wide share) as effectively public.
@@ -455,20 +455,22 @@ These are the rules whose violation is silent: nothing crashes, a user just sees
    can fail open. Treat any change to prefixing or to `DocumentAccess.to_acl()` as
    requiring a full reindex (§7) and an explicit read/write parity check, not
    just a unit test of one side.
-9. **EE dispatch must degrade safely in CE; a missing EE implementation must
-   never widen access.** Every dispatch point here
+9. **EE dispatch should degrade safely in CE; the hierarchy dispatch points are
+   an exception.** Every dispatch point here
    (`_get_acl_for_user`, `_get_access_for_documents`,
    `_get_user_external_group_ids`,
    `_get_accessible_hierarchy_nodes_for_source`/`_filter_accessible_hierarchy_node_ids`)
    goes through `fetch_versioned_implementation`, which falls back to the CE
    module only on `ModuleNotFoundError` naming `ee.onyx`
-   (`utils/variable_functionality.py`). The CE fallback for every one of these
-   is a strict subset of what EE would compute (fewer ACL entries, an empty
-   group list, an unfiltered-but-narrower hierarchy result whose actual
-   permission logic never runs), so the fallback narrows or leaves access
-   unchanged, never widens it. A new dispatched function must preserve this
-   direction: if CE cannot compute the real answer, its fallback must return
-   the more restrictive one.
+   (`utils/variable_functionality.py`). For the ACL dispatch points, the CE
+   fallback is a subset of what EE would compute (fewer ACL entries, an empty
+   group list), so it narrows access. The hierarchy fallbacks are the
+   exception. CE `_get_accessible_hierarchy_nodes_for_source` returns every
+   non-stub node for the source, and CE `_filter_accessible_hierarchy_node_ids`
+   passes every requested id (`db/hierarchy.py`). EE filters both by access.
+   A missing EE implementation there can expose nodes EE would hide. A new
+   dispatched function should return the more restrictive answer when CE
+   cannot compute the real one.
 10. **`_get_acl_visibility_filter`'s output is deliberately cacheable in
     isolation from the rest of `_get_search_filters`'s clauses** (per its own
     docstring). A change that folds ACL logic into a combined clause with
@@ -522,7 +524,7 @@ These are the rules whose violation is silent: nothing crashes, a user just sees
 | If your change… | Also check |
 |---|---|
 | changes an ACL string prefix or `DocumentAccess.to_acl()` | requires a full reindex; read (`_get_acl_for_user`) and write (`_get_access_for_documents`) must change in the same PR, never one ahead of the other (§5.8) |
-| adds a new ACL source (a new kind of group, a new external-permission concept) | both `_get_acl_for_user` (read) and `_get_access_for_documents` (write) in **both** CE and EE, or CE's narrower fallback silently drifts from what EE now computes; add it to `DocumentAccess` first, not as a parallel field |
+| adds a new ACL source (a new kind of group, a new external-permission concept) | both `_get_acl_for_user` (read) and `_get_access_for_documents` (write) in **both** CE and EE, or CE's fallback silently drifts from what EE now computes; add it to `DocumentAccess` first, not as a parallel field |
 | adds a new filter to `IndexFilters`/`BaseFilters` | [[document-index]]'s `_get_search_filters`; confirm it AND-composes with the ACL clause rather than replacing it; the two document-set access checks in `SearchTool.run` and `_build_index_filters` |
 | adds a new retrieval lane or federated source | does it carry `access_control_list`, or is it claiming the same exemption as Slack (§5.5)? That claim needs its own justification, not a copy-paste of the Slack comment |
 | adds a new search entry point (a new endpoint, a new tool, a new background job that queries the index) | it must call `build_access_filters_for_user` (or explicitly justify why not, per §5.2) before building `IndexFilters`; it must not construct a query outside `DocumentQuery._get_search_filters` |

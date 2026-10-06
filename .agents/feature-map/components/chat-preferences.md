@@ -75,9 +75,9 @@ controls.
 | `useTierAtLeast(Tier.ENTERPRISE)` | Gates the retention-days field. |
 | Business/Enterprise checks live in [[editions-and-gating]]; this document does not re-derive them. |
 
-No admin-configured setting overrides prompt *text* directly (per
-[[context-assembly]] §2); this component's admin fields override prompt
-*content and behavior*, not the template.
+Admin-configured settings can change prompt content. For example, the default
+assistant's `system_prompt` is the base prompt (`get_default_base_system_prompt`).
+They do not change the assembly template (see [[context-assembly]] §4.1).
 
 ---
 
@@ -195,8 +195,10 @@ establish that this injection **bypasses `allowed_tool_ids`**: a user who
 disables every other tool for a specific message still gets `MemoryTool` if
 `enable_memory_tool` is on. This document does not restate that mechanism; the
 consequence that matters here is privacy: **memories are written
-automatically, mid-turn, without a per-message confirmation**, then surface in
-every later turn's prompt via `USER_MEMORIES_PROMPT`.
+automatically, mid-turn, without a per-message confirmation**. They surface in
+later prompts via `USER_MEMORIES_PROMPT` while `use_memories` is on. When
+`use_memories` is off, `process_message.py` strips them from the prompt context
+(`without_memories()`), but the memory tool can still write them.
 
 The actual write happens after the tool call resolves, in
 `chat/llm_loop.py` (around the `MemoryToolResponse` handling): a new memory
@@ -334,7 +336,7 @@ cd backend && uv run pytest tests/unit/onyx/chat/test_user_language_prompt.py -v
 
 # Memory tool
 cd backend && uv run pytest tests/unit/tools/test_memory_tool_packets.py -v
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/tools/test_memory_tool_integration.py -v
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/tools/test_memory_tool_integration.py -v
 
 # Broader prompt/context unit coverage
 cd backend && uv run pytest tests/unit -k "prompt or memory or personalization"

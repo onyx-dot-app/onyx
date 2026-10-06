@@ -397,8 +397,11 @@ comment reads `# No longer used`. See §9.
    `advance_to_*` helper is a no-op unless the row is in the exact prior state. A
    caller that mutates `reclaim_status` directly instead of going through these
    helpers can desynchronize `reclaim_stopped_reading_at` from the actual state.
-9. **`get_current_search_settings` requires exactly one PRESENT row** and raises if
-    none exists; the DB must never be left with zero PRESENT rows mid-swap.
+9. **`get_current_search_settings` returns the highest-id PRESENT row and raises
+    only when none exists.** `swap_index.py:_perform_index_swap` commits the old
+    row as PAST before it commits the new row as PRESENT. The transition briefly
+    has no PRESENT row. Do not build code that assumes exactly one PRESENT row at
+    every instant.
 
 ---
 
@@ -451,12 +454,12 @@ cd backend && uv run pytest tests/unit/server/metrics/test_opensearch_search_met
 
 # External dependency unit tests (real OpenSearch, mocked elsewhere) -- prefer these
 # for index/query behavior
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/document_index
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/opensearch
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/search_settings
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/document_index
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/opensearch
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/search_settings
 
 # Integration tests for the swap/reindex admin flow
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/search_settings
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/search_settings
 ```
 
 See `backend/AGENTS.md` for the authoritative commands and required env.

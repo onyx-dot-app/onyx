@@ -148,8 +148,9 @@ encryption. This component only consumes the pairing at run time (§4).
   turned into filterable key-value pairs by
   `convert_metadata_dict_to_list_of_strings`), `doc_updated_at`/`doc_created_at`,
   `primary_owners`/`secondary_owners` (`BasicExpertInfo`), `external_access`
-  (`ExternalAccess | None`, filled only by connectors with permission sync
-  enabled; flows to [[access-control]]), `parent_hierarchy_raw_node_id` (links
+  (`ExternalAccess | None`, optional connector-provided metadata. Many
+  connectors fill it only during permission-sync runs. Some, such as
+  `GmailConnector`, fill it on every indexing run. Flows to [[access-control]]), `parent_hierarchy_raw_node_id` (links
   a document to a `HierarchyNode`), `file_id`, `additional_info` (opaque,
   connector-specific).
 - **`Document.content_hash`**: an MD5 fingerprint over text, image ids, sorted
@@ -268,7 +269,9 @@ isn't a `CheckpointedConnector`. `ConnectorRunner.run(checkpoint)`:
 
 The docfetching entrypoint (`backend/onyx/background/indexing/run_docfetching.py`)
 drives this generator, batches the yielded documents onward, and persists the
-returned checkpoint so the next scheduled run resumes rather than restarts.
+returned checkpoint. An interrupted attempt resumes from that checkpoint on the
+next scheduled run. After a successful attempt, the next run starts with a fresh
+dummy checkpoint (`run_docfetching.py`).
 [[indexing-pipeline]] owns everything from "batch of `Document` objects
 received" onward: chunking, embedding, and the index write.
 

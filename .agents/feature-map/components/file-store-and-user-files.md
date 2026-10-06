@@ -419,9 +419,11 @@ access-control consequence of this.
    as a project grows.
 4. **Deleting a project or session must not orphan blobs.** `delete_project`
    only unlinks; `delete_user_file` refuses while associations exist and
-   otherwise deletes index entries, blobs, and the row together, in that
-   order, so a partial failure never leaves a `UserFile` row pointing at
-   nothing or a blob pointed at by nothing durable.
+   otherwise deletes index entries, blobs, and the row, in that order
+   (`tasks.py:delete_user_file_impl`). If a blob delete fails, the row stays
+   so a retry can find the blob. If the blob delete succeeds and the final row
+   commit fails, the row briefly points at a deleted blob. The retry is safe
+   because the blob deletes use `error_on_missing=False`.
 5. **Extraction failure must be surfaced, not silently indexed as empty**, at
    upload time: `categorize_uploaded_files` rejects a file it cannot extract
    text from (`extract_file_text(..., break_on_unprocessable=False)` returning
@@ -491,8 +493,8 @@ access-control consequence of this.
 
 ```bash
 cd backend && uv run pytest tests/unit -k "file_store or extract_file_text or projects_file_utils"
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit -k "file_store or user_file"
-cd backend && uv run --env-file .vscode/.env pytest tests/integration -k "user_file or projects or file"
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit -k "file_store or user_file"
+uv run --env-file .vscode/.env pytest backend/tests/integration -k "user_file or projects or file"
 ```
 
 See `backend/AGENTS.md` for the authoritative commands. Prefer integration

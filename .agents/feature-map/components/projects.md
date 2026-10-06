@@ -411,7 +411,7 @@ the margin with which path a given turn actually takes. See §9.
 
 ```bash
 cd backend && uv run pytest tests/unit -k "projects_file_utils or projects_upload_task or user_file_project_sync"
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/projects
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/projects
 cd web && bun run playwright chat/folded_projects_popover.spec.ts chat/project_files_visual_regression.spec.ts
 ```
 

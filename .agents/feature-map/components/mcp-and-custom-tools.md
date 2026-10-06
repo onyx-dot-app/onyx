@@ -65,8 +65,8 @@ inline, not a broken turn.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| POST | `/admin/mcp/servers/create` | `create_mcp_server_simple` (calls `_upsert_mcp_server`) | Create; new server defaults `is_public=True`. |
-| POST | `/admin/mcp/servers/update` | `update_mcp_server_with_tools` (calls `_upsert_mcp_server`) | Edit; can rotate admin credentials, OAuth client, transport, access list. |
+| POST | `/admin/mcp/servers/create` | `upsert_mcp_server` (calls `_upsert_mcp_server`) | Create, or edit when the body has `existing_server_id`. An edit can rotate admin credentials, OAuth client, transport, and access list. A new server defaults `is_public=True`. |
+| POST | `/admin/mcp/servers/update` | `update_mcp_server_with_tools` | Changes only name, description, and the selected tool set (`_sync_tools_for_server`). It does not touch credentials, transport, or access. |
 | POST | `/admin/mcp/server` | `create_mcp_server_simple` | Legacy/simple create path. |
 | PATCH | `/admin/mcp/server/{server_id}` | `update_mcp_server_simple` | Partial update. |
 | PATCH | `/admin/mcp/server/{server_id}/status` | `update_mcp_server_status` | Sets `MCPServer.status` directly. |
@@ -111,6 +111,9 @@ All `/admin/*` MCP and tool routes are gated by
 `onyx/server/features/mcp/ssrf.py:mcp_ssrf_httpx_client_factory` is used for
 every outbound MCP HTTP call (discovery, tool calls, OAuth), so a server URL
 that resolves to an internal address is blocked before any credential is sent.
+The block follows the configured SSRF protection level
+(`ssrf.py:validate_mcp_outbound_url`). At `DISABLED`, private and loopback
+targets are allowed.
 
 ---
 
@@ -195,8 +198,10 @@ Tool (openapi_schema set) --tool_constructor.py--> build_custom_tools_from_...
 ### 4.1 MCP server lifecycle: admin configuration to a discovered tool set
 
 1. Admin submits the create/update form on `/admin/mcp-actions`. The frontend
-   posts to `/admin/mcp/servers/create` or `/admin/mcp/servers/update`, both
-   handled by `_upsert_mcp_server` (`mcp/api.py:_upsert_mcp_server`).
+   posts to `/admin/mcp/servers/create` (`mcp/api.py:upsert_mcp_server`, which
+   calls `_upsert_mcp_server`). An edit sends `existing_server_id` to the same
+   endpoint. `/admin/mcp/servers/update` only renames the server and syncs its
+   selected tools.
 2. `_upsert_mcp_server` validates the URL
    (`_validate_mcp_server_url`), resolves credential fields against any
    existing values so a re-submit of a masked field does not blank it out
@@ -490,10 +495,10 @@ code or exception surfaces as the raw response body or propagates up to
 
 ```bash
 # Playwright e2e: MCP server creation, OAuth connect, per-user API key, group access
-cd web && npx playwright test tests/e2e/mcp/mcp_oauth_flow.spec.ts
-cd web && npx playwright test tests/e2e/mcp/mcp_per_user_key.spec.ts
-cd web && npx playwright test tests/e2e/mcp/mcp_group_access.spec.ts
-cd web && npx playwright test tests/e2e/mcp/default-agent-mcp.spec.ts
+cd web && bun run playwright tests/e2e/mcp/mcp_oauth_flow.spec.ts
+cd web && bun run playwright tests/e2e/mcp/mcp_per_user_key.spec.ts
+cd web && bun run playwright tests/e2e/mcp/mcp_group_access.spec.ts
+cd web && bun run playwright tests/e2e/mcp/default-agent-mcp.spec.ts
 
 # Backend integration tests for tool construction, including MCP/custom dispatch
 cd backend && uv run pytest tests/integration -k "tool or mcp"

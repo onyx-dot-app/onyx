@@ -158,8 +158,12 @@ above is essentially every time, because `LICENSE_ENFORCEMENT_ENABLED`
 defaults `"true"`. The CE branch above (`module_full = module`, no `ee.`
 prefix) is reached only when `global_version.is_ee_version()` is `False`,
 which requires an operator to have set both `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false`
-(the default) and `LICENSE_ENFORCEMENT_ENABLED=false` (not the default), or to
-be running a build where `./ee` was stripped from the image.
+(the default) and `LICENSE_ENFORCEMENT_ENABLED=false` (not the default).
+Stripping `./ee` from the image does not set `global_version` to CE. With the
+default flags, `is_ee_version()` stays `True`. The missing top-level `ee`
+import raises `ModuleNotFoundError: No module named 'ee'`, which does not name
+`ee.onyx`, so `fetch_versioned_implementation` re-raises it instead of using
+the CE fallback.
 
 `set_is_ee_based_on_env_variable()` runs at module level (not lazily) in
 `backend/onyx/main.py` (before `app = fetch_versioned_implementation(module="onyx.main", attribute="get_application")`)
@@ -252,8 +256,8 @@ sufficient for a paid feature to respond.
 
 1. **EE code loading is the default in a standard deployment.** A CE-only
    code path (`global_version.is_ee_version() is False`) is not the normal
-   case; it requires both edition flags to be explicitly off, or a build with
-   `ee` stripped. Do not write or review code as if CE resolution is the
+   case; it requires both edition flags to be explicitly off. A build with
+   `ee` stripped fails at import instead of resolving to CE. Do not write or review code as if CE resolution is the
    common path; assume `ee.<module>` unless proven otherwise for the target
    deployment.
 2. **A CE stub that "does nothing" is not evidence Onyx does nothing.** The

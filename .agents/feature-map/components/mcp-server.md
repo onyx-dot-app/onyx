@@ -116,7 +116,7 @@ the SSRF guard for outbound admin-configured MCP client connections, owned by
 
 Self-hosted docker-compose ships the `mcp_server` service **commented out** by
 default in `deployment/docker_compose/docker-compose.prod.yml`,
-`docker-compose.prod-no-letsencyrpt.yml`, and `docker-compose.template.yml`; an
+`docker-compose.prod-no-letsencrypt.yml`, and `docker-compose.template.yml`; an
 operator uncomments it and sets `MCP_SERVER_ENABLED=true` to run it. Uncommented,
 it runs `python -m onyx.mcp_server_main` in the same backend image, pointed at
 `API_SERVER_HOST=api_server`.
@@ -277,10 +277,12 @@ whatever those endpoints give back.
    Explicit document sets replace an agent's knowledge scope rather than
    narrowing it, so honoring both would silently search outside the agent's
    intended scope.
-6. **A filter value that does not resolve must fail, not silently drop.**
-   `search.py:_unknown_value_error` and its callers raise `_FilterError`
-   rather than proceeding with an unscoped search; a dropped filter would
-   return a wider result set indistinguishable from a correctly scoped one.
+6. **An unknown `source_types`, `document_set_names`, or `agent` value must
+   fail, not silently drop.** `search.py:_unknown_value_error` and its callers
+   raise `_FilterError` rather than proceeding with an unscoped search; a
+   dropped filter would return a wider result set indistinguishable from a
+   correctly scoped one. A malformed `time_cutoff` is the exception. The tool
+   logs a warning and searches without a time bound.
 7. **The MCP server must not become a way to bypass what the web path
    enforces.** It reuses the exact same `/search` endpoint and the same
    `Permission.READ_SEARCH` gate as any other programmatic caller

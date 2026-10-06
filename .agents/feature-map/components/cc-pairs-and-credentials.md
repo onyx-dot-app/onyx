@@ -412,14 +412,18 @@ It does not block the delete call; see §9.
    that only flips the `status` column without the Redis fence and cancellation
    calls will leave a running indexing task un-notified.
 7. **The `(connector_id, credential_id)` composite primary key means a
-   connector and credential can only be paired once.** `add_credential_to_connector`
-   checks `existing_association` and returns a no-op success rather than a
-   duplicate row.
-8. **`credential.source` must match every connector it is paired with.**
-   Enforced only at `swap_credentials_connector` time, not at pair-creation
-   time in the same explicit way (creation relies on the UI only offering
-   compatible credentials). A change that lets a mismatched pair through will
-   break the connector at runtime, not at save time.
+   connector and credential can only be paired once.** The DB helper
+   `add_credential_to_connector` returns `success=False` for an existing pair.
+   The API (`server/documents/cc_pair.py`) rejects a duplicate request with
+   `OnyxError(CONFLICT)`. A caller must not treat a duplicate as a success.
+8. **A credential must be usable by the connector's source, but its stored
+   `source` need not equal the connector's source.**
+   `credential_families.py:is_credential_usable_for_source` accepts a
+   compatible family credential across sources.
+   `db/credentials.py:swap_credentials_connector` enforces this check when a
+   credential is swapped. Pair creation validates the binding through
+   `factory.py:validate_ccpair_for_user`. A change that lets an unusable pair
+   through will break the connector at runtime, not at save time.
 
 ---
 

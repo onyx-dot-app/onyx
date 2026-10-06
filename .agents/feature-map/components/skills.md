@@ -436,7 +436,7 @@ for content that never landed.
 
 ```bash
 # External dependency unit tests (need Postgres for Skill/ExternalApp rows)
-cd backend && uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit -k skill
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit -k skill
 # e.g. backend/tests/external_dependency_unit/craft/test_external_app_fileset.py
 
 # Frontend unit/component tests already covering this surface

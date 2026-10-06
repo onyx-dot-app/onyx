@@ -258,9 +258,9 @@ cd backend && uv run pytest tests/external_dependency_unit/voice/test_openai_str
 ```
 
 ```bash
-cd web && npx playwright test tests/e2e/admin/voice/disconnect-provider.spec.ts
-cd web && npx playwright test tests/e2e/admin/voice/stt-only.spec.ts
-cd web && npx playwright test tests/e2e/admin/voice/zoom-provider.spec.ts
+cd web && bun run playwright tests/e2e/admin/voice/disconnect-provider.spec.ts
+cd web && bun run playwright tests/e2e/admin/voice/stt-only.spec.ts
+cd web && bun run playwright tests/e2e/admin/voice/zoom-provider.spec.ts
 ```
 
 No integration test targets this component specifically.

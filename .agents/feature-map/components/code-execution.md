@@ -62,7 +62,7 @@ frontend, not `:8080` directly.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `CODE_INTERPRETER_BASE_URL` | `http://localhost:8000` | Base URL of the external Code Interpreter service. Required for `PythonTool` and `BashTool` to exist at all. |
+| `CODE_INTERPRETER_BASE_URL` | `http://localhost:8000` | Base URL of the external Code Interpreter service. Must be non-empty for `PythonTool` and `BashTool` to exist. An unset variable uses the default, so only an empty value disables them. |
 | `CODE_INTERPRETER_DEFAULT_TIMEOUT_MS` | 60,000 | Per-execution timeout passed to the service for both `run_python` and `bash`. |
 | `CODE_INTERPRETER_MAX_OUTPUT_LENGTH` | 50,000 | Character cap applied to stdout and stderr independently before they enter the LLM-facing response (`utils.py:truncate_output`). |
 | `CODE_INTERPRETER_MAX_STAGED_FILES` | 25 | Max chat files staged into one Python execution. |
@@ -135,8 +135,9 @@ LLM emits run_python(code=...)
           └─ get_default_file_store().save_file(..., FileOrigin.CHAT_IMAGE_GEN)
 ```
 
-Each call to the service goes through `CodeInterpreterClient._send_with_admission_retry`.
-It retries HTTP 429 and 503 up to 3 attempts, honors `Retry-After`, and stays inside the
+Execution and session-creation calls go through `CodeInterpreterClient._send_with_admission_retry`.
+File upload, download, delete, `health`, and `delete_session` calls do not use it, so they are not retried.
+The helper retries HTTP 429 and 503 up to 3 attempts, honors `Retry-After`, and stays inside the
 call's time budget. After that it raises `CodeInterpreterBusyError`.
 
 Each streamed SSE event maps to a `StreamOutputEvent` / `StreamResultEvent` /
@@ -183,7 +184,7 @@ across bash calls within one coding-agent turn (see §4.5).
 ### 4.4 Availability gating
 
 `PythonTool.is_available` (`python_tool.py:is_available`):
-1. `CODE_INTERPRETER_BASE_URL` must be set.
+1. `CODE_INTERPRETER_BASE_URL` must be non-empty. It defaults to `http://localhost:8000`, so only an explicit empty value fails this check.
 2. `fetch_code_interpreter_server(db_session).server_enabled` must be `True` (the admin
    toggle).
 3. `CodeInterpreterClient().health(use_cache=True).healthy` must be `True`. Health responses
@@ -360,7 +361,7 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 ### What "working" looks like
 
 - `run_python` and `bash` both disappear cleanly (no error, no dead tool call) when
-  `CODE_INTERPRETER_BASE_URL` is unset, the admin toggle is off, or the service is unhealthy.
+  `CODE_INTERPRETER_BASE_URL` is empty, the admin toggle is off, or the service is unhealthy (an unset variable uses the `http://localhost:8000` default, so it is unhealthy only if nothing listens there).
 - Output longer than `CODE_INTERPRETER_MAX_OUTPUT_LENGTH` is truncated with the standard
   footer, never sent raw to the LLM.
 - A bash command that times out or a Python execution that crashes produces a completed tool
@@ -371,8 +372,8 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 ## 9. Footguns
 
 - **Both tools vanish silently when unconfigured.** No error is shown to the user or logged
-  at `warning` or above when `CODE_INTERPRETER_BASE_URL` is unset; `is_available` just returns
-  `False` and the tool is absent from the turn (`[[tools-framework]]` §5 contract 2). Do not
+  at `warning` or above when `CODE_INTERPRETER_BASE_URL` is empty or the service is unreachable; `is_available`
+  just returns `False` and the tool is absent from the turn (`[[tools-framework]]` §5 contract 2). Do not
   assume a missing tool call means the model chose not to use it.
 - **The bash/python asymmetry is easy to miss.** `run_python` is a normal persona-attachable
   `Tool` with a DB row and `ToolCall` persistence. `bash` is constructed directly by

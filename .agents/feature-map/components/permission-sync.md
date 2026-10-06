@@ -579,18 +579,18 @@ document to the wrong person.
 # External dependency unit: exercises real Postgres/Redis with connector SDKs
 # mocked at the network boundary. The confluence group sync test is the
 # canonical example referenced in backend/AGENTS.md.
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/permission_sync
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/connectors/confluence/test_confluence_group_sync.py
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/connectors/google_drive/test_google_drive_group_sync.py
-cd backend && uv run --env-file .vscode/.env pytest tests/external_dependency_unit/connectors/jira/test_jira_group_sync.py
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/permission_sync
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/connectors/confluence/test_confluence_group_sync.py
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/connectors/google_drive/test_google_drive_group_sync.py
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/connectors/jira/test_jira_group_sync.py
 
 # Integration: full sync attempt against a live connector job test environment
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/connector_job_tests/google/test_google_drive_permission_sync.py
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/connector_job_tests/slack/test_permission_sync.py
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/connector_job_tests/github/test_github_permission_sync.py
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/connector_job_tests/jira/test_jira_permission_sync_full.py
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/indexing/test_initial_permission_sync.py
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/usergroup/test_usergroup_syncing.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/google/test_google_drive_permission_sync.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/slack/test_permission_sync.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/github/test_github_permission_sync.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/jira/test_jira_permission_sync_full.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/indexing/test_initial_permission_sync.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/usergroup/test_usergroup_syncing.py
 
 # Unit: attempt-record bookkeeping, redis fencing, per-source group-sync logic
 cd backend && uv run pytest tests/unit/onyx/redis/test_connector_permission_sync.py

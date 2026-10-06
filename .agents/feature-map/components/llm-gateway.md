@@ -313,9 +313,11 @@ force off.
 
 ### 4.7 Cost and usage
 
-Every handler opens `_gateway_trace(flow, model)` (a `trace("llm_gateway",
+Every generation handler opens `_gateway_trace(flow, model)` (a `trace("llm_gateway",
 ...)`) and an `llm_generation_span(llm, flow=flow, ...)`
-(`api.py:_gateway_trace`, repeated in both passthrough modules). `flow` is
+(`api.py:_gateway_trace`, repeated in both passthrough modules).
+`gateway_list_models` and `gateway_anthropic_count_tokens` open neither, so
+metadata and token-count requests are not usage-metered. `flow` is
 the `LLMFlow` GATE 2 resolved: `LLMFlow.LLM_GATEWAY` for a directly-scoped
 caller, `LLMFlow.CRAFT_LLM_GENERATION` for a Craft sandbox
 (`onyx/tracing/flows.py`). The span records usage on completion;
@@ -421,7 +423,7 @@ records the span before signalling `_STREAM_END`.
    only produce `LLMFlow.CRAFT_LLM_GENERATION`, and only when
    `is_craft_enabled_for_user` also passes; it must never fall through to the
    plain `LLMFlow.LLM_GATEWAY` path (§4.2).
-4. **Every call must be metered and tagged.** Every handler, translation and
+4. **Every call must be metered and tagged.** Every generation handler, translation and
    passthrough, streaming and non-streaming, opens a `_gateway_trace` plus an
    `llm_generation_span`/manual `_track_llm_cost` call. A new endpoint or a
    new passthrough branch that skips this loses its span (translation
@@ -510,10 +512,10 @@ cd backend && uv run pytest tests/unit/onyx/server/features/craft/test_craft_gat
 cd backend && uv run pytest tests/unit/onyx/server/features/craft/test_session_gateway_config.py
 cd backend && uv run pytest tests/unit/onyx/server/gateway
 # Usage metering, end to end
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/streaming_endpoints/test_gateway_usage_tracking.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/streaming_endpoints/test_gateway_usage_tracking.py
 # Real client integration tests (need ANTHROPIC_API_KEY / OpenAI secrets)
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/gateway_clients/test_claude_code_gateway.py
-cd backend && uv run --env-file .vscode/.env pytest tests/integration/tests/gateway_clients/test_codex_gateway.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/gateway_clients/test_claude_code_gateway.py
+uv run --env-file .vscode/.env pytest backend/tests/integration/tests/gateway_clients/test_codex_gateway.py
 ```
 
 See `backend/AGENTS.md` for required env and secrets.

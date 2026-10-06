@@ -31,8 +31,10 @@ image generation, custom OpenAPI actions, MCP tools. They can add starter
 messages that appear as clickable suggestions, an icon, and labels for
 grouping in the picker.
 
-Saving does not require special permission for a personal agent; sharing it or
-making it public does. The owner can share the agent with named users or
+Creating an agent needs the `ADD_AGENTS` permission. Community Edition grants
+it to every user. Enterprise Edition grants it through group permissions
+(`onyx/auth/permissions.py:CE_UNGATED_PERMISSIONS`). Sharing an agent or making
+it public needs more access. The owner can share the agent with named users or
 groups as editor or viewer, or publish it org-wide. Anyone who can see it can
 pin it to their own sidebar; pin order is per-user.
 
@@ -417,7 +419,7 @@ underlying counts at finer grain for the admin panel.
 ```bash
 cd backend && uv run pytest tests/integration -k persona
 cd backend && uv run pytest tests/unit -k persona
-cd web && bunx playwright test tests/e2e/agents
+cd web && bun run playwright tests/e2e/agents
 ```
 
 Relevant existing e2e coverage: `web/tests/e2e/agents/create_and_edit_agent.spec.ts`,

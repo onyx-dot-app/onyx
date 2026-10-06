@@ -187,8 +187,11 @@ where it appeared in turn *N*'s history.
 
 ### 4.3 Files: user uploads vs. project files
 
-Both are loaded through `process_message.py:extract_context_files`, but the
-product intent differs and the code preserves it:
+The two kinds take different load paths, and the product intent differs. The
+code preserves it. Project files (and persona-attached files) load through
+`process_message.py:extract_context_files`. User uploads do not. Attached files
+become history messages in `chat_utils.py:convert_chat_history`, one message per
+text file, tagged with `file_id`.
 
 - **User-uploaded files** (attached to a single message) are a "point in time"
   inclusion. They stay where they were uploaded in the message history and, as
@@ -203,12 +206,15 @@ product intent differs and the code preserves it:
 
 At upload, every file is token-counted with the target LLM's tokenizer where
 known, falling back to a default tokenizer otherwise. Images get an assumed
-token count rather than a real one. `extract_context_files` compares the
-aggregate token count of context-eligible files against
+token count rather than a real one. `extract_context_files` handles only
+the project and persona files. It compares the aggregate token count of
+context-eligible files (it skips metadata-only types) against
 `(llm_max_context_window - reserved_token_count) * 0.6` (the 60% ceiling exists
 because the tokenizer is approximate and to avoid starving history on every
-project-heavy turn). Below that ceiling, files load as full text
-(`_create_context_files_message`, §4.4). At or above it, they fall back to
+project-heavy turn). Below that ceiling, text files load as full text
+(`_create_context_files_message`, §4.4), and images load as image files.
+Metadata-only types never load as text. They produce `FileToolMetadata`
+entries instead. At or above it, they fall back to
 `use_as_search_filter` (vectorized, RAG-retrievable through the search tool) or,
 when the vector DB is disabled, to lightweight `FileToolMetadata` entries that
 name whichever retrieval tool this cycle actually offers
@@ -280,12 +286,18 @@ dropped.
 If any dropped message carries a `file_id`, or if `all_injected_file_metadata`
 contains a `file_id` no surviving message carries (orphaned by prior summary
 truncation), `_create_file_tool_metadata_message` builds a forgotten-files
-notice naming those files, reserved out of the same budget, and inserted right
-before the last user message. If reserving space for that notice itself pushes
-the budget negative, the loop evicts additional history messages (oldest of
-the kept set first) until it fits, folding any newly evicted file into the
-notice. This is why a truncation must never silently drop a file: the model is
-told what happened instead of just losing the reference.
+notice naming those files. The notice is reserved out of the same budget and
+inserted right before the last user message. If reserving space for that notice
+itself pushes the budget negative, the loop evicts additional history messages
+(oldest of the kept set first) until it fits, and folds any newly evicted file
+into the notice.
+
+The notice is conditional. It needs a non-empty `all_injected_file_metadata` and
+a `token_counter`. `process_message.py` passes an empty metadata map when the
+turn has no FileReader tool, so a dropped file is then not disclosed. The
+budget check also has a gap. The loop rebuilds the notice for each newly
+evicted file but does not subtract the extra tokens from `remaining_budget`.
+The final history can exceed `available_tokens` by that difference.
 
 `_drop_orphaned_tool_call_responses` runs last, stripping any
 `TOOL_CALL_RESPONSE` whose matching `ASSISTANT` tool-call message got truncated
@@ -408,8 +420,9 @@ Cycle 2 (another tool call): S, U1, TC, TR, TC, TR, R, A1
 4. **User-uploaded files do not move.** They stay attached to the point in the
    history where they were uploaded and drift toward truncation like any other
    old message; this is intentional, not a bug to fix.
-5. **Truncation is oldest-first and must emit a forgotten-files notice for any
-   dropped file.** A truncation path that drops a `file_id` without updating
+5. **Truncation is oldest-first and must emit a forgotten-files notice for a
+   dropped file whenever file metadata is available (FileReader tool present).**
+   A truncation path that drops a `file_id` without updating
    `all_injected_file_metadata` and running `_create_file_tool_metadata_message`
    silently lies to the model.
 6. **Reserved tokens (`calculate_reserved_tokens`) must be computed before the
@@ -538,9 +551,9 @@ cd backend && uv run pytest tests/integration -k chat
   Only tool-call arguments survive a cycle boundary. Anything a later cycle
   needs must be re-derivable from the arguments or re-fetched; do not assume a
   fact from an earlier tool response is still visible.
-- **Internal search arguments in history are the expanded queries, not what the
-  LLM wrote.** If you are debugging "why did the model re-search," look at the
-  expanded query, not the model's literal tool call.
+- **Internal search arguments in history are the LLM's original arguments, not
+  the expanded queries.** If you are debugging "why did the model re-search,"
+  the expanded queries are in the `SearchToolQueriesDelta` packet, not in history.
 - **The document `document` key is deliberately not `citation_id` or anything
   resembling a natural-language term**, to keep the model from narrating it.
   Renaming it "for clarity" reintroduces the artifact the naming was chosen to

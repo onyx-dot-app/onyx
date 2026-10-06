@@ -75,31 +75,31 @@ protects.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| GET | `/build/sessions` | `list_sessions` (`session/api.py:88`) | |
-| POST | `/build/sessions` | `create_session` (`session/api.py:106`) | Reserve-then-provision; see §4.1. |
-| GET | `/build/sessions/{id}` | `get_session_details` (`session/api.py:165`) | |
-| POST | `/build/sessions/{id}/skills/reload` | `reload_session_skills` (`session/api.py:202`) | |
-| GET | `/build/sessions/{id}/sandbox-status` | `get_sandbox_status` (`session/api.py:213`) | DB-only, for the FE sleep poll. |
-| POST | `/build/sessions/{id}/restore` | `restore_session` (`session/api.py:357`) | Wakes a sleeping sandbox and rebuilds the workspace; 409s under concurrent restore. |
-| POST | `/build/sessions/{id}/snapshot` | `create_session_snapshot` (`session/api.py:436`) | Per-session workspace snapshot. |
-| POST | `/build/sessions/{id}/opencode-history-snapshot` | `create_session_opencode_history_snapshot` (`session/api.py:471`) | Sandbox-global opencode history capture; see §4.5. Manual capture hook for tests and operators; no frontend caller (see §9). |
-| GET | `/build/sessions/{id}/artifacts` | `list_artifacts` (`session/api.py:505`) | |
-| GET | `/build/sessions/{id}/artifacts/{path}` | `download_artifact` (`session/api.py:559`) | |
-| GET | `/build/sessions/{id}/export-docx/{path}` | `export_docx` (`session/api.py:598`) | Uses `session/md_to_docx.py`. |
-| DELETE | `/build/sessions/{id}` | `delete_session` (`session/api.py:321`) | |
-| GET | `/build/sessions/{id}/messages` | `list_messages` (`session/messages.py:62`) | |
-| POST | `/build/sessions/{id}/send-message` | `send_message` (`session/messages.py:81`) | **The turn endpoint.** Returns `InteractiveTurnResponse`, not a stream; see §4.2. |
-| POST | `/build/sessions/{id}/subagents/{subagent_id}/send-message` | `send_subagent_message` (`session/messages.py:221`) | Bypasses the interactive-turn queue entirely; streams synchronously via `SessionManager.send_subagent_message`. See §9. |
-| POST | `/build/sessions/{id}/interrupt` | `interrupt_message` (`session/messages.py:290`) | See §4.4. |
+| GET | `/build/sessions` | `list_sessions` (`session/api.py`) | |
+| POST | `/build/sessions` | `create_session` (`session/api.py`) | Reserve-then-provision; see §4.1. |
+| GET | `/build/sessions/{id}` | `get_session_details` (`session/api.py`) | |
+| POST | `/build/sessions/{id}/skills/reload` | `reload_session_skills` (`session/api.py`) | |
+| GET | `/build/sessions/{id}/sandbox-status` | `get_sandbox_status` (`session/api.py`) | DB-only, for the FE sleep poll. |
+| POST | `/build/sessions/{id}/restore` | `restore_session` (`session/api.py`) | Wakes a sleeping sandbox and rebuilds the workspace; 409s under concurrent restore. |
+| POST | `/build/sessions/{id}/snapshot` | `create_session_snapshot` (`session/api.py`) | Per-session workspace snapshot. |
+| POST | `/build/sessions/{id}/opencode-history-snapshot` | `create_session_opencode_history_snapshot` (`session/api.py`) | Sandbox-global opencode history capture; see §4.5. Manual capture hook for tests and operators; no frontend caller (see §9). |
+| GET | `/build/sessions/{id}/artifacts` | `list_artifacts` (`session/api.py`) | |
+| GET | `/build/sessions/{id}/artifacts/{path}` | `download_artifact` (`session/api.py`) | |
+| GET | `/build/sessions/{id}/export-docx/{path}` | `export_docx` (`session/api.py`) | Uses `session/md_to_docx.py`. |
+| DELETE | `/build/sessions/{id}` | `delete_session` (`session/api.py`) | |
+| GET | `/build/sessions/{id}/messages` | `list_messages` (`session/messages.py`) | |
+| POST | `/build/sessions/{id}/send-message` | `send_message` (`session/messages.py`) | **The turn endpoint.** Returns `InteractiveTurnResponse`, not a stream; see §4.2. |
+| POST | `/build/sessions/{id}/subagents/{subagent_id}/send-message` | `send_subagent_message` (`session/messages.py`) | Bypasses the interactive-turn queue entirely; streams synchronously via `SessionManager.send_subagent_message`. See §9. |
+| POST | `/build/sessions/{id}/interrupt` | `interrupt_message` (`session/messages.py`) | See §4.4. |
 | GET | `/build/sessions/{id}/turns/active` | `get_active_interactive_turn` (`interactive_turns/api.py`) | Poll for the current turn's id/status. |
 | GET | `/build/sessions/{id}/turns/{turn_id}/events` | `get_interactive_turn_events` (`interactive_turns/api.py`) | SSE attach/resume to a running turn; also (re)starts the runner if it stalled. |
 | GET/PUT/POST/PATCH/DELETE | `/build/sessions/{id}/generate-name`, `/name`, `/public`, `/files`, `/pptx-preview/{path}`, `/webapp-info`, `/webapp-download`, `/download-directory/{path}`, `/upload`, `/files/{path}`, `/scheduled-run-context`, `/scheduled-run-events` | `session/api.py` | Naming, sharing (`sharing_scope`), workspace file browse and upload, webapp info, and the scheduled-run banner and live events. |
-| GET | `/build/approvals/sessions/{id}/live` | `list_live_approvals` (`approvals/api.py:121`) | |
-| POST | `/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py:145`) | |
-| POST | `/build/approvals/{approval_id}/session-grant` | `submit_session_grant` (`approvals/api.py:202`) | Pre-approval; see §4.6. |
-| GET/POST | `/build/library/tree`, `/library/upload`, `/library/upload-zip`, `/library/directories` | `user_library/api.py` | User library CRUD. |
-| DELETE | `/build/library/files/{document_id}` | `delete_file` (`user_library/api.py:490`) | |
-| GET | `/build/admin/base-instructions` | `get_base_instructions` (`api.py:57`) | Owned by `[[craft-admin]]`. |
+| GET | `/build/approvals/sessions/{id}/live` | `list_live_approvals` (`approvals/api.py`) | |
+| POST | `/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | |
+| POST | `/build/approvals/{approval_id}/session-grant` | `submit_session_grant` (`approvals/api.py`) | Pre-approval; see §4.6. |
+| GET/POST | `/build/user-library/tree`, `/build/user-library/upload`, `/build/user-library/upload-zip`, `/build/user-library/directories` | `user_library/api.py` | User library CRUD. |
+| DELETE | `/build/user-library/files/{document_id}` | `delete_file` (`user_library/api.py`) | |
+| GET | `/build/admin/base-instructions` | `get_base_instructions` (`api.py`) | Owned by `[[craft-admin]]`. |
 
 ### Environment / timeouts (`backend/onyx/server/features/build/configs.py`,
 `timeouts.py` unless noted)
@@ -128,7 +128,8 @@ BuildSession ──< BuildMessage
              ──< Artifact
              ──< ActionReceipt
              ──< Snapshot
-             ──1:1── Sandbox (one sandbox per user, shared across sessions)
+             >──1 Sandbox (many sessions share one sandbox per user, via
+                           `Sandbox.user_id`, which is unique)
 
 ActionApproval ── gated_app (GatedApp, shared with [[craft-admin]])
 ActionReceipt  ── gated_app, approval (nullable, SET NULL on delete)
@@ -208,7 +209,7 @@ POST /build/sessions                          session/api.py:create_session
 
 Session and sandbox identities are **committed before external
 provisioning**: "reserve, then reconcile, then finalize"
-(`session/api.py:117-121`, comment on `create_session`). A failed or
+(`session/api.py`, comment on `create_session`). A failed or
 interrupted attempt leaves durable, repairable state instead of rolling back
 to nothing; a later request converges on the same IDs. The Redis lock only
 reduces duplicate provisioning work under concurrency; correctness comes
@@ -256,7 +257,7 @@ POST /build/sessions/{id}/send-message          session/messages.py:send_message
                  └─ finalize_persist (terminal, every path)
 ```
 
-`send_message` (`session/messages.py:81`) does **not** stream. It creates a
+`send_message` (`session/messages.py`) does **not** stream. It creates a
 `BuildMessage` user row, mints an `InteractiveTurn` cache record
 (`QUEUED`), and starts a background thread
 (`executor.py:start_interactive_turn_runner`) that the frontend then attaches
@@ -347,12 +348,12 @@ turn's already-streamed content is durable; nothing rolls it back.
 
 On the frontend, `useBuildStreaming.ts:interruptStreaming` sets an
 `isInterrupting` flag and calls `reconcileInterruptedTurn` **after** posting
-the interrupt (`web/src/app/craft/hooks/useBuildStreaming.ts:1059-1085`).
+the interrupt (`web/src/app/craft/hooks/useBuildStreaming.ts`).
 `reconcileInterruptedTurn` still exists and is the load-bearing fix for the
 historical bug: it polls `fetchActiveTurn` until the backend turn is gone,
 then, in `settle()`, reloads the session (`loadSession(..., { force: true,
 preferPersisted: true })`) **before** flipping session status back to
-`"active"` (`useBuildStreaming.ts:169-180`, comment: "Reload BEFORE the flip
+`"active"` (`useBuildStreaming.ts`, comment: "Reload BEFORE the flip
 to active: the flip triggers the queued auto-send, so reloading after would
 race the freshly-started next turn"). A queued resend cannot fire until the
 reload has repopulated the interrupted turn's persisted output. This is
@@ -367,13 +368,13 @@ preserve-opencode-sessions.md` and confirmed against
 
 - **Per-session workspace snapshots** (`outputs/`, `attachments/`): created
   by `create_session_snapshot_keep_latest`
-  (`sandbox_lifecycle.py:174`), restored by `ensure_session_ready`. Owned in
+  (`sandbox_lifecycle.py`), restored by `ensure_session_ready`. Owned in
   depth by `[[craft-sandboxes]]`.
 - **Sandbox-global opencode history** (`.opencode-data/`, shared by every
   `BuildSession` in one sandbox): captured by
   `sandbox_manager.create_opencode_history_snapshot`, which is called from
   three places (owned in depth by `[[craft-sandboxes]]` §4.5):
-  1. `sleep_sandbox` (`sandbox_lifecycle.py:810`, comment: "Chat
+  1. `sleep_sandbox` (`sandbox_lifecycle.py`, comment: "Chat
      history lives outside session workspaces; capture it before the
      [terminate]"), before putting an idle sandbox to sleep. If the snapshot
      fails but the pod still passes a health check, the reap is skipped
@@ -384,14 +385,16 @@ preserve-opencode-sessions.md` and confirmed against
      minutes at the default 1-hour idle timeout) gets re-snapshotted,
      including its opencode history, while still `RUNNING`.
   3. `snapshot_opencode_history_before_recovery`
-     (`sandbox_lifecycle.py:151`), best-effort, before terminating an
+     (`sandbox_lifecycle.py`), best-effort, before terminating an
      **unhealthy** sandbox during recovery.
 
-**There is no per-turn capture**, but the background sweep bounds the gap:
-opencode history is at most `idle_timeout / SNAPSHOT_INTERVAL_DIVISOR` stale
-for an active sandbox, not stale back to the last idle-reap or recovery. The
+**There is no per-turn capture.** The background sweep (`cleanup_idle_sandboxes_task`)
+tries to keep opencode history fresh, with a target of
+`idle_timeout / SNAPSHOT_INTERVAL_DIVISOR`. It gives no hard bound. It captures
+history only after it creates a workspace snapshot, and a capture failure is
+best-effort. The
 manual endpoint `POST /sessions/{id}/opencode-history-snapshot`
-(`session/api.py:471`) forces a capture. Tests and operators use it
+(`session/api.py`) forces a capture. Tests and operators use it
 (`backend/tests/integration/common_utils/managers/build_session.py`); no frontend
 code calls it.
 A sandbox that crashes hard within that bound, or is forcibly killed outside
@@ -435,7 +438,7 @@ proxy request via a `approval:wake:{id}` cache channel
 `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` wait.
 
 **Pre-approval is "session-grant", not a separate mechanism.**
-`submit_session_grant` (`approvals/api.py:202`) approves the specific request
+`submit_session_grant` (`approvals/api.py`) approves the specific request
 *and* every other currently-pending or future request in the session that
 matches the same `(gated_app_id)` target and whose required action types are
 a subset of what was just granted (`actions_requiring_approval`,
@@ -523,7 +526,7 @@ persisted `agent_provider`/`agent_model`, if still visible and accessible;
 provider. Per `[[llm-providers]]`, `CRAFT` is a pointer flow that nothing
 populates automatically, so step (2) is frequently empty and step (3) is
 the common case in practice. `reconcile_session_llm_config`
-(`session/manager.py:280`) re-validates this on every turn (a stored pick
+(`session/manager.py`) re-validates this on every turn (a stored pick
 may no longer be accessible) and rewrites the sandbox's `opencode.json` only
 when the resolved config actually changed, tracked via a
 `dispose_pending` cache marker so a crash between writing the file and
@@ -712,7 +715,7 @@ general Craft work.
   capture points are idle-reap sleep, the periodic background sweep, and
   best-effort pre-recovery (§4.5).
 - **Subagent messages skip the interactive-turn queue entirely.**
-  `send_subagent_message` (`session/messages.py:221`) streams synchronously
+  `send_subagent_message` (`session/messages.py`) streams synchronously
   through `SessionManager.send_subagent_message` →
   `streaming.py:stream_subagent_turn`, bypassing `create_interactive_turn`,
   `prompt_slot`, and the whole cache-turn lifecycle in §4.2-4.3. A change to

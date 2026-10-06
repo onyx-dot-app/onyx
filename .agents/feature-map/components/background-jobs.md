@@ -37,13 +37,13 @@ its own cadence. Permission and group syncs pick up ACL changes from the externa
 system without a user action. A user-uploaded file starts processing within
 seconds of the upload finishing.
 
-None of this is instant. Every one of these paths is a periodic scan (run by
-Celery Beat) that notices work is due and hands it to a worker, so there is
-always some delay, typically single-digit seconds to tens of seconds, between a
-change becoming eligible and a task picking it up. If a worker is down or a
-queue is backed up, the delay grows and nothing else in the product tells the
-admin directly; the signal is a stale "last indexed" or "last synced" timestamp
-on the connector.
+Connector indexing, pruning, and permission and group sync are periodic scans
+run by Celery Beat. User-file uploads enqueue processing directly
+(`db/projects.py`). The user-file Beat scan recovers files that stay pending.
+Scheduled work runs on its configured cadence plus queue latency. Cloud
+templates also apply the beat multiplier. If a worker is down or a queue is
+backed up, the delay grows. For connector work, the admin sees a stale "last
+indexed" or "last synced" timestamp, not a direct alert.
 
 ---
 
@@ -242,12 +242,14 @@ family in `onyx/redis/` (`redis_connector_prune.py`, `redis_connector_delete.py`
      multiplier slows down how often each tenant's checker tasks fire, without a
      deploy, because `OnyxRuntime.get_beat_multiplier()` reads a runtime-adjustable
      value.
-   - For every tenant, add one schedule entry per task in
+   - In self-hosted mode, for every tenant, add one schedule entry per task in
      `get_tasks_to_schedule()`, named `f"{task_name}-{tenant_id}"`, with
      `tenant_id` stamped into the entry's `kwargs`
-     (`apps/beat.py:_generate_schedule`, the per-tenant loop). This is the one
-     place that guarantees `tenant_id` reaches `TenantAwareTask`; a direct
-     `send_task` call elsewhere must set it explicitly (see §5).
+     (`apps/beat.py:_generate_schedule`, the per-tenant loop). Under
+     `MULTI_TENANT`, `tasks_to_schedule` is empty. The cloud generator tasks
+     fan templates out per tenant and stamp `tenant_id` on the dispatched
+     tasks. A direct `send_task` call elsewhere must set `tenant_id`
+     explicitly (see §5).
 4. Compare the new schedule's task names against the current one
    (`_compare_schedules`); if unchanged and the multiplier is unchanged, skip the
    update.
@@ -325,7 +327,7 @@ is so long-running headless-agent task runs do not compete for Heavy's slots
 
 ## 5. Contracts and invariants
 
-1. **Every task that reaches a worker must carry `tenant_id` in its kwargs.**
+1. **Every tenant-scoped task that reaches a worker must carry `tenant_id` in its kwargs.** Cloud system-wide tasks are exempt. For example, `cloud_monitor_celery_queues` takes no `tenant_id`.
    `TenantAwareTask.__call__` falls back to `POSTGRES_DEFAULT_SCHEMA` when it is
    missing, which is not an error, it is a silent wrong-tenant execution risk.
    Beat's per-tenant schedule stamps this automatically

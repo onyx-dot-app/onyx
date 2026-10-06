@@ -37,9 +37,10 @@ background and continues rendering it live; it does not lose the turn, but it
 also does not replay, byte-for-byte, whatever the client missed while
 disconnected (see §5, §9).
 
-A sub-agent ("task" tool) still shows only its prompt and final text folded
-into the parent transcript. There is no live view of a sub-agent's own
-thinking or tool calls yet.
+A sub-agent ("task" tool) has a separate sub-agent view (`SubagentView.tsx`).
+That view shows the sub-agent's own thinking and tool calls live while the
+run is active. The parent transcript shows only the task prompt and the final
+answer.
 
 ---
 
@@ -65,7 +66,7 @@ subscriber queue off the same `PodEventBus` (§4.2); neither is authoritative.
 | Variable | Default | Effect |
 |---|---|---|
 | `SSE_KEEPALIVE_INTERVAL` | 15s | Cadence of `SSEKeepalive` markers on every stream in this component. |
-| `OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS` | derived from `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | Renewed by turn activity; abandoning the turn (`abort`) fires if nothing arrives for this long. |
+| `OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS` | derived from `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | Renewed by turn activity. It aborts a silent prompt step after this long. The runner re-prompts up to `MAX_TIMEOUT_CONTINUATIONS` (2) times before it fails the turn (`interactive_turns/executor.py`). |
 | `OPENCODE_SERVE_CONNECT_TIMEOUT` / `_REQUEST_TIMEOUT` / `_EVENT_READ_TIMEOUT` | 5s / 30s / 60s | HTTP timeouts from the API server to the in-pod `opencode serve` process. |
 | `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | 180s | How long a turn waits on an unanswered approval before it times out. |
 | `RUNNER_STALE_AFTER_SECONDS` (`timeouts.py`) | `6 * SSE_KEEPALIVE_INTERVAL` | A `RUNNING` turn with no heartbeat this long is reclaimable by a new runner. |
@@ -229,7 +230,7 @@ discriminated Pydantic union enforced at the type level the way chat's
 | `ApprovalRequestedPacket` (`approval_requested`) | A new approval card exists; carries only ids, frontend refetches contents. |
 | `SubagentStartedPacket` (`subagent_started`) | A child opencode session was created for a `task` tool call. |
 | `ConnectAppRequestPacket` (`connect_app_request`) | The agent's `connect_app` tool wants the user to connect an org app. |
-| `ContextUsagePacket` (`context_usage`) | Token/cost usage snapshot. Captured into turn state, not itself persisted as a message. |
+| `ContextUsagePacket` (`context_usage`) | Token/cost usage snapshot. Captured into turn state, then persisted once per turn by `finalize_persist` as a `BuildMessage`. |
 | `CompactionPacket` (`compaction`) | History was compacted; carries a summary. |
 
 `SSEKeepalive` (`sandbox/sse.py:SSEKeepalive`) is a third, transport-only
@@ -373,9 +374,9 @@ work against the default Kubernetes backend, follow
 3. Reload the tab mid-turn. Confirm the client calls
    `GET /sessions/{id}/turns/active` then re-attaches to `.../events`, and the
    transcript keeps growing rather than restarting.
-4. Trigger a `task` (sub-agent) tool call and confirm only its prompt and
-   final text appear in the parent transcript, with no live sub-agent detail
-   (current, documented gap; see §9).
+4. Trigger a `task` (sub-agent) tool call. Confirm only its prompt and final
+   text appear in the parent transcript. Open the sub-agent view and confirm
+   it shows the sub-agent's thinking and tool calls (see §9).
 
 ---
 
@@ -411,7 +412,7 @@ work against the default Kubernetes backend, follow
   `/session`) that look like transport bugs but aren't.
 - **No terminal/PTY channel exists.** An old design note that mentions one
   describes an unbuilt branch; see §5.10.
-- **The sub-agent view is a read-only transcript, not a live stream of its own.**
+- **The sub-agent view follows the main turn stream, with no stream of its own.**
   `web/src/app/craft/components/SubagentView.tsx` renders from `ChatPanel.tsx`
   when `viewedSubagentSessionId` is set. `AgentSwitcher.tsx` sets it through
   `useBuildSessionStore.ts:viewSubagent`. There is no dedicated sub-agent
