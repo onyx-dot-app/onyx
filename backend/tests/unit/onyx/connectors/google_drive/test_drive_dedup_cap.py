@@ -114,6 +114,21 @@ def test_uncapped_duplicate_passes_through_after_cap() -> None:
     assert [f.drive_file["id"] for f in yielded] == ["f0", "f1", "f1"]
 
 
+def test_dedup_survives_a_checkpoint_round_trip() -> None:
+    """A file seen before the checkpoint is saved stays deduped after resume."""
+    checkpoint = _checkpoint()
+    first = _drain(checkpoint, [_file("abc123"), _file("def456")])
+
+    # Same path as save_checkpoint / load_checkpoint.
+    restored = GoogleDriveConnector(include_my_drives=True).validate_checkpoint_json(
+        checkpoint.model_dump_json()
+    )
+    second = _drain(restored, [_file("def456"), _file("ghi789"), _file("abc123")])
+
+    assert [f.drive_file["id"] for f in first] == ["abc123", "def456"]
+    assert [f.drive_file["id"] for f in second] == ["ghi789"]
+
+
 def test_old_checkpoint_field_name_is_not_reused() -> None:
     """A checkpoint written before the rename held document URLs, not file ids.
 
