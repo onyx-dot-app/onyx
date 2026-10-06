@@ -40,6 +40,18 @@ CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = [
     {
+        "name": "cleanup-oauth-provider-records",
+        "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_RECORDS,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-user-file-processing",
         "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_PROCESSING,
         "schedule": timedelta(seconds=20),
@@ -373,6 +385,16 @@ def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:
 # the name attribute must start with ONYX_CLOUD_CELERY_TASK_PREFIX = "cloud" to be seen
 # by the DynamicTenantScheduler as system wide task and not a per tenant task
 beat_cloud_tasks: list[dict] = [
+    {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_cleanup-oauth-provider-clients",
+        "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_CLIENTS,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
     # cloud specific tasks
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-alembic",
@@ -421,6 +443,16 @@ tasks_to_schedule: list[dict] = []
 if not MULTI_TENANT:
     tasks_to_schedule.extend(
         [
+            {
+                "name": "cleanup-oauth-provider-clients",
+                "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_CLIENTS,
+                "schedule": timedelta(hours=1),
+                "options": {
+                    "queue": OnyxCeleryQueues.PRIMARY,
+                    "priority": OnyxCeleryPriority.LOW,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                },
+            },
             {
                 "name": "monitor-celery-queues",
                 "task": OnyxCeleryTask.MONITOR_CELERY_QUEUES,
