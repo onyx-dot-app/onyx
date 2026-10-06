@@ -21,6 +21,7 @@ depends_on = None
 
 # Enum names as the non-native columns store them.
 OUTLOOK_SOURCE = "OUTLOOK"
+UPDATE_TRIGGER = "UPDATE"
 REINDEX_TRIGGER = "REINDEX"
 
 connector_table = sa.table(
@@ -46,7 +47,12 @@ def upgrade() -> None:
         sa.update(cc_pair_table)
         .where(
             cc_pair_table.c.connector_id.in_(_outlook_connector_ids()),
-            cc_pair_table.c.indexing_trigger.is_(None),
+            # A pending incremental run would consume the trigger without
+            # rebuilding the threads that gained no mail.
+            sa.or_(
+                cc_pair_table.c.indexing_trigger.is_(None),
+                cc_pair_table.c.indexing_trigger == UPDATE_TRIGGER,
+            ),
         )
         .values(indexing_trigger=REINDEX_TRIGGER)
     )
@@ -54,7 +60,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # The trigger is consumed by the next indexing run, so clearing the ones
-    # this revision set is the only state to put back.
+    # this revision set is the only state to put back. A pending UPDATE it
+    # raised comes back as no trigger.
     op.execute(
         sa.update(cc_pair_table)
         .where(

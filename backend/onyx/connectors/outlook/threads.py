@@ -130,9 +130,19 @@ def choose_builder(candidates: Sequence[ThreadCopy]) -> ThreadCopy:
 
 
 def newest_message_ids(copy: ThreadCopy, keep: int) -> set[str]:
-    """The messages a document built from this copy holds."""
+    """The newest ``keep`` messages of the copy."""
     ordered = sorted(copy.received, key=lambda m: _message_order(copy.received, m))
     return set(ordered[-keep:])
+
+
+def compared_window(copy: ThreadCopy, limit: int) -> ThreadCopy:
+    """The copy cut to its newest ``limit`` messages. Both walks compare
+    copies on this window, so a builder read through a capped outline and
+    one read from the full listing come out the same."""
+    kept = newest_message_ids(copy, limit)
+    return copy.model_copy(
+        update={"received": {m: at for m, at in copy.received.items() if m in kept}}
+    )
 
 
 def readers_of(

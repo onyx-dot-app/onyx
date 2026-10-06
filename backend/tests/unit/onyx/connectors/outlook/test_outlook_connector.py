@@ -967,6 +967,89 @@ def test_slim_walk_yields_the_documents_indexing_builds_with_the_same_readers() 
     assert len(indexed) == 3
 
 
+def test_long_thread_copies_are_compared_on_the_same_window_in_both_walks() -> None:
+    """Bob holds the most messages in all, Alice holds a private reply among
+    the newest. Compared on everything, Bob builds and Alice reads his copy.
+    Compared on the newest CONVERSATION_FETCH_LIMIT, the copies tie, Alice
+    builds, and Bob must not read the private reply. Both walks must agree."""
+    newest = RECEIVED + timedelta(days=2)
+    shared = [
+        message(id=f"m-{i}", received_at=RECEIVED + timedelta(minutes=i))
+        for i in range(CONVERSATION_FETCH_LIMIT + 100)
+    ]
+    older = [
+        message(id=f"old-{i}", received_at=RECEIVED - timedelta(days=1, minutes=i))
+        for i in range(50)
+    ]
+    private = message(id="private", received_at=newest - timedelta(minutes=1))
+    last = message(id="last", received_at=newest)
+    held: dict[str, list[OutlookMessage]] = {
+        ALICE.id: [last, private] + shared[::-1],
+        BOB.id: [last] + shared[::-1] + older,
+    }
+    gateway = _happy_gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(mailboxes=[ALICE, BOB])
+
+    def delta(*, mailbox_id: str, folder_id: str, **_: Any) -> OutlookDeltaPage:
+        if folder_id != INBOX_ID:
+            return OutlookDeltaPage(changes=[])
+        return OutlookDeltaPage(
+            changes=[
+                change(id=m.id, received_at=m.received_at) for m in held[mailbox_id]
+            ]
+        )
+
+    def pages(items: list[Any], next_link: str | None) -> tuple[list[Any], str | None]:
+        start = int(next_link.rsplit("=", 1)[1]) if next_link else 0
+        chunk = items[start : start + 100]
+        link = (
+            f"https://graph/messages?skip={start + 100}"
+            if start + 100 < len(items)
+            else None
+        )
+        return chunk, link
+
+    def messages(
+        *, mailbox_id: str, next_link: str | None = None, **_: Any
+    ) -> OutlookMessagePage:
+        chunk, link = pages(held[mailbox_id], next_link)
+        return OutlookMessagePage(messages=chunk, next_link=link)
+
+    def outline(
+        *, mailbox_id: str, next_link: str | None = None, **_: Any
+    ) -> OutlookDeltaPage:
+        chunk, link = pages(held[mailbox_id], next_link)
+        return OutlookDeltaPage(
+            changes=[change(id=m.id, received_at=m.received_at) for m in chunk],
+            next_link=link,
+        )
+
+    gateway.fetch_folder_delta_page.side_effect = delta
+    gateway.fetch_conversation_messages_page.side_effect = messages
+    gateway.fetch_conversation_outline_page.side_effect = outline
+    connector = _connector(gateway)
+
+    indexed = {
+        item.id: _readers(item)
+        for item in _run(connector, include_permissions=True)
+        if isinstance(item, Document)
+    }
+    slim = {
+        item.id: _readers(item)
+        for batch in connector.retrieve_all_slim_docs_perm_sync()
+        for item in batch
+        if isinstance(item, SlimDocument)
+    }
+
+    thread_id = thread_doc_id(CONVERSATION_ID)
+    assert indexed[thread_id] == {"alice@contoso.com"}
+    assert indexed == slim
+    assert set(indexed) == {
+        thread_id,
+        copy_document_id(thread_id.split(":", 1)[1], BOB),
+    }
+
+
 def test_failure_in_one_mailbox_leaves_the_whole_step_to_be_retried() -> None:
     gateway = _many_mailbox_gateway(2)
 

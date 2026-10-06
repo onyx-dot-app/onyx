@@ -125,6 +125,7 @@ from onyx.connectors.outlook.threads import (
     ThreadTable,
     candidate_copies,
     choose_builder,
+    compared_window,
     copy_document_id,
     delete_abandoned_tables,
     group_threads,
@@ -447,11 +448,12 @@ def readers_access(readers: Iterable[OutlookMailbox]) -> ExternalAccess:
 def slim_thread_documents(
     group: ThreadGroup, include_permissions: bool
 ) -> list[SlimDocument]:
-    """The documents indexing produces for a thread, by the same rules it
-    uses, with their readers when permissions are wanted. Indexing compares
-    copies on outlines capped at CONVERSATION_FETCH_LIMIT raw messages, so a
-    thread longer than that can pick a different builder here."""
-    candidates: list[ThreadCopy] = candidate_copies(group)
+    """The documents indexing produces for a thread, by the same rules and
+    the same caps, with their readers when permissions are wanted."""
+    candidates: list[ThreadCopy] = [
+        compared_window(copy, CONVERSATION_FETCH_LIMIT)
+        for copy in candidate_copies(group)
+    ]
     builder: ThreadCopy = choose_builder(candidates)
     readers: list[OutlookMailbox] = readers_of(
         candidates, newest_message_ids(builder, MAX_MESSAGES_PER_CONVERSATION)
@@ -1662,22 +1664,24 @@ class OutlookConnector(
         candidates: list[ThreadCopy] = candidate_copies(group)
         items: list[Document | ConnectorFailure] = []
         try:
-            # The listing holds only the window's messages, so the copies are
-            # compared on their full outlines. One candidate needs no
-            # comparison: it is the builder and the only reader.
+            # Copies are compared on their outlines, and the document's
+            # messages come from the builder's outline, as in the slim walk.
+            # A sole candidate is the builder and the only reader.
+            wanted: set[str] | None = None
+            readers: list[OutlookMailbox]
             if len(candidates) > 1:
                 for copy in candidates:
                     copy.received = self._conversation_outline(
                         copy, exclusions[copy.mailbox.id], cutoff
                     )
-            builder: ThreadCopy = choose_builder(candidates)
+                builder: ThreadCopy = choose_builder(candidates)
+                wanted = newest_message_ids(builder, MAX_MESSAGES_PER_CONVERSATION)
+                readers = readers_of(candidates, wanted)
+            else:
+                builder = candidates[0]
+                readers = [builder.mailbox]
             kept: list[OutlookMessage] = self._copy_messages(
-                builder, exclusions[builder.mailbox.id], cutoff
-            )
-            readers: list[OutlookMailbox] = (
-                [builder.mailbox]
-                if len(candidates) == 1
-                else readers_of(candidates, {m.match_id for m in kept})
+                builder, exclusions[builder.mailbox.id], cutoff, wanted
             )
             document: Document | None = self._copy_document(
                 thread_document_id(group.key),
@@ -1720,33 +1724,36 @@ class OutlookConnector(
         excluded_folder_ids: set[str],
         cutoff: datetime | None,
     ) -> dict[str, datetime | None]:
-        """The copy's indexable messages by Message-ID with receipt times, no
-        bodies, within the fetch budget."""
-
-        def fetch(
-            next_link: str | None,
-        ) -> tuple[list[OutlookMessageChange], str | None]:
+        """The copy's newest CONVERSATION_FETCH_LIMIT indexable messages by
+        Message-ID with receipt times, no bodies. Pages are small, so the
+        walk runs until that many are found or the conversation ends."""
+        received: dict[str, datetime | None] = {}
+        next_link: str | None = None
+        while True:
             page = self.ops.fetch_conversation_outline_page(
                 mailbox_id=copy.mailbox.id,
                 conversation_id=copy.conversation_id,
                 next_link=next_link,
             )
-            return page.changes, page.next_link
-
-        return {
-            change.match_id: change.received_at
-            for changes in _conversation_pages(fetch)
-            for change in changes
-            if is_indexable(change, excluded_folder_ids, cutoff)
-        }
+            for change in page.changes:
+                if is_indexable(change, excluded_folder_ids, cutoff):
+                    received[change.match_id] = change.received_at
+                if len(received) >= CONVERSATION_FETCH_LIMIT:
+                    return received
+            next_link = page.next_link
+            if next_link is None:
+                return received
 
     def _copy_messages(
         self,
         copy: ThreadCopy,
         excluded_folder_ids: set[str],
         cutoff: datetime | None,
+        wanted: set[str] | None = None,
     ) -> list[OutlookMessage]:
-        """The newest indexable messages of one copy, with bodies."""
+        """The newest indexable messages of one copy, with bodies: the ones
+        in ``wanted`` when given, else the newest MAX_MESSAGES_PER_CONVERSATION
+        found within the fetch budget."""
 
         def fetch(next_link: str | None) -> tuple[list[OutlookMessage], str | None]:
             page = self.ops.fetch_conversation_messages_page(
@@ -1759,9 +1766,14 @@ class OutlookConnector(
         # Pages arrive newest first, so the walk stops at the newest indexable
         # messages however many drafts or trashed replies sit among them.
         kept: list[OutlookMessage] = []
+        enough: int = MAX_MESSAGES_PER_CONVERSATION if wanted is None else len(wanted)
         for messages in _conversation_pages(fetch):
-            kept.extend(indexable_messages(messages, excluded_folder_ids, cutoff))
-            if len(kept) >= MAX_MESSAGES_PER_CONVERSATION:
+            kept.extend(
+                m
+                for m in indexable_messages(messages, excluded_folder_ids, cutoff)
+                if wanted is None or m.match_id in wanted
+            )
+            if len(kept) >= enough:
                 break
         return kept[:MAX_MESSAGES_PER_CONVERSATION]
 
