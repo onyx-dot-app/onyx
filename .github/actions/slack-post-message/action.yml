@@ -49,6 +49,8 @@ runs:
             mention="${MENTION_USER}"
           fi
           TEXT="${TEXT//\{mention\}/${mention}}"
+        else
+          TEXT="${TEXT//\{mention\}/}"
         fi
 
         jq -cn --arg channel "${SLACK_CHANNEL}" --arg text "${TEXT}" \
