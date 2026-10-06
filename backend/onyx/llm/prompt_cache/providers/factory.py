@@ -14,8 +14,6 @@ from onyx.llm.prompt_cache.providers.vertex import VertexAIPromptCacheProvider
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_BEDROCK_TAG = "anthropic."
-
 # OpenRouter model name prefixes — used to determine which upstream provider
 # is being called so the correct caching strategy can be applied.
 OPENROUTER_ANTHROPIC_PREFIX = "anthropic/"
@@ -56,6 +54,45 @@ def _adapter_for_aggregator(llm_config: LLMConfig) -> PromptCacheProvider:
     return NoOpPromptCacheProvider()
 
 
+def _adapter_for_bedrock(llm_config: LLMConfig) -> PromptCacheProvider:
+    """Pick a cache adapter for a Bedrock model by declared cache support.
+
+    LiteLLM translates ``cache_control`` into Converse ``cachePoint`` blocks on
+    system, user, and tool messages, so the Anthropic-style marker works for
+    any cache-capable Bedrock model (Claude, Amazon Nova). Models that
+    litellm's model map does not mark cache-capable get no-op: a ``cachePoint``
+    sent to a non-capable model fails the Converse call.
+    """
+    import litellm.utils
+
+    names = [
+        name for name in (llm_config.deployment_name, llm_config.model_name) if name
+    ]
+    cacheable = False
+    for name in names:
+        try:
+            if litellm.utils.supports_prompt_caching(
+                model=name, custom_llm_provider="bedrock"
+            ):
+                cacheable = True
+                break
+        except Exception:
+            continue
+    if cacheable:
+        logger.debug(
+            "Prompt caching enabled for Bedrock model: %s (provider=%s)",
+            llm_config.model_name,
+            llm_config.model_provider,
+        )
+        return AnthropicPromptCacheProvider()
+    logger.debug(
+        "Prompt caching not supported for Bedrock model: %s (provider=%s)",
+        llm_config.model_name,
+        llm_config.model_provider,
+    )
+    return NoOpPromptCacheProvider()
+
+
 def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
     """Get the appropriate prompt cache provider adapter for a given provider.
 
@@ -67,11 +104,16 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
     """
     if llm_config.model_provider == LlmProviderNames.OPENAI:
         return OpenAIPromptCacheProvider()
-    elif llm_config.model_provider == LlmProviderNames.ANTHROPIC or (
-        llm_config.model_provider == LlmProviderNames.BEDROCK
-        and ANTHROPIC_BEDROCK_TAG in llm_config.model_name
-    ):
+    elif llm_config.model_provider == LlmProviderNames.ANTHROPIC:
         return AnthropicPromptCacheProvider()
+    elif llm_config.model_provider in (
+        LlmProviderNames.BEDROCK,
+        LlmProviderNames.BEDROCK_CONVERSE,
+    ):
+        # Capability-checked before the aggregator fallback so cacheable
+        # non-Claude models (Amazon Nova) are covered and non-cacheable
+        # models are not over-marked.
+        return _adapter_for_bedrock(llm_config)
     elif llm_config.model_provider == LlmProviderNames.VERTEX_AI:
         return VertexAIPromptCacheProvider()
     elif llm_config.model_provider == LlmProviderNames.OPENROUTER:
@@ -106,8 +148,8 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
     elif llm_config.model_provider in AGGREGATOR_PROVIDERS:
         # Aggregators/gateways can serve any upstream model, so the adapter is
         # picked from the API surface and the model name. Providers with their
-        # own handling (openrouter, bedrock+anthropic, vertex) are matched
-        # above and never reach this branch.
+        # own handling (openrouter, bedrock, vertex) are matched above and
+        # never reach this branch.
         return _adapter_for_aggregator(llm_config)
     else:
         # Default to no-op for providers without caching support
