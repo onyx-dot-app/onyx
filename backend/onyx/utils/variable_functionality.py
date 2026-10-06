@@ -2,6 +2,7 @@ import functools
 import importlib
 import importlib.util
 import inspect
+from importlib.machinery import ModuleSpec
 from typing import Any, TypeVar
 
 from onyx.configs.app_configs import (
@@ -38,7 +39,7 @@ def is_ee_available() -> bool:
     """Whether this build ships the Enterprise Edition code. The MIT-only mirror
     strips `ee.onyx` and keeps a bare `ee` package."""
     try:
-        spec = importlib.util.find_spec("ee.onyx")
+        spec: ModuleSpec | None = importlib.util.find_spec("ee.onyx")
     except ModuleNotFoundError:
         # No `ee` package at all.
         return False

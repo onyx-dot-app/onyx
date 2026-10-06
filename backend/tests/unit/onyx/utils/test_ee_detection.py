@@ -16,8 +16,13 @@ from onyx.utils.variable_functionality import (
 )
 
 
-def test_ee_is_available_in_this_repo() -> None:
-    assert is_ee_available()
+def test_ee_is_available_when_the_package_is_real() -> None:
+    # Mocked, so this also runs on the MIT-only mirror, which has no `ee.onyx`.
+    with patch(
+        "onyx.utils.variable_functionality.importlib.util.find_spec",
+        return_value=ModuleSpec("ee.onyx", loader=None, origin="ee/onyx/__init__.py"),
+    ):
+        assert is_ee_available()
 
 
 def test_ee_is_unavailable_with_no_ee_package() -> None:
@@ -75,7 +80,7 @@ def test_telemetry_names_the_domain_only_when_licensed(
         patch.object(telemetry.requests, "post") as post,
     ):
         post.return_value = MagicMock(ok=True)
-        sent = telemetry.optional_telemetry(
+        sent: bool | None = telemetry.optional_telemetry(
             record_type=telemetry.RecordType.USAGE,
             data={"milestone": MilestoneRecordType.RAN_QUERY.value},
             tenant_id="tenant_abc",
@@ -84,5 +89,5 @@ def test_telemetry_names_the_domain_only_when_licensed(
 
     assert sent is True
     get_tier.assert_called_once_with("tenant_abc")
-    payload = post.call_args.kwargs["json"]
+    payload: dict[str, object] = post.call_args.kwargs["json"]
     assert ("instance_domain" in payload) is sends_domain
