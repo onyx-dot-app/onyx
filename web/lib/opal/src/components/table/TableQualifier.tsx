@@ -26,14 +26,15 @@ interface TableQualifierProps {
   imageAlt?: string;
   /** Show a tinted background container behind the content. */
   background?: boolean;
-  /** Icon size preset. `"lg"` = 28/24, `"md"` = 20/16. @default "md" */
+  /** Icon size preset. `"lg"` = 28/24 (avatars), `"md"` = 16. @default "md" */
   iconSize?: "lg" | "md";
 }
 
-// Icon size in px, by icon preset, then by the table's row height.
+// Icon size in px, by icon preset, then by the table's row height. "md" is
+// Opal's standard 16px icon at every height; "lg" is for avatars.
 const iconSizesMap = {
   lg: { 2.75: 28, 2.25: 24 },
-  md: { 2.75: 20, 2.25: 16 },
+  md: { 2.75: 16, 2.25: 16 },
 } as const;
 
 function getOverlayStyles(selected: boolean, disabled: boolean) {

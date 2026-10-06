@@ -51,7 +51,7 @@ export interface TableQualifierColumn<TData> {
   imageAlt?: (row: TData) => string;
   /** A tinted tile behind the icon or image. @default false */
   background?: boolean;
-  /** `"lg"` for avatars, `"md"` for icons. @default "md" */
+  /** `"lg"` for avatars (28/24px), `"md"` for icons (16px). @default "md" */
   iconSize?: "lg" | "md";
 }
 
