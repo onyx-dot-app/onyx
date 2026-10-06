@@ -120,8 +120,8 @@ The `Feature Map Reconcile` workflow (`.github/workflows/feature-map-reconcile.y
 runs `reconcile.py` once a day. It catches what the per-PR rules miss: a code PR
 that changed behaviour without a document update.
 
-1. It reviews the commits merged to `main` since the commit in `RECONCILED`. On the
-   first run, it reviews the past 7 days.
+1. It reviews commits merged to `main` in the past 24 hours. The `RECONCILED`
+   marker excludes commits already reviewed, including during the same day.
 2. It maps each commit to its components with `stale_docs.py`. A commit that
    already updated a component's document is skipped for that component.
 3. It runs one Claude Code agent per affected component, in parallel. Each agent
@@ -136,6 +136,12 @@ that changed behaviour without a document update.
 A reconciliation does not change `Verified against` lines, because it checks only
 the new commits, not whole documents. The workflow skips a day while the previous
 reconciliation pull request is still open. `RECONCILED` moves forward only when
-every component agent succeeds, so a failed component is retried on the next run.
+every component agent succeeds and the run changes a feature-map document.
+No-op runs leave the marker unchanged. Failed commits remain eligible only
+within the 24-hour window.
+
+If the range exceeds `--max-commits`, the script fails before running agents or
+changing the marker. Increase the limit to review the whole range.
+
 Run it by hand with `python3 .agents/feature-map/reconcile.py` (prints the plan) or
-from the Actions tab with an optional `since` commit.
+from the Actions tab with an optional `since` commit to override the time window.

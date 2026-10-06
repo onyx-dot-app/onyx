@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Reconciles the feature map with the commits merged to main since the last run.
+"""Reconciles the feature map with commits merged to main in the past 24 hours.
 
-Reads the commits since the commit in `RECONCILED` (or the last 7 days), finds the
+Reads unreviewed commits from the past 24 hours, finds the
 components whose code changed without a document change, and runs one Claude Code
 agent per component in parallel. One integrator agent then applies the cross-file
 changes (PATHS.md rows). The integrity check and an em dash check gate the result,
-and `RECONCILED` moves to HEAD only when the whole range was reviewed.
+and `RECONCILED` moves to HEAD only when all selected commits were reviewed.
 
 Usage: reconcile.py [--write --rationale-file PATH] [--failure-context-file PATH]
 Without --write, prints the plan as JSON and calls no agent.
@@ -30,7 +30,7 @@ MARKER = MAP_DIR / "RECONCILED"
 CLAUDE_CODE_VERSION = "2.1.285"
 PROMPTS = REPO_ROOT / ".github/prompts"
 DIFF_LIMIT = 30_000
-DEFAULT_WINDOW = "7 days ago"
+DEFAULT_WINDOW = "24 hours ago"
 MAX_REINTEGRATIONS = 2
 COMPONENT_TIMEOUT = 1200
 INTEGRATOR_TIMEOUT = 1800
@@ -114,13 +114,16 @@ def commit_files(sha: str) -> list[str]:
     return [line for line in out.splitlines() if line]
 
 
-def list_commits(base: str) -> list[tuple[str, str]]:
+def list_commits(
+    base: str, window: str | None = DEFAULT_WINDOW
+) -> list[tuple[str, str]]:
     out = git(
         "log",
         "--first-parent",
         "--no-merges",
         "--reverse",
         "--format=%H%x1f%s",
+        *([f"--since-as-filter={window}"] if window else []),
         f"{base}..HEAD",
     )
     commits: list[tuple[str, str]] = []
@@ -265,6 +268,18 @@ def read_report(path: Path, keys: set[str]) -> dict[str, Any] | None:
         return None
     if not isinstance(data, dict) or not keys <= data.keys():
         return None
+    for key in keys:
+        value = data[key]
+        if key == "changed":
+            valid = isinstance(value, bool)
+        elif key == "summary":
+            valid = isinstance(value, str)
+        else:
+            valid = isinstance(value, list) and all(
+                isinstance(item, str) for item in value
+            )
+        if not valid:
+            return None
     return data
 
 
@@ -309,6 +324,7 @@ def run_integrator(paths: Paths, model: str, run: int, outcome: Outcome) -> None
         paths.root / f"integrate-{run}.log",
         INTEGRATOR_TIMEOUT,
     )
+    revert_outside_map()
     report = read_report(paths.integrate_report, INTEGRATE_KEYS) if ok else None
     if report:
         outcome.integrator.append(report)
@@ -370,7 +386,15 @@ def integrity_loop(
 def revert_outside_map() -> list[str]:
     reverted: list[str] = []
     for code, path in status_entries():
-        if path.startswith(f"{MAP_PREFIX}/"):
+        file = REPO_ROOT / path
+        document = (
+            file.suffix == ".md"
+            and file.parent
+            in (REPO_ROOT / MAP_PREFIX, REPO_ROOT / MAP_PREFIX / "components")
+            and not file.is_symlink()
+            and (not file.exists() or not file.stat().st_mode & 0o111)
+        )
+        if document:
             continue
         if code == "??":
             (REPO_ROOT / path).unlink(missing_ok=True)
@@ -399,13 +423,9 @@ def fan_out(
             outcome.reports[name] = report
 
 
-def rationale(plan: Plan, outcome: Outcome, truncated: int) -> str:
+def rationale(plan: Plan, outcome: Outcome) -> str:
     count = len(plan["commits"])
     lines = [f"Range `{plan['base'][:10]}..{plan['head'][:10]}`, {count} commits."]
-    if truncated:
-        lines.append(
-            f"The range had {count + truncated} commits. Only the newest {count} were reviewed."
-        )
     if outcome.repair:
         lines.append(
             "This was a repair run. It fixed the failure from an earlier CI run."
@@ -478,6 +498,7 @@ def execute(args: argparse.Namespace, plan: Plan, owned: Owned) -> Outcome:
     warm_cache()
     if not outcome.repair:
         fan_out(paths, plan, owned, args, outcome)
+    revert_outside_map()
     wanted = any(r["for_integrator"] for r in outcome.reports.values())
     run = 0
     if outcome.repair or wanted or plan["unowned"]:
@@ -493,11 +514,13 @@ def main() -> int:
     base = find_base(args.since)
     if not base or base == head:
         return say_nothing(args)
-    commits = list_commits(base)
-    truncated = max(0, len(commits) - args.max_commits)
-    if truncated:
-        commits = commits[truncated:]
-        base = git("rev-parse", f"{commits[0][0]}^").strip()
+    commits = list_commits(base, window=None if args.since else DEFAULT_WINDOW)
+    if len(commits) > args.max_commits:
+        print(
+            f"Refusing to skip commits: {len(commits)} exceed --max-commits={args.max_commits}. "
+            "Increase --max-commits to review the whole range."
+        )
+        return 1
     plan, owned = build_plan(base, head, commits)
     if not args.write:
         print(json.dumps(plan, indent=2))
@@ -507,7 +530,7 @@ def main() -> int:
     reverted = revert_outside_map()
     if reverted:
         print("Reverted changes outside the feature map:", *reverted, sep="\n  ")
-    args.rationale_file.write_text(rationale(plan, outcome, truncated))
+    args.rationale_file.write_text(rationale(plan, outcome))
     if outcome.errors:
         print("\n".join(outcome.errors))
         return 1
