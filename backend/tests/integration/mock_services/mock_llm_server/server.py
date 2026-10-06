@@ -27,6 +27,7 @@ from tests.integration.mock_services.mock_llm_server.models import (
 MAX_RECORDED_REQUESTS = 1000
 _COMPLETION_ID = "chatcmpl-mock"
 _FRAGMENTS = 3
+_GATE_TIMEOUT_S = 60
 
 
 @dataclass
@@ -36,6 +37,7 @@ class _Entry:
     requests: deque[RecordedRequest] = field(
         default_factory=lambda: deque(maxlen=MAX_RECORDED_REQUESTS)
     )
+    gates: dict[str, threading.Event] = field(default_factory=dict)
 
 
 def _content_text(content: Any) -> str:
@@ -178,13 +180,17 @@ def _delta(model: str, delta: dict[str, Any], finish: str | None = None) -> str:
     return _chunk(model, [{"index": 0, "delta": delta, "finish_reason": finish}])
 
 
-def _sse(reply: Reply, body: dict[str, Any]) -> Iterator[str]:
+def _sse(
+    reply: Reply, body: dict[str, Any], gate: threading.Event | None = None
+) -> Iterator[str]:
     model = str(body.get("model", ""))
     yield _delta(model, {"role": "assistant", "content": ""})
     for piece in _fragments(reply.reasoning or ""):
         yield _delta(model, {"reasoning_content": piece})
-    for piece in _fragments(reply.text or ""):
+    for index, piece in enumerate(_fragments(reply.text or "")):
         yield _delta(model, {"content": piece})
+        if index == 0 and gate is not None and not gate.wait(_GATE_TIMEOUT_S):
+            raise TimeoutError("mock LLM stream gate was not released")
     for index, call in enumerate(reply.tool_calls):
         function = {"name": call.name, "arguments": ""}
         opening = {"index": index, "id": call.id, "type": "function"}
@@ -248,6 +254,9 @@ def create_app() -> FastAPI:
 
     @app.put("/scripts/{script_id}")
     async def put_script(script_id: str, script: Script) -> Response:
+        if previous := scripts.get(script_id):
+            for gate in previous.gates.values():
+                gate.set()
         scripts[script_id] = _Entry(script=script)
         return Response(status_code=204)
 
@@ -270,7 +279,17 @@ def create_app() -> FastAPI:
 
     @app.delete("/scripts/{script_id}")
     async def delete_script(script_id: str) -> Response:
-        scripts.pop(script_id, None)
+        if entry := scripts.pop(script_id, None):
+            for gate in entry.gates.values():
+                gate.set()
+        return Response(status_code=204)
+
+    @app.post("/scripts/{script_id}/gates/{gate_id}/release")
+    async def release_gate(script_id: str, gate_id: str) -> Response:
+        entry = scripts.get(script_id)
+        if entry is None:
+            return _error(f"unknown script {script_id}", 404)
+        entry.gates.setdefault(gate_id, threading.Event()).set()
         return Response(status_code=204)
 
     @app.post("/scripts/{script_id}/v1/chat/completions")
@@ -289,7 +308,14 @@ def create_app() -> FastAPI:
         if reply is None:
             return _error("mock_llm_server: more than one scripted reply matched")
         if body.get("stream"):
-            return StreamingResponse(_sse(reply, body), media_type="text/event-stream")
+            gate = (
+                entry.gates.setdefault(reply.pause_after_first_chunk, threading.Event())
+                if reply.pause_after_first_chunk is not None
+                else None
+            )
+            return StreamingResponse(
+                _sse(reply, body, gate), media_type="text/event-stream"
+            )
         return JSONResponse(_completion(reply, body))
 
     return app
