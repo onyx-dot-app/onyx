@@ -44,6 +44,8 @@ class LLMConfig(BaseModel):
     reasoning_effort_default: ReasoningEffort | None = None
     reasoning_effort_user_default: ReasoningEffort | None = None
     reasoning_effort_max: ReasoningEffort | None = None
+    # Admin-configured flag, for models the catalog does not know.
+    supports_reasoning: bool = False
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 
