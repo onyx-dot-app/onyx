@@ -683,7 +683,7 @@ function classifyChanges(
   const embeddingChanged = !isSameModelSelection(values, initialValues);
   const contextualToggleChanged =
     values.enable_contextual_rag !== initialValues.enable_contextual_rag;
-  const contextualDisabled =
+  const contextualDisabled: boolean =
     initialValues.enable_contextual_rag && !values.enable_contextual_rag;
   const contextualModelChanged =
     values.enable_contextual_rag &&
@@ -1036,7 +1036,7 @@ export default function IndexSettingsPage() {
   // Applies to documents indexed from now on, without a re-index.
   const applyContextualForward = useCallback(
     async (values: IndexSettingsFormValues): Promise<boolean> => {
-      const disabling = !values.enable_contextual_rag;
+      const disabling: boolean = !values.enable_contextual_rag;
       const modelConfigurationId = values.contextual_rag_model_configuration_id;
       if (!searchSettings) return false;
       if (!disabling && modelConfigurationId === null) return false;

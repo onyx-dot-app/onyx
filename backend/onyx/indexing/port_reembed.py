@@ -104,14 +104,14 @@ def select_reembed_strategy(
     normalize/dimension and multipass changes only alter the vectors (or
     large/mini chunks the port doesn't read), so they fall through to
     MODEL_ONLY."""
-    present_holds_context = (
+    present_holds_context: bool = (
         present_ss.enable_contextual_rag
         or present_ss.contextual_rag_model_configuration_id is not None
     )
-    rag_relevant = present_holds_context or future_ss.enable_contextual_rag
+    rag_relevant: bool = present_holds_context or future_ss.enable_contextual_rag
     # Flag flips always re-glue: after a forward-only disable the index mixes
     # chunks with and without context, so a re-enable must generate for all.
-    augmentation_changed = (
+    augmentation_changed: bool = (
         present_ss.enable_contextual_rag != future_ss.enable_contextual_rag
         or present_holds_context != future_ss.enable_contextual_rag
         or (
