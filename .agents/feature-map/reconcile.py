@@ -36,7 +36,7 @@ COMPONENT_TIMEOUT = 1200
 INTEGRATOR_TIMEOUT = 1800
 REPORT_KEYS = {"changed", "summary", "for_integrator", "needs_human"}
 INTEGRATE_KEYS = {"summary", "needs_human"}
-EM_DASH = "—"
+EM_DASH = "\u2014"
 MAP_PREFIX = ".agents/feature-map"
 # Unowned paths outside these roots are tooling, CI, deployment, or the design
 # system; they never need a PATHS.md row.
@@ -302,16 +302,18 @@ def run_integrator(paths: Paths, model: str, run: int, outcome: Outcome) -> None
         FAILURE_CONTEXT_FILE=str(paths.failure_context),
         REPORT_FILE=str(paths.integrate_report),
     )
-    run_claude(
+    ok = run_claude(
         prompt,
         model,
         [paths.root],
         paths.root / f"integrate-{run}.log",
         INTEGRATOR_TIMEOUT,
     )
-    report = read_report(paths.integrate_report, INTEGRATE_KEYS)
+    report = read_report(paths.integrate_report, INTEGRATE_KEYS) if ok else None
     if report:
         outcome.integrator.append(report)
+    else:
+        outcome.failed.append(f"integrator (pass {run})")
 
 
 def status_entries(*pathspec: str) -> list[tuple[str, str]]:
@@ -339,7 +341,11 @@ def em_dash_errors() -> list[str]:
     errors: list[str] = []
     for path in map_changes():
         file = REPO_ROOT / path
-        if file.is_file() and EM_DASH in file.read_text(errors="replace"):
+        if (
+            file.suffix == ".md"
+            and file.is_file()
+            and EM_DASH in file.read_text(errors="replace")
+        ):
             errors.append(f"{path}: contains an em dash (U+2014); rewrite the sentence")
     return errors
 
@@ -504,6 +510,10 @@ def main() -> int:
     args.rationale_file.write_text(rationale(plan, outcome, truncated))
     if outcome.errors:
         print("\n".join(outcome.errors))
+        return 1
+    if outcome.failed and not outcome.reports and not outcome.integrator:
+        # Every agent failed (a bad key, an outage): fail so the run alerts.
+        print("Every agent failed:", ", ".join(outcome.failed))
         return 1
     if not outcome.repair and not outcome.failed and map_changes():
         MARKER.write_text(head + "\n")
