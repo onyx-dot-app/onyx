@@ -85,6 +85,7 @@ jobs:
         runner=8cpu-linux-x64,
         "run-id=${{ github.run_id }}-build-backend-image",
         "extras=ecr-cache",
+        "volume=100gb",
       ]
     timeout-minutes: 10
     environment: ci-protected
@@ -125,6 +126,7 @@ jobs:
         runner=8cpu-linux-x64,
         "run-id=${{ github.run_id }}-connectors-check",
         "extras=ecr-cache",
+        "volume=100gb",
       ]
     timeout-minutes: 40
     environment: ci-protected
