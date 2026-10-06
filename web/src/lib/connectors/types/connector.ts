@@ -1,4 +1,3 @@
-import type { ManageAccessEntry } from "@/lib/connectors/accessType";
 import type { ValidInputTypes } from "@/lib/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 
@@ -12,10 +11,6 @@ export interface ConnectorBase<T> {
   indexing_start: Date | null;
   access_type: string;
   groups?: number[];
-  /** Manage groups with roles; replaces `groups`. Placeholder-credential create only. */
-  manage_access?: ManageAccessEntry[];
-  /** A private connector's reader groups. Placeholder-credential create only. */
-  data_access?: number[];
   from_beginning?: boolean;
 }
 
