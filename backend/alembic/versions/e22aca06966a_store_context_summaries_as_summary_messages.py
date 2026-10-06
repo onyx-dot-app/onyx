@@ -1,7 +1,7 @@
 """Store context summaries as SUMMARY chat messages.
 
 Revision ID: e22aca06966a
-Revises: b3e7c1d9a4f2
+Revises: 84c15650b1ad
 Create Date: 2026-10-02 12:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 revision = "e22aca06966a"
-down_revision = "b3e7c1d9a4f2"
+down_revision = "84c15650b1ad"
 branch_labels = None
 depends_on = None
 
