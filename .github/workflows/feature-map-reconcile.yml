@@ -1,7 +1,7 @@
 ### Daily reconciliation of the feature map (.agents/feature-map/) with the
-### commits merged to main. It reviews every commit since the last reconciled
-### one (the .agents/feature-map/RECONCILED marker; on the first run, the past
-### 7 days), fans out one Claude agent per affected component, then runs an
+### commits merged to main. It reviews unreviewed commits from the past 24 hours,
+### using .agents/feature-map/RECONCILED to skip commits already reviewed.
+### It fans out one Claude agent per affected component, then runs an
 ### integrator pass and the integrity check. It opens a reviewed PR on
 ### auto/feature-map-reconcile.
 ###
@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       since:
-        description: "Base commit override (default: the RECONCILED marker)"
+        description: "Base commit override (default: unreviewed commits from the past 24 hours)"
         required: false
         default: ""
   # Repair trigger: quality-check failure on the auto PR branch. Safe: the
@@ -36,6 +36,10 @@ on:
 permissions:
   contents: read
   actions: read
+
+concurrency:
+  group: feature-map-reconcile-caller
+  cancel-in-progress: false
 
 jobs:
   check-open-pr:
