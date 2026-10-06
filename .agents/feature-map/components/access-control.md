@@ -157,7 +157,20 @@ OpenSearch chunk document
   (`onyx/db/user_group.py:assert_group_config_is_editable`,
   `assert_not_shared_with_default_group`). Sharing a resource with the Basic
   default group is refused outright: use the resource's own `is_public` flag
-  instead, since Basic holds every user.
+  instead, since Basic holds every user. The Community downgrade
+  (`ee/onyx/db/community_downgrade.py:remove_custom_user_groups__no_commit`,
+  [[billing]] §4.5) deletes every non-default group row directly. It does not
+  mark the group with `ee/onyx/db/user_group.py:prepare_user_group_for_deletion`
+  and wait for the Celery group sync
+  (`ee/onyx/background/celery/tasks/vespa/tasks.py:monitor_usergroup_taskset`)
+  to delete it. First it makes the resources shared with those groups public:
+  personas shared with or owned by a group (`public_permission` becomes
+  `VIEWER`, and their user files get `needs_persona_sync`), document sets, LLM
+  providers, MCP servers, and skills (`public_permission` becomes `VIEWER` when
+  unset). A standard user in a group that grants `FULL_ADMIN_PANEL_ACCESS`
+  joins Admin. A standard user left in no default group joins Basic. It
+  deletes the group-scoped token rate limits and recomputes the members'
+  permissions.
 - `PermissionGrant`: `(group_id, permission)` rows; the source of
   `User.effective_permissions`.
 - `DocumentSet` (`DocumentSetDBModel`, `db/document_set.py`): `is_public`,
@@ -551,6 +564,7 @@ These are the rules whose violation is silent: nothing crashes, a user just sees
 | touches `fetch_versioned_implementation` dispatch or `global_version` | every CE/EE pair in this document; verify the CE fallback still narrows rather than widens (§5.9) |
 | changes group membership resolution (`fetch_user_groups_for_user`, `fetch_external_groups_for_user`) | re-run the two-user integration test (§8); a stale cache or a membership write that doesn't invalidate it is a data-exposure bug, not a performance bug |
 | changes curator/group-manager scoping (`is_group_manager`, `within_managed_scope_clause`, `allow_scope`) | every route using `require_permission(..., allow_scope=True)` has a real GATE 2 check; this governs admin capability, not document ACL, but a bug here can let a curator manage a document set outside their scope, which does affect who a persona can search |
+| adds a resource that can be shared with a user group (a `*__UserGroup` link table) | the Community downgrade in `ee/onyx/db/community_downgrade.py`: `_make_group_shared_resources_public__no_commit` must make the resource public, and `_UNCASCADED_GROUP_LINKS` must list the link table if the group row's delete does not cascade to it |
 | adds an ACL bypass parameter anywhere in the search chain | re-verify §5.3 still holds: there is no such flag today. Adding one is a security review |
 
 ---

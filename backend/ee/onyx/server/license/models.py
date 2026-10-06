@@ -130,6 +130,7 @@ class LicenseUploadResponse(BaseModel):
 
 class CommunityDowngradeResponse(BaseModel):
     connectors_made_public: int
+    user_groups_removed: int
 
 
 class SeatUsageResponse(BaseModel):
