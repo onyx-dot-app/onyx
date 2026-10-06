@@ -23,7 +23,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/lib/app/components";
 import { linkCredential } from "@/lib/credentials/svc";
-import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
+import AuthenticationAccountSection from "@/views/admin/connectors/AddConnectorPage/sections/AuthenticationAccountSection";
 import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
@@ -636,11 +636,12 @@ export default function AddConnector({ connector }: AddConnectorProps) {
                     )}
 
                     {!noCredentials && (
-                      <CredentialsConfigurer
+                      <AuthenticationAccountSection
                         connector={connector}
                         accessType={formikProps.values.access_type}
                         currentCredential={currentCredential}
                         onCredentialChange={setCurrentCredential}
+                        checkedCredential={canCreate ? formCredential : null}
                       />
                     )}
 

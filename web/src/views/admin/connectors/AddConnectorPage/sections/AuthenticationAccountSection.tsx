@@ -1,6 +1,8 @@
 "use client";
 
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { useFormikContext } from "formik";
 import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
@@ -16,8 +18,52 @@ import { shouldRedirectToOAuth } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import type { ConnectionConfiguration } from "@/lib/connectors/types";
+import { useConnectorConfiguration } from "@/lib/connectors/connectors";
+import { toWireAccess } from "@/lib/connectors/accessType";
+import {
+  useDraftCheckRun,
+  type UseDraftCheckRunResult,
+} from "@/lib/connectors/checks/hooks";
+import { connectorFormState } from "@/lib/connectors/checks/formState";
+import type {
+  CapabilityCheckResult,
+  CapabilityCheckStatus,
+  DraftCheckState,
+} from "@/lib/connectors/checks/types";
+import { ConnectorsCheckCard } from "@/views/admin/connectors/AddConnectorPage/sections/shared/ConnectorsCheckCard";
 
-export interface CredentialsConfigurerProps {
+const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
+  "passed",
+  "failed",
+  "indeterminate",
+  "skipped",
+]);
+
+/** A check that has an outcome. Not-applicable checks never get one. */
+function isFinished(
+  check: DraftCheckState
+): check is DraftCheckState & { state: CapabilityCheckStatus } {
+  return FINISHED_STATES.has(check.state);
+}
+
+function toCheckResult(
+  check: DraftCheckState & { state: CapabilityCheckStatus }
+): CapabilityCheckResult {
+  return {
+    capability: check.capability,
+    check_id: check.check_id,
+    display_name: check.display_name,
+    required: check.required,
+    status: check.state,
+    message: check.message,
+    remediation: check.remediation,
+    docs_link: check.docs_link,
+    duration_ms: check.duration_ms,
+  };
+}
+
+interface AuthenticationAccountSectionProps {
   /** The source being set up. */
   connector: ConfigurableSources;
   /** Access type from the connector form; a new credential inherits it. */
@@ -26,20 +72,45 @@ export interface CredentialsConfigurerProps {
   currentCredential: Credential<any> | null;
   /** Called when the user picks or creates a credential. */
   onCredentialChange: (credential: Credential<any>) => void;
+  /** The credential the capability checks run with; `null` hides them. */
+  checkedCredential: Credential<any> | null;
 }
 
 /**
  * The credential step of the connector setup page: pick a saved credential,
- * create one, or authorize the source through OAuth.
+ * create one, or authorize the source through OAuth. Once a credential is
+ * picked, its capability checks run against the unsaved form below it.
  */
-export function CredentialsConfigurer({
+export default function AuthenticationAccountSection({
   connector,
   accessType,
   currentCredential,
   onCredentialChange,
-}: CredentialsConfigurerProps) {
+  checkedCredential,
+}: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
   const settings = useSettings();
+  const { values } = useFormikContext<Record<string, unknown>>();
+  const configuration: ConnectionConfiguration =
+    useConnectorConfiguration(connector);
+  const formState: Record<string, unknown> = useMemo(
+    () => connectorFormState(configuration, values),
+    [configuration, values]
+  );
+  const checkRun: UseDraftCheckRunResult = useDraftCheckRun({
+    source: connector,
+    credentialId: checkedCredential?.id ?? null,
+    accessType: toWireAccess(accessType, {
+      restrict_access_to_groups: values.restrict_access_to_groups === true,
+      restriction_group_ids: Array.isArray(values.restriction_group_ids)
+        ? values.restriction_group_ids.filter(
+            (id): id is number => typeof id === "number"
+          )
+        : [],
+    }).access_type,
+    formState,
+  });
+  const checks: DraftCheckState[] = checkRun.snapshot?.checks ?? [];
   const {
     displayName,
     credentials,
@@ -212,6 +283,25 @@ export function CredentialsConfigurer({
               )}
             </Section>
           </Card>
+
+          {checkedCredential && !checkRun.error && (
+            <ConnectorsCheckCard
+              results={checks.flatMap((check) =>
+                isFinished(check) ? [toCheckResult(check)] : []
+              )}
+              inProgressCount={
+                checks.filter(
+                  (check) =>
+                    check.state === "pending" || check.state === "running"
+                ).length
+              }
+              expectedCount={
+                checks.filter((check) => check.state === "waiting").length
+              }
+              running={checkRun.running}
+              onRerun={checkRun.rerun}
+            />
+          )}
 
           {/* One card creates a credential. Its header toggles it; the fold
           below is a plain container, so a click in the open form cannot fold

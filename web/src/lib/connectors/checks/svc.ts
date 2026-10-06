@@ -1,34 +1,28 @@
-import type { CapabilityReportSnapshot } from "@/lib/connectors/checks/types";
+import type {
+  DraftCheckRunRequest,
+  DraftCheckRunSnapshot,
+} from "@/lib/connectors/checks/types";
 
-/** The stored report for a credential, scoped to a connector when given. */
-export function capabilityReportUrl(
-  credentialId: number,
-  connectorId?: number | null
-): string {
-  const base = `/api/manage/admin/credential/${credentialId}/capability-report`;
-  return connectorId == null ? base : `${base}?connector_id=${connectorId}`;
+/** A draft run's current snapshot; poll it while `status` is `running`. */
+export function draftCheckRunUrl(runId: string): string {
+  return `/api/manage/admin/connector-checks/runs/${runId}`;
 }
 
 /**
- * Starts a capability-check run. The response is the row marked `running`;
- * poll `capabilityReportUrl` until `run_status` is `completed`.
+ * Starts the capability checks for an unsaved connector form. Checks that
+ * cannot run yet come back resolved (waiting, not applicable); poll
+ * `draftCheckRunUrl` for the rest.
  */
-export async function runCapabilityCheck(
-  credentialId: number,
-  connectorId?: number | null
-): Promise<CapabilityReportSnapshot> {
-  const response = await fetch(
-    `/api/manage/admin/credential/${credentialId}/capability-check`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        connectorId == null ? {} : { connector_id: connectorId }
-      ),
-    }
-  );
+export async function startDraftCheckRun(
+  request: DraftCheckRunRequest
+): Promise<DraftCheckRunSnapshot> {
+  const response = await fetch("/api/manage/admin/connector-checks/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
   if (!response.ok) {
-    throw new Error(`Capability check request failed: ${response.status}`);
+    throw new Error(`Capability check run request failed: ${response.status}`);
   }
   return response.json();
 }

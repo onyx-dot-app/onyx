@@ -68,7 +68,7 @@ packages:
   src/lib/chat: 98.6
   src/lib/connectors: 98.9
   src/lib/constants: 100
-  src/lib/credentials: 98.4
+  src/lib/credentials: 98.3
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/hierarchy: 100
@@ -93,14 +93,14 @@ packages:
   src/lib/usage: 97.9
   src/lib/users: 99
   src/lib/voice: 99.3
-  src/lib/webSearch: 97.3
+  src/lib/webSearch: 97.4
   src/providers: 99.5
   src/refresh-components: 99.7
   src/refresh-components/avatars: 99.7
   src/refresh-components/buttons: 99.7
   src/refresh-components/cards: 98.4
   src/refresh-components/commandmenu: 99.7
-  src/refresh-components/form: 98.6
+  src/refresh-components/form: 99
   src/refresh-components/inputs: 100
   src/refresh-components/messages: 100
   src/refresh-components/modals: 100

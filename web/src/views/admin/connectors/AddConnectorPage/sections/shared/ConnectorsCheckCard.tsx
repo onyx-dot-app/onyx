@@ -21,15 +21,16 @@ import { cn } from "@opal/utils";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
-  CapabilityReportSnapshot,
 } from "@/lib/connectors/checks/types";
 
 export interface ConnectorsCheckCardProps {
-  /** The stored report row; `null` when no run has happened yet. */
-  snapshot: CapabilityReportSnapshot | null;
-  /** True while the first fetch is pending. */
-  loading?: boolean;
-  /** True from a re-run request until the row reads `completed`. */
+  /** The finished checks, in any order. */
+  results: CapabilityCheckResult[];
+  /** Checks queued or running now. */
+  inProgressCount?: number;
+  /** Checks waiting on a form field before they can run. */
+  expectedCount?: number;
+  /** True while a run is in flight. */
   running?: boolean;
   onRerun?: () => void;
 }
@@ -253,14 +254,14 @@ function CheckGroup({ status, results }: CheckGroupProps) {
 // ---------------------------------------------------------------------------
 
 /**
- * The capability-check report for one credential and connector, grouped by
- * outcome like a pull request's checks panel. The backend stores the last
- * completed run and a running flag, so a re-run shows the previous results
- * under a spinner until the new report lands.
+ * The capability checks for a credential and the connector being set up,
+ * grouped by outcome like a pull request's checks panel. The ring and the
+ * title count every check, so a run fills them in as checks finish.
  */
 export function ConnectorsCheckCard({
-  snapshot,
-  loading = false,
+  results,
+  inProgressCount = 0,
+  expectedCount = 0,
   running = false,
   onRerun,
 }: ConnectorsCheckCardProps) {
@@ -268,10 +269,6 @@ export function ConnectorsCheckCard({
   const format = useFormatter();
   const [collapsed, setCollapsed] = useState(false);
 
-  const results = useMemo(
-    () => snapshot?.report?.check_results ?? [],
-    [snapshot]
-  );
   const groups = useMemo(
     () =>
       GROUP_ORDER.map((status) => ({
@@ -282,16 +279,15 @@ export function ConnectorsCheckCard({
   );
   const passed = results.filter((result) => result.status === "passed").length;
   const failed = results.filter((result) => result.status === "failed").length;
-  const isRunning = running || snapshot?.run_status === "running";
-  const hasReport = results.length > 0;
-  const total = results.length;
+  const isRunning: boolean = running;
+  const hasResults: boolean = results.length > 0;
+  const total: number = results.length + inProgressCount + expectedCount;
+  const hasChecks: boolean = total > 0;
 
   // What the fold hides, as one comma-separated line in a fixed order, e.g.
-  // "2 failed, 1 skipped, 5 successful". Zero counts are left out. The
-  // backend has no per-check progress yet, so the in-progress and expected
-  // slots stay at zero until it does.
+  // "2 failed, 1 skipped, 5 successful". Zero counts are left out.
   const summary = useMemo(() => {
-    if (!hasReport) return isRunning ? t("running.label") : t("empty.label");
+    if (!hasChecks) return isRunning ? t("running.label") : t("empty.label");
     const count = (status: CapabilityCheckStatus) =>
       results.filter((result) => result.status === status).length;
     const parts: Array<[string, number]> = [
@@ -300,8 +296,8 @@ export function ConnectorsCheckCard({
         t("summary.unverified", { count: count("indeterminate") }),
         count("indeterminate"),
       ],
-      [t("summary.inProgress", { count: 0 }), 0],
-      [t("summary.expected", { count: 0 }), 0],
+      [t("summary.inProgress", { count: inProgressCount }), inProgressCount],
+      [t("summary.expected", { count: expectedCount }), expectedCount],
       [t("summary.skipped", { count: count("skipped") }), count("skipped")],
       [t("summary.successful", { count: count("passed") }), count("passed")],
     ];
@@ -309,10 +305,17 @@ export function ConnectorsCheckCard({
       parts.filter(([, n]) => n > 0).map(([label]) => label),
       { type: "unit" }
     );
-  }, [hasReport, isRunning, results, t, format]);
+  }, [
+    hasChecks,
+    isRunning,
+    results,
+    inProgressCount,
+    expectedCount,
+    t,
+    format,
+  ]);
 
-  // Content wants an icon component; this one is the ring, or a spinner
-  // while a run is in flight.
+  // Content wants an icon component; this one is the ring.
   const HeaderIcon = useMemo<IconFunctionComponent>(
     () =>
       function HeaderIcon({ className }: IconProps) {
@@ -341,7 +344,7 @@ export function ConnectorsCheckCard({
             <Content
               icon={HeaderIcon}
               title={
-                hasReport ? t("titleWithCount", { passed, total }) : t("title")
+                hasChecks ? t("titleWithCount", { passed, total }) : t("title")
               }
               description={collapsed ? summary : undefined}
               sizePreset="section"
@@ -355,7 +358,7 @@ export function ConnectorsCheckCard({
                 prominence="internal"
                 tooltip={t("rerunButton.label")}
                 aria-label={t("rerunButton.label")}
-                disabled={isRunning || loading}
+                disabled={isRunning}
                 onClick={onRerun}
               />
             )}
@@ -375,7 +378,7 @@ export function ConnectorsCheckCard({
         </div>
 
         {!collapsed &&
-          (hasReport ? (
+          (hasResults ? (
             <div className="flex flex-col gap-2">
               {groups.map((group) => (
                 <CheckGroup

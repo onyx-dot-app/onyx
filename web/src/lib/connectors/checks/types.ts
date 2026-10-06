@@ -1,9 +1,10 @@
 import type { ValidSources } from "@/lib/connectors/types/source";
+import type { AccessType } from "@/lib/types";
 
 /**
  * Mirrors the backend's capability-check models
- * (`onyx.connectors.capability_checks.models`) and the report row the
- * `/manage/admin/credential/{id}/capability-report` endpoint returns.
+ * (`onyx.connectors.capability_checks`), and the draft runs that
+ * `/manage/admin/connector-checks/runs` serves for an unsaved connector form.
  */
 
 /** What a credential may be able to do for its source. */
@@ -13,8 +14,8 @@ export type CredentialCapability =
   | "external_group_sync";
 
 /**
- * Outcome of one check. `indeterminate` is a transient or unknown failure
- * and must not be read as proof the credential is broken.
+ * Outcome of one finished check. `indeterminate` is a transient or unknown
+ * failure and must not be read as proof the credential is broken.
  */
 export type CapabilityCheckStatus =
   | "passed"
@@ -22,25 +23,7 @@ export type CapabilityCheckStatus =
   | "indeterminate"
   | "skipped";
 
-/** Per-capability roll-up of its checks. */
-export type CapabilityVerdict =
-  | "passed"
-  | "passed_with_warnings"
-  | "failed"
-  | "indeterminate"
-  | "skipped"
-  | "not_applicable";
-
-export type CapabilityCheckTrigger =
-  | "manual"
-  | "credential_created"
-  | "cc_pair_validation"
-  | "indexing_attempt";
-
-/** Lifecycle of the stored row; the last completed report stays readable
- * while a re-run is `running`. */
-export type CapabilityReportRunStatus = "running" | "completed";
-
+/** One finished check, as the checks card shows it. */
 export interface CapabilityCheckResult {
   capability: CredentialCapability;
   check_id: string;
@@ -50,34 +33,68 @@ export interface CapabilityCheckResult {
   status: CapabilityCheckStatus;
   /** Failure text, skip reason, or empty on success. */
   message: string;
-  error_type: string | null;
-  /** A wrapper around the legacy validation rather than a named probe. */
-  is_fallback: boolean;
   remediation: string | null;
   docs_link: string | null;
   duration_ms: number | null;
 }
 
-export interface CredentialCapabilityReport {
-  credential_id: number;
-  source: ValidSources;
-  /** `null` for a config-less, credential-only run. */
-  connector_id: number | null;
-  checked_at: string;
-  trigger: CapabilityCheckTrigger;
-  verdicts: Record<CredentialCapability, CapabilityVerdict>;
-  check_results: CapabilityCheckResult[];
+/** A check's state in a draft run. */
+export type DraftCheckStateKind =
+  | CapabilityCheckStatus
+  | "pending"
+  | "running"
+  /** A required form field is missing or invalid; it runs once it is valid. */
+  | "waiting"
+  /** The access type or the check's own rule excludes it. */
+  | "not_applicable";
+
+export type DraftRunStatus =
+  | "running"
+  | "completed"
+  /** A newer run for the same draft key replaced this one. */
+  | "superseded"
+  | "failed_to_run";
+
+/** Which cached results a new draft run ignores. */
+export type DraftRerunMode = "none" | "failed" | "all";
+
+export interface DraftCheckState {
+  check_id: string;
+  display_name: string;
+  capability: CredentialCapability;
+  required: boolean;
+  state: DraftCheckStateKind;
+  message: string;
+  missing_fields: string[];
+  invalid_fields: string[];
+  remediation: string | null;
+  docs_link: string | null;
+  duration_ms: number | null;
+  from_cache: boolean;
+  /** The check proves the credential works with the credential-bound fields. */
+  validates_binding: boolean;
 }
 
-/** One stored row: the latest run for a credential and connector scope. */
-export interface CapabilityReportSnapshot {
-  credential_id: number;
-  connector_id: number | null;
+export interface DraftCheckRunSnapshot {
+  run_id: string;
+  draft_key: string;
   source: ValidSources;
-  trigger: CapabilityCheckTrigger;
-  run_status: CapabilityReportRunStatus;
-  run_started_at: string | null;
-  connector_config_hash: string | null;
-  /** `null` until a run completes. */
-  report: CredentialCapabilityReport | null;
+  credential_id: number;
+  access_type: AccessType | null;
+  status: DraftRunStatus;
+  /** Field name to error message, for the form. */
+  form_errors: Record<string, string>;
+  unknown_fields: string[];
+  checks: DraftCheckState[];
+}
+
+/** Body of `POST /manage/admin/connector-checks/runs`. */
+export interface DraftCheckRunRequest {
+  source: ValidSources;
+  credential_id: number;
+  access_type: AccessType | null;
+  /** One form session. A new run for the same key supersedes the last. */
+  draft_key: string;
+  form_state: Record<string, unknown>;
+  rerun: DraftRerunMode;
 }
