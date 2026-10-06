@@ -31,11 +31,11 @@ TENANT_RESOLUTION_SKIP_PATHS = frozenset(
         "/health/ready",
         "/metrics",
         "/openapi.json",
-        "/mcp-oauth/metadata",
-        "/mcp-oauth/register",
-        "/mcp-oauth/authorize",
-        "/mcp-oauth/token",
-        "/mcp-oauth/revoke",
+        "/oauth-provider/metadata",
+        "/oauth-provider/register",
+        "/oauth-provider/authorize",
+        "/oauth-provider/token",
+        "/oauth-provider/revoke",
     }
 )
 

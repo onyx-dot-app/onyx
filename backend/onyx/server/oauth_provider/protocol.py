@@ -24,15 +24,19 @@ from starlette.types import Message
 
 from onyx.auth.oauth_provider import OAuthProviderTokenKind, parse_oauth_provider_token
 from onyx.db.enums import Permission
-from onyx.db.mcp_oauth import mcp_oauth_tenant_has_members
-from onyx.db.oauth_provider import OAUTH_PROVIDER_STORAGE_ERRORS
-from onyx.mcp_oauth.attempts import allow_mcp_oauth_request
-from onyx.mcp_oauth.config import MCPOAuthSettings, canonical_mcp_resource
-from onyx.oauth_provider.attempts import get_authorization_code
-from onyx.server.mcp_oauth.provider import (
+from onyx.db.oauth_provider import (
+    OAUTH_PROVIDER_STORAGE_ERRORS,
+    oauth_provider_tenant_has_members,
+)
+from onyx.oauth_provider.attempts import (
+    allow_oauth_provider_request,
+    get_authorization_code,
+)
+from onyx.oauth_provider.config import OAuthProviderSettings, canonical_mcp_resource
+from onyx.server.oauth_provider.provider import (
     AuthorizationClientSnapshot,
-    MCPClientMetadataUnavailable,
-    OnyxMCPOAuthProvider,
+    OAuthClientMetadataUnavailable,
+    OnyxOAuthProvider,
 )
 from onyx.utils.client_ip import get_client_ip
 from onyx.utils.logger import setup_logger
@@ -53,7 +57,7 @@ _CORS = {
 _UNAVAILABLE_ERRORS = (
     *OAUTH_PROVIDER_STORAGE_ERRORS,
     RedisError,
-    MCPClientMetadataUnavailable,
+    OAuthClientMetadataUnavailable,
 )
 
 
@@ -136,9 +140,9 @@ async def _rate_limit(request: Request, operation: str) -> Response | None:
     )
     per_minute = 300 if operation == "register" else 3000
     try:
-        allowed = await allow_mcp_oauth_request(
+        allowed = await allow_oauth_provider_request(
             f"{operation}:ip:{address}", limit=per_minute, window_seconds=60
-        ) and await allow_mcp_oauth_request(
+        ) and await allow_oauth_provider_request(
             f"{operation}:global", limit=per_minute * 10, window_seconds=60
         )
     except RedisError:
@@ -163,10 +167,10 @@ def _no_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object
     return result
 
 
-class MCPOAuthProtocol:
-    def __init__(self, settings: MCPOAuthSettings) -> None:
+class OAuthProviderProtocol:
+    def __init__(self, settings: OAuthProviderSettings) -> None:
         self.settings = settings
-        self.provider = OnyxMCPOAuthProvider(settings)
+        self.provider = OnyxOAuthProvider(settings)
         authenticator = ClientAuthenticator(self.provider)
         self.token_handler = TokenHandler(self.provider, authenticator)
         self.revoke_handler = RevocationHandler(self.provider, authenticator)
@@ -262,7 +266,7 @@ class MCPOAuthProtocol:
                 response = await self.authorize_handler.handle(prepared)
             else:
                 client = await self.provider.get_client(authorization.client_id)
-                provider = OnyxMCPOAuthProvider(
+                provider = OnyxOAuthProvider(
                     self.settings,
                     authorization_client=AuthorizationClientSnapshot(
                         client_id=authorization.client_id, client=client
@@ -275,7 +279,7 @@ class MCPOAuthProtocol:
             return _service_unavailable()
         location = response.headers.get("location")
         if location and not location.startswith(
-            f"{self.settings.web_url}/oauth/mcp/authorize?"
+            f"{self.settings.web_url}/oauth-provider/authorize?"
         ):
             response.headers["location"] = construct_redirect_uri(
                 location, iss=self.settings.issuer_url
@@ -306,7 +310,7 @@ class MCPOAuthProtocol:
             else:
                 return _oauth_error("unsupported_grant_type", "Unsupported grant type")
             if tenant_id is None or not await run_in_threadpool(
-                mcp_oauth_tenant_has_members, tenant_id
+                oauth_provider_tenant_has_members, tenant_id
             ):
                 return _oauth_error("invalid_grant", "Invalid or expired grant")
             context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -323,7 +327,7 @@ class MCPOAuthProtocol:
         except (ValueError, UnicodeError):
             return _oauth_error("invalid_request", "Invalid token parameters")
         except _UNAVAILABLE_ERRORS:
-            logger.warning("MCP OAuth token storage is unavailable")
+            logger.warning("OAuth provider token storage is unavailable")
             return _service_unavailable()
         response.headers.update({**NO_STORE_HEADERS, **_CORS})
         return response
@@ -337,7 +341,7 @@ class MCPOAuthProtocol:
                 canonical_mcp_resource(values["resource"], self.settings)
             parsed = parse_oauth_provider_token(values.get("token", ""))
             known = parsed is not None and await run_in_threadpool(
-                mcp_oauth_tenant_has_members, parsed.tenant_id
+                oauth_provider_tenant_has_members, parsed.tenant_id
             )
             tenant_id = (
                 parsed.tenant_id
@@ -357,15 +361,15 @@ class MCPOAuthProtocol:
         except (ValueError, UnicodeError):
             return _oauth_error("invalid_request", "Invalid revocation parameters")
         except _UNAVAILABLE_ERRORS:
-            logger.warning("MCP OAuth revocation storage is unavailable")
+            logger.warning("OAuth provider revocation storage is unavailable")
             return _service_unavailable()
         response.headers.update({**NO_STORE_HEADERS, **_CORS})
         return response
 
 
-def create_mcp_oauth_protocol_router(settings: MCPOAuthSettings) -> APIRouter:
-    router = APIRouter(prefix="/mcp-oauth")
-    endpoints = MCPOAuthProtocol(settings)
+def create_oauth_provider_protocol_router(settings: OAuthProviderSettings) -> APIRouter:
+    router = APIRouter(prefix="/oauth-provider")
+    endpoints = OAuthProviderProtocol(settings)
     router.add_api_route("/metadata", endpoints.metadata, methods=["GET", "OPTIONS"])
     router.add_api_route("/register", endpoints.register, methods=["POST", "OPTIONS"])
     router.add_api_route("/authorize", endpoints.authorize, methods=["GET", "POST"])

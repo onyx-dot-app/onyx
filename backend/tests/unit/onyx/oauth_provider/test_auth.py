@@ -9,8 +9,8 @@ from onyx.configs import app_configs
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.enums import AccountType
 from onyx.db.models import User
-from onyx.server.mcp_oauth import protocol as oauth_protocol
-from onyx.server.mcp_oauth.api import _session_hash
+from onyx.server.oauth_provider import protocol as oauth_protocol
+from onyx.server.oauth_provider.api import _session_hash
 from shared_configs.contextvars import UsageCredentialIdentity
 from shared_configs.enums import UsageCredentialType
 
@@ -57,13 +57,13 @@ async def test_oauth_rate_limit_uses_forwarded_client_address(
     addresses: tuple[str, str],
 ) -> None:
     limiter = AsyncMock(return_value=True)
-    monkeypatch.setattr(oauth_protocol, "allow_mcp_oauth_request", limiter)
+    monkeypatch.setattr(oauth_protocol, "allow_oauth_provider_request", limiter)
     for chain in forwarded:
         request = Request(
             {
                 "type": "http",
                 "method": "POST",
-                "path": "/mcp-oauth/register",
+                "path": "/oauth-provider/register",
                 "client": ("10.0.0.9", 1234),
                 "headers": [
                     (

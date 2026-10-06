@@ -1,11 +1,11 @@
 import pytest
 
 from onyx.configs import app_configs
-from onyx.mcp_oauth.config import (
-    MCPOAuthSettings,
+from onyx.oauth_provider.config import (
+    OAuthProviderSettings,
     canonical_mcp_resource,
-    get_mcp_oauth_settings,
-    validate_mcp_redirect_uri,
+    get_oauth_provider_settings,
+    validate_oauth_redirect_uri,
 )
 
 
@@ -19,35 +19,35 @@ def _patch_oauth_config(
     monkeypatch.setattr(app_configs, "MCP_SERVER_OAUTH_RESOURCE_URL", resource_url)
 
 
-def test_get_mcp_oauth_settings_derives_defaults(
+def test_get_oauth_provider_settings_derives_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch_oauth_config(monkeypatch, web_domain="https://onyx.example/")
 
-    settings = get_mcp_oauth_settings()
+    settings = get_oauth_provider_settings()
 
-    assert settings == MCPOAuthSettings(
-        issuer_url="https://onyx.example/api/mcp-oauth",
-        resource_url="https://onyx.example/mcp/",
+    assert settings == OAuthProviderSettings(
+        issuer_url="https://onyx.example/api/oauth-provider",
+        mcp_resource_url="https://onyx.example/mcp/",
         web_url="https://onyx.example",
         web_origin="https://onyx.example",
     )
 
 
-def test_get_mcp_oauth_settings_preserves_web_path_and_origin(
+def test_get_oauth_provider_settings_preserves_web_path_and_origin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch_oauth_config(monkeypatch, web_domain="https://onyx.example/app/")
 
-    settings = get_mcp_oauth_settings()
+    settings = get_oauth_provider_settings()
 
-    assert settings.issuer_url == "https://onyx.example/app/api/mcp-oauth"
-    assert settings.resource_url == "https://onyx.example/app/mcp/"
+    assert settings.issuer_url == "https://onyx.example/app/api/oauth-provider"
+    assert settings.mcp_resource_url == "https://onyx.example/app/mcp/"
     assert settings.web_url == "https://onyx.example/app"
     assert settings.web_origin == "https://onyx.example"
 
 
-def test_get_mcp_oauth_settings_uses_any_url_canonical_form(
+def test_get_oauth_provider_settings_uses_any_url_canonical_form(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch_oauth_config(
@@ -56,10 +56,10 @@ def test_get_mcp_oauth_settings_uses_any_url_canonical_form(
         resource_url="HTTPS://MCP.EXAMPLE.com:443/Custom/Prefix////",
     )
 
-    settings = get_mcp_oauth_settings()
+    settings = get_oauth_provider_settings()
 
-    assert settings.issuer_url == "https://onyx.example/App/api/mcp-oauth"
-    assert settings.resource_url == "https://mcp.example.com/Custom/Prefix/"
+    assert settings.issuer_url == "https://onyx.example/App/api/oauth-provider"
+    assert settings.mcp_resource_url == "https://mcp.example.com/Custom/Prefix/"
     assert settings.web_url == "https://onyx.example/App"
     assert settings.web_origin == "https://onyx.example"
 
@@ -73,14 +73,14 @@ def test_get_mcp_oauth_settings_uses_any_url_canonical_form(
         "https://mcp.example.com/custom/prefix/",
     ],
 )
-def test_get_mcp_oauth_settings_canonicalizes_resource_trailing_slash(
+def test_get_oauth_provider_settings_canonicalizes_resource_trailing_slash(
     monkeypatch: pytest.MonkeyPatch, resource_url: str
 ) -> None:
     _patch_oauth_config(monkeypatch, resource_url=resource_url)
 
-    settings = get_mcp_oauth_settings()
+    settings = get_oauth_provider_settings()
 
-    assert settings.resource_url == resource_url.rstrip("/") + "/"
+    assert settings.mcp_resource_url == resource_url.rstrip("/") + "/"
 
 
 @pytest.mark.parametrize(
@@ -91,12 +91,12 @@ def test_get_mcp_oauth_settings_canonicalizes_resource_trailing_slash(
         "http://[::1]:3000",
     ],
 )
-def test_get_mcp_oauth_settings_allows_loopback_http(
+def test_get_oauth_provider_settings_allows_loopback_http(
     monkeypatch: pytest.MonkeyPatch, web_domain: str
 ) -> None:
     _patch_oauth_config(monkeypatch, web_domain=web_domain)
 
-    settings = get_mcp_oauth_settings()
+    settings = get_oauth_provider_settings()
 
     assert settings.web_url == web_domain
 
@@ -122,15 +122,15 @@ def test_get_mcp_oauth_settings_allows_loopback_http(
         "https://example.com/" + ("a" * 2048),
     ],
 )
-def test_get_mcp_oauth_settings_rejects_invalid_web_domain(
+def test_get_oauth_provider_settings_rejects_invalid_web_domain(
     monkeypatch: pytest.MonkeyPatch, web_domain: str
 ) -> None:
     _patch_oauth_config(
         monkeypatch, web_domain=web_domain, resource_url="https://mcp.example/mcp"
     )
 
-    with pytest.raises(ValueError, match="Invalid MCP OAuth URL"):
-        get_mcp_oauth_settings()
+    with pytest.raises(ValueError, match="Invalid OAuth provider URL"):
+        get_oauth_provider_settings()
 
 
 @pytest.mark.parametrize(
@@ -150,19 +150,19 @@ def test_get_mcp_oauth_settings_rejects_invalid_web_domain(
         "https://mcp.example.com/" + ("a" * 2048),
     ],
 )
-def test_get_mcp_oauth_settings_rejects_invalid_resource_url(
+def test_get_oauth_provider_settings_rejects_invalid_resource_url(
     monkeypatch: pytest.MonkeyPatch, resource_url: str
 ) -> None:
     _patch_oauth_config(monkeypatch, resource_url=resource_url)
 
-    with pytest.raises(ValueError, match="Invalid MCP OAuth URL"):
-        get_mcp_oauth_settings()
+    with pytest.raises(ValueError, match="Invalid OAuth provider URL"):
+        get_oauth_provider_settings()
 
 
 def test_canonical_mcp_resource_accepts_exact_and_missing_final_slash_only() -> None:
-    settings = MCPOAuthSettings(
-        issuer_url="https://onyx.example/api/mcp-oauth",
-        resource_url="https://onyx.example/mcp/",
+    settings = OAuthProviderSettings(
+        issuer_url="https://onyx.example/api/oauth-provider",
+        mcp_resource_url="https://onyx.example/mcp/",
         web_url="https://onyx.example",
         web_origin="https://onyx.example",
     )
@@ -190,14 +190,14 @@ def test_canonical_mcp_resource_accepts_exact_and_missing_final_slash_only() -> 
     ],
 )
 def test_canonical_mcp_resource_rejects_prefix_widening(resource: str) -> None:
-    settings = MCPOAuthSettings(
-        issuer_url="https://onyx.example/api/mcp-oauth",
-        resource_url="https://onyx.example/mcp/",
+    settings = OAuthProviderSettings(
+        issuer_url="https://onyx.example/api/oauth-provider",
+        mcp_resource_url="https://onyx.example/mcp/",
         web_url="https://onyx.example",
         web_origin="https://onyx.example",
     )
 
-    with pytest.raises(ValueError, match="Invalid MCP OAuth resource"):
+    with pytest.raises(ValueError, match="Invalid OAuth provider resource"):
         canonical_mcp_resource(resource, settings)
 
 
@@ -214,7 +214,7 @@ def test_canonical_mcp_resource_rejects_prefix_widening(resource: str) -> None:
 def test_validate_mcp_redirect_uri_accepts_strict_public_redirects(
     redirect_uri: str,
 ) -> None:
-    assert validate_mcp_redirect_uri(redirect_uri) == str(redirect_uri)
+    assert validate_oauth_redirect_uri(redirect_uri) == str(redirect_uri)
 
 
 @pytest.mark.parametrize(
@@ -238,5 +238,5 @@ def test_validate_mcp_redirect_uri_accepts_strict_public_redirects(
 def test_validate_mcp_redirect_uri_rejects_unsafe_redirects(
     redirect_uri: str,
 ) -> None:
-    with pytest.raises(ValueError, match="Invalid MCP OAuth URL"):
-        validate_mcp_redirect_uri(redirect_uri)
+    with pytest.raises(ValueError, match="Invalid OAuth provider URL"):
+        validate_oauth_redirect_uri(redirect_uri)

@@ -13,7 +13,7 @@ from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.mcp_oauth import api
+from onyx.server.oauth_provider import api
 from shared_configs.contextvars import UsageCredentialIdentity
 from shared_configs.enums import UsageCredentialType
 

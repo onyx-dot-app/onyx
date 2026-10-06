@@ -1,9 +1,10 @@
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from uuid import UUID
 
 from mcp.shared.auth import OAuthClientInformationFull
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, tuple_, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,12 +26,16 @@ from onyx.db.models import (
     OAuthProviderGrant,
     OAuthProviderToken,
     User,
+    UserTenantMapping,
+    UserTenantMappingOAuthAccount,
 )
 from onyx.oauth_provider.models import (
     OAuthProviderGrantInfo,
+    OAuthProviderOwner,
     OAuthProviderTokenInfo,
     OAuthProviderTokenPair,
 )
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
 OAUTH_PROVIDER_ACCESS_LIFETIME = timedelta(minutes=15)
@@ -340,3 +345,106 @@ def revoke_oauth_provider_grant__no_commit(
     if grant.revoked_at is None:
         grant.revoked_at = datetime.now(timezone.utc)
     return True
+
+
+def oauth_provider_tenant_has_members(tenant_id: str) -> bool:
+    if not MULTI_TENANT:
+        return tenant_id == POSTGRES_DEFAULT_SCHEMA
+    if tenant_id == POSTGRES_DEFAULT_SCHEMA:
+        return False
+    with get_catalog_session() as session:
+        return (
+            session.scalar(
+                select(UserTenantMapping.tenant_id)
+                .where(
+                    UserTenantMapping.tenant_id == tenant_id,
+                    UserTenantMapping.active.is_(True),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
+
+def oauth_provider_owner_is_member(
+    tenant_id: str, email: str, identities: Sequence[tuple[str, str]]
+) -> bool:
+    if not MULTI_TENANT:
+        return tenant_id == POSTGRES_DEFAULT_SCHEMA
+    subject_membership = (
+        select(UserTenantMappingOAuthAccount.oauth_name)
+        .where(
+            UserTenantMappingOAuthAccount.tenant_id == UserTenantMapping.tenant_id,
+            UserTenantMappingOAuthAccount.email == UserTenantMapping.email,
+            tuple_(
+                UserTenantMappingOAuthAccount.oauth_name,
+                UserTenantMappingOAuthAccount.account_id,
+            ).in_(identities),
+        )
+        .exists()
+    )
+    with get_catalog_session() as session:
+        return (
+            session.scalar(
+                select(UserTenantMapping.tenant_id)
+                .where(
+                    UserTenantMapping.tenant_id == tenant_id,
+                    UserTenantMapping.active.is_(True),
+                    or_(UserTenantMapping.email == email.lower(), subject_membership),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
+
+def oauth_provider_owner_snapshot(user: User) -> OAuthProviderOwner:
+    return OAuthProviderOwner(
+        user_id=user.id,
+        email=user.email,
+        oauth_identities=tuple(
+            (account.oauth_name, account.account_id) for account in user.oauth_accounts
+        ),
+    )
+
+
+def get_oauth_provider_owner(
+    session: Session, user_id: UUID
+) -> OAuthProviderOwner | None:
+    user = session.get(User, user_id, populate_existing=True)
+    if user is None or not user.is_active:
+        return None
+    return oauth_provider_owner_snapshot(user)
+
+
+def get_oauth_provider_token_owner(
+    session: Session,
+    raw_token: str,
+    *,
+    client_id: str,
+    resource: str,
+) -> OAuthProviderOwner | None:
+    parsed = parse_oauth_provider_token(raw_token)
+    if parsed is None or parsed.tenant_id != get_current_tenant_id():
+        return None
+    user = (
+        session.scalars(
+            select(User)
+            .join(OAuthProviderGrant, OAuthProviderGrant.user_id == User.id)
+            .join(
+                OAuthProviderToken, OAuthProviderToken.grant_id == OAuthProviderGrant.id
+            )
+            .where(
+                OAuthProviderToken.token_hash == parsed.token_hash,
+                OAuthProviderToken.kind == parsed.kind.value,
+                OAuthProviderGrant.client_id == client_id,
+                OAuthProviderGrant.resource == resource,
+                User.__table__.c.is_active.is_(True),
+            )
+        )
+        .unique()
+        .one_or_none()
+    )
+    if user is None:
+        return None
+    return oauth_provider_owner_snapshot(user)

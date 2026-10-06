@@ -41,10 +41,10 @@ from onyx.configs.app_configs import (
     GOOGLE_LOGIN_BASE_SCOPES,
     GOOGLE_OAUTH_SCOPE_OVERRIDE,
     LOG_ENDPOINT_LATENCY,
-    MCP_SERVER_OAUTH_ENABLED,
     OAUTH_CLIENT_ID,
     OAUTH_CLIENT_SECRET,
     OAUTH_ENABLED,
+    OAUTH_PROVIDER_ENABLED,
     POSTGRES_API_SERVER_POOL_OVERFLOW,
     POSTGRES_API_SERVER_POOL_SIZE,
     POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW,
@@ -645,15 +645,20 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)
 
-    if MCP_SERVER_OAUTH_ENABLED:
-        from onyx.mcp_oauth.config import get_mcp_oauth_settings
-        from onyx.server.mcp_oauth.api import router as mcp_oauth_user_router
-        from onyx.server.mcp_oauth.protocol import create_mcp_oauth_protocol_router
+    if OAUTH_PROVIDER_ENABLED:
+        from onyx.oauth_provider.config import get_oauth_provider_settings
+        from onyx.server.oauth_provider.api import router as oauth_provider_user_router
+        from onyx.server.oauth_provider.protocol import (
+            create_oauth_provider_protocol_router,
+        )
 
         include_router_with_global_prefix_prepended(
-            application, create_mcp_oauth_protocol_router(get_mcp_oauth_settings())
+            application,
+            create_oauth_provider_protocol_router(get_oauth_provider_settings()),
         )
-        include_router_with_global_prefix_prepended(application, mcp_oauth_user_router)
+        include_router_with_global_prefix_prepended(
+            application, oauth_provider_user_router
+        )
 
     # Password login is served in every deployment mode.
     include_auth_router_with_prefix(

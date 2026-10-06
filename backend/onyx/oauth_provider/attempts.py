@@ -235,3 +235,45 @@ async def consume_authorization_code(code: str) -> StoredOAuthProviderCode | Non
     if record is None or record.expires_at <= time.time():
         return None
     return record
+
+
+_RATE_KEY_PREFIX = f"{DEFAULT_REDIS_PREFIX}:oauth_provider:rate"
+
+_RATE_LIMIT_SCRIPT = """
+local count = redis.call("INCR", KEYS[1])
+if count == 1 then
+  redis.call("EXPIRE", KEYS[1], ARGV[1])
+end
+return count <= tonumber(ARGV[2])
+"""
+
+
+def _rate_key(bucket: str, window_seconds: int) -> str:
+    digest = hashlib.sha256(bucket.encode("utf-8")).hexdigest()
+    window_id = int(time.time() // window_seconds)
+    return f"{_RATE_KEY_PREFIX}:{{{digest}}}:{window_id}"
+
+
+async def allow_oauth_provider_request(
+    bucket: str,
+    *,
+    limit: int,
+    window_seconds: int,
+) -> bool:
+    if limit <= 0:
+        raise ValueError("OAuth provider rate limit must be positive")
+    if window_seconds <= 0:
+        raise ValueError("OAuth provider rate-limit window must be positive")
+
+    redis = await get_async_redis_connection()
+    allowed = await cast(
+        Awaitable[object],
+        redis.eval(
+            _RATE_LIMIT_SCRIPT,
+            1,
+            _rate_key(bucket, window_seconds),
+            str(window_seconds),
+            str(limit),
+        ),
+    )
+    return bool(allowed)
