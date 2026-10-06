@@ -1,0 +1,1333 @@
+{
+  "airtable": {
+    "airtable_url": {
+      "type": "string",
+      "required": false,
+      "default": ""
+    },
+    "base_id": {
+      "type": "string",
+      "required": false,
+      "default": ""
+    },
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "share_id": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "table_name_or_id": {
+      "type": "string",
+      "required": false,
+      "default": ""
+    },
+    "treat_all_non_attachment_fields_as_metadata": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "view_id": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "asana": {
+    "asana_project_ids": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "asana_team_id": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "asana_workspace_id": {
+      "type": "string",
+      "required": true
+    },
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "continue_on_failure": {
+      "type": "boolean",
+      "required": false
+    }
+  },
+  "axero": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "include_article": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "include_blog": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "include_forum": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "include_wiki": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "spaces": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "bitbucket": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "projects": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "repositories": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "workspace": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "bookstack": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "box": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "folder_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "include_web_links": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    }
+  },
+  "braintrust": {
+    "experiment_row_lookback_days": {
+      "type": "integer",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "project_name": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "canvas": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "clickup": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "connector_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "connector_type": {
+      "type": "string",
+      "enum": [
+        "list",
+        "folder",
+        "space",
+        "workspace"
+      ],
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "retrieve_task_comments": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    }
+  },
+  "coda": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "index_page_content": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "workspace_id": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "confluence": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "continue_on_failure": {
+      "type": "boolean",
+      "required": false
+    },
+    "cql_query": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "include_attachments": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "index_recursively": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "labels_to_skip": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "required": false
+    },
+    "page_id": {
+      "type": "string",
+      "required": false,
+      "default": ""
+    },
+    "space": {
+      "type": "string",
+      "required": false,
+      "default": ""
+    },
+    "timezone_offset": {
+      "type": "number",
+      "required": false
+    }
+  },
+  "discord": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "channel_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "server_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "start_date": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "discourse": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "document360": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "workspace": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "dropbox": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "drupal_wiki": {
+    "allow_images": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "continue_on_failure": {
+      "type": "boolean",
+      "required": false
+    },
+    "include_attachments": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "spaces": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "egnyte": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "folder_path": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "file": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "file_locations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "required": true
+    },
+    "file_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "zip_metadata": {
+      "type": "object",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "zip_metadata_file_id": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "fireflies": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "freshdesk": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "gitbook": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "space_id": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "github": {
+    "branch": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "include_files": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "include_issues": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "include_prs": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "repo_owner": {
+      "type": "string",
+      "required": true
+    },
+    "repositories": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "state_filter": {
+      "type": "string",
+      "required": false,
+      "default": "all"
+    }
+  },
+  "gitlab": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "include_code_files": {
+      "type": "boolean",
+      "required": false
+    },
+    "include_issues": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "include_mrs": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "project_name": {
+      "type": "string",
+      "required": true
+    },
+    "project_owner": {
+      "type": "string",
+      "required": true
+    },
+    "state_filter": {
+      "type": "string",
+      "required": false,
+      "default": "all"
+    }
+  },
+  "gmail": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "gong": {
+    "hide_user_info": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "workspaces": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "google_cloud_storage": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "bucket_name": {
+      "type": "string",
+      "required": true
+    },
+    "prefix": {
+      "type": "string",
+      "required": false,
+      "default": ""
+    }
+  },
+  "google_drive": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "continue_on_failure": {
+      "type": "boolean",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "exclude_domain_link_only": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "folder_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "follow_shortcuts": {
+      "type": "boolean",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "include_files_shared_with_me": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "include_my_drives": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "include_shared": {
+      "type": "boolean",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "include_shared_drives": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "my_drive_emails": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "only_org_public": {
+      "type": "boolean",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "shared_drive_urls": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "shared_folder_urls": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "specific_user_emails": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "google_sites": {
+    "base_url": {
+      "type": "string",
+      "required": true
+    },
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "zip_path": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "guru": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "highspot": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "spot_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "hubspot": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "object_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "tickets",
+          "companies",
+          "deals",
+          "contacts"
+        ]
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "imap": {
+    "mailboxes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "jira": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "comment_email_blacklist": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "jql_query": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "labels_to_skip": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "required": false
+    },
+    "project_key": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "linear": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "loopio": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "loopio_stack_name": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "lumapps": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "custom_content_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "instance_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "lang": {
+      "type": "string",
+      "required": false,
+      "default": "en"
+    }
+  },
+  "mediawiki": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "required": true
+    },
+    "hostname": {
+      "type": "string",
+      "required": true
+    },
+    "language_code": {
+      "type": "string",
+      "required": false,
+      "default": "en"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "required": true
+    },
+    "recurse_depth": {
+      "type": "integer",
+      "required": true
+    }
+  },
+  "mock_connector": {
+    "mock_server_host": {
+      "type": "string",
+      "required": true
+    },
+    "mock_server_port": {
+      "type": "integer",
+      "required": true
+    }
+  },
+  "notion": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "recursive_index_enabled": {
+      "type": "boolean",
+      "required": false
+    },
+    "root_page_id": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "oci_storage": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "bucket_name": {
+      "type": "string",
+      "required": true
+    },
+    "prefix": {
+      "type": "string",
+      "required": false,
+      "default": ""
+    }
+  },
+  "onedrive": {
+    "excluded_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "treat_organization_link_as_public": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "users": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "outline": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "outlook": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "calendar_future_days": {
+      "type": "integer",
+      "required": false,
+      "default": 180
+    },
+    "calendar_past_days": {
+      "type": "integer",
+      "required": false,
+      "default": 365
+    },
+    "excluded_folders": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "include_attachments": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "include_calendar": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "mailboxes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "productboard": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "r2": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "bucket_name": {
+      "type": "string",
+      "required": true
+    },
+    "prefix": {
+      "type": "string",
+      "required": false,
+      "default": ""
+    }
+  },
+  "s3": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "bucket_name": {
+      "type": "string",
+      "required": true
+    },
+    "prefix": {
+      "type": "string",
+      "required": false,
+      "default": ""
+    }
+  },
+  "salesforce": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "custom_query_config": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "requested_objects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "sharepoint": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "excluded_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "excluded_sites": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "exhaustive_ad_enumeration": {
+      "type": "boolean",
+      "required": false
+    },
+    "include_site_documents": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "include_site_pages": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "sites": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "treat_sharing_link_as_public": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    }
+  },
+  "slab": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  },
+  "slack": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "channel_regex_enabled": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "channels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "exclude_channel_regex_enabled": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "exclude_channels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "include_bot_messages": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "num_threads": {
+      "type": "integer",
+      "required": false
+    },
+    "use_redis": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    }
+  },
+  "teams": {
+    "include_attachments": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "include_inline_images": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "include_meeting_chats": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "include_meeting_transcripts": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "max_workers": {
+      "type": "integer",
+      "required": false,
+      "default": 10
+    },
+    "meeting_organizers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "teams": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "transcript_organizers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "testrail": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "cases_page_size": {
+      "type": "integer",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "max_pages": {
+      "type": "integer",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "project_ids": {
+      "type": [
+        "array",
+        "string"
+      ],
+      "items": {
+        "type": "integer"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "skip_doc_absolute_chars": {
+      "type": "integer",
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "web": {
+    "base_url": {
+      "type": "string",
+      "required": true
+    },
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "mintlify_cleanup": {
+      "type": "boolean",
+      "required": false,
+      "default": true
+    },
+    "scroll_before_scraping": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "url_rewrites": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "web_connector_type": {
+      "type": "string",
+      "enum": [
+        "recursive",
+        "single",
+        "sitemap",
+        "upload"
+      ],
+      "required": false,
+      "default": "recursive"
+    }
+  },
+  "wikipedia": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "required": true
+    },
+    "language_code": {
+      "type": "string",
+      "required": false,
+      "default": "en"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "required": true
+    },
+    "recurse_depth": {
+      "type": "integer",
+      "required": true
+    }
+  },
+  "xenforo": {
+    "base_url": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "zendesk": {
+    "calls_per_minute": {
+      "type": "integer",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "content_type": {
+      "type": "string",
+      "enum": [
+        "articles",
+        "tickets"
+      ],
+      "required": false,
+      "default": "articles"
+    }
+  },
+  "zoom": {
+    "group_id": {
+      "type": "string",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "host_emails": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "include_meetings": {
+      "type": "boolean",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "include_webinars": {
+      "type": "boolean",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "meeting_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "rate_limit_percent": {
+      "type": "number",
+      "nullable": true,
+      "required": false,
+      "default": null
+    },
+    "webinar_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "nullable": true,
+      "required": false,
+      "default": null
+    }
+  },
+  "zulip": {
+    "batch_size": {
+      "type": "integer",
+      "required": false
+    }
+  }
+}
