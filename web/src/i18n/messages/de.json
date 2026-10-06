@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "Ausgeschlossene Pfade",
-          "description": "Glob-Muster für Dateipfade und Dateinamen, zum Beispiel '*.tmp' oder 'Archive/*'."
+          "description": "Glob-Muster für Dateipfade und Dateinamen, zum Beispiel `*.tmp` oder `Archive/*`."
         },
         "organizationLinks": {
           "label": "Organisationslinks als öffentlich behandeln",

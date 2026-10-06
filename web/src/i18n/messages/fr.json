@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "Chemins exclus",
-          "description": "Motifs glob appliqués à chaque chemin et nom de fichier, tels que '*.tmp' ou 'Archive/*'."
+          "description": "Motifs glob appliqués à chaque chemin et nom de fichier, tels que `*.tmp` ou `Archive/*`."
         },
         "organizationLinks": {
           "label": "Traiter les liens de l’organisation comme publics",

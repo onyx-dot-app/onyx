@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "除外するパス",
-          "description": "各ファイルパスとファイル名に照合する glob パターン（例: '*.tmp'、'Archive/*'）。"
+          "description": "各ファイルパスとファイル名に照合する glob パターン（例: `*.tmp`、`Archive/*`）。"
         },
         "organizationLinks": {
           "label": "組織リンクを公開として扱う",

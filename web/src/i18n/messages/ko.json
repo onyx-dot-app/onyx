@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "제외 경로",
-          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: '*.tmp' 또는 'Archive/*')."
+          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: `*.tmp` 또는 `Archive/*`)."
         },
         "organizationLinks": {
           "label": "조직 링크를 공개로 처리",

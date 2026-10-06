@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "المسارات المستبعدة",
-          "description": "أنماط Glob المطابقة لكل مسار ملف واسم ملف، مثل '*.tmp' أو 'Archive/*'."
+          "description": "أنماط Glob المطابقة لكل مسار ملف واسم ملف، مثل `*.tmp` أو `Archive/*`."
         },
         "organizationLinks": {
           "label": "معاملة روابط المؤسسة كروابط عامة",

@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "Rutas excluidas",
-          "description": "Patrones glob que se comparan con cada ruta y nombre de archivo, como '*.tmp' o 'Archive/*'."
+          "description": "Patrones glob que se comparan con cada ruta y nombre de archivo, como `*.tmp` o `Archive/*`."
         },
         "organizationLinks": {
           "label": "Tratar los enlaces de la organización como públicos",

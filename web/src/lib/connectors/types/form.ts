@@ -71,6 +71,8 @@ export interface TextOption extends Option {
   default?: string;
   initial?: string | ((currentCredential: Credential<any> | null) => string);
   isTextArea?: boolean;
+  /** Example value shown in the empty input. */
+  placeholder?: string;
   /** Text below the input. It gets the connector's name as `connectorName`. */
   subDescription?: TextSubDescriptionKey;
 }

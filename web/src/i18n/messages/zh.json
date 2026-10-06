@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "排除的路径",
-          "description": "与每个文件路径和文件名匹配的 glob 模式，例如“*.tmp”或“Archive/*”。"
+          "description": "与每个文件路径和文件名匹配的 glob 模式，例如`*.tmp`或`Archive/*`。"
         },
         "organizationLinks": {
           "label": "将组织链接视为公开链接",

@@ -718,6 +718,7 @@ export const connectorConfigs: Record<
           }
           return false;
         },
+        placeholder: "https://your-domain.atlassian.net/wiki",
         subDescription: "siteUrl",
       },
       {
@@ -931,15 +932,9 @@ export const connectorConfigs: Record<
                 isTextArea: true,
                 description:
                   "Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure." +
-                  "\n\nExample:" +
-                  "\n{" +
-                  '\n  "Account": {' +
-                  '\n    "fields": ["Id", "Name", "Industry"],' +
-                  '\n    "associations": {' +
-                  '\n      "Contact": ["Id", "FirstName", "LastName", "Email"]' +
-                  "\n    }" +
-                  "\n  }" +
-                  "\n}" +
+                  "\n\nExample: " +
+                  '`{"Account": {"fields": ["Id", "Name", "Industry"], ' +
+                  '"associations": {"Contact": ["Id", "FirstName", "LastName", "Email"]}}}`' +
                   `\n\n[See our docs](${DOCS_ADMINS_PATH}/connectors/official/salesforce) for more details.`,
               },
             ],
@@ -959,12 +954,11 @@ export const connectorConfigs: Record<
         label: "Sites",
         name: "sites",
         optional: true,
-        description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
-• Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
-• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
-• To index users' personal sites, use the [OneDrive connector](${DOCS_ADMINS_PATH}/connectors/official/onedrive).
-• Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.
-`,
+        description: `- If no sites are specified, all sites in your organization will be indexed (\`Sites.Read.All\` permission required).
+- Specifying \`https://onyxai.sharepoint.com/sites/support\` for example only indexes this site.
+- Specifying \`https://onyxai.sharepoint.com/sites/support/subfolder\` for example only indexes this folder.
+- To index users' personal sites, use the [OneDrive connector](${DOCS_ADMINS_PATH}/connectors/official/onedrive).
+- Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.`,
       },
     ],
     advanced_values: [
@@ -1008,8 +1002,8 @@ export const connectorConfigs: Record<
         description:
           "Site URLs or glob patterns to exclude from indexing. " +
           "Matched sites will never be indexed, even if they appear in the sites list above. " +
-          "Examples: 'https://contoso.sharepoint.com/sites/archive' (exact), " +
-          "'*://*/sites/archive-*' (glob pattern).",
+          "Examples: `https://contoso.sharepoint.com/sites/archive` (exact), " +
+          "`*://*/sites/archive-*` (glob pattern).",
       },
       {
         type: "list",
@@ -1020,7 +1014,7 @@ export const connectorConfigs: Record<
         description:
           "Glob patterns for file paths to exclude from indexing within document libraries. " +
           "Patterns are matched against both the full relative path and the filename. " +
-          "Examples: '*.tmp' (temp files), '~$*' (Office lock files), 'Archive/*' (folder).",
+          "Examples: `*.tmp` (temp files), `~$*` (Office lock files), `Archive/*` (folder).",
       },
       {
         type: "text",
@@ -1376,7 +1370,8 @@ export const connectorConfigs: Record<
         label: "Enable Channel Regex",
         name: "channel_regex_enabled",
         description: `If enabled, we will treat the "channels" specified above as regular expressions. A channel's messages will be pulled in by the connector if the name of the channel fully matches any of the specified regular expressions.
-For example, specifying .*-support.* as a "channel" will cause the connector to include any channels with "-support" in the name.`,
+
+For example, specifying \`.*-support.*\` as a "channel" will cause the connector to include any channels with "-support" in the name.`,
         optional: true,
       },
       {
@@ -1395,7 +1390,8 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         label: "Enable Exclude Channel Regex",
         name: "exclude_channel_regex_enabled",
         description: `If enabled, we will treat the "channels to exclude" specified above as regular expressions. A channel will be excluded if its name fully matches any of the specified regular expressions.
-For example, specifying .*-alerts as a "channel to exclude" will cause the connector to skip any channels ending in "-alerts".`,
+
+For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the connector to skip any channels ending in "-alerts".`,
         optional: true,
       },
       {
@@ -2055,8 +2051,8 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
           { name: "business_plus", value: "business_plus" },
         ],
         description:
-          "Sets how fast this connector is allowed to call Zoom. Pick pro on " +
-          "a Pro account, and business_plus on Business, Education, " +
+          "Sets how fast this connector is allowed to call Zoom. Pick `pro` on " +
+          "a Pro account, and `business_plus` on Business, Education, " +
           "Enterprise or Partner.",
       },
     ],

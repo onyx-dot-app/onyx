@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "Caminhos excluídos",
-          "description": "Padrões glob comparados com cada caminho e nome de arquivo, como '*.tmp' ou 'Archive/*'."
+          "description": "Padrões glob comparados com cada caminho e nome de arquivo, como `*.tmp` ou `Archive/*`."
         },
         "organizationLinks": {
           "label": "Tratar links da organização como públicos",

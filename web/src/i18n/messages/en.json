@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "Excluded Paths",
-          "description": "Glob patterns matched against each file path and filename, such as '*.tmp' or 'Archive/*'."
+          "description": "Glob patterns matched against each file path and filename, such as `*.tmp` or `Archive/*`."
         },
         "organizationLinks": {
           "label": "Treat organization links as public",

@@ -75,6 +75,8 @@ const TabsField: FC<TabsFieldProps> = ({
         </OpalText>
       ) : (
         <Tabs
+          // Space between the tab strip and the fields of the open tab.
+          gap={4}
           value={
             values[tabField.name] ??
             tabField.defaultTab ??
