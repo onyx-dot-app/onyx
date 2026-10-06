@@ -18,6 +18,35 @@ import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 
+const CITATION_LABEL_PATTERN = /^\[(D|Q)?\d+\]$/;
+
+// Returns the label only when it has no nested elements (e.g. bold).
+function getPlainLabel(children: React.ReactNode): string | null {
+  if (typeof children === "string" || typeof children === "number") {
+    return String(children);
+  }
+  if (
+    Array.isArray(children) &&
+    children.every((c) => typeof c === "string" || typeof c === "number")
+  ) {
+    return children.join("");
+  }
+  return null;
+}
+
+function getTextContent(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(getTextContent).join("");
+  }
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return getTextContent(node.props.children);
+  }
+  return "";
+}
+
 interface DocumentCardProps {
   document: OnyxDocument;
   updatePresentingDocument: (document: MinimalOnyxDocument) => void;
@@ -165,9 +194,17 @@ export const MemoizedLink = memo(
       }
     }, [document, updatePresentingDocument, question, openQuestion]);
 
+    const url = ensureHrefProtocol(href);
+    const isChatFile = url?.includes("/api/chat/file/");
+    const plainLabel = getPlainLabel(value);
+
     if (value?.toString().startsWith("*")) {
       return <BlinkingBar addMargin />;
-    } else if (value?.toString().startsWith("[")) {
+    } else if (
+      !isChatFile &&
+      plainLabel !== null &&
+      CITATION_LABEL_PATTERN.test(plainLabel)
+    ) {
       const sourceInfo = documentSourceInfo || questionSourceInfo;
       if (!sourceInfo) {
         return <>{rest.children}</>;
@@ -189,13 +226,9 @@ export const MemoizedLink = memo(
       );
     }
 
-    const url = ensureHrefProtocol(href);
-
-    // Check if the link is to a file on the backend
-    const isChatFile = url?.includes("/api/chat/file/");
     if (isChatFile && updatePresentingDocument) {
       const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
-      const filename = value?.toString() || "download";
+      const filename = getTextContent(value).trim() || "download";
       return (
         <button
           type="button"
