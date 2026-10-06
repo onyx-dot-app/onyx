@@ -1,3 +1,4 @@
+import ipaddress
 import re
 import socket
 import time
@@ -18,7 +19,11 @@ from mcp.server.auth.provider import (
     TokenError,
 )
 from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
-from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from mcp.shared.auth import (
+    InvalidRedirectUriError,
+    OAuthClientInformationFull,
+    OAuthToken,
+)
 from pydantic import AnyUrl, BaseModel, ConfigDict
 from starlette.concurrency import run_in_threadpool
 
@@ -59,6 +64,51 @@ from onyx.oauth_provider.models import (
 from shared_configs.contextvars import get_current_tenant_id
 
 _PKCE_CHALLENGE = re.compile(r"[A-Za-z0-9_-]{43}")
+
+
+def _is_loopback_host(hostname: str | None) -> bool:
+    if hostname is None:
+        return False
+    if hostname == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
+def _matches_loopback_redirect(requested: AnyUrl, registered: list[AnyUrl]) -> bool:
+    requested_parts = urlsplit(str(requested))
+    if not _is_loopback_host(requested_parts.hostname):
+        return False
+    for candidate in registered:
+        registered_parts = urlsplit(str(candidate))
+        if (
+            _is_loopback_host(registered_parts.hostname)
+            and registered_parts.scheme == requested_parts.scheme
+            and registered_parts.hostname == requested_parts.hostname
+            and registered_parts.path == requested_parts.path
+            and registered_parts.query == requested_parts.query
+        ):
+            return True
+    return False
+
+
+class LoopbackRedirectOAuthClient(OAuthClientInformationFull):
+    # RFC 8252 7.3: a registered loopback redirect URI matches a requested URI
+    # on the same host regardless of port, so `http://localhost/callback`
+    # accepts `http://localhost:<ephemeral-port>/callback`.
+    def validate_redirect_uri(self, redirect_uri: AnyUrl | None) -> AnyUrl:
+        try:
+            return super().validate_redirect_uri(redirect_uri)
+        except InvalidRedirectUriError:
+            if (
+                redirect_uri is not None
+                and self.redirect_uris is not None
+                and _matches_loopback_redirect(redirect_uri, self.redirect_uris)
+            ):
+                return redirect_uri
+            raise
 
 
 class OAuthClientMetadataUnavailable(OnyxError):
@@ -194,13 +244,16 @@ class OnyxOAuthProvider(OAuthProvider):
         if len(client_id) > 2048:
             return None
         if not client_id.startswith("https://"):
-            return await run_in_threadpool(get_oauth_provider_client, client_id)
+            stored = await run_in_threadpool(get_oauth_provider_client, client_id)
+            if stored is None:
+                return None
+            return LoopbackRedirectOAuthClient.model_validate(stored.model_dump())
         try:
             validate_oauth_url(client_id, allow_query=True)
             document = await _cimd_fetcher(client_id).fetch(client_id)
             if str(document.client_id) != client_id:
                 return None
-            client = OAuthClientInformationFull(
+            client = LoopbackRedirectOAuthClient(
                 client_id=client_id,
                 client_name=document.client_name or urlsplit(client_id).netloc,
                 redirect_uris=[
