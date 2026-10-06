@@ -2146,6 +2146,10 @@
         "remove": {
           "tooltip": "Remove {name}"
         },
+        "table": {
+          "group": "Group",
+          "members": "Members"
+        },
         "toggle": {
           "description": "Limit access to members of selected groups. Synced permissions still apply.",
           "title": "Restrict Access to Groups"

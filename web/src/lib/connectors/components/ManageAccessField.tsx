@@ -2,12 +2,14 @@
 
 import { useTranslations } from "next-intl";
 import { Divider, MessageCard } from "@opal/components";
-import { AttachmentItem, Content, Section } from "@opal/layouts";
+import { Content, Section } from "@opal/layouts";
 import { SvgUserManage } from "@opal/icons";
 import useUsers from "@/hooks/useUsers";
 import { Permission } from "@/lib/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import GroupShareList from "@/lib/connectors/components/GroupShareList";
+import GroupShareList, {
+  type GroupShareLockedRow,
+} from "@/lib/connectors/components/GroupShareList";
 
 interface ManageAccessFieldProps {
   disabled?: boolean;
@@ -32,28 +34,13 @@ export default function ManageAccessField({
     ? undefined
     : usersData?.accepted.filter((user) => user.is_admin).length;
 
-  const adminsRow = (
-    <AttachmentItem
-      prominence="secondary"
-      icon={SvgUserManage}
-      title={t("admins.title")}
-      description={
-        adminCount === undefined
-          ? undefined
-          : tRestriction("memberCount", { count: adminCount })
-      }
-      rightChildren={
-        <Content
-          icon={SvgUserManage}
-          title={t("admins.alwaysShared")}
-          sizePreset="secondary"
-          variant="body"
-          orientation="reverse"
-          color="muted"
-        />
-      }
-    />
-  );
+  const adminsRow: GroupShareLockedRow = {
+    id: "admins",
+    name: t("admins.title"),
+    icon: SvgUserManage,
+    memberCount: adminCount,
+    note: t("admins.alwaysShared"),
+  };
 
   return (
     <Section gap={3} alignItems="stretch" height="fit">
@@ -66,7 +53,7 @@ export default function ManageAccessField({
       <GroupShareList
         name="groups"
         placeholder={t("placeholder")}
-        leadingRow={adminsRow}
+        lockedRows={[adminsRow]}
         disabled={disabled}
       />
       <Divider paddingParallel={0} paddingPerpendicular={0} />
@@ -75,6 +62,7 @@ export default function ManageAccessField({
         title={t("note")}
         outerPadding={1}
         innerPadding={1}
+        rounding={3}
       />
     </Section>
   );

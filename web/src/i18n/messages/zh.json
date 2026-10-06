@@ -2146,6 +2146,10 @@
         "remove": {
           "tooltip": "移除 {name}"
         },
+        "table": {
+          "group": "群组",
+          "members": "成员"
+        },
         "toggle": {
           "description": "仅允许所选群组的成员访问。同步的权限仍然适用。",
           "title": "限制为群组访问"
