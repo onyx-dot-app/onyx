@@ -65,9 +65,13 @@ function TableQualifier({
     switch (content) {
       case "icon":
         // shrink-0 and overflow-visible: a flex item may otherwise shrink the
-        // SVG, and its own default overflow cuts a stroke at its edge.
+        // SVG, and its own default overflow cuts a stroke at its edge. The
+        // stroke is currentColor, so text-02 colors it.
         return Icon ? (
-          <Icon size={iconSize} className="shrink-0 overflow-visible" />
+          <Icon
+            size={iconSize}
+            className="shrink-0 overflow-visible text-text-02"
+          />
         ) : null;
 
       case "image":
