@@ -123,6 +123,7 @@ from onyx.connectors.outlook.source_operations import (
 )
 from onyx.connectors.outlook.threads import (
     ThreadTable,
+    bucket_count_for,
     candidate_copies,
     choose_builder,
     compared_window,
@@ -150,6 +151,8 @@ logger = setup_logger()
 
 # Document ids per batch handed to pruning.
 SLIM_BATCH_SIZE = 500
+# Listing rows the slim walk gathers before writing a page of the thread table.
+SLIM_LISTING_ROWS_PER_PAGE = 10_000
 
 # Skipped by default. Resolved by well-known name per mailbox, because display
 # names are localized and an admin's exclusion list is not.
@@ -238,8 +241,11 @@ class OutlookCheckpoint(ConnectorCheckpoint):
     # Listing pages written so far, one per listing step, and the rows in them.
     listing_pages: int = 0
     listing_rows: int = 0
-    # None until the listing is split into build buckets.
+    # None until the bucket count is fixed, then the listing pages already
+    # cut into buckets, and whether the buckets are ready to build from.
     build_buckets: int | None = None
+    bucketed_pages: int = 0
+    buckets_ready: bool = False
     # The bucket being built and the threads of it already built.
     next_bucket: int = 0
     next_thread: int = 0
@@ -393,6 +399,16 @@ def _page_ends_before(
         return False
     oldest = items[-1].received_at
     return oldest is not None and oldest < cutoff
+
+
+def _within_history(
+    received: dict[str, datetime | None], cutoff: datetime | None
+) -> dict[str, datetime | None]:
+    """The listed messages not older than the cutoff. Mailboxes are listed at
+    different moments, so one cutoff is applied again when copies are compared."""
+    if cutoff is None:
+        return received
+    return {m: at for m, at in received.items() if at is None or at >= cutoff}
 
 
 def is_indexable(
@@ -723,6 +739,8 @@ class OutlookConnector(
         resolve_microsoft_environment(self.graph_api_host, self.authority_host)
         self.batch_size = batch_size
         self._ops: OutlookSourceOperations | None = None
+        # A read-through cache of the bucket being built, never state.
+        self._grouped_bucket: tuple[tuple[str, int], list[ThreadGroup]] | None = None
 
     @property
     def ops(self) -> OutlookSourceOperations:
@@ -836,18 +854,30 @@ class OutlookConnector(
                 checkpoint, table, start, end, include_permissions
             )
             return checkpoint
-        if checkpoint.build_buckets is None:
-            checkpoint.build_buckets = table.write_buckets(
-                checkpoint.listing_pages, checkpoint.listing_rows
-            )
-            logger.info(
-                "Outlook: %s message copies listed, building in %s buckets",
-                checkpoint.listing_rows,
+        if not checkpoint.buckets_ready:
+            if checkpoint.build_buckets is None:
+                checkpoint.build_buckets = bucket_count_for(checkpoint.listing_rows)
+                logger.info(
+                    "Outlook: %s message copies listed, building in %s buckets",
+                    checkpoint.listing_rows,
+                    checkpoint.build_buckets,
+                )
+            checkpoint.bucketed_pages = table.bucket_pages(
+                checkpoint.bucketed_pages,
+                checkpoint.listing_pages,
                 checkpoint.build_buckets,
             )
+            if checkpoint.bucketed_pages >= checkpoint.listing_pages:
+                table.fold_exclusions()
+                checkpoint.buckets_ready = True
             return checkpoint
-        if checkpoint.next_bucket < checkpoint.build_buckets:
-            yield from self._build_step(checkpoint, table, include_permissions)
+        if checkpoint.next_bucket < (checkpoint.build_buckets or 0):
+            yield from self._build_step(
+                checkpoint,
+                table,
+                include_permissions,
+                listing_complete=self._listing_covers_history(start),
+            )
             return checkpoint
         table.delete_all()
         checkpoint.has_more = False
@@ -911,14 +941,13 @@ class OutlookConnector(
         checkpoint: OutlookCheckpoint,
         table: ThreadTable,
         include_permissions: bool,
+        listing_complete: bool,
     ) -> Generator[Document | ConnectorFailure, None, None]:
         """Builds the next THREADS_PER_BUILD_STEP threads of the current
-        bucket, side by side. A bucket is regrouped on every step, so the
-        checkpoint needs only two counters."""
+        bucket, side by side."""
         table.touch()
-        groups: list[ThreadGroup] = sorted(
-            group_threads(table.read_bucket(checkpoint.next_bucket)),
-            key=lambda group: group.key,
+        groups: list[ThreadGroup] = self._bucket_groups(
+            table, checkpoint.run_id, checkpoint.next_bucket
         )
         step: list[ThreadGroup] = groups[
             checkpoint.next_thread : checkpoint.next_thread + THREADS_PER_BUILD_STEP
@@ -927,7 +956,10 @@ class OutlookConnector(
         results: list[list[Document | ConnectorFailure]] = (
             run_functions_tuples_in_parallel(
                 [
-                    (self._build_thread, (group, exclusions, include_permissions))
+                    (
+                        self._build_thread,
+                        (group, exclusions, include_permissions, listing_complete),
+                    )
                     for group in step
                 ],
                 max_workers=THREAD_BUILD_WORKERS,
@@ -939,6 +971,33 @@ class OutlookConnector(
         if checkpoint.next_thread >= len(groups):
             checkpoint.next_bucket += 1
             checkpoint.next_thread = 0
+
+    def _bucket_groups(
+        self, table: ThreadTable, run_id: str, bucket: int
+    ) -> list[ThreadGroup]:
+        """The bucket's threads in key order. Kept between the steps of one
+        bucket: it is rebuilt from the table on a miss, so nothing is lost
+        when another process resumes the attempt."""
+        cached: tuple[tuple[str, int], list[ThreadGroup]] | None = self._grouped_bucket
+        if cached is not None and cached[0] == (run_id, bucket):
+            return cached[1]
+        # Dropped first, so two buckets are never held at once.
+        self._grouped_bucket = None
+        groups: list[ThreadGroup] = sorted(
+            group_threads(table.read_bucket(bucket)), key=lambda group: group.key
+        )
+        self._grouped_bucket = ((run_id, bucket), groups)
+        return groups
+
+    def _listing_covers_history(self, start: SecondsSinceUnixEpoch) -> bool:
+        """True when the listing window opens at or before the history
+        cutoff, so the listing holds every indexable message of each copy
+        and no outline needs to be read."""
+        window_start: datetime | None = _poll_bound(start)
+        if window_start is None:
+            return True
+        cutoff: datetime | None = self._history_cutoff()
+        return cutoff is not None and window_start <= cutoff
 
     def _advance_mailbox(
         self,
@@ -1135,6 +1194,7 @@ class OutlookConnector(
         table = ThreadTable(uuid4().hex)
         pages: int = 0
         rows: int = 0
+        pending: list[ThreadListing] = []
         try:
             for mailbox in mailboxes:
                 try:
@@ -1154,10 +1214,12 @@ class OutlookConnector(
                 access = owner_access(mailbox) if include_permissions else None
                 yield list(self._hierarchy_nodes(mailbox, tree, access))
                 for page in self._thread_listing_pages(mailbox, tree):
-                    if page:
-                        table.write_page(pages, page)
+                    pending.extend(page)
+                    if len(pending) >= SLIM_LISTING_ROWS_PER_PAGE:
+                        table.write_page(pages, pending)
                         pages += 1
-                        rows += len(page)
+                        rows += len(pending)
+                        pending = []
                     if callback is not None:
                         callback.progress("outlook_slim_docs", len(page))
                 if self.include_calendar:
@@ -1166,7 +1228,21 @@ class OutlookConnector(
                     )
             # A thread is listed once every mailbox has been read, so its
             # readers come from the full set of copies.
-            bucket_count: int = table.write_buckets(pages, rows)
+            if pending:
+                table.write_page(pages, pending)
+                pages += 1
+                rows += len(pending)
+            # The cut reads no mail, so each step reports only to keep the
+            # caller's lock alive.
+            bucket_count: int = table.write_buckets(
+                pages,
+                rows,
+                on_step=(
+                    (lambda: callback.progress("outlook_slim_docs", 0))
+                    if callback is not None
+                    else None
+                ),
+            )
             # One progress report per bucket keeps the prune lock alive
             # through the bucket reads without a call per thread.
             yield from self._slim_batches(
@@ -1673,6 +1749,7 @@ class OutlookConnector(
         group: ThreadGroup,
         exclusions: dict[str, set[str]],
         include_permissions: bool,
+        listing_complete: bool,
     ) -> list[Document | ConnectorFailure]:
         """The thread's document from the copy that holds its newest message
         and the most messages, readable by the copies holding every message
@@ -1681,16 +1758,29 @@ class OutlookConnector(
         candidates: list[ThreadCopy] = candidate_copies(group)
         items: list[Document | ConnectorFailure] = []
         try:
-            # Copies are compared on their outlines, and the document's
-            # messages come from the builder's outline, as in the slim walk.
+            # Copies are compared on the listing when it covers the history
+            # and on their outlines otherwise, under one cutoff either way.
             # A sole candidate is the builder and the only reader.
             wanted: set[str] | None = None
             readers: list[OutlookMailbox]
             if len(candidates) > 1:
-                for copy in candidates:
-                    copy.received = self._conversation_outline(
-                        copy, exclusions[copy.mailbox.id], cutoff
+                candidates = [
+                    compared_window(
+                        copy.model_copy(
+                            update={
+                                "received": (
+                                    _within_history(copy.received, cutoff)
+                                    if listing_complete
+                                    else self._conversation_outline(
+                                        copy, exclusions[copy.mailbox.id], cutoff
+                                    )
+                                )
+                            }
+                        ),
+                        CONVERSATION_FETCH_LIMIT,
                     )
+                    for copy in candidates
+                ]
                 builder: ThreadCopy = choose_builder(candidates)
                 wanted = newest_message_ids(builder, MAX_MESSAGES_PER_CONVERSATION)
                 readers = readers_of(candidates, wanted)

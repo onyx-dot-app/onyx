@@ -17,15 +17,15 @@ import binascii
 import json
 import math
 import zlib
-from collections.abc import Generator, Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from typing import Any
 
 from pydantic import TypeAdapter
 
 from onyx.configs.constants import NUM_DAYS_TO_KEEP_CHECKPOINTS, FileOrigin
 from onyx.connectors.outlook.models import (
+    BucketManifest,
     OutlookMailbox,
     ThreadCopy,
     ThreadGroup,
@@ -37,19 +37,20 @@ THREAD_DOCUMENT_ID_PREFIX = "outlook-thread:"
 _ROOT_BYTES = 22
 _FILE_PREFIX = "outlook-threads"
 # Listing rows one build bucket holds in memory while its threads are grouped.
-ROWS_PER_BUCKET = 20_000
+ROWS_PER_BUCKET = 50_000
 # Rows buffered per bucket before a chunk file is written, and rows buffered
-# across all buckets before the fullest one is written, so splitting the
-# listing holds a bounded number of rows however many buckets there are.
-BUCKET_FLUSH_ROWS = 1_000
-BUCKET_BUFFER_ROWS = 50_000
+# across all buckets before the fullest one is written. Rows are held as their
+# serialized lines, so the cap is a few hundred megabytes at most.
+BUCKET_FLUSH_ROWS = 10_000
+BUCKET_BUFFER_ROWS = 500_000
+# Listing rows cut into buckets per step, so the cut stays resumable.
+BUCKETING_ROWS_PER_STEP = 1_000_000
 _EXCLUSIONS = "exclusions.json"
 _MANIFEST = "buckets.json"
 _TOUCH = "touch.json"
 
 _OLDEST = datetime.min.replace(tzinfo=timezone.utc)
 _ROWS = TypeAdapter(list[ThreadListing])
-_COUNTS = TypeAdapter(list[int])
 _STRINGS = TypeAdapter(list[str])
 _EXCLUSIONS_BY_MAILBOX = TypeAdapter(dict[str, list[str]])
 
@@ -63,6 +64,26 @@ def thread_key(conversation_index: str) -> str | None:
     if len(raw) < _ROOT_BYTES:
         return None
     return base64.urlsafe_b64encode(raw[:_ROOT_BYTES]).decode().rstrip("=")
+
+
+_KEY_PREFIX = b'{"key":"'
+
+
+def _line_key(line: bytes) -> bytes:
+    """The thread key of a serialized listing row, read without parsing it.
+    ThreadListing puts ``key`` first, so the line opens with it."""
+    if not line.startswith(_KEY_PREFIX):
+        raise ValueError("A thread table row does not open with its key")
+    return line[len(_KEY_PREFIX) : line.index(b'"', len(_KEY_PREFIX))]
+
+
+def _rows(lines: Sequence[bytes]) -> list[ThreadListing]:
+    return _ROWS.validate_json(b"[" + b",".join(lines) + b"]")
+
+
+def bucket_count_for(row_count: int) -> int:
+    """Buckets that keep each one near ROWS_PER_BUCKET listing rows."""
+    return max(1, math.ceil(row_count / ROWS_PER_BUCKET))
 
 
 def thread_document_id(key: str) -> str:
@@ -165,68 +186,119 @@ class ThreadTable:
         self._chunk_counts: list[int] | None = None
 
     def _page_id(self, page: int) -> str:
-        return f"{self._prefix}listing-{page}.json"
+        return f"{self._prefix}listing-{page}.jsonl"
 
     def _chunk_id(self, bucket: int, chunk: int) -> str:
-        return f"{self._prefix}bucket-{bucket}-{chunk}.json"
+        return f"{self._prefix}bucket-{bucket}-{chunk}.jsonl"
 
     def _mailbox_id(self, mailbox_id: str) -> str:
         return f"{self._prefix}mailbox-{mailbox_id}.json"
 
-    def _write(self, file_id: str, payload: object) -> None:
+    def _save(self, file_id: str, content: bytes, file_type: str) -> None:
         get_default_file_store().save_file(
-            content=BytesIO(json.dumps(payload).encode()),
+            content=BytesIO(content),
             display_name=file_id,
             file_origin=FileOrigin.INDEXING_CHECKPOINT,
-            file_type="application/json",
+            file_type=file_type,
             file_id=file_id,
         )
+
+    def _write(self, file_id: str, payload: object) -> None:
+        self._save(file_id, json.dumps(payload).encode(), "application/json")
 
     def _read(self, file_id: str) -> bytes:
         return get_default_file_store().read_file(file_id, mode="b").read()
 
+    def _write_lines(self, file_id: str, lines: Sequence[bytes]) -> None:
+        self._save(file_id, b"\n".join(lines), "application/x-ndjson")
+
+    def _read_lines(self, file_id: str) -> list[bytes]:
+        content: bytes = self._read(file_id)
+        return content.split(b"\n") if content else []
+
     def write_page(self, page: int, listings: Sequence[ThreadListing]) -> None:
-        self._write(
-            self._page_id(page), [row.model_dump(mode="json") for row in listings]
+        """One row per line, so cutting into buckets moves lines without
+        parsing them."""
+        self._write_lines(
+            self._page_id(page), [row.model_dump_json().encode() for row in listings]
         )
 
-    def iter_pages(self, page_count: int) -> Generator[ThreadListing, None, None]:
-        """Every listing row, page by page, so no more than one page is held at once."""
-        for page in range(page_count):
-            yield from _ROWS.validate_json(self._read(self._page_id(page)))
+    def bucket_pages(self, first_page: int, page_count: int, bucket_count: int) -> int:
+        """Cuts listing pages into buckets by thread key, from ``first_page``
+        until BUCKETING_ROWS_PER_STEP rows are cut or the pages run out, so a
+        bucket holds whole threads. Returns the page to continue from.
 
-    def write_buckets(self, page_count: int, row_count: int) -> int:
-        """Splits the listing into buckets by thread key, so a bucket holds
-        whole threads and about ROWS_PER_BUCKET rows, and folds the mailbox
-        exclusions into one file. Returns the bucket count."""
-        bucket_count: int = max(1, math.ceil(row_count / ROWS_PER_BUCKET))
-        buffers: list[list[dict[str, Any]]] = [[] for _ in range(bucket_count)]
-        chunk_counts: list[int] = [0] * bucket_count
+        The manifest records the pages already cut, so a step replayed after
+        its manifest was written returns at once, and one replayed before, or
+        from the first page, rewrites the same chunks."""
+        manifest: BucketManifest | None = self._manifest() if first_page else None
+        if manifest is None:
+            manifest = BucketManifest(next_page=0, chunks=[0] * bucket_count)
+        if manifest.next_page > first_page:
+            return manifest.next_page
+        buffers: list[list[bytes]] = [[] for _ in range(bucket_count)]
         buffered = 0
+        cut: int = 0
 
         def flush(bucket: int) -> None:
             nonlocal buffered
             if not buffers[bucket]:
                 return
-            self._write(self._chunk_id(bucket, chunk_counts[bucket]), buffers[bucket])
-            chunk_counts[bucket] += 1
+            self._write_lines(
+                self._chunk_id(bucket, manifest.chunks[bucket]), buffers[bucket]
+            )
+            manifest.chunks[bucket] += 1
             buffered -= len(buffers[bucket])
             buffers[bucket] = []
 
-        for row in self.iter_pages(page_count):
-            bucket: int = zlib.crc32(row.key.encode()) % bucket_count
-            buffers[bucket].append(row.model_dump(mode="json"))
-            buffered += 1
-            if len(buffers[bucket]) >= BUCKET_FLUSH_ROWS:
-                flush(bucket)
-            elif buffered >= BUCKET_BUFFER_ROWS:
-                flush(max(range(bucket_count), key=lambda b: len(buffers[b])))
+        page: int = first_page
+        while page < page_count and cut < BUCKETING_ROWS_PER_STEP:
+            lines: list[bytes] = self._read_lines(self._page_id(page))
+            for line in lines:
+                bucket: int = zlib.crc32(_line_key(line)) % bucket_count
+                buffers[bucket].append(line)
+                buffered += 1
+                if len(buffers[bucket]) >= BUCKET_FLUSH_ROWS:
+                    flush(bucket)
+                elif buffered >= BUCKET_BUFFER_ROWS:
+                    flush(max(range(bucket_count), key=lambda b: len(buffers[b])))
+            cut += len(lines)
+            page += 1
         for bucket in range(bucket_count):
             flush(bucket)
-        self._write(f"{self._prefix}{_MANIFEST}", chunk_counts)
-        self._chunk_counts = chunk_counts
+        manifest.next_page = page
+        self._write_manifest(manifest)
+        return page
+
+    def write_buckets(
+        self,
+        page_count: int,
+        row_count: int,
+        on_step: Callable[[], None] | None = None,
+    ) -> int:
+        """Cuts the whole listing into buckets, calling ``on_step`` after
+        each resumable step. Returns the bucket count."""
+        bucket_count: int = bucket_count_for(row_count)
+        page: int = 0
+        while True:
+            page = self.bucket_pages(page, page_count, bucket_count)
+            if on_step is not None:
+                on_step()
+            if page >= page_count:
+                return bucket_count
+
+    def fold_exclusions(self) -> None:
+        """Gathers the per-mailbox exclusion files into one, read once per build step."""
         self._write(f"{self._prefix}{_EXCLUSIONS}", self._collect_exclusions())
-        return bucket_count
+
+    def _manifest(self) -> BucketManifest:
+        return BucketManifest.model_validate_json(
+            self._read(f"{self._prefix}{_MANIFEST}")
+        )
+
+    def _write_manifest(self, manifest: BucketManifest) -> None:
+        self._write(f"{self._prefix}{_MANIFEST}", manifest.model_dump(mode="json"))
+        self._chunk_counts = manifest.chunks
 
     def _collect_exclusions(self) -> dict[str, list[str]]:
         mailbox_prefix = f"{self._prefix}mailbox-"
@@ -239,19 +311,17 @@ class ThreadTable:
 
     def read_bucket(self, bucket: int) -> list[ThreadListing]:
         if self._chunk_counts is None:
-            self._chunk_counts = _COUNTS.validate_json(
-                self._read(f"{self._prefix}{_MANIFEST}")
-            )
+            self._chunk_counts = self._manifest().chunks
         rows: list[ThreadListing] = []
         for chunk in range(self._chunk_counts[bucket]):
-            rows.extend(_ROWS.validate_json(self._read(self._chunk_id(bucket, chunk))))
+            rows.extend(_rows(self._read_lines(self._chunk_id(bucket, chunk))))
         return rows
 
     def write_mailbox_exclusions(self, mailbox_id: str, folder_ids: list[str]) -> None:
         self._write(self._mailbox_id(mailbox_id), folder_ids)
 
     def read_exclusions(self) -> dict[str, set[str]]:
-        """Excluded folder ids by mailbox, as folded in by write_buckets."""
+        """Excluded folder ids by mailbox, as gathered by fold_exclusions."""
         return {
             mailbox_id: set(folder_ids)
             for mailbox_id, folder_ids in _EXCLUSIONS_BY_MAILBOX.validate_json(

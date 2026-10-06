@@ -209,3 +209,11 @@ class ThreadGroup(BaseModel):
     key: str
     newest_message_id: str
     copies: list[ThreadCopy]
+
+
+class BucketManifest(BaseModel):
+    """How far the listing is cut into buckets: the pages done and the chunk
+    files written per bucket."""
+
+    next_page: int
+    chunks: list[int]

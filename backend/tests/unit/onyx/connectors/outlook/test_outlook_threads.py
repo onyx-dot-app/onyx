@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.connectors.outlook.models import OutlookMailbox, ThreadListing
 from onyx.connectors.outlook.threads import (
     ThreadTable,
@@ -161,7 +163,9 @@ def test_thread_table_round_trips_pages_into_buckets_and_cleans_up() -> None:
             keys = {row.key for row in table.read_bucket(b)}
             assert sum(1 for r in rows if r.key in keys) == len(table.read_bucket(b))
         # Chunks and the manifest are plain JSON, so another run can read them.
-        assert json.loads(store.files["outlook-threads/run/buckets.json"]) == [
+        manifest = json.loads(store.files["outlook-threads/run/buckets.json"])
+        assert manifest["next_page"] == 2
+        assert manifest["chunks"] == [
             sum(
                 1
                 for f in store.files
@@ -170,6 +174,7 @@ def test_thread_table_round_trips_pages_into_buckets_and_cleans_up() -> None:
             for b in range(bucket_count)
         ]
         assert ThreadTable("run").read_bucket(0) == table.read_bucket(0)
+        table.fold_exclusions()
         assert ThreadTable("run").read_exclusions() == {"user-1": {"junk"}}
 
         table.touch()
@@ -221,3 +226,62 @@ def test_total_buffer_cap_flushes_the_fullest_bucket() -> None:
         assert len(chunks) >= 3
         rows = [r for b in range(bucket_count) for r in table.read_bucket(b)]
         assert sorted(r.key for r in rows) == [f"k{i}" for i in range(6)]
+
+
+def test_bucketing_resumes_by_page_and_a_replayed_step_changes_nothing() -> None:
+    store = memory_file_store()
+    pages = [
+        [_listing(f"k{p}-{i}", 1, f"m{p}-{i}") for i in range(4)] for p in range(5)
+    ]
+    with (
+        patch(
+            "onyx.connectors.outlook.threads.get_default_file_store",
+            return_value=store,
+        ),
+        patch("onyx.connectors.outlook.threads.BUCKETING_ROWS_PER_STEP", 8),
+    ):
+        table = ThreadTable("run")
+        for number, page in enumerate(pages):
+            table.write_page(number, page)
+
+        first = table.bucket_pages(0, page_count=5, bucket_count=3)
+        assert first == 2
+        after_first = dict(store.files)
+        # The checkpoint was not saved, so the same step runs again.
+        assert ThreadTable("run").bucket_pages(0, page_count=5, bucket_count=3) == 2
+        assert store.files == after_first
+
+        second = table.bucket_pages(first, page_count=5, bucket_count=3)
+        third = table.bucket_pages(second, page_count=5, bucket_count=3)
+        assert (second, third) == (4, 5)
+        # A later step replayed after its manifest was written returns at once.
+        before_replay = dict(store.files)
+        assert ThreadTable("run").bucket_pages(first, page_count=5, bucket_count=3) == 5
+        assert store.files == before_replay
+        rows = [row for b in range(3) for row in ThreadTable("run").read_bucket(b)]
+
+    assert sorted(row.message_id for row in rows) == sorted(
+        row.message_id for page in pages for row in page
+    )
+
+
+def test_an_empty_listing_cuts_into_one_empty_bucket() -> None:
+    store = memory_file_store()
+    with patch(
+        "onyx.connectors.outlook.threads.get_default_file_store", return_value=store
+    ):
+        table = ThreadTable("run")
+        assert table.write_buckets(page_count=0, row_count=0) == 1
+        table.fold_exclusions()
+        assert ThreadTable("run").read_bucket(0) == []
+        assert ThreadTable("run").read_exclusions() == {}
+
+
+def test_a_row_that_does_not_open_with_its_key_fails_the_cut() -> None:
+    store = memory_file_store()
+    store.files["outlook-threads/run/listing-0.jsonl"] = b'{"mailbox":{},"key":"k"}'
+    with patch(
+        "onyx.connectors.outlook.threads.get_default_file_store", return_value=store
+    ):
+        with pytest.raises(ValueError, match="does not open with its key"):
+            ThreadTable("run").bucket_pages(0, page_count=1, bucket_count=2)

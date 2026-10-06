@@ -291,6 +291,7 @@ def _step(
     connector: OutlookConnector,
     checkpoint: OutlookCheckpoint,
     include_permissions: bool = False,
+    start: int = START,
 ) -> tuple[list[Document | HierarchyNode | ConnectorFailure], OutlookCheckpoint]:
     items: list[Document | HierarchyNode | ConnectorFailure] = []
     load = (
@@ -298,7 +299,7 @@ def _step(
         if include_permissions
         else connector.load_from_checkpoint
     )
-    generator = load(START, END, checkpoint)
+    generator = load(start, END, checkpoint)
     while True:
         try:
             items.append(next(generator))
@@ -307,14 +308,14 @@ def _step(
 
 
 def _run(
-    connector: OutlookConnector, include_permissions: bool = False
+    connector: OutlookConnector, include_permissions: bool = False, start: int = START
 ) -> list[Document | HierarchyNode | ConnectorFailure]:
     """Drive the walk to completion, round-tripping the checkpoint as JSON each
     step the way the indexing pipeline persists it."""
     checkpoint = connector.build_dummy_checkpoint()
     collected: list[Document | HierarchyNode | ConnectorFailure] = []
     for _ in range(50):
-        items, checkpoint = _step(connector, checkpoint, include_permissions)
+        items, checkpoint = _step(connector, checkpoint, include_permissions, start)
         collected.extend(items)
         checkpoint = connector.validate_checkpoint_json(checkpoint.model_dump_json())
         if not checkpoint.has_more:
@@ -757,7 +758,7 @@ def test_listing_step_replayed_after_a_failure_rewrites_the_same_page(
     _step(connector, saved)
 
     pages = [f for f in _memory_thread_table.files if "listing-" in f]
-    assert pages == [f"outlook-threads/{checkpoint.run_id}/listing-0.json"]
+    assert pages == [f"outlook-threads/{checkpoint.run_id}/listing-0.jsonl"]
     assert saved.listing_pages == 1
 
 
@@ -945,6 +946,47 @@ def test_a_private_reply_is_readable_only_by_the_mailboxes_that_hold_it() -> Non
         c.kwargs["mailbox_id"]
         for c in gateway.fetch_conversation_outline_page.call_args_list
     ) == [ALICE.id, BOB.id]
+
+
+def test_a_listing_from_the_beginning_compares_copies_without_reading_outlines() -> (
+    None
+):
+    """A window that opens at the beginning lists every message of each copy,
+    so the copies are compared on the listing and no outline is fetched."""
+    gateway = _private_reply_gateway()
+    connector = _connector(gateway)
+
+    with_outlines = {
+        item.id: _readers(item)
+        for item in _run(connector, include_permissions=True)
+        if isinstance(item, Document)
+    }
+    outline_calls = gateway.fetch_conversation_outline_page.call_count
+    assert outline_calls > 0
+
+    documents = {
+        item.id: _readers(item)
+        for item in _run(connector, include_permissions=True, start=0)
+        if isinstance(item, Document)
+    }
+
+    assert gateway.fetch_conversation_outline_page.call_count == outline_calls
+    assert documents == with_outlines
+
+
+def test_listing_covers_the_history_from_the_beginning_or_from_before_the_cutoff() -> (
+    None
+):
+    unbounded = _connector(_happy_gateway())
+    assert unbounded._listing_covers_history(0)
+    assert not unbounded._listing_covers_history(START)
+
+    bounded = _connector(_happy_gateway(), mail_history_days=30)
+    now = datetime.now(timezone.utc)
+    assert bounded._listing_covers_history(int((now - timedelta(days=45)).timestamp()))
+    assert not bounded._listing_covers_history(
+        int((now - timedelta(days=5)).timestamp())
+    )
 
 
 def test_slim_walk_yields_the_documents_indexing_builds_with_the_same_readers() -> None:
@@ -1991,9 +2033,13 @@ def test_slim_docs_batch_and_report_progress() -> None:
     # batched once every mailbox is read, with one report for the bucket.
     slim_batches = [b for b in batches if isinstance(b[0], SlimDocument)]
     assert [len(b) for b in slim_batches] == [SLIM_BATCH_SIZE] * 3 + [3]
+    # The zero is the heartbeat of the cut into buckets.
     assert callback.progress.call_args_list == [
         call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)
-    ] * 3 + [call("outlook_slim_docs", 3 * SLIM_BATCH_SIZE + 3)]
+    ] * 3 + [
+        call("outlook_slim_docs", 0),
+        call("outlook_slim_docs", 3 * SLIM_BATCH_SIZE + 3),
+    ]
 
 
 def test_slim_docs_follow_delta_pages_by_their_link() -> None:
