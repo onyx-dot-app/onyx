@@ -95,13 +95,13 @@ def count_message_replay_tokens(
     if not image_files_replayed_as_markers:
         return msg.token_count
     # Include images whose stored cost is zero, such as project images.
-    num_images = sum(
+    num_images: int = sum(
         1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
     )
     if not num_images:
         return msg.token_count
-    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-    marker_tokens = (
+    sample_marker: str = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+    marker_tokens: int = (
         token_counter(sample_marker)
         if token_counter
         else _NON_VISION_MARKER_TOKEN_FALLBACK
