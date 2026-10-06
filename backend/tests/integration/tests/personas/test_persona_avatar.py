@@ -7,6 +7,8 @@ Covers:
    everyone, private gated to owner/allowed members).
 3. 404 responses for personas without a configured avatar or that do not
    exist at all.
+4. Uploads that are not allowlisted images are rejected, so the avatar route
+   cannot serve active content such as HTML.
 """
 
 import base64
@@ -130,6 +132,60 @@ def test_persona_owner_can_fetch_their_avatar(
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("image/")
     assert response.content == _AVATAR_PNG_BYTES
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["content-security-policy"] == "sandbox"
+
+
+@pytest.mark.parametrize(
+    "filename, content, declared_type",
+    [
+        ("payload.html", b"<script>alert(1)</script>", "text/html"),
+        ("payload.png", b"<script>alert(1)</script>", "image/png"),
+        (
+            "payload.svg",
+            b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            "image/svg+xml",
+        ),
+    ],
+)
+def test_upload_rejects_non_image_content(
+    reset: None,  # noqa: ARG001
+    filename: str,
+    content: bytes,
+    declared_type: str,
+) -> None:
+    user: DATestUser = UserManager.create(name="avatar_uploader")
+    response = client.post(
+        f"{API_SERVER_URL}/admin/persona/upload-image",
+        files={"file": (filename, io.BytesIO(content), declared_type)},
+        headers={k: v for k, v in user.headers.items() if k.lower() != "content-type"},
+    )
+    assert response.status_code == 400, response.text
+
+
+def test_upload_stores_sniffed_type_not_declared_type(
+    persona_avatar_setup: PersonaAvatarSetup,
+) -> None:
+    owner = persona_avatar_setup.owner
+    response = client.post(
+        f"{API_SERVER_URL}/admin/persona/upload-image",
+        files={"file": ("avatar.png", io.BytesIO(_AVATAR_PNG_BYTES), "text/html")},
+        headers={k: v for k, v in owner.headers.items() if k.lower() != "content-type"},
+    )
+    response.raise_for_status()
+    persona_id = _create_persona_with_avatar(
+        owner=owner,
+        name="mislabeled avatar persona",
+        is_public=True,
+        uploaded_image_id=response.json()["file_id"],
+    )
+
+    avatar = client.get(
+        f"{API_SERVER_URL}/persona/{persona_id}/avatar",
+        headers=persona_avatar_setup.other_user.headers,
+    )
+    assert avatar.status_code == 200, avatar.text
+    assert avatar.headers["content-type"] == "image/png"
 
 
 def test_public_persona_avatar_is_accessible_to_other_users(

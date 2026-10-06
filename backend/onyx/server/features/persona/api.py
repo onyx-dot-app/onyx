@@ -1,5 +1,7 @@
+from io import BytesIO
 from uuid import UUID
 
+import puremagic
 from fastapi import (
     APIRouter,
     Depends,
@@ -65,7 +67,11 @@ from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
+from onyx.file_store.serving import (
+    INLINE_SAFE_IMAGE_MIME_TYPES,
+    RESPONSE_POLICY_VERSION,
+    resolve_inline_disposition,
+)
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.persona.constants import (
     ADMIN_AGENTS_RESOURCE,
@@ -327,15 +333,33 @@ def upload_file(
     file: UploadFile,
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> dict[str, str]:
+    # Store the type sniffed from the bytes, never the client-declared one.
+    content = file.file.read()
+    file_type = _sniff_avatar_mime_type(content)
+    if file_type is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Avatar must be a PNG, JPEG, GIF, or WebP image",
+        )
     file_store = get_default_file_store()
-    file_type = ChatFileType.IMAGE
     file_id = file_store.save_file(
-        content=file.file,
+        content=BytesIO(content),
         display_name=file.filename,
         file_origin=FileOrigin.CHAT_UPLOAD,
-        file_type=file.content_type or file_type.value,
+        file_type=file_type,
     )
     return {"file_id": file_id}
+
+
+def _sniff_avatar_mime_type(content: bytes) -> str | None:
+    try:
+        matches = puremagic.magic_string(content)
+    except (puremagic.PureError, ValueError):
+        return None
+    mime_type = matches[0].mime_type if matches else None
+    if mime_type not in INLINE_SAFE_IMAGE_MIME_TYPES:
+        return None
+    return mime_type
 
 
 """Endpoints for all"""
@@ -816,7 +840,7 @@ def get_persona_avatar(
         )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 
-    etag = f'"{file_id}"'
+    etag = f'"{file_id}-{RESPONSE_POLICY_VERSION}"'
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
@@ -825,8 +849,15 @@ def get_persona_avatar(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    # Older uploads kept the client-declared type, so anything that is not an
+    # allowlisted image is served as an inert attachment.
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type, inline_types=INLINE_SAFE_IMAGE_MIME_TYPES
+    )
     file_store = get_default_file_store()
     file_io = file_store.read_file(file_id, mode="b")
     return StreamingResponse(
-        file_io, media_type=file_record.file_type, headers=cache_headers
+        file_io,
+        media_type=media_type,
+        headers={**cache_headers, **security_headers},
     )
