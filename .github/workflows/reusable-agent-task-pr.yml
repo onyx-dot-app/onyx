@@ -61,6 +61,16 @@ on:
         required: false
         type: string
         default: ""
+      slack-channel:
+        description: "Slack channel ID to ping when the task PR is opened or refreshed (empty = no post)"
+        required: false
+        type: string
+        default: ""
+      slack-mention:
+        description: "GitHub username to @-mention in the Slack post (resolved via slack-notify/user-mappings.json)"
+        required: false
+        type: string
+        default: ""
       agent-model:
         description: "OPENAI_MODEL override for the agent call (empty = script default)"
         required: false
@@ -85,6 +95,9 @@ on:
       # the fallback script.
       OPENAI_API_KEY:
         description: "OpenAI API key for the agent call"
+        required: false
+      SLACK_BOT_TOKEN:
+        description: "Slack bot token for the PR announcement post"
         required: false
 
 concurrency:
@@ -231,12 +244,14 @@ jobs:
           fi
 
       - name: Open or update PR
+        id: pr
         if: >-
           github.event_name != 'workflow_run' ||
           steps.repair-guard.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
           FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
           PR_TITLE: ${{ inputs.pr-title }}
           REVIEWER: ${{ inputs.reviewer }}
@@ -285,3 +300,44 @@ jobs:
           fi
           gh pr edit "${pr_number}" "${edit_args[@]}" \
             || echo "::warning::Could not update PR #${pr_number}"
+
+          echo "pr_number=${pr_number}" >> "${GITHUB_OUTPUT}"
+          echo "pr_url=${REPO_URL}/pull/${pr_number}" >> "${GITHUB_OUTPUT}"
+
+      # Ping the reviewer in Slack when the task produced or refreshed a PR.
+      # Non-fatal: the PR is the artifact; a Slack hiccup must not fail the run.
+      #
+      # The action loads from a checkout of this workflow's own sha, not the
+      # working tree: a workflow_run repair checks out the task PR's head,
+      # which can predate the action.
+      - name: Checkout Slack actions
+        id: slack-actions
+        if: >-
+          inputs.slack-channel != '' &&
+          (github.event_name != 'workflow_run' ||
+           steps.repair-guard.outputs.proceed == 'true') &&
+          steps.pr.outputs.pr_number != ''
+        continue-on-error: true # notification-only; a checkout outage must not fail the run
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          path: .ci-actions
+          sparse-checkout: .github/actions
+
+      - name: Post PR to Slack for review
+        if: >-
+          inputs.slack-channel != '' &&
+          (github.event_name != 'workflow_run' ||
+           steps.repair-guard.outputs.proceed == 'true') &&
+          steps.pr.outputs.pr_number != '' &&
+          steps.slack-actions.outcome == 'success'
+        uses: ./.ci-actions/.github/actions/slack-post-message
+        with:
+          bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          channel: ${{ inputs.slack-channel }}
+          mention: ${{ inputs.slack-mention }}
+          text: |
+            *🤖 ${{ inputs.task-name }} PR ready for review* {mention}
+            *PR:* <${{ steps.pr.outputs.pr_url }}|#${{ steps.pr.outputs.pr_number }}>
+            *Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|workflow run>

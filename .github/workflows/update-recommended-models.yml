@@ -43,6 +43,7 @@ jobs:
     secrets:
       CHERRY_PICK_APP_PRIVATE_KEY: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      SLACK_BOT_TOKEN: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
     with:
       task-name: recommended-models
       script: backend/scripts/update_recommended_models_agent.py
@@ -51,6 +52,8 @@ jobs:
       branch: auto/update-recommended-models
       pr-title: "chore(llms): update recommended models"
       reviewer: rohoswagger
+      slack-channel: C0C6T9W2U3X # #ai-pr-reviews
+      slack-mention: rohoswagger
       agent-model: ${{ github.event.inputs.agent_model }}
 
   notify-slack-on-failure:
