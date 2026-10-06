@@ -109,24 +109,76 @@ async def test_incidental_credential_change_still_changes_binding(
     )
 
 
-def test_unverified_session_identity_fails_closed(
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case",
+    [
+        "invalid_jwt",
+        "service_account",
+        "other_users_token",
+        "no_credentials",
+        "multi_tenant_jwt",
+    ],
+)
+async def test_unbound_or_foreign_sessions_fail_closed(
     jwt_strategy: SingleTenantJWTStrategy,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
 ) -> None:
-    _ = jwt_strategy
     user = User(id=uuid4(), account_type=AccountType.STANDARD)
+    request = session_request(await jwt_strategy.write_token(user))
+    if case == "invalid_jwt":
+        request = session_request("invalid-jwt")
+    elif case == "service_account":
+        user.account_type = AccountType.SERVICE_ACCOUNT
+    elif case == "other_users_token":
+        other = User(id=uuid4(), account_type=AccountType.STANDARD)
+        request = session_request(await jwt_strategy.write_token(other))
+    elif case == "no_credentials":
+        request = Request(
+            {
+                "type": "http",
+                "headers": [],
+                "state": {
+                    "usage_credential": UsageCredentialIdentity(
+                        UsageCredentialType.SESSION
+                    )
+                },
+            }
+        )
+    elif case == "multi_tenant_jwt":
+        monkeypatch.setattr(api, "MULTI_TENANT", True)
+        request = session_request(
+            "external-idp-token", source="bearer", credential=UsageCredentialType.JWT
+        )
     with pytest.raises(OnyxError):
-        api._session_hash(session_request("invalid-jwt"), user)
+        api._session_hash(request, user)
 
 
-def test_external_idp_jwt_does_not_use_onyx_session_identity(
-    jwt_strategy: SingleTenantJWTStrategy,
+def test_external_idp_jwt_binds_to_the_bearer_not_session_state(
+    jwt_strategy: SingleTenantJWTStrategy, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _ = jwt_strategy
+    monkeypatch.setattr(api, "MULTI_TENANT", False)
     user = User(id=uuid4(), account_type=AccountType.STANDARD)
-    request = session_request(
-        "external-idp-token", source="bearer", credential=UsageCredentialType.JWT
-    )
-    assert api._session_hash(request, user)
+
+    def binding(bearer: str, session_token: str) -> str:
+        request = Request(
+            {
+                "type": "http",
+                "headers": [(b"authorization", f"Bearer {bearer}".encode())],
+                "state": {
+                    "usage_credential": UsageCredentialIdentity(
+                        UsageCredentialType.JWT
+                    ),
+                    "authenticated_session_token": session_token,
+                },
+            }
+        )
+        return api._session_hash(request, user)
+
+    assert binding("idp-a", "first") == binding("idp-a", "second")
+    assert binding("idp-a", "first") != binding("idp-b", "first")
 
 
 @pytest.mark.asyncio

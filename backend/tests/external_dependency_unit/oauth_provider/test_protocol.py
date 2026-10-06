@@ -51,7 +51,7 @@ pytestmark = [
 _ORIGIN = "http://localhost:3000"
 _RESOURCE = f"{_ORIGIN}/mcp/"
 _REDIRECT = "http://127.0.0.1:9876/callback"
-_UNKNOWN_OAUTH_REFRESH_TOKEN = "onyx_ort_public." + "a" * 43
+_UNKNOWN_OAUTH_REFRESH_TOKEN = "onyx_ort_tenant_does_not_exist." + "a" * 43
 
 
 async def test_rate_limiter_counts_bucket_and_keeps_ttl(
@@ -750,6 +750,29 @@ async def test_authorize_fetches_no_store_metadata_once_per_request(
             assert fetch.await_count == expected_fetches
     finally:
         _cimd_fetcher.cache_clear()
+
+
+async def test_authorize_rejects_missing_pkce_method(
+    protocol_client: httpx.AsyncClient,
+) -> None:
+    client_id = await _register(protocol_client)
+    _, challenge = generate_pkce_pair()
+    response = await protocol_client.get(
+        "/oauth-provider/authorize",
+        params={
+            "client_id": client_id,
+            "redirect_uri": _REDIRECT,
+            "response_type": "code",
+            "scope": "read:search",
+            "resource": _RESOURCE,
+            "code_challenge": challenge,
+            "state": "client-state",
+        },
+    )
+    assert response.status_code == 302, response.text
+    redirect = parse_qs(urlsplit(response.headers["location"]).query)
+    assert redirect["error"] == ["invalid_request"]
+    assert "request" not in redirect
 
 
 async def test_unknown_tenant_revocation_is_success(
