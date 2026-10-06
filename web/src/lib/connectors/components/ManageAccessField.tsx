@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Card, Divider, MessageCard, Text } from "@opal/components";
-import { Content, ContentAction, Section } from "@opal/layouts";
+import { Divider, MessageCard } from "@opal/components";
+import { AttachmentItem, Content, Section } from "@opal/layouts";
 import { SvgUserManage } from "@opal/icons";
 import useUsers from "@/hooks/useUsers";
 import { Permission } from "@/lib/types";
@@ -33,25 +33,26 @@ export default function ManageAccessField({
     : usersData?.accepted.filter((user) => user.is_admin).length;
 
   const adminsRow = (
-    <Card color="background-tint-01" border="none" padding={2}>
-      <ContentAction
-        icon={SvgUserManage}
-        title={t("admins.title")}
-        description={
-          adminCount === undefined
-            ? undefined
-            : tRestriction("memberCount", { count: adminCount })
-        }
-        sizePreset="main-ui"
-        variant="section"
-        padding={0}
-        rightChildren={
-          <Text font="secondary-body" color="text-03">
-            {t("admins.alwaysShared")}
-          </Text>
-        }
-      />
-    </Card>
+    <AttachmentItem
+      prominence="secondary"
+      icon={SvgUserManage}
+      title={t("admins.title")}
+      description={
+        adminCount === undefined
+          ? undefined
+          : tRestriction("memberCount", { count: adminCount })
+      }
+      rightChildren={
+        <Content
+          icon={SvgUserManage}
+          title={t("admins.alwaysShared")}
+          sizePreset="secondary"
+          variant="body"
+          orientation="reverse"
+          color="muted"
+        />
+      }
+    />
   );
 
   return (

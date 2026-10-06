@@ -2,8 +2,8 @@
 
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
-import { Button, Card, InputSingleComboBox } from "@opal/components";
-import { ContentAction, InputErrorText, Section } from "@opal/layouts";
+import { Button, InputSingleComboBox } from "@opal/components";
+import { AttachmentItem, InputErrorText, Section } from "@opal/layouts";
 import { SvgUsers, SvgX } from "@opal/icons";
 import { useUserGroups } from "@/lib/hooks";
 
@@ -71,33 +71,25 @@ export default function GroupShareList({
       {selectedGroups.length > 0 && (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {selectedGroups.map((group) => (
-            <Card
+            <AttachmentItem
               key={group.id}
-              color="background-tint-01"
-              border="none"
-              padding={2}
-            >
-              <ContentAction
-                icon={SvgUsers}
-                title={group.name}
-                description={t("memberCount", { count: group.users.length })}
-                sizePreset="main-ui"
-                variant="section"
-                padding={0}
-                rightChildren={
-                  <Button
-                    icon={SvgX}
-                    size="sm"
-                    prominence="internal"
-                    tooltip={t("remove.tooltip", { name: group.name })}
-                    disabled={disabled}
-                    onClick={() =>
-                      setGroups(field.value.filter((id) => id !== group.id))
-                    }
-                  />
-                }
-              />
-            </Card>
+              prominence="secondary"
+              icon={SvgUsers}
+              title={group.name}
+              description={t("memberCount", { count: group.users.length })}
+              rightChildren={
+                <Button
+                  icon={SvgX}
+                  size="sm"
+                  prominence="internal"
+                  tooltip={t("remove.tooltip", { name: group.name })}
+                  disabled={disabled}
+                  onClick={() =>
+                    setGroups(field.value.filter((id) => id !== group.id))
+                  }
+                />
+              }
+            />
           ))}
         </div>
       )}
