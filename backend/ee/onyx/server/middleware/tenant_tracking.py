@@ -15,7 +15,11 @@ from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
+from onyx.error_handling.exceptions import (
+    OnyxError,
+    log_onyx_error,
+    onyx_error_to_json_response,
+)
 from onyx.oauth_provider.auth import oauth_provider_tenant_from_request
 from onyx.redis.redis_pool import (
     retrieve_auth_token_data_from_bearer,
@@ -114,6 +118,7 @@ def add_api_server_tenant_id_middleware(
             return await call_next(request)
 
         except OnyxError as error:
+            log_onyx_error(error)
             return onyx_error_to_json_response(error)
         except Exception as e:
             logger.exception("Error in tenant ID middleware: %s", str(e))
