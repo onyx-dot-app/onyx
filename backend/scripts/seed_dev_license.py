@@ -16,7 +16,7 @@ import sys
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
-from ee.onyx.db.license import invalidate_license_cache, upsert_license  # noqa: E402
+from ee.onyx.db.license import publish_license_metadata, upsert_license  # noqa: E402
 from ee.onyx.utils.license import (  # noqa: E402
     normalize_license_file,
     verify_license_signature,
@@ -39,8 +39,10 @@ def main() -> None:
     SqlEngine.init_engine(pool_size=1, max_overflow=0)
     with get_session_with_current_tenant() as db_session:
         upsert_license(db_session, license_data)
-    # A running instance would keep serving the old license from its cache.
-    invalidate_license_cache()
+        # A running instance would keep serving the old license from its cache.
+        # Published under the cache lock, so a refresh in flight cannot put the
+        # old entry back.
+        publish_license_metadata(db_session)
 
     print("Dev license seeded")
 

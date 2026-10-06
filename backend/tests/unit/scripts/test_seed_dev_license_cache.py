@@ -1,5 +1,5 @@
-"""Seeding a dev license must drop the cached license details, or a running
-instance keeps serving the license it had before."""
+"""Seeding a dev license must republish the cached license details, or a
+running instance keeps serving the license it had before."""
 
 from unittest.mock import MagicMock, patch
 
@@ -7,7 +7,9 @@ import pytest
 from scripts import seed_dev_license
 
 
-def test_seeding_drops_the_cached_license(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_seeding_republishes_the_cached_license(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("ONYX_DEV_LICENSE", "license-blob")
     calls: MagicMock = MagicMock()
     with (
@@ -16,22 +18,22 @@ def test_seeding_drops_the_cached_license(monkeypatch: pytest.MonkeyPatch) -> No
         patch.object(seed_dev_license, "SqlEngine"),
         patch.object(seed_dev_license, "get_session_with_current_tenant"),
         patch.object(seed_dev_license, "upsert_license") as upsert,
-        patch.object(seed_dev_license, "invalidate_license_cache") as invalidate,
+        patch.object(seed_dev_license, "publish_license_metadata") as publish,
     ):
         calls.attach_mock(upsert, "upsert")
-        calls.attach_mock(invalidate, "invalidate")
+        calls.attach_mock(publish, "publish")
         seed_dev_license.main()
 
-    assert [call[0] for call in calls.mock_calls] == ["upsert", "invalidate"]
+    assert [call[0] for call in calls.mock_calls] == ["upsert", "publish"]
 
 
 def test_an_empty_license_seeds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ONYX_DEV_LICENSE", "")
     with (
         patch.object(seed_dev_license, "upsert_license") as upsert,
-        patch.object(seed_dev_license, "invalidate_license_cache") as invalidate,
+        patch.object(seed_dev_license, "publish_license_metadata") as publish,
     ):
         seed_dev_license.main()
 
     upsert.assert_not_called()
-    invalidate.assert_not_called()
+    publish.assert_not_called()
