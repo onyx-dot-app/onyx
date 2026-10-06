@@ -32,13 +32,13 @@ Interactive.Stateful           <- variant="select-heavy", interaction, state, di
             ├─ div > Icon?                 (interactive-foreground-icon)
             ├─ [Foldable]?                 (wraps label + chevron when foldable)
             │    ├─ <span>?                .opal-button-label
-            │    └─ div > ChevronIcon      .opal-open-button-chevron
+            │    └─ div > ChevronIcon      .opal-chevron
             └─ <span>? / ChevronIcon       (non-foldable)
 ```
 
 - **`interaction` controls both the chevron and the hover visual state.** When `interaction` is `"hover"` (explicitly or via Radix `data-state="open"`), the chevron rotates 180° and the hover background activates.
 - **Open-state detection**: the explicit `interaction` prop takes priority; otherwise the component reads the trigger attributes merged onto it: `data-state="open"` from Radix triggers (e.g. `Popover.Trigger`), or `aria-expanded` from an Opal `Dropdown.Trigger`.
-- **Chevron rotation** is CSS-driven via `.interactive[data-interaction="hover"] .opal-open-button-chevron { rotate: -180deg }`. The `ChevronIcon` is a stable named component (not an inline function) to preserve React element identity across renders.
+- **Chevron rotation** is CSS-driven, in `buttons/chevron.css`: `.interactive[data-interaction="hover"] .opal-chevron { rotate: -180deg }` (and the same for `"active"`). The `ChevronIcon` is a stable named component (not an inline function) to preserve React element identity across renders.
 
 ## Props
 
