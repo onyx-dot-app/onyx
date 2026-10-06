@@ -1,18 +1,6 @@
 {
   "aliases": {},
   "models": {
-    "accounts/fireworks/models/": {
-      "cost": {
-        "input": 0.09999999999999999,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 40960,
-        "output": 40960
-      },
-      "mode": "embedding",
-      "name": "accounts/fireworks/models/"
-    },
     "accounts/fireworks/models/SSD-1B": {
       "cost": {
         "input": 0.00013,

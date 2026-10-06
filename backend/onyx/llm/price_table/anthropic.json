@@ -133,6 +133,62 @@
       "temperature": true,
       "tool_call": true
     },
+    "claude-mythos-5": {
+      "cost": {
+        "cache_read": 1.0,
+        "cache_write": 12.5,
+        "cache_write_above_1hr": 20.0,
+        "input": 10.0,
+        "output": 50.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-mythos-5",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "claude-mythos-5-1": {
+      "cost": {
+        "cache_read": 0.25,
+        "cache_write": 12.5,
+        "cache_write_above_1hr": 20.0,
+        "input": 10.0,
+        "output": 50.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-mythos-5-1",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "claude-opus-4-5": {
       "attachment": true,
       "cost": {
@@ -232,6 +288,34 @@
       "temperature": true,
       "tool_call": true
     },
+    "claude-opus-4-6-20260205": {
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
+        "input": 5.0,
+        "output": 25.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-opus-4-6-20260205",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "claude-opus-4-7": {
       "attachment": true,
       "cost": {
@@ -263,6 +347,34 @@
       "release_date": "2026-04-14",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "claude-opus-4-7-20260416": {
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
+        "input": 5.0,
+        "output": 25.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-opus-4-7-20260416",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "claude-opus-4-8": {

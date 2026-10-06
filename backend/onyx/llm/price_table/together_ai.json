@@ -361,17 +361,6 @@
       "mode": "rerank",
       "name": "Salesforce/Llama-Rank-V1"
     },
-    "baai/bge-base-en-v1.5": {
-      "cost": {
-        "input": 0.008,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 512
-      },
-      "mode": "embedding",
-      "name": "baai/bge-base-en-v1.5"
-    },
     "deepseek-ai/DeepSeek-R1": {
       "attachment": false,
       "cost": {

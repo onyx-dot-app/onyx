@@ -2662,6 +2662,11 @@
     },
     "grok-4.6": {
       "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "input": 1.25,
+        "output": 6
+      },
       "family": "grok",
       "limit": {
         "context": 200000,
@@ -3043,6 +3048,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Model Router",
       "open_weights": false,
       "reasoning": false,
@@ -3549,6 +3555,14 @@
       },
       "mode": "embedding",
       "name": "us/text-embedding-ada-002"
+    },
+    "whisper": {
+      "cost": {
+        "second": 0.0001,
+        "second_input": 0.0001
+      },
+      "mode": "audio_transcription",
+      "name": "whisper"
     },
     "whisper-1": {
       "cost": {
