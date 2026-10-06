@@ -192,6 +192,8 @@ jobs:
   build-devcontainer-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     runs-on:
       [
         runs-on,
@@ -230,14 +232,18 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Devcontainer Docker image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: .devcontainer
           file: .devcontainer/Dockerfile
-          push: true
+          # Push by digest: the devcontainer image is content-stable, so
+          # per-run tags accumulated on a single ECR image digest until they
+          # hit the 1000-tags-per-image cap. Downstream jobs pull
+          # <repo>@<digest> via this job's `digest` output instead.
+          outputs: type=image,push=true,push-by-digest=true
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
           provenance: false
@@ -377,7 +383,7 @@ jobs:
       - name: Install Python deps
         uses: ./.github/actions/install-python-deps
         with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
@@ -457,7 +463,7 @@ jobs:
               -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
               -e ENABLE_CRAFT=true \
               -e ONYX_DEV_LICENSE \
-              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
+              ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }} \
               $RUN_CMD
 
       # ------------------------------------------------------------
@@ -546,7 +552,7 @@ jobs:
       - name: Install Python deps
         uses: ./.github/actions/install-python-deps
         with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Onyx Lite Integration Tests
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
@@ -576,7 +582,7 @@ jobs:
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e ONYX_DEV_LICENSE \
-              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
+              ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }} \
               uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/no_vectordb
 
       - name: Dump all-container logs (onyx-lite)
@@ -651,12 +657,11 @@ jobs:
       - name: Install Python deps
         uses: ./.github/actions/install-python-deps
         with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Multi-Tenant Integration Tests
         env:
-          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          DEVCONTAINER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
         run: |
           echo "Running multi-tenant integration tests..."
           docker run --rm --network onyx_default \
@@ -693,7 +698,7 @@ jobs:
             -e DEV_MODE=true \
             -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
             -e LICENSE_ENFORCEMENT_ENABLED=false \
-            ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
+            ${DEVCONTAINER_IMAGE} \
             uv run --no-sync pytest -v --tb=short -rs tests/integration/multitenant_tests
 
       - name: Dump all-container logs (multi-tenant)
