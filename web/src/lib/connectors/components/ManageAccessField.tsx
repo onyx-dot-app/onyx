@@ -69,7 +69,12 @@ export default function ManageAccessField({
         disabled={disabled}
       />
       <Divider paddingParallel={0} paddingPerpendicular={0} />
-      <MessageCard variant="info" title={t("note")} />
+      <MessageCard
+        variant="default"
+        title={t("note")}
+        outerPadding={1}
+        innerPadding={1}
+      />
     </Section>
   );
 }
