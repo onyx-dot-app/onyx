@@ -859,29 +859,6 @@ def _assert_sync_restricted_allowed() -> None:
         )
 
 
-def assert_data_access_allowed(
-    user: User,
-    db_session: Session,
-    access_type: AccessType,
-    data_access: list[int] | None,
-) -> None:
-    """Data-access groups go only on private or restricted pairs, and only
-    groups the user can see. Shared by the requests that create a pair."""
-    if not data_access:
-        return
-    if access_type not in AccessType.data_access_types():
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Data-access groups can only be set on private or restricted connectors.",
-        )
-    visible_group_ids = get_visible_user_group_ids(user, db_session)
-    if visible_group_ids is not None and not visible_group_ids.issuperset(data_access):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "You can't give data access to groups you can't see.",
-        )
-
-
 @router.put(
     "/connector/{connector_id}/credential/{credential_id}", tags=PUBLIC_API_TAGS
 )
@@ -909,9 +886,21 @@ def associate_credential_to_connector(
                 "A restricted connector needs at least one data-access group.",
             )
 
-    assert_data_access_allowed(
-        user, db_session, metadata.access_type, metadata.data_access
-    )
+    if metadata.data_access:
+        if metadata.access_type not in AccessType.data_access_types():
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Data-access groups can only be set on private or restricted "
+                "connectors.",
+            )
+        visible_group_ids = get_visible_user_group_ids(user, db_session)
+        if visible_group_ids is not None and not visible_group_ids.issuperset(
+            metadata.data_access
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "You can't give data access to groups you can't see.",
+            )
 
     # GATE 2 write authorization (see assert_within_scope).
     #

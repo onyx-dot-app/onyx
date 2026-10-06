@@ -784,10 +784,10 @@ def manage_access_by_group(
     return {entry.group_id: entry.role for entry in entries}
 
 
-class ManageAndDataAccess(BaseModel):
-    """Who manages a cc-pair and who reads it. Shared by the requests that
-    create one, so each reads the two lists the same way."""
-
+class ConnectorCredentialPairMetadata(BaseModel):
+    name: str
+    access_type: AccessType
+    auto_sync_options: dict[str, Any] | None = None
     # Groups that manage the pair as Editors, for clients that predate
     # manage_access. At most one of groups and manage_access may be set.
     groups: list[int] = Field(default_factory=list)
@@ -796,6 +796,7 @@ class ManageAndDataAccess(BaseModel):
     # Groups whose members may read a PRIVATE pair's documents. None means
     # the manage groups.
     data_access: list[int] | None = None
+    processing_mode: ProcessingMode = ProcessingMode.REGULAR
 
     @model_validator(mode="after")
     def _one_manage_field(self) -> Self:
@@ -807,25 +808,6 @@ class ManageAndDataAccess(BaseModel):
         if self.manage_access:
             return manage_access_by_group(self.manage_access)
         return dict.fromkeys(self.groups, ConnectorManageRole.EDITOR)
-
-
-class ConnectorCredentialPairMetadata(ManageAndDataAccess):
-    name: str
-    access_type: AccessType
-    auto_sync_options: dict[str, Any] | None = None
-    processing_mode: ProcessingMode = ProcessingMode.REGULAR
-
-
-class ConnectorWithMockCredentialRequest(ConnectorUpdateRequest, ManageAndDataAccess):
-    """A connector created with a placeholder credential, for sources that
-    need none. Takes the same access lists as linking a real credential."""
-
-    def to_connector_base(self) -> ConnectorBase:
-        return ConnectorBase(
-            **self.model_dump(
-                exclude={"access_type", "groups", "manage_access", "data_access"}
-            )
-        )
 
 
 class CCStatusUpdateRequest(BaseModel):
