@@ -29,7 +29,7 @@ Do not use the "site:" operator in your web search queries.
 
 OPEN_URLS_GUIDANCE = """
 ## open_url
-Reads full web pages by URL: the most promising results of a web_search, or URLs the user provides. Accepts multiple URLs per call.
+Reads full web pages by URL, not image files: the most promising results of a web_search, or URLs the user provides. Accepts multiple URLs per call.
 """.lstrip()
 
 PYTHON_TOOL_GUIDANCE = """
@@ -46,7 +46,7 @@ Generates images only when the user requests one. To edit an existing image, pas
 
 MEMORY_GUIDANCE = """
 ## add_memory
-Stores facts for future conversations: enduring preferences, long-term goals, stable constraints, and explicit "remember this" requests.
+Stores user-shared facts for future conversations: enduring preferences, long-term goals, stable constraints, and explicit "remember this" requests.
 """.lstrip()
 
 TOOL_CALL_FAILURE_PROMPT = """
