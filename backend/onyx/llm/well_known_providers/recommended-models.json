@@ -1,21 +1,18 @@
 {
-  "version": "1.17",
+  "version": "1.18",
   "updated_at": "2026-10-06T00:00:00Z",
   "providers": {
     "openai": {
-      "default_model": "gemini-3.1-pro-preview",
+      "default_model": "claude-opus-5-5",
       "additional_visible_models": [
         {
-          "name": "gemini-3.1-pro-preview"
+          "name": "claude-opus-5-5"
         },
         {
-          "name": "gpt-6-astra"
+          "name": "gpt-6.1-sol"
         },
         {
-          "name": "gemini-3.8-flash"
-        },
-        {
-          "name": "gemini-3.7-flash"
+          "name": "claude-sonnet-5-5"
         }
       ]
     },
@@ -29,10 +26,6 @@
         {
           "name": "claude-sonnet-5-5",
           "display_name": "Claude Sonnet 5.5"
-        },
-        {
-          "name": "claude-haiku-4-5",
-          "display_name": "Claude Haiku 4.5"
         }
       ]
     },
@@ -48,8 +41,8 @@
           "display_name": "Gemini 3.8 Flash"
         },
         {
-          "name": "gemini-3.7-flash",
-          "display_name": "Gemini 3.7 Flash"
+          "name": "gemini-3.1-flash-lite",
+          "display_name": "Gemini 3.1 Flash Lite"
         }
       ]
     },
@@ -73,8 +66,8 @@
           "display_name": "Qwen3.8 Max 0902"
         },
         {
-          "name": "moonshotai/kimi-k3",
-          "display_name": "Kimi K3"
+          "name": "qwen/qwen3.8-flash",
+          "display_name": "Qwen3.8 Flash"
         }
       ]
     }
