@@ -43,6 +43,8 @@ export interface GroupShareGroup {
 interface GroupShareListProps {
   /** Formik field holding the selected group ids. */
   name: "groups" | "data_access_group_ids";
+  /** The table's accessible name; it has no visible header. */
+  label: string;
   placeholder: string;
   /** Fixed rows shown before the selected groups (e.g. "Admins"). */
   lockedRows?: GroupShareLockedRow[];
@@ -60,6 +62,7 @@ interface GroupShareListProps {
  */
 export default function GroupShareList({
   name,
+  label,
   placeholder,
   lockedRows = [],
   rowAction,
@@ -206,6 +209,7 @@ export default function GroupShareList({
       {loadFailed && <InputErrorText>{t("loadError")}</InputErrorText>}
       {rows.length > 0 && (
         <Table
+          label={label}
           items={rows}
           columns={columns}
           getRowId={(row) => row.id}

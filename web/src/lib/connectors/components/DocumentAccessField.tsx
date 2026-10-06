@@ -186,6 +186,7 @@ export default function DocumentAccessField({
       {accessType.value === "private" && (
         <GroupShareList
           name="data_access_group_ids"
+          label={t("specificGroups.title")}
           placeholder={tRestriction("picker.placeholder")}
           disabled={disabled}
         />

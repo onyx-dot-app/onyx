@@ -102,6 +102,7 @@ export default function ManageAccessField({
       />
       <GroupShareList
         name="groups"
+        label={t("title")}
         placeholder={t("placeholder")}
         lockedRows={[adminsRow]}
         rowAction={renderRoleMenu}
