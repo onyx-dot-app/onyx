@@ -24,7 +24,7 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
     documents this marks."""
     # Id order and a key-share lock, like every other locker of these rows: no
     # deadlock with them, and inserts that reference a pair are not blocked.
-    cc_pair_ids = list(
+    cc_pair_ids: list[int] = list(
         db_session.scalars(
             select(ConnectorCredentialPair.id)
             .where(ConnectorCredentialPair.access_type != AccessType.PUBLIC)

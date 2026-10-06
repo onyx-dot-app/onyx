@@ -518,6 +518,18 @@ document to the wrong person.
    silently truncating to a wrong-but-smaller set. This is fail-static, not
    fail-closed or fail-open; treat repeated skips (visible via
    `docs_with_permission_errors` on the attempt) as a real gap, not noise.
+8. **The Community downgrade removes all synced permission data, with no
+   sync.** `ee/onyx/db/community_downgrade.py:make_all_cc_pairs_public__no_commit`
+   sets every perm-synced cc-pair to `PUBLIC` and clears its
+   `auto_sync_options`, `last_time_perm_sync` and
+   `last_time_external_group_sync`, so `get_all_auto_sync_cc_pairs` returns no
+   pair. It deletes every `User__ExternalUserGroupId` and
+   `PublicExternalUserGroup` row. It clears `external_user_emails` and
+   `external_user_group_ids` on every `Document` and `HierarchyNode` and sets
+   `Document.is_public` to false. It bumps `Document.last_modified` for the
+   documents of the changed pairs
+   (`onyx/db/document.py:mark_cc_pair_documents_for_sync__no_commit`), so the
+   index write in §4.3 applies. See [[billing]] §4.5.
 
 ---
 

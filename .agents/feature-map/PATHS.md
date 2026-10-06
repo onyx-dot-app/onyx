@@ -108,6 +108,8 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/db/llm_usage.py`, `db/usage.py`, `db/user_usage.py`, `db/system_usage.py`, `server/features/usage/`, `docs/usage/` | observability |
 | `backend/onyx/db/token_limit.py`, `server/token_rate_limits/`, `server/usage_limits.py`, `server/tenant_usage_limits.py` | rate-and-usage-limits |
 | `backend/ee/onyx/server/billing/`, `backend/ee/onyx/server/license/`, `backend/ee/onyx/utils/tier.py` | billing, editions-and-gating |
+| `backend/ee/onyx/db/community_downgrade.py` | billing, access-control |
+| `backend/ee/onyx/server/settings/api.py` | editions-and-gating |
 | `backend/ee/onyx/server/enterprise_settings/` | whitelabelling-and-theme |
 | `backend/ee/onyx/db/standard_answer.py`, `backend/ee/onyx/server/manage/standard_answer.py`, `*/onyxbot/slack/handlers/handle_standard_answers.py` | standard-answers |
 | `backend/onyx/db/notification.py`, `db/release_notes.py`, `db/admin_banner.py`, `server/features/notifications/`, `features/release_notes/`, `features/admin_banner/` | notifications |

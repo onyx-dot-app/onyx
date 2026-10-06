@@ -71,6 +71,7 @@ All authenticated handlers gate on
 | POST | `/license/upload` | `upload_license` | Manual signed license file, for air-gapped self-hosted. Rejects on `MULTI_TENANT`. |
 | POST | `/license/refresh` | `refresh_license_cache_endpoint` | Re-reads the DB, not the control plane. |
 | DELETE | `/license` | `delete_license` | Rejects on `MULTI_TENANT`. |
+| POST | `/license/downgrade` | `downgrade_to_community` | Drops the deployment to the Community tier (§4.5). Returns `CommunityDowngradeResponse` (`connectors_made_public`). Rejects on `MULTI_TENANT`. |
 
 All of these gate on `FULL_ADMIN_PANEL_ACCESS` too, and are sync `def` (not
 `async def`) because the work is blocking: `requests` calls, sync SQLAlchemy,
@@ -216,6 +217,32 @@ prevent seats going over the limit through other means (a license swap, a
 control-plane-side downgrade) - that is enforced separately by
 `license_enforcement.py` at request time (§5).
 
+### 4.5 Community downgrade (self-hosted)
+
+```
+POST /license/downgrade                       ee/onyx/server/license/api.py:downgrade_to_community
+  MULTI_TENANT -> OnyxError(VALIDATION_ERROR)
+  LICENSE_ENFORCEMENT_ENABLED false -> OnyxError(VALIDATION_ERROR)
+  make_all_cc_pairs_public__no_commit         ee/onyx/db/community_downgrade.py
+  db_session.commit()
+  delete_license(db_session)                  ee/onyx/db/license.py
+  -> CommunityDowngradeResponse(connectors_made_public)
+```
+
+The route is under `/license`, which is in `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES`
+(`ee/onyx/configs/license_enforcement_config.py`). An admin can call it while an
+expired license gates the other routes. No frontend code calls it.
+
+- `make_all_cc_pairs_public__no_commit` sets every cc-pair that is not `PUBLIC`
+  to `PUBLIC`. It clears `auto_sync_options`, `last_time_perm_sync` and
+  `last_time_external_group_sync`, deletes the data-access group rows of those
+  pairs, and marks their indexed documents for index sync
+  (`db/document.py:mark_cc_pair_documents_for_sync__no_commit`). For all pairs,
+  it deletes every `User__ExternalUserGroupId` and `PublicExternalUserGroup` row
+  and clears the synced permission columns on `Document` and `HierarchyNode`.
+  The index keeps the old chunk ACLs until the metadata sync rewrites the
+  marked documents. See [[cc-pairs-and-credentials]] §5 and [[permission-sync]] §5.
+
 ---
 
 ## 5. Contracts and invariants
@@ -255,7 +282,7 @@ control-plane-side downgrade) - that is enforced separately by
    middleware does not run on cloud (`MULTI_TENANT`); cloud gating is
    separate.
 6. **`/license/claim`, `/license/upload`, `/license/refresh`, `DELETE
-   /license` all reject outright on `MULTI_TENANT`.** Cloud licensing has no
+   /license`, `/license/downgrade` all reject outright on `MULTI_TENANT`.** Cloud licensing has no
    local license row at all; these handlers assume self-hosted and 400 rather
    than silently no-op on cloud.
 7. **Seat-count writes cannot under-provision current usage.** Both checkout
@@ -272,6 +299,11 @@ control-plane-side downgrade) - that is enforced separately by
    Enterprise-license-holding Community-intent deployment through
    incorrectly if such a state existed; always use `tier_at_least(get_tier(),
    Tier.X)` for tier-specific gates.
+9. **The Community downgrade deletes the license last.**
+   `ee/onyx/server/license/api.py:downgrade_to_community` commits the database
+   changes before it calls `delete_license`. A failure
+   before that call leaves a licensed deployment, and a second call completes
+   the downgrade. A change that deletes the license earlier breaks this.
 
 ---
 
@@ -308,7 +340,7 @@ control-plane-side downgrade) - that is enforced separately by
 | If your change... | Also check |
 |---|---|
 | adds a new `CustomerTier` value or changes `_CUSTOMER_TIER_TO_TIER` | `tier_from_license_metadata` and `_cloud_tier`'s unknown-tier fallback (`Tier.BUSINESS`); every `tier_at_least` call site that assumes only three `Tier` values |
-| changes `BILLING_CACHE_TTL_SECONDS` or `BILLING_INFO_CACHE_TTL_SECONDS` | how stale an entitlement can appear post-purchase; whether `invalidate_billing_info_cache` is called from every mutation path (`create_checkout_session`, `update_seats`, `end_trial`, `/license/claim`; `/license/upload`, `/license/refresh`, and `DELETE /license` do not call it today) |
+| changes `BILLING_CACHE_TTL_SECONDS` or `BILLING_INFO_CACHE_TTL_SECONDS` | how stale an entitlement can appear post-purchase; whether `invalidate_billing_info_cache` is called from every mutation path (`create_checkout_session`, `update_seats`, `end_trial`, `/license/claim`; `/license/upload`, `/license/refresh`, `DELETE /license`, and `/license/downgrade` do not call it today) |
 | changes seat-counting logic (`get_used_seats`, `user_counts_toward_seats`) | keep the two in sync (the module comment says so explicitly); `license_enforcement.py`'s 402 threshold uses the cached `used_seats`, which is a separate write path from the live count |
 | changes the license-enforcement middleware's fail-open/fail-closed behavior | §5 points 3 and 4; do not accidentally make it fail closed on transient Redis errors, which would lock out every self-hosted customer during a Redis blip |
 | adds a new billing endpoint | whether it needs the self-hosted circuit breaker treatment (`_is_billing_circuit_open`/`_open_billing_circuit`), and whether it must call `invalidate_billing_info_cache()` after a state-changing operation |
@@ -332,6 +364,7 @@ cd backend && uv run pytest tests/unit/ee/onyx/server/middleware/test_license_en
 cd backend && uv run pytest tests/unit/ee/onyx/server/settings/test_license_enforcement_settings.py
 cd backend && uv run pytest tests/unit/ee/onyx/utils/test_tier.py
 cd backend && uv run pytest tests/unit/ee/onyx/db/test_license.py
+cd backend && uv run pytest tests/external_dependency_unit/ee/onyx/db/test_community_downgrade.py
 ```
 
 Frontend:

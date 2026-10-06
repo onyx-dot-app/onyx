@@ -408,6 +408,13 @@ It does not block the delete call; see §9.
    business tier in EE. A cc-pair with `access_type=SYNC` or `SYNC_RESTRICTED` promises that
    [[permission-sync]] is the source of truth for who can see its documents;
    `PUBLIC` and `PRIVATE` never consult external permissions. For `SYNC_RESTRICTED`, only members of the pair's data-access groups can see the documents their source ACL allows.
+   One code path changes `access_type` on an existing pair: the Community
+   downgrade (`ee/onyx/db/community_downgrade.py:make_all_cc_pairs_public__no_commit`)
+   sets every pair that is not `PUBLIC` to `PUBLIC`. It also clears
+   `auto_sync_options`, `last_time_perm_sync` and `last_time_external_group_sync`,
+   deletes the pair's `user_group__cc_pair_data_access` rows, and marks the
+   pair's documents for index sync. The index keeps the old chunk ACLs until
+   the metadata sync rewrites those documents. See [[billing]] §4.5.
 6. **Pausing must not silently continue background work.** `update_cc_pair_status`
    must cancel in-flight index attempts and set the stop fence; a status change
    that only flips the `status` column without the Redis fence and cancellation
@@ -453,6 +460,9 @@ It does not block the delete call; see §9.
   (`get_default_document_index`, then `DocumentIndex.delete`/`update`).
 - Document sets and personas: scope themselves to a list of cc-pair ids, never
   to connector ids.
+- [[editions-and-gating]]: `connector_credential_pair.py:has_perm_synced_cc_pairs`
+  decides if a self-hosted deployment with no license and the legacy EE flag
+  is gated (that document's §4.4).
 
 ---
 
@@ -462,7 +472,7 @@ It does not block the delete call; see §9.
 |---|---|
 | adds a field to `connector_specific_config` | The connector implementation that reads it ([[connectors]]), the add-connector form schema in `web/src/views/admin/connectors/AddConnectorPage/`, and whether the field is a secret that belongs in `credential_json` instead. |
 | changes credential encryption (`utils/encryption.py`, EE variant, or `rotate_encryption_key.py`) | Both CE and EE code paths; `SensitiveValue`'s `is_json` branch; every `.get_value(apply_mask=...)` call site (there are 60+) still needs to decrypt correctly; run a rotation dry-run against a populated `credential` table. |
-| changes `AccessType` (adding a value, changing semantics) | [[permission-sync]] (what `SYNC` means to it), [[access-control]] (`build_only_permission_sync_included_where`-style clauses in `connector_credential_pair.py`), and every place that special-cases `PUBLIC`/`SYNC` in a `where_clause`. |
+| changes `AccessType` (adding a value, changing semantics) | [[permission-sync]] (what `SYNC` means to it), [[access-control]] (`build_only_permission_sync_included_where`-style clauses in `connector_credential_pair.py`), and every place that special-cases `PUBLIC`/`SYNC` in a `where_clause`. Also the Community downgrade (`ee/onyx/db/community_downgrade.py:make_all_cc_pairs_public__no_commit`) and `has_perm_synced_cc_pairs`. |
 | changes the deletion flow | The orphan-document invariant (§5.4) above all else; `sync_record` progress reporting; the Redis fence keys in `RedisConnector.delete`; whether `Connector`/`Credential` cascade rules still hold. |
 | changes `ConnectorCredentialPairStatus` (adding/removing a value) | `active_statuses()`, `indexable_statuses()`, `is_active()`, every `status.in_([...])` check in `connector_credential_pair.py` and the deletion/indexing task modules, and the frontend status badge components under `web/src/app/admin/connector/`. |
 | changes `ConnectorCredentialPair.id` vs `(connector_id, credential_id)` usage | Every join table above uses `id`; `document_by_connector_credential_pair` uses the composite pair directly. Mixing the two silently orphans rows. |

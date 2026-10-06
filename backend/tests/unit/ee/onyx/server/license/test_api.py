@@ -253,6 +253,7 @@ class TestDowngradeToCommunity:
     @patch("ee.onyx.server.license.api.db_delete_license")
     @patch("ee.onyx.server.license.api.make_all_cc_pairs_public__no_commit")
     @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.license.api.LICENSE_ENFORCEMENT_ENABLED", True)
     def test_connectors_are_committed_public_before_the_license_goes(
         self,
         mock_make_public: MagicMock,
@@ -284,6 +285,23 @@ class TestDowngradeToCommunity:
         mock_make_public: MagicMock,
         mock_delete_license: MagicMock,
     ) -> None:
+        with pytest.raises(OnyxError):
+            downgrade_to_community(user=MagicMock(), db_session=MagicMock())
+
+        mock_make_public.assert_not_called()
+        mock_delete_license.assert_not_called()
+
+    @patch("ee.onyx.server.license.api.db_delete_license")
+    @patch("ee.onyx.server.license.api.make_all_cc_pairs_public__no_commit")
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.license.api.LICENSE_ENFORCEMENT_ENABLED", False)
+    def test_enforcement_off_is_rejected_untouched(
+        self,
+        mock_make_public: MagicMock,
+        mock_delete_license: MagicMock,
+    ) -> None:
+        """With enforcement off the tier stays Enterprise whatever the license,
+        so a downgrade would only make the connectors public."""
         with pytest.raises(OnyxError):
             downgrade_to_community(user=MagicMock(), db_session=MagicMock())
 

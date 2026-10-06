@@ -21,7 +21,10 @@ import requests
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
-from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
+from ee.onyx.configs.app_configs import (
+    CLOUD_DATA_PLANE_URL,
+    LICENSE_ENFORCEMENT_ENABLED,
+)
 from ee.onyx.db.community_downgrade import make_all_cc_pairs_public__no_commit
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import (
@@ -295,10 +298,18 @@ def downgrade_to_community(
             OnyxErrorCode.VALIDATION_ERROR,
             "Downgrading is only available for self-hosted deployments",
         )
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        # Enforcement off grants Enterprise with no license, so removing the
+        # license would leave the paid tier on with every connector public.
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Downgrading needs license enforcement. Remove "
+            "LICENSE_ENFORCEMENT_ENABLED=false first.",
+        )
 
     # Committed before the license goes: a failure in between leaves a licensed
     # deployment with public connectors, which a retry finishes.
-    cc_pair_ids = make_all_cc_pairs_public__no_commit(db_session)
+    cc_pair_ids: list[int] = make_all_cc_pairs_public__no_commit(db_session)
     db_session.commit()
     db_delete_license(db_session)
 
