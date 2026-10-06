@@ -68,6 +68,16 @@ pre-commit run --all-files
 pre-commit run --files <path> [<path> ...]
 ```
 
+Claude Code and Codex also run pre-commit on the files you changed in a turn when
+you end it (`.agents/hooks/pre_commit_on_stop.py`, wired as `UserPromptSubmit` and
+`Stop` hooks in `.claude/settings.json` and `.codex/hooks.json`). Files that were
+already dirty when the turn started are skipped unless you change them. Codex runs
+the hooks only after you trust the project `.codex/` layer. If pre-commit fails, fix
+the reported problems before you finish. When the repo has the feature map
+(`.agents/feature-map/stale_docs.py`), the same hook also names any feature-map
+component whose code the turn changed but whose document the branch did not. Update
+the document if your change alters what it states.
+
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 
 NOTE: Keep code comments brief and focused on information that stays relevant long-term.
