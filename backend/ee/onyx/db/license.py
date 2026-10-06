@@ -161,6 +161,12 @@ def delete_license(db_session: Session) -> bool:
     if existing:
         db_session.delete(existing)
         db_session.commit()
+        try:
+            from onyx.utils.fleet_telemetry import emit_license_state
+
+            emit_license_state(False, "removed")
+        except Exception:
+            pass
         # Under the cache lock: a store that committed just before this delete
         # publishes under the same lock and re-reads the row there, so its
         # entry either lands before this invalidate or is never written.

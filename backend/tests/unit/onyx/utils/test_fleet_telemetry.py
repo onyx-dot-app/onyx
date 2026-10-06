@@ -628,6 +628,11 @@ def test_collector_failures_are_visible_without_exposing_source_errors(
     from onyx.utils import fleet_telemetry_collector as source
 
     monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
+    monkeypatch.setattr(
+        source,
+        "license_snapshot",
+        Mock(return_value={"license_present": False, "first_set_at": None}),
+    )
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
     sender = client()
@@ -659,6 +664,11 @@ def test_job_progress_identity_changes_with_counts_but_terminal_identity_is_stab
     from onyx.utils import fleet_telemetry_collector as source
 
     monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
+    monkeypatch.setattr(
+        source,
+        "license_snapshot",
+        Mock(return_value={"license_present": False, "first_set_at": None}),
+    )
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
     monkeypatch.setattr(source, "connector_page", Mock(return_value=[]))
@@ -716,6 +726,11 @@ def test_repair_cadence_avoids_idle_reads_and_still_polls_old_active_jobs(
     from onyx.utils import fleet_telemetry_collector as source
 
     monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
+    monkeypatch.setattr(
+        source,
+        "license_snapshot",
+        Mock(return_value={"license_present": False, "first_set_at": None}),
+    )
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
     monkeypatch.setattr(
@@ -749,7 +764,7 @@ def test_repair_cadence_avoids_idle_reads_and_still_polls_old_active_jobs(
     )
     monkeypatch.setattr(source, "job_page", jobs)
     assert collector.collect_one_schema()
-    initial = sender._take_batch()
+    initial = [event for event in sender._take_batch() if event["event_type"] == "job"]
     assert initial[0]["data"]["memberships_synced"] == 3
     assert datetime.fromisoformat(initial[0]["occurred_at"]) > old
     assert not collector.collect_one_schema()
@@ -880,6 +895,11 @@ def test_failed_queue_reads_wait_for_configured_poll_interval(
     from onyx.utils import fleet_telemetry_collector as source
 
     monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
+    monkeypatch.setattr(
+        source,
+        "license_snapshot",
+        Mock(return_value={"license_present": False, "first_set_at": None}),
+    )
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
     monkeypatch.setattr(
@@ -932,6 +952,11 @@ def test_initial_discovery_aws_and_health_run_once_then_follow_intervals(
         source, "time", SimpleNamespace(monotonic=lambda: clock[0], time=time.time)
     )
     monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
+    monkeypatch.setattr(
+        source,
+        "license_snapshot",
+        Mock(return_value={"license_present": False, "first_set_at": None}),
+    )
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     discovery = Mock(return_value=["public"])
     monkeypatch.setattr(source, "tenant_schemas", discovery)
@@ -1101,3 +1126,21 @@ def test_signup_survives_telemetry_queue_failure(
         fleet, "emit_telemetry", Mock(side_effect=RuntimeError("unavailable"))
     )
     fleet.emit_signup_domain("PRIVATE@onyx.app", datetime.now(timezone.utc))
+
+
+def test_license_telemetry_excludes_credentials_and_fails_open(monkeypatch) -> None:
+    import onyx.utils.fleet_telemetry as telemetry
+
+    sender = client()
+    monkeypatch.setattr(telemetry, "_client", sender)
+    telemetry.emit_license_state(True, "set", datetime.now(timezone.utc))
+    assert sender._take_batch()[0]["data"]["license_present"] is True
+    assert (
+        telemetry.sanitize_data(
+            "license",
+            {"license_present": True, "action": "set", "license_key": "PRIVATE"},
+        )
+        is None
+    )
+    monkeypatch.setattr(sender, "emit", Mock(side_effect=RuntimeError("unavailable")))
+    telemetry.emit_license_state(False, "removed")

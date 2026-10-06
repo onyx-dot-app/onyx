@@ -280,6 +280,13 @@ def email_domain_page(
         ]
 
 
+def license_snapshot(engine: Engine, schema: str) -> dict[str, Any]:
+    scoped = _schema(schema)
+    statement = f"SELECT license_present,first_set_at FROM {scoped}.fleet_license_state"  # noqa: S608 - Validated schema.
+    with engine.connect() as connection:
+        return dict(connection.execute(text(statement)).mappings().one())
+
+
 def tenant_schemas(engine: Engine) -> list[str]:
     with engine.connect() as connection:
         return list(

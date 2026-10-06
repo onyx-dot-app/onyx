@@ -351,11 +351,22 @@ def verify_and_store_license(
         # sync is what a user clicks to clear staleness.
         publish_license_cache(db_session)
         return payload
-    upsert_license(db_session, license_data, commit=False)
+    license_row = upsert_license(db_session, license_data, commit=False)
+    try:
+        first_set_at = license_row.created_at
+    except Exception:
+        first_set_at = None
     # Commit inside the lock, publish outside it: the Redis cache backend has
     # no socket timeout, so a stalled publish would hold the advisory lock and
     # wedge every other store, refresh, and delete behind it.
     db_session.commit()
+
+    try:
+        from onyx.utils.fleet_telemetry import emit_license_state
+
+        emit_license_state(True, "set", first_set_at)
+    except Exception:
+        pass
 
     resume_license_reclaim()
     publish_license_cache(db_session)

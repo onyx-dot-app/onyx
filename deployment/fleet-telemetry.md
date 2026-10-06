@@ -120,7 +120,8 @@ GRANT SELECT ON public.connector,
     public.external_group_permission_sync_attempt,
     public.hierarchy_fetch_attempt,
     public.port_attempt,
-    public.fleet_signup_email_domains
+    public.fleet_signup_email_domains,
+    public.fleet_license_state
 TO onyx_fleet_reader;
 ALTER ROLE onyx_fleet_reader SET default_transaction_read_only = on;
 ALTER ROLE onyx_fleet_reader SET statement_timeout = '1500ms';
@@ -176,3 +177,13 @@ Existing accounts use their database creation timestamps. Historical timestamp t
 prove signup order. Accounts deleted before either collection path ran cannot be recovered.
 The fleet service retains domains after collection and recommends the earliest signup domain.
 Operators explicitly apply that domain as the tenant label; classification is independent.
+
+
+## License presence
+
+Migration `93b903235ac2` creates `fleet_license_state`. Grant SELECT on the view only.
+It exposes a boolean and a first stored timestamp, never the signed blob or billing information.
+The standalone collector reads it every connector interval and reports `license_errors` on failure.
+License set/removal hooks enqueue after commit, with no additional database or network request.
+A configured license sets the automatic registry default to Customer; absent means Free User.
+Operator POC/Customer/Free User tags take precedence. Presence does not establish validity or expiry.

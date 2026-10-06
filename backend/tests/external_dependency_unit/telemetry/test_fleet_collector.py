@@ -31,6 +31,7 @@ def source_schema() -> Generator[tuple[str, str], None, None]:
     schema = "telemetry_test_" + uuid.uuid4().hex[:12]
     engine = create_engine(source_url)
     tables = (
+        "license",
         "connector",
         "connector_credential_pair",
         "index_attempt",
@@ -65,6 +66,16 @@ def source_schema() -> Generator[tuple[str, str], None, None]:
             SELECT lower(split_part(email,'@',2)) AS domain,min(created_at) AS first_signup_at
             FROM "{schema}"."user" WHERE account_type='STANDARD' AND email ~ '^[^@]+@[^@]+$'
             GROUP BY lower(split_part(email,'@',2))''')
+        )  # noqa: S608 - Generated schema only.
+        connection.execute(
+            text(f'INSERT INTO "{schema}".license (license_data) VALUES (:key)'),
+            {"key": "PRIVATE LICENSE"},
+        )  # noqa: S608 - Generated schema and fixed test fixture.
+        connection.execute(
+            text(f"""CREATE VIEW "{schema}".fleet_license_state WITH (security_barrier=true) AS
+            SELECT coalesce(bool_or(length(license_data)>0),false) AS license_present,
+            min(created_at) FILTER (WHERE length(license_data)>0) AS first_set_at
+            FROM "{schema}".license""")
         )  # noqa: S608 - Generated schema only.
         # Collection must not depend on obsolete connector columns.
         connection.execute(
@@ -160,6 +171,8 @@ def test_bounded_source_pages_reconcile_all_connectors_and_safe_outcomes(
         assert len({event["data"]["cc_pair_id"] for event in connectors}) == 250
         serialized = str(events)
         assert "PRIVATE" not in serialized
+        license = next(event for event in events if event["event_type"] == "license")
+        assert license["data"]["license_present"] is True
         attempt = next(event for event in events if event["event_type"] == "attempt")
         assert attempt["data"]["state"] == "failed"
         assert attempt["data"]["error_code"] == "auth"

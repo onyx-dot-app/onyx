@@ -27,6 +27,7 @@ from onyx.db.fleet_telemetry import (
     connector_page,
     email_domain_page,
     job_page,
+    license_snapshot,
     tenant_schemas,
 )
 from onyx.utils.fleet_telemetry import (
@@ -175,6 +176,8 @@ class FleetCollector:
         self._domain_cursor: dict[str, str] = {}
         self._last_domains: dict[str, float] = {}
         self.email_domain_errors = 0
+        self.license_errors = 0
+        self._last_license: dict[str, float] = {}
         self._attempt_cursor: dict[str, tuple[datetime, int]] = {}
         self._job_cursor: dict[str, tuple[datetime, str]] = {}
         self._active_job_cursor: dict[str, str] = {}
@@ -277,6 +280,35 @@ class FleetCollector:
                 self._last_domains[schema] = now
         return True
 
+    def collect_license(self, schema: str, now: float) -> bool:
+        if not poll_due(
+            self._last_license.get(schema),
+            now,
+            self.client.settings["connector_interval_seconds"],
+        ):
+            return False
+        try:
+            row = license_snapshot(self.engine, schema)
+        except SQLAlchemyError:
+            self.license_errors += 1
+            self._last_license[schema] = now
+            return False
+        sent = self._event(
+            "license",
+            {
+                "license_present": row["license_present"],
+                "action": "snapshot",
+                "first_set_at": _iso(row["first_set_at"]),
+            },
+            schema,
+            datetime.now(timezone.utc),
+            "license",
+            durable_id=False,
+        )
+        if sent:
+            self._last_license[schema] = now
+        return sent
+
     def collect_one_schema(self) -> bool:
         if not self.schemas:
             return False
@@ -286,6 +318,7 @@ class FleetCollector:
         if self._failed_schema.get(schema, (0, 0))[0] > now:
             return False
         collected = self.collect_email_domains(schema, now)
+        collected = self.collect_license(schema, now) or collected
         if poll_due(
             self._last_connectors.get(schema),
             now,
@@ -557,6 +590,7 @@ class FleetCollector:
             self._last_aws = time.monotonic()
         self.client.health = {
             "email_domain_errors": self.email_domain_errors,
+            "license_errors": self.license_errors,
             "source_errors": self.source_errors,
             "source_consecutive_errors": max(
                 self._discovery_failures,

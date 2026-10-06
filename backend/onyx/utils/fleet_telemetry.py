@@ -181,6 +181,7 @@ _COUNTERS = frozenset(
     }
 )
 _FIELDS: dict[str, frozenset[str]] = {
+    "license": frozenset({"license_present", "action", "first_set_at"}),
     "tenant_domain": frozenset({"domain", "first_signup_at"}),
     "query": frozenset(
         {
@@ -302,6 +303,7 @@ _FIELDS: dict[str, frozenset[str]] = {
     "heartbeat": frozenset(
         {
             "email_domain_errors",
+            "license_errors",
             "config_revision",
             "dropped_events",
             "recent_dropped_events",
@@ -323,6 +325,7 @@ _FIELDS: dict[str, frozenset[str]] = {
     ),
 }
 _ENUM_FIELDS = {
+    "action": frozenset({"snapshot", "set", "removed"}),
     "state": _STATES,
     "connector_type": _SOURCES,
     "error_code": _ERRORS,
@@ -954,6 +957,22 @@ def emit_signup_domain(email: str, created_at: datetime) -> None:
                 "tenant_domain",
                 {"domain": domain, "first_signup_at": created_at.isoformat()},
             )
+    except Exception:
+        return
+
+
+def emit_license_state(
+    present: bool, action: str, first_set_at: datetime | None = None
+) -> None:
+    try:
+        emit_telemetry(
+            "license",
+            {
+                "license_present": present,
+                "action": action,
+                "first_set_at": first_set_at.isoformat() if first_set_at else None,
+            },
+        )
     except Exception:
         return
 
