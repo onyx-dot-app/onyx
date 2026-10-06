@@ -176,11 +176,11 @@ jobs:
       - name: Notify Slack about PRs ready for review
         if: steps.pr.outputs.links != ''
         continue-on-error: true
-        uses: ./.github/actions/slack-notify
+        uses: ./.github/actions/slack-post-message
         with:
-          webhook-url: ${{ secrets.AI_PR_REVIEWS_WEBHOOK }}
-          title: "Base image PRs ready for review"
-          details: "{mention} Please review ${{ steps.pr.outputs.links }}"
+          bot-token: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
+          channel: C0C6T9W2U3X # #ai-pr-reviews
+          text: "{mention} Please review ${{ steps.pr.outputs.links }}"
           mention: rohoswagger
 
   notify-slack-on-failure:

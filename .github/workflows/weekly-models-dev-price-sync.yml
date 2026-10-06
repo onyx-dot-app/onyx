@@ -106,12 +106,12 @@ jobs:
       - name: Post PR to Slack for review
         if: steps.pr.outputs.pr_number != '' && steps.slack-actions.outcome == 'success'
         continue-on-error: true
-        uses: ./.ci-actions/.github/actions/slack-notify
+        uses: ./.ci-actions/.github/actions/slack-post-message
         with:
-          webhook-url: ${{ secrets.AI_PR_REVIEWS_WEBHOOK }}
+          bot-token: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
+          channel: C0C6T9W2U3X # #ai-pr-reviews
           mention: rohoswagger
-          title: "Model prices PR ready for review"
-          details: |
+          text: |
             models.dev price sync PR ready for review {mention}
             *PR:* <${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.pr_number }}|#${{ steps.pr.outputs.pr_number }}>
             *Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|workflow run>

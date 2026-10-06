@@ -61,6 +61,16 @@ on:
         required: false
         type: string
         default: ""
+      slack-channel:
+        description: "Slack channel ID for PR review notifications (empty = no post)"
+        required: false
+        type: string
+        default: ""
+      slack-mention:
+        description: "GitHub username to resolve to a Slack mention"
+        required: false
+        type: string
+        default: ""
       agent-model:
         description: "OPENAI_MODEL override for the agent call (empty = script default)"
         required: false
@@ -86,8 +96,8 @@ on:
       OPENAI_API_KEY:
         description: "OpenAI API key for the agent call"
         required: false
-      AI_PR_REVIEWS_WEBHOOK:
-        description: "Slack webhook for PR review notifications"
+      SLACK_BOT_TOKEN:
+        description: "Slack bot token for PR review notifications"
         required: false
 
 concurrency:
@@ -303,6 +313,7 @@ jobs:
       - name: Checkout Slack actions
         id: slack-actions
         if: >-
+          inputs.slack-channel != '' &&
           (github.event_name != 'workflow_run' ||
            steps.repair-guard.outputs.proceed == 'true') &&
           steps.pr.outputs.pr_number != ''
@@ -316,17 +327,18 @@ jobs:
 
       - name: Post PR to Slack for review
         if: >-
+          inputs.slack-channel != '' &&
           (github.event_name != 'workflow_run' ||
            steps.repair-guard.outputs.proceed == 'true') &&
           steps.pr.outputs.pr_number != '' &&
           steps.slack-actions.outcome == 'success'
         continue-on-error: true
-        uses: ./.ci-actions/.github/actions/slack-notify
+        uses: ./.ci-actions/.github/actions/slack-post-message
         with:
-          webhook-url: ${{ secrets.AI_PR_REVIEWS_WEBHOOK }}
-          mention: ${{ inputs.reviewer }}
-          title: "PR ready for review"
-          details: |
+          bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          channel: ${{ inputs.slack-channel }}
+          mention: ${{ inputs.slack-mention }}
+          text: |
             ${{ inputs.task-name }} PR ready for review {mention}
             *PR:* <${{ steps.pr.outputs.pr_url }}|#${{ steps.pr.outputs.pr_number }}>
             *Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|workflow run>

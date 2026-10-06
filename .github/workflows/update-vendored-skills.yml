@@ -88,11 +88,11 @@ jobs:
       - name: Notify Slack about PR ready for review
         if: steps.pr.outputs.url != ''
         continue-on-error: true
-        uses: ./.github/actions/slack-notify
+        uses: ./.github/actions/slack-post-message
         with:
-          webhook-url: ${{ secrets.AI_PR_REVIEWS_WEBHOOK }}
-          title: "Vendored skills PR ready for review"
-          details: "{mention} Please review <${{ steps.pr.outputs.url }}|the vendored skills update>"
+          bot-token: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
+          channel: C0C6T9W2U3X # #ai-pr-reviews
+          text: "{mention} Please review <${{ steps.pr.outputs.url }}|the vendored skills update>"
           mention: rohoswagger
 
   notify-slack-on-failure:
