@@ -71,7 +71,7 @@ def stage_file_connector_upload(
         file_store.delete_file(file_id)
         file_ids.append(current_file_id)
 
-    zip_metadata_file_id = None
+    zip_metadata_file_id: str | None = None
     if uploaded.zip_metadata_file_id is not None:
         merged_metadata = load_zip_metadata(
             current.zip_metadata_file_id, current.zip_metadata

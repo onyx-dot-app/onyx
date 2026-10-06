@@ -15,13 +15,15 @@ This module must stay light to import: connector config modules import it.
 """
 
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.orm import Session
 
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import ScopeDirection
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 ConfigT = TypeVar("ConfigT", bound=ConnectorConfig)
 
@@ -35,6 +37,19 @@ class PlanningData(BaseModel):
 DataT = TypeVar("DataT", bound=PlanningData)
 
 
+@runtime_checkable
+class PlanningDataLoader(Protocol):
+    """Reads a rule's data for a pair (by id) and its old and new config."""
+
+    def __call__(
+        self,
+        db_session: "Session",
+        cc_pair_id: int,
+        old: ConnectorConfig,
+        new: ConnectorConfig,
+    ) -> PlanningData: ...
+
+
 class RuleSteps(BaseModel):
     """Propagation a rule decides for some fields in place of the default
     rules. The default rules make no steps for ``field_names``."""
@@ -42,9 +57,10 @@ class RuleSteps(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     field_names: frozenset[str]
-    # Config of a one-off backfill over [indexing_start, now]. It names
-    # exactly what to index, so the run stays small also on a source that
-    # cannot fetch a time window. None when nothing needs indexing.
+    # Config of a one-off backfill over [indexing_start, now], or over all
+    # time when that window is empty. It names exactly what to index, so the
+    # run stays small also on a source that cannot fetch a time window. None
+    # when nothing needs indexing.
     backfill_config: dict[str, Any] | None = None
     # Documents that the old config gave and the new config does not.
     prune: bool = False
@@ -75,17 +91,14 @@ class PlanningRule(BaseModel):
     ``planning_rule`` or ``planning_rule_with_data``, which keep the rule
     function strictly typed."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     config_class: type[ConnectorConfig]
     apply: Callable[
         [ConnectorConfig, ConnectorConfig, PlanningData | None],
         ConnectorChangeOverride | None,
     ]
-    # Reads the rule's data for a pair (by id) and its old and new config.
-    load_data: (
-        Callable[[Session, int, ConnectorConfig, ConnectorConfig], PlanningData] | None
-    ) = None
+    load_data: PlanningDataLoader | None = None
 
 
 def _ensure_configs(
@@ -116,7 +129,7 @@ def planning_rule(
 def planning_rule_with_data(
     config_class: type[ConfigT],
     data_class: type[DataT],
-    load_data: Callable[[Session, int, ConfigT, ConfigT], DataT],
+    load_data: Callable[["Session", int, ConfigT, ConfigT], DataT],
     rule: Callable[[ConfigT, ConfigT, DataT], ConnectorChangeOverride | None],
 ) -> PlanningRule:
     """A rule that also reads what ``load_data`` returns. Without its data
@@ -136,7 +149,10 @@ def planning_rule_with_data(
         return rule(typed_old, typed_new, data)
 
     def load(
-        db_session: Session, cc_pair_id: int, old: ConnectorConfig, new: ConnectorConfig
+        db_session: "Session",
+        cc_pair_id: int,
+        old: ConnectorConfig,
+        new: ConnectorConfig,
     ) -> PlanningData:
         return load_data(
             db_session, cc_pair_id, *_ensure_configs(config_class, old, new)

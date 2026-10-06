@@ -13,6 +13,8 @@ from onyx.db.models import ConnectorCredentialPair, FileRecord
 from onyx.file_store.constants import STAGED_FOR_CC_PAIR_METADATA_KEY
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.connector import upload_files
+from onyx.server.documents.file_connector_staging import stage_file_connector_upload
+from onyx.server.documents.models import FileUploadResponse
 
 
 def text_upload(name: str, content: bytes) -> UploadFile:
@@ -42,7 +44,8 @@ def read_json_file(file_id: str) -> Any:
 
 
 class FilePair:
-    """A file connector pair with stored files, and the file ids to delete."""
+    """A file connector pair with stored files, and the file ids to delete.
+    It records staged files too, since a claim removes their staged mark."""
 
     def __init__(self, pair: ConnectorCredentialPair) -> None:
         self.pair = pair
@@ -64,17 +67,31 @@ class FilePair:
             "file_names": uploaded.file_names,
         }
         if zip_metadata is not None:
-            metadata_file_id = get_default_file_store().save_file(
-                content=BytesIO(json.dumps(zip_metadata).encode()),
-                display_name=ONYX_METADATA_FILENAME,
-                file_origin=FileOrigin.CONNECTOR_METADATA,
-                file_type="application/json",
+            config["zip_metadata_file_id"] = self.save_metadata_file(
+                json.dumps(zip_metadata).encode()
             )
-            self.file_ids.append(metadata_file_id)
-            config["zip_metadata_file_id"] = metadata_file_id
         self.pair.connector.connector_specific_config = config
         db_session.commit()
         return uploaded.file_paths
+
+    def stage(
+        self, db_session: Session, uploads: list[UploadFile]
+    ) -> FileUploadResponse:
+        staged = stage_file_connector_upload(db_session, self.pair.id, uploads)
+        self.file_ids.extend(staged.file_paths)
+        if staged.zip_metadata_file_id is not None:
+            self.file_ids.append(staged.zip_metadata_file_id)
+        return staged
+
+    def save_metadata_file(self, content: bytes) -> str:
+        file_id = get_default_file_store().save_file(
+            content=BytesIO(content),
+            display_name=ONYX_METADATA_FILENAME,
+            file_origin=FileOrigin.CONNECTOR_METADATA,
+            file_type="application/json",
+        )
+        self.file_ids.append(file_id)
+        return file_id
 
 
 def staged_file_ids(db_session: Session, cc_pair_id: int) -> set[str]:

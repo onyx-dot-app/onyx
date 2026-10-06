@@ -30,7 +30,7 @@ from onyx.connectors.edit_plan.models import (
 from onyx.connectors.edit_plan.planner import compute_edit_plan, normalize_steps
 from onyx.connectors.edit_plan.store import compute_base_state_hash
 from onyx.connectors.field_policy import FieldClass, ScopeDirection
-from onyx.connectors.file.edit_planning import FilePlanningData
+from onyx.connectors.file.models import FilePlanningData
 from onyx.connectors.github.config import GithubConnectorConfig
 from onyx.connectors.models import InputType
 from onyx.connectors.planning_rule import (
@@ -947,3 +947,53 @@ def test_file_edit_without_file_data_reindexes() -> None:
     )
 
     assert _kinds(plan) == [EditStepKind.FULL_REINDEX]
+
+
+def test_file_edit_with_a_future_indexing_start_keeps_the_scoped_backfill() -> None:
+    current = _current(
+        DocumentSource.FILE,
+        {"file_locations": ["f1"]},
+        indexing_start=datetime(2030, 1, 1, tzinfo=timezone.utc),
+    )
+    plan = _plan(
+        current,
+        _inputs(supports_windowed_runs=False, rule_data=_file_data()),
+        connector_specific_config={"file_locations": ["f1", "f2"]},
+    )
+
+    assert _kinds(plan) == [EditStepKind.SCOPED_BACKFILL]
+    backfill = _step(plan, EditStepKind.SCOPED_BACKFILL).backfill
+    assert backfill is not None
+    assert (backfill.window_start, backfill.window_end) == (_EPOCH, _NOW)
+    assert backfill.connector_config_override is not None
+    assert backfill.connector_config_override["file_locations"] == ["f2"]
+
+
+def test_planning_rule_runs_once_per_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[None] = []
+
+    def rule(
+        old: GithubConnectorConfig,  # noqa: ARG001
+        new: GithubConnectorConfig,  # noqa: ARG001
+        data: _RuleData,  # noqa: ARG001
+    ) -> ConnectorChangeOverride | None:
+        calls.append(None)
+        return None
+
+    monkeypatch.setitem(
+        PLANNING_RULES,
+        DocumentSource.GITHUB,
+        planning_rule_with_data(
+            GithubConnectorConfig,
+            _RuleData,
+            lambda *_: _RuleData(backfill_repositories=""),
+            rule,
+        ),
+    )
+    _plan(
+        _current(DocumentSource.GITHUB, {"repo_owner": "onyx", "repositories": "a"}),
+        _inputs(rule_data=_RuleData(backfill_repositories="")),
+        connector_specific_config={"repo_owner": "onyx", "repositories": "a,b"},
+    )
+
+    assert len(calls) == 1

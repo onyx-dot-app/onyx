@@ -213,32 +213,23 @@ def classify_source_config_change(
     source: DocumentSource,
     old_config: dict[str, Any],
     new_config: dict[str, Any],
-    rule_data: PlanningData | None = None,
+    override: ConnectorChangeOverride | None = None,
 ) -> list[ConfigFieldChange]:
-    """``classify_config_change`` with the source's config class and planning
-    rule."""
+    """``classify_config_change`` with the source's config class."""
     return classify_config_change(
-        CONNECTOR_CLASS_MAP[source].config_class,
-        old_config,
-        new_config,
-        PLANNING_RULES.get(source),
-        rule_data,
+        CONNECTOR_CLASS_MAP[source].config_class, old_config, new_config, override
     )
 
 
-def source_change_override(
-    source: DocumentSource,
+def rule_change_override(
+    config_class: type[ConnectorConfig],
     old_config: dict[str, Any],
     new_config: dict[str, Any],
+    rule: PlanningRule,
     rule_data: PlanningData | None = None,
 ) -> ConnectorChangeOverride | None:
-    """What the source's planning rule decides for the edit. None when the
-    source has no rule, the rule uses the default rules, or either config
-    fails validation."""
-    rule = PLANNING_RULES.get(source)
-    if rule is None:
-        return None
-    config_class = CONNECTOR_CLASS_MAP[source].config_class
+    """What ``rule`` decides for the edit. None when the rule uses the
+    default rules or either config fails validation."""
     old_model = _validate(config_class, old_config)
     new_model = _validate(config_class, new_config)
     if old_model is None or new_model is None:
@@ -254,6 +245,27 @@ def source_change_override(
                 f"for unknown fields: {sorted(unknown_fields)}"
             )
     return override
+
+
+def source_change_override(
+    source: DocumentSource,
+    old_config: dict[str, Any],
+    new_config: dict[str, Any],
+    rule_data: PlanningData | None = None,
+) -> ConnectorChangeOverride | None:
+    """``rule_change_override`` with the source's config class and planning
+    rule. None also when the source has no rule. A data-backed rule can be
+    slow, so compute this once per edit."""
+    rule = PLANNING_RULES.get(source)
+    if rule is None:
+        return None
+    return rule_change_override(
+        CONNECTOR_CLASS_MAP[source].config_class,
+        old_config,
+        new_config,
+        rule,
+        rule_data,
+    )
 
 
 def load_source_rule_data(
@@ -281,29 +293,27 @@ def classify_config_change(
     config_class: type[ConnectorConfig],
     old_config: dict[str, Any],
     new_config: dict[str, Any],
-    rule: PlanningRule | None = None,
-    rule_data: PlanningData | None = None,
+    override: ConnectorChangeOverride | None = None,
 ) -> list[ConfigFieldChange]:
     """One entry per field whose value differs between the two configs.
 
     Configs are compared as validated models, so defaults and coercion do not
     show as changes. If either config fails validation, raw values (with field
-    defaults filled in) are compared and ``rule`` is skipped. A field with no
-    policy counts as BEHAVIOR. A SCOPE change with no effect on scope (e.g.
-    reordered items) is left out. A direction from ``rule`` replaces the one
-    derived from the field's descriptor.
+    defaults filled in) are compared and ``override`` is skipped. A field
+    with no policy counts as BEHAVIOR. A SCOPE change with no effect on scope
+    (e.g. reordered items) is left out. A direction from ``override`` (see
+    ``rule_change_override``) replaces the one derived from the field's
+    descriptor.
     """
     old_model = _validate(config_class, old_config)
     new_model = _validate(config_class, new_config)
-    override: ConnectorChangeOverride | None = None
     if old_model and new_model:
         old_values = old_model.model_dump(mode="json")
         new_values = new_model.model_dump(mode="json")
-        if rule:
-            override = rule.apply(old_model, new_model, rule_data)
     else:
         old_values = _with_defaults(config_class, old_config)
         new_values = _with_defaults(config_class, new_config)
+        override = None
     rule_directions = override.scope_directions if override else {}
     rule_added_items = override.added_items if override else {}
     for name in [*rule_directions, *rule_added_items]:
@@ -361,16 +371,11 @@ def build_source_scoped_backfill_config(
     source: DocumentSource,
     old_config: dict[str, Any],
     new_config: dict[str, Any],
-    rule_data: PlanningData | None = None,
+    override: ConnectorChangeOverride | None = None,
 ) -> dict[str, Any] | None:
-    """``build_scoped_backfill_config`` with the source's config class and
-    planning rule."""
+    """``build_scoped_backfill_config`` with the source's config class."""
     return build_scoped_backfill_config(
-        CONNECTOR_CLASS_MAP[source].config_class,
-        old_config,
-        new_config,
-        PLANNING_RULES.get(source),
-        rule_data,
+        CONNECTOR_CLASS_MAP[source].config_class, old_config, new_config, override
     )
 
 
@@ -378,8 +383,7 @@ def build_scoped_backfill_config(
     config_class: type[ConnectorConfig],
     old_config: dict[str, Any],
     new_config: dict[str, Any],
-    rule: PlanningRule | None = None,
-    rule_data: PlanningData | None = None,
+    override: ConnectorChangeOverride | None = None,
 ) -> dict[str, Any] | None:
     """The new config limited to the items a widening added, for a one-off
     backfill of just those items.
@@ -393,7 +397,7 @@ def build_scoped_backfill_config(
     changes = [
         change
         for change in classify_config_change(
-            config_class, old_config, new_config, rule, rule_data
+            config_class, old_config, new_config, override
         )
         if change.field_class != FieldClass.COSMETIC
     ]

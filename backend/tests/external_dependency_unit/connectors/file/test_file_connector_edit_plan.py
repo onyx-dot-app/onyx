@@ -1,6 +1,7 @@
 """Planning a file connector edit against stored and staged files: only new
 or changed files are indexed, removed files are pruned, and a zip-metadata
-change re-indexes only the files whose entries changed."""
+change re-indexes only the files whose entries changed. A metadata file that
+cannot be used fails planning."""
 
 from collections.abc import Generator
 from typing import Any
@@ -22,7 +23,6 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.connector import upload_files
-from onyx.server.documents.file_connector_staging import stage_file_connector_upload
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.connectors.file.file_edit_helpers import (
     FilePair,
@@ -73,9 +73,7 @@ def test_added_and_removed_files(
     db_session: Session, file_pair: FilePair, admin: User
 ) -> None:
     current_a, _ = file_pair.save_current_files(db_session, {"a.txt": _A, "b.txt": _B})
-    staged = stage_file_connector_upload(
-        db_session, file_pair.pair.id, [text_upload("c.txt", _C)]
-    )
+    staged = file_pair.stage(db_session, [text_upload("c.txt", _C)])
 
     plan = _plan(
         db_session,
@@ -107,9 +105,8 @@ def test_metadata_change_reindexes_only_the_changed_files(
         },
     )
     # The zip holds a.txt again (same bytes) with a new title.
-    staged = stage_file_connector_upload(
+    staged = file_pair.stage(
         db_session,
-        file_pair.pair.id,
         [zip_upload({"a.txt": _A}, [{"filename": "a.txt", "title": "A2"}])],
     )
     assert staged.file_paths == current_ids[:1]
@@ -144,5 +141,20 @@ def test_added_file_must_be_staged_for_the_pair(
             file_pair,
             admin,
             file_locations=[current_a, *unstaged.file_paths],
+        )
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_unusable_metadata_file_fails_planning(
+    db_session: Session, file_pair: FilePair, admin: User
+) -> None:
+    file_pair.save_current_files(db_session, {"a.txt": _A})
+
+    with pytest.raises(OnyxError) as exc:
+        _plan(
+            db_session,
+            file_pair,
+            admin,
+            zip_metadata_file_id=file_pair.save_metadata_file(b"null"),
         )
     assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT

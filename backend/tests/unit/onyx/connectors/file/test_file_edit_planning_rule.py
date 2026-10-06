@@ -4,7 +4,8 @@ new or changed, and prunes only when a document of the old config is gone."""
 from typing import Any
 
 from onyx.connectors.file.config import LocalFileConnectorConfig
-from onyx.connectors.file.edit_planning import FilePlanningData, file_planning_rule
+from onyx.connectors.file.edit_planning import file_planning_rule
+from onyx.connectors.file.models import FilePlanningData
 from onyx.connectors.planning_rule import RuleSteps
 from onyx.file_store.models import StoredFileFacts
 
@@ -156,6 +157,22 @@ def test_combined_edit() -> None:
     assert steps is not None and steps.prune
     assert steps.backfill_config is not None
     assert steps.backfill_config["file_names"] == ["name-f1", "name-f3"]
+
+
+def test_removing_a_file_that_shares_a_document_id_reindexes_the_others() -> None:
+    # f1 and f2 give one document; indexing keeps the fields of one of them.
+    metadata = {"a.txt": {"id": "doc-x"}, "b.txt": {"id": "doc-x"}}
+    steps = _steps(_config(["f1", "f2", "f3"]), _config(["f2", "f3"]), metadata)
+
+    assert _indexed(steps) == ["f2"]
+    assert steps is not None and not steps.prune
+
+
+def test_unchanged_shared_document_id_changes_nothing() -> None:
+    metadata = {"a.txt": {"id": "doc-x"}, "b.txt": {"id": "doc-x"}}
+    steps = _steps(_config(["f1", "f2"]), _config(["f1", "f2", "f3"]), metadata)
+
+    assert _indexed(steps) == ["f3"]
 
 
 def test_file_without_a_record_gives_no_step() -> None:

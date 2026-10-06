@@ -31,6 +31,7 @@ from onyx.connectors.factory import (
     validate_proposed_pairing,
 )
 from onyx.connectors.pairing_access import validate_pairing_access
+from onyx.connectors.planning_rule import PlanningData
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.context.search.models import CCPairAccessMode
 from onyx.db.connector_edit_requests import has_restartable_attempt
@@ -121,7 +122,7 @@ def plan_connector_edit(
     """
     current = fetch_current_pair_state(db_session, cc_pair_id)
     ensure_edit_is_plannable(current, proposed)
-    rule_data = None
+    rule_data: PlanningData | None = None
     if proposed.connector_specific_config != current.connector_specific_config:
         try:
             validate_connector_config(

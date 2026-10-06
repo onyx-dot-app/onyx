@@ -180,6 +180,7 @@ def _widen_steps(
     current: PairState,
     proposed: ProposedPairState,
     inputs: EditPlanInputs,
+    override: ConnectorChangeOverride | None,
     field_names: list[str],
 ) -> list[EditStep]:
     """A backfill of only the added items over [indexing_start, now] when the
@@ -190,7 +191,7 @@ def _widen_steps(
             current.source,
             current.connector_specific_config,
             proposed.connector_specific_config,
-            inputs.rule_data,
+            override,
         )
         if inputs.supports_windowed_runs
         else None
@@ -223,6 +224,7 @@ def _field_change_steps(
     current: PairState,
     proposed: ProposedPairState,
     inputs: EditPlanInputs,
+    override: ConnectorChangeOverride | None,
 ) -> list[EditStep]:
     steps: list[EditStep] = []
     identity_fields: list[str] = []
@@ -257,7 +259,7 @@ def _field_change_steps(
             )
         )
     if widened_fields:
-        steps.extend(_widen_steps(current, proposed, inputs, widened_fields))
+        steps.extend(_widen_steps(current, proposed, inputs, override, widened_fields))
     if narrowed_fields:
         steps.append(
             _step(
@@ -284,21 +286,17 @@ def _rule_steps(
     ]
     steps: list[EditStep] = []
     if rule_steps.backfill_config is not None:
+        # The config names what to index, so an empty window (e.g. an
+        # indexing start in the future) runs over all time, not a re-index.
         window = _backfill_window(
             proposed.indexing_start, inputs.now, rule_steps.backfill_config
-        )
+        ) or _backfill_window(None, inputs.now, rule_steps.backfill_config)
         steps.append(
             _step(
                 EditStepKind.SCOPED_BACKFILL,
                 EditStepReason.ITEMS_ADDED_OR_CHANGED,
                 field_names=field_names,
                 backfill=window,
-            )
-            if window is not None
-            else _step(
-                EditStepKind.FULL_REINDEX,
-                EditStepReason.ITEMS_ADDED_OR_CHANGED,
-                field_names=field_names,
             )
         )
     if rule_steps.prune:
@@ -540,16 +538,6 @@ def compute_edit_plan(
     config_changed: bool = (
         proposed.connector_specific_config != current.connector_specific_config
     )
-    field_changes: list[ConfigFieldChange] = (
-        classify_source_config_change(
-            current.source,
-            current.connector_specific_config,
-            proposed.connector_specific_config,
-            inputs.rule_data,
-        )
-        if config_changed
-        else []
-    )
     override: ConnectorChangeOverride | None = (
         source_change_override(
             current.source,
@@ -560,6 +548,16 @@ def compute_edit_plan(
         if config_changed
         else None
     )
+    field_changes: list[ConfigFieldChange] = (
+        classify_source_config_change(
+            current.source,
+            current.connector_specific_config,
+            proposed.connector_specific_config,
+            override,
+        )
+        if config_changed
+        else []
+    )
     rule_steps: RuleSteps | None = override.rule_steps if override else None
     credential_changed: bool = proposed.credential_id != current.credential_id
 
@@ -568,7 +566,7 @@ def compute_edit_plan(
         for change in field_changes
         if rule_steps is None or change.field_name not in rule_steps.field_names
     ]
-    steps = _field_change_steps(default_changes, current, proposed, inputs)
+    steps = _field_change_steps(default_changes, current, proposed, inputs, override)
     if rule_steps is not None:
         steps.extend(_rule_steps(rule_steps, field_changes, proposed, inputs))
     indexing_start_steps, notes = _indexing_start_steps(current, proposed, inputs)

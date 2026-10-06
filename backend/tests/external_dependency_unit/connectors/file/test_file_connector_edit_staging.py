@@ -25,7 +25,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.connector import upload_files
-from onyx.server.documents.file_connector_staging import stage_file_connector_upload
 from tests.external_dependency_unit.connectors.file.file_edit_helpers import (
     FilePair,
     read_json_file,
@@ -92,9 +91,8 @@ def test_staging_marks_new_files_and_reuses_current_ones(
 ) -> None:
     [current_a] = file_pair.save_current_files(db_session, {"a.txt": _A})
 
-    staged = stage_file_connector_upload(
+    staged = file_pair.stage(
         db_session,
-        file_pair.pair.id,
         [text_upload("a.txt", _A), text_upload("b.txt", _B)],
     )
 
@@ -119,9 +117,8 @@ def test_staging_merges_zip_metadata_into_the_current_metadata(
         zip_metadata={"a.txt": {"filename": "a.txt", "title": "A"}},
     )
 
-    staged = stage_file_connector_upload(
+    staged = file_pair.stage(
         db_session,
-        file_pair.pair.id,
         [zip_upload({"b.txt": _B}, [{"filename": "b.txt", "title": "B"}])],
     )
 
@@ -143,9 +140,7 @@ def test_apply_claims_only_the_files_staged_for_its_pair(
 ) -> None:
     file_pair.save_current_files(db_session, {"a.txt": _A})
     old = _config(file_pair)
-    staged = stage_file_connector_upload(
-        db_session, file_pair.pair.id, [text_upload("b.txt", _B)]
-    )
+    staged = file_pair.stage(db_session, [text_upload("b.txt", _B)])
     new = old.model_copy(
         update={"file_locations": [*old.file_locations, *staged.file_paths]}
     )
@@ -170,9 +165,8 @@ def test_staged_files_expire(
 ) -> None:
     file_pair.save_current_files(db_session, {"a.txt": _A})
     old = _config(file_pair)
-    staged = stage_file_connector_upload(
+    staged = file_pair.stage(
         db_session,
-        file_pair.pair.id,
         [
             text_upload("fresh.txt", b"fresh"),
             text_upload("late.txt", b"late"),
