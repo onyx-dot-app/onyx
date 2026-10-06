@@ -9,6 +9,8 @@ export interface SharePermissionMenuOption<T extends string> {
   value: T;
   label: string;
   icon: IconFunctionComponent;
+  /** What the permission allows, under its label in the list. */
+  description?: string;
 }
 
 export interface SharePermissionMenuProps<T extends string> {
@@ -71,6 +73,7 @@ export function SharePermissionMenu<T extends string>({
         value: option.value,
         icon: option.icon,
         title: option.label,
+        description: option.description,
       })
     ),
     ...(onRemove
