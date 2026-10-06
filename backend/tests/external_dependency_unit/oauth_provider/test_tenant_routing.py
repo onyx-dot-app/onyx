@@ -24,7 +24,10 @@ from onyx.server.oauth_provider.api import router
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
-pytestmark = pytest.mark.asyncio(loop_scope="module")
+pytestmark = [
+    pytest.mark.asyncio(loop_scope="module"),
+    pytest.mark.usefixtures("enable_ee"),
+]
 
 
 async def test_cloud_token_tenant_wins_over_cookie_without_membership_bypass(
