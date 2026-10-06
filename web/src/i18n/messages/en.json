@@ -2904,7 +2904,7 @@
         "confluenceDataCenter": "Confluence Data Center"
       },
       "subDescriptions": {
-        "siteUrl": "Paste your site URL or subdomain. {connectorName}'s REST API must be reachable there."
+        "siteUrl": "Paste your site URL. {connectorName}'s REST API must be reachable there."
       },
       "boundFields": {
         "errors": {

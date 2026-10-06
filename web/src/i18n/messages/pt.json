@@ -2904,7 +2904,7 @@
         "confluenceDataCenter": "Confluence Data Center"
       },
       "subDescriptions": {
-        "siteUrl": "Cole a URL ou o subdomínio do seu site. A API REST do {connectorName} deve estar acessível nele."
+        "siteUrl": "Cole a URL do seu site. A API REST do {connectorName} deve estar acessível nele."
       },
       "boundFields": {
         "errors": {

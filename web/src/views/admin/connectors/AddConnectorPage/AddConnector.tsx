@@ -145,6 +145,8 @@ export interface AddConnectorProps {
 export default function AddConnector({ connector }: AddConnectorProps) {
   const t = useTranslations("admin.connectorsList");
   const oneDriveT = useTranslations("admin.connectorsList.oneDrive");
+  // The string-pair editor (InputKeyValue) shows these same messages.
+  const keyValueT = useTranslations("opal.keyValue");
   const router = useRouter();
   const settings = useSettings();
   const defaultPruneFreqHours = settings.default_pruning_freq
@@ -262,6 +264,8 @@ export default function AddConnector({ connector }: AddConnectorProps) {
           specificGroupsRequired: t(
             "settings.documentAccess.specificGroups.required"
           ),
+          stringPairEmptyKey: keyValueT("emptyKey"),
+          stringPairDuplicateKey: keyValueT("duplicateKey"),
         }
       )}
       onSubmit={async (values) => {

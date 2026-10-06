@@ -92,6 +92,49 @@ export function splitCredentialBoundFields(
 interface ConnectorValidationMessages {
   oneDriveUsersRequired?: string;
   specificGroupsRequired?: string;
+  /** A string-pair row with an empty left key. */
+  stringPairEmptyKey?: string;
+  /** Two string-pair rows with the same left key. */
+  stringPairDuplicateKey?: string;
+}
+
+/** Each row's trimmed value under `leftKey`, or "" when it has none. */
+function stringPairLeftKeys(
+  rows: unknown[] | undefined,
+  leftKey: string
+): string[] {
+  return (rows ?? []).map((row) => {
+    const entry: [string, unknown] | undefined =
+      typeof row === "object" && row !== null
+        ? Object.entries(row).find(([key]) => key === leftKey)
+        : undefined;
+    return String(entry?.[1] ?? "").trim();
+  });
+}
+
+/**
+ * A string-pair list, such as URL rewrite rules. Each row needs a left key,
+ * and no two rows may share one, as the InputKeyValue editor shows.
+ */
+function stringPairListSchema(
+  leftKey: string,
+  messages: ConnectorValidationMessages
+): Yup.Schema {
+  return Yup.array()
+    .of(Yup.object())
+    .test(
+      "non-empty-keys",
+      messages.stringPairEmptyKey ?? "Key cannot be empty",
+      (rows) => stringPairLeftKeys(rows, leftKey).every((key) => key !== "")
+    )
+    .test(
+      "unique-keys",
+      messages.stringPairDuplicateKey ?? "Duplicate key",
+      (rows) => {
+        const keys: string[] = stringPairLeftKeys(rows, leftKey);
+        return new Set(keys).size === keys.length;
+      }
+    );
 }
 
 const buildInitialValuesForFields = (
@@ -156,7 +199,7 @@ export function createConnectorValidationSchema(
             : field.type === "multiselect"
               ? Yup.array().of(Yup.string())
               : field.type === "string_pair_list"
-                ? Yup.array().of(Yup.object())
+                ? stringPairListSchema(field.leftKey, messages)
                 : field.type === "checkbox"
                   ? Yup.boolean()
                   : field.type === "file"
