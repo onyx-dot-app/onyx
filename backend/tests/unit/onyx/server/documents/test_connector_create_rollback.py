@@ -14,7 +14,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import connector as connector_server
 from onyx.server.documents.models import (
-    ConnectorUpdateRequest,
+    ConnectorWithMockCredentialRequest,
     DocumentSource,
     InputType,
     ObjectCreationIdResponse,
@@ -22,8 +22,8 @@ from onyx.server.documents.models import (
 
 
 @pytest.fixture
-def request_data() -> ConnectorUpdateRequest:
-    return ConnectorUpdateRequest(
+def request_data() -> ConnectorWithMockCredentialRequest:
+    return ConnectorWithMockCredentialRequest(
         name="sharepoint-retry",
         source=DocumentSource.SHAREPOINT,
         input_type=InputType.POLL,
@@ -54,7 +54,8 @@ def stubbed_creation(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
 
 
 def test_failed_validation_removes_both_rows(
-    request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
+    request_data: ConnectorWithMockCredentialRequest,
+    stubbed_creation: dict[str, MagicMock],
 ) -> None:
     db_session = MagicMock()
 
@@ -74,7 +75,8 @@ def test_failed_validation_removes_both_rows(
 
 
 def test_duplicate_name_removes_nothing(
-    request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
+    request_data: ConnectorWithMockCredentialRequest,
+    stubbed_creation: dict[str, MagicMock],
 ) -> None:
     stubbed_creation["create_connector"].side_effect = ValueError(
         "Connector by this name already exists, duplicate naming not allowed."
@@ -91,7 +93,8 @@ def test_duplicate_name_removes_nothing(
 
 
 def test_connector_paired_meanwhile_still_drops_the_mock_credential(
-    request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
+    request_data: ConnectorWithMockCredentialRequest,
+    stubbed_creation: dict[str, MagicMock],
 ) -> None:
     stubbed_creation["discard_connector_if_unpaired"].return_value = False
     db_session = MagicMock()
@@ -107,7 +110,8 @@ def test_connector_paired_meanwhile_still_drops_the_mock_credential(
 
 
 def test_transient_validation_failure_also_frees_the_name(
-    request_data: ConnectorUpdateRequest, stubbed_creation: dict[str, MagicMock]
+    request_data: ConnectorWithMockCredentialRequest,
+    stubbed_creation: dict[str, MagicMock],
 ) -> None:
     stubbed_creation[
         "validate_ccpair_for_user"

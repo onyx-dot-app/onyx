@@ -104,7 +104,6 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
-    ConnectorManageRole,
     IndexingMode,
     Permission,
     ProcessingMode,
@@ -143,6 +142,7 @@ from onyx.file_store.file_store import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.cc_pair import assert_data_access_allowed
 from onyx.server.documents.models import (
     AuthStatus,
     AuthUrl,
@@ -157,6 +157,7 @@ from onyx.server.documents.models import (
     ConnectorSnapshot,
     ConnectorStatus,
     ConnectorUpdateRequest,
+    ConnectorWithMockCredentialRequest,
     CredentialBase,
     CredentialSnapshot,
     DocsCountOperator,
@@ -1574,7 +1575,7 @@ def create_connector_from_model(
 
 @router.post("/admin/connector-with-mock-credential")
 def create_connector_with_mock_credential(
-    connector_data: ConnectorUpdateRequest,
+    connector_data: ConnectorWithMockCredentialRequest,
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
@@ -1590,13 +1591,18 @@ def create_connector_with_mock_credential(
             "Restricted perm-synced connectors must be created with a credential.",
         )
 
+    assert_data_access_allowed(
+        user, db_session, connector_data.access_type, connector_data.data_access
+    )
+
     # GATE 2 write authorization (see assert_within_scope).
+    manage_access = connector_data.manage_roles_by_group()
     assert_within_scope(
         user,
         db_session,
         permission=Permission.MANAGE_CONNECTORS,
         current_group_ids=[],
-        requested_group_ids=connector_data.groups or [],
+        requested_group_ids=manage_access.keys(),
         is_non_public=connector_data.access_type != AccessType.PUBLIC,
     )
 
@@ -1635,10 +1641,8 @@ def create_connector_with_mock_credential(
             credential_id=credential_id,
             access_type=connector_data.access_type,
             cc_pair_name=connector_data.name,
-            # this legacy create path has no roles, so its groups manage as Editors
-            manage_access=dict.fromkeys(
-                connector_data.groups, ConnectorManageRole.EDITOR
-            ),
+            manage_access=manage_access,
+            data_access_group_ids=connector_data.data_access,
         )
 
         # Tenant-work-gating lifecycle hook: keep new-tenant latency to
