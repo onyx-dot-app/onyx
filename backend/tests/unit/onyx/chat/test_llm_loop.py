@@ -1855,6 +1855,36 @@ class TestSelectReminderText:
         assert ANSWER_COVERAGE_GUIDANCE.strip() in result
         assert ANSWER_COMPLETENESS_REMINDER in result
 
+    def test_image_gen_reminder_still_carries_citation_guidance(self) -> None:
+        """A turn mixing a citeable tool with generate_image must not lose the
+        citation instructions to the image-gen short-circuit."""
+        result = self._select(ran_image_gen=True, include_citation_reminder=True)
+        assert result is not None
+        assert IMAGE_GEN_REMINDER in result
+        assert REQUIRE_CITATION_GUIDANCE.strip() in result
+
+    def test_open_url_reminder_still_carries_citation_guidance(self) -> None:
+        result = self._select(
+            just_ran_web_search=True,
+            has_open_url_tool=True,
+            include_citation_reminder=True,
+        )
+        assert result is not None
+        assert OPEN_URL_REMINDER in result
+        assert REQUIRE_CITATION_GUIDANCE.strip() in result
+
+    def test_authored_citation_tag_is_not_duplicated(self) -> None:
+        """When the task prompt's {{CITATION_GUIDANCE}} already resolved to the
+        guidance inside reminder_text, it must not be appended a second time."""
+        result = self._select(
+            persona_task_prompt="Task." + REQUIRE_CITATION_GUIDANCE,
+            include_citation_reminder=True,
+        )
+        assert result is not None
+        assert result.count(REQUIRE_CITATION_GUIDANCE.strip()) == 1
+        # COVERAGE is only added by the reminder, so it still appears once.
+        assert ANSWER_COVERAGE_GUIDANCE.strip() in result
+
 
 @pytest.mark.parametrize("select_none", [False, True])
 def test_saved_search_docs_follow_the_search_selection(select_none: bool) -> None:

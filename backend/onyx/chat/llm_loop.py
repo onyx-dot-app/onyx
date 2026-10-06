@@ -773,9 +773,19 @@ def select_reminder_text(
     "open_url is not available" replies.
     """
     if ran_image_gen:
-        return IMAGE_GEN_REMINDER
+        return build_reminder_message(
+            reminder_text=IMAGE_GEN_REMINDER,
+            include_citation_reminder=include_citation_reminder,
+            include_file_reminder=include_file_reminder,
+            is_last_cycle=out_of_cycles,
+        )
     if just_ran_web_search and has_open_url_tool and not out_of_cycles:
-        return OPEN_URL_REMINDER
+        return build_reminder_message(
+            reminder_text=OPEN_URL_REMINDER,
+            include_citation_reminder=include_citation_reminder,
+            include_file_reminder=include_file_reminder,
+            is_last_cycle=out_of_cycles,
+        )
     return build_reminder_message(
         reminder_text=persona_task_prompt,
         include_citation_reminder=include_citation_reminder,

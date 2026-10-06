@@ -142,7 +142,12 @@ def build_reminder_message(
         # blocks that used to be appended to the system prompt; they moved here
         # so head prompts stay byte-stable across loop iterations for prompt
         # caching. They supersede the shorter CITATION_REMINDER.
-        reminder += "\n\n" + REQUIRE_CITATION_GUIDANCE
+        # reminder_text may already carry the guidance when the task prompt
+        # authored a {{CITATION_GUIDANCE}} tag — don't emit it twice. The tag
+        # only injects REQUIRE_CITATION_GUIDANCE, so COVERAGE is appended
+        # unconditionally.
+        if REQUIRE_CITATION_GUIDANCE.strip() not in reminder:
+            reminder += "\n\n" + REQUIRE_CITATION_GUIDANCE
         reminder += "\n\n" + ANSWER_COVERAGE_GUIDANCE
         reminder += "\n\n" + ANSWER_COMPLETENESS_REMINDER
     if include_file_reminder:
