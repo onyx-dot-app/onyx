@@ -704,7 +704,6 @@ jobs:
             -e DISABLE_TELEMETRY=true \
             -e DEV_MODE=true \
             -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-            -e LICENSE_ENFORCEMENT_ENABLED=false \
             ${DEVCONTAINER_IMAGE} \
             uv run --no-sync pytest -v --tb=short -rs tests/integration/multitenant_tests
 

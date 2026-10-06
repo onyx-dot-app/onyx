@@ -1830,17 +1830,6 @@ AUTO_LLM_UPDATE_INTERVAL_SECONDS = int(
 )
 
 #####
-# Enterprise Edition Configs
-#####
-# NOTE: this should only be enabled if you have purchased an enterprise license.
-# if you're interested in an enterprise license, please reach out to us at
-# founders@onyx.app OR message Chris Weaver or Yuhong Sun in the Onyx
-# Discord community https://discord.gg/4NA5SbzrWb
-ENTERPRISE_EDITION_ENABLED = (
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
-)
-
-#####
 # Image Generation Configuration (DEPRECATED)
 # These environment variables will be deprecated soon.
 # To configure image generation, please visit the Image Generation page in the Admin Panel.
