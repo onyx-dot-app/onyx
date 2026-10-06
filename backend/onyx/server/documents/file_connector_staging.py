@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import ONYX_METADATA_FILENAME, DocumentSource, FileOrigin
 from onyx.connectors.file.config import LocalFileConnectorConfig
 from onyx.connectors.file.edit_staging import ensure_files_staged_for_edit
-from onyx.connectors.file.metadata import load_zip_metadata
+from onyx.connectors.file.metadata import ZipMetadataError, load_zip_metadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.file_record import get_stored_file_facts
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -43,6 +43,16 @@ def _current_file_config(
     )
 
 
+def _read_metadata_strictly(
+    zip_metadata_file_id: str | None, zip_metadata: dict[str, Any] | None
+) -> dict[str, Any]:
+    """A merge must not drop the entries of a file it cannot read."""
+    try:
+        return load_zip_metadata(zip_metadata_file_id, zip_metadata, strict=True)
+    except ZipMetadataError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+
+
 def _base_metadata(
     db_session: Session,
     cc_pair_id: int,
@@ -55,9 +65,11 @@ def _base_metadata(
         draft_zip_metadata_file_id is None
         or draft_zip_metadata_file_id == current.zip_metadata_file_id
     ):
-        return load_zip_metadata(current.zip_metadata_file_id, current.zip_metadata)
+        return _read_metadata_strictly(
+            current.zip_metadata_file_id, current.zip_metadata
+        )
     ensure_files_staged_for_edit(db_session, cc_pair_id, [draft_zip_metadata_file_id])
-    return load_zip_metadata(draft_zip_metadata_file_id, None)
+    return _read_metadata_strictly(draft_zip_metadata_file_id, None)
 
 
 def stage_file_connector_upload(
@@ -75,8 +87,9 @@ def stage_file_connector_upload(
     back unchanged.
 
     Raises:
-        OnyxError: The pair is not a file connector, or the draft's metadata
-            file was not staged for this pair's edit.
+        OnyxError: The pair is not a file connector, the draft's metadata
+            file was not staged for this pair's edit, or a metadata file to
+            merge cannot be read or has a wrong shape (INVALID_INPUT).
     """
     current = _current_file_config(db_session, cc_pair_id)
     base_metadata = _base_metadata(
@@ -106,7 +119,7 @@ def stage_file_connector_upload(
 
     zip_metadata_file_id = draft_zip_metadata_file_id
     if uploaded.zip_metadata_file_id is not None:
-        merged_metadata = base_metadata | load_zip_metadata(
+        merged_metadata = base_metadata | _read_metadata_strictly(
             uploaded.zip_metadata_file_id, None
         )
         zip_metadata_file_id = file_store.save_file(

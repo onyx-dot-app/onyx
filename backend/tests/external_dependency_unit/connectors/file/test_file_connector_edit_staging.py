@@ -134,6 +134,28 @@ def test_staging_merges_zip_metadata_into_the_current_metadata(
     }
 
 
+def test_staging_rejects_a_zip_when_the_current_metadata_cannot_be_read(
+    db_session: Session,
+    file_pair: FilePair,
+) -> None:
+    file_pair.save_current_files(db_session, {"a.txt": _A})
+    config = file_pair.pair.connector.connector_specific_config
+    file_pair.pair.connector.connector_specific_config = config | {
+        "zip_metadata_file_id": file_pair.save_metadata_file(b"not json")
+    }
+    db_session.commit()
+
+    with pytest.raises(OnyxError) as exc:
+        file_pair.stage(
+            db_session,
+            [zip_upload({"b.txt": _B}, [{"filename": "b.txt", "title": "B"}])],
+        )
+
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+    # It fails before it stages the upload.
+    assert staged_file_ids(db_session, file_pair.pair.id) == set()
+
+
 def test_apply_claims_only_the_files_staged_for_its_pair(
     db_session: Session,
     file_pair: FilePair,
