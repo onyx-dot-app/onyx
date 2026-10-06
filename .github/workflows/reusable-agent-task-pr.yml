@@ -1,9 +1,9 @@
 ### Reusable "agent performs a repo task and opens a reviewed PR" workflow.
 ###
 ### A caller workflow supplies a task script (backend/scripts/*.py) that
-### regenerates repo files using the OpenAI Responses API, plus an optional
-### deterministic fallback script. This workflow owns the shared machinery:
-### App credentials, checkout, the agent-vs-fallback dance, commit + PR
+### regenerates repo files using an LLM agent (an OpenAI or Anthropic key), plus
+### an optional deterministic fallback script. This workflow owns the shared
+### machinery: App credentials, checkout, the agent-vs-fallback dance, commit + PR
 ### mechanics, and self-repair — when the caller's validation workflow fails
 ### on the task branch, the caller's workflow_run trigger re-invokes this
 ### workflow with the failing logs so the agent can fix its own output.
@@ -76,15 +76,23 @@ on:
         required: false
         type: number
         default: 5
+      fetch-depth:
+        description: "Checkout depth; 0 = full history for tasks that read git log"
+        required: false
+        type: number
+        default: 1
     secrets:
       # Minted so PRs/commits come from the app bot, not github-actions[bot].
       CHERRY_PICK_APP_PRIVATE_KEY:
         description: "GitHub App private key for the PR token"
         required: true
-      # Any task not needing an agent call can omit it; empty → straight to
-      # the fallback script.
+      # Any task not needing an agent call can omit these; with no agent key
+      # → straight to the fallback script.
       OPENAI_API_KEY:
         description: "OpenAI API key for the agent call"
+        required: false
+      ANTHROPIC_API_KEY:
+        description: "Anthropic API key for the agent call"
         required: false
 
 concurrency:
@@ -128,6 +136,7 @@ jobs:
           # iterates on its own last attempt instead of starting from main.
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || 'main' }}
           token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: ${{ inputs.fetch-depth }}
 
       - name: Configure git identity as App
         env:
@@ -203,6 +212,7 @@ jobs:
           steps.repair-guard.outputs.proceed == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_MODEL: ${{ inputs.agent-model }}
           SCRIPT: ${{ inputs.script }}
           SCRIPT_ARGS: ${{ inputs.script-args }}
@@ -220,7 +230,7 @@ jobs:
             args="${args} --failure-context-file /tmp/failure_context.txt"
           fi
 
-          if [ -n "${OPENAI_API_KEY:-}" ] && python3 "${SCRIPT}" ${args}; then
+          if [ -n "${OPENAI_API_KEY:-}${ANTHROPIC_API_KEY:-}" ] && python3 "${SCRIPT}" ${args}; then
             echo "Agent task succeeded."
           elif [ -n "${FALLBACK_SCRIPT}" ]; then
             echo "::warning::Agent path unavailable or failed; running deterministic fallback."
@@ -244,7 +254,7 @@ jobs:
         # Fixed branch + force-push: the content changes run over run, so an
         # already-open PR should be refreshed, not left stale.
         run: |
-          if git diff --quiet -- ${FILES}; then
+          if [ -z "$(git status --porcelain -- ${FILES})" ]; then
             echo "No changes to ${FILES}. Nothing to do."
             exit 0
           fi

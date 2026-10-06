@@ -88,6 +88,23 @@ def _owners(path: str, owned: list[tuple[str, list[str]]]) -> list[str]:
     return owners
 
 
+def _ignored(path: str) -> bool:
+    return path.startswith(_IGNORED_PREFIXES) or any(
+        m in path for m in _IGNORED_MARKERS
+    )
+
+
+def unowned_paths(changed: list[str]) -> list[str]:
+    """Changed product paths that no PATHS.md row owns, in input order."""
+    names = {doc.stem for doc in COMPONENTS_DIR.glob("*.md")}
+    owned = _ownership(names, changed)
+    return [
+        path
+        for path in dict.fromkeys(changed)
+        if not _ignored(path) and not _owners(path, owned)
+    ]
+
+
 def stale_components(changed: list[str]) -> dict[str, list[str]]:
     names = {doc.stem for doc in COMPONENTS_DIR.glob("*.md")}
     updated_docs = {
@@ -98,9 +115,7 @@ def stale_components(changed: list[str]) -> dict[str, list[str]]:
     owned = _ownership(names, changed)
     stale: dict[str, list[str]] = {}
     for path in changed:
-        if path.startswith(_IGNORED_PREFIXES) or any(
-            m in path for m in _IGNORED_MARKERS
-        ):
+        if _ignored(path):
             continue
         for component in _owners(path, owned):
             if component not in updated_docs:

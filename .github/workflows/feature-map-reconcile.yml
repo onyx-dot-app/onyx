@@ -1,0 +1,113 @@
+### Daily reconciliation of the feature map (.agents/feature-map/) with the
+### commits merged to main. It reviews every commit since the last reconciled
+### one (the .agents/feature-map/RECONCILED marker; on the first run, the past
+### 7 days), fans out one Claude agent per affected component, then runs an
+### integrator pass and the integrity check. It opens a reviewed PR on
+### auto/feature-map-reconcile.
+###
+### A run is skipped while a previous reconciliation PR is still open, so a
+### reviewer's edits are never force-pushed over. When quality checks fail on
+### the auto branch, the workflow_run trigger below re-invokes the reusable
+### workflow with the failure logs so the agent repairs its own output. All
+### credentials / repair-loop / PR mechanics live in reusable-agent-task-pr.yml.
+
+name: Feature Map Reconcile
+
+on:
+  schedule:
+    - cron: "0 14 * * *" # daily, 14:00 UTC
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Base commit override (default: the RECONCILED marker)"
+        required: false
+        default: ""
+  # Repair trigger: quality-check failure on the auto PR branch. Safe: the
+  # reusable job only proceeds for failures whose head_repository is this
+  # repo and whose sha is still the open PR's head.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: ["Quality Checks PR"]
+    types: [completed]
+    branches: [auto/feature-map-reconcile]
+
+# actions:read is required: a caller's permissions cap what the reusable
+# workflow may grant GITHUB_TOKEN, and repair runs fetch the failed run's
+# logs with it.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  check-open-pr:
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      open: ${{ steps.check.outputs.open }}
+    steps:
+      - name: Validate since input
+        env:
+          SINCE: ${{ github.event.inputs.since }}
+        run: |
+          if [ -n "${SINCE}" ] && ! [[ "${SINCE}" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "::error::since must be a 7 to 40 character lowercase hex commit sha."
+            exit 1
+          fi
+
+      - name: Check for an open reconciliation PR
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Capture first: a gh failure must abort the step, not read as
+          # "no open PR" and start a run that force-pushes over a review.
+          open_count="$(gh pr list --repo "${{ github.repository }}" --state open \
+            --head auto/feature-map-reconcile --json number --jq length)"
+          if [ "${open_count}" -gt 0 ]; then
+            echo "::notice::A reconciliation PR is still open. Skipping this run."
+            echo "open=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "open=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+  reconcile:
+    needs: check-open-pr
+    if: always() && (github.event_name == 'workflow_run' || needs.check-open-pr.outputs.open == 'false')
+    uses: ./.github/workflows/reusable-agent-task-pr.yml
+    secrets:
+      CHERRY_PICK_APP_PRIVATE_KEY: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    with:
+      task-name: feature-map-reconcile
+      script: .agents/feature-map/reconcile.py
+      script-args: ${{ github.event.inputs.since && format('--since {0}', github.event.inputs.since) || '' }}
+      files: .agents/feature-map
+      branch: auto/feature-map-reconcile
+      pr-title: "docs(agents): reconcile the feature map with main"
+      reviewer: rohoswagger
+      fetch-depth: 0
+      timeout-minutes: 120
+      max-repair-commits: 3
+
+  notify-slack-on-failure:
+    needs:
+      - reconcile
+    if: always() && needs.reconcile.result == 'failure'
+    runs-on: ubuntu-latest
+    environment: ci-protected
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/slack-notify
+
+      - name: Notify Slack about reconcile failure
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          title: "🚨 Feature Map Reconcile workflow failed"
+          details: "*The daily feature map reconciliation failed.* Check the run logs."

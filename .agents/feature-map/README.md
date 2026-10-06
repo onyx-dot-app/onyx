@@ -78,6 +78,8 @@ it needs.
   date. A small doc fix in a code PR does not change it. To find the components
   that may be stale, list the commits since that hash on the component's code
   paths: `git log <sha>..HEAD -- <paths from PATHS.md>`.
+- Prose follows the ASD-STE100 rules in the root `AGENTS.md`: short sentences,
+  active voice, one word for one idea.
 
 ## The integrity check
 
@@ -111,5 +113,29 @@ hook, it names each component at most once per session.
 The check catches broken references only. It cannot tell when a description is
 wrong while every path it cites still exists. That is why each component records
 the commit it was last verified against.
-- Prose follows the ASD-STE100 rules in the root `AGENTS.md`: short sentences,
-  active voice, one word for one idea.
+
+## Daily reconciliation
+
+The `Feature Map Reconcile` workflow (`.github/workflows/feature-map-reconcile.yml`)
+runs `reconcile.py` once a day. It catches what the per-PR rules miss: a code PR
+that changed behaviour without a document update.
+
+1. It reviews the commits merged to `main` since the commit in `RECONCILED`. On the
+   first run, it reviews the past 7 days.
+2. It maps each commit to its components with `stale_docs.py`. A commit that
+   already updated a component's document is skipped for that component.
+3. It runs one Claude Code agent per affected component, in parallel. Each agent
+   reads the diffs, checks them against the code, and edits only its own document.
+   The prompt is `.github/prompts/feature-map-reconcile-component.md`.
+4. An integrator agent applies the changes that other files need, such as new
+   `PATHS.md` rows for code that no component owns. The prompt is
+   `.github/prompts/feature-map-reconcile-integrate.md`.
+5. The integrity check runs. The integrator fixes any error it reports.
+6. The workflow opens a pull request on `auto/feature-map-reconcile` for review.
+
+A reconciliation does not change `Verified against` lines, because it checks only
+the new commits, not whole documents. The workflow skips a day while the previous
+reconciliation pull request is still open. `RECONCILED` moves forward only when
+every component agent succeeds, so a failed component is retried on the next run.
+Run it by hand with `python3 .agents/feature-map/reconcile.py` (prints the plan) or
+from the Actions tab with an optional `since` commit.
