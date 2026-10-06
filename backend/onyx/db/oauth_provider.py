@@ -348,6 +348,10 @@ def revoke_oauth_provider_grant__no_commit(
 
 
 def oauth_provider_tenant_has_members(tenant_id: str) -> bool:
+    """Whether ``tenant_id`` names a workspace with at least one active member.
+
+    Used to reject OAuth tokens whose embedded tenant does not exist before any
+    tenant schema is queried."""
     if not MULTI_TENANT:
         return tenant_id == POSTGRES_DEFAULT_SCHEMA
     if tenant_id == POSTGRES_DEFAULT_SCHEMA:
@@ -369,6 +373,10 @@ def oauth_provider_tenant_has_members(tenant_id: str) -> bool:
 def oauth_provider_owner_is_member(
     tenant_id: str, email: str, identities: Sequence[tuple[str, str]]
 ) -> bool:
+    """Whether a grant owner still belongs to ``tenant_id``.
+
+    The owner counts as a member through an active catalog mapping for their
+    email or for one of their linked OAuth identities."""
     if not MULTI_TENANT:
         return tenant_id == POSTGRES_DEFAULT_SCHEMA
     subject_membership = (
@@ -399,6 +407,8 @@ def oauth_provider_owner_is_member(
 
 
 def oauth_provider_owner_snapshot(user: User) -> OAuthProviderOwner:
+    """Copy the fields the membership check needs, so it can run after the
+    tenant session that loaded ``user`` has closed."""
     return OAuthProviderOwner(
         user_id=user.id,
         email=user.email,
@@ -411,6 +421,7 @@ def oauth_provider_owner_snapshot(user: User) -> OAuthProviderOwner:
 def get_oauth_provider_owner(
     session: Session, user_id: UUID
 ) -> OAuthProviderOwner | None:
+    """Snapshot of the active user ``user_id``, or None if they are gone or inactive."""
     user = session.get(User, user_id, populate_existing=True)
     if user is None or not user.is_active:
         return None
@@ -424,6 +435,8 @@ def get_oauth_provider_token_owner(
     client_id: str,
     resource: str,
 ) -> OAuthProviderOwner | None:
+    """Snapshot of the active user who owns ``raw_token`` for this client and
+    resource, in the current tenant. Accepts access and refresh tokens."""
     parsed = parse_oauth_provider_token(raw_token)
     if parsed is None or parsed.tenant_id != get_current_tenant_id():
         return None
