@@ -62,12 +62,12 @@ on:
         type: string
         default: ""
       slack-channel:
-        description: "Slack channel ID to ping when the task PR is opened or refreshed (empty = no post)"
+        description: "Slack channel ID for PR review notifications (empty = no post)"
         required: false
         type: string
         default: ""
       slack-mention:
-        description: "GitHub username to @-mention in the Slack post (resolved via slack-notify/user-mappings.json)"
+        description: "GitHub username to resolve to a Slack mention"
         required: false
         type: string
         default: ""
@@ -97,7 +97,7 @@ on:
         description: "OpenAI API key for the agent call"
         required: false
       SLACK_BOT_TOKEN:
-        description: "Slack bot token for the PR announcement post"
+        description: "Slack bot token for PR review notifications"
         required: false
 
 concurrency:
@@ -332,12 +332,13 @@ jobs:
            steps.repair-guard.outputs.proceed == 'true') &&
           steps.pr.outputs.pr_number != '' &&
           steps.slack-actions.outcome == 'success'
+        continue-on-error: true
         uses: ./.ci-actions/.github/actions/slack-post-message
         with:
           bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
           channel: ${{ inputs.slack-channel }}
           mention: ${{ inputs.slack-mention }}
           text: |
-            *🤖 ${{ inputs.task-name }} PR ready for review* {mention}
+            ${{ inputs.task-name }} PR ready for review {mention}
             *PR:* <${{ steps.pr.outputs.pr_url }}|#${{ steps.pr.outputs.pr_number }}>
             *Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|workflow run>
