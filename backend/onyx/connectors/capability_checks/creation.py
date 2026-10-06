@@ -15,8 +15,6 @@ from functools import partial
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-
 from onyx.background.celery.tasks.capability_checks.enqueue import (
     send_capability_check_run_task,
 )
@@ -34,6 +32,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CredentialCapabilityReport,
+    NamedCheckRun,
     compute_connector_config_hash,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
@@ -65,25 +64,6 @@ _TRIGGER = CapabilityCheckTrigger.CC_PAIR_VALIDATION
 CREATION_BLOCKING_BUDGET_SECONDS = 3.0
 
 _REJECTED_MESSAGE = "Did not finish before the connector was rejected."
-
-
-class NamedCheckRun(BaseModel):
-    """The outcome of the named checks after the blocking budget."""
-
-    # Results of the checks that finished, reused draft results included.
-    finished_results: list[CapabilityCheckResult]
-    # Checks that were still running at the end of the budget.
-    unfinished_check_ids: frozenset[str]
-
-    @property
-    def failed_required_results(self) -> list[CapabilityCheckResult]:
-        """The finished required checks that failed. Only these block a
-        pairing."""
-        return [
-            result
-            for result in self.finished_results
-            if result.required and result.status == CapabilityCheckStatus.FAILED
-        ]
 
 
 def _fresh_draft_results(

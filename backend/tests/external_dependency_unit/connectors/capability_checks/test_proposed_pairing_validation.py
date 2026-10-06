@@ -17,12 +17,10 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CredentialCapability,
+    ProposedPairingValidation,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.factory import (
-    ProposedPairingValidation,
-    validate_proposed_pairing,
-)
+from onyx.connectors.factory import validate_proposed_pairing
 from onyx.connectors.models import InputType
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.credential_capability import get_capability_report_row

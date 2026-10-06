@@ -15,7 +15,6 @@ from onyx.db.enums import AccessType
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.utils import variable_functionality
 from tests.external_dependency_unit.conftest import create_test_user
 
 # Any id works: an admin sees every group, and a basic user sees none.
@@ -42,10 +41,10 @@ def group_restrictions_allowed(
 
 
 @pytest.fixture
-def ee_business_tier(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
-    monkeypatch.setattr(
-        variable_functionality.global_version, "is_ee_version", lambda: True
-    )
+def ee_business_tier(
+    enable_ee: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> MagicMock:
     monkeypatch.setattr(tier, "LICENSE_ENFORCEMENT_ENABLED", True)
     get_tier = MagicMock(return_value=Tier.BUSINESS)
     monkeypatch.setattr(tier, "get_tier", get_tier)

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
-from onyx.connectors.capability_checks.models import CapabilityCheckResult
+from onyx.connectors.capability_checks.models import ProposedPairingValidation
 from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
@@ -366,18 +366,6 @@ def _build_and_validate_connector(
     runnable_connector.validate_connector_settings()
     if access_type.is_perm_synced():
         runnable_connector.validate_perm_sync()
-
-
-class ProposedPairingValidation(BaseModel):
-    """The result of validating a pairing state that is not stored."""
-
-    # Set when the credential binding, the connector construction, or the
-    # legacy validation failed. The named checks do not run then.
-    validation_error: str | None = None
-    # Named checks only: the finished results, and the checks still running at
-    # the end of the blocking budget.
-    check_results: list[CapabilityCheckResult] = []
-    unfinished_check_ids: frozenset[str] = frozenset()
 
 
 def validate_proposed_pairing(
