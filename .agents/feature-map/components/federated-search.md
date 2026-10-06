@@ -270,7 +270,11 @@ future source makes it non-empty) merge the same way, but arrive through
 
 ## 5. Contracts and invariants
 
-1. **A federated result must never exceed what the user's own token can see.**
+1. **Onyx does not ACL-filter Slack results. The token decides what comes back.**
+   In a web-user search, the token is that user's OAuth token. In a Slack-bot
+   turn, `_prefetch_slack_data` uses the tenant Slack bot's `user_token` first,
+   then its `bot_token`. Those results show what that token can see, not
+   necessarily what the requesting Slack user can see.
    Verified for Slack: `_run_slack_search` builds `IndexFilters(access_control_list=None)`
    (`search_tool.py`), and access is enforced entirely by what the Slack API
    returns for the given `access_token`, which is scoped by Slack's own OAuth

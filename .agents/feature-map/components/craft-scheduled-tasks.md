@@ -109,8 +109,8 @@ run could saturate would stall dispatch for every tenant
   `UNIQUE(scheduled_task_id, gated_app_id)`. The `gated_app` row is an
   external app or an MCP server. The table name is `scheduled_task_pre_approved_app`
   and predates MCP support. See §4.4.
-- `BuildSession.origin` (`SessionOrigin`: `INTERACTIVE`/`SCHEDULED`): set by
-  the executor at session-create time. The normal Craft sidebar query
+- `BuildSession.origin` (`SessionOrigin`: `INTERACTIVE`/`SCHEDULED`/`SLACK`): set at
+  session-create time (`SCHEDULED` by the executor). The normal Craft sidebar query
   filters to `INTERACTIVE`, which is how scheduled runs stay out of it. A
   dedicated column was chosen over a join-based `NOT EXISTS` against
   `scheduled_task_run` because the dispatcher writes its run row before the
@@ -231,6 +231,11 @@ by default.
   the task's grants. The executor commits `session_id` with `RUNNING` in the
   same write before any agent egress can occur (§4.3 step 3), so there is
   no window where a grant could apply before the run row says so.
+  The gate memoizes the lookup per session in `_grant_cache`
+  (`_GRANT_CACHE_TTL_S` = 60 seconds). Nothing invalidates it when the run
+  ends. A follow-up in the first 60 seconds after the terminal transition
+  can still use the cached grant. The same cache can also hold a stale
+  "no grant" result for the first seconds of a run.
 - **Admin `DENY` always wins, before a grant is ever consulted.** The
   gate's verdict order is `DENY` (403, no row) then `ALWAYS` (forward, no
   row) then `ASK` (the only branch where a pre-approval grant is checked at
@@ -264,7 +269,8 @@ separate choice.
 ## 5. Contracts and invariants
 
 1. **A pre-approved action must be bounded by exactly what the user
-   granted: one app, one currently-`RUNNING` run of that task.** Any change
+   granted: one app, one `RUNNING` run of that task (plus the 60-second
+   grant-cache grace window after the run ends, §4.4).** Any change
    that widens the grant lookup (e.g. matching on `origin=SCHEDULED` alone,
    or on a terminal-status run) reopens the follow-up-message leak
    described in §4.4.

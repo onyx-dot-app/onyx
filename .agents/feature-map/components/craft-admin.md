@@ -37,10 +37,10 @@ On **Apps**, the admin sees every external service and MCP server the Craft
 agent can reach: built-in apps (Slack, Gmail, Google Calendar, Google Drive, Linear,
 HubSpot, Notion, GitHub), any custom app the admin has registered, and connected MCP
 servers. For each, the admin can enable or disable it, edit its per-action
-policy (auto-approve, ask, or deny each kind of action), and, for
-self-hosted deployments, configure its credentials. On Onyx Cloud, built-in
-apps already have Onyx-managed OAuth credentials; the admin can only toggle
-them on and set policy.
+policy (auto-approve, ask, or deny each kind of action), and configure its
+credentials. On Onyx Cloud, built-in apps already have Onyx-managed OAuth
+credentials, so the admin can only toggle them on and set policy. Custom apps
+on Cloud keep a normal credential form.
 
 On **Preferences**, the admin sets a workspace default model for Craft
 sessions and a free-text "organization instructions" block that every Craft
@@ -156,7 +156,8 @@ storing a redundant explicit value
 ### 4.2 Apps: what an admin configures and how it is enforced
 
 An admin action on `/admin/craft/apps` is one of: enable/disable an app,
-edit its `auth_template` and `organization_credentials` (self-hosted only),
+edit its `auth_template` and `organization_credentials` (not available for
+Onyx-managed built-ins on Cloud),
 edit its per-action policy, or associate/detach a skill. External-app changes
 route through `backend/onyx/db/external_app.py` (`update_external_app`,
 `_write_policies__no_commit`) and, for policy, into the shared `gated_app`
@@ -183,8 +184,10 @@ outbound HTTPS request from a Craft sandbox
 ```
 
 Credential injection (`sandbox_proxy/credential_injection.py`) is a separate
-concern from policy: a resolver only injects a secret for an app the user has
-connected. A request that matches no connected app's `upstream_url_patterns`
+concern from policy: a resolver injects a secret only for a request the matcher
+attributed to an enabled app. It merges the organization credentials with the
+user's own credentials, if any. An org-credentialed app needs no user
+connection. A request that matches no enabled app's `upstream_url_patterns`
 is not gated by the external-app evaluator. The separate
 `McpRequestEvaluator` can still gate it as an MCP call. A request that
 neither evaluator matches has `matched_actions is None` in

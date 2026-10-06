@@ -68,8 +68,8 @@ Pay particular attention to hand-mirrored contracts, because nothing enforces th
 
 - The streaming packet enum exists in Python, in web TypeScript, and in mobile
   TypeScript.
-- A new tool needs a class, a `BUILT_IN_TOOL_MAP` entry, a seeded database row, and
-  a frontend renderer.
+- A new built-in tool needs a class, a `BUILT_IN_TOOL_MAP` entry, a seeded database
+  row, and a frontend renderer. Custom tools follow other registration paths.
 - Prompt text and reminder placement change model behaviour without changing any
   type.
 
@@ -98,8 +98,10 @@ into one. This is short and it catches a specific class of confident mistake.
 Independent of the map, every change is subject to:
 
 - `AGENTS.md` at the repo root: typing, Simplified Technical English in prose.
-- `backend/AGENTS.md`: Celery, migrations, error handling, LLM tracing. Any new LLM
-  call site needs an explicit `LLMFlow` tag, or it shows up as `UNTAGGED_*`.
+- `backend/AGENTS.md`: Celery, migrations, error handling, LLM tracing. Every LLM
+  call needs a generation span tagged with `LLMFlow`. Shared-client calls that set no
+  flow emit `UNTAGGED_*` sentinels (`backend/onyx/llm/multi_llm.py:MultiLLM.invoke`,
+  `MultiLLM.stream`). Direct-provider calls without a span emit nothing.
 - `web/AGENTS.md`: the component rules. Opal over refresh-components, no raw HTML
   form elements, no raw text nodes, no `lucide-react`, no `dark:` modifier, design
   tokens only.

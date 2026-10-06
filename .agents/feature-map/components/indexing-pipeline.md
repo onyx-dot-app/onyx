@@ -622,10 +622,12 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
    PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}" -U postgres \
      -c "SELECT id, status, total_batches, completed_batches, total_docs_indexed, total_chunks, heartbeat_counter FROM index_attempt ORDER BY id DESC LIMIT 5;"
    ```
-5. Kill the docprocessing worker mid-run (or `docker stop` the container) and
+5. With a checkpoint-capable connector (a `CheckpointedConnector`), kill the
+   docprocessing worker mid-run (or `docker stop` the container) and
    confirm: the attempt eventually flips to `FAILED` via the heartbeat check (up to
    `HEARTBEAT_TIMEOUT_SECONDS`), and a fresh scheduled attempt resumes from the
-   saved checkpoint rather than re-fetching everything.
+   saved checkpoint rather than re-fetching everything. Other connectors
+   restart extraction by design.
 6. Delete a document from the source and wait for the next prune cycle; confirm it
    drops out of search results and its `Document` row is removed (or its ACL
    patched, if another cc-pair still owns it).

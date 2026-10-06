@@ -37,10 +37,13 @@ upload or claim a license via the `/license` endpoints
 (`backend/ee/onyx/server/license/api.py`), and previously blocked admin
 surfaces, seat limits, and tier-gated features unlock. A cloud (`MULTI_TENANT`)
 deployment still registers the license routes. `GET /license`, `GET /license/seats`,
-and `POST /license/refresh` stay callable. Claim, upload, and delete reject cloud
-requests with a `MULTI_TENANT` check. Gating there is external, through the control
-plane: `backend/ee/onyx/server/middleware/tenant_tracking.py` calls
-`backend/ee/onyx/server/tenants/product_gating.py:is_tenant_gated`.
+and `POST /license/refresh` are callable only for ungated tenants. Claim, upload,
+and delete reject cloud requests with a `MULTI_TENANT` check. Gating there is
+external, through the control plane:
+`backend/ee/onyx/server/middleware/tenant_tracking.py` calls
+`backend/ee/onyx/server/tenants/product_gating.py:is_tenant_gated`. For a gated
+tenant it returns 402 (`SUBSCRIPTION_INACTIVE`) before the handler runs. `/license`
+is not in `backend/ee/onyx/configs/multi_tenant_gating_config.py:MULTI_TENANT_GATING_ALLOWED_PREFIXES`.
 `check_ee_features_enabled` returns true for cloud.
 
 An admin building a custom OpenAPI action or MCP tool also sees per-action

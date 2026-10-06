@@ -73,7 +73,7 @@ sub-loop (the deep research agent, the coding agent), or the AI assistant genera
 | Credential | The stored, encrypted secret for one account on a source. |
 | cc-pair (`ConnectorCredentialPair`) | A connector plus a credential. **This is the real unit of ingestion**, not the connector. Indexing, permissions, and deletion all operate on the pair. |
 | Index attempt | One run of indexing for a cc-pair. |
-| Document set | An admin-defined group of cc-pairs, used to scope an agent or a search. |
+| Document set | An admin-defined group of cc-pairs and/or federated connectors, used to scope an agent or a search. |
 | User file | A file a user uploaded, as opposed to a connector-sourced document. |
 | Project | A durable collection of user files plus instructions that persists across sessions. |
 
@@ -101,7 +101,7 @@ sub-loop (the deep research agent, the coding agent), or the AI assistant genera
 |---|---|
 | Step / cycle | One LLM inference with a given context and tool set. A turn contains up to `MAX_LLM_CYCLES` of them. |
 | Emitter | The object a deep call uses to push a packet without returning it up the stack. It stamps `model_index`. |
-| State container | The per-model accumulator read once at the end of a turn to build the saved rows. It must never drive logic. |
+| State container | The per-model accumulator that streaming code fills and persistence reads at the end of a turn to build the saved rows. Deep-research tool code also reads its prior tool calls. |
 | Reminder | A trailing user message carrying one or two critical instructions. It is last because models attend hardest to final tokens. |
 | Custom agent prompt | The persona's instructions, injected as a user message that moves to sit above the newest user message each turn. |
 | Fence | A cache key acting as a flag. The stop fence means the user pressed stop. The processing fence means a turn is live. |
@@ -113,4 +113,4 @@ Mixing these is the most common mistake in the chat code.
 
 1. `ChatMessage`: the database row. Convert it early, never pass it deep.
 2. `ChatMessageSimple`: the canonical in-code model. Extend this one.
-3. `LanguageModelInput`: the LLM-facing form. Deliberately minimal.
+3. `ChatCompletionMessage`: the LLM-facing form. Deliberately minimal.

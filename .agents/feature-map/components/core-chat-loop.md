@@ -257,9 +257,12 @@ whenever you touch this component.
    citation reliability.
 10. **Multi-model requires streaming** and is capped at 2-3 models. Deep research
     cannot run multi-model.
-11. **Incognito turns must not persist content.** `persist_content=False` blanks the
-    row; content goes to `append_incognito_message`. Any new field written during a
-    turn needs an incognito decision.
+11. **Incognito persistence depends on the pinned record mode.**
+    `backend/onyx/db/enums.py:record_mode_persists_content` decides. A `FULL_HISTORY`
+    session writes conversation content to `chat_message` like an ordinary chat.
+    A `USAGE_ONLY` session passes `persist_content=False`, which blanks the row.
+    Its content goes to `append_incognito_message`. Any new field written during a
+    turn needs a decision for each mode.
 
 ---
 
@@ -293,7 +296,7 @@ whenever you touch this component.
 | adds a new way for a turn to end | `_persist_model_outcome` must be the route; verify the stop path and the error path both still make one save attempt |
 | touches thread creation or the queue | `contextvars` copying, `drain_done` handling, and the 50 ms cancel poll |
 | changes `save_chat_turn` or the tables | [[chat-persistence]]; the session-replay path `GET /chat/get-chat-session/{id}` must render the same packets the live stream produced |
-| changes the tool set or tool results | [[tools-framework]] and every tool implementation; tool responses are dropped from history and replaced with a placeholder, so anything the future needs must live in the tool-call arguments |
+| changes the tool set or tool results | [[tools-framework]] and every tool implementation; later turns see a placeholder instead of the tool response (the active turn keeps it), so anything a later turn needs must live in the tool-call arguments |
 | changes prompts | run an eval; see [[observability]] for tracing, and `backend/onyx/evals/` |
 | changes anything in this component at all | the Slack and Discord bots, the public API, and MCP all share this loop |
 
@@ -359,7 +362,7 @@ launching Playwright ad hoc.
 - **Three representations of a message exist** and mixing them is the most common
   mistake here: `ChatMessage` (DB, convert early and never pass deep),
   `ChatMessageSimple` (the canonical in-code model, and the one to extend), and
-  `LanguageModelInput` (deliberately minimal, LLM-facing).
+  `ChatCompletionMessage` (`llm/model_request.py`, deliberately minimal, LLM-facing).
 - **Moving a sentence inside the system prompt changes behaviour a lot.** The team
   measured instruction-follow rates swinging from roughly 30% to 90% by moving the
   same sentence into the right section. Do not reorganise prompt text for tidiness.

@@ -71,7 +71,13 @@ frontend, not `:8080` directly.
 
 There is no env var for bash-specific timeouts or output caps; `BashTool` reuses
 `CODE_INTERPRETER_DEFAULT_TIMEOUT_MS` and `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`
-(`bash_tool.py`). The coding agent additionally hardcodes its own timeouts (see §4.4).
+(`bash_tool.py`), including bash calls the coding agent makes.
+`fake_tools/coding_agent.py` adds three hardcoded limits:
+`CODING_AGENT_SETUP_TIMEOUT_MS` (60 s) for the repo setup commands,
+`CODING_AGENT_SESSION_TTL_SECONDS` (1 hour) for the session, and
+`CODING_AGENT_FORCE_ANSWER_SECONDS` (25 minutes). After 25 minutes the loop
+stops and forces a final answer. The loop checks this limit once per cycle.
+`CODING_AGENT_BASH_TIMEOUT_MS` is defined but no code reads it.
 
 ---
 

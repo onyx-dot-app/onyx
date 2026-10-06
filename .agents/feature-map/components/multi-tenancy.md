@@ -229,30 +229,28 @@ shape:
   for the duration of a catalog-table read)
 - `scripts/debugging/onyx_db.py`, `onyx_redis.py`, `opensearch/*.py` (dev tooling)
 
-**Where this breaks:** any new thread, thread pool, or `asyncio.to_thread`/executor
-call started from inside a request or a task does not automatically inherit the
-current contextvar's *live* value across a raw thread boundary unless the caller
-copies the context. [[core-chat-loop]] documents the concrete case: `_run_models`
-(`chat/process_message.py`) submits each per-model worker with a copied
-`contextvars.Context` (`contextvars.copy_context().run`, `process_message.py`)
-specifically because tenant ID and tracing context live in contextvars. Generalize
-that pattern: **a bare `Thread(target=fn)`, a `ThreadPoolExecutor.submit(fn)`, or a
-background `asyncio.create_task` that does not wrap its target in
-`contextvars.copy_context().run(...)` loses the tenant context inside that thread**,
-and any DB session or Redis client built inside it resolves to whatever the
-contextvar's *default* is (`None` under `MULTI_TENANT`, `POSTGRES_DEFAULT_SCHEMA`
-otherwise) rather than the request's actual tenant. Under `MULTI_TENANT=True` this
-either raises (`get_current_tenant_id` raises `RuntimeError` on `None`, a fail-safe)
-or, if some caller has looser handling, is a real fail-open through wrong data
-scoping. Standard Python threads *do* inherit the contextvar's value **as it existed
-at thread-creation time** in this specific set of call sites, because each one is
-explicit; the risk is a new call site that isn't.
+**Where this breaks:** a raw thread, a thread pool, or `loop.run_in_executor` call
+started from inside a request or a task does not inherit the current contextvar
+values. The caller must copy the context. [[core-chat-loop]] documents the concrete
+case: `_run_models` (`chat/process_message.py`) submits each per-model worker with a
+copied `contextvars.Context` (`contextvars.copy_context().run`, `process_message.py`)
+because tenant ID and tracing context live in contextvars. Generalize that pattern:
+**a bare `Thread(target=fn)` or a `ThreadPoolExecutor.submit(fn)` that does not wrap
+its target in `contextvars.copy_context().run(...)` loses the tenant context inside
+that thread**, and any DB session or Redis client built inside it resolves to
+whatever the contextvar's *default* is (`None` under `MULTI_TENANT`,
+`POSTGRES_DEFAULT_SCHEMA` otherwise) rather than the request's actual tenant. Under
+`MULTI_TENANT=True` this either raises (`get_current_tenant_id` raises
+`RuntimeError` on `None`, a fail-safe) or, if some caller has looser handling, is a
+real fail-open through wrong data scoping.
 
-`asyncio.to_thread` (used by `db/engine/async_sql_engine.py:get_async_engine_for_tenant`
-and `ee/onyx/server/middleware/tenant_tracking.py`'s gating check) does propagate the
-calling context automatically, per Python's documented behavior; this is the one
-concurrency primitive in this codebase where context propagation is not something a
-developer has to remember to add.
+`asyncio.create_task` and `asyncio.to_thread` copy the current context
+automatically, per Python's documented behavior. A task created inside a request
+reads the request's tenant. `db/pat.py:_schedule_pat_last_used_update` relies on
+this: its background task calls `get_current_tenant_id()` itself. Both
+`db/engine/async_sql_engine.py:get_async_engine_for_tenant` and
+`ee/onyx/server/middleware/tenant_tracking.py`'s gating check use `asyncio.to_thread`.
+The risk is a new call site that crosses a raw thread boundary without copying.
 
 ---
 
@@ -271,12 +269,13 @@ developer has to remember to add.
    body or query parameter; `is_valid_schema_name`/`TENANT_ID_PATTERN` validate
    every tenant ID that does cross a boundary (a JWT claim, a Redis-cached session,
    an anonymous cookie) before it is used as a schema name.
-3. **Every new thread, thread pool, or task must receive tenant context
+3. **Every new raw thread or thread pool must receive tenant context
    explicitly.** Either copy the context (`contextvars.copy_context().run`, as
    [[core-chat-loop]] does) or set the contextvar at the top of the new
-   thread/task body and reset it in a `finally` (as every listed call site in §4.2
-   does). A new concurrency primitive that does neither is a tenant-context bug,
-   not a performance bug.
+   thread body and reset it in a `finally` (as every listed call site in §4.2
+   does). A new thread that does neither is a tenant-context bug, not a
+   performance bug. `asyncio.create_task` and `asyncio.to_thread` copy the
+   context, so they need nothing extra.
 4. **A tenant-scoped table belongs in `alembic/`, never `alembic_tenants/`.**
    `alembic_tenants/env.py` targets only `PublicBase.metadata`; a table added to
    `onyx/db/models.py:Base` and migrated through `alembic_tenants/` would never
@@ -355,7 +354,7 @@ developer has to remember to add.
 | If your change… | Also check |
 |---|---|
 | adds a new table | Does it belong once per tenant (`Base`, `alembic/`) or once globally (`PublicBase`, `alembic_tenants/`)? Getting this backwards means the table is either duplicated into every schema or never created at all (§5.4). |
-| adds a new thread or thread pool anywhere reachable from a request or task | Does it copy `contextvars.Context`, or set/reset the tenant contextvar explicitly? An uncopied thread silently resolves to the default tenant or raises, depending on `MULTI_TENANT` (§4.2, §9). |
+| adds a new raw thread or thread pool anywhere reachable from a request or task | Does it copy `contextvars.Context`, or set/reset the tenant contextvar explicitly? An uncopied thread silently resolves to the default tenant or raises, depending on `MULTI_TENANT` (§4.2, §9). |
 | adds a new Celery task | Does it take `tenant_id` and route through `TenantAwareTask` (or an equivalent explicit `.set()`/`.reset()`)? Does the beat schedule need a per-tenant entry (`beat.py:DynamicTenantScheduler._generate_schedule`) or a single cloud-wide one? |
 | adds a new global cache (in-process `lru_cache`/`functools.cache`, a module-level dict) that stores anything derived from tenant data | It needs the tenant in its key, or it must genuinely be tenant-independent (see §9 for what was checked and found safe). |
 | changes session creation (`get_session`, `get_async_session`, or their EE equivalents) | Every one of the call sites in §5.1; confirm `schema_translate_map` still gets built from `get_current_tenant_id()`, never a value the caller could substitute. |
@@ -455,10 +454,11 @@ PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}
 - **A raw thread or executor started without `contextvars.copy_context()` loses
   tenant context.** [[core-chat-loop]]'s `_run_models` gets this right by copying
   the context per worker specifically because an earlier version of this exact bug
-  class existed. Any new `Thread(...)`, `ThreadPoolExecutor.submit(...)`, or manual
-  `asyncio.create_task` that captures no context and then opens a DB session or
+  class existed. Any new `Thread(...)`, `ThreadPoolExecutor.submit(...)`, or
+  `loop.run_in_executor` that copies no context and then opens a DB session or
   builds a Redis client inside itself is reading or writing against the wrong
-  tenant, or raising, not against "no tenant" safely.
+  tenant, or raising, not against "no tenant" safely. `asyncio.create_task` and
+  `asyncio.to_thread` copy the context and are not affected.
 - **`onyx/utils/middleware.py:add_onyx_tenant_id_middleware` trusts a bare
   `X-Onyx-Tenant-ID` header with no signature check.** It is wired into
   `backend/model_server/main.py` only, never the API server. The exposure is

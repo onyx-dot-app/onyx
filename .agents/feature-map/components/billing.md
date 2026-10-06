@@ -36,8 +36,9 @@ the cloud data plane at all.
 
 Ending a free trial early, updating seat count, and reconnecting after a
 Stripe outage (a "Connect to Stripe" retry button) are all done from this same
-page. If the org exceeds its seat count, every request in the app returns a
-402 until seats are reduced or the plan is upgraded (see §5).
+page. On self-hosted, if the org exceeds its seat count, requests outside the
+license allowlist return a 402 until seats are reduced or the plan is
+upgraded (see §5). Billing, auth, and user-management routes stay open.
 
 ---
 
@@ -241,11 +242,14 @@ control-plane-side downgrade) - that is enforced separately by
    (availability), not which *tier* a feature check resolves to (point 2);
    the two mechanisms can legitimately disagree in the same request path
    without being a bug.
-5. **A seat-limit breach blocks every request with 402, not just the billing
-   page.** `license_enforcement.py` compares `metadata.used_seats >
-   metadata.seats` on every self-hosted request once a license is active and
-   returns `{"error": "seat_limit_exceeded", ...}`; it is not scoped to
-   billing endpoints.
+5. **A seat-limit breach blocks every non-allowlisted self-hosted request
+   with 402, not just the billing page.** `license_enforcement.py` compares
+   `metadata.used_seats > metadata.seats` once a license is active and
+   returns `{"error": "seat_limit_exceeded", ...}`. Paths in
+   `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES` skip the check (auth, license,
+   billing, `/manage/users`, and similar), so admins can fix the breach. The
+   middleware does not run on cloud (`MULTI_TENANT`); cloud gating is
+   separate.
 6. **`/license/claim`, `/license/upload`, `/license/refresh`, `DELETE
    /license` all reject outright on `MULTI_TENANT`.** Cloud licensing has no
    local license row at all; these handlers assume self-hosted and 400 rather
@@ -329,8 +333,8 @@ cd backend && uv run pytest tests/unit/ee/onyx/db/test_license.py
 Frontend:
 
 ```bash
-cd web && bun test src/lib/billing/svc.test.ts
-cd web && bun test src/app/admin/billing/page.test.tsx
+cd web && bun run test -- src/lib/billing/svc.test.ts
+cd web && bun run test -- src/app/admin/billing/page.test.tsx
 ```
 
 No playwright e2e target exists for billing; theming has

@@ -83,9 +83,11 @@ gates, plus the workspace setting, exist.
 (`backend/onyx/server/pat/models.py`, `SELECTABLE_PAT_SCOPES`), gated
 in the UI at `min_tier=LLM_GATEWAY_MIN_TIER` (Business). It is also implied
 by `Permission.BASIC_ACCESS` and by `Permission.CRAFT_SANDBOX`
-(`backend/onyx/auth/permissions.py`, `IMPLIED_PERMISSIONS`), so any
-ordinary logged-in user's unscoped PAT, and every Craft sandbox's PAT, both
-carry it implicitly. See §4.2 and [[auth-and-identity]] for what `PAT scope`
+(`backend/onyx/auth/permissions.py`, `IMPLIED_PERMISSIONS`). GATE 1 therefore
+accepts users whose permissions include `BASIC_ACCESS`, and Craft PATs with the
+explicit `CRAFT_SANDBOX` scope. GATE 2 rejects an unscoped PAT, because
+`token_scopes` is `None`. A user needs a PAT with an explicit scope that implies
+`USE_LLM_GATEWAY`. See §4.2 and [[auth-and-identity]] for what `PAT scope`
 means mechanically.
 
 ### Configuration (`backend/onyx/server/gateway/configs.py`)
@@ -511,11 +513,11 @@ records the span before signalling `_STREAM_END`.
 
 ```bash
 # Gateway request/scope/streaming unit tests
-cd backend && uv run pytest tests/unit/ee/onyx/server/gateway/test_llm_gateway_api.py
+uv run --env-file .vscode/.env pytest backend/tests/unit/ee/onyx/server/gateway/test_llm_gateway_api.py
 # Craft policy asymmetry (GATE 2) unit tests
-cd backend && uv run pytest tests/unit/onyx/server/features/craft/test_craft_gateway.py
-cd backend && uv run pytest tests/unit/onyx/server/features/craft/test_session_gateway_config.py
-cd backend && uv run pytest tests/unit/onyx/server/gateway
+uv run --env-file .vscode/.env pytest backend/tests/unit/onyx/server/features/craft/test_craft_gateway.py
+uv run --env-file .vscode/.env pytest backend/tests/unit/onyx/server/features/craft/test_session_gateway_config.py
+uv run --env-file .vscode/.env pytest backend/tests/unit/onyx/server/gateway
 # Usage metering, end to end
 uv run --env-file .vscode/.env pytest backend/tests/integration/tests/streaming_endpoints/test_gateway_usage_tracking.py
 # Real client integration tests (need ANTHROPIC_API_KEY / OpenAI secrets)

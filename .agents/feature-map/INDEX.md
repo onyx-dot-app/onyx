@@ -146,7 +146,7 @@ when you clean up nearby code.
 ## Admin panel coverage
 
 `web/src/lib/admin-routes.ts` is the authoritative list of admin routes. Every one
-of its 40 entries maps to a written component, across 22 components.
+of its 41 entries maps to a written component, across 22 components.
 
 To re-check after changing the admin panel, list the routes and confirm each still
 has an owner here:

@@ -176,9 +176,9 @@ name, `ran_image_gen` is set `True` for the rest of that turn; the next cycle
 forces `tool_choice = ToolChoiceOptions.NONE` and offers no tools
 (`llm_loop.py:run_llm_loop`, the `elif out_of_cycles or ran_image_gen` branch), and the reminder text injected before that final answer is
 `IMAGE_GEN_REMINDER` instead of the normal citation/file reminder
-(`llm_loop.py:select_reminder_text`). In effect, image generation is always the
-last tool call of a turn: the model must answer immediately afterward rather
-than chaining further tool calls.
+(`llm_loop.py:select_reminder_text`). After that cycle, the model must answer
+without another tool-calling cycle. Other tool calls returned in the same cycle
+still run.
 
 ### The standalone generation endpoint
 

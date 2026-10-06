@@ -11,15 +11,20 @@ those component documents in [components/](components/).
 
 Some paths map to more than one component. Read all of them.
 
+Short paths: in a cell, a bare file name sits in the directory of the nearest
+earlier full path. A path that starts with `db/` or `server/` sits under
+`backend/onyx/`. Other config files under `backend/onyx/configs/` have no row
+here. Read the component that documents the setting in its env table.
+
 ---
 
 ## Backend: core loop
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/chat/llm_loop.py`, `llm_step.py`, `process_message.py`, `chat_state.py`, `chat_processing_checker.py`, `stop_signal_checker.py` | core-chat-loop |
+| `backend/onyx/chat/llm_loop.py`, `backend/onyx/chat/llm_step.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_state.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/chat/emitter.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
-| `backend/onyx/chat/prompt_utils.py`, `compression.py`, `token_budget.py`, `incognito*.py` | context-assembly |
+| `backend/onyx/chat/prompt_utils.py`, `compression.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly, agents-personas |
 | `backend/onyx/chat/citation_processor.py`, `citation_utils.py` | citations |
 | `backend/onyx/chat/save_chat.py`, `backend/onyx/db/chat.py`, `db/chat_search.py`, `db/feedback.py` | chat-persistence |
@@ -92,8 +97,13 @@ Some paths map to more than one component. Read all of them.
 | `backend/onyx/db/users.py`, `db/auth.py`, `db/api_key.py`, `db/pat.py`, `db/saml.py`, `db/sso_provider.py`, `server/api_key/`, `server/pat/`, `server/manage/users.py` | auth-and-identity |
 | `backend/onyx/oauth/`, `backend/onyx/db/oauth_config.py`, `server/features/oauth_config/`, `server/features/user_oauth_token/` | auth-and-identity |
 | `backend/onyx/db/tenant_shard.py`, `db/engine/`, `backend/onyx/server/middleware/` | multi-tenancy |
+| `backend/onyx/server/middleware/rate_limiting.py` | rate-and-usage-limits |
+| `backend/onyx/server/middleware/latency_logging.py` | observability |
 | `backend/onyx/background/celery/`, `background/periodic_poller.py`, `background/task_utils.py`, `backend/ee/onyx/background/`, `backend/onyx/db/tasks.py`, `db/scheduled_task.py`, `db/sync_record.py` | background-jobs |
-| `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/db/gated_app.py`, `backend/onyx/configs/` | editions-and-gating |
+| `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/db/gated_app.py`, `backend/onyx/configs/app_configs.py` | editions-and-gating |
+| `backend/onyx/configs/chat_configs.py` | chat-persistence, context-assembly, llm-providers |
+| `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
+| `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
 | `backend/onyx/tracing/`, `server/manage/tracing/`, `db/tracing.py`, `server/metrics/`, `docs/METRICS.md`, `docs/AUDIT_LOGGING.md` | observability |
 | `backend/onyx/db/llm_usage.py`, `db/usage.py`, `db/user_usage.py`, `db/system_usage.py`, `server/features/usage/`, `docs/usage/` | observability |
 | `backend/onyx/db/token_limit.py`, `server/token_rate_limits/`, `server/usage_limits.py`, `server/tenant_usage_limits.py` | rate-and-usage-limits |

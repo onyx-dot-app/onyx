@@ -81,7 +81,7 @@ deletion units.
 | PUT | `/manage/admin/credential/swap` | `swap_credentials_for_connector` | Swaps the credential a cc-pair uses. |
 | GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Admin listing, masked. |
 | GET, POST | `/connector/oauth/*` | `server/documents/standard_oauth.py` | Connector-side OAuth authorization flow. |
-| PUT | `/manage/connector/{connector_id}/credential` | `associate_credential_to_connector` | `server/documents/cc_pair.py`. Creates the cc-pair. Takes `ConnectorCredentialPairMetadata`, including manage-access groups and data-access groups. |
+| PUT | `/manage/connector/{connector_id}/credential/{credential_id}` | `associate_credential_to_connector` | `server/documents/cc_pair.py`. Creates the cc-pair. Takes `ConnectorCredentialPairMetadata`, including manage-access groups and data-access groups. |
 | DELETE | `/manage/connector/{connector_id}/credential/{credential_id}` | `dissociate_credential_from_connector` | Hard-deletes the pairing row directly (no background cleanup); used when the pairing has no indexed documents yet. |
 | GET | `/manage/admin/cc-pair/{id}` | `get_cc_pair_full_info` | `server/documents/cc_pair.py` |
 | PUT | `/manage/admin/cc-pair/{id}/status` | `update_cc_pair_status` | Pause/resume only. |
@@ -128,7 +128,7 @@ Connector id `0` is a permanent seeded row for the Ingestion API
 |---|---|---|
 | `id` | int, PK | Id `0` is a permanent seeded public credential (`credentials.py:create_initial_public_credential`) for sources that need no auth. |
 | `name` | str, nullable | |
-| `source` | `DocumentSource` | Must match the connector(s) it is paired with (`credentials.py:swap_credentials_connector` enforces this on swap). |
+| `source` | `DocumentSource` | Must be usable by the paired connector(s). A compatible family credential may have a different source (`credential_families.py:is_credential_usable_for_source`, checked in `credentials.py:swap_credentials_connector` on swap). |
 | `credential_json` | `SensitiveValue[dict] | None`, column type `EncryptedJson()` | The secret. Never a plain dict at rest; wrapped so every read requires an explicit `.get_value(apply_mask=...)` call. |
 | `user_id` | UUID, nullable, FK `user.id` ON DELETE CASCADE | Owner. `None` for the seeded public credential and for admin-created shared credentials. |
 | `admin_public` | bool, default `True` | If true, any admin can use this credential regardless of owner. |
@@ -220,7 +220,7 @@ Connector (1) ---< ConnectorCredentialPair >--- (1) Credential
 
 ### 4.1 Create
 
-`PUT /manage/connector/{connector_id}/credential` →
+`PUT /manage/connector/{connector_id}/credential/{credential_id}` →
 `cc_pair.py:associate_credential_to_connector` →
 `connector_credential_pair.py:add_credential_to_connector`. This validates the
 credential belongs to the user (or is public/curator-shared), validates

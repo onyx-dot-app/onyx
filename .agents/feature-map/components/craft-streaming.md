@@ -1,7 +1,7 @@
 # Craft Streaming
 
 > How a Craft turn's output reaches the browser: the `opencode serve` client,
-> the per-pod event bus, the attach-based SSE endpoint, and the packet
+> the per-(sandbox, directory) event bus, the attach-based SSE endpoint, and the packet
 > vocabulary. Craft does not reuse chat's `Packet`/`Placement` wire format; it
 > has its own, and its reconnect story is weaker than chat's. See
 > [[streaming-protocol]] for the contrast.
@@ -119,7 +119,7 @@ them:
 ```
 opencode serve (in-pod)              GET /event (raw SSE from opencode)
   └─ PodEventBus._reader_loop         sandbox/opencode/event_bus.py
-     one long-lived subscription per pod, fanned out by session_id
+     one long-lived subscription per (sandbox_id, directory), fanned out by session_id
        └─ per-session Queue           _Subscription.queue
           ├─ OpencodeServeClient.send_message      (turn-owning path)
           │    consumes its own subscription, translates raw opencode
@@ -257,8 +257,9 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
    `{ type: "unknown" }` for anything it does not recognize, mirroring
    `findRenderer`'s `null` in [[streaming-protocol]]. Adding a packet type here
    needs a `parsePacket.ts` case or it renders as nothing.
-4. **The turn-level terminator is `session.idle` / `session.status:{type:idle}`
-   only.** `message.updated` fires once per inner opencode step, not once per
+4. **A successful turn ends on `session.idle` / `session.status:{type:idle}`. An error
+   can end it earlier.** `message.updated` with `info.error` and `session.error` both
+   emit an `Error` terminator. `message.updated` fires once per inner opencode step, not once per
    turn; treating it as a terminator drops every step after the first (see
    `docs/craft/issues/opencode-serve-event-stream-pitfalls.md` §1). This is
    fixed in `translate_opencode_event`, not a live risk, but any new
@@ -284,9 +285,8 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 9. **There is no packet-level reconnect buffer.** Unlike
    [[streaming-protocol]]'s `stream_buffer.py`, nothing compresses and stores
    every SSE line Craft emits. A client that attaches after missing events
-   gets only what the shared `PodEventBus` still has queued for its
-   subscription (bounded, `maxsize=500`, per `_Subscription`) plus whatever
-   the turn emits from that point forward. What it lost is recoverable only
+   gets an empty per-subscriber queue (bounded, `maxsize=500`, per
+   `_Subscription`). It receives only events the turn emits after the attach. What it lost is recoverable only
    through the **persisted** `BuildMessage` rows via
    `GET /sessions/{id}/messages`, which is a different, coarser shape (no
    `ToolCallStart`, no `CurrentModeUpdate`, no live deltas), not a replay of

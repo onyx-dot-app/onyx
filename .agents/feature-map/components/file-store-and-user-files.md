@@ -202,7 +202,8 @@ dispatch by extension:
 | `.pdf` | `read_pdf_file` (via `pdf_to_text` for text-only callers) | Runs in an isolated subprocess by default (`isolate_pdfium=True`); embedded images extracted via `pdf_image_utils.py:iter_pdf_extracted_images`. |
 | `.docx` | `read_docx_file` | Embedded images via `extract_docx_images`. |
 | `.pptx` | `read_pptx_file` / `pptx_to_text` | Embedded images via `extract_pptx_images`; chart-to-markdown conversion is patched to a no-op for performance (`image_summarization.py:get_markitdown_converter`). |
-| `.xlsx` / `.xlsm` | `xlsx_sheet_extraction` / `xlsx_to_text` | Streams rows; `stage_xlsx_sheets` materializes large tabular sections to a staged file rather than holding them in memory. |
+| `.xlsx` | `xlsx_sheet_extraction` / `xlsx_to_text` | Streams rows; `stage_xlsx_sheets` materializes large tabular sections to a staged file rather than holding them in memory. |
+| `.xlsm` | `extract_file_text_locally` calls `xlsx_to_text` | `extract_text_and_images` has no `.xlsm` dispatch, so that path returns empty text for it. |
 | `.eml` | `eml_to_text` | |
 | `.epub` | `epub_to_text` | |
 | `.html` | `html_utils.py:parse_html_page_basic` | |

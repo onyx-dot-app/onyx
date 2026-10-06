@@ -207,8 +207,11 @@ via `PydanticListType`, not a separate table.
 
 ### 4.1 Access filtering: `_add_user_filters`
 
-Every access-controlled, user-facing list or fetch goes through
-`db/persona.py:_add_user_filters`. The helpers `get_personas` and
+Every access-controlled, user-facing persona listing goes through
+`db/persona.py:_add_user_filters`. A single-agent fetch (`GET /persona/{id}`)
+does not use it. It uses `get_persona_by_id`, which has its own access rules:
+owner, owner-group member, builtin agent, and, when `is_for_edit` is false,
+direct share, group share, or `is_public`. The helpers `get_personas` and
 `get_personas_by_ids` do not apply it. Their docstrings warn that they can
 return personas from all users. `_add_user_filters` builds
 one query combining: global `MANAGE_AGENTS`/`READ_AGENTS` short-circuits,

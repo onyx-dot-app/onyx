@@ -249,12 +249,13 @@ has no e2e coverage since it requires a live Discord connection).
 - **`MessageOrigin.DISCORDBOT` is effectively dead on the server side.** It gets
   overwritten to `MessageOrigin.API` before any handler sees it (§5.3); do not
   rely on it for telemetry or behavior branching in `chat_backend.py`.
-- **The cache, not the database, is the source of truth for routing at message
-  time.** A guild enabled in the database will not answer until
-  `DiscordCacheManager.refresh_all` or `refresh_guild` picks it up; registration
-  calls `refresh_guild` immediately, but toggling `enabled` via the admin API
-  does not proactively refresh the bot's cache; it waits for the next periodic
-  refresh (up to 60s).
+- **The cache decides which guilds route to a tenant at message time.** A guild
+  enabled in the database will not answer until `DiscordCacheManager.refresh_all`
+  or `refresh_guild` picks it up; registration calls `refresh_guild` immediately,
+  but enabling a guild via the admin API does not proactively refresh the bot's
+  cache; it waits for the next periodic refresh (up to 60s). Disabling takes
+  effect on the next message, because `handle_message.py:should_respond` reads
+  `guild_config.enabled` from the database each time.
 - **DMs are explicitly unsupported.** `handle_commands.py:handle_dm` always
   replies that it cannot respond in DMs and points to the public Onyx Discord.
 - **`!sync-channels` never re-enables anything.** It adds new channels

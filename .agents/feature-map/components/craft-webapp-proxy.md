@@ -119,8 +119,9 @@ and before the websocket is accepted:
 
 **The security answer:** a preview is reachable only by the session owner,
 or by anyone else if and only if the session's sharing scope is not
-`PRIVATE`. There is no separate "preview link" credential; the same
-session-sharing rule that gates the transcript gates the live app. A
+`PRIVATE`. There is no separate "preview link" credential. `PUBLIC_ORG`
+grants access to the live app only. Transcript and session routes still
+require session ownership (`db/build_session.py:get_build_session`). A
 logged-in viewer without the right sharing scope gets a 404. An authenticated non-owner
 cannot distinguish "session does not exist" from "session exists but is
 private." An unauthenticated viewer can: a missing session returns 404, and

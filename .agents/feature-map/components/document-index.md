@@ -33,7 +33,7 @@ whether the index is healthy.
 
 An admin experiences it directly on the embedding-model page. They pick a new
 embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, and
-more), optionally test it against a document, and start a re-index. From that point,
+more), optionally run a sample embedding test (a fixed test string, not a document), and start a re-index. From that point,
 Onyx builds a second, parallel index in the background using the new model while the
 old index keeps serving live search. A progress view shows re-index status and errors.
 When indexing catches up (the exact criterion depends on the switchover type chosen),

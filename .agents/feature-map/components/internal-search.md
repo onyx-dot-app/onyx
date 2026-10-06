@@ -53,7 +53,7 @@ downstream, so it should not hand-craft time or source scoping into the query te
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| POST | `/search` | `search` (`server/features/search/api.py`) | Runs the same `SearchTool.run()` pipeline as chat, for programmatic callers (onyx-cli, Craft sandbox, integrations). Returns ranked sections, no LLM answer. |
+| POST | `/search` | `search` (`server/features/search/api.py`) | Runs the same `SearchTool.run()` pipeline as chat, for programmatic callers (onyx-cli, Craft sandbox, integrations). Returns the LLM-selected and expanded sections, no LLM answer. |
 | POST | `/admin/search` | `admin_search` (`server/query_and_chat/query_backend.py`) | Admin-only. Calls `document_index.keyword_retrieval` or `random_retrieval` directly, bypassing this whole pipeline. Used for admin document inspection, not for chat. |
 | GET | `/query/valid-tags` | `get_tags` (`server/query_and_chat/query_backend.py`) | Tag autocomplete for the filter UI. |
 
@@ -383,7 +383,7 @@ See `backend/AGENTS.md` for the authoritative commands and required env, and
 5. Ask a follow-up naming a specific connector by name (for example "search only
    in Zendesk") and confirm the filter note reflects that scope.
 6. Hit `POST /api/search` directly with a query and confirm it returns the same
-   shape of ranked sections without an LLM answer.
+   shape of the selected sections without an LLM answer.
 
 Drive the browser with `claude-in-chrome` against the user's real Chrome rather
 than launching Playwright ad hoc.

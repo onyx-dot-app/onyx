@@ -9,7 +9,7 @@
 **Domain:** core-loop
 **Edition:** CE, with query-expansion and search-flow prompt variants in EE
 **Owns:**
-`backend/onyx/chat/prompt_utils.py`, `token_budget.py`, `compression.py`,
+`backend/onyx/chat/prompt_utils.py`, `backend/onyx/llm/token_budget.py`, `compression.py`,
 `COMPRESSION.md`, `incognito.py`, `incognito_context.py`,
 `backend/onyx/prompts/`, `backend/ee/onyx/prompts/`
 
@@ -65,8 +65,8 @@ its token math to the frontend:
 
 | Variable | File | Effect |
 |---|---|---|
-| `GEN_AI_INPUT_TOKEN_SAFETY_MARGIN` | `configs/model_configs.py` | Fraction of the model's input window held back as safety margin. Shrinks `ChatTokenBudget.input_tokens`. |
-| `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS` | `configs/model_configs.py` | Minimum output allowance `ChatTokenBudget.output_allowance` will reserve before it gives up on a cycle. |
+| `GEN_AI_INPUT_TOKEN_SAFETY_MARGIN` | `configs/model_configs.py` | Fraction of the model's input window held back as safety margin. Shrinks `TokenBudget.input_tokens`. |
+| `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS` | `configs/model_configs.py` | Minimum output allowance `TokenBudget.output_allowance` will reserve before it gives up on a cycle. |
 | `COMPRESSION_TRIGGER_RATIO` | `configs/chat_configs.py` | Default 0.75. Compress when chat-history tokens exceed this fraction of available space (`compression.py:get_compression_params`). |
 | `RECENT_MESSAGES_RATIO` | `compression.py` | Default 0.2. Fraction of the current history tokens kept verbatim (never summarized) when compressing. |
 | `DISABLE_VECTOR_DB` | referenced in `process_message.py:extract_context_files` | Changes whether oversized files fall back to search or to `FileReaderTool` metadata. |
@@ -116,8 +116,9 @@ Per cycle, `llm_loop.py:construct_message_history` produces this order:
 [context / project files]    -- JSON document block, moves here every cycle (§4.3-4.4)
 [forgotten-files notice]     -- USER message, only if truncation dropped a file (§4.6)
 [last user message]          -- untouched, always present
-[tool calls and responses]   -- from this turn's cycles so far; responses are
-                                 replaced with a placeholder on the *next* cycle (§4.7)
+[tool calls and responses]   -- from this turn's cycles so far, with full tool
+                                 responses; earlier turns' responses are
+                                 placeholders (§4.7)
 [reminder]                   -- USER_REMINDER message, always last (§4.5)
 ```
 
@@ -305,18 +306,23 @@ out from under it (some providers reject a response with no matching call).
 
 ### 4.7 Tool calls in history
 
-Tool call *arguments* survive truncation; tool call *responses* do not.
-`llm_step.py` (owned by [[core-chat-loop]]) is where responses get replaced
-with a fixed placeholder string once a cycle completes; this component only
-carries the resulting messages through `construct_message_history` unchanged.
-For the internal search tool specifically, the arguments kept in history are
-the **expanded** queries the tool actually ran (see EE query expansion,
-`backend/ee/onyx/prompts/query_expansion.py`), not the raw query text the LLM
-wrote, so a later cycle sees what was actually searched.
+Within one turn, `run_llm_loop` keeps the full tool response
+(`ToolResponse.llm_facing_response`) in history for every later cycle.
+
+A later turn is different. `chat_utils.py:convert_chat_history` loads saved
+history. It replaces each ordinary tool response
+with `TOOL_CALL_RESPONSE_CROSS_MESSAGE` (`backend/onyx/prompts/chat_prompts.py`).
+The image generation tool is the exception. Its saved file ids and revised
+prompts stay visible.
+
+Tool call *arguments* stay in history. For the internal search tool, they are
+the original arguments the LLM supplied. Query expansion (EE:
+`backend/ee/onyx/prompts/query_expansion.py`) changes only what the tool runs.
+It does not rewrite the saved arguments.
 
 ### 4.8 Token budget
 
-`token_budget.py:resolve_chat_token_budget(llm)` builds a `ChatTokenBudget`:
+`backend/onyx/llm/token_budget.py:resolve_token_budget(llm)` builds a `TokenBudget`:
 `input_tokens` is the model's `max_input_tokens` shrunk by
 `GEN_AI_INPUT_TOKEN_SAFETY_MARGIN`, and `output_allowance` refuses to grant an
 output budget smaller than `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS` once estimated
@@ -479,7 +485,7 @@ Cycle 2 (another tool call): S, U1, TC, TR, TC, TR, R, A1
 | reorders the assembled context | [[core-chat-loop]]'s §4.4 restates this ordering; both docs must change together. Re-verify the worked examples in §4 above still hold. |
 | adds a new context element (a new file type, a new injected section) | Decide its position relative to the custom agent prompt and project files explicitly; decide its incognito behavior (§4.10); decide whether it counts toward `calculate_reserved_tokens`. |
 | changes the document JSON shape | [[citations]]: citation parsing depends on the exact `document` key and its position. Treat any change here as a citation-reliability change requiring an eval, not a formatting choice. |
-| changes the token budget (`token_budget.py`, `calculate_reserved_tokens`) | Compression triggers (`get_compression_params`) move with the available-token math; re-check `extract_context_files`'s 60% ceiling still makes sense relative to the new numbers. |
+| changes the token budget (`backend/onyx/llm/token_budget.py`, `calculate_reserved_tokens`) | Compression triggers (`get_compression_params`) move with the available-token math; re-check `extract_context_files`'s 60% ceiling still makes sense relative to the new numbers. |
 | changes compression (`compression.py`) | Branch-aware summary attachment (`parent_message_id`, `last_summarized_message_id`) must still hold across a branched conversation; see `COMPRESSION.md`. |
 | touches incognito | `incognito.py:current_turn_persists_content` must still gate every new persisted field; verify against the pinned mode, not the live admin setting. |
 
@@ -547,10 +553,11 @@ cd backend && uv run pytest tests/integration -k chat
   followed, especially when they are orthogonal or mildly contradictory to the
   base prompt, and that weaker models produce broken tool calls and garbled
   final answers under that arrangement. Do not "simplify" by merging the two.
-- **Tool responses are discarded from history and replaced with a placeholder.**
-  Only tool-call arguments survive a cycle boundary. Anything a later cycle
-  needs must be re-derivable from the arguments or re-fetched; do not assume a
-  fact from an earlier tool response is still visible.
+- **Tool responses become placeholders only in later turns.** Inside one
+  turn, every cycle sees the full responses. When a later turn loads saved
+  history, ordinary responses turn into `TOOL_CALL_RESPONSE_CROSS_MESSAGE`.
+  Tool-call arguments survive. Do not assume a fact from an earlier turn's tool
+  response is still visible. Do not remove in-turn responses to save context.
 - **Internal search arguments in history are the LLM's original arguments, not
   the expanded queries.** If you are debugging "why did the model re-search,"
   the expanded queries are in the `SearchToolQueriesDelta` packet, not in history.

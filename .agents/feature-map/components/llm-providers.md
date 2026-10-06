@@ -29,9 +29,11 @@ A user picks a model per chat session, or leaves it on the assistant's default,
 or leaves that on the workspace default. Whichever call actually reaches the
 model, the user experience is the same: streamed tokens, and (if the provider
 supports it) streamed reasoning. If a request to the provider times out or the
-connection drops before the provider yields any chunk, the user sees a short
-retry delay rather than an error; once any chunk has been yielded, the error
-propagates and a drop mid-answer shows as a stream cut off.
+connection drops before the provider yields any chunk, Onyx retries retryable
+errors for up to `1 + LLM_FIRST_CHUNK_MAX_RETRIES` attempts. The user sees a
+short delay. If all attempts fail, the error propagates. Once any chunk has
+been yielded, the error propagates with no retry, and a drop mid-answer shows
+as a stream cut off.
 
 An admin with usage tracking enabled can see LLM cost and per-user usage in the
 observability surfaces. An admin can connect Braintrust or Langfuse to see full
@@ -128,8 +130,9 @@ edit surface. It is a thin client over the endpoints above.
   `llm_model_flow_type`, with `is_default`. Two constraints matter:
   - `uq_model_config_per_llm_model_flow_type`: one row per (model, flow type).
   - `ix_one_default_per_llm_model_flow`: a **partial unique index** on
-    `llm_model_flow_type` where `is_default = true`. This is what guarantees
-    exactly one default per flow across the whole table, not per provider.
+    `llm_model_flow_type` where `is_default = true`. This guarantees at most
+    one default per flow across the whole table, not per provider. It does not
+    guarantee that a default exists. Seed a default separately.
 - **`LLMModelFlowType`** (`db/enums.py`): `CHAT`, `VISION`, `CONTEXTUAL_RAG`,
   `REASONING`, `CHAT_NAMING`, `CRAFT`. Stored on `llm_model_flow` as
   `Enum(LLMModelFlowType, native_enum=False)`, which SQLAlchemy renders as a

@@ -182,7 +182,8 @@ seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
 ### Postgres tables
 
 - `TaskQueueState` (`onyx/db/models.py`, accessed through `onyx/db/tasks.py`):
-  one row per submitted task, tracked by `task_name`/`task_id`/`status`
+  one row per explicitly registered job (not every Celery task; today only query-history
+  exports call `register_task`, in `ee/onyx/server/query_history/api.py`), tracked by `task_name`/`task_id`/`status`
   (`TaskStatus.PENDING/STARTED/SUCCESS/FAILURE`). `db/tasks.py:register_task`,
   `mark_task_as_started_with_id`, `mark_task_as_finished_with_id`,
   `check_task_is_live_and_not_timed_out`.

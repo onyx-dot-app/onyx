@@ -274,10 +274,11 @@ in §4.4.
 3. **Memories are per user and must respect incognito.** `Memory.user_id` is
    never null; `add_memory`/`update_memory_at_index` are never called when
    `get_current_incognito_record_mode() is not None` (§4.4).
-4. **Disabling a feature takes effect on the next turn, not only for new
-   sessions.** `use_memories`, `enable_memory_tool`, and every admin toggle in
-   `Settings` are read fresh per turn (`get_memories`, `load_settings`), not
-   cached on the `ChatSession`. A change mid-conversation must be visible on
+4. **Turn-scoped settings take effect on the next turn, not only for new
+   sessions.** `use_memories`, `enable_memory_tool`, and the `Settings` values
+   that the turn path consumes are read fresh per turn (`get_memories`,
+   `load_settings`), not cached on the `ChatSession`. Other settings, such as
+   `maximum_chat_retention_days`, follow their own consumers. A change mid-conversation must be visible on
    the very next message in that same session.
 5. **`use_memories=False` hides memories from the prompt, it does not stop
    the write path.** Do not conflate the two; see §4.3.
@@ -374,7 +375,7 @@ not just the existing unit tests.
 
 ### What "working" looks like
 
-- Admin settings apply workspace-wide on the next turn, not just new sessions.
+- Admin settings that the turn path reads apply workspace-wide on the next turn, not just new sessions.
 - A user's memory and preference changes are private to them and never appear
   in another user's prompt.
 - Disabling memory read or write takes effect immediately, not after a

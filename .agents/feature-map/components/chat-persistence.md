@@ -294,8 +294,11 @@ processing fence shows an unfinished stream. The client uses it to reconnect thr
    are constructed at load time (`db/README.md`, `chat/README.md`,
    [[context-assembly]]).
 2. **The empty root message must exist exactly once per session.**
-   `get_or_create_root_message` enforces this; `MultipleResultsFound` is
-   treated as data corruption, not a recoverable case.
+   `get_or_create_root_message` reads the root row and inserts one if none
+   exists. It does not use an atomic uniqueness constraint, so two
+   concurrent first loads could each insert a root. Code must expect one
+   root. `MultipleResultsFound` on a later read is treated as data
+   corruption, not a recoverable case.
 3. **Input is on the user message; everything produced during inference is on
    the assistant message.** Response text, tool calls, feedback, and
    citations never live on a `USER` row.

@@ -31,7 +31,7 @@ answers, copy a response, and like or dislike it. They can send one message to t
 three models at once and pick a favorite. They can drag a file onto the page or paste an
 image to attach it, pick a different agent or model before sending, and share a
 conversation as a public read-only link. If they reload mid-answer, the answer keeps
-streaming instead of restarting.
+streaming instead of restarting (`web/src/hooks/useChatSessionController.ts:resumeInFlightRun`).
 
 ---
 

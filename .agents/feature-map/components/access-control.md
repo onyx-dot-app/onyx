@@ -316,9 +316,10 @@ picks the `CCPairAccessMode`:
   pairs from the ACL filter.
 - `SHADOW`: results use the ACL filter. The cc-pair filter is only compared and
   logged. This is the mode when `ENABLE_CC_PAIR_ACCESS_FILTER` (or the Redis
-  override `cc_pair_access_filter` / `enabled`) is on.
-- `ENFORCE`: results use the cc-pair filter. This needs the Redis-only flag
-  `cc_pair_access_filter` / `enforce` and a finished `cc_pair_ids` backfill
+  override `cc_pair_access_filter` / `enabled`) is on and the `ENFORCE`
+  conditions below are not both met.
+- `ENFORCE`: results use the cc-pair filter. This needs the `enabled` flag,
+  the Redis-only flag `cc_pair_access_filter` / `enforce`, and a finished `cc_pair_ids` backfill
   (`document_index/opensearch/cc_pair_ids_backfill.py:is_cc_pair_ids_backfill_complete`).
 
 In `_get_search_filters`, `_get_cc_pair_access_visibility_filter` replaces the

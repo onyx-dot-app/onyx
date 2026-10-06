@@ -144,8 +144,10 @@ encryption. This component only consumes the pairing at run time (§4).
   stages a CSV in the file store (`csv_file_id`) and is streamed row-by-row at
   chunk time so a large sheet never sits on the worker heap
   (`TabularSection.materialize_text`).
-- **`DocumentBase`** / **`Document`** (`Document.id` and `Document.source` are
-  required; everything else on `DocumentBase` is optional): `id` (the stable
+- **`DocumentBase`** / **`Document`** (`Document` requires `id`, `source`,
+  `sections`, `semantic_identifier`, and `metadata`. On `DocumentBase`, `id` and
+  `source` are optional, and the other three are still required. The remaining
+  fields are optional): `id` (the stable
   dedup key, see §5), `sections`, `semantic_identifier` (the UI display
   identifier), `title` (falls back to `semantic_identifier` via
   `get_title_for_document_index`), `metadata` (dict of string/string-list,

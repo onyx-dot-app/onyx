@@ -129,12 +129,14 @@ the coding-agent sandbox).
 | `MOBILE_ALLOWED_REDIRECT_URIS` | `configs/app_configs.py` | | Allowlist mobile SSO completion redirects against. |
 | `OIDC_DISCOVERY_CACHE_TTL_SECONDS` | `auth/oauth_refresher.py` | 3600 | OIDC discovery-document cache for token-refresh endpoint resolution. |
 
-**Not env, admin-configured (DB rows):** `SSOProvider` rows
-(`db/sso_provider.py`) hold the OAuth/OIDC/SAML settings the legacy
-single-provider env vars (`OAUTH_CLIENT_ID`, `OPENID_CONFIG_URL`, and the
-removed `AUTH_TYPE=google_oauth|oidc|saml`) used to. `verify_auth_setting`
-(`auth/users.py`) only warns on the stale env values; it does not read
-them.
+**Admin-configured (DB rows) and the legacy env path:** `SSOProvider` rows
+(`db/sso_provider.py`) hold the multi-provider OAuth/OIDC/SAML settings. The
+legacy single-provider env vars (`OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`,
+`OPENID_CONFIG_URL`) still work. `main.py` uses `OAUTH_ENABLED` to add the
+env-credential Google login router next to the provider rows. `oauth_refresher.py`
+(`_resolve_token_endpoint`) uses them to refresh tokens for accounts with no
+provider row. The removed `AUTH_TYPE=google_oauth|oidc|saml` is not read:
+`verify_auth_setting` (`auth/users.py`) only warns on stale values.
 
 ---
 

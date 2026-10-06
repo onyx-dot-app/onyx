@@ -440,15 +440,15 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit -k 
 # e.g. backend/tests/external_dependency_unit/craft/test_external_app_fileset.py
 
 # Frontend unit/component tests already covering this surface
-cd web && bun test web/src/views/SkillsPage.test.tsx
-cd web && bun test web/src/views/SkillEditorPage.test.tsx
-cd web && bun test web/src/sections/cards/SkillCard.test.tsx
-cd web && bun test web/src/sections/modals/SkillPreviewModal.test.tsx
-cd web && bun test web/src/sections/modals/skills/CreateSkillModal.test.tsx
-cd web && bun test web/src/sections/modals/skills/ImportSkillsFromGitHubModal.test.tsx
-cd web && bun test web/src/sections/skills/SkillBundlePicker.test.tsx
-cd web && bun test web/src/sections/skills/SkillFileTree.test.tsx
-cd web && bun test web/src/app/craft/components/SkillsStaleNotice.test.tsx
+cd web && bun run test -- src/views/SkillsPage.test.tsx
+cd web && bun run test -- src/views/SkillEditorPage.test.tsx
+cd web && bun run test -- src/sections/cards/SkillCard.test.tsx
+cd web && bun run test -- src/sections/modals/SkillPreviewModal.test.tsx
+cd web && bun run test -- src/sections/modals/skills/CreateSkillModal.test.tsx
+cd web && bun run test -- src/sections/modals/skills/ImportSkillsFromGitHubModal.test.tsx
+cd web && bun run test -- src/sections/skills/SkillBundlePicker.test.tsx
+cd web && bun run test -- src/sections/skills/SkillFileTree.test.tsx
+cd web && bun run test -- src/app/craft/components/SkillsStaleNotice.test.tsx
 ```
 
 See `backend/AGENTS.md` for authoritative test commands and required env.

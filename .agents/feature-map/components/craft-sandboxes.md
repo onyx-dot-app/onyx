@@ -82,8 +82,11 @@ visible seams:
 | `SANDBOX_PROXY_HOST` / `SANDBOX_PROXY_NAMESPACE` | required (K8s) / `onyx` | The egress-proxy endpoint pinned via `hostAliases` (see §5, §9). |
 
 Celery task: `CLEANUP_IDLE_SANDBOXES` (`backend/onyx/background/celery/tasks/build/tasks.py`),
-scheduled every `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS`
-(`backend/onyx/background/celery/tasks/beat_schedule.py`), consumed by the
+scheduled every `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS` on self-hosted beats
+(`beat_schedule.py:get_tasks_to_schedule`). In `MULTI_TENANT` deployments,
+`get_cloud_tasks_to_schedule` fans the same template out with the cloud beat
+multiplier, so the effective interval is `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 8`
+(`backend/onyx/background/celery/tasks/beat_schedule.py`). It is consumed by the
 **`sandbox` Celery queue**, currently routed to `celery-worker-heavy`
 (`docs/craft/infra/sandbox-worker-network-policy.md`).
 
@@ -213,7 +216,7 @@ lifecycle layer treats as retryable.
 `setup_session_workspace` (per-session, called after `provision`) execs into the
 pod (`k8s_stream`/`connect_get_namespaced_pod_exec`) to run a replay-safe,
 `flock`-serialized shell script (`session_workspace.py:build_session_workspace_setup_script`)
-that creates `sessions/$id/{outputs,attachments}`, symlinks `.opencode/skills` and
+that creates `/workspace/sessions/$id/{outputs,attachments}`, symlinks `.opencode/skills` and
 `user_library` to the sandbox-wide managed directories, writes `AGENTS.md` and
 `opencode.json`, and (if the session has a port) writes `start-webapp.sh`. It
 never scaffolds or starts the dev server itself (`[[craft-webapp-proxy]]` owns that).
@@ -328,9 +331,10 @@ that migration is complete; verify against the manager methods you're touching.
 `session_workspace.py:19` on the api-server side and
 `image/sandbox_daemon/snapshot.py:18` inside the image, kept as two literal
 copies because the daemon can't import the api-server package at runtime,
-per `base.py:62-67`'s comment). Session directories live under it:
-`sessions/$session_id/{outputs,attachments,venv,.opencode/skills,AGENTS.md,
-start-webapp.sh}` (`base.py` class docstring, "Directory Structure"). `emptyDir`
+per `base.py:62-67`'s comment). Session directories live directly under it:
+`/workspace/sessions/$session_id/{outputs,attachments,venv,.opencode/skills,AGENTS.md,
+start-webapp.sh}` (`kubernetes_sandbox_manager.py` builds `{SESSIONS_ROOT}/{session_id}`;
+`base.py` class docstring, "Directory Structure", shows the generic layout). `emptyDir`
 means this volume, and everything in it, **is destroyed with the pod**; nothing
 here survives a `terminate()` unless captured into a snapshot first (§4.5).
 
@@ -376,8 +380,8 @@ symlink into it rather than copying (`session_workspace.py`).
    `POST /{session_id}/opencode-history-snapshot`, §2): the history endpoint
    is a manual capture hook for tests and operators. No frontend code calls it.
 
-**What a session snapshot contains:** `sessions/$id/outputs/` and
-`sessions/$id/attachments/` only (`base.py:create_snapshot` docstring); `venv`,
+**What a session snapshot contains:** the session's `outputs/` and
+`attachments/` directories only (`base.py:create_snapshot` docstring); `venv`,
 skills, `AGENTS.md`, and the `user_library` symlink are excluded and regenerated
 on restore. `node_modules` and `.next` are excluded even from `outputs/`
 (`image/sandbox_daemon/snapshot.py:_SNAPSHOT_GENERATED_DIR_NAMES`), rebuilt on
@@ -451,9 +455,10 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    sandbox `RUNNING` for retry); only an unreachable pod is terminated without
    a fresh snapshot, and that is a deliberate, logged exception, not silent
    data loss (`sandbox_lifecycle.py:sleep_sandbox`).
-2. **A snapshot write must not corrupt the previous one.** New-before-delete:
-   the new blob and DB row are committed before any prior snapshot for that
-   session is deleted (`create_session_snapshot_keep_latest`); restore extracts
+2. **A snapshot write must not corrupt the previous one.** New-blob-before-delete:
+   the new blob is stored before any prior blob is deleted, but the DB commit is
+   the last step (`create_session_snapshot_keep_latest`, §4.5). A commit failure
+   after the prunes can leave no restorable snapshot. Restore extracts
    to a temp dir and atomically renames into place
    (`sandbox_daemon/extract.py:safe_extract_then_atomic_swap`).
 3. **The pod spec lives in Helm, not in Python.** `_create_sandbox_pod` reads

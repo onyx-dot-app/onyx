@@ -93,8 +93,10 @@ own storage, managed by the OS webview engine, not by Tauri code.
 `{ sessionId, messages, timestamp, identity }`. This is the chat session ID and message
 history, not a credential. `identity` is the JWT `sub` or `email` claim, or a fixed
 shared value for an API key (`widget/src/config/config.ts:deriveCredentialIdentity`).
-`loadSession` discards a stored session whose identity differs, so a second person on the
-same tab never sees the first person's messages. **The widget does not persist the API key**; it holds the value
+`loadSession` discards a stored session whose identity differs, so a second person with a
+different `sub` or `email` claim on the same tab never sees the first person's messages.
+A JWT with neither claim (for example only `preferred_username` or `upn`) gets the shared
+fallback identity, so a second such visitor can restore the first person's transcript. **The widget does not persist the API key**; it holds the value
 in memory only (`config.apiKey`). The key comes from the customer page's HTML (an attribute on
 `<onyx-chat-widget>`) or, for self-hosted builds, gets compiled directly into
 the published `dist/onyx-widget.js` (`widget/vite.config.ts`'s `define`
