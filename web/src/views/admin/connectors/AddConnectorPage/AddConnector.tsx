@@ -2,7 +2,6 @@
 
 import { PageLoader, IconLoader } from "@opal/loaders";
 import {
-  Content,
   IllustrationContent,
   PageCenter,
   Section,
@@ -11,9 +10,8 @@ import {
 } from "@opal/layouts";
 import { SvgPlugBroken } from "@opal/illustrations";
 import { escapeMarkdown, markdown } from "@opal/utils";
-import { Card, Divider, MessageCard, Button } from "@opal/components";
+import { Divider, MessageCard, Button } from "@opal/components";
 import { SvgArrowExchange } from "@opal/icons";
-import { Disabled } from "@opal/core";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
@@ -27,9 +25,9 @@ import { linkCredential } from "@/lib/credentials/svc";
 import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
 import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
-import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
-import ConnectorSettings from "@/views/admin/connectors/AddConnectorPage/form/ConnectorSettings";
-import DynamicConnectionForm from "@/views/admin/connectors/AddConnectorPage/form/DynamicConnectorCreationForm";
+import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
+import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
+import ConnectorContentSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorContentSection";
 import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
 import {
@@ -644,82 +642,31 @@ export default function AddConnector({ connector }: AddConnectorProps) {
                     {/* The wizard could not reach these sections without a
                       valid credential; on one page they stay disabled until
                       the credential and the bound fields are valid instead. */}
-                    <Disabled
+                    <ConnectorContentSection
+                      config={credentialBoundFields.rest}
+                      values={formikProps.values}
+                      connector={connector}
+                      currentCredential={formCredential}
                       disabled={!configUnlocked}
-                      tooltip={gateMessage ?? undefined}
-                    >
-                      <Card
-                        border="solid"
-                        rounding={4}
-                        padding={6}
-                        disabled={!configUnlocked}
-                      >
-                        {/* A disabled fieldset also takes the controls out of
-                          the tab order; the wrapper above only blocks the
-                          pointer. */}
-                        <fieldset
-                          disabled={!configUnlocked}
-                          className="contents"
-                          data-testid="connector-form"
-                        >
-                          <Section gap={4} alignItems="start" width="full">
-                            {/* Announces why the configuration is locked
-                              when the reason changes. */}
-                            <Section
-                              alignItems="start"
-                              width="full"
-                              height="fit"
-                              aria-live="polite"
-                            >
-                              <Content
-                                title={t("sections.configuration.title")}
-                                description={gateMessage ?? undefined}
-                                sizePreset="main-content"
-                                variant="section"
-                              />
-                            </Section>
-                            <DynamicConnectionForm
-                              values={formikProps.values}
-                              config={credentialBoundFields.rest}
-                              connector={connector}
-                              currentCredential={formCredential}
-                            />
-                          </Section>
-                        </fieldset>
-                      </Card>
-                    </Disabled>
+                      disabledReason={gateMessage ?? undefined}
+                    />
 
                     <Divider paddingParallel={0} paddingPerpendicular={0} />
-                    <Disabled
+                    <ConnectorSettingsSection
+                      connector={connector}
+                      currentCredential={formCredential}
                       disabled={!configUnlocked}
-                      tooltip={gateMessage ?? undefined}
-                    >
-                      <fieldset disabled={!configUnlocked} className="contents">
-                        <ConnectorSettings
-                          connector={connector}
-                          currentCredential={formCredential}
-                          disabled={!configUnlocked}
-                        />
-                      </fieldset>
-                    </Disabled>
+                      disabledReason={gateMessage ?? undefined}
+                    />
 
                     {connector !== "file" && (
                       <>
                         <Divider paddingParallel={0} paddingPerpendicular={0} />
-                        <Disabled
+                        <ScheduleSection
+                          defaultPruneFreqHours={defaultPruneFreqHours}
                           disabled={!configUnlocked}
-                          tooltip={gateMessage ?? undefined}
-                        >
-                          <fieldset
-                            disabled={!configUnlocked}
-                            className="contents"
-                          >
-                            <AdvancedFormPage
-                              defaultPruneFreqHours={defaultPruneFreqHours}
-                              disabled={!configUnlocked}
-                            />
-                          </fieldset>
-                        </Disabled>
+                          disabledReason={gateMessage ?? undefined}
+                        />
                       </>
                     )}
                   </Section>

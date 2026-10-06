@@ -7,19 +7,19 @@ import type { Credential } from "@/lib/credentials/types";
 import { RenderField } from "./FieldRendering";
 import { useFormikContext } from "formik";
 
-export interface DynamicConnectionFormProps {
+export interface ConnectorConfigFieldsProps {
   config: ConnectionConfiguration;
   values: any;
   connector: ConfigurableSources;
   currentCredential: Credential<any> | null;
 }
 
-export default function DynamicConnectionForm({
+export default function ConnectorConfigFields({
   config,
   values,
   connector,
   currentCredential,
-}: DynamicConnectionFormProps) {
+}: ConnectorConfigFieldsProps) {
   const { setFieldValue } = useFormikContext<any>(); // Get Formik's context functions
 
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
