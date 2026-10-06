@@ -268,6 +268,11 @@ jobs:
       - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-{1}-job-{2}', github.run_id, matrix.edition, strategy['job-index']) }}
       - extras=ecr-cache
+      # The default ~38GB volume is ~50% AMI baseline plus ~15GB of pulled
+      # images (devcontainer, model server, services) — it hovers at ~90%,
+      # which trips OpenSearch's high disk watermark and blocks index
+      # creation mid-run.
+      - volume=100gb
     timeout-minutes: 25
 
     strategy:
@@ -500,6 +505,7 @@ jobs:
         runner=4cpu-linux-arm64,
         "run-id=${{ github.run_id }}-onyx-lite-tests",
         "extras=ecr-cache",
+        "volume=100gb",
       ]
     timeout-minutes: 10
 
@@ -607,6 +613,7 @@ jobs:
         runner=8cpu-linux-arm64,
         "run-id=${{ github.run_id }}-multitenant-tests",
         "extras=ecr-cache",
+        "volume=100gb",
       ]
     timeout-minutes: 15
 
