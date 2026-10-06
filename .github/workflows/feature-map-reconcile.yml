@@ -83,6 +83,7 @@ jobs:
     secrets:
       CHERRY_PICK_APP_PRIVATE_KEY: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AI_PR_REVIEWS_WEBHOOK: ${{ secrets.AI_PR_REVIEWS_WEBHOOK }}
     with:
       task-name: feature-map-reconcile
       script: .agents/feature-map/reconcile.py
