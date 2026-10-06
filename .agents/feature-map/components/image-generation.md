@@ -99,8 +99,9 @@ implement it, registered in `image_gen/factory.py:PROVIDERS`:
 | `azure` | `providers/azure_img_gen.py:AzureImageGenerationProvider` | Same as OpenAI, via an Azure deployment name |
 | `vertex_ai` | `providers/vertex_img_gen.py:VertexImageGenerationProvider` | Yes, up to 14, via Gemini image editing (`genai.Client`) instead of LiteLLM's `image_edit` |
 
-All three route plain generation through `litellm.image_generation` /
-`litellm.image_edit` and wrap each provider call in
+All three use `litellm.image_generation` for plain generation. OpenAI and Azure
+use `litellm.image_edit` for reference-image edits. Vertex uses `genai.Client`.
+All provider calls are wrapped in
 `tracing.llm_utils.traced_llm_call` with `LLMFlow.IMAGE_GENERATION` or
 `LLMFlow.IMAGE_EDIT` (`onyx/tracing/flows.py`). See [[observability]].
 

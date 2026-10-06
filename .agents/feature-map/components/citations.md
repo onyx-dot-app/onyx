@@ -54,7 +54,7 @@ Citations have no HTTP endpoints of their own. They ride the same turn described
 | Surface | Where | Notes |
 |---|---|---|
 | `include_citations` | `SendMessageRequest.include_citations` (`server/query_and_chat/models.py`), default `True` | Per-request switch. `llm_loop.py:run_llm_loop` maps it to `CitationMode.HYPERLINK` (default) or `CitationMode.REMOVE`. Callers that must not expose links to the end surface (for example a public bot) set it `False`. |
-| `CitationMode` | `chat/citation_processor.py:CitationMode` | `HYPERLINK` (format and emit `CitationInfo`), `KEEP_MARKERS` (preserve `[1]` verbatim, emit no `CitationInfo`, used by the research agent's intermediate reports, `tools/fake_tools/research_agent.py`, ahead of `collapse_citations`), `REMOVE` (strip markers entirely, emit no `CitationInfo`, driven by `include_citations=False`). All three still track every citation seen via `get_seen_citations`. |
+| `CitationMode` | `chat/citation_processor.py:CitationMode` | `HYPERLINK` (format and emit `CitationInfo`), `KEEP_MARKERS` (preserve `[1]` verbatim, emit no `CitationInfo`, used by the research agent's intermediate reports, `tools/fake_tools/research_agent.py`, ahead of `collapse_citations`), `REMOVE` (strip markers entirely, emit no `CitationInfo`, driven by `include_citations=False`). All three track mapped citations via `get_seen_citations`. A marker with no mapping is skipped. |
 | `CitationInfo` packet | `server/query_and_chat/streaming_models.py:CitationInfo` | The wire-visible surface for ordinary inline citations. Research-agent reports also emit `IntermediateReportCitedDocs` (`tools/fake_tools/research_agent.py`). Carries `citation_number` and `document_id`. See [[streaming-protocol]] §4.1. |
 
 ---
@@ -69,7 +69,8 @@ Citations add no tables of their own. They write into columns [[chat-persistence
 - `SearchDoc` (`db/models.py:SearchDoc`): one row per unique retrieved document
   version. A citation-only document (for example a project file cited but never
   shown as a tool-call result) still gets a row here, created on demand in
-  `save_chat.py:save_chat_turn`.
+  `save_chat.py:save_chat_turn`. Only project-file rows are also linked to the
+  message. Other citation-only rows are not in the message's document list.
 - `ChatMessage__SearchDoc` and `ToolCall__SearchDoc` (`db/models.py`): the join
   tables linking a message's full document set, and a specific tool call's result
   set, to `SearchDoc` rows. A citation can point at a `SearchDoc` that is linked to
@@ -107,7 +108,7 @@ Emitter.emit(CitationInfo packet)  +  state_container.set_citation_mapping(...) 
    ▼
 save_chat_turn                                                 chat/save_chat.py
    │  persists ChatMessage.citations = {citation_num: SearchDoc.id}, only for emitted citations
-   │  links every unique SearchDoc (tool-call and citation-only) to the ChatMessage
+   │  links tool-call SearchDocs and citation-only project-file SearchDocs to the ChatMessage
    ▼
 frontend: getCitations(packets) -> CitationMap                 services/packetUtils.ts, app/interfaces.ts
    │  {citation_num: document_id}, deduped by document_id
@@ -129,10 +130,10 @@ open URL). It returns both the JSON string the model reads and the parallel
 `SearchDocsResponse.citation_mapping` field described in [[internal-search]] §4.7.
 
 Each document entry in the JSON is built as `{"document": citation_id, "title": ...,
-..., "content": ...}` (`utils.py:convert_inference_sections_to_llm_string`, the
-`result = {...}` block). The key is `document`, not `citation_id` or `id`, and the
-integer comes first, followed by short metadata, then the long content, in that
-fixed order. `backend/onyx/chat/README.md` states why: naming it `document` avoids
+..., "content": ..., "metadata": ...}` (`utils.py:convert_inference_sections_to_llm_string`,
+the `result = {...}` block). The key is `document`, not `citation_id` or `id`. The
+integer comes first, followed by short fields such as the title, then `content`. The
+optional `metadata` field comes last. `backend/onyx/chat/README.md` states why: naming it `document` avoids
 the model narrating "I should reference citation_id: 5"-style artifacts, and putting
 the number first exploits models' stronger local attention even though they have
 full context access.
@@ -221,7 +222,7 @@ mapping entirely if the turn is stopped mid-stream.
    doc missing from `all_search_docs` is expected for project files
    (`source_type == FILE`) and logged as a warning otherwise, since it can indicate
    an upstream bug.
-4. Links every unique `SearchDoc` (tool-call and citation-only) to the
+4. Links every tool-call `SearchDoc` and every citation-only project-file `SearchDoc` to the
    `ChatMessage` via `add_search_docs_to_chat_message`.
 5. Sets `assistant_message.citations = citation_number_to_search_doc_id or None`.
 
@@ -242,9 +243,9 @@ state.
 `MemoizedTextComponents.tsx:MemoizedAnchor`, passing `citations` (the `CitationMap`)
 and `docs` (the turn's `OnyxDocument[]`). `MemoizedAnchor` matches link text against
 `/\[(D|Q)?(\d+)\]/`: a bare number resolves through `citations[n] -> document_id ->
-docs.find(document_id)`; a `D`-prefixed or `Q`-prefixed number is reserved for
-sub-question document/question links used by deep research, not by ordinary search
-citations. If neither an `associatedDoc` nor an `associatedSubQuestion` is found, it
+docs.find(document_id)`; a `D`-prefixed number is also a document citation and resolves the same way. Only a
+`Q`-prefixed number is a sub-question link: it indexes `subQuestions[n - 1]` (used by
+deep research). If neither an `associatedDoc` nor an `associatedSubQuestion` is found, it
 returns `<></>`: nothing is rendered, by design, because during streaming the
 `CitationInfo` packet may simply not have arrived yet.
 
@@ -350,7 +351,7 @@ and by the time a replayed message's full text is available, its citation map is
 | changes the LLM-facing document JSON format (`convert_inference_sections_to_llm_string`) | the citation guidance text in `prompts/chat_prompts.py`; every citeable tool (`SearchTool`, `WebSearchTool`, `OpenURLTool`); run a citation eval, not just a unit test, since this is a behavior-sensitive prompt surface |
 | adds a new citing tool | `tools/tool_runner.py:MERGEABLE_TOOL_FIELDS` and the `starting_citation_num += 100` block; `citation_utils.py:update_citation_processor_from_tool_response`'s `CITEABLE_TOOLS_NAMES` check (`tools/built_in_tools.py`); [[tools-framework]] |
 | changes `CitationInfo` or adds a citation-adjacent packet type | [[streaming-protocol]] §5 and §7 in full: `StreamingType`, both hand-mirrored frontend enums, `findRenderer` |
-| changes markdown or link rendering (`MemoizedAnchor`, `processContent`, `useMarkdownComponents`) | the `[D]`/`[Q]` sub-question link paths share the same anchor component; verify ordinary numeric citations are unaffected |
+| changes markdown or link rendering (`MemoizedAnchor`, `processContent`, `useMarkdownComponents`) | the `[Q]` sub-question link path shares the same anchor component; verify ordinary numeric citations are unaffected |
 | changes what `save_chat` persists for citations | `session_loading.py:translate_assistant_message_to_packets`; a saved-session reload must still reproduce the live citation set |
 | reorders the assembled prompt (system prompt, reminder, tool responses) | citation quality is the most common casualty; see [[core-chat-loop]] §7 |
 | changes citation regex patterns (`citation_pattern`, `possible_citation_pattern`) | the ReDoS-safety comment in `citation_processor.py` above `possible_citation_pattern`; keep the comma-separated digit-run form, do not reintroduce nested unbounded quantifiers |
@@ -400,9 +401,9 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 - **An unresolved citation renders as nothing, not an error.** A broken mapping
   looks exactly like missing text. If citations silently vanish from an answer,
   suspect the pipeline before suspecting the model.
-- **Citation numbers are per tool call, not per turn.** `starting_citation_num`
-  resets its base for every citeable tool call in a batch (§4.3). Do not assume a
-  single monotonic counter spans the whole conversation turn.
+- **Citation numbers use turn-wide, ascending ranges.** Each citeable tool call
+  reserves 100 numbers, starting at the next free number (§4.3). Later batches start
+  after the highest existing number. Do not assume one call owns the whole turn.
 - **History keeps the model's original query arguments**, but the documents it
   cites come from whatever actually ran after expansion (see [[internal-search]]
   §9). The citation numbering is tied to that expanded, executed search, not to
@@ -414,7 +415,7 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 - **`citation_to_doc` (full mapping) and `_emitted_citations` (streamed subset)
   answer different questions.** Reading the wrong one when adding a new save path
   either persists citations nobody saw or drops citations that were shown.
-- **`[D#]` and `[Q#]` are not internal-search citations.** `MemoizedAnchor` treats
-  them as deep-research sub-question links, keyed by list index rather than by
-  the citation map. Do not assume every bracket-number pattern in the text goes
+- **`[Q#]` is not an internal-search citation.** `MemoizedAnchor` treats it as a
+  deep-research sub-question link, keyed by list index rather than by the citation
+  map. `[D#]` still resolves through the citation map like a bare `[#]`. Do not assume every bracket-number pattern in the text goes
   through the citation pipeline described here.

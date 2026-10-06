@@ -213,8 +213,10 @@ ownership (`user_id` or `owner_group_id` membership), `EDITOR`-level direct or
 group shares, org-wide `is_public` with `EDITOR` `public_permission`, and, for
 scoped managers, `within_managed_scope_clause`. Anonymous users see only
 `is_public and is_listed` rows. `get_editable=False` additionally requires
-`is_listed` for every path except direct ownership, so an unlisted agent stays
-reachable to its owner but invisible in listings to everyone else.
+`is_listed` for every path except ownership (the owning user or an owner-group
+member). An unlisted agent stays reachable to its owner. Users with global
+`MANAGE_AGENTS`, or `READ_AGENTS` when `get_editable=False`, skip the filter.
+Other users do not see it in listings.
 
 ### 4.2 Create/update: `create_update_persona` → `upsert_persona`
 
@@ -222,7 +224,9 @@ reachable to its owner but invisible in listings to everyone else.
 `db/persona.py:create_update_persona`, which gates featured-status changes on
 `MANAGE_AGENTS`, checks scoped-manager bounds
 (`_assert_persona_update_within_managed_scope`), then calls `upsert_persona`
-with every column in §3. `upsert_persona` re-fetches attached tools,
+with the content fields in §3. Display priority is not part of this flow
+(`update_personas_display_priority` sets it), and share rows go through
+`update_persona_access`. `upsert_persona` re-fetches attached tools,
 document sets, and user files by id and enforces two access guards on the
 attach side:
 
@@ -231,8 +235,10 @@ attach side:
   is later revoked (`existing_tool_ids` check, `tool_constructor.py`
   docstring on `construct_tools`).
 - **Knowledge attach** (`knowledge_guard_applies`): a non-`MANAGE_AGENTS`
-  editor may only add document sets or user files they can themselves access;
-  already-attached ones survive removal of the editor's own access.
+  editor may only add document sets, hierarchy nodes, or user files they can
+  themselves access (user files: they must own them). Attached documents go
+  through `get_accessible_documents_by_ids` for every caller. Already-attached
+  document sets, nodes, and files survive removal of the editor's own access.
 
 `update_persona_access` (versioned via `fetch_versioned_implementation` so EE
 can add group-share support) applies `is_public`/`public_permission` and

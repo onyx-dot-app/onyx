@@ -79,7 +79,7 @@ visible seams:
 | `SANDBOX_SERVICE_ACCOUNT_NAME` | `sandbox` | Service account the pod runs as; must match `deployment/helm/charts/onyx/templates/sandbox-rbac.yaml`. |
 | `SANDBOX_NEXTJS_PORT_START` / `_END` | 3010 / 3100 | Per-session Next.js dev-server port range, shared by the Service, the NetworkPolicy, and the PodTemplate's container ports. |
 | `ONYX_SANDBOX_PUSH_PRIVATE_KEY` | required | Ed25519 seed signing every sidecar request (`kubernetes/sidecar_client.py:get_push_key_pair`). |
-| `SANDBOX_PROXY_HOST` / `SANDBOX_PROXY_NAMESPACE` | required (K8s) | The egress-proxy endpoint pinned via `hostAliases` (see §5, §9). |
+| `SANDBOX_PROXY_HOST` / `SANDBOX_PROXY_NAMESPACE` | required (K8s) / `onyx` | The egress-proxy endpoint pinned via `hostAliases` (see §5, §9). |
 
 Celery task: `CLEANUP_IDLE_SANDBOXES` (`backend/onyx/background/celery/tasks/build/tasks.py`),
 scheduled every `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS`
@@ -407,9 +407,10 @@ snapshot actually contains a webapp.
 lands, `create_session_snapshot_keep_latest`
 (`session/sandbox_lifecycle.py:174`) deletes every prior `Snapshot` for that
 session (`SnapshotManager.delete_snapshot`, idempotent: a missing blob counts as
-already-deleted). The new snapshot is durable (committed) before any old one is
-removed, so a session is never left without a restorable snapshot
-(`docs/craft/infra/snapshot-retention.md`, current behaviour, matches the code).
+already-deleted). The new archive is stored before any old blob is deleted.
+The new `Snapshot` row is committed only after those deletions
+(`db_session.commit()` is the last step). A commit failure in that window can
+leave no restorable snapshot, because the old blobs are already gone.
 The sandbox-global opencode history snapshot is **not** versioned at all: it
 overwrites one fixed FileStore path each capture (§3).
 

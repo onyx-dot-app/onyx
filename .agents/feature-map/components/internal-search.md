@@ -235,8 +235,9 @@ in parallel (again via `run_functions_tuples_in_parallel`, wrapped in
 the section is in `best_doc_ids` (`expand_override=True`, which skips straight to
 `FULL_DOCUMENT`), it first asks `classify_section_relevance`
 (`secondary_llm_flows/document_filter.py`) whether to keep it as-is, pull the
-immediately adjacent chunks, pull the full surrounding window, or drop it as not
-relevant after all. `FULL_DOCUMENT` fetches `FULL_DOC_NUM_CHUNKS_AROUND = 5`
+immediately adjacent chunks, or pull the full surrounding window. A `NOT_RELEVANT`
+result makes `expand_section_with_context` return `None`, but `expand_section_safe`
+then keeps the original section. This stage never drops a selected section. `FULL_DOCUMENT` fetches `FULL_DOC_NUM_CHUNKS_AROUND = 5`
 chunks on each side via `_retrieve_adjacent_chunks`, which calls
 `document_index.id_based_retrieval`.
 
@@ -341,7 +342,7 @@ the LLM, assigning one citation number per unique `document_id` starting at
 | If your change... | Also check |
 |---|---|
 | changes a lane weight or the RRF formula | run a retrieval eval before merging; a weight swing changes which documents survive to LLM selection, which is invisible in a unit test |
-| adds a retrieval lane | the RRF weight list and `lane_specs` must stay parallel to `search_functions` |
+| adds a retrieval lane | keep `search_weights` parallel to `search_functions`; both lists feed the RRF call |
 | adds a filter field to `BaseFilters`/`IndexFilters` | `_build_index_filters`, the two document-set access checks, [[document-index]]'s query builder, and the Search UI filter form |
 | changes the LLM-facing string format in `convert_inference_sections_to_llm_string` | [[citations]]; this breaks citation parsing everywhere the string is consumed, not just here |
 | changes `SearchDocsResponse` fields | the UI renderer for `SearchToolDocumentsDelta`/search cards, and [[chat-persistence]]'s `SearchDoc` persistence, both of which read this shape |
@@ -403,12 +404,11 @@ than launching Playwright ad hoc.
   emits the expanded queries in `SearchToolQueriesDelta` for the UI. It does not
   replace `tool_call.tool_args`, so history shows what the model wrote. See also
   [[core-chat-loop]] §9.
-- **Scope and time decisions are cached per turn**, not per call.
-  `_scope_decision_settled` latches once `decide_search_scope` returns `None`
-  (no source directive), and `_time_filter_computed` latches after the first
-  `decide_time_filter` call. A second `internal_search` call in the same turn
-  will not re-derive either, even if the conversation state looks like it
-  should.
+- **The time decision is cached per turn. The scope decision is cached only when
+  it finds no source directive.** `_time_filter_computed` latches after the first
+  `decide_time_filter` call. `_scope_decision_settled` latches only when
+  `decide_search_scope` returns `None`. If it returns a source list, the next
+  `internal_search` call in the same turn runs the decision again.
 - **`hybrid_alpha == 0.0` short-circuits to pure keyword retrieval**
   (`_keyword_search` in `search_runner.py`), skipping the embedding call
   entirely.

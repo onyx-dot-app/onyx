@@ -260,11 +260,12 @@ in §4.4.
 
 ## 5. Contracts and invariants
 
-1. **A user preference must never override an admin restriction.** A disabled
-   built-in tool on the default agent (admin, `ChatPreferencesPage.tsx`
-   tool toggles) stays disabled for every user regardless of any per-user
-   setting; there is no per-user "re-enable this tool" path in this
-   component.
+1. **A user preference does not override an admin restriction, except for
+   `MemoryTool`.** A disabled built-in tool on the default agent (admin,
+   `ChatPreferencesPage.tsx` tool toggles) stays disabled for every user. There is
+   no per-user "re-enable this tool" path for those tools. `tool_constructor.py`
+   injects `MemoryTool` whenever `user.enable_memory_tool` is true, even if the
+   default persona's tool configuration omits it (§4.4).
 2. **Every setting that reaches the prompt must render deterministically.**
    [[context-assembly]] explains why prompt text position is load-bearing (a
    measured swing from ~30% to ~90% instruction-follow by moving one

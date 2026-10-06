@@ -400,7 +400,7 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   `run_research_agent_call` (`fake_tools/coding_agent.py`, `fake_tools/research_agent.py`)
   are hand-rolled sub-agent loops that hand the LLM synthetic function schemas for
   internal control signals (`think_tool`, `generate_answer`, `generate_report`
-  defined in `onyx/deep_research/dr_mock_tools.py` and `onyx/coding_agent/mock_tools.py`).
+  defined in `onyx/deep_research/tool_definitions.py` and `onyx/coding_agent/tool_definitions.py`).
   These signals have no DB `Tool` row, never appear in `BUILT_IN_TOOL_MAP`, and
   never go through `run_tool_calls`; the coding agent dispatches its bash calls
   directly via `_run_bash_call`. The directory name suggests these are real tools;

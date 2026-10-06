@@ -320,8 +320,9 @@ The `scheduled_tasks` worker (`apps/scheduled_tasks.py`) autodiscovers only
 its own queue and app: the docstring in `apps/scheduled_tasks.py` explains this
 is so long-running headless-agent task runs do not compete for Heavy's slots
 (pruning, permission sync, CSV export). It uses `worker_pool = "threads"` and
-`worker_prefetch_multiplier = 1` like every other worker
-(`configs/scheduled_tasks.py`).
+`worker_prefetch_multiplier = 1` (`configs/scheduled_tasks.py`), like Heavy and most
+other workers. Light is the exception: it reads
+`CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER`, default 8.
 
 ---
 
@@ -344,8 +345,8 @@ is so long-running headless-agent task runs do not compete for Heavy's slots
    sending tasks, either from the beat schedule or directly from another task."
    Every entry in `beat_schedule.py` sets `expires` via `BEAT_EXPIRES_DEFAULT`;
    a new direct `send_task` call needs the same.
-4. **A fence must always be released or expire.** Every `FENCE_TTL` in this
-   codebase is 7 days, a defensive backstop, not the intended recovery path.
+4. **A fence must always be released or expire.** Every Celery connector and indexing
+   `FENCE_TTL` covered here is 7 days, a defensive backstop, not the intended recovery path.
    The intended path is the checker task's fence-validation pass (§4.2). A
    change that adds a new fenced flow without wiring it into a `check_for_*`
    validation loop leaves that fence with only the 7-day TTL as a safety net.

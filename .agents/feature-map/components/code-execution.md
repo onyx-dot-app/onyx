@@ -29,8 +29,8 @@ code block appear, then streamed stdout/stderr, then a result. If the code produ
 (a chart, a CSV), a file count shows and the file becomes downloadable
 (`web/src/app/app/message/messageComponents/timeline/renderers/code/PythonToolRenderer.tsx`).
 
-When the user asks the coding agent to investigate a GitHub repository, the assistant clones
-it into an isolated session and runs a sequence of bash commands, shown as a timeline of
+When the user asks the coding agent to investigate a GitHub repository, the assistant downloads
+and extracts the repository's `HEAD` archive into an isolated session (no Git history) and runs a sequence of bash commands, shown as a timeline of
 "thinking" and "bash" steps, ending in a final answer
 (`web/src/app/app/message/messageComponents/timeline/renderers/code/CodingAgentRenderer.tsx`).
 The user never sees or triggers the bash tool directly; it only exists inside that sub-agent
@@ -371,9 +371,10 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 
 ## 9. Footguns
 
-- **Both tools vanish silently when unconfigured.** No error is shown to the user or logged
-  at `warning` or above when `CODE_INTERPRETER_BASE_URL` is empty or the service is unreachable; `is_available`
-  just returns `False` and the tool is absent from the turn (`[[tools-framework]]` §5 contract 2). Do not
+- **Both tools vanish when unconfigured.** No error is shown to the user. An empty
+  `CODE_INTERPRETER_BASE_URL` returns before any logging. A failed health check logs at
+  `warning` in `CodeInterpreterClient.health`. In both cases `is_available`
+  returns `False` and the tool is absent from the turn (`[[tools-framework]]` §5 contract 2). Do not
   assume a missing tool call means the model chose not to use it.
 - **The bash/python asymmetry is easy to miss.** `run_python` is a normal persona-attachable
   `Tool` with a DB row and `ToolCall` persistence. `bash` is constructed directly by

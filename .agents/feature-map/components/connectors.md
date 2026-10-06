@@ -153,8 +153,8 @@ encryption. This component only consumes the pairing at run time (§4).
   `GmailConnector`, fill it on every indexing run. Flows to [[access-control]]), `parent_hierarchy_raw_node_id` (links
   a document to a `HierarchyNode`), `file_id`, `additional_info` (opaque,
   connector-specific).
-- **`Document.content_hash`**: an MD5 fingerprint over text, image ids, sorted
-  metadata, and sorted owners, computed before image summarization runs. It is
+- **`Document.content_hash`**: an MD5 fingerprint over title, text, image ids, sorted
+  `doc_metadata` (not the filter `metadata` field), and sorted owners, computed before image summarization runs. It is
   the fallback dedup gate for connectors that don't supply `doc_updated_at`
   (the web connector is the example in the docstring).
 - **`SlimDocument`**: `id`, `external_access`, `parent_hierarchy_raw_node_id`,

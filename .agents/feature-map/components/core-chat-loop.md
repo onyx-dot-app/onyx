@@ -193,8 +193,10 @@ notice so the model knows content was removed rather than silently losing it.
 
 `_persist_model_outcome` is the single entry point for every completion path:
 success, stop button, worker error, and post-drain self-completion. It is guarded by
-a lock plus a per-model `persisted[]` flag, so a turn is saved exactly once no matter
-which path fires.
+a lock plus a per-model `persisted[]` flag, so a turn gets at most one save attempt no
+matter which path fires. The flag is set before the save runs. If the save raises,
+the error is logged and later paths do nothing. The reserved row then stays
+incomplete.
 
 It dispatches to `llm_loop_completion_handle` (success and stop) or
 `_save_errored_message` (error). `llm_loop_completion_handle` snapshots the state
@@ -243,7 +245,7 @@ whenever you touch this component.
 4. **The state container and the emitter accumulate state; they never drive logic.**
    Do not branch on their contents in `llm_loop` or `llm_step`. This is stated in
    `chat/README.md` and it is the reason the layering holds.
-5. **A turn is persisted exactly once.** Anything new that can end a turn must route
+5. **A turn gets one save attempt.** Anything new that can end a turn must route
    through `_persist_model_outcome`, not call the save path directly.
 6. **The assistant message row exists before the first token.** IDs are reserved up
    front. Do not move reservation later.
@@ -288,7 +290,7 @@ whenever you touch this component.
 | adds or renames a streaming packet | [[streaming-protocol]] and the frontend parser and renderer in [[chat-frontend]]; then [[mobile-app]], which parses the same stream |
 | changes the order or content of assembled context | [[context-assembly]]; re-read the rationale in `chat/README.md` before moving anything; citation quality is the usual casualty |
 | adds a field to `ChatStateContainer` | `save_chat_turn`, `gather_stream_full` (non-streaming path), `_save_errored_message`, and the incognito path |
-| adds a new way for a turn to end | `_persist_model_outcome` must be the route; verify the stop path and the error path both still save exactly once |
+| adds a new way for a turn to end | `_persist_model_outcome` must be the route; verify the stop path and the error path both still make one save attempt |
 | touches thread creation or the queue | `contextvars` copying, `drain_done` handling, and the 50 ms cancel poll |
 | changes `save_chat_turn` or the tables | [[chat-persistence]]; the session-replay path `GET /chat/get-chat-session/{id}` must render the same packets the live stream produced |
 | changes the tool set or tool results | [[tools-framework]] and every tool implementation; tool responses are dropped from history and replaced with a placeholder, so anything the future needs must live in the tool-call arguments |
@@ -340,9 +342,13 @@ launching Playwright ad hoc.
 
 ## 9. Footguns
 
-- **Tool responses are discarded from history.** They are replaced by a fixed
-  placeholder string. Only the tool-call *arguments* survive. If a later cycle needs
-  a fact, it must be in the arguments or re-fetched.
+- **Tool responses are discarded from later-turn history.** Inside the active turn,
+  the next cycle still receives the tool response. When a later message rebuilds
+  history, a fixed placeholder string replaces the response
+  (`chat_utils.py:_build_tool_call_response_history_message`). Only the tool-call
+  *arguments* survive. The exception is image generation. Its file ids and revised
+  prompts stay in later-turn history. If a later turn needs another fact, it must be
+  in the arguments or re-fetched.
 - **Search tool arguments in history are the LLM's original arguments, not the
   expanded queries.** Query expansion happens inside `SearchTool.run`. It emits
   the expanded set in `SearchToolQueriesDelta` and does not change

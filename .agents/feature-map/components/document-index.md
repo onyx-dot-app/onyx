@@ -75,7 +75,7 @@ Per the frontend rule in `CLAUDE.md`, always call these through the web server
 
 | Variable | Default | Effect |
 |---|---|---|
-| `DISABLE_VECTOR_DB` | false | `get_default_document_index` returns `DisabledDocumentIndex` (no-op) instead of a real backend. |
+| `DISABLE_VECTOR_DB` | false | `get_default_document_index` returns `DisabledDocumentIndex` instead of a real backend. Every method except `verify_and_create_index_if_necessary` raises `RuntimeError`. |
 | `USING_AWS_MANAGED_OPENSEARCH` | false | Changes shard/replica counts (`schema.py:DocumentSchema.get_index_settings_based_on_environment`) and gates IAM auth. |
 | `OPENSEARCH_TEXT_ANALYZER` | `"english"` | Stemming/tokenization analyzer for `title`/`content`. Changing it needs a reindex of existing indices. |
 | `OPENSEARCH_INDEX_NUM_SHARDS` / `OPENSEARCH_INDEX_NUM_REPLICAS` | environment-dependent | Override shard/replica counts. |
@@ -83,7 +83,7 @@ Per the frontend rule in `CLAUDE.md`, always call these through the web server
 | `HYBRID_SEARCH_NORMALIZATION_PIPELINE` | `1` (`MIN_MAX`) | Integer enum value. `2` is `ZSCORE`. Chooses the OpenSearch normalization technique (`opensearch/constants.py`). |
 | `ENABLE_CC_PAIR_ACCESS_FILTER` | false | Fallback for the `cc_pair_access_filter` `enabled` runtime flag. True turns on shadow mode (see §4.3). The `enforce` flag has no env var and defaults to false. |
 | `DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES` | 500 | Candidates fetched per hybrid subquery before fusion. |
-| `HYBRID_ALPHA` | 0.5 (`configs/chat_configs.py`) | Caller-level keyword/semantic hint, clamped to `[0, 1]`. See §4.3 and §9 for how little of this the index actually uses. |
+| `HYBRID_ALPHA` | 0.5 (`configs/chat_configs.py`) | Caller-level keyword/semantic hint. The env default is clamped to `[0, 1]`. A caller-provided `hybrid_alpha` is not validated. See §4.3 and §9 for how little of this the index actually uses. |
 | `OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED` | true | Disables highlight computation in query bodies. |
 | `OPENSEARCH_EXPLAIN_ENABLED` | false | Adds scoring breakdowns; documented as roughly 1000x slower for hybrid search in practice. |
 | `PIT_KEEP_ALIVE` | `"5m"` | Point-in-time lease used by the reindex port's consistent scan. |
@@ -175,8 +175,8 @@ they need: `SchemaVerifiable` (`verify_and_create_index_if_necessary`), `Indexab
 (`id_based_retrieval`), `RandomCapable` (`random_retrieval`).
 
 `OpenSearchDocumentIndex` (`opensearch/opensearch_document_index.py`) is the only real
-implementation. A `DisabledDocumentIndex` (`document_index/disabled.py`) is a no-op
-used when `DISABLE_VECTOR_DB` is set.
+implementation. A `DisabledDocumentIndex` (`document_index/disabled.py`) is used when `DISABLE_VECTOR_DB` is set.
+Every method except `verify_and_create_index_if_necessary` (a no-op) raises `RuntimeError`, so a stray vector-DB call fails fast.
 
 `OpenSearchIndexPair` wraps a `primary` and an optional `secondary`
 `OpenSearchDocumentIndex` behind the same `DocumentIndex` interface. Its fan-out rules

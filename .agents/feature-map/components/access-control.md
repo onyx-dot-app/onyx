@@ -91,7 +91,7 @@ or written, and the docstring says so. **Do not treat `UserRole.ADMIN` /
   (`BASIC_ACCESS`, `READ_DOCUMENT_SETS`, `MANAGE_USER_GROUPS`,
   `FULL_ADMIN_PANEL_ACCESS`, `READ_CHAT`/`WRITE_CHAT`, and more). A user's
   `effective_permissions` (a JSONB column, computed by
-  `db/scoped_permissions.py:recompute_user_permissions__no_commit`) is the union
+  `db/permissions.py:recompute_user_permissions__no_commit`) is the union
   of permissions granted to every group they belong to, plus any
   `account_derived_permissions` from their `AccountType`.
 - `AccountType` (`db/enums.py`): `STANDARD`, `SERVICE_ACCOUNT`, and others,
@@ -177,9 +177,9 @@ OpenSearch chunk document
   `Document`'s.
 - `DocumentAccess` (`access/models.py`): the in-memory union of `user_emails`,
   `user_groups`, `external_user_emails`, `external_user_group_ids`, `is_public`.
-  `DocumentAccess.to_acl()` is the **only** place that turns this into query-ready
-  strings, and it is the single point of truth both the write path (indexing) and
-  the read path (`build_access_filters_for_user`, indirectly) must agree with.
+  `DocumentAccess.to_acl()` formats the indexed ACL (write path). The read path
+  builds the user's entries separately in `_get_acl_for_user`. Both sides use the
+  prefix helpers in `access/utils.py`, so those helpers and `to_acl()` must agree.
 
 ---
 
@@ -227,8 +227,9 @@ DocMetadataAwareIndexChunk.from_index_chunk(access=<DocumentAccess>, ...)
 ```
 
 A document with no permission-sync-capable connector and no explicit sharing gets
-`is_public=False` and an empty ACL: nobody but an admin bypassing the index (see
-§9) can retrieve it until it is put in a document set or shared with a group.
+`is_public=False` and an empty ACL: nobody can retrieve it through ACL-filtered
+search until it is made public or granted a matching ACL entry. A document set
+does not grant access (see §4.4).
 
 ### 4.3 Read path: from acting user to the query
 
@@ -625,14 +626,14 @@ verified by "it still returns documents"; it is verified by a second user
   needs the Redis flag and a complete `cc_pair_ids` backfill, so a tenant can
   have the master flag on and still run the ACL filter. A `SYNC_RESTRICTED`
   pair is hidden in every mode, because the ACL alone cannot express it.
-- **A change to how the ACL is computed does not take effect until a
-  reindex.** The ACL stored on an already-indexed chunk is a snapshot from
-  whenever it was last written or updated (`Updatable.update`, see
-  [[document-index]]); changing `_get_acl_for_user`'s or
-  `_get_access_for_documents`'s logic changes what a *future* write computes,
-  not what is already in the index. A permission bug fix can look "fixed" in
-  code review and still leak or hide documents in production until a resync
-  or reindex runs.
+- **Read-side and write-side ACL changes roll out differently.**
+  `_get_acl_for_user` runs on each query, so a change takes effect on the next
+  request. `_get_access_for_documents` computes the ACL stored on each indexed
+  chunk. That ACL is a snapshot from whenever it was last written or updated
+  (`Updatable.update`, see [[document-index]]). A change to that logic affects
+  only *future* writes, not what is already in the index. A write-side
+  permission fix can look "fixed" in code review and still leak or hide
+  documents in production until a resync or reindex runs.
 - **`PUBLIC_DOC_PAT` is a bare string convention (`"PUBLIC"`), not a typed
   sentinel.** Nothing stops a future ACL source from independently producing
   the literal string `"PUBLIC"` as a legitimate group or email-derived entry

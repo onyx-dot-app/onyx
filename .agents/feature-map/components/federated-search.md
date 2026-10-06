@@ -193,7 +193,7 @@ single DB session opened at the top of `run()`, before any parallel lane starts:
    row (`db/slack_bot.py:fetch_slack_bots`) that is `enabled`, preferring one
    with a `user_token` over one with only a `bot_token`. `access_token =
    user_token or bot_token`.
-2. **Web user** (no bot token found, `self.user` set): looks up
+2. **Per-user OAuth fallback** (`access_token` still empty, `self.user` set; this also runs in bot context): looks up
    `list_federated_connector_oauth_tokens(db_session, self.user.id)`
    (`db/federated.py:list_federated_connector_oauth_tokens`) and takes the
    Slack row's `token`.

@@ -64,7 +64,7 @@ in a browser tab; the extension carries no credentials of its own.
 
 | Surface | Setting | Where | Effect |
 |---|---|---|---|
-| Desktop | `server_url` | `~/Library/Application Support/app.onyx.desktop/config.json` (macOS path; see `desktop/README.md` for Linux/Windows), read by `desktop/src-tauri/src/config.rs:load_config` | The only server this instance talks to. Defaults to `https://cloud.onyx.app` (`config.rs:DEFAULT_SERVER_URL`). Self-hosted use is a config edit, not a rebuild. |
+| Desktop | `server_url` | `~/Library/Application Support/app.onyx.onyx-desktop/config.json` (macOS path; see `desktop/README.md` for Linux/Windows), read by `desktop/src-tauri/src/config.rs:load_config` | The only server this instance talks to. Defaults to `https://cloud.onyx.app` (`config.rs:DEFAULT_SERVER_URL`). Self-hosted use is a config edit, not a rebuild. |
 | Desktop | `summon_shortcut` | Same config file, `config.rs:default_summon_shortcut` | Global OS shortcut (`Super+Shift+Space` macOS / `Ctrl+Alt+Space` elsewhere) that raises the app from anywhere; can be set to `null` |
 | Widget | `backend-url`, `api-key` | HTML attributes on `<onyx-chat-widget>`, or `VITE_WIDGET_BACKEND_URL`/`VITE_WIDGET_API_KEY` baked in at build time for self-hosted builds (`widget/vite.config.ts`, `widget/src/config/config.ts:resolveConfig`) | Which backend the widget calls and the credential it authenticates with. Attributes always win over the baked-in env values. |
 | Widget | `tokenProvider` | JavaScript property on the element, not an attribute (`widget/src/widget.ts`) | An async function that returns a bearer token. It wins over `api-key`. The widget calls it before every request attempt (`config.ts:resolveAuthToken`). |
@@ -79,8 +79,10 @@ Mostly not applicable: none of the three owns a database table, and all
 three are stateless clients of the same chat backend tables
 ([[chat-persistence]]).
 
-**Desktop.** The only persisted local state is the config file
-(`desktop/src-tauri/src/config.rs:AppConfig`): `server_url`, `window_title`,
+**Desktop.** The persisted local state is the config file and the window
+state. The window state (size, position) comes from
+`tauri_plugin_window_state` (`desktop/src-tauri/src/main.rs`). The config file
+(`desktop/src-tauri/src/config.rs:AppConfig`) holds `server_url`, `window_title`,
 `show_menu_bar`, `hide_window_decorations`, `summon_shortcut`,
 `summon_opens_new_chat`. No credential is stored here; the app holds no
 session of its own; whatever cookie the webview accumulates is the webview's

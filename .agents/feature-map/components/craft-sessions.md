@@ -254,7 +254,7 @@ POST /build/sessions/{id}/send-message          session/messages.py:send_message
                  │    └─ yield_sandbox_events       session/manager.py → session/streaming.py
                  │         (hands off to opencode-serve in the sandbox; see [[craft-streaming]])
                  ├─ persist_sandbox_event (per event)
-                 └─ finalize_persist (terminal, every path)
+                 └─ finalize_persist (terminal flush, streamed paths)
 ```
 
 `send_message` (`session/messages.py`) does **not** stream. It creates a
@@ -286,12 +286,15 @@ then re-prompts with a fixed steering message
 a Craft turn always drives exactly one opencode session with one resolved
 model (`session_llm_config`).
 
-**Persistence is a single terminal choke point, but structured differently
-from chat's `_persist_model_outcome`.** Every terminal path (success, the
-hard-cap deadline, an unrecoverable sandbox error, an interrupt, an
-unexpected exception) calls `session_manager.finalize_persist(session_id,
+**Persistence is incremental with a terminal flush for streamed paths, unlike
+chat's `_persist_model_outcome`.** Every terminal path that streamed (success,
+the hard-cap deadline, an unrecoverable sandbox error, an interrupt, an
+unexpected exception in the drive loop) calls `session_manager.finalize_persist(session_id,
 state)` (`interactive_turns/executor.py`, at least 5 call sites) followed by
-`finish_turn(...)` to move the cache record to its terminal status. Unlike
+`finish_turn(...)` to move the cache record to its terminal status. A failure
+before streaming skips the flush. If `prompt_slot` is not acquired, the executor
+persists an error row with `persist_turn_error` and calls `finish_turn`
+directly. Unlike
 chat, where persistence happens once *after* the loop ends, Craft persists
 incrementally: `persist_sandbox_event` writes and commits **each** streamed
 event as it arrives (`_drive_interactive_turn.drive_one_prompt`, "the caller
@@ -299,7 +302,7 @@ just returns" branches all follow a commit), and `finalize_persist` only
 flushes whatever the per-turn `BuildStreamingState` accumulated since the
 last flush. So there is no single "save the whole turn" transaction to point
 to the way `save_chat_turn` is one; correctness instead rests on: no
-terminal path may skip its `finalize_persist` + `finish_turn` pair.
+streamed terminal path may skip its `finalize_persist` + `finish_turn` pair.
 
 ### 4.3 Locking
 
@@ -307,7 +310,7 @@ Three independent locks/leases, at three different scopes:
 
 | Lock | Scope | Guards | Source |
 |---|---|---|---|
-| `session_creation_lock(user_id)` | per user | Session/workspace creation, restore, and the interactive-turn runner's `_ready_session_runtime` fallback path, so a provision, a reap, and a restore can never interleave. | `session/locks.py:session_creation_lock` |
+| `session_creation_lock(user_id)` | per user | Serializes session/workspace creation, restore, and the interactive-turn runner's `_ready_session_runtime` fallback path. The idle reaper (`sandbox_lifecycle.py:sleep_sandbox`) holds it only for the workspace listing and for the final recheck before termination. It releases the lock while it snapshots. | `session/locks.py:session_creation_lock` |
 | `prompt_slot(sandbox_id, session_id)` | per session | **Serializes turns within one session.** A second `send-message` while a turn holds the slot gets a `CONFLICT` ("busy with a previous turn") from `acquire_active_turn_lock`, or, if it reaches the executor, a `finish_turn(FAILED, "Concurrent turn in flight...")`. | `session/manager.py:prompt_slot` → `sandbox.serve_transport.PromptSlot` |
 | `acquire_active_turn_lock(cache, session_id)` | per session, Redis | Guards the handful of read-modify-write Redis round-trips in `interactive_turns/state.py` (create/claim/touch/finish) so two API pods can't race the same turn's status. Lease (`TURN_LOCK_LEASE_SECONDS` = 60s) is independent of turn duration; ownership is decided by the `runner_id` compare inside the lock, not by the lease. | `interactive_turns/state.py:acquire_active_turn_lock` |
 
@@ -618,7 +621,7 @@ auto-named by a different one.
 
 | If your change… | Also check |
 |---|---|
-| changes the turn executor (`interactive_turns/executor.py`) | every terminal path still calls `finalize_persist` before `finish_turn`; the timeout-continuation loop's `MAX_TIMEOUT_CONTINUATIONS` cap; `[[craft-streaming]]`'s event shapes the executor switches on (`PromptResponse`, `ActivityTimeoutError`, `SandboxError`) |
+| changes the turn executor (`interactive_turns/executor.py`) | every streamed terminal path still calls `finalize_persist` before `finish_turn` (the prompt-slot rejection path persists an error row instead); the timeout-continuation loop's `MAX_TIMEOUT_CONTINUATIONS` cap; `[[craft-streaming]]`'s event shapes the executor switches on (`PromptResponse`, `ActivityTimeoutError`, `SandboxError`) |
 | changes locking (`prompt_slot`, `acquire_active_turn_lock`, `session_creation_lock`) | the CONFLICT-vs-silent-failure behavior at each acquisition site; whether a reclaim (`claim_turn_for_runner`) can still race a live runner; `[[craft-sandboxes]]`'s reaper, which also touches sandbox state under related locks |
 | changes interrupt (`interrupt_signal.py`, `interrupt_message`) | the FE's `reconcileInterruptedTurn` polling contract (`fetchActiveTurn` going to `null`); whether partial output still commits before `finish_turn(CANCELLED)`; the direct `abort_opencode_session` best-effort path staying best-effort (not blocking) |
 | adds an approval point | `ApprovalRequestedPacket` plumbing through `[[craft-streaming]]`; `list_live_approvals`'s time-window filter; whether the new point's target maps to a `GatedApp (kind, target_id)` the session-grant matching in `submit_session_grant` can actually cover |

@@ -137,7 +137,7 @@ and returns one of four `FileStore` implementations: `S3BackedFileStore`
 (also covers MinIO, DigitalOcean Spaces, any S3-compatible endpoint),
 `GCSBackedFileStore`, `AzureBlobBackedFileStore`, or `PostgresBackedFileStore`
 (`onyx/file_store/postgres_file_store.py`, using `FileContent.lobj_oid`
-against `pg_largeobject`, chosen when no external object store is available).
+against `pg_largeobject`, chosen only when `FILE_STORE_BACKEND=postgres`; there is no automatic fallback).
 Every implementation writes the same `FileRecord` row
 (`file_store.py:S3BackedFileStore.save_file` calls
 `db/file_record.py:upsert_filerecord`); only where the bytes physically land
@@ -254,9 +254,10 @@ ceiling, files are flagged `use_as_search_filter=True` instead
 (`extract_context_files`, the `aggregate_tokens >= max_actual_tokens` branch)
 and the model must retrieve them via the internal search tool
 ([[tools-framework]], [[internal-search]]). This path does not wait for the
-ceiling, though: **project files are always vectorized at upload time**,
+ceiling, though: **indexable project files are vectorized at upload time**,
 independent of whether a given turn's context would fit them
-(`chat/README.md`, "Projects"). The indexing side is
+(`chat/README.md`, "Projects"). Files marked `UserFileStatus.SKIPPED`
+(`db/projects.py`, over-threshold tabular files in `skip_indexing`) are not indexed. The indexing side is
 `indexing/adapters/user_file_indexing_adapter.py:UserFileIndexingAdapter`,
 driven by `background/celery/tasks/user_file_processing/tasks.py:_process_user_file_with_indexing`,
 which runs the same `run_indexing_pipeline` used for connector documents
@@ -492,7 +493,7 @@ access-control consequence of this.
 ### Tests
 
 ```bash
-cd backend && uv run pytest tests/unit -k "file_store or extract_file_text or projects_file_utils"
+uv run --env-file .vscode/.env pytest backend/tests/unit -k "file_store or extract_file_text or projects_file_utils"
 uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit -k "file_store or user_file"
 uv run --env-file .vscode/.env pytest backend/tests/integration -k "user_file or projects or file"
 ```

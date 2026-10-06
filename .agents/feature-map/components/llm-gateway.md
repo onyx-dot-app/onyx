@@ -71,9 +71,9 @@ the Craft-specific setting (§4.2).
 
 Every endpoint depends on `require_permission(Permission.USE_LLM_GATEWAY)`
 (every endpoint in `api.py`) as GATE 1, then calls
-`_authorize_gateway_request` (`api.py`), which checks the workspace
-`llm_gateway_enabled` setting for non-Craft traffic before delegating to
-`craft_gateway.py:gateway_request_flow` as GATE 2. See §4.2 for why both
+`_authorize_gateway_request` (`api.py`), which calls
+`craft_gateway.py:gateway_request_flow` as GATE 2 and then checks the workspace
+`llm_gateway_enabled` setting for non-Craft traffic. See §4.2 for why both
 gates, plus the workspace setting, exist.
 
 ### PAT scope
@@ -88,12 +88,16 @@ ordinary logged-in user's unscoped PAT, and every Craft sandbox's PAT, both
 carry it implicitly. See §4.2 and [[auth-and-identity]] for what `PAT scope`
 means mechanically.
 
-### Environment configuration (`backend/onyx/server/gateway/configs.py`)
+### Configuration (`backend/onyx/server/gateway/configs.py`)
+
+`GATEWAY_PATH_PREFIX` (`/gateway`) and `LLM_GATEWAY_MIN_TIER` (`Tier.BUSINESS`) are
+Python constants, not environment variables. `GATEWAY_PATH_PREFIX` is the router's
+mount prefix and the key `PATH_PREFIX_MIN_TIER` gates on. `LLM_GATEWAY_MIN_TIER` is the
+minimum tier for the whole `/gateway` prefix. The timeout values below are also
+constants. Only the two passthrough kill switches read the environment.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `GATEWAY_PATH_PREFIX` | `/gateway` | The router's mount prefix; also the key `PATH_PREFIX_MIN_TIER` gates on. |
-| `LLM_GATEWAY_MIN_TIER` | `Tier.BUSINESS` | Minimum tier for the whole `/gateway` prefix. |
 | `ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED` | on (`!= "false"`) | Kill switch: `false` forces Anthropic-backed providers through the OpenAI-shaped translation path instead of the native passthrough, losing server tools and thinking-signature fidelity. |
 | `OPENAI_GATEWAY_PASSTHROUGH_ENABLED` | on (`!= "false"`) | Same kill switch for true-OpenAI models on `/v1/responses`. |
 | `ANTHROPIC_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS` / `_READ_TIMEOUT_SECONDS` | 10 / 600 | httpx timeouts for the Anthropic passthrough. |
@@ -135,12 +139,13 @@ asynchronously from tracing spans, not synchronously by the gateway request.
 
 ```
 POST /gateway/v1/chat/completions               ee/onyx/server/gateway/api.py
-  ├─ require_permission(Permission.USE_LLM_GATEWAY)   GATE 1 (FastAPI Depends)
   ├─ tier_gate middleware                             ee/onyx/server/middleware/tier_gate.py
   │    PATH_PREFIX_MIN_TIER["/gateway"] = Tier.BUSINESS
+  ├─ require_permission(Permission.USE_LLM_GATEWAY)   GATE 1 (FastAPI Depends)
   ├─ _authorize_gateway_request                       api.py
-  │    └─ gateway_request_flow                         onyx/server/features/build/craft_gateway.py
-  │         GATE 2: resolves the LLMFlow tag, or rejects
+  │    ├─ gateway_request_flow                         onyx/server/features/build/craft_gateway.py
+  │    │    GATE 2: resolves the LLMFlow tag, or rejects
+  │    └─ workspace switch: Settings.llm_gateway_enabled (LLM_GATEWAY flow only)
   ├─ check_token_rate_limits(user)                     onyx/server/query_and_chat/token_limit.py
   ├─ resolve_gateway_model                              api.py
   │    └─ fetch_accessible_llm_provider_by_id           db/llm.py
@@ -161,7 +166,7 @@ denies the gateway rather than allowing it.
 
 ### 4.2 Authentication and scope: two gates and a workspace switch
 
-Before GATE 2 runs, `_authorize_gateway_request` checks the workspace
+After GATE 2 resolves the flow, `_authorize_gateway_request` checks the workspace
 `llm_gateway_enabled` setting (`server/settings/models.py:Settings`,
 default on) whenever the resolved flow is `LLMFlow.LLM_GATEWAY` (a
 directly-scoped caller, not a Craft sandbox); if it is off, the request is

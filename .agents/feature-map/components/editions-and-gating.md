@@ -36,9 +36,12 @@ Community (`Tier.COMMUNITY` in `backend/onyx/server/settings/models.py`);
 upload or claim a license via the `/license` endpoints
 (`backend/ee/onyx/server/license/api.py`), and previously blocked admin
 surfaces, seat limits, and tier-gated features unlock. A cloud (`MULTI_TENANT`)
-deployment never sees the license endpoints at all; gating there is external,
-via the control plane and `is_tenant_gated()`
-(`backend/ee/onyx/server/settings/api.py:check_ee_features_enabled`).
+deployment still registers the license routes. `GET /license`, `GET /license/seats`,
+and `POST /license/refresh` stay callable. Claim, upload, and delete reject cloud
+requests with a `MULTI_TENANT` check. Gating there is external, through the control
+plane: `backend/ee/onyx/server/middleware/tenant_tracking.py` calls
+`backend/ee/onyx/server/tenants/product_gating.py:is_tenant_gated`.
+`check_ee_features_enabled` returns true for cloud.
 
 An admin building a custom OpenAPI action or MCP tool also sees per-action
 gating: each action defaults to a policy (`ALWAYS`, `ASK`, `DENY` in
@@ -199,10 +202,11 @@ merely reaching that function already implies EE.
 - `fetch_ee_implementation_or_noop(module, attribute, noop_return_value)`
   (`variable_functionality.py:fetch_ee_implementation_or_noop`): checks
   `global_version.is_ee_version()` **first**, before attempting any import.
-  If not EE, it returns a synchronous or async no-op closure (built by
-  `inspect.iscoroutinefunction` on `noop_return_value`) that ignores every
-  argument and returns the captured `noop_return_value`, without ever
-  attempting to import `ee.<module>`. If EE, it delegates to
+  If not EE, it returns a no-op closure, without ever attempting to import
+  `ee.<module>`. The closure type depends on `inspect.iscoroutinefunction(noop_return_value)`.
+  A sync closure ignores every argument and returns `noop_return_value`. An async
+  closure calls and awaits `noop_return_value(*args, **kwargs)`, so the fallback
+  can run code. If EE, it delegates to
   `fetch_versioned_implementation` and re-raises on failure (an EE process
   that cannot load an EE-only symbol is a real error, not a fallback case).
   Also used for the tier guards in `backend/ee/onyx/utils/tier.py`

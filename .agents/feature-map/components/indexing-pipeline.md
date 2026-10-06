@@ -79,7 +79,7 @@ is already local.
 | `MAX_CHUNKS_PER_DOC_BATCH` | 1000 | Sub-batch size for the embed step inside one docprocessing task; see §4.4. |
 | `MAX_DOCUMENT_CHARS` | set | A document above this char count is skipped with a `ConnectorFailure`, not chunked. |
 | `PERSISTENT_INDEXING` | see configs | When true, an unhandled docprocessing batch exception is converted into per-doc failures and the attempt can finish (`COMPLETED_WITH_ERRORS`) instead of `FAILED`. Unhandled connector-generator exceptions in docfetching still mark the attempt `FAILED`. See `indexing/persistent_indexing.py` and §4.5. |
-| `ENABLE_CONTEXTUAL_RAG` | see configs | Global fallback; a `SearchSettings.enable_contextual_rag` per-model override wins when set. |
+| `ENABLE_CONTEXTUAL_RAG` | see configs | Contextual RAG is on when this global flag or `SearchSettings.enable_contextual_rag` is true. A per-model false does not turn off a true global flag (`indexing_pipeline.py`). |
 | `USE_DOCUMENT_SUMMARY` / `USE_CHUNK_SUMMARY` (`onyx/configs/app_configs.py`) | see configs | Which contextual-RAG LLM calls run; at least one must be true for `enable_contextual_rag`. |
 | `CONTEXTUAL_RAG_LLM_TIMEOUT` (`chat_configs.py`) | see configs | Timeout for each contextual-RAG LLM call. |
 | `MINI_CHUNK_SIZE`, `LARGE_CHUNK_RATIO`, `BLURB_SIZE`, `SKIP_METADATA_IN_CHUNK` | see configs | Multipass/large-chunk and blurb/metadata chunking knobs, `chunker.py`. |

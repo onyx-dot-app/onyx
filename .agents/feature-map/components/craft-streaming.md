@@ -153,7 +153,8 @@ drives the turn.
 is an HTTP client over one `opencode serve` process per sandbox pod
 (`ensure_session`, `send_message`, `get_message`, `abort`). It does not itself
 own the SSE connection to opencode: that is `PodEventBus`
-(`sandbox/opencode/event_bus.py:PodEventBus`), a single per-pod reader that
+(`sandbox/opencode/event_bus.py:PodEventBus`), one reader per
+`(sandbox_id, directory)` (the opencode `/event` stream is scoped by `?directory=`) that
 opens `GET {base_url}/event`, parses raw SSE blocks
 (`_parse_sse_block`), and dispatches each event to every subscriber whose
 `session_id` matches (`PodEventBus._dispatch`). One dead upstream connection

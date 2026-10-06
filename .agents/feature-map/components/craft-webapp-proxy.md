@@ -28,8 +28,10 @@ agent edits files. The user never runs a command to see this; the dev server
 starts the first time the agent (or the user, via a documented fallback
 script) needs it.
 
-Only the session's owner, or someone the session is shared with, can open the
-preview. A logged-in viewer without access gets a 404, not a broken frame.
+Only the session owner can load the Preview tab, because `get_webapp_info`
+verifies ownership. The proxy also admits any authenticated tenant user who
+knows the proxy URL when the sharing scope is `PUBLIC_ORG`. A logged-in viewer
+without access gets a 404, not a broken frame.
 A logged-out viewer is redirected to `/auth/login`.
 
 ---
@@ -49,15 +51,16 @@ endpoint that reports `has_webapp`, `webapp_url`, and `ready`; the frontend
 polls it to decide when to show the Preview tab and what iframe URL to pass
 it (`web/src/app/craft/components/OutputPanel.tsx`).
 
-### Redis cache keys (`webapp_proxy.py`)
+### Cache keys (`webapp_proxy.py`)
 
 | Key | TTL | Meaning |
 |---|---|---|
 | `craft:webapp:url:{session_id}` | 60 s | Cached sandbox base URL, so a hot proxy path skips a DB round trip. |
 | `craft:webapp:access:{session_id}:{user_id}` | 30 s | Cached "this user may view this session's webapp" grant. Only grants are cached; a 404 or 401 always re-checks. |
 
-Both are process-shared, not per-pod, so the cache is consistent across
-API server replicas.
+Both live in the configured `CacheBackend` (`get_cache_backend`: Redis, or
+PostgreSQL when `CACHE_BACKEND=postgres`). They are shared by all API server
+replicas, so the cache is consistent across them.
 
 ---
 
@@ -80,7 +83,7 @@ owns the `BuildSession` row this proxy resolves through
 
 `_get_sandbox_url` (`webapp_proxy.py`) resolves a session to a base URL:
 
-1. Check the Redis cache (`craft:webapp:url:{session_id}`).
+1. Check the cache backend (`craft:webapp:url:{session_id}`).
 2. On a miss, load `(sandbox_id, nextjs_port)` via
    `get_webapp_target_async`. Missing session, unallocated port, or missing
    sandbox each raise a distinct HTTP error (404, 503, 404).

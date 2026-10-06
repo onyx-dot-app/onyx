@@ -17,7 +17,8 @@ Some paths map to more than one component. Read all of them.
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/chat/llm_loop.py`, `llm_step.py`, `process_message.py`, `chat_state.py`, `emitter.py`, `stop_signal_checker.py`, `stream_buffer.py` | core-chat-loop |
+| `backend/onyx/chat/llm_loop.py`, `llm_step.py`, `process_message.py`, `chat_state.py`, `chat_processing_checker.py`, `stop_signal_checker.py` | core-chat-loop |
+| `backend/onyx/chat/emitter.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
 | `backend/onyx/chat/prompt_utils.py`, `compression.py`, `token_budget.py`, `incognito*.py` | context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly, agents-personas |
 | `backend/onyx/chat/citation_processor.py`, `citation_utils.py` | citations |

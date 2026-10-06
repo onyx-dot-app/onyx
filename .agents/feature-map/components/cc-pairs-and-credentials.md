@@ -275,7 +275,8 @@ idempotent and resumable.
 
 Every admin-facing credential response goes through
 `CredentialSnapshot.from_credential_db_model` (`server/documents/models.py:153`),
-which calls `credential.credential_json.get_value(apply_mask=mask_credential_prefix)`.
+which calls `credential.credential_json.get_value(apply_mask=False)` and then
+applies `mask_credential_dict` when `mask_credential_prefix` is true.
 `mask_credential_prefix` comes from `get_security_settings().mask_credential_prefix`
 (`server/security/store.py:106`), sourced from `MASK_CREDENTIAL_PREFIX`
 (`configs/app_configs.py`, **default `True`**). When masked,
@@ -354,10 +355,10 @@ used only when a pairing has no indexed documents; see §2). The real flow:
 7. Once the taskset drains with zero remaining `document_by_connector_credential_pair`
    rows for the pair, `monitor_connector_deletion_taskset` deletes the
    `ConnectorCredentialPair` row itself (`delete_connector_credential_pair__no_commit`)
-   and, if no other pair uses them, leaves the `Connector`/`Credential` rows
-   otherwise untouched (they cascade-delete only when their own delete is
-   called, e.g. `db/connector.py:delete_connector`, which is explicitly marked
-   "be VERY careful" and is not on the normal deletion path).
+   and then deletes the `Connector` row if no credentials remain on it. The
+   `Credential` rows stay. They cascade-delete only when their own delete is
+   called. `db/connector.py:delete_connector` is explicitly marked "be VERY
+   careful" and is not on the normal deletion path.
 8. `sync_record` for `SyncType.CONNECTOR_DELETION` tracks progress throughout;
    `cleanup_sync_records` clears it if the cc-pair somehow left `DELETING`
    before finishing.

@@ -259,10 +259,13 @@ not cover:
    dependency on the user-facing `/build` router. The separate `/build/admin`
    router does not use it (item 5). The frontend's `craftAvailable` flag only controls whether
    the nav item and page render; it grants nothing by itself.
-2. **An app not connected/enabled cannot have its credentials injected.**
-   `credential_injection.py` resolvers only claim requests for apps a user has
-   authenticated against; an app the admin has not enabled has no live
-   `ExternalAppUserCredential` for any user to claim with.
+2. **A disabled app gets no credential injection.**
+   `ExternalAppResolver` renders headers through
+   `external_apps/credentials.py:resolve_injection_headers`. That function
+   returns `{}` when the app is missing or not `enabled`. Otherwise it merges the
+   organization credentials with the user's `ExternalAppUserCredential`, if any.
+   An org-credentialed app needs no per-user row. Disabling an app does not
+   delete stored user credentials.
 3. **A connected app's `DENY`-policied action is blocked before any upstream
    connection for that action, not just hidden from the agent's tool list.**
    The gate addon (`sandbox_proxy/addons/gate.py`) returns `http_403` before

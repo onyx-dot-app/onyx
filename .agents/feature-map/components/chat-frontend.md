@@ -473,8 +473,9 @@ hoc for a one-off check.
 6. Drag an image file onto the page (not into the input bar) and confirm it uploads.
 7. Press stop mid-answer, reload the page, confirm the partial answer persisted and the
    session did not resume generating.
-8. Open the share modal, toggle public, open the `/app/shared/{id}` link in a private
-   window, confirm it renders without requiring the same account's edit affordances.
+8. Open the share modal, toggle public, and copy the `/app/shared/{id}` link. In a private
+   window, sign in as another user and open the link. Confirm it renders read-only.
+   An unauthenticated window redirects to sign-in.
 
 ### What "working" looks like
 

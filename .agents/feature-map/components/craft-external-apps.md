@@ -169,9 +169,10 @@ sandbox process (opencode / a tool call)
      destination_is_blocked(host, port) denies anything that is, or resolves
      to, a non-globally-routable address, except ONYX_SERVER_URL's own
      host:port. Checked at http_connect (early deny), request (decrypted
-     inner request, both HTTP and HTTPS), and server_connect (the
-     authoritative, rebind-proof backstop right before mitmproxy opens the
-     upstream TCP connection).
+     inner request, both HTTP and HTTPS), and server_connect (a final
+     re-check right before mitmproxy opens the upstream TCP connection).
+     It narrows the DNS-rebinding window but does not close it: gate.py
+     does not pin server.address to the resolved IP.
      sandbox_proxy/addons/gate.py:destination_is_blocked, GateAddon.server_connect
   │
 3. Identity resolution
@@ -203,7 +204,9 @@ sandbox process (opencode / a tool call)
      sandbox_proxy/request_evaluator.py:CompositeRequestEvaluator.evaluate
   │
 6. Policy evaluation
-     matched_actions is None        -> off-catalog: skip to step 8 ungated.
+     matched_actions is None        -> off-catalog: skip policy evaluation (ungated),
+                                        but continue to step 7 for host-based credential
+                                        injection or a credential-error block.
      governing_action.policy DENY   -> 403 policy_denied, no DB row, no upstream call.
      governing_action.policy ALWAYS -> proceed straight to credential injection (step 7).
      governing_action.policy ASK    -> resolve the originating BuildSession from the

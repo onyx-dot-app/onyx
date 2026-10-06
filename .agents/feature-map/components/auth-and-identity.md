@@ -55,7 +55,9 @@ new signups are ordinary users unless an admin invites them or a domain is
 configured to auto-provision.
 
 Once signed in, the session persists across page loads via a cookie, and
-"log out" invalidates it immediately rather than waiting for expiry.
+"log out" invalidates Redis-backed sessions immediately. Stateless JWTs
+(`AUTH_BACKEND=jwt`) stay valid until expiry, because
+`SingleTenantJWTStrategy.destroy_token` does nothing.
 Native mobile clients get the same session in a header instead of a cookie
 (`bearer_transport`, `backend/onyx/auth/users.py`). A signed-out
 anonymous visitor can still use chat if an admin turned that on, with public

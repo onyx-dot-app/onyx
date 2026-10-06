@@ -29,8 +29,10 @@ persona per guild and optionally overriding it per channel
 (`web/src/app/admin/discord-bot/[guild-id]/page.tsx`). In an enabled channel, the
 bot answers when @mentioned, or always if `require_bot_invocation` is off, or
 implicitly when a user replies to the bot or posts in a bot-owned thread
-(`handle_message.py:check_implicit_invocation`). Answers can go inline, as a
-reply, or into a dedicated thread depending on `thread_only_mode`.
+(`handle_message.py:check_implicit_invocation`). Answers
+reply to the message by default. With `thread_only_mode` on, the bot makes a
+dedicated thread and answers there. Inside an existing thread it answers in
+that thread (`handle_message.py:send_response`).
 
 ---
 
@@ -42,7 +44,8 @@ reply, or into a dedicated thread depending on `thread_only_mode`.
 | `/admin/discord-bot/[guild-id]` | `web/src/app/admin/discord-bot/[guild-id]/page.tsx`, channel table and persona overrides |
 | `GET/POST/DELETE /manage/admin/discord-bot/config` | `discord_bot/api.py`, self-hosted-only bot token management |
 | `GET/POST/PATCH/DELETE /manage/admin/discord-bot/guilds` (and `/guilds/{id}`) | `discord_bot/api.py` |
-| `GET/PATCH /manage/admin/discord-bot/guilds/{id}/channels` | `discord_bot/api.py` |
+| `GET /manage/admin/discord-bot/guilds/{config_id}/channels` | `discord_bot/api.py` |
+| `PATCH /manage/admin/discord-bot/guilds/{guild_config_id}/channels/{channel_config_id}` | `discord_bot/api.py` |
 | `DELETE /manage/admin/discord-bot/service-api-key` | `discord_bot/api.py` |
 | `!register <key>` Discord command | `handle_commands.py:handle_registration_command` |
 | `!sync-channels` Discord command | `handle_commands.py:handle_sync_channels_command` |
