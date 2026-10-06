@@ -13,7 +13,7 @@ from onyx.connectors.gmail.connector import (
     _build_time_range_query,
     thread_to_document,
 )
-from onyx.connectors.models import Document, TextSection
+from onyx.connectors.models import Document, SlimDocument, TextSection
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
@@ -237,3 +237,67 @@ def test_gmail_checkpoint_progression() -> None:
     assert isinstance(final_checkpoint, GmailCheckpoint)
     assert final_checkpoint.has_more is False
     assert final_checkpoint.user_emails == []
+
+
+def test_slim_listing_reads_every_page_of_every_user() -> None:
+    """The slim listing (used by pruning and permission sync) must return
+    every thread: all pages of a user, and each user from its first page."""
+    connector = GmailConnector()
+    connector._creds = MagicMock()
+    connector._primary_admin_email = "admin@example.com"
+
+    thread_list_responses: dict[str, dict[str | None, dict[str, Any]]] = {
+        "user1@example.com": {
+            None: {
+                "threads": [{"id": "t1"}, {"id": "t2"}],
+                "nextPageToken": "token-user1-page2",
+            },
+            "token-user1-page2": {
+                "threads": [{"id": "t3"}],
+                "nextPageToken": None,
+            },
+        },
+        "user2@example.com": {
+            None: {"threads": [{"id": "t4"}], "nextPageToken": None},
+        },
+    }
+    list_calls: list[tuple[str, str | None]] = []
+
+    def fake_get_gmail_service(_: object, __: str) -> MagicMock:
+        def list_threads(
+            *,
+            userId: str,
+            pageToken: str | None = None,
+            **_: object,
+        ) -> MagicMock:
+            list_calls.append((userId, pageToken))
+            request = MagicMock()
+            request.execute.return_value = thread_list_responses[userId][pageToken]
+            return request
+
+        service = MagicMock()
+        service.users.return_value.threads.return_value.list.side_effect = list_threads
+        return service
+
+    with patch.object(
+        GmailConnector,
+        "_get_all_user_emails",
+        return_value=["user1@example.com", "user2@example.com"],
+    ):
+        with patch(
+            "onyx.connectors.gmail.connector.get_gmail_service",
+            side_effect=fake_get_gmail_service,
+        ):
+            slim_ids = [
+                item.id
+                for batch in connector.retrieve_all_slim_docs_perm_sync()
+                for item in batch
+                if isinstance(item, SlimDocument)
+            ]
+
+    assert sorted(slim_ids) == ["t1", "t2", "t3", "t4"]
+    assert list_calls == [
+        ("user1@example.com", None),
+        ("user1@example.com", "token-user1-page2"),
+        ("user2@example.com", None),
+    ]

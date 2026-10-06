@@ -488,6 +488,9 @@ class GmailConnector(
             ):
                 # if a page token is returned, set it and leave the function
                 if isinstance(thread, str):
+                    # The threads of this page must not be lost.
+                    if slim_doc_batch:
+                        yield slim_doc_batch
                     set_page_token(thread)
                     return
                 if is_slim:
@@ -650,14 +653,22 @@ class GmailConnector(
                 pt_dict[PAGE_TOKEN_KEY] = page_token
 
             for user_email in self._get_all_user_emails():
-                yield from self._fetch_slim_threads(
-                    user_email,
-                    pt_dict[PAGE_TOKEN_KEY],
-                    set_page_token,
-                    start,
-                    end,
-                    callback=callback,
-                )
+                # Each call reads one page. List every page of this user,
+                # and start the next user from its first page.
+                page_token: str | None = None
+                while True:
+                    pt_dict[PAGE_TOKEN_KEY] = None
+                    yield from self._fetch_slim_threads(
+                        user_email,
+                        page_token,
+                        set_page_token,
+                        start,
+                        end,
+                        callback=callback,
+                    )
+                    page_token = pt_dict[PAGE_TOKEN_KEY]
+                    if page_token is None:
+                        break
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
