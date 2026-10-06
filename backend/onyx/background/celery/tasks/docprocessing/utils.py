@@ -279,6 +279,11 @@ def should_index(
         if cc_pair.indexing_trigger is not None:
             # if a manual indexing trigger is on the cc pair, honor it for live search settings
             return True
+        # The first attempt spends the trigger. A pending prune-after-reindex
+        # request keeps the pair due until a full re-index succeeds, even
+        # without refresh_freq.
+        if cc_pair.prune_after_reindex_requested_at is not None:
+            return True
 
     # if no attempt has ever occurred, we should index regardless of refresh_freq
     if not last_index_attempt:

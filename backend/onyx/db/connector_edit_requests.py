@@ -23,6 +23,8 @@ def _lock_cc_pair_for_request(
         select(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
         .with_for_update()
+        # Read the locked row, not a stale copy from the identity map.
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if cc_pair is None:
         raise OnyxError(
@@ -99,8 +101,9 @@ def request_prune_after_reindex__no_commit(
 ) -> None:
     """Asks for a full re-index of the current index and a prune once one
     succeeds, so documents that left the scope are removed after the new
-    crawl. Until then every new attempt on the current index is a full
-    re-index, so a failed or canceled one passes the request on."""
+    crawl. Until then the pair stays due on the current index, even without
+    refresh_freq, and every new attempt there is a full re-index, so a failed
+    or canceled one passes the request on."""
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
     cc_pair.prune_after_reindex_requested_at = func.now()
     cc_pair.indexing_trigger = IndexingMode.REINDEX

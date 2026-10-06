@@ -417,6 +417,36 @@ def test_prune_request_waits_for_a_running_prune_and_clears_on_its_own(
     assert not _is_pruning_due(cc_pair)
 
 
+def test_failed_prune_keeps_the_request(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pruning_tasks, "ALLOW_SIMULTANEOUS_PRUNING", True)
+    tenant_id = get_current_tenant_id()
+    redis_connector = RedisConnector(tenant_id, cc_pair.id)
+
+    request_prune__no_commit(db_session, cc_pair.id)
+    db_session.commit()
+    db_session.refresh(cc_pair)
+    requested_at = cc_pair.prune_requested_at
+    assert requested_at is not None
+    celery_app = MagicMock()
+    celery_app.send_task.return_value.id = "requested_task"
+    assert (
+        try_creating_prune_generator_task(
+            celery_app, cc_pair, db_session, get_redis_client(), tenant_id
+        )
+        is not None
+    )
+
+    redis_connector.prune.set_generator_failed()
+    _finish_prune(db_session, redis_connector, tenant_id)
+    db_session.refresh(cc_pair)
+    assert cc_pair.prune_requested_at == requested_at
+    assert cc_pair.last_pruned is None
+
+
 def test_prune_success_keeps_a_newer_request(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
@@ -453,9 +483,9 @@ def test_prune_after_reindex_waits_for_a_successful_full_reindex(
     cc_pair: ConnectorCredentialPair,
     search_settings: SearchSettings,
 ) -> None:
-    # Scheduled runs are due at once after the trigger is spent.
-    cc_pair.connector.refresh_freq = 0
-    db_session.commit()
+    # Unscheduled: only the pending request keeps the pair due after the
+    # first attempt spends the trigger.
+    assert cc_pair.connector.refresh_freq is None
 
     request_prune_after_reindex__no_commit(db_session, cc_pair.id)
     db_session.commit()
@@ -487,7 +517,13 @@ def test_prune_after_reindex_waits_for_a_successful_full_reindex(
     assert cc_pair.prune_requested_at is not None
     assert cc_pair.prune_after_reindex_requested_at is None
 
-    # With the request served, the next run is incremental again.
+    # With the request served, the unscheduled pair is not due.
+    _run_beat(db_session, cc_pair, search_settings)
+    assert len(_attempts(db_session, cc_pair.id)) == 2
+
+    # A scheduled run is incremental again.
+    cc_pair.connector.refresh_freq = 0
+    db_session.commit()
     _run_beat(db_session, cc_pair, search_settings)
     *_, third = _attempts(db_session, cc_pair.id)
     assert not third.from_beginning
