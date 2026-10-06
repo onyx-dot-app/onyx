@@ -8,6 +8,7 @@ from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
     ScopeInclude,
+    ScopeOpaque,
     ScopeOrdered,
 )
 
@@ -22,10 +23,16 @@ class TestRailConnectorConfig(ConnectorConfig):
     # comes only from the API.
     project_ids: Annotated[
         str | list[int] | None,
-        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=True, empty_list_means_none=True),
+        ),
     ] = None
-    # Matters only when max_pages cuts the case list short.
-    cases_page_size: Annotated[int | None, FieldPolicy(FieldClass.COSMETIC)] = None
+    # Cases per page. With max_pages it caps the cases fetched per project and
+    # suite, so a change can fetch more or fewer cases.
+    cases_page_size: Annotated[
+        int | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
+    ] = None
     # A cap on case pages per project and suite.
     max_pages: Annotated[
         int | None,
@@ -46,7 +53,7 @@ class TestRailConnectorConfig(ConnectorConfig):
         ),
     ] = None
 
-    # The constructor treats a blank string like None (use the default).
+    # The constructor treats a blank string and 0 like None (use the default).
     @field_validator(
         "cases_page_size", "max_pages", "skip_doc_absolute_chars", mode="before"
     )
@@ -55,3 +62,10 @@ class TestRailConnectorConfig(ConnectorConfig):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator(
+        "cases_page_size", "max_pages", "skip_doc_absolute_chars", mode="after"
+    )
+    @classmethod
+    def _zero_to_none(cls, value: int | None) -> int | None:
+        return value or None

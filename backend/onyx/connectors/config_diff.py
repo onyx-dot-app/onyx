@@ -20,7 +20,7 @@ from onyx.connectors.field_policy import (
     ScopeToggle,
     get_field_policy,
 )
-from onyx.connectors.planning_rule import PlanningRule
+from onyx.connectors.planning_rule import ConnectorChangeOverride, PlanningRule
 from onyx.connectors.planning_rule_registry import PLANNING_RULES
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.utils.logger import setup_logger
@@ -97,9 +97,9 @@ def _inverted(direction: ScopeDirection) -> ScopeDirection:
 def _ordered_direction(
     field_name: str, scope: ScopeOrdered, old_value: Any, new_value: Any
 ) -> ScopeDirection:
-    old = scope.none_means if old_value is None else old_value
-    new = scope.none_means if new_value is None else new_value
-    if old == new:
+    old: Any = scope.none_means if old_value is None else old_value
+    new: Any = scope.none_means if new_value is None else new_value
+    if old == new or (old in scope.unbounded and new in scope.unbounded):
         return ScopeDirection.NONE
     if old in scope.unbounded:
         return ScopeDirection.NARROW
@@ -236,7 +236,7 @@ def classify_config_change(
     """
     old_model = _validate(config_class, old_config)
     new_model = _validate(config_class, new_config)
-    override = None
+    override: ConnectorChangeOverride | None = None
     if old_model and new_model:
         old_values = old_model.model_dump(mode="json")
         new_values = new_model.model_dump(mode="json")
@@ -246,11 +246,12 @@ def classify_config_change(
         old_values = _with_defaults(config_class, old_config)
         new_values = _with_defaults(config_class, new_config)
     rule_directions = override.scope_directions if override else {}
-    for name in rule_directions:
+    rule_added_items = override.added_items if override else {}
+    for name in [*rule_directions, *rule_added_items]:
         policy = _policy_for(config_class, name)
         if policy is None or policy.field_class != FieldClass.SCOPE:
             raise ValueError(
-                f"The planning rule for {config_class.__name__} returned a direction for {name}, which is not a SCOPE field"
+                f"The planning rule for {config_class.__name__} returned {name}, which is not a SCOPE field"
             )
 
     changed_names = [
@@ -289,7 +290,7 @@ def classify_config_change(
                 field_name=name,
                 field_class=FieldClass.SCOPE,
                 scope_direction=direction,
-                added_items=scope_change.added_items,
+                added_items=rule_added_items.get(name, scope_change.added_items),
                 removed_items=scope_change.removed_items,
             )
         )

@@ -5,10 +5,14 @@ from onyx.connectors.connector_config import ConnectorConfig, CredentialBinding
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
+    ScopeDirection,
     ScopeExclude,
     ScopeInclude,
     ScopeOpaque,
 )
+from onyx.connectors.planning_rule import ConnectorChangeOverride
+
+_PROJECT_KEY = "project_key"
 
 
 class JiraCredentialBinding(CredentialBinding):
@@ -39,3 +43,14 @@ class JiraConnectorConfig(JiraCredentialBinding, ConnectorConfig):
     jql_query: Annotated[
         str | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
     ] = None
+
+
+def jira_planning_rule(
+    old: JiraConnectorConfig, new: JiraConnectorConfig
+) -> ConnectorChangeOverride | None:
+    # The connector ignores the project key while a JQL query is set.
+    if old.jql_query and new.jql_query:
+        return ConnectorChangeOverride(
+            scope_directions={_PROJECT_KEY: ScopeDirection.NONE}
+        )
+    return None

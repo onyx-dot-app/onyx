@@ -18,5 +18,8 @@ class HubSpotConnectorConfig(ConnectorConfig):
     # None fetches every type. [] fetches none, but the form cannot send it.
     object_types: Annotated[
         list[HubSpotObjectType] | None,
-        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=True, empty_list_means_none=True),
+        ),
     ] = None

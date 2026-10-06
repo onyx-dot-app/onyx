@@ -44,16 +44,20 @@ def salesforce_planning_rule(
         return None
     # An empty list means the default types, and the connector
     # normalizes the case of each type.
-    old_types = set(resolve_parent_object_types(old.requested_objects))
-    new_types = set(resolve_parent_object_types(new.requested_objects))
-    widens = bool(new_types - old_types)
-    narrows = bool(old_types - new_types)
-    if widens and narrows:
+    old_types: list[str] = resolve_parent_object_types(old.requested_objects)
+    new_types: list[str] = resolve_parent_object_types(new.requested_objects)
+    added: list[str] = list(dict.fromkeys(t for t in new_types if t not in old_types))
+    narrows: bool = bool(set(old_types) - set(new_types))
+    direction: ScopeDirection
+    if added and narrows:
         direction = ScopeDirection.BOTH
-    elif widens:
+    elif added:
         direction = ScopeDirection.WIDEN
     elif narrows:
         direction = ScopeDirection.NARROW
     else:
         direction = ScopeDirection.NONE
-    return ConnectorChangeOverride(scope_directions={_REQUESTED_OBJECTS: direction})
+    return ConnectorChangeOverride(
+        scope_directions={_REQUESTED_OBJECTS: direction},
+        added_items={_REQUESTED_OBJECTS: added},
+    )

@@ -34,6 +34,9 @@ class ConnectorChangeOverride(BaseModel):
     # A direction per SCOPE field. Fields not named here use the direction
     # from their descriptor.
     scope_directions: dict[str, ScopeDirection] = {}
+    # The items a change added, per SCOPE field, e.g. for a scoped backfill.
+    # Fields not named here use the items from their descriptor.
+    added_items: dict[str, list[str]] = {}
 
 
 class PlanningRule(BaseModel):

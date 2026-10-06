@@ -8,9 +8,13 @@ from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
+    ScopeDirection,
     ScopeInclude,
     ScopeOpaque,
 )
+from onyx.connectors.planning_rule import ConnectorChangeOverride
+
+_CONNECTOR_IDS = "connector_ids"
 
 
 class ClickupConnectorType(StrEnum):
@@ -43,3 +47,18 @@ class ClickupConnectorConfig(ConnectorConfig):
     @classmethod
     def _blank_to_none(cls, value: Any) -> Any:
         return None if value == "" else value
+
+
+def _is_workspace_mode(config: ClickupConnectorConfig) -> bool:
+    return config.connector_type in (None, ClickupConnectorType.WORKSPACE)
+
+
+def clickup_planning_rule(
+    old: ClickupConnectorConfig, new: ClickupConnectorConfig
+) -> ConnectorChangeOverride | None:
+    # A workspace connector sends no container filter.
+    if _is_workspace_mode(old) and _is_workspace_mode(new):
+        return ConnectorChangeOverride(
+            scope_directions={_CONNECTOR_IDS: ScopeDirection.NONE}
+        )
+    return None

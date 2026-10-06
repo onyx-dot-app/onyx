@@ -11,10 +11,13 @@ from onyx.connectors.field_policy import ScopeDirection
 from onyx.connectors.github.config import GithubConnectorConfig
 from onyx.connectors.planning_rule_registry import PLANNING_RULES
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.connectors.testrail import config as testrail_config
 
 _CONFLUENCE_SITE = {"wiki_base": "https://example.atlassian.net", "is_cloud": True}
 _BITBUCKET_WORKSPACE = {"workspace": "onyx"}
 _DRUPAL_SITE = {"base_url": "https://wiki.example.com"}
+_ASANA_WORKSPACE = {"asana_workspace_id": "w"}
+_JIRA_SITE = {"jira_base_url": "https://example.atlassian.net"}
 
 
 def test_every_rule_reads_the_config_class_of_its_source() -> None:
@@ -219,6 +222,122 @@ def test_every_rule_reads_the_config_class_of_its_source() -> None:
             _DRUPAL_SITE | {"spaces": ["1"]},
             {"spaces": ScopeDirection.WIDEN, "pages": ScopeDirection.NARROW},
         ),
+        # Asana: the team filter applies only without project ids.
+        (
+            DocumentSource.ASANA,
+            _ASANA_WORKSPACE | {"asana_project_ids": "1", "asana_team_id": "a"},
+            _ASANA_WORKSPACE | {"asana_project_ids": "1", "asana_team_id": "b"},
+            {},
+        ),
+        (
+            DocumentSource.ASANA,
+            _ASANA_WORKSPACE | {"asana_team_id": "a"},
+            _ASANA_WORKSPACE | {"asana_team_id": "b"},
+            {"asana_team_id": ScopeDirection.BOTH},
+        ),
+        # Jira: a JQL query replaces the project key.
+        (
+            DocumentSource.JIRA,
+            _JIRA_SITE | {"jql_query": "q", "project_key": "A"},
+            _JIRA_SITE | {"jql_query": "q", "project_key": "B"},
+            {},
+        ),
+        (
+            DocumentSource.JIRA,
+            _JIRA_SITE | {"project_key": "A"},
+            _JIRA_SITE | {"project_key": "B"},
+            {"project_key": ScopeDirection.BOTH},
+        ),
+        # ClickUp: a workspace connector sends no container filter.
+        (
+            DocumentSource.CLICKUP,
+            {"connector_ids": ["1"]},
+            {"connector_ids": ["2"]},
+            {},
+        ),
+        (
+            DocumentSource.CLICKUP,
+            {"connector_type": "list", "connector_ids": ["1"]},
+            {"connector_type": "list", "connector_ids": ["1", "2"]},
+            {"connector_ids": ScopeDirection.WIDEN},
+        ),
+        # Notion: a root page is always followed recursively.
+        (
+            DocumentSource.NOTION,
+            {"root_page_id": "r", "recursive_index_enabled": False},
+            {"root_page_id": "r", "recursive_index_enabled": True},
+            {},
+        ),
+        (
+            DocumentSource.NOTION,
+            {"recursive_index_enabled": False},
+            {"recursive_index_enabled": True},
+            {"recursive_index_enabled": ScopeDirection.WIDEN},
+        ),
+        # Outlook matches excluded folder names without case.
+        (
+            DocumentSource.OUTLOOK,
+            {"excluded_folders": ["Inbox"]},
+            {"excluded_folders": ["inbox "]},
+            {},
+        ),
+        (
+            DocumentSource.OUTLOOK,
+            {"excluded_folders": ["Inbox"]},
+            {"excluded_folders": ["inbox", "Sent"]},
+            {"excluded_folders": ScopeDirection.NARROW},
+        ),
+        # Two unbounded values are the same scope.
+        (DocumentSource.DISCORD, {"start_date": None}, {"start_date": ""}, {}),
+        # TestRail: 0 and blank are the default limit, and only None or a
+        # blank string fetches every project.
+        (
+            DocumentSource.TESTRAIL,
+            {"max_pages": 100},
+            {"max_pages": 0},
+            {"max_pages": ScopeDirection.WIDEN},
+        ),
+        (DocumentSource.TESTRAIL, {"skip_doc_absolute_chars": ""}, {}, {}),
+        (
+            DocumentSource.TESTRAIL,
+            {"cases_page_size": 100},
+            {"cases_page_size": 50},
+            {"cases_page_size": ScopeDirection.UNKNOWN},
+        ),
+        (
+            DocumentSource.TESTRAIL,
+            {"project_ids": ""},
+            {"project_ids": []},
+            {"project_ids": ScopeDirection.NARROW},
+        ),
+        (
+            DocumentSource.TESTRAIL,
+            {"project_ids": []},
+            {"project_ids": "1"},
+            {"project_ids": ScopeDirection.WIDEN},
+        ),
+        # HubSpot: None fetches every type, [] none.
+        (
+            DocumentSource.HUBSPOT,
+            {},
+            {"object_types": []},
+            {"object_types": ScopeDirection.NARROW},
+        ),
+        (
+            DocumentSource.HUBSPOT,
+            {"object_types": []},
+            {"object_types": ["tickets"]},
+            {"object_types": ScopeDirection.WIDEN},
+        ),
+        # Loopio: a blank stack name fetches every stack, as None does.
+        (DocumentSource.LOOPIO, {"loopio_stack_name": " "}, {}, {}),
+        # Xenforo: the crawled URL is not part of document ids.
+        (
+            DocumentSource.XENFORO,
+            {"base_url": "https://a.example.com/threads/1/"},
+            {"base_url": "https://a.example.com/threads/2/"},
+            {"base_url": ScopeDirection.UNKNOWN},
+        ),
     ],
 )
 def test_source_rule_directions(
@@ -268,6 +387,25 @@ def test_github_scoped_backfill_for_added_repositories() -> None:
     )
 
     assert delta == {"repo_owner": "onyx", "repositories": "b", "include_issues": True}
+
+
+def test_salesforce_scoped_backfill_holds_only_added_types() -> None:
+    # {} resolves to Account, so only Contact is new.
+    delta = build_source_scoped_backfill_config(
+        DocumentSource.SALESFORCE, {}, {"requested_objects": ["Account", "Contact"]}
+    )
+
+    assert delta == {"requested_objects": ["Contact"]}
+
+
+def test_testrail_zero_and_blank_limits_are_none() -> None:
+    config = testrail_config.TestRailConnectorConfig.model_validate(
+        {"max_pages": 0, "skip_doc_absolute_chars": "", "cases_page_size": 0}
+    )
+
+    assert config.max_pages is None
+    assert config.skip_doc_absolute_chars is None
+    assert config.cases_page_size is None
 
 
 def test_rule_direction_blocks_scoped_backfill() -> None:
