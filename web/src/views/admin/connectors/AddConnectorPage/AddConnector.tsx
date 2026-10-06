@@ -12,6 +12,7 @@ import { SvgPlugBroken } from "@opal/illustrations";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { Divider, MessageCard, Button } from "@opal/components";
 import { SvgArrowExchange } from "@opal/icons";
+import { Disabled } from "@opal/core";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
@@ -648,35 +649,44 @@ export default function AddConnector({ connector }: AddConnectorProps) {
                     )}
 
                     {/* The wizard could not reach these sections without a
-                      valid credential; on one page they stay disabled until
-                      the credential and the bound fields are valid instead. */}
-                    <ConnectorContentSection
-                      config={credentialBoundFields.rest}
-                      values={formikProps.values}
-                      connector={connector}
-                      currentCredential={formCredential}
+                      valid credential; on one page they stay locked, under one
+                      Disabled that blocks pointer and keyboard, until the
+                      credential and the bound fields are valid. */}
+                    <Disabled
                       disabled={!configUnlocked}
-                      disabledReason={gateMessage ?? undefined}
-                    />
-
-                    <Divider paddingParallel={0} paddingPerpendicular={0} />
-                    <ConnectorSettingsSection
-                      connector={connector}
-                      currentCredential={formCredential}
-                      disabled={!configUnlocked}
-                      disabledReason={gateMessage ?? undefined}
-                    />
-
-                    {connector !== "file" && (
-                      <>
-                        <Divider paddingParallel={0} paddingPerpendicular={0} />
-                        <ScheduleSection
-                          defaultPruneFreqHours={defaultPruneFreqHours}
+                      tooltip={gateMessage ?? undefined}
+                      data-testid="connector-form"
+                    >
+                      <Section gap={6} alignItems="stretch" width="full">
+                        <ConnectorContentSection
+                          config={credentialBoundFields.rest}
+                          values={formikProps.values}
+                          connector={connector}
+                          currentCredential={formCredential}
                           disabled={!configUnlocked}
-                          disabledReason={gateMessage ?? undefined}
                         />
-                      </>
-                    )}
+
+                        <Divider paddingParallel={0} paddingPerpendicular={0} />
+                        <ConnectorSettingsSection
+                          connector={connector}
+                          currentCredential={formCredential}
+                          disabled={!configUnlocked}
+                        />
+
+                        {connector !== "file" && (
+                          <>
+                            <Divider
+                              paddingParallel={0}
+                              paddingPerpendicular={0}
+                            />
+                            <ScheduleSection
+                              defaultPruneFreqHours={defaultPruneFreqHours}
+                              disabled={!configUnlocked}
+                            />
+                          </>
+                        )}
+                      </Section>
+                    </Disabled>
                   </Section>
                 </>
               )}

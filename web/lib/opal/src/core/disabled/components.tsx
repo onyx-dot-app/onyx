@@ -44,7 +44,8 @@ interface DisabledProps extends WithoutStyles<
 
 /**
  * Wrapper component that applies baseline disabled CSS (opacity, cursor,
- * pointer-events) to its children.
+ * pointer-events) to its children, and, unless `allowClick` is set, disables
+ * the form controls inside so the keyboard cannot reach them either.
  *
  * Renders a `<div>` that carries the `data-opal-disabled` attribute so the
  * CSS rules in `styles.css` take effect on the wrapper and cascade into its
@@ -68,10 +69,16 @@ function Disabled({
   tooltip,
   tooltipSide = "right",
   ref,
+  children,
   ...rest
 }: DisabledProps) {
   const showTooltip = disabled && tooltip;
   const enableClick = allowClick || showTooltip;
+  // The CSS only blocks the pointer. A disabled fieldset also takes the form
+  // controls inside out of the tab order and stops keyboard input. It is
+  // always rendered, so toggling `disabled` never remounts the children.
+  // `allowClick` keeps the children interactive, so it keeps the keyboard.
+  const blockKeyboard: boolean = Boolean(disabled) && !allowClick;
 
   const wrapper = (
     <div
@@ -80,7 +87,11 @@ function Disabled({
       aria-disabled={disabled || undefined}
       data-opal-disabled={disabled || undefined}
       data-allow-click={disabled && enableClick ? "" : undefined}
-    />
+    >
+      <fieldset disabled={blockKeyboard} className="contents">
+        {children}
+      </fieldset>
+    </div>
   );
 
   if (!showTooltip) return wrapper;

@@ -6,12 +6,17 @@ Wrapper component that applies baseline disabled CSS (opacity, cursor, pointer-e
 children. Renders a `<div>` with the `data-opal-disabled` attribute so styling cascades into all
 descendants. Works with any children — DOM elements, React components, or fragments.
 
+When `disabled` is true, it also blocks the keyboard: the children sit in a `<fieldset>` (with
+`display: contents`) that is disabled, so the form controls inside leave the tab order and take no
+input. `allowClick` keeps the children interactive, so it leaves the keyboard enabled too. The
+fieldset is always rendered, so toggling `disabled` does not remount the children.
+
 ## Props
 
 | Prop          | Type                                     | Default   | Description                                                                         |
 | ------------- | ---------------------------------------- | --------- | ----------------------------------------------------------------------------------- |
 | `disabled`    | `boolean`                                | `false`   | Applies disabled styling when truthy                                                |
-| `allowClick`  | `boolean`                                | `false`   | Re-enables pointer events while keeping disabled visuals                            |
+| `allowClick`  | `boolean`                                | `false`   | Re-enables pointer events and keyboard input while keeping disabled visuals         |
 | `tooltip`     | `string \| RichStr`                      | —         | Tooltip shown on hover when disabled (implies `allowClick`). Supports `markdown()`. |
 | `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on                                                   |
 

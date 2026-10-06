@@ -1,5 +1,4 @@
 import { useTranslations } from "next-intl";
-import { Disabled } from "@opal/core";
 import {
   Card,
   Collapsible,
@@ -18,9 +17,8 @@ import {
 
 interface ScheduleSectionProps {
   defaultPruneFreqHours?: number;
+  /** Freezes the section while the page locks the configuration. */
   disabled?: boolean;
-  /** Why the section is disabled, shown as a tooltip. */
-  disabledReason?: string;
 }
 
 // `indexingStart` is stored as a "YYYY-MM-DD" string. Read and write it in
@@ -43,110 +41,103 @@ function formatIndexingStart(date: Date | null): string {
 export default function ScheduleSection({
   defaultPruneFreqHours = 600,
   disabled,
-  disabledReason,
 }: ScheduleSectionProps) {
   const t = useTranslations("admin.connectorsList.scheduled");
 
   return (
-    <Disabled disabled={disabled} tooltip={disabledReason}>
-      {/* A disabled fieldset also takes the controls out of the tab order;
-        the wrapper above only blocks the pointer. */}
-      <fieldset disabled={disabled} className="contents">
-        <Collapsible
-          title={t("title")}
-          description={t("description")}
-          disabled={disabled}
-        >
-          <Card border="solid" rounding={4} padding={4} disabled={disabled}>
-            <Section alignItems="stretch" gap={4}>
-              <InputHorizontal
-                withLabel="refreshFreq"
-                disabled={disabled}
-                title={t("refreshFrequency.title")}
-                description={t("refreshFrequency.description")}
-                fillInput
-                center
-              >
-                <FormikField<number | undefined>
-                  name="refreshFreq"
-                  render={(field, helper) => (
-                    <InputNumber
-                      id="refreshFreq"
-                      value={field.value ?? null}
-                      onChange={(value) => {
-                        // InputNumber has no blur callback, so touch on change to
-                        // show the field's validation error.
-                        helper.setTouched(true, false);
-                        helper.setValue(value ?? undefined);
-                      }}
-                      min={MIN_REFRESH_FREQ_MINUTES}
-                      max={MAX_REFRESH_FREQ_MINUTES}
-                      placeholder={String(defaultRefreshFreqMinutes)}
-                      suffix={t("units.minutes")}
-                      disabled={disabled}
-                    />
-                  )}
+    <Collapsible
+      title={t("title")}
+      description={t("description")}
+      disabled={disabled}
+    >
+      <Card border="solid" rounding={4} padding={4} disabled={disabled}>
+        <Section alignItems="stretch" gap={4}>
+          <InputHorizontal
+            withLabel="refreshFreq"
+            disabled={disabled}
+            title={t("refreshFrequency.title")}
+            description={t("refreshFrequency.description")}
+            fillInput
+            center
+          >
+            <FormikField<number | undefined>
+              name="refreshFreq"
+              render={(field, helper) => (
+                <InputNumber
+                  id="refreshFreq"
+                  value={field.value ?? null}
+                  onChange={(value) => {
+                    // InputNumber has no blur callback, so touch on change to
+                    // show the field's validation error.
+                    helper.setTouched(true, false);
+                    helper.setValue(value ?? undefined);
+                  }}
+                  min={MIN_REFRESH_FREQ_MINUTES}
+                  max={MAX_REFRESH_FREQ_MINUTES}
+                  placeholder={String(defaultRefreshFreqMinutes)}
+                  suffix={t("units.minutes")}
+                  disabled={disabled}
                 />
-              </InputHorizontal>
+              )}
+            />
+          </InputHorizontal>
 
-              <InputHorizontal
-                withLabel="pruneFreq"
-                disabled={disabled}
-                title={t("pruneFrequency.title")}
-                description={t("pruneFrequency.description")}
-                fillInput
-                center
-              >
-                <FormikField<number | undefined>
-                  name="pruneFreq"
-                  render={(field, helper) => (
-                    <InputNumber
-                      id="pruneFreq"
-                      value={field.value ?? null}
-                      onChange={(value) => {
-                        helper.setTouched(true, false);
-                        helper.setValue(value ?? undefined);
-                      }}
-                      min={MIN_PRUNE_FREQ_HOURS}
-                      max={MAX_PRUNE_FREQ_HOURS}
-                      decimalPlaces={3}
-                      placeholder={String(defaultPruneFreqHours)}
-                      suffix={t("units.hours")}
-                      disabled={disabled}
-                    />
-                  )}
+          <InputHorizontal
+            withLabel="pruneFreq"
+            disabled={disabled}
+            title={t("pruneFrequency.title")}
+            description={t("pruneFrequency.description")}
+            fillInput
+            center
+          >
+            <FormikField<number | undefined>
+              name="pruneFreq"
+              render={(field, helper) => (
+                <InputNumber
+                  id="pruneFreq"
+                  value={field.value ?? null}
+                  onChange={(value) => {
+                    helper.setTouched(true, false);
+                    helper.setValue(value ?? undefined);
+                  }}
+                  min={MIN_PRUNE_FREQ_HOURS}
+                  max={MAX_PRUNE_FREQ_HOURS}
+                  decimalPlaces={3}
+                  placeholder={String(defaultPruneFreqHours)}
+                  suffix={t("units.hours")}
+                  disabled={disabled}
                 />
-              </InputHorizontal>
+              )}
+            />
+          </InputHorizontal>
 
-              <InputHorizontal
-                withLabel="indexingStart"
-                disabled={disabled}
-                title={t("indexingStart.title")}
-                description={t("indexingStart.description")}
-                suffix="optional"
-                fillInput
-                center
-              >
-                <FormikField<string | undefined>
-                  name="indexingStart"
-                  render={(field, helper) => (
-                    <InputDatePicker
-                      id="indexingStart"
-                      value={parseIndexingStart(field.value)}
-                      onChange={(date) =>
-                        helper.setValue(formatIndexingStart(date))
-                      }
-                      placeholder={t("indexingStart.placeholder")}
-                      clearable
-                      disabled={disabled}
-                    />
-                  )}
+          <InputHorizontal
+            withLabel="indexingStart"
+            disabled={disabled}
+            title={t("indexingStart.title")}
+            description={t("indexingStart.description")}
+            suffix="optional"
+            fillInput
+            center
+          >
+            <FormikField<string | undefined>
+              name="indexingStart"
+              render={(field, helper) => (
+                <InputDatePicker
+                  id="indexingStart"
+                  value={parseIndexingStart(field.value)}
+                  onChange={(date) =>
+                    helper.setValue(formatIndexingStart(date))
+                  }
+                  placeholder={t("indexingStart.placeholder")}
+                  clearable
+                  disabled={disabled}
                 />
-              </InputHorizontal>
-            </Section>
-          </Card>
-        </Collapsible>
-      </fieldset>
-    </Disabled>
+              )}
+            />
+          </InputHorizontal>
+        </Section>
+      </Card>
+    </Collapsible>
   );
 }
