@@ -9,6 +9,13 @@ import {
 } from "@/lib/connectors/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
 
+// Field descriptions render as Opal markdown. Under Jest, react-markdown's
+// default export loads as a module object, so render the source text as is.
+jest.mock("react-markdown", () => ({
+  __esModule: true,
+  default: ({ children }: { children?: string }) => children ?? null,
+}));
+
 function ZoomForm() {
   const config = connectorConfigs.zoom;
   return (

@@ -7,7 +7,7 @@ import type {
 } from "@/lib/connectors/types";
 import SelectInput from "./inputs/SelectInput";
 import NumberInput from "./inputs/NumberInput";
-import { TextFormField, MultiSelectField } from "@/components/Field";
+import { MultiSelectField } from "@/components/Field";
 import ListInput from "./inputs/ListInput";
 import StringPairListInput from "./inputs/StringPairListInput";
 import FileInput from "./inputs/FileInput";
@@ -23,7 +23,7 @@ import type { IconFunctionComponent } from "@opal/types";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { getSourceDisplayName } from "@/lib/sources";
-import Text from "@/refresh-components/texts/Text";
+import { markdown } from "@opal/utils";
 
 // Define a general type for form values
 type FormValues = Record<string, any>;
@@ -66,9 +66,9 @@ const TabsField: FC<TabsFieldProps> = ({
 
       {/* Ensure there's at least one tab before rendering */}
       {tabField.tabs.length === 0 ? (
-        <Text text03 secondaryBody>
+        <OpalText font="secondary-body" color="text-03">
           {t("tabs.empty.label")}
-        </Text>
+        </OpalText>
       ) : (
         <Tabs
           value={
@@ -257,6 +257,11 @@ export const RenderField: FC<RenderFieldProps> = ({
       : (field.initial ?? "");
   const subDescriptionKey: TextSubDescriptionKey | undefined =
     field.type === "text" ? field.subDescription : undefined;
+  // Config descriptions carry inline markdown, such as links and `code`.
+  const richDescription =
+    typeof description === "string" && description
+      ? markdown(description)
+      : undefined;
 
   // Prepopulate the field with initialValue. A field that the credential
   // disables takes the credential's value, also over a value entered before
@@ -354,57 +359,40 @@ export const RenderField: FC<RenderFieldProps> = ({
           disabled={disabled}
         />
       ) : field.type === "text" ? (
-        subDescriptionKey ? (
-          <InputVertical
-            withLabel={field.name}
-            title={label}
-            subDescription={t(`subDescriptions.${subDescriptionKey}`, {
-              connectorName: getSourceDisplayName(connector) ?? connector,
-            })}
-            suffix={
-              field.optional ? t("field.optionalSuffix.label") : undefined
-            }
-          >
-            <InputTypeInField
-              name={field.name}
-              placeholder={field.placeholder}
-              variant={disabled ? "disabled" : undefined}
-            />
-          </InputVertical>
-        ) : field.isTextArea ? (
-          <InputVertical
-            withLabel={field.name}
-            title={label}
-            description={description}
-            suffix={
-              field.optional ? t("field.optionalSuffix.label") : undefined
-            }
-          >
+        // The field name ties the label to the input's id and shows the
+        // field's Formik error under it.
+        <InputVertical
+          withLabel={field.name}
+          title={label}
+          description={richDescription}
+          subDescription={
+            subDescriptionKey
+              ? t(`subDescriptions.${subDescriptionKey}`, {
+                  connectorName: getSourceDisplayName(connector) ?? connector,
+                })
+              : undefined
+          }
+          suffix={field.optional ? t("field.optionalSuffix.label") : undefined}
+        >
+          {field.isTextArea ? (
             <InputTextAreaField
               name={field.name}
               placeholder={field.placeholder}
               variant={disabled ? "disabled" : undefined}
               rows={1}
             />
-          </InputVertical>
-        ) : (
-          <TextFormField
-            subtext={description}
-            optional={field.optional}
-            type={field.type}
-            label={label}
-            name={field.name}
-            isTextArea={false}
-            disabled={disabled}
-            onChange={(e) => setFieldValue(field.name, e.target.value)}
-          />
-        )
+          ) : (
+            <InputTypeInField
+              name={field.name}
+              placeholder={field.placeholder}
+              variant={disabled ? "disabled" : undefined}
+            />
+          )}
+        </InputVertical>
       ) : field.type === "string_tab" ? (
-        <GeneralLayouts.Section>
-          <Text text03 secondaryBody>
-            {description}
-          </Text>
-        </GeneralLayouts.Section>
+        <OpalText font="secondary-body" color="text-03">
+          {richDescription ?? ""}
+        </OpalText>
       ) : (
         <>
           {/* oxlint-disable-next-line i18n/no-raw-jsx-text -- developer diagnostic, not copy */}
