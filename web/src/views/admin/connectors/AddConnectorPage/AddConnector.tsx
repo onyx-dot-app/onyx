@@ -1,6 +1,19 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
+import { PageLoader, IconLoader } from "@opal/loaders";
+import {
+  Content,
+  IllustrationContent,
+  PageCenter,
+  Section,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
+import { SvgPlugBroken } from "@opal/illustrations";
+import { escapeMarkdown, markdown } from "@opal/utils";
+import { Card, Divider, MessageCard, Button } from "@opal/components";
+import { SvgArrowExchange } from "@opal/icons";
+import { Disabled } from "@opal/core";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
@@ -45,8 +58,6 @@ import type {
   ConnectorBase,
 } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
-import { Card, Divider, MessageCard } from "@opal/components";
-import { Disabled } from "@opal/core";
 import {
   useGmailCredentials,
   useCredentialLoad,
@@ -54,20 +65,7 @@ import {
 } from "@/lib/credentials/hooks";
 import { Formik } from "formik";
 import { useRouter } from "next/navigation";
-import { Button } from "@opal/components";
-import {
-  Content,
-  IllustrationContent,
-  PageCenter,
-  Section,
-  SettingsLayouts,
-  toast,
-} from "@opal/layouts";
-import { PageLoader } from "@opal/loaders";
-import { SvgPlugBroken } from "@opal/illustrations";
-import { escapeMarkdown, markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
-import { SvgArrowExchange } from "@opal/icons";
 import { useTranslations } from "next-intl";
 import {
   SYNC_RESTRICTED_ACCESS_TYPE,
@@ -142,11 +140,11 @@ export async function submitConnector<T>(
   }
 }
 
-export default function AddConnector({
-  connector,
-}: {
+export interface AddConnectorProps {
   connector: ConfigurableSources;
-}) {
+}
+
+export default function AddConnector({ connector }: AddConnectorProps) {
   const t = useTranslations("admin.connectorsList");
   const oneDriveT = useTranslations("admin.connectorsList.oneDrive");
   const router = useRouter();
@@ -628,7 +626,7 @@ export default function AddConnector({
                         {!noCredentials && (
                           <Divider
                             paddingParallel={0}
-                            paddingPerpendicular={2}
+                            paddingPerpendicular={0}
                           />
                         )}
                       </>
