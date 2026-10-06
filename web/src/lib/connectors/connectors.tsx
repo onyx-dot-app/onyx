@@ -729,6 +729,7 @@ export const connectorConfigs: Record<
         name: "scoped_token",
         optional: true,
         default: false,
+        asCheckbox: true,
       },
       {
         type: "tab",

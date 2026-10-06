@@ -90,6 +90,8 @@ export interface BooleanOption extends Option {
   initial?: (currentCredential: Credential<any> | null) => boolean | undefined;
   /** Shows the value as two tabs with these labels instead of a checkbox. */
   tabLabels?: { true: CheckboxTabLabelKey; false: CheckboxTabLabelKey };
+  /** Shows a checkbox instead of the standard switch. */
+  asCheckbox?: boolean;
 }
 
 export interface FileOption extends Option {
