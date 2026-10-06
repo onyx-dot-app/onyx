@@ -1,5 +1,21 @@
 import React from "react";
 
+export function extractTextFromReactNode(node: React.ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (!node) return "";
+
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return extractTextFromReactNode(node.props.children);
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(extractTextFromReactNode).join("");
+  }
+
+  return "";
+}
+
 export function extractCodeText(
   node: any,
   content: string,
@@ -37,26 +53,6 @@ export function extractCodeText(
     codeText = formattedCodeLines.join("\n").trim();
   } else {
     // Fallback if position offsets are not available
-    const extractTextFromReactNode = (node: React.ReactNode): string => {
-      if (typeof node === "string") return node;
-      if (typeof node === "number") return String(node);
-      if (!node) return "";
-
-      if (React.isValidElement(node)) {
-        const children = (node.props as any).children;
-        if (Array.isArray(children)) {
-          return children.map(extractTextFromReactNode).join("");
-        }
-        return extractTextFromReactNode(children);
-      }
-
-      if (Array.isArray(node)) {
-        return node.map(extractTextFromReactNode).join("");
-      }
-
-      return "";
-    };
-
     codeText = extractTextFromReactNode(children);
   }
 
