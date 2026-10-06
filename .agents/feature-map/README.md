@@ -78,5 +78,38 @@ it needs.
   date. A small doc fix in a code PR does not change it. To find the components
   that may be stale, list the commits since that hash on the component's code
   paths: `git log <sha>..HEAD -- <paths from PATHS.md>`.
+
+## The integrity check
+
+`check_feature_map.py` runs as the `feature-map-integrity` pre-commit hook on every
+commit, locally and in CI. It fails when:
+
+- a component does not have sections `## 1.` to `## 9.` in order, or has no
+  `**Verified against:**` line;
+- a component is missing from `INDEX.md`, or `PATHS.md` names a component that does
+  not exist;
+- a `[[component]]` link does not resolve;
+- a backticked repo path does not exist. A short path such as `db/models.py`
+  resolves against the usual roots (`backend/onyx/`, `web/src/`, and others).
+
+So a PR that renames or deletes a file the map cites must update the map too. If a
+code span looks like a path but is not meant to exist in the repo (a build output,
+a runtime path, or a statement that a file does not exist), add it to
+`path-allowlist.txt`. Run the check by hand with
+`python3 .agents/feature-map/check_feature_map.py`.
+
+## The stale-document reminder
+
+`stale_docs.py` takes a list of changed files, maps each one to its components
+through `PATHS.md` (longest prefix wins, tests and `.agents/` ignored), and names
+every component whose code changed but whose document did not. Run it by hand with
+`python3 .agents/feature-map/stale_docs.py <files>`. The agent Stop hook from #15555
+runs it on the branch's changes when an agent ends a turn, so the agent decides
+whether the document needs an update while it still knows what it changed. With the
+hook, it names each component at most once per session.
+
+The check catches broken references only. It cannot tell when a description is
+wrong while every path it cites still exists. That is why each component records
+the commit it was last verified against.
 - Prose follows the ASD-STE100 rules in the root `AGENTS.md`: short sentences,
   active voice, one word for one idea.
