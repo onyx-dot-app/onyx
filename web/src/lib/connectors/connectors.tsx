@@ -719,13 +719,14 @@ export const connectorConfigs: Record<
           }
           return false;
         },
-        description:
-          "The base URL of your Confluence instance (e.g., https://your-domain.atlassian.net/wiki)",
+        subDescription: "siteUrl",
       },
       {
         type: "checkbox",
         query: "Using scoped token?",
-        label: "Using scoped token",
+        label: "This is an API token with scopes",
+        description:
+          "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens.",
         name: "scoped_token",
         optional: true,
         default: false,

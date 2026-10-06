@@ -1,6 +1,10 @@
-import React, { FC, useEffect } from "react";
+import React, { FC, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import type { BooleanOption, TabOption } from "@/lib/connectors/types";
+import type {
+  BooleanOption,
+  TabOption,
+  TextSubDescriptionKey,
+} from "@/lib/connectors/types";
 import SelectInput from "./inputs/SelectInput";
 import NumberInput from "./inputs/NumberInput";
 import { TextFormField, MultiSelectField } from "@/components/Field";
@@ -13,9 +17,12 @@ import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { Tabs, Text as OpalText } from "@opal/components";
 import { useField, useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Content, InputVertical } from "@opal/layouts";
-import CheckboxField from "@/refresh-components/form/LabeledCheckboxField";
+import { Content, InputVertical, Label } from "@opal/layouts";
+import { InputCheckboxField } from "@opal/form";
+import type { IconFunctionComponent } from "@opal/types";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import { getSourceDisplayName } from "@/lib/sources";
 import Text from "@/refresh-components/texts/Text";
 
 // Define a general type for form values
@@ -128,15 +135,16 @@ const TabsField: FC<TabsFieldProps> = ({
 interface CheckboxTabsFieldProps {
   option: BooleanOption & Required<Pick<BooleanOption, "tabLabels">>;
   label: string;
-  description: string | undefined;
   disabled: boolean;
 }
 
-/** A checkbox option shown as two tabs, with its label and description. */
+/**
+ * A checkbox option shown as two tabs. The tab labels name both choices, so
+ * the label only names the tab strip for assistive technology.
+ */
 function CheckboxTabsField({
   option,
   label,
-  description,
   disabled,
 }: CheckboxTabsFieldProps) {
   const t = useTranslations("admin.connectorsList.checkboxTabs");
@@ -146,12 +154,6 @@ function CheckboxTabsField({
   // The tab strip carries strings; the form value stays a boolean.
   return (
     <GeneralLayouts.Section gap={1} alignItems="start">
-      <Content
-        title={label}
-        description={description}
-        sizePreset="main-content"
-        variant="section"
-      />
       <Tabs
         value={String(value ?? option.default ?? false)}
         onValueChange={(next) => {
@@ -174,6 +176,50 @@ function CheckboxTabsField({
         </OpalText>
       )}
     </GeneralLayouts.Section>
+  );
+}
+
+interface CheckboxContentFieldProps {
+  name: string;
+  label: string;
+  description: string | undefined;
+  disabled: boolean;
+}
+
+/**
+ * A checkbox option with the checkbox in the icon slot, left of the title.
+ * The label around it hands a click on the title or description to the
+ * checkbox.
+ */
+function CheckboxContentField({
+  name,
+  label,
+  description,
+  disabled,
+}: CheckboxContentFieldProps) {
+  // A stable component identity keeps React from remounting the checkbox.
+  const checkboxIcon = useMemo<IconFunctionComponent>(() => {
+    function CheckboxIcon() {
+      return (
+        <InputCheckboxField
+          name={name}
+          aria-label={label}
+          disabled={disabled}
+        />
+      );
+    }
+    return CheckboxIcon;
+  }, [name, label, disabled]);
+  return (
+    <Label disabled={disabled}>
+      <Content
+        icon={checkboxIcon}
+        title={label}
+        description={description}
+        sizePreset="main-ui"
+        variant="section"
+      />
+    </Label>
   );
 }
 
@@ -209,6 +255,8 @@ export const RenderField: FC<RenderFieldProps> = ({
     typeof field.initial === "function"
       ? field.initial(currentCredential)
       : (field.initial ?? "");
+  const subDescriptionKey: TextSubDescriptionKey | undefined =
+    field.type === "text" ? field.subDescription : undefined;
 
   // Prepopulate the field with initialValue. A field that the credential
   // disables takes the credential's value, also over a value entered before
@@ -288,29 +336,33 @@ export const RenderField: FC<RenderFieldProps> = ({
           name={field.name}
         />
       ) : field.type === "checkbox" && field.tabLabels ? (
-        <CheckboxTabsField
-          option={field}
+        <CheckboxTabsField option={field} label={label} disabled={disabled} />
+      ) : field.type === "checkbox" ? (
+        <CheckboxContentField
+          name={field.name}
           label={label}
           description={description}
           disabled={disabled}
         />
-      ) : field.type === "checkbox" ? (
-        <GeneralLayouts.Section
-          flexDirection="row"
-          justifyContent="start"
-          alignItems="start"
-          gap={2}
-        >
-          <CheckboxField
-            name={field.name}
-            label={label}
-            sublabel={description}
-            disabled={disabled}
-            onChange={(checked) => setFieldValue(field.name, checked)}
-          />
-        </GeneralLayouts.Section>
       ) : field.type === "text" ? (
-        field.isTextArea ? (
+        subDescriptionKey ? (
+          <InputVertical
+            withLabel={field.name}
+            title={label}
+            subDescription={t(`subDescriptions.${subDescriptionKey}`, {
+              connectorName: getSourceDisplayName(connector) ?? connector,
+            })}
+            suffix={
+              field.optional ? t("field.optionalSuffix.label") : undefined
+            }
+          >
+            <InputTypeInField
+              name={field.name}
+              placeholder={field.placeholder}
+              variant={disabled ? "disabled" : undefined}
+            />
+          </InputVertical>
+        ) : field.isTextArea ? (
           <InputVertical
             withLabel={field.name}
             title={label}

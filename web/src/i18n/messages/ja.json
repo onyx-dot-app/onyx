@@ -2915,6 +2915,9 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "サイトの URL またはサブドメインを貼り付けてください。そこで {connectorName} の REST API にアクセスできる必要があります。"
+      },
       "boundFields": {
         "advancedOptions": "詳細オプション",
         "errors": {

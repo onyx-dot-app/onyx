@@ -2915,6 +2915,9 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "Paste your site URL or subdomain. {connectorName}'s REST API must be reachable there."
+      },
       "boundFields": {
         "advancedOptions": "Advanced Options",
         "errors": {

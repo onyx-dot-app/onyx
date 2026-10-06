@@ -2915,6 +2915,9 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "الصق عنوان URL لموقعك أو النطاق الفرعي. يجب أن تكون واجهة REST API الخاصة بـ {connectorName} قابلة للوصول هناك."
+      },
       "boundFields": {
         "advancedOptions": "خيارات متقدمة",
         "errors": {

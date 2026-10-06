@@ -2915,6 +2915,9 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "粘贴你的站点 URL 或子域名。{connectorName} 的 REST API 必须能在该地址访问。"
+      },
       "boundFields": {
         "advancedOptions": "高级选项",
         "errors": {

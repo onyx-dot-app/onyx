@@ -63,11 +63,16 @@ export interface StringPairListOption extends Option {
   rightPlaceholder?: string;
 }
 
+/** A key under `admin.connectorsList.subDescriptions` in the message catalog. */
+export type TextSubDescriptionKey = "siteUrl";
+
 export interface TextOption extends Option {
   type: "text";
   default?: string;
   initial?: string | ((currentCredential: Credential<any> | null) => string);
   isTextArea?: boolean;
+  /** Text below the input. It gets the connector's name as `connectorName`. */
+  subDescription?: TextSubDescriptionKey;
 }
 
 export interface NumberOption extends Option {
