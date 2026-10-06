@@ -116,7 +116,8 @@ export const resetStripeConnection = () =>
 const LICENSE_REQUEST_TIMEOUT_MS: number = 60_000;
 
 // The downgrade rewrites every restricted connector's documents in one request.
-// Five minutes is also where the bundled nginx stops waiting for the API.
+// Five minutes is the default read timeout of the Docker Compose nginx, the
+// shortest of the bundled proxies. The Helm nginx waits 900 seconds.
 const DOWNGRADE_REQUEST_TIMEOUT_MS: number = 5 * 60_000;
 
 // Self-hosted only actions
