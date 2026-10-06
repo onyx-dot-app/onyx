@@ -246,6 +246,8 @@ class ConfluenceConnector(
     CredentialsConnector,
     Resolver,
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         wiki_base: str,

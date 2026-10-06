@@ -23,6 +23,7 @@ from onyx.connectors.interfaces import (
     CredentialsConnector,
     LoadConnector,
     PollConnector,
+    prune_listing_honors_indexing_start,
 )
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
@@ -121,6 +122,14 @@ def source_supports_windowed_runs(source: DocumentSource) -> bool:
         return False
     connector_class = _load_connector_class(source)
     return issubclass(connector_class, (CheckpointedConnector, PollConnector))
+
+
+def source_prune_honors_indexing_start(source: DocumentSource) -> bool:
+    """True if a prune of the source removes documents older than the
+    indexing start. A source without a connector class prunes nothing."""
+    if source not in CONNECTOR_CLASS_MAP:
+        return False
+    return prune_listing_honors_indexing_start(_load_connector_class(source))
 
 
 def validate_connector_config(

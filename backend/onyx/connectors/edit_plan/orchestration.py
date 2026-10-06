@@ -26,6 +26,7 @@ from onyx.connectors.edit_plan.planner import (
 from onyx.connectors.edit_plan.state import fetch_current_pair_state
 from onyx.connectors.edit_plan.store import compute_base_state_hash, save_edit_plan
 from onyx.connectors.factory import (
+    source_prune_honors_indexing_start,
     source_supports_windowed_runs,
     validate_connector_config,
     validate_proposed_pairing,
@@ -168,6 +169,7 @@ def plan_connector_edit(
     )
     inputs = EditPlanInputs(
         supports_windowed_runs=source_supports_windowed_runs(current.source),
+        prune_honors_indexing_start=source_prune_honors_indexing_start(current.source),
         fetches_permissions_during_indexing=(
             source_should_fetch_permissions_during_indexing(current.source)
         ),

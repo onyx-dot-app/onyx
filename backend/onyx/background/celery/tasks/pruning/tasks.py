@@ -572,6 +572,7 @@ def connector_pruning_generator_task(
         connector_source: DocumentSource | None = None
         connector_type: str = ""
         is_connector_public: bool = False
+        indexing_start: float | None = None
         runnable_connector: BaseConnector | None = None
         all_indexed_document_ids: set[str] = set()
 
@@ -604,6 +605,14 @@ def connector_pruning_generator_task(
             connector_source = cc_pair.connector.source
             connector_type = connector_source.value
             is_connector_public = cc_pair.access_type == AccessType.PUBLIC
+            # A scheduled prune also removes documents older than the indexing
+            # start, where the listing can filter by it. Same conversion as
+            # the indexing run.
+            indexing_start = (
+                cc_pair.connector.indexing_start.timestamp()
+                if cc_pair.connector.indexing_start
+                else None
+            )
 
             task_logger.info(
                 f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={connector_source}"
@@ -642,7 +651,10 @@ def connector_pruning_generator_task(
 
         # Extract docs and hierarchy nodes from the source (no DB session held).
         extraction_result = extract_ids_from_runnable_connector(
-            runnable_connector, callback, connector_type=connector_type
+            runnable_connector,
+            callback,
+            connector_type=connector_type,
+            start=indexing_start,
         )
         all_connector_doc_ids = extraction_result.raw_id_to_parent
 
@@ -731,14 +743,17 @@ def connector_pruning_generator_task(
             redis_connector.prune.generator_complete = tasks_generated
 
             # --- Hierarchy node pruning ---
-            live_node_ids = {n.id for n in upserted_nodes}
-            stale_removed = remove_stale_hierarchy_node_cc_pair_entries(
-                db_session=db_session,
-                connector_id=connector_id,
-                credential_id=credential_id,
-                live_hierarchy_node_ids=live_node_ids,
-                commit=True,
-            )
+            # A listing from a start can omit live nodes, so it removes none.
+            stale_removed = 0
+            if extraction_result.listed_from is None:
+                live_node_ids = {n.id for n in upserted_nodes}
+                stale_removed = remove_stale_hierarchy_node_cc_pair_entries(
+                    db_session=db_session,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                    live_hierarchy_node_ids=live_node_ids,
+                    commit=True,
+                )
             deleted_raw_ids, reparented_nodes = cleanup_unowned_hierarchy_nodes(
                 db_session=db_session,
                 source=source,

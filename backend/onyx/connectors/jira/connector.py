@@ -516,6 +516,8 @@ class JiraConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         jira_base_url: str,

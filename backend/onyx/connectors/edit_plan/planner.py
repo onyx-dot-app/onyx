@@ -89,8 +89,13 @@ _INVALID_MESSAGE = (
     "The connector is invalid. A successful validation of the new settings "
     "makes it active again."
 )
+_INDEXING_START_LATER_PRUNE_MESSAGE = (
+    "The indexing start date is later. The prune removes documents older than "
+    "the new date."
+)
 _INDEXING_START_LATER_MESSAGE = (
-    "The indexing start date is later. Documents older than the new date stay indexed."
+    "The indexing start date is later. Documents older than the new date stay "
+    "indexed, because a prune of this source cannot filter by date."
 )
 _CREDENTIAL_FULL_PATH_MESSAGE = (
     "On this source, a new credential usually sees different content (for "
@@ -319,6 +324,16 @@ def _indexing_start_steps(
         return [], []
     # No start means no floor, the earliest start there is.
     if old_start is None or (new_start is not None and new_start > old_start):
+        # A prune lists only the documents from the indexing start, so it
+        # removes the older ones.
+        if inputs.prune_honors_indexing_start:
+            return [_step(EditStepKind.PRUNE, EditStepReason.INDEXING_START_LATER)], [
+                EditNote(
+                    kind=EditNoteKind.INDEXING_START_LATER,
+                    severity=EditNoteSeverity.INFO,
+                    message=_INDEXING_START_LATER_PRUNE_MESSAGE,
+                )
+            ]
         return [], [
             EditNote(
                 kind=EditNoteKind.INDEXING_START_LATER,

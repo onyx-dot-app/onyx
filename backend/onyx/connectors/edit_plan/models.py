@@ -82,6 +82,7 @@ class EditStepReason(str, Enum):
     ITEMS_REMOVED = "items_removed"
     OPAQUE_SCOPE_CHOICE = "opaque_scope_choice"
     INDEXING_START_EARLIER = "indexing_start_earlier"
+    INDEXING_START_LATER = "indexing_start_later"
     CREDENTIAL_FULL_PATH = "credential_full_path"
     ACCESS_CHANGED = "access_changed"
     # The source gets document permissions only while it indexes.
@@ -161,6 +162,8 @@ class EditPlanInputs(BaseModel):
     """What the planner needs besides the two states, gathered by the caller."""
 
     supports_windowed_runs: bool
+    # A prune lists only the documents from the indexing start.
+    prune_honors_indexing_start: bool
     fetches_permissions_during_indexing: bool
     access_filter_enforced: bool
     attempt_running: bool

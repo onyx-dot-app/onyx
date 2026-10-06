@@ -824,6 +824,8 @@ class SlackConnector(
     CredentialsConnector,
     CheckpointedConnectorWithPermSync[SlackCheckpoint],
 ):
+    slim_listing_honors_indexing_start = True
+
     MAX_CHANNELS_TO_LOG = 50
 
     # *** values to use when filtering bot channels ***
