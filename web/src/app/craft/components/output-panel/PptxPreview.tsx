@@ -33,7 +33,10 @@ export default function PptxPreview({
 
   const { data, error, isLoading } = useSWR(
     [SWR_KEYS.buildSessionPptxPreview(sessionId, filePath), refreshKey ?? 0],
-    () => fetchPptxPreview(sessionId, filePath),
+    async () => ({
+      ...(await fetchPptxPreview(sessionId, filePath)),
+      imageRevision: crypto.randomUUID(),
+    }),
     {
       revalidateOnFocus: false,
       dedupingInterval: 10000,
@@ -139,8 +142,8 @@ export default function PptxPreview({
   }
 
   const slidePath = data.slide_paths[activeSlide] ?? "";
-  // Wait for this revision's conversion, then bypass the old slide image cache.
-  const slideUrl = `${getArtifactUrl(sessionId, slidePath)}?revision=${refreshKey ?? 0}`;
+  // Local refresh counters can repeat after reloads; each response needs fresh images.
+  const slideUrl = `${getArtifactUrl(sessionId, slidePath)}?revision=${data.imageRevision}`;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">

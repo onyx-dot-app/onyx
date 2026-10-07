@@ -202,8 +202,9 @@ provisioning entirely, since nothing will view them live.
 
 ### Artifact preview refresh
 
-PowerPoint previews use the supplied refresh revision in their conversion cache key
-and slide image URLs. A refreshed deck can have fewer slides; selection stays within
+PowerPoint previews use the supplied refresh revision in their conversion cache key.
+Each successful response assigns a fresh slide image token, because local refresh
+counters can repeat after page reloads. A refreshed deck can have fewer slides; selection stays within
 its new bounds. Next-slide input is ignored while conversion has no slides.
 PDF previews bypass the browser cache when fetching the artifact.
 These behaviors live in `PptxPreview.tsx` and `PdfPreview.tsx` under

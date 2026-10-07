@@ -30,7 +30,8 @@ it("waits for an updated conversion and reloads slide images at the same paths",
     />
   );
   const image = await screen.findByRole("img");
-  expect(image).toHaveAttribute("src", expect.stringContaining("revision=1"));
+  const originalUrl = image.getAttribute("src");
+  expect(image).toHaveAttribute("src", expect.stringContaining("revision="));
 
   let finishConversion: (value: PptxPreviewResponse) => void = () => {};
   jest.mocked(fetchPptxPreview).mockReturnValueOnce(
@@ -50,9 +51,9 @@ it("waits for an updated conversion and reloads slide images at the same paths",
   await act(async () => {
     finishConversion(converted);
   });
-  expect(await screen.findByRole("img")).toHaveAttribute(
+  expect(await screen.findByRole("img")).not.toHaveAttribute(
     "src",
-    expect.stringContaining("revision=2")
+    originalUrl
   );
 });
 
@@ -123,4 +124,28 @@ it("ignores next-slide keys while the deck is converting", async () => {
     "src",
     expect.stringContaining("slide-2.jpg")
   );
+});
+
+it("does not reuse old slide URLs when the session refresh counter resets", async () => {
+  const converted = {
+    slide_count: 1,
+    slide_paths: ["outputs/.pptx-preview/deck/slide-1.jpg"],
+    cached: false,
+  };
+  jest.mocked(fetchPptxPreview).mockResolvedValue(converted);
+  const preview = (
+    <PptxPreview
+      sessionId="reopened-session"
+      filePath="outputs/deck.pptx"
+      refreshKey={1}
+    />
+  );
+  const first = render(preview);
+  const originalUrl = (await screen.findByRole("img")).getAttribute("src");
+  first.unmount();
+
+  // A fresh browser session can reach the same counter after another edit.
+  render(preview);
+  const refreshedImage = await screen.findByRole("img");
+  expect(refreshedImage).not.toHaveAttribute("src", originalUrl);
 });
