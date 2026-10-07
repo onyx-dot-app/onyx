@@ -536,9 +536,11 @@ def test_augmentation_mixed_docs_enrich_per_document(
 
 def test_model_only_strips_stored_context_when_asked() -> None:
     """With the FUTURE off, a MODEL_ONLY re-embed drops the doc summary and
-    chunk context a forward-only disable left in the stored content."""
+    chunk context a forward-only disable left in the stored chunk, from the
+    vector and from the stored fields. Only the copies indexing appended go,
+    so a body sentence the context repeats stays where it was."""
     chunk = _stored_chunk(
-        "Summary. body text Context.",
+        "Summary. Context. body text Context.",
         title=None,
         doc_summary="Summary. ",
         chunk_context=" Context.",
@@ -556,8 +558,12 @@ def test_model_only_strips_stored_context_when_asked() -> None:
         strip_stored_context=True,
     )
 
-    assert kept[0].content_vector == _vec("Summary. body text Context.")
-    assert stripped[0].content_vector == _vec("body text")
+    assert kept[0].content_vector == _vec("Summary. Context. body text Context.")
+    assert kept[0].doc_summary == "Summary. "
+    assert stripped[0].content_vector == _vec("Context. body text")
+    assert stripped[0].content == "Context. body text"
+    assert stripped[0].doc_summary == ""
+    assert stripped[0].chunk_context == ""
 
 
 def test_reembed_pairs_embeddings_by_identity_not_position() -> None:

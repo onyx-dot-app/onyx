@@ -291,8 +291,9 @@ def re_embed_chunks(
     text the PRESENT index never did.
 
     `strip_stored_context` (the FUTURE has contextual RAG off) drops a chunk's
-    stored doc summary and chunk context from the MODEL_ONLY input: after a
-    forward-only disable the PRESENT index still holds them with the flag off.
+    stored doc summary and chunk context from its content and fields before
+    the MODEL_ONLY re-embed: after a forward-only disable the PRESENT index
+    still holds them with the flag off.
     """
     if not stored_chunks:
         return []
@@ -305,13 +306,10 @@ def re_embed_chunks(
 
     if present_tokenizer is None:
         raise ValueError("MODEL_ONLY re-embed requires the PRESENT tokenizer")
+    if strip_stored_context:
+        stored_chunks = [_strip_stored_context(chunk) for chunk in stored_chunks]
     embed_inputs = [
-        _without_stored_context(
-            chunk, recover_embedding_input(chunk, present_tokenizer)
-        )
-        if strip_stored_context
-        else recover_embedding_input(chunk, present_tokenizer)
-        for chunk in stored_chunks
+        recover_embedding_input(chunk, present_tokenizer) for chunk in stored_chunks
     ]
     doc_aware_chunks = [
         _stored_chunk_to_doc_aware(chunk, embed_input)
@@ -331,13 +329,30 @@ def re_embed_chunks(
     ]
 
 
-def _without_stored_context(chunk: DocumentChunkWithoutVectors, text: str) -> str:
-    """``text`` minus the chunk's stored doc summary and chunk context, each
-    removed once. A no-op for a chunk that holds neither."""
-    for piece in (chunk.doc_summary, chunk.chunk_context):
-        if piece:
-            text = text.replace(piece, "", 1)
-    return text
+def _strip_stored_context(
+    chunk: DocumentChunkWithoutVectors,
+) -> DocumentChunkWithoutVectors:
+    """The chunk without the doc summary and chunk context indexing stored in
+    it, removed only where indexing put them: the summary right after the
+    title prefix, the context right before the metadata suffix. The title
+    prefix is kept as stored. A no-op for a chunk that holds neither."""
+    if not chunk.doc_summary and not chunk.chunk_context:
+        return chunk
+    content = chunk.content
+    suffix = chunk.metadata_suffix or ""
+    if suffix and content.endswith(suffix):
+        content = content.removesuffix(suffix)
+    else:
+        suffix = ""
+    if chunk.chunk_context and content.endswith(chunk.chunk_context):
+        content = content.removesuffix(chunk.chunk_context)
+    if chunk.doc_summary:
+        at = content.find(chunk.doc_summary)
+        if 0 <= at <= len(_title_prefix(chunk)):
+            content = content[:at] + content[at + len(chunk.doc_summary) :]
+    return chunk.model_copy(
+        update={"content": content + suffix, "doc_summary": "", "chunk_context": ""}
+    )
 
 
 def _bare_contents(stored_chunks: list[DocumentChunkWithoutVectors]) -> list[str]:
