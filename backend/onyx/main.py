@@ -177,7 +177,7 @@ from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
     fetch_versioned_implementation,
     global_version,
-    set_is_ee_based_on_env_variable,
+    set_is_ee_if_available,
 )
 from shared_configs.configs import (
     CORS_ALLOW_CREDENTIALS,
@@ -807,7 +807,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
 # NOTE: needs to be outside of the `if __name__ == "__main__"` block so that the
 # app is exportable
-set_is_ee_based_on_env_variable()
+set_is_ee_if_available()
 app = fetch_versioned_implementation(module="onyx.main", attribute="get_application")
 
 

@@ -199,15 +199,14 @@ class OnyxDiscordClient(commands.Bot):
 def main() -> None:
     """Main entry point for Discord bot."""
     from onyx.db.engine.sql_engine import SqlEngine
-    from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+    from onyx.utils.variable_functionality import set_is_ee_if_available
 
     logger.info("Starting Onyx Discord Bot...")
 
     # Initialize the database engine (required before any DB operations)
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
-    # Initialize EE features based on environment
-    set_is_ee_based_on_env_variable()
+    set_is_ee_if_available()
 
     counter = 0
     while True:

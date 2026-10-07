@@ -58,7 +58,7 @@ and re-exported through a "factory stub" in
 `onyx/background/celery/versioned_apps/*.py`. The versioned-app file calls
 `fetch_versioned_implementation("onyx.background.celery.apps.<name>", "celery_app")`
 (`versioned_apps/primary.py:app`), which is the same EE/CE dispatch mechanism
-described in `[[editions-and-gating]]`: with `ENTERPRISE_EDITION_ENABLED` set,
+described in `[[editions-and-gating]]`: in a build that ships the EE code,
 the loader resolves to `ee/onyx/background/celery/apps/<name>.py` instead of the
 CE file. `onyx/background/celery/versioned_apps/light.py` is the one exception;
 its docstring states there is no EE variant, so it imports the CE app directly.

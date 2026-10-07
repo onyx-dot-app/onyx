@@ -243,19 +243,16 @@ then inserts the `ConnectorCredentialPair` row with `status=SCHEDULED`. The gate
   `input_str.encode()` unchanged, so the value is stored as plain UTF-8 bytes.
 
 **Which one runs is not what the edition names suggest.** The EE implementation
-is the default in a standard deployment. `set_is_ee_based_on_env_variable`
-(`onyx/utils/variable_functionality.py`) calls `global_version.set_ee()` when
-**either** `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES` is true **or**
-`LICENSE_ENFORCEMENT_ENABLED` is true, and the latter **defaults to `"true"`**.
+is the default in a standard deployment. `set_is_ee_if_available`
+(`onyx/utils/variable_functionality.py`) calls `global_version.set_ee()`
+whenever the build ships the `ee.onyx` package (`is_ee_available` in the same
+file).
 The `ee` package ships in the standard backend image (`backend/Dockerfile`
 copies `./ee` to `/app/ee`), so `fetch_versioned_implementation` resolves the
-EE symbol and real AES encryption runs even with
-`ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false`.
+EE symbol and real AES encryption runs with or without a license.
 
-The CE passthrough is therefore reached only when EE code is genuinely absent
-or disabled: an image built without `ee/`, or a deployment that sets both
-`LICENSE_ENFORCEMENT_ENABLED=false` and
-`ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false`. In that configuration
+The CE passthrough is therefore reached only when EE code is genuinely absent:
+an image built without `ee/onyx`. In that build
 credentials are stored unencrypted and the only signal is a log warning.
 
 On read, `process_result_value` never decrypts eagerly. It wraps the encrypted
@@ -386,15 +383,15 @@ It does not block the delete call; see §9.
    is a single global toggle, not per-request. A change that adds a new
    credential-reading endpoint must call `.get_value(apply_mask=...)`
    explicitly (the type system forces this) and must default to masked.
-3. **Encryption depends on whether EE code is loaded, not on the paid feature
-   flag.** Real AES-CBC lives only in `ee/onyx/utils/encryption.py`; the
+3. **Encryption depends on whether EE code is loaded, not on the
+   license.** Real AES-CBC lives only in `ee/onyx/utils/encryption.py`; the
    `onyx/utils/encryption.py` implementation is a passthrough. Dispatch goes
    through `fetch_versioned_implementation`, and EE code loads by default
-   because `LICENSE_ENFORCEMENT_ENABLED` defaults to `"true"` and the image
-   ships `ee/`. So a standard deployment does encrypt. A build without `ee/`,
-   or one that disables both EE flags, silently stores plaintext. Any change
-   to `set_is_ee_based_on_env_variable`, to the Dockerfile's `ee` copy, or to
-   those defaults changes credential encryption for every existing deployment.
+   because the image ships `ee/` and `set_is_ee_if_available` loads it when
+   present. So a standard deployment does encrypt. A build without `ee/onyx`
+   silently stores plaintext. Any change
+   to `set_is_ee_if_available`, to `is_ee_available`, or to the Dockerfile's
+   `ee` copy changes credential encryption for every existing deployment.
    See §4.2.
 4. **Deleting a cc-pair must not delete a document another cc-pair still
    indexes.** Verified in `document_by_cc_pair_cleanup_task`: deletion from the
@@ -461,7 +458,7 @@ It does not block the delete call; see §9.
 - Document sets and personas: scope themselves to a list of cc-pair ids, never
   to connector ids.
 - [[editions-and-gating]]: `connector_credential_pair.py:has_perm_synced_cc_pairs`
-  decides if a self-hosted deployment with no license and the legacy EE flag
+  decides if a self-hosted deployment with no license
   is gated (that document's §4.4).
 
 ---

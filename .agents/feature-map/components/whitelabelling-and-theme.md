@@ -66,8 +66,9 @@ put anything sensitive in here, as this is accessible without auth"
 ### Frontend route
 
 `/admin/theme` is rewritten to `web/src/app/ee/admin/theme/page.tsx` by
-`web/src/proxy.ts:EE_ROUTES`, which lists `"/admin/theme"` explicitly, and
-only when `SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED` is true. The
+`web/src/proxy.ts:EE_ROUTES`, which lists `"/admin/theme"` explicitly. The
+`/ee` layout (`web/src/app/ee/layout.tsx`) then gates the page on
+`ee_features_enabled` from `GET /settings`. The
 route additionally requires `Tier.BUSINESS` to be visible in the sidebar
 (`ADMIN_ROUTES.THEME.requiredTier`, `web/src/lib/admin-routes.ts`).
 
@@ -350,13 +351,12 @@ exists for logo upload specifically.
   `web/src/app/admin/theme/` to shadow it. A directory under `ee/admin/` that is
   not in `EE_ROUTES` is unreachable. Check `EE_ROUTES` and whether a CE-tree
   sibling exists before you decide which copy of an admin surface runs.
-- **The rewrite only fires when `SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED`
-  is true**, which (per `web/src/lib/constants.ts`) mirrors the backend's
-  `LICENSE_ENFORCEMENT_ENABLED` default-true behavior described in
-  [[editions-and-gating]]. With both flags at their defaults this is always
-  true in a standard deployment; an operator who explicitly disables both
-  loses the `/admin/theme` route entirely (404, since there is no CE
-  fallback page), not a degraded CE version of it.
+- **The rewrite always fires. The license gate is in the `/ee` layout.**
+  `web/src/app/ee/layout.tsx` fetches `/settings`. When `ee_features_enabled`
+  is false and the status is not `gated_access`, it renders
+  `web/src/app/ee/EEFeatureRedirect.tsx`, which shows a toast and sends the
+  user to `/app`. There is no degraded CE version of `/admin/theme`. If the
+  settings fetch fails, the layout renders the page (fail open).
 - **`createLogoIcon` is a false lead for "where is the custom logo
   rendered."** It is real, it is the one sanctioned exception in
   `web/AGENTS.md` to the `web/src/components/` import ban and the `dark:`

@@ -72,9 +72,8 @@ admin UI renders from `PermissionSyncAttempt` rows (owned by
 
 Both beat entries are registered in `backend/onyx/background/celery/tasks/beat_schedule.py`
 (not the `ee/` file of the same name, which is empty of these entries) and are
-only added to `beat_task_templates` when `ENTERPRISE_EDITION_ENABLED or
-_LICENSE_ENFORCEMENT_ENABLED` (`beat_schedule.py`, the block starting `if
-ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED:`). Both are
+only added to `beat_task_templates` when the build ships the EE code
+(`beat_schedule.py`, the block starting `if is_ee_available():`). Both are
 `work_gated: True` and route through the `heavy` worker per `backend/AGENTS.md`.
 
 ### Per-source sync frequency (`ee/onyx/configs/app_configs.py`)
@@ -546,8 +545,8 @@ document to the wrong person.
 - [[background-jobs]]: the Celery beat/fence/lock machinery
   (`RedisConnectorPermissionSync`, `RedisConnectorExternalGroupSync`,
   `SyncRecord`) this component's tasks are built on.
-- [[editions-and-gating]]: `ENTERPRISE_EDITION_ENABLED` /
-  `_LICENSE_ENFORCEMENT_ENABLED` gate both beat entries
+- [[editions-and-gating]]: `onyx/utils/variable_functionality.py:is_ee_available`
+  gates both beat entries
   (`onyx/background/celery/tasks/beat_schedule.py`).
 
 **Depended on by**

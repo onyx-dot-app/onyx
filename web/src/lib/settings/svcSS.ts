@@ -5,11 +5,7 @@ import {
   Settings,
   QueryHistoryType,
 } from "@/lib/settings/types";
-import {
-  CUSTOM_ANALYTICS_ENABLED,
-  HOST_URL,
-  SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
-} from "@/lib/constants";
+import { CUSTOM_ANALYTICS_ENABLED, HOST_URL } from "@/lib/constants";
 import { fetchSS } from "@/lib/utilsSS";
 import { getWebVersion } from "@/lib/version";
 
@@ -47,14 +43,10 @@ async function fetchCustomAnalyticsScriptSS(): Promise<string | null> {
 
 export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
   const settingsTask = fetchSS("/settings");
-  const enterpriseTask = SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED
-    ? fetchSS("/enterprise-settings")
+  const enterpriseTask = fetchSS("/enterprise-settings");
+  const analyticsTask = CUSTOM_ANALYTICS_ENABLED
+    ? fetchSS("/enterprise-settings/custom-analytics-script")
     : Promise.resolve(null);
-  const analyticsTask =
-    SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED &&
-    CUSTOM_ANALYTICS_ENABLED
-      ? fetchSS("/enterprise-settings/custom-analytics-script")
-      : Promise.resolve(null);
 
   try {
     const [settingsResponse, enterpriseResponse, analyticsResponse] =
@@ -96,6 +88,8 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       if (enterpriseResponse.ok) {
         enterpriseSettings = await enterpriseResponse.json();
       } else if (
+        // 404: a build without Enterprise code has no such route.
+        enterpriseResponse.status !== 404 &&
         enterpriseResponse.status !== 403 &&
         enterpriseResponse.status !== 401
       ) {
@@ -111,7 +105,10 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
     if (analyticsResponse) {
       if (analyticsResponse.ok) {
         customAnalyticsScript = await analyticsResponse.json();
-      } else if (analyticsResponse.status !== 403) {
+      } else if (
+        analyticsResponse.status !== 404 &&
+        analyticsResponse.status !== 403
+      ) {
         throw new Error(
           `fetchSettingsSS: analytics failed status=${
             analyticsResponse.status
