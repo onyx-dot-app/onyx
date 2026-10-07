@@ -25,7 +25,10 @@ from ee.onyx.configs.app_configs import (
     CLOUD_DATA_PLANE_URL,
     LICENSE_ENFORCEMENT_ENABLED,
 )
-from ee.onyx.db.community_downgrade import make_all_cc_pairs_public__no_commit
+from ee.onyx.db.community_downgrade import (
+    make_all_cc_pairs_public__no_commit,
+    remove_custom_user_groups__no_commit,
+)
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import (
     get_license_metadata,
@@ -54,6 +57,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -290,8 +294,9 @@ def downgrade_to_community(
     Drop this deployment to the Community tier.
 
     Every connector becomes public, permissions synced from the sources stop
-    applying, and the license is removed. Lives under /license so it stays
-    reachable while an expired license gates the rest of the API.
+    applying, user groups are removed with what they shared made public, and
+    the license is removed. Lives under /license so it stays reachable while an
+    expired license gates the rest of the API.
     """
     if MULTI_TENANT:
         raise OnyxError(
@@ -308,14 +313,23 @@ def downgrade_to_community(
         )
 
     # Committed before the license goes: a failure in between leaves a licensed
-    # deployment with public connectors, which a retry finishes.
+    # deployment part way to Community, which a retry finishes.
     cc_pair_ids: list[int] = make_all_cc_pairs_public__no_commit(db_session)
+    user_groups_removed: int = remove_custom_user_groups__no_commit(db_session)
     db_session.commit()
+    # Listings are cached per group set, so a provider that just became public
+    # would stay hidden from users outside its old groups until the TTL.
+    invalidate_provider_listing_cache()
     db_delete_license(db_session)
 
     logger.notice(
-        "Downgraded to Community by %s: %d connectors made public",
+        "Downgraded to Community by %s: %d connectors made public, "
+        "%d user groups removed",
         user.email,
         len(cc_pair_ids),
+        user_groups_removed,
     )
-    return CommunityDowngradeResponse(connectors_made_public=len(cc_pair_ids))
+    return CommunityDowngradeResponse(
+        connectors_made_public=len(cc_pair_ids),
+        user_groups_removed=user_groups_removed,
+    )

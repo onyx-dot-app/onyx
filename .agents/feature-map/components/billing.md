@@ -71,7 +71,7 @@ All authenticated handlers gate on
 | POST | `/license/upload` | `upload_license` | Manual signed license file, for air-gapped self-hosted. Rejects on `MULTI_TENANT`. |
 | POST | `/license/refresh` | `refresh_license_cache_endpoint` | Re-reads the DB, not the control plane. |
 | DELETE | `/license` | `delete_license` | Rejects on `MULTI_TENANT`. |
-| POST | `/license/downgrade` | `downgrade_to_community` | Drops the deployment to the Community tier (§4.5). Returns `CommunityDowngradeResponse` (`connectors_made_public`). Rejects on `MULTI_TENANT`. |
+| POST | `/license/downgrade` | `downgrade_to_community` | Drops the deployment to the Community tier (§4.5). Returns `CommunityDowngradeResponse` (`connectors_made_public`, `user_groups_removed`). Rejects on `MULTI_TENANT`. |
 
 All of these gate on `FULL_ADMIN_PANEL_ACCESS` too, and are sync `def` (not
 `async def`) because the work is blocking: `requests` calls, sync SQLAlchemy,
@@ -224,9 +224,10 @@ POST /license/downgrade                       ee/onyx/server/license/api.py:down
   MULTI_TENANT -> OnyxError(VALIDATION_ERROR)
   LICENSE_ENFORCEMENT_ENABLED false -> OnyxError(VALIDATION_ERROR)
   make_all_cc_pairs_public__no_commit         ee/onyx/db/community_downgrade.py
-  db_session.commit()
+  remove_custom_user_groups__no_commit        ee/onyx/db/community_downgrade.py
+  db_session.commit()                         one commit for both steps
   delete_license(db_session)                  ee/onyx/db/license.py
-  -> CommunityDowngradeResponse(connectors_made_public)
+  -> CommunityDowngradeResponse(connectors_made_public, user_groups_removed)
 ```
 
 The route is under `/license`, which is in `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES`
@@ -242,6 +243,9 @@ expired license gates the other routes. No frontend code calls it.
   and clears the synced permission columns on `Document` and `HierarchyNode`.
   The index keeps the old chunk ACLs until the metadata sync rewrites the
   marked documents. See [[cc-pairs-and-credentials]] §5 and [[permission-sync]] §5.
+- `remove_custom_user_groups__no_commit` deletes every non-default user group.
+  First it makes the resources shared with those groups public, and it keeps
+  the members in the default groups. See [[access-control]] §3.
 
 ---
 
@@ -365,6 +369,7 @@ cd backend && uv run pytest tests/unit/ee/onyx/server/settings/test_license_enfo
 cd backend && uv run pytest tests/unit/ee/onyx/utils/test_tier.py
 cd backend && uv run pytest tests/unit/ee/onyx/db/test_license.py
 cd backend && uv run pytest tests/external_dependency_unit/ee/onyx/db/test_community_downgrade.py
+cd backend && uv run pytest tests/external_dependency_unit/ee/onyx/db/test_community_downgrade_groups.py
 ```
 
 Frontend:
