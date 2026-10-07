@@ -30,21 +30,6 @@ _T = TypeVar("_T")  # Default type
 _MISSING: object = object()
 
 
-class ContextThreadPoolExecutor(ThreadPoolExecutor):
-    """Give each submitted operation its own copy of the caller's context."""
-
-    def __init__(self, max_workers: int, thread_name_prefix: str = "") -> None:
-        super().__init__(max_workers=max_workers, thread_name_prefix=thread_name_prefix)
-
-    def submit[T, **P](
-        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
-    ) -> Future[T]:
-        # A single Context cannot be entered concurrently by multiple threads.
-        # Copy per submission to preserve tenant and trace state without races.
-        context: contextvars.Context = contextvars.copy_context()
-        return super().submit(lambda: context.run(fn, *args, **kwargs))
-
-
 class ThreadSafeDict(MutableMapping[KT, VT]):
     """
     A thread-safe dictionary implementation that uses a lock to ensure thread safety.

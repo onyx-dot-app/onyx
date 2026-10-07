@@ -6,7 +6,6 @@ from concurrent.futures import Future
 import pytest
 
 from onyx.utils.threadpool_concurrency import (
-    ContextThreadPoolExecutor,
     FunctionCall,
     run_functions_in_parallel,
     run_functions_tuples_in_parallel,
@@ -210,30 +209,6 @@ def test_start_thread_with_context_passes_args() -> None:
     thread.join(timeout=2.0)
 
     assert seen == [("pos", "kw")]
-
-
-def test_executor_isolates_concurrent_submission_contexts() -> None:
-    barrier: threading.Barrier = threading.Barrier(2)
-
-    def read_then_change() -> str:
-        barrier.wait(timeout=2)
-        inherited: str = test_var.get()
-        test_var.set("worker")
-        return inherited
-
-    token: contextvars.Token[str] = test_var.set("first")
-    try:
-        executor: ContextThreadPoolExecutor
-        with ContextThreadPoolExecutor(max_workers=2) as executor:
-            first: Future[str] = executor.submit(read_then_change)
-            test_var.set("second")
-            second: Future[str] = executor.submit(read_then_change)
-            assert first.result(timeout=3) == "first"
-            assert second.result(timeout=3) == "second"
-            assert executor.submit(test_var.get).result(timeout=3) == "second"
-        assert test_var.get() == "second"
-    finally:
-        test_var.reset(token)
 
 
 def test_thread_uses_explicit_empty_context() -> None:
