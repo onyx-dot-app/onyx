@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_user
+from onyx.auth.users import current_user, scope_exempt
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, SystemUsageAttribution
@@ -221,7 +221,9 @@ user_usage_router = APIRouter(prefix="/user/usage", tags=PUBLIC_API_TAGS)
 admin_usage_router = APIRouter(prefix="/admin/usage", tags=PUBLIC_API_TAGS)
 
 
-@user_usage_router.get("")
+# scope_exempt: returns only the caller's own usage, so a scoped PAT may read
+# it like /me. Without a marker the scoped-PAT route gate rejects it fail-closed.
+@user_usage_router.get("", dependencies=[Depends(scope_exempt)])
 def get_my_usage(
     days: Annotated[int | None, Query(ge=1, le=3_650)] = None,
     start: date | None = None,

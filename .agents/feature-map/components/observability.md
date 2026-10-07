@@ -92,7 +92,7 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| GET | `/user/usage` | `get_my_usage` | Caller's own token/cost usage and budget. |
+| GET | `/user/usage` | `get_my_usage` | Caller's own token/cost usage and budget; `scope_exempt` so a scoped PAT can read its owner's usage. |
 | GET | `/admin/usage/export` | `export_usage` | Company-wide usage by user email. |
 | GET | `/admin/usage/system` | `get_system_usage` | Non-user (system-attributed) usage, e.g. contextual RAG. |
 | POST | `/admin/usage/reset` | `reset_usage` | Clears one user's usage across every active rate-limit window. |
