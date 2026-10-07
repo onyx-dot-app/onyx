@@ -436,7 +436,7 @@ def test_client_image_capability_fallback(
 ) -> None:
     with patch(
         "onyx.llm.multi_llm.get_model_map", return_value={"test-model": catalog}
-    ):
+    ) as model_map:
         client: LitellmLLM = get_llm(
             provider="openai",
             model="test-model",
@@ -445,6 +445,10 @@ def test_client_image_capability_fallback(
             supports_images=override,
         )
     assert client.config.supports_images is expected
+    if override is not None:
+        model_map.assert_not_called()
+    else:
+        model_map.assert_called_once()
 
 
 def test_client_resolves_image_capability_from_deployment_name() -> None:
@@ -510,3 +514,50 @@ def test_client_does_not_modify_caller_model_kwargs() -> None:
         model_kwargs=kwargs,
     )
     assert kwargs == {"metadata": {"source": "caller"}}
+
+
+def test_client_captures_nested_deployment_settings_after_merging() -> None:
+    deployment: list[str] = ["original"]
+    defaults: dict[str, bool] = {"enabled": True}
+    deployment_body: dict[str, object] = {
+        "metadata": {"deployment": deployment, "source": "deployment"},
+        "default_only": defaults,
+    }
+    request_metadata: dict[str, str] = {"source": "request"}
+    kwargs: dict[str, object] = {
+        "extra_body": {"metadata": request_metadata},
+    }
+    client: LitellmLLM = LitellmLLM(
+        api_key="secret-key",
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=4096,
+        extra_body=deployment_body,
+        model_kwargs=kwargs,
+    )
+    assert deployment_body == {
+        "metadata": {"deployment": ["original"], "source": "deployment"},
+        "default_only": {"enabled": True},
+    }
+    assert kwargs == {"extra_body": {"metadata": {"source": "request"}}}
+    deployment.append("changed")
+    defaults["enabled"] = False
+    request_metadata["source"] = "changed"
+    response: LiteLLMModelResponse = LiteLLMModelResponse(
+        choices=[{"message": {"role": "assistant", "content": "done"}}],
+    )
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
+        patch("litellm.completion", return_value=response) as completion,
+    ):
+        assert (
+            client.invoke(
+                GenerationRequest(messages=[UserMessage(content="test")])
+            ).text
+            == "done"
+        )
+    sent: Mapping[str, object] = completion.call_args.kwargs
+    assert sent["extra_body"] == {
+        "metadata": {"deployment": ["original"], "source": "request"},
+        "default_only": {"enabled": True},
+    }

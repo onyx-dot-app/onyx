@@ -238,7 +238,9 @@ and retries with a narrower request, up to the ladder's length.
 `supports_image_input=True` overrides catalog values. Configured `False` permits
 catalog fallback. Unknown catalog capability stays `None`. Direct client callers
 can explicitly set `supports_images=False` to disable fallback.
-The client copies custom configuration and nested model kwargs at construction.
+The client shallow-copies string-valued custom configuration at construction.
+It deep-copies model settings after merging deployment headers and body defaults.
+Explicit image capability overrides skip catalog lookup.
 Later caller mutations do not change the client's captured settings.
 
 ### 4.5 Streaming contract
