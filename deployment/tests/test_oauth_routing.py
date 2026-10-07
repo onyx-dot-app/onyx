@@ -21,9 +21,9 @@ def test_rendered_mcp_routes_match_the_web_domain_resource(
     shutil.copyfile(chart / "values.yaml", tmp_path / "values.yaml")
     for name in (
         "_helpers.tpl",
+        "ingress-api.yaml",
         "ingress-mcp.yaml",
         "ingress-mcp-oauth-callback.yaml",
-        "ingress-mcp-oauth-discovery.yaml",
     ):
         shutil.copyfile(chart / "templates" / name, templates / name)
     result: subprocess.CompletedProcess[str] = subprocess.run(
@@ -79,6 +79,26 @@ def test_rendered_mcp_routes_match_the_web_domain_resource(
         assert path["pathType"] == "Exact"
         assert path["backend"]["service"]["name"] == "onyx-webserver"
 
+    api: dict[str, Any] = ingresses["onyx-ingress-api"]
+    web_api: dict[str, Any] = next(
+        rule for rule in api["spec"]["rules"] if rule["host"] == "web.example.com"
+    )
+    path = web_api["http"]["paths"][0]
+    assert path["backend"]["service"]["name"] == "onyx-api-service"
+    assert (
+        api["metadata"]["annotations"]["nginx.ingress.kubernetes.io/rewrite-target"]
+        == "/$2"
+    )
+    for endpoint in ("register", "authorize", "token", "revoke", "consent", "grants"):
+        match: re.Match[str] | None = re.fullmatch(
+            path["path"], f"/api/oauth-provider/{endpoint}"
+        )
+        assert match is not None
+        assert "/" + match.group(2) == f"/oauth-provider/{endpoint}"
+    if api_host != "web.example.com":
+        assert re.fullmatch(path["path"], "/api/oauth-provider-unrelated/token") is None
+    assert any("web.example.com" in tls["hosts"] for tls in api["spec"]["tls"])
+
 
 def _read(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text()
@@ -88,9 +108,7 @@ def test_mcp_oauth_discovery_routes_use_generic_oauth_provider() -> None:
     nginx = _read("deployment/data/nginx/mcp.conf.inc.template")
     helm_nginx = _read("deployment/helm/charts/onyx/templates/nginx-conf.yaml")
     next_config = _read("web/next.config.js")
-    ingress = _read(
-        "deployment/helm/charts/onyx/templates/ingress-mcp-oauth-discovery.yaml"
-    )
+    ingress = _read("deployment/helm/charts/onyx/templates/ingress-api.yaml")
 
     for content in (nginx, helm_nginx, next_config, ingress):
         assert "/oauth-provider/metadata" in content
@@ -102,7 +120,7 @@ def test_mcp_oauth_discovery_routes_use_generic_oauth_provider() -> None:
     )
     assert 'source: "/.well-known/oauth-authorization-server/:path*"' in next_config
     assert r"path: /\.well-known/oauth-authorization-server(/|$)(.*)" in ingress
-    assert ingress.count("pathType: ImplementationSpecific") == 2
+    assert ingress.count("pathType: ImplementationSpecific") == 3
     assert ingress.count('nginx.ingress.kubernetes.io/use-regex: "true"') == 2
     assert "proxy_pass http://mcp_server;" in nginx
     assert (
@@ -128,10 +146,10 @@ def test_deployment_restarts_nginx() -> None:
 
 
 def test_ingress_discovery_patterns_match_only_literal_well_known_paths() -> None:
-    template = _read(
-        "deployment/helm/charts/onyx/templates/ingress-mcp-oauth-discovery.yaml"
+    template = _read("deployment/helm/charts/onyx/templates/ingress-api.yaml") + _read(
+        "deployment/helm/charts/onyx/templates/ingress-mcp.yaml"
     )
-    paths = re.findall(r"- path: (.+)", template)
+    paths = re.findall(r"- path: (.+well-known.+)", template)
     assert len(paths) == 2
     for path in paths:
         pattern = re.compile("^" + path)

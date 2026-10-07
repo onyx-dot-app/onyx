@@ -39,3 +39,35 @@ spec:
       {{- end }}
     {{- end }}
 {{- end }}
+
+{{- if and .Values.ingress.enabled .Values.mcpServer.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "onyx.resourceName" (list . "ingress-mcp-resource-metadata") }}
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    {{- if not .Values.ingress.className }}
+    kubernetes.io/ingress.class: nginx
+    {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.webserver.host }}
+      http:
+        paths:
+          - path: /\.well-known/oauth-protected-resource(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "onyx.resourceName" (list . "mcp-server-service") }}
+                port:
+                  number: {{ .Values.mcpServer.service.servicePort }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.webserver.host }}
+      secretName: {{ include "onyx.resourceName" (list . "ingress-webserver-tls") }}
+{{- end }}
