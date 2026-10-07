@@ -13,7 +13,7 @@ export interface ChecksRing {
 }
 
 export interface ChecksProgress {
-  /** The ring to draw, or `null` to show the spinner. */
+  /** The ring to draw, or `null` to show the spinner while a run starts. */
   ring: ChecksRing | null;
   /** Checks that passed, for the `(passed/counted)` suffix. */
   passed: number;
@@ -31,8 +31,9 @@ export interface ChecksProgress {
  * - skipped and not-applicable checks are not counted: neither blocks, and a
  *   finished run would otherwise never fill the ring.
  *
- * Nothing started yet shows the spinner. No checks at all, once the run is
- * done, shows a full green ring.
+ * The ring shows the spinner while nothing has started, and a full green
+ * ring when there is nothing to count. A run that is starting has no checks
+ * yet, so it asks for the spinner itself.
  */
 export function checksProgress(
   counts: Record<DraftCheckStateKind, number>,
@@ -47,17 +48,9 @@ export function checksProgress(
   };
   const counted: number =
     ring.success + ring.error + ring.warning + ring.neutral + ring.rest;
-  const started: boolean = counted - ring.rest > 0;
-
-  if (counted === 0) {
-    return {
-      ring:
-        status === "running"
-          ? null
-          : { success: 1, error: 0, warning: 0, neutral: 0, rest: 0 },
-      passed: 0,
-      counted: 0,
-    };
-  }
-  return { ring: started ? ring : null, passed: counts.passed, counted };
+  return {
+    ring: counted === 0 && status === "running" ? null : ring,
+    passed: counts.passed,
+    counted,
+  };
 }

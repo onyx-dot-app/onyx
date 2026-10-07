@@ -1,15 +1,20 @@
+import { IconLoader } from "@opal/loaders/icon-loader/components";
 import type { IconProps } from "@opal/types";
 
 /**
  * Each count takes its share of the ring, out of the sum of all five. The
- * caller decides what each colour means.
+ * caller decides what each colour means; negative counts read as 0.
  */
 export interface SvgProgressRingProps extends IconProps {
+  /** Green arc, e.g. items that succeeded. */
   success?: number;
+  /** Red arc, e.g. items that failed. */
   error?: number;
+  /** Amber arc, e.g. items that need attention. */
   warning?: number;
+  /** Light grey arc, e.g. items in progress. */
   neutral?: number;
-  /** Counted in the total, but drawn as a gap. */
+  /** A gap, e.g. items not started. Counted in the total, but not drawn. */
   rest?: number;
 }
 
@@ -32,7 +37,10 @@ const CENTER = VIEWBOX / 2;
 
 /**
  * A ring of coloured arcs, clockwise from the top: success, error, warning,
- * neutral, then a gap for the rest. With every count at 0 it draws nothing.
+ * neutral, then a gap for the rest.
+ *
+ * With no coloured arc the ring would be empty, so it shows the spinner when
+ * only `rest` is left, and a full success ring when every count is 0.
  */
 const SvgProgressRing = ({
   size,
@@ -51,6 +59,11 @@ const SvgProgressRing = ({
     rest: Math.max(rest, 0),
   };
   const total = PARTS.reduce((sum, [part]) => sum + counts[part], 0);
+  if (total === counts.rest && counts.rest > 0) {
+    return <IconLoader size={size} {...props} />;
+  }
+  if (total === 0) counts.success = 1;
+  const drawnTotal = Math.max(total, 1);
   let offset = 0;
 
   return (
@@ -64,8 +77,7 @@ const SvgProgressRing = ({
     >
       <g transform={`rotate(-90 ${CENTER} ${CENTER})`}>
         {PARTS.map(([part, className]) => {
-          const length =
-            total === 0 ? 0 : (counts[part] / total) * CIRCUMFERENCE;
+          const length = (counts[part] / drawnTotal) * CIRCUMFERENCE;
           const start = offset;
           offset += length;
           if (className === null || length === 0) return null;

@@ -50,16 +50,22 @@ it("leaves skipped and not-applicable checks out of the ring and the count", () 
   });
 });
 
-it("shows the spinner until a check starts", () => {
+it("asks for the spinner while a run starts", () => {
   expect(checksProgress(counts({}), "running").ring).toBeNull();
+  // Checks not started are all gap, which the ring itself shows as the spinner.
   expect(checksProgress(counts({ pending: 2, waiting: 1 }), "running")).toEqual(
-    { ring: null, passed: 0, counted: 3 }
+    {
+      ring: { success: 0, error: 0, warning: 0, neutral: 0, rest: 3 },
+      passed: 0,
+      counted: 3,
+    }
   );
 });
 
-it("shows a full green ring for a finished run with nothing to check", () => {
+it("passes an empty ring for a finished run with nothing to check", () => {
+  // The ring itself shows every count at 0 as a full green ring.
   expect(checksProgress(counts({ not_applicable: 2 }), "passed")).toEqual({
-    ring: { success: 1, error: 0, warning: 0, neutral: 0, rest: 0 },
+    ring: { success: 0, error: 0, warning: 0, neutral: 0, rest: 0 },
     passed: 0,
     counted: 0,
   });
