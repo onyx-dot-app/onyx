@@ -12,10 +12,11 @@ version. A lost save means a concurrent writer won or the session ended, and
 the caller must not retry with the history it loaded.
 """
 
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
+from redis.exceptions import WatchError
 
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.models import ChatMessageSimple
@@ -35,7 +36,7 @@ _TOMBSTONE_TTL_SECONDS = INCOGNITO_CONTEXT_TTL_SECONDS
 # These only bound what one session may hold in Redis.
 _MAX_CONTEXT_MESSAGES = 200
 _MAX_CONTEXT_BYTES = 1_000_000
-# 15 digits stay exact in a Lua double, and turn counts never approach it.
+# Bound the version prefix before converting it to an integer.
 _MAX_VERSION_DIGITS = 15
 
 _KEY_PREFIX = "incognito_ctx"
@@ -44,28 +45,8 @@ _MESSAGES_ADAPTER: TypeAdapter[list[ChatMessageSimple]] = TypeAdapter(
     list[ChatMessageSimple]
 )
 
-# Stored value grammar: ``<version>:<messages json>``. Lua and Python agree
-# only on the digits-before-colon prefix, mirrored by _parse_version_prefix.
-# Non-matching values read as version 0. Applies when stored version == ARGV[1].
+# Stored value grammar: ``<version>:<messages json>``.
 _TOMBSTONE = b"tombstone"
-_CAS_SCRIPT = """
-local cur = redis.call('GET', KEYS[1])
-if cur == 'tombstone' then
-  return 0
-end
-local cur_version = 0
-if cur then
-  local v = string.match(cur, '^(%d+):')
-  if v ~= nil and #v <= 15 then
-    cur_version = tonumber(v)
-  end
-end
-if cur_version ~= tonumber(ARGV[1]) then
-  return 0
-end
-redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
-return 1
-"""
 
 
 class IncognitoContext(BaseModel):
@@ -96,8 +77,8 @@ def _parse_version_prefix(raw: bytes) -> tuple[int, bytes | None]:
     """The value's version and JSON body, or (0, None) for a tombstone or a
     value this store did not write.
 
-    Byte-for-byte the same rule as the CAS script: ASCII digits, at most
-    ``_MAX_VERSION_DIGITS`` of them, immediately followed by a colon.
+    Accept ASCII digits, at most ``_MAX_VERSION_DIGITS`` of them,
+    immediately followed by a colon.
     """
     prefix, sep, body = raw.partition(b":")
     if sep and prefix.isdigit() and len(prefix) <= _MAX_VERSION_DIGITS:
@@ -134,6 +115,58 @@ def load_incognito_context(chat_session_id: UUID) -> IncognitoContext:
     return IncognitoContext(version=version, messages=messages)
 
 
+class _IncognitoWrite(BaseModel):
+    context: bytes
+    agents: dict[bytes, bytes]
+
+
+def _agents_key(chat_session_id: UUID) -> str:
+    return f"{_KEY_PREFIX}:{chat_session_id}:agents"
+
+
+def _update_incognito_state(
+    chat_session_id: UUID,
+    update: Callable[[bytes | None, dict[bytes, bytes]], _IncognitoWrite | None],
+    *,
+    max_attempts: int = 1,
+) -> bool:
+    """Commit both stores from a watched snapshot; reject tombstoned sessions.
+
+    The callback returns replacement state or None to skip the write.
+    Conflict retries read fresh state and rerun the callback. Callbacks must
+    not perform external writes. A stale full-history save must not retry.
+    """
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be positive")
+    client = get_redis_client()
+    context_key = _context_key(chat_session_id)
+    agents_key = _agents_key(chat_session_id)
+    for _ in range(max_attempts):
+        try:
+            with client.pipeline() as pipeline:
+                pipeline.watch(context_key, agents_key)
+                raw = pipeline.get_watched(context_key)
+                if raw == _TOMBSTONE:
+                    return False
+                agents = pipeline.hgetall_watched(agents_key)
+                state = update(raw, agents)
+                if state is None:
+                    return False
+                pipeline.multi()
+                pipeline.set(
+                    context_key, state.context, ex=INCOGNITO_CONTEXT_TTL_SECONDS
+                )
+                pipeline.delete(agents_key)
+                if state.agents:
+                    pipeline.hset(agents_key, state.agents)
+                    pipeline.expire(agents_key, INCOGNITO_CONTEXT_TTL_SECONDS)
+                pipeline.execute()
+            return True
+        except WatchError:
+            continue
+    return False
+
+
 def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> bool:
     """Write the full history, bump the version, restart the idle clock.
 
@@ -155,17 +188,13 @@ def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> 
         body = _MESSAGES_ADAPTER.dump_json(trimmed)
     payload = f"{context.version + 1}:".encode() + body
 
-    client = get_redis_client()
-    result = client.eval(
-        _CAS_SCRIPT,
-        keys=[_context_key(chat_session_id)],
-        args=[
-            str(context.version).encode(),
-            payload,
-            str(INCOGNITO_CONTEXT_TTL_SECONDS).encode(),
-        ],
-    )
-    return bool(result)
+    def update(raw: bytes | None, agents: dict[bytes, bytes]) -> _IncognitoWrite | None:
+        version = _parse_version_prefix(raw)[0] if raw is not None else 0
+        if version != context.version:
+            return None
+        return _IncognitoWrite(context=payload, agents=agents)
+
+    return _update_incognito_state(chat_session_id, update)
 
 
 def append_incognito_message(chat_session_id: UUID, message: ChatMessageSimple) -> None:
@@ -230,7 +259,12 @@ def teardown_incognito_session(chat_session_id: UUID) -> None:
     recreate it (a missing key reads as version zero), and delete the buffered
     stream chunks holding the streamed answer NDJSON."""
     client = get_redis_client()
-    client.set(_context_key(chat_session_id), _TOMBSTONE, ex=_TOMBSTONE_TTL_SECONDS)
+    with client.pipeline() as pipeline:
+        pipeline.set(
+            _context_key(chat_session_id), _TOMBSTONE, ex=_TOMBSTONE_TTL_SECONDS
+        )
+        pipeline.delete(_agents_key(chat_session_id))
+        pipeline.execute()
     buffered = list(client.scan_iter(match=stream_buffer_key_pattern(chat_session_id)))
     if buffered:
         client.delete(*buffered)
