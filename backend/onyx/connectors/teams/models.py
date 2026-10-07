@@ -45,6 +45,18 @@ class ChannelMember(BaseModel):
     )
 
 
+class ChannelIdentity(BaseModel):
+    """Where a message lives, carried by the rows of a team-wide export."""
+
+    team_id: str | None = None
+    channel_id: str | None = None
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+
 class Message(BaseModel):
     id: str
     replyToId: str | None
@@ -58,6 +70,7 @@ class Message(BaseModel):
     web_url: str
     # Graph also lists system events (member added, channel renamed) as messages.
     message_type: str | None = None
+    channel_identity: ChannelIdentity | None = None
 
     model_config = ConfigDict(
         alias_generator=to_camel,

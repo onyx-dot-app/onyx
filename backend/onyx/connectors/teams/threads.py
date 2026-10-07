@@ -214,6 +214,22 @@ class ThreadSource:
                 ),
             )
 
+    def document(
+        self, channel: ChannelRef, root: Message, replies: list[Message]
+    ) -> Document:
+        """One thread whose messages are already in hand."""
+        return _convert_thread_to_document(
+            channel=channel,
+            root=root,
+            replies=replies,
+            message_images=(
+                self._message_images if self._include_inline_images else None
+            ),
+        )
+
+    def deleted_since(self, root: Message, start: SecondsSinceUnixEpoch) -> bool:
+        return _deleted_since(root, start)
+
     def slim(self, channel: ChannelRef, walk: SlimWalk) -> Iterator[SlimDocument]:
         # A thread names its channel's group, so readers cost no call.
         external_access = (

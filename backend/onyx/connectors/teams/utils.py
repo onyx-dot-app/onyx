@@ -377,6 +377,39 @@ def message_delta_url(
     )
 
 
+def _graph_time(when: SecondsSinceUnixEpoch) -> str:
+    return datetime.fromtimestamp(when, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def team_export_url(
+    team_id: str, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+) -> str:
+    """Every message of every channel of a team changed inside the window,
+    replies included, in one stream. The export API wants both bounds."""
+    return (
+        f"teams/{team_id}/channels/getAllMessages"
+        f"?$filter=lastModifiedDateTime gt {_graph_time(start)}"
+        f" and lastModifiedDateTime lt {_graph_time(end)}&$top={MESSAGE_PAGE_SIZE}"
+    )
+
+
+def team_export_probe_url(team_id: str) -> str:
+    return f"teams/{team_id}/channels/getAllMessages?$top=1"
+
+
+def fetch_root_message(
+    graph_client: GraphClient, team_id: str, channel_id: str, message_id: str
+) -> Message:
+    return Message(
+        **_sanitize_message_user_display_name(
+            get_json_with_retry(
+                graph_client,
+                f"teams/{team_id}/channels/{channel_id}/messages/{message_id}",
+            )
+        )
+    )
+
+
 def fetch_message_page(
     graph_client: GraphClient, request_url: str
 ) -> tuple[list[Message], str | None]:

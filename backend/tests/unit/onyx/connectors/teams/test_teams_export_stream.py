@@ -1,0 +1,227 @@
+"""Channel threads through the export API: one stream per team, replies in
+the stream, the channel walk as the fallback when the app lacks the approval
+or a team is too large to hold."""
+
+from typing import Any
+
+import pytest
+
+from onyx.connectors.models import ConnectorFailure, Document
+from onyx.connectors.teams import export as export_module
+from onyx.connectors.teams.connector import TeamsCheckpoint
+from onyx.connectors.teams.models import ChannelRef
+from onyx.connectors.teams.utils import team_export_probe_url, team_export_url
+from tests.unit.onyx.connectors.teams.helpers import (
+    CHANNEL,
+    TEAM_ID,
+    connector,
+    graph_client,
+    message,
+    replies_url,
+    step,
+)
+
+OTHER = ChannelRef(
+    team_id=TEAM_ID,
+    id="19:other@thread.tacv2",
+    display_name="Other",
+    membership_type="standard",
+)
+START = 1_700_000_000
+PROBE = team_export_probe_url(TEAM_ID)
+
+
+def _in_channel(row: dict[str, Any], channel: ChannelRef) -> dict[str, Any]:
+    return {**row, "channelIdentity": {"teamId": TEAM_ID, "channelId": channel.id}}
+
+
+def _team_with_channels(monkeypatch: pytest.MonkeyPatch) -> None:
+    def sdk_channel(channel: ChannelRef) -> Any:
+        from unittest.mock import MagicMock
+
+        sdk = MagicMock()
+        sdk.id = channel.id
+        sdk.properties = {
+            "displayName": channel.display_name,
+            "membershipType": channel.membership_type,
+        }
+        return sdk
+
+    monkeypatch.setattr(
+        "onyx.connectors.teams.listing.get_team_by_id", lambda **_: object()
+    )
+    monkeypatch.setattr(
+        "onyx.connectors.teams.listing.collect_all_channels_from_team",
+        lambda **_: [sdk_channel(CHANNEL), sdk_channel(OTHER)],
+    )
+
+
+def _documents(items: list[Any]) -> dict[str, Document]:
+    return {item.id: item for item in items if isinstance(item, Document)}
+
+
+def _team_checkpoint() -> TeamsCheckpoint:
+    return TeamsCheckpoint(has_more=True, todo_team_ids=[TEAM_ID])
+
+
+def test_a_team_streams_whole_threads_without_a_replies_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _team_with_channels(monkeypatch)
+    client = graph_client(
+        {
+            PROBE: {"value": []},
+            team_export_url(TEAM_ID, 0, 1): {
+                "value": [
+                    _in_channel(message("m1", "one"), CHANNEL),
+                    _in_channel(message("r1", "reply", reply_to="m1"), CHANNEL),
+                    _in_channel(message("o1", "other"), OTHER),
+                ]
+            },
+        }
+    )
+
+    items, checkpoint = step(connector(client), _team_checkpoint())
+
+    documents = _documents(items)
+    assert set(documents) == {"m1", "o1"}
+    assert [section.text or "" for section in documents["m1"].sections][-1].endswith(
+        "reply"
+    )
+    assert checkpoint.export is True
+    assert checkpoint.todo_team_ids == []
+    assert checkpoint.has_more is False
+    requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
+    assert replies_url("m1") not in requested
+
+
+def test_an_older_thread_that_only_gained_a_reply_is_read_whole(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _team_with_channels(monkeypatch)
+    old = "2020-01-01T10:00:00Z"
+    client = graph_client(
+        {
+            PROBE: {"value": []},
+            team_export_url(TEAM_ID, START, START + 1): {
+                "value": [
+                    _in_channel(
+                        message(
+                            "r9", "late", reply_to="m9", created="2026-10-01T10:00:00Z"
+                        ),
+                        CHANNEL,
+                    )
+                ]
+            },
+            f"teams/{TEAM_ID}/channels/{CHANNEL.id}/messages/m9": message(
+                "m9", "root", created=old
+            ),
+            replies_url("m9"): {
+                "value": [
+                    message(
+                        "r8", "early", reply_to="m9", created="2020-01-02T10:00:00Z"
+                    ),
+                    message(
+                        "r9", "late", reply_to="m9", created="2026-10-01T10:00:00Z"
+                    ),
+                ]
+            },
+        }
+    )
+
+    items, checkpoint = step(connector(client), _team_checkpoint(), start=START)
+
+    documents = _documents(items)
+    assert set(documents) == {"m9"}
+    assert [
+        (section.text or "").split("\n")[-1] for section in documents["m9"].sections
+    ] == [
+        "root",
+        "early",
+        "late",
+    ]
+    assert checkpoint.export is True
+
+
+def test_an_app_without_the_approval_walks_channels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _team_with_channels(monkeypatch)
+    client = graph_client({}, refused={PROBE: 403})
+
+    items, checkpoint = step(connector(client), _team_checkpoint())
+
+    assert items == []
+    assert checkpoint.export is False
+    assert [channel.id for channel in checkpoint.todo_channels] == [
+        CHANNEL.id,
+        OTHER.id,
+    ]
+    assert checkpoint.todo_team_ids == []
+
+
+def test_the_export_decision_is_kept_for_the_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second team step never probes again, so every step of an attempt
+    takes the path the first one took."""
+    _team_with_channels(monkeypatch)
+    client = graph_client({}, refused={PROBE: 403})
+    saved = TeamsCheckpoint(has_more=True, todo_team_ids=[TEAM_ID], export=False)
+
+    _, checkpoint = step(connector(client), saved)
+
+    requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
+    assert PROBE not in requested
+    assert checkpoint.export is False
+
+
+def test_a_team_too_large_to_hold_goes_to_the_channel_walk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _team_with_channels(monkeypatch)
+    monkeypatch.setattr(export_module, "EXPORT_MESSAGES_CAP", 1)
+    client = graph_client(
+        {
+            PROBE: {"value": []},
+            team_export_url(TEAM_ID, 0, 1): {
+                "value": [
+                    _in_channel(message("m1", "one"), CHANNEL),
+                    _in_channel(message("m2", "two"), CHANNEL),
+                ]
+            },
+        }
+    )
+
+    items, checkpoint = step(connector(client), _team_checkpoint())
+
+    assert items == []
+    assert [channel.id for channel in checkpoint.todo_channels] == [
+        CHANNEL.id,
+        OTHER.id,
+    ]
+    assert checkpoint.has_more is True
+
+
+def test_a_thread_in_a_channel_the_team_does_not_list_is_one_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _team_with_channels(monkeypatch)
+    stranger = ChannelRef(
+        team_id=TEAM_ID, id="19:gone@thread.tacv2", display_name="Gone"
+    )
+    client = graph_client(
+        {
+            PROBE: {"value": []},
+            team_export_url(TEAM_ID, 0, 1): {
+                "value": [_in_channel(message("m1", "one"), stranger)]
+            },
+        }
+    )
+
+    items, _ = step(connector(client), _team_checkpoint())
+
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert failures[0].failed_entity is not None
+    assert failures[0].failed_entity.entity_id == "m1"
