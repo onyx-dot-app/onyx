@@ -111,7 +111,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   },
   sharepoint: {
     icon: SvgSharepoint,
-    displayName: "Sharepoint",
+    displayName: "SharePoint",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/sharepoint`,
     isPopular: true,
@@ -300,7 +300,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   },
   clickup: {
     icon: SvgClickup,
-    displayName: "Clickup",
+    displayName: "ClickUp",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/clickup`,
   },
@@ -361,7 +361,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   },
   xenforo: {
     icon: SvgXenforo,
-    displayName: "Xenforo",
+    displayName: "XenForo",
     category: SourceCategory.Messaging,
   },
   zulip: {
@@ -414,14 +414,14 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   // Code Repository
   github: {
     icon: SvgGithub,
-    displayName: "Github",
+    displayName: "GitHub",
     category: SourceCategory.CodeRepository,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/github`,
     isPopular: true,
   },
   gitlab: {
     icon: SvgGitlab,
-    displayName: "Gitlab",
+    displayName: "GitLab",
     category: SourceCategory.CodeRepository,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gitlab`,
   },
