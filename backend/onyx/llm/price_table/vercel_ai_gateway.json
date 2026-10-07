@@ -1632,6 +1632,49 @@
       "temperature": true,
       "tool_call": true
     },
+    "anthropic/claude-haiku-5.5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100001,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "anthropic/claude-opus-4": {
       "attachment": true,
       "cost": {
@@ -1990,7 +2033,7 @@
       },
       "family": "claude-sonnet",
       "limit": {
-        "context": 1000000,
+        "context": 200000,
         "output": 64000
       },
       "modalities": {
@@ -2956,33 +2999,6 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-21",
-      "temperature": true,
-      "tool_call": true
-    },
-    "deepseek/deepseek-v3.1-terminus": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.135,
-        "input": 0.27,
-        "output": 1
-      },
-      "family": "deepseek",
-      "limit": {
-        "context": 131072,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "DeepSeek V3.1 Terminus",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-09-22",
       "temperature": true,
       "tool_call": true
     },
@@ -5895,33 +5911,6 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-07-11",
-      "temperature": true,
-      "tool_call": true
-    },
-    "moonshotai/kimi-k2-thinking": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.141,
-        "input": 0.47,
-        "output": 2
-      },
-      "family": "kimi-thinking",
-      "limit": {
-        "context": 216144,
-        "output": 216144
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Kimi K2 Thinking",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-11-06",
       "temperature": true,
       "tool_call": true
     },
@@ -10405,31 +10394,28 @@
       "release_date": "2026-07-29",
       "tool_call": false
     },
-    "stepfun/step-3.5-flash": {
+    "stealth/glyph-cluster": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.02,
-        "input": 0.09,
-        "output": 0.3
+        "input": 0,
+        "output": 0
       },
       "limit": {
-        "context": 262114,
-        "output": 262114
+        "context": 256000,
+        "output": 256000
       },
       "modalities": {
         "input": [
-          "text",
-          "image"
+          "text"
         ],
         "output": [
           "text"
         ]
       },
-      "name": "StepFun 3.5 Flash",
-      "open_weights": true,
+      "name": "Glyph Cluster",
+      "open_weights": false,
       "reasoning": true,
-      "release_date": "2026-01-29",
-      "temperature": true,
+      "release_date": "2026-10-07",
       "tool_call": true
     },
     "stepfun/step-3.7-flash": {

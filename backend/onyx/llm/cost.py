@@ -185,6 +185,9 @@ def _catalog_cost_cents(
         value = rates.get(key)
         if value is None:
             value = cost.get(key)
+        # Negative rates are upstream "unknown price" sentinels, never real.
+        if value is not None and value < 0:
+            value = None
         return float(value) if value is not None else (fallback or 0.0)
 
     input_rate = _rate("input")

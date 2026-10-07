@@ -148,7 +148,7 @@ def test_unbounded_entry_drops_max_output_tokens() -> None:
                     "unbounded": True,
                 },
                 "vendor/real-model": {
-                    "limit": {"context": 2_000_000, "output": 2_000_000},
+                    "limit": {"context": 2_000_000, "output": 128_000},
                 },
             },
             "aliases": {},
@@ -169,8 +169,80 @@ def test_unbounded_entry_drops_max_output_tokens() -> None:
                 model_map, LlmProviderNames.OPENROUTER, "vendor/real-model"
             )
             assert bounded is not None
-            assert bounded["max_output_tokens"] == 2_000_000
+            assert bounded["max_output_tokens"] == 128_000
             assert bounded["unbounded"] is None
+        finally:
+            _reset_caches()
+
+
+def test_inflated_output_claim_drops_max_output_tokens() -> None:
+    """Chat-mode entries whose vendored output limit is at or above the
+    context window carry a pool-max fabrication, not a per-request cap —
+    the model map must not emit it. Non-chat modes (image/TTS limits mean
+    something else) are left alone."""
+    mock_catalog: dict[str, Any] = {
+        "wandb": {
+            "models": {
+                "vendor/fabricated": {
+                    "mode": "chat",
+                    "limit": {"context": 262_144, "output": 262_144},
+                },
+                "vendor/real": {
+                    "mode": "chat",
+                    "limit": {"context": 262_144, "output": 131_072},
+                },
+                "vendor/veo": {
+                    "mode": "image",
+                    "limit": {"context": 480, "output": 8192},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            fabricated = find_model_obj(model_map, "wandb", "vendor/fabricated")
+            assert fabricated is not None
+            assert fabricated["max_output_tokens"] is None
+            assert fabricated["unbounded"] is None
+
+            real = find_model_obj(model_map, "wandb", "vendor/real")
+            assert real is not None
+            assert real["max_output_tokens"] == 131_072
+
+            image = find_model_obj(model_map, "wandb", "vendor/veo")
+            assert image is not None
+            assert image["max_output_tokens"] == 8192
+        finally:
+            _reset_caches()
+
+
+def test_chat_only_skips_non_chat_entries() -> None:
+    """A bare-name scan can resolve a chat lookup to an image/embedding entry;
+    chat_only makes it behave like a miss so callers get fallbacks."""
+    mock_catalog: dict[str, Any] = {
+        "openai": {
+            "models": {
+                "gpt-image-1": {
+                    "mode": "image",
+                    "limit": {"context": 0, "output": 0},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            # Unfiltered lookup still resolves (cost/existence checks need it).
+            assert find_model_obj(model_map, "custom", "gpt-image-1") is not None
+            assert (
+                find_model_obj(model_map, "custom", "gpt-image-1", chat_only=True)
+                is None
+            )
         finally:
             _reset_caches()
 
