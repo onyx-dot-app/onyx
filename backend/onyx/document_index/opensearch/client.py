@@ -1287,16 +1287,21 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         return num_deleted
 
-    def update_by_query(self, query_body: dict[str, Any]) -> int:
+    def update_by_query(
+        self, query_body: dict[str, Any], fail_on_conflict: bool = False
+    ) -> int:
         """Runs a scripted update on every document matching a query.
 
         A chunk rewritten while the update runs (a version conflict) is
         skipped, not retried: the caller must only use this for values that
-        every other writer of the chunk also sets. The index is refreshed
-        afterwards, so a following update-by-query sees this one's writes.
+        every other writer of the chunk also sets, or pass
+        ``fail_on_conflict`` so a skipped chunk raises and the caller retries.
+        The index is refreshed afterwards, so a following update-by-query
+        sees this one's writes.
 
         Raises:
-            Exception: There was an error updating the documents.
+            Exception: There was an error updating the documents, or a chunk
+                was skipped on a version conflict with ``fail_on_conflict``.
 
         Returns:
             The number of documents updated.
@@ -1316,6 +1321,11 @@ class OpenSearchIndexClient(OpenSearchClient):
             raise RuntimeError(
                 f"Failed to update some or all of the documents for index {self._index_name}: "
                 f"{result['failures']}"
+            )
+        if fail_on_conflict and int(result.get("version_conflicts", 0)) > 0:
+            raise RuntimeError(
+                f"Update by query skipped {result['version_conflicts']} chunks on "
+                f"version conflicts for index {self._index_name}."
             )
         return int(result.get("updated", 0))
 

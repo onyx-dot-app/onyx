@@ -835,12 +835,16 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 )
 
             if unknown_chunk_count_doc_ids:
+                # Access fields must not be left stale on a chunk that a
+                # concurrent write raced: raise, so the sync retries and the
+                # document stays unsynced.
                 self._client.update_by_query(
                     DocumentQuery.set_properties_query(
                         document_ids=unknown_chunk_count_doc_ids,
                         properties=properties_to_update,
                         tenant_state=self._tenant_state,
-                    )
+                    ),
+                    fail_on_conflict=True,
                 )
 
         if missing_chunk_ids:
