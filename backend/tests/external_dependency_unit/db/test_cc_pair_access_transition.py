@@ -26,6 +26,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_edit_requests import apply_access_change__no_commit
 from onyx.db.document import (
+    mark_cc_pair_documents_for_sync__no_commit,
+    mark_document_as_indexed_for_cc_pair__no_commit,
     mark_document_as_synced,
     upsert_document_by_connector_credential_pair,
 )
@@ -132,13 +134,18 @@ def make_pair(
             cleanup_cc_pair(db_session, pair)
 
 
-def _add_synced_document(db_session: Session, pair: ConnectorCredentialPair) -> str:
+def _add_synced_document(
+    db_session: Session,
+    pair: ConnectorCredentialPair,
+    chunk_count: int | None = 1,
+    indexed: bool = False,
+) -> str:
     doc_id = f"access-transition-{uuid4().hex[:8]}"
     db_session.add(
         DbDocument(
             id=doc_id,
             semantic_id=doc_id,
-            chunk_count=1,
+            chunk_count=chunk_count,
             last_modified=_EARLIER,
             last_synced=_EARLIER,
         )
@@ -147,6 +154,11 @@ def _add_synced_document(db_session: Session, pair: ConnectorCredentialPair) -> 
     upsert_document_by_connector_credential_pair(
         db_session, pair.connector_id, pair.credential_id, [doc_id]
     )
+    if indexed:
+        mark_document_as_indexed_for_cc_pair__no_commit(
+            db_session, pair.connector_id, pair.credential_id, [doc_id]
+        )
+        db_session.commit()
     return doc_id
 
 
@@ -313,7 +325,7 @@ def _pending_pair(
 
 def _clear(db_session: Session, pair: ConnectorCredentialPair) -> bool:
     cleared = clear_perm_sync_pending__no_commit(
-        db_session, pair.id, needs_group_sync=False
+        db_session, pair.id, needs_doc_sync=True, needs_group_sync=False
     )
     db_session.commit()
     db_session.refresh(pair)
@@ -408,3 +420,63 @@ def test_syncs_that_started_before_the_mark_stay_due(
     db_session.commit()
     assert not is_external_doc_permissions_sync_due(pair)
     assert not is_external_group_sync_due(pair)
+
+
+def test_a_source_without_doc_sync_gets_no_mark(
+    db_session: Session, make_pair: _PairFactory
+) -> None:
+    # Salesforce checks access after search; no doc permission sync clears a
+    # mark.
+    salesforce_pair = make_pair(AccessType.PUBLIC, DocumentSource.SALESFORCE)
+    _change(db_session, salesforce_pair, AccessType.SYNC)
+    assert salesforce_pair.perm_sync_pending_since is None
+    assert salesforce_pair.last_time_perm_sync is None
+
+    drive_pair = make_pair(AccessType.PUBLIC, DocumentSource.GOOGLE_DRIVE)
+    _change(db_session, drive_pair, AccessType.SYNC)
+    assert drive_pair.perm_sync_pending_since is not None
+
+
+def test_beat_clears_a_stale_mark_on_a_source_without_doc_sync(
+    db_session: Session, make_pair: _PairFactory
+) -> None:
+    pair = make_pair(AccessType.SYNC, DocumentSource.SALESFORCE)
+    doc_id = _add_synced_document(db_session, pair)
+    # A mark that older code set, with no perm sync and a document that waits
+    # for metadata sync.
+    pair.perm_sync_pending_since = datetime.now(tz=timezone.utc)
+    pair.last_time_perm_sync = None
+    db_session.commit()
+    mark_cc_pair_documents_for_sync__no_commit(db_session, [pair.id])
+    db_session.commit()
+    assert _needs_metadata_sync(db_session, doc_id)
+
+    clear_caught_up_perm_sync_pending_marks(get_current_tenant_id())
+    db_session.refresh(pair)
+    assert pair.perm_sync_pending_since is None
+
+
+def test_legacy_indexed_documents_are_marked_and_hold_the_mark(
+    db_session: Session, make_pair: _PairFactory
+) -> None:
+    pair = make_pair(AccessType.PUBLIC)
+    # Indexed before chunk counts were stored.
+    legacy_doc_id = _add_synced_document(
+        db_session, pair, chunk_count=None, indexed=True
+    )
+    # Added by a permission sync, never indexed: it has no chunks.
+    unindexed_doc_id = _add_synced_document(db_session, pair, chunk_count=None)
+
+    _change(db_session, pair, AccessType.SYNC)
+    pending_since = pair.perm_sync_pending_since
+    assert pending_since is not None
+    assert _needs_metadata_sync(db_session, legacy_doc_id)
+    assert not _needs_metadata_sync(db_session, unindexed_doc_id)
+
+    mark_cc_pair_as_permissions_synced(
+        db_session, pair.id, pending_since + timedelta(seconds=1)
+    )
+    assert not _clear(db_session, pair)
+
+    mark_document_as_synced(legacy_doc_id, db_session)
+    assert _clear(db_session, pair)

@@ -264,7 +264,8 @@ the LLM, assigning one citation number per unique `document_id` starting at
    the single DB session opened at the top of `run()`. It returns a `UserAccessFilters`
    object: the ACL list plus an optional `CCPairAccessFilter` (`cc_pair_access`).
    The filter is set when the cc-pair flag is on. It is also set in `OFF` mode when
-   the user cannot see a `SYNC_RESTRICTED` pair, so the pair stays hidden
+   a guarded pair exists (a `SYNC_RESTRICTED` pair, or a pair awaiting its first
+   permission sync), so a guarded pair that grants the user nothing stays hidden
    (`_build_cc_pair_access_filter`). There is no flag that skips
    it: the only input that decides document access is the `user` the caller passes
    to `SearchTool`. A caller that wants a narrower scope passes a narrower user (the

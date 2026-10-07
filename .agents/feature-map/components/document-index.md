@@ -226,7 +226,10 @@ now-stale trailing chunks when a re-indexed document got shorter (using
 
 `Updatable.update(update_requests)` patches ACL, document-set membership, boost,
 hidden, project/persona membership, and `secondary_index_updated` without a
-re-embed. `MetadataUpdateRequest` can raise `SecondaryIndexDocumentMissingError`
+re-embed. The OpenSearch implementation updates chunks by ID from the document's
+chunk count. A document whose chunk count is unknown (indexed before
+`Document.chunk_count` existed, or being indexed now) is updated by query on its
+document ID (`opensearch/search.py:DocumentQuery.set_properties_query`). `MetadataUpdateRequest` can raise `SecondaryIndexDocumentMissingError`
 mid-port, when a metadata update lands on the primary before the reindex port has
 copied that document into the FUTURE index; callers use this to defer the secondary
 sync instead of failing outright.
@@ -292,7 +295,8 @@ where the old and new filters disagree. In `ENFORCE` mode,
 `_get_enforced_cc_pair_access` swaps in the cc-pair filter, which tests
 `cc_pair_ids` against the user's open and ACL cc-pairs. Chunks with no cc-pair (user
 files) fall back to the old ACL filter. Even in `OFF` mode, the filter exists to hide
-`SYNC_RESTRICTED` cc-pairs (`hidden_restricted_cc_pair_ids`). See [[permission-sync]].
+`SYNC_RESTRICTED` cc-pairs and cc-pairs awaiting their first permission sync
+(`hidden_restricted_cc_pair_ids`). See [[access-control]] §4.3a.
 Chunks get `cc_pair_ids` at index time. The beat task
 `cc_pair_ids_backfill` fills older chunks without re-embedding, with progress in the
 KV store (`KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY`), restarted per `SearchSettings`

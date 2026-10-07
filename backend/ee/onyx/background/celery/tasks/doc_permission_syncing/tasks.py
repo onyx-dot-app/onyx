@@ -329,7 +329,7 @@ def clear_caught_up_perm_sync_pending_marks(tenant_id: str) -> None:
     """Clears the mark of each pair awaiting its first permission sync whose
     permissions are now in the document index. Group ACL entries are only as
     current as the group memberships, so a source with group sync also waits
-    for one."""
+    for one. A mark on a source with no doc permission sync clears at once."""
     with get_session_with_current_tenant() as db_session:
         pending_cc_pair_sources = get_perm_sync_pending_cc_pair_sources(db_session)
         if not pending_cc_pair_sources:
@@ -338,11 +338,16 @@ def clear_caught_up_perm_sync_pending_marks(tenant_id: str) -> None:
         maybe_mark_tenant_active(tenant_id, caller="doc_permission_sync")
         for cc_pair_id, source in pending_cc_pair_sources.items():
             sync_config = get_source_perm_sync_config(source)
-            needs_group_sync = (
-                sync_config is not None and sync_config.group_sync_config is not None
-            )
             if clear_perm_sync_pending__no_commit(
-                db_session, cc_pair_id, needs_group_sync
+                db_session,
+                cc_pair_id,
+                needs_doc_sync=(
+                    sync_config is not None and sync_config.doc_sync_config is not None
+                ),
+                needs_group_sync=(
+                    sync_config is not None
+                    and sync_config.group_sync_config is not None
+                ),
             ):
                 task_logger.info(
                     f"Cleared perm sync pending mark: cc_pair={cc_pair_id}"

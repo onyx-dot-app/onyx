@@ -118,22 +118,27 @@ def get_perm_sync_pending_cc_pair_sources(
 
 
 def clear_perm_sync_pending__no_commit(
-    db_session: Session, cc_pair_id: int, needs_group_sync: bool
+    db_session: Session,
+    cc_pair_id: int,
+    needs_doc_sync: bool,
+    needs_group_sync: bool,
 ) -> bool:
     """Clears the pair's perm_sync_pending_since once its permissions are in
     the document index: a doc permission sync that started after the mark
     succeeded, an external group sync after the mark succeeded when
     needs_group_sync, and no indexed document of the pair waits for metadata
-    sync. Returns True if it cleared the mark."""
+    sync. Without needs_doc_sync the mark clears at once: no doc permission
+    sync runs for the source, and it checks access after search. Returns True
+    if it cleared the mark."""
     pending_since = ConnectorCredentialPair.perm_sync_pending_since
-    conditions = [
-        ConnectorCredentialPair.id == cc_pair_id,
-        pending_since.is_not(None),
-        # Set to the start time of the last successful doc permission sync.
-        ConnectorCredentialPair.last_time_perm_sync >= pending_since,
-        ~build_cc_pair_has_unsynced_documents_clause(),
-    ]
-    if needs_group_sync:
+    conditions = [ConnectorCredentialPair.id == cc_pair_id, pending_since.is_not(None)]
+    if needs_doc_sync:
+        conditions += [
+            # Set to the start time of the last successful doc permission sync.
+            ConnectorCredentialPair.last_time_perm_sync >= pending_since,
+            ~build_cc_pair_has_unsynced_documents_clause(),
+        ]
+    if needs_doc_sync and needs_group_sync:
         conditions.append(
             ConnectorCredentialPair.last_time_external_group_sync >= pending_since
         )

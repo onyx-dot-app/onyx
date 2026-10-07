@@ -199,7 +199,9 @@ def apply_access_change__no_commit(
 
     Entering a perm-synced type from another type makes both permission syncs
     due and marks the pair as awaiting its first permission sync, so it grants
-    nothing until its chunks carry the synced access. Leaving one clears the
+    nothing until its chunks carry the synced access. A source with no doc
+    permission sync (Salesforce checks access after search) gets no mark,
+    since nothing would clear it. Leaving one clears the
     mark and keeps the synced ACLs. SYNC <-> SYNC_RESTRICTED keeps the mark as
     it is: the ACLs are already synced. visible_group_ids is as in
     set_cc_pair_data_access_groups__no_commit; a type without data access
@@ -214,7 +216,12 @@ def apply_access_change__no_commit(
     if access_type.is_perm_synced() and not previous_access_type.is_perm_synced():
         cc_pair.last_time_perm_sync = None
         cc_pair.last_time_external_group_sync = None
-        cc_pair.perm_sync_pending_since = func.now()
+        if fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.sync_params",
+            "source_requires_doc_sync",
+            noop_return_value=False,
+        )(cc_pair.connector.source):
+            cc_pair.perm_sync_pending_since = func.now()
     elif not access_type.is_perm_synced():
         cc_pair.perm_sync_pending_since = None
     db_session.flush()
