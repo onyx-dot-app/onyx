@@ -55,8 +55,6 @@ class CurrentPairState(PairState):
     cc_pair_id: int
     connector_id: int
     status: ConnectorCredentialPairStatus
-    # The pairs that share the connector, this one included.
-    connector_pair_count: int
 
 
 class EditStepKind(str, Enum):

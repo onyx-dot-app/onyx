@@ -119,17 +119,6 @@ _UNFINISHED_CHECK_FAILED_MESSAGE = (
 )
 
 
-def _connector_fields_changed(
-    current: CurrentPairState, proposed: ProposedPairState
-) -> bool:
-    return (
-        proposed.connector_specific_config != current.connector_specific_config
-        or proposed.indexing_start != current.indexing_start
-        or proposed.refresh_freq != current.refresh_freq
-        or proposed.prune_freq != current.prune_freq
-    )
-
-
 def ensure_edit_is_plannable(
     current: CurrentPairState, proposed: ProposedPairState
 ) -> None:
@@ -156,17 +145,6 @@ def ensure_edit_is_plannable(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"{current.source.value} has no connector configuration to edit.",
-        )
-    # The connector's fields apply to all its pairs, but a plan covers only
-    # the edited pair.
-    if current.connector_pair_count > 1 and _connector_fields_changed(
-        current, proposed
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"The connector has {current.connector_pair_count} connections. "
-            "They share its configuration, indexing start and frequencies, so "
-            "an edit of one connection cannot change them.",
         )
 
 

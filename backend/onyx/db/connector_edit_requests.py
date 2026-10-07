@@ -25,7 +25,7 @@ from onyx.db.index_attempt import (
     cancel_waiting_index_attempt__no_commit,
     create_index_attempt__no_commit,
 )
-from onyx.db.models import Connector, ConnectorCredentialPair, IndexAttempt
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -104,18 +104,11 @@ def _lock_cc_pair_for_request(
 
 
 def lock_cc_pair_for_edit__no_commit(db_session: Session, cc_pair_id: int) -> None:
-    """Row-locks the pair and then its connector, and reloads their state.
-    Concurrent applies on any pair of the connector run one after the other,
-    and each reads what the previous one committed. The connector lock also
-    blocks a new pair on the connector until the commit. Raises ``OnyxError``
-    (CONFLICT) for a DELETING pair."""
+    """Row-locks the pair and reloads its state, so concurrent applies run one
+    after the other and each reads what the previous one committed. Raises
+    ``OnyxError`` (CONFLICT) for a DELETING pair."""
     db_session.expire_all()
-    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
-    db_session.execute(
-        select(Connector.id)
-        .where(Connector.id == cc_pair.connector_id)
-        .with_for_update()
-    )
+    _lock_cc_pair_for_request(db_session, cc_pair_id)
 
 
 def write_edited_pair_state__no_commit(

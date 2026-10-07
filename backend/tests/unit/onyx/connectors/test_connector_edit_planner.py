@@ -64,13 +64,11 @@ def _current(
     data_access_group_ids: list[int] | None = None,
     status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
     indexing_start: datetime | None = None,
-    connector_pair_count: int = 1,
 ) -> CurrentPairState:
     return CurrentPairState(
         cc_pair_id=1,
         connector_id=2,
         status=status,
-        connector_pair_count=connector_pair_count,
         source=source,
         input_type=InputType.POLL,
         connector_specific_config=config or {},
@@ -86,10 +84,7 @@ def _current(
 
 def _proposed(current: CurrentPairState, **changes: Any) -> ProposedPairState:
     return ProposedPairState.model_validate(
-        current.model_dump(
-            exclude={"cc_pair_id", "connector_id", "status", "connector_pair_count"}
-        )
-        | changes
+        current.model_dump(exclude={"cc_pair_id", "connector_id", "status"}) | changes
     )
 
 
@@ -747,34 +742,6 @@ def test_source_and_input_type_changes_are_refused(changes: dict[str, Any]) -> N
         _plan(_current(), **changes)
 
     assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
-
-
-@pytest.mark.parametrize(
-    "changes",
-    [
-        {"connector_specific_config": {"channels": ["general"]}},
-        {"indexing_start": datetime(2025, 1, 1, tzinfo=timezone.utc)},
-        {"refresh_freq": 7200},
-        {"prune_freq": 172800},
-    ],
-)
-def test_connector_field_edit_of_a_shared_connector_is_refused(
-    changes: dict[str, Any],
-) -> None:
-    with pytest.raises(OnyxError) as exc:
-        _plan(_current(connector_pair_count=2), **changes)
-
-    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
-
-
-def test_pair_field_edit_of_a_shared_connector_is_planned() -> None:
-    plan = _plan(
-        _current(connector_pair_count=2),
-        name="renamed",
-        access_type=AccessType.PRIVATE,
-    )
-
-    assert plan.changed_settings == ["name"]
 
 
 def test_config_edit_of_a_source_without_a_config_model_is_refused() -> None:

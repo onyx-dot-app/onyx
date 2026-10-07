@@ -342,7 +342,6 @@ def apply_connector_edit(
         if load_edit_plan(stored.plan_id, cc_pair_id) is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, _PLAN_NOT_FOUND_MESSAGE)
         current = fetch_current_pair_state(db_session, cc_pair_id)
-        ensure_edit_is_plannable(current, proposed)
         ensure_base_state_matches(stored, current)
 
         credential = _proposed_credential(db_session, current, proposed)

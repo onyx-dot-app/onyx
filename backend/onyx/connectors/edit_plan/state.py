@@ -1,10 +1,7 @@
 from sqlalchemy.orm import Session
 
 from onyx.connectors.edit_plan.models import CurrentPairState
-from onyx.db.connector_credential_pair import (
-    get_cc_pair_ids_for_connector,
-    get_connector_credential_pair_from_id,
-)
+from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.models import UserGroup
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -36,9 +33,6 @@ def fetch_current_pair_state(db_session: Session, cc_pair_id: int) -> CurrentPai
         cc_pair_id=cc_pair.id,
         connector_id=connector.id,
         status=cc_pair.status,
-        connector_pair_count=len(
-            get_cc_pair_ids_for_connector(db_session, connector.id)
-        ),
         source=connector.source,
         input_type=connector.input_type,
         connector_specific_config=connector.connector_specific_config,
