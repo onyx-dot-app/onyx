@@ -10,6 +10,11 @@
 
 import { expect, type Locator, type Page } from "@playwright/test";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
+import {
+  mockPassingConnectorChecks,
+  runConnectorChecks,
+  startChecksButton,
+} from "@tests/e2e/utils/connectorChecks";
 
 export class ConnectorSetupPage {
   readonly page: Page;
@@ -21,6 +26,8 @@ export class ConnectorSetupPage {
   readonly accessTypeSelect: Locator;
   /** The group picker that follows a "Specific Groups" pick. */
   readonly groupAccessPrompt: Locator;
+  /** Starts the connector checks, which the configuration waits for. */
+  readonly startChecksButton: Locator;
 
   constructor(page: Page, source: string) {
     this.page = page;
@@ -38,6 +45,17 @@ export class ConnectorSetupPage {
     this.groupAccessPrompt = page.getByPlaceholder(
       "Add groups to restrict access to this connector"
     );
+    this.startChecksButton = startChecksButton(page);
+  }
+
+  /** Make the connector checks pass without calling the source. */
+  async mockChecks(): Promise<void> {
+    await mockPassingConnectorChecks(this.page);
+  }
+
+  /** Run the connector checks and wait for the configuration to unlock. */
+  async runChecks(): Promise<void> {
+    await runConnectorChecks(this.page);
   }
 
   /** A single-line text field from the connector config, by its config name. */
