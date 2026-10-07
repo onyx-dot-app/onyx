@@ -6,7 +6,7 @@ import re
 import ssl
 from datetime import datetime, timezone
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import getaddresses
 from enum import Enum
 from typing import Any, cast
 
@@ -438,9 +438,10 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
-    return [(name, addr) for name, addr in name_addr_pairs if addr]
+    # getaddresses applies RFC 5322 quoting rules, so the comma inside a display
+    # name like "Lastname, Firstname" stays part of the name. Splitting the raw
+    # header on commas first read that as two addresses.
+    return [(name, addr) for name, addr in getaddresses([raw_header]) if addr]
 
 
 def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
