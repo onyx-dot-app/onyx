@@ -705,3 +705,8 @@ secrets/env.
   assumes "no session = no `User` object" will not notice an
   `AccountType.ANONYMOUS` or `AccountType.BOT` user flowing through the same
   code paths as a standard interactive user.
+
+### Legacy callhome removal
+
+Signup emits the reviewed fleet email-domain event. The unused legacy signup callhome event is removed.
+Sentry retains installation identity in `backend/onyx/utils/instance_identity.py`; API startup no longer creates a legacy telemetry UUID.

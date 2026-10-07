@@ -555,3 +555,7 @@ Collection uses a source-owned schedule: connectors and resources every 300 seco
 Fleet-service labels, classifications, and alert thresholds cannot change deployment behavior.
 
 `DISABLE_TELEMETRY=true` prevents fleet sender startup and all isolated collection. Helm omits the collector when this flag is set.
+
+### Legacy callhome removal
+
+Timing decorators now write local logs only. The obsolete print_only export option is removed from their callers.

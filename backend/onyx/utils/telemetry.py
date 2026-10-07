@@ -1,18 +1,8 @@
-import uuid
-from enum import Enum
+"""Cloud product analytics. Fleet callhome uses fleet_telemetry instead."""
+
 from typing import Any
 
-from onyx.configs.app_configs import DISABLE_TELEMETRY
-from onyx.configs.constants import (
-    KV_CUSTOMER_UUID_KEY,
-    KV_INSTANCE_DOMAIN_KEY,
-    MilestoneRecordType,
-)
-from onyx.db.encrypted_kv_store import load_encrypted_kv, upsert_encrypted_kv
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import User
-from onyx.key_value_store.interface import KvKeyNotFoundError, unwrap_str
-from onyx.utils.fleet_telemetry import emit_telemetry
+from onyx.configs.constants import MilestoneRecordType
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -21,105 +11,6 @@ from onyx.utils.variable_functionality import (
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
-
-
-_DANSWER_TELEMETRY_ENDPOINT = "https://telemetry.onyx.app/anonymous_telemetry"
-_CACHED_UUID: str | None = None
-_CACHED_INSTANCE_DOMAIN: str | None = None
-
-# Cap each telemetry POST so a slow or unreachable endpoint cannot pin a sender
-# thread indefinitely and let threads accumulate.
-_TELEMETRY_POST_TIMEOUT_SECONDS = 5
-
-
-class RecordType(str, Enum):
-    VERSION = "version"
-    SIGN_UP = "sign_up"
-    USAGE = "usage"
-    LATENCY = "latency"
-    FAILURE = "failure"
-    METRIC = "metric"
-    INDEXING_PROGRESS = "indexing_progress"
-    INDEXING_COMPLETE = "indexing_complete"
-    PERMISSION_SYNC_PROGRESS = "permission_sync_progress"
-    PERMISSION_SYNC_COMPLETE = "permission_sync_complete"
-    INDEX_ATTEMPT_STATUS = "index_attempt_status"
-
-
-def _get_or_generate_customer_id_mt(tenant_id: str) -> str:
-    return str(uuid.uuid5(uuid.NAMESPACE_X500, tenant_id))
-
-
-def get_or_generate_uuid() -> str:
-    # TODO: split out the whole "instance UUID" generation logic into a separate
-    # utility function. Telemetry should not be aware at all of how the UUID is
-    # generated/stored.
-    # TODO: handle potential race condition for UUID generation. Doesn't matter for
-    # the telemetry case, but if this is used generally it should be handled.
-    global _CACHED_UUID
-
-    if _CACHED_UUID is not None:
-        return _CACHED_UUID
-
-    try:
-        _CACHED_UUID = unwrap_str(load_encrypted_kv(KV_CUSTOMER_UUID_KEY))
-    except KvKeyNotFoundError:
-        _CACHED_UUID = str(uuid.uuid4())
-        upsert_encrypted_kv(KV_CUSTOMER_UUID_KEY, {"value": _CACHED_UUID})
-
-    return _CACHED_UUID
-
-
-def _get_or_generate_instance_domain() -> str | None:  #
-    global _CACHED_INSTANCE_DOMAIN
-
-    if _CACHED_INSTANCE_DOMAIN is not None:
-        return _CACHED_INSTANCE_DOMAIN
-
-    try:
-        _CACHED_INSTANCE_DOMAIN = unwrap_str(load_encrypted_kv(KV_INSTANCE_DOMAIN_KEY))
-    except KvKeyNotFoundError:
-        with get_session_with_current_tenant() as db_session:
-            first_user = db_session.query(User).first()
-            if first_user:
-                _CACHED_INSTANCE_DOMAIN = first_user.email.split("@")[-1]
-                upsert_encrypted_kv(
-                    KV_INSTANCE_DOMAIN_KEY, {"value": _CACHED_INSTANCE_DOMAIN}
-                )
-
-    return _CACHED_INSTANCE_DOMAIN
-
-
-def optional_telemetry(
-    record_type: RecordType,
-    data: dict,
-    user_id: str | None = None,  # noqa: ARG001 - Keep the legacy call signature.
-    tenant_id: str | None = None,  # Allows for override of tenant_id
-    blocking: bool = False,
-) -> bool | None:
-    """Compatibility adapter. ``blocking`` means queue acceptance, never network I/O.
-
-    The legacy open-ended metric and text payloads are deliberately not forwarded.
-    Fleet collection reconstructs connector/job state in an isolated process.
-    """
-    if DISABLE_TELEMETRY:
-        return False if blocking else None
-    accepted = False
-    try:
-        if record_type == RecordType.VERSION and isinstance(data.get("version"), str):
-            accepted = emit_telemetry(
-                "version", {"version": data["version"]}, tenant_id=tenant_id
-            )
-        elif record_type == RecordType.INDEX_ATTEMPT_STATUS:
-            safe = {
-                "attempt_id": data.get("index_attempt_id"),
-                "cc_pair_id": data.get("cc_pair_id"),
-                "state": str(data.get("status", "unknown")).lower(),
-            }
-            accepted = emit_telemetry("attempt", safe, tenant_id=tenant_id)
-    except Exception:
-        pass
-    return accepted if blocking else None
 
 
 def mt_cloud_telemetry(

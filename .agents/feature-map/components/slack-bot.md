@@ -476,7 +476,7 @@ See `backend/AGENTS.md` for required env and secrets.
   document, is posted into the Slack thread on failure unless an operator
   explicitly sets it to `"false"`.
 - **`respond_member_group_list` is a single allowlist doing two jobs.** It gates
-  who can invoke the bot at all (before telemetry, before user provisioning) and
+  who can invoke the bot at all (before answer processing, before user provisioning) and
   also scopes who sees the ephemeral response. Configuring it wrong (e.g. an
   admin expecting it to only affect visibility) silences the bot for everyone
   else in the channel, including tags and DMs.
@@ -495,3 +495,8 @@ See `backend/AGENTS.md` for required env and secrets.
   standard answer can be given again in a different Slack thread even if a user
   already saw it elsewhere, because `used_standard_answer_ids` is computed from
   `get_chat_sessions_by_slack_thread_id` for the current thread only.
+
+### Legacy callhome removal
+
+Slack queries use fleet query instrumentation. Legacy usage reporting and its extra Slack email lookup are removed.
+Invocation gates, user provisioning, and permission checks are unchanged.

@@ -225,7 +225,7 @@ def _estimate_section_tokens(
     return content_tokens + METADATA_TOKEN_ESTIMATE
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def _trim_sections_by_tokens(
     sections: list[InferenceSection],
     max_tokens: int,
@@ -594,7 +594,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     @log_function_time(
         func_name="Search tool - query expansion + scope decision",
-        print_only=True,
         debug_only=True,
     )
     def _expand_queries_and_decide_scope(
@@ -657,7 +656,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             time_filter=self._time_filter,
         )
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     def run(
         self,
         placement: Placement,

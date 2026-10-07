@@ -158,8 +158,7 @@ lists plus its own additions):
   taking `beat_task_templates` (with the cloud-only `skip_gated`/`work_gated`
   option keys stripped) and adding self-hosted-only entries
   (`monitor-celery-queues`, `monitor-process-memory`, `celery-beat-heartbeat`,
-  `emit-version-telemetry`, `cleanup-oauth-provider-clients`).
-  `beat_schedule.py:tasks_to_schedule`
+  `cleanup-oauth-provider-clients`). `beat_schedule.py:tasks_to_schedule`
 
 The per-tenant `cleanup-oauth-provider-grants` template deletes expired OAuth
 provider grants daily; their tokens cascade. Without Celery (`DISABLE_VECTOR_DB`),
@@ -433,7 +432,7 @@ See [[document-index]] for the cached admin warnings it supplies.
 | If your change... | Also check |
 |---|---|
 | adds a new task | which worker's `-Q` list (supervisord.conf and every relevant Helm `celery-worker-*.yaml`) includes its queue; whether it needs an `expires=`; whether it needs `tenant_id` propagated explicitly if not beat-scheduled |
-| changes a queue name (an `OnyxCeleryQueues` constant) | every `-Q` list in `backend/supervisord.conf` and `deployment/helm/charts/onyx/templates/celery-worker-*.yaml`; every `send_task`/`apply_async` call that references the old name; the queue-length metric mapping in `tasks/monitoring/tasks.py:_collect_queue_metrics` |
+| changes a queue name (an `OnyxCeleryQueues` constant) | every `-Q` list in `backend/supervisord.conf` and `deployment/helm/charts/onyx/templates/celery-worker-*.yaml`; every `send_task`/`apply_async` call that references the old name; the fleet collector queue mapping in `utils/fleet_telemetry_collector.py` |
 | changes the beat schedule (`beat_schedule.py` or the EE equivalent) | whether the task is per-tenant or cloud-wide (wrong list changes whether `beat_multiplier` applies); the `expires` value; whether `DISABLE_VECTOR_DB` filtering needs the task name added to `_VECTOR_DB_BEAT_TASK_NAMES` |
 | changes a fence or lock (key name, TTL, payload schema) | the checker task's fence-validation pass for that fence family (mirror `validate_pruning_fences`); `on_task_postrun`/`on_task_revoked` taskset cleanup, which matches on key prefix; `ACTIVE_FENCES` membership add/remove sites |
 | adds a worker | its `apps/<name>.py`, `versioned_apps/<name>.py`, `configs/<name>.py`; an entry in `backend/supervisord.conf`; a Helm `celery-worker-<name>.yaml` (plus HPA/ScaledObject if it should autoscale); an entry in `background/README.md`'s worker table (keep it truthful, see §9); whether it needs an EE counterpart under `ee/onyx/background/celery/apps/` |
@@ -520,10 +519,6 @@ shared machinery, not feature correctness.
   `expires`) with no error, no log on the sending side, and no exception
   anywhere. The only symptom is "this never happened." Cross-check §2's table
   whenever you touch a queue name.
-- **`monitoring`'s queue-length metrics do not cover every queue.** `_collect_queue_metrics`
-  (`tasks/monitoring/tasks.py`) maps roughly twenty queues to Prometheus
-  metrics, but `scheduled_tasks` is not among them, so a backlog on that queue
-  produces no queue-length signal today.
 - **`BackgroundError` is not a general failure-surfacing mechanism.** It is
   written from exactly two call sites (both under `ee/onyx`, both in
   external-group/permission-sync code), and nothing reads it back through an
@@ -537,3 +532,11 @@ shared machinery, not feature correctness.
 - **Worker code changes need a manual restart.** There is no file-watcher
   auto-reload for Celery workers; `backend/AGENTS.md` says to ask the user to
   restart the worker after any change to task or app code.
+
+### Fleet telemetry replaces legacy callhome
+
+The legacy `monitor_background_processes` and `emit_version_telemetry` tasks and schedules are removed.
+The isolated fleet collector reads queues, connectors, and sync jobs with bounded source queries.
+The fleet sender emits version at startup; Kubernetes collection also reports observed runtime versions.
+Operational queue watchdogs, process-memory logs, and OpenSearch health caching remain application functions.
+`DISABLE_TELEMETRY=true` prevents fleet sender and collector startup without disabling those operational functions.

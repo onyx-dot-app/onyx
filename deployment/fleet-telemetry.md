@@ -220,3 +220,12 @@ history policy. Deploy the updated fleet service before enabling this collector 
 Fleet telemetry sends events and reads bounded delivery receipts only. It never fetches remote collection settings.
 Collection uses a source-owned schedule: connectors and resources every 300 seconds; queues every 600 seconds.
 Fleet-service labels, classifications, and alert thresholds cannot change deployment behavior.
+
+## Legacy callhome replacement
+
+Fleet telemetry replaces the anonymous Go-server protocol. The legacy endpoint, record-type adapter,
+periodic metrics poller, daily version task, and unused signup, Slack, and permission-sync exports are removed.
+Index-attempt transitions emit directly through the bounded sender. The source collector recovers final attempt and job state.
+Timing decorators keep local logging and no longer export arbitrary function names or user IDs.
+Sentry installation identity remains a separate utility because Sentry still uses it.
+Cloud PostHog analytics and feature flags are separate from this callhome pipeline.

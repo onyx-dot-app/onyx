@@ -148,7 +148,6 @@ def _stub_lifespan(stack: ExitStack) -> tuple[MagicMock, MagicMock, AsyncMock]:
     stack.enter_context(patch.object(onyx_main, "get_session_with_current_tenant"))
     stack.enter_context(patch.object(onyx_main, "setup_onyx"))
     stack.enter_context(patch.object(onyx_main, "get_default_file_store"))
-    stack.enter_context(patch.object(onyx_main, "get_or_generate_uuid"))
     stack.enter_context(patch("onyx.utils.fleet_telemetry.start_telemetry"))
     stack.enter_context(patch("onyx.utils.fleet_telemetry.stop_telemetry"))
     stack.enter_context(patch.object(onyx_main, "MULTI_TENANT", False))

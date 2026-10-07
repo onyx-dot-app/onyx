@@ -174,7 +174,6 @@ from onyx.utils.middleware import (
     add_endpoint_context_middleware,
     add_onyx_request_id_middleware,
 )
-from onyx.utils.telemetry import get_or_generate_uuid
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
     fetch_versioned_implementation,
@@ -412,9 +411,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     await warm_up_connections()
 
     if not MULTI_TENANT:
-        # We cache this at the beginning so there is no delay in the first telemetry
         CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
-        get_or_generate_uuid()
 
         # If we are multi-tenant, we need to only set up initial public tables
         with get_session_with_current_tenant() as db_session:

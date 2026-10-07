@@ -21,7 +21,10 @@ class TestAddInstanceTags:
     def setup_method(self) -> None:
         _reset_state()
 
-    @patch("onyx.utils.telemetry.get_or_generate_uuid", return_value="test-uuid-1234")
+    @patch(
+        "onyx.utils.instance_identity.get_or_generate_uuid",
+        return_value="test-uuid-1234",
+    )
     @patch("sentry_sdk.set_tag")
     def test_first_event_sets_instance_id(
         self, mock_set_tag: MagicMock, mock_uuid: MagicMock
@@ -33,7 +36,10 @@ class TestAddInstanceTags:
         mock_set_tag.assert_called_once_with("instance_id", "test-uuid-1234")
         mock_uuid.assert_called_once()
 
-    @patch("onyx.utils.telemetry.get_or_generate_uuid", return_value="test-uuid-1234")
+    @patch(
+        "onyx.utils.instance_identity.get_or_generate_uuid",
+        return_value="test-uuid-1234",
+    )
     @patch("sentry_sdk.set_tag")
     def test_second_event_skips_resolution(
         self, _mock_set_tag: MagicMock, mock_uuid: MagicMock
@@ -46,7 +52,7 @@ class TestAddInstanceTags:
         mock_uuid.assert_called_once()  # only resolved once
 
     @patch(
-        "onyx.utils.telemetry.get_or_generate_uuid",
+        "onyx.utils.instance_identity.get_or_generate_uuid",
         side_effect=Exception("DB unavailable"),
     )
     @patch("sentry_sdk.set_tag")
@@ -60,7 +66,7 @@ class TestAddInstanceTags:
         assert "tags" not in result or "instance_id" not in result.get("tags", {})
 
     @patch(
-        "onyx.utils.telemetry.get_or_generate_uuid",
+        "onyx.utils.instance_identity.get_or_generate_uuid",
         side_effect=Exception("DB unavailable"),
     )
     @patch("sentry_sdk.set_tag")
@@ -73,7 +79,10 @@ class TestAddInstanceTags:
 
         assert mock_uuid.call_count == 2  # retried on second event
 
-    @patch("onyx.utils.telemetry.get_or_generate_uuid", return_value="test-uuid-1234")
+    @patch(
+        "onyx.utils.instance_identity.get_or_generate_uuid",
+        return_value="test-uuid-1234",
+    )
     @patch("sentry_sdk.set_tag")
     def test_preserves_existing_tags(
         self, _mock_set_tag: MagicMock, _mock_uuid: MagicMock

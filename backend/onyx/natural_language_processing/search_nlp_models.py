@@ -1337,7 +1337,7 @@ class EmbeddingModel:
 
         return embeddings
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def encode(
         self,
         texts: list[str],

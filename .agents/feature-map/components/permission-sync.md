@@ -712,3 +712,8 @@ fixed ACL; this one proves **sync correctly changes** the ACL over time.
   Salesforce access bug is reported, do not look for a failed
   `DocPermissionSyncAttempt`; there will never be one. Look at
   `censor_salesforce_chunks` and `_post_query_chunk_censoring` instead.
+
+### Legacy callhome removal
+
+The isolated fleet collector reads permission and group-sync attempts. Unused legacy progress and completion exports are removed.
+Permission writes, sync status updates, and scheduling remain unchanged.

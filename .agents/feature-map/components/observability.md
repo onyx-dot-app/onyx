@@ -166,6 +166,21 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 
 ## 4. How it works
 
+### Fleet callhome
+
+Fleet callhome replaces the legacy anonymous Go telemetry protocol. The bounded
+sender in `backend/onyx/utils/fleet_telemetry.py` emits allowlisted events without
+network I/O on request paths. The isolated collector supplies connector, queue,
+job, resource, and OpenSearch snapshots. Index attempt transitions emit directly.
+The old anonymous endpoint, adapter, duplicate Celery monitoring task, and daily
+version task are removed. Timing decorators retain local logs only.
+
+Set `DISABLE_TELEMETRY=true` at deployment startup to disable fleet senders and
+collectors. Collection configuration comes from the deployment; the service cannot
+change it. See `deployment/fleet-telemetry.md` for configuration and verification.
+Cloud PostHog analytics remain separate in `backend/onyx/utils/telemetry.py`.
+Sentry retains its instance identity through `backend/onyx/utils/instance_identity.py`.
+
 ### 4.1 Prometheus metrics
 
 `server/metrics/prometheus_setup.py:setup_prometheus_metrics` is called during

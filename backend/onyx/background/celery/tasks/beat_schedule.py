@@ -215,16 +215,6 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
-    {
-        "name": "monitor-background-processes",
-        "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
-        "schedule": timedelta(minutes=5),
-        "options": {
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.MONITORING,
-        },
-    },
     # Craft scheduled tasks (per-tenant dispatcher + stuck-run sweeper).
     # Both are lightweight DB-only coordination tasks and run on the
     # primary queue. The dedicated `scheduled_tasks` worker is reserved
@@ -492,17 +482,6 @@ if not MULTI_TENANT:
                     "priority": OnyxCeleryPriority.HIGHEST,
                     "expires": BEAT_EXPIRES_DEFAULT,
                     "queue": OnyxCeleryQueues.PRIMARY,
-                },
-            },
-            # hourly tick; the task itself enforces a once-per-day cadence
-            {
-                "name": "emit-version-telemetry",
-                "task": OnyxCeleryTask.EMIT_VERSION_TELEMETRY,
-                "schedule": timedelta(hours=1),
-                "options": {
-                    "priority": OnyxCeleryPriority.LOW,
-                    "expires": BEAT_EXPIRES_DEFAULT,
-                    "queue": OnyxCeleryQueues.MONITORING,
                 },
             },
         ]
