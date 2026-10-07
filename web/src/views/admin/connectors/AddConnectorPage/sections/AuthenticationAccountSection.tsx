@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
-import { Disabled } from "@opal/core";
 import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
@@ -383,12 +382,10 @@ export default function AuthenticationAccountSection({
               onRerun={checkRun.rerun}
             />
           ) : (
-            <Disabled disabled={checksLocked} tooltip={checksLockedReason}>
-              <ConnectorsCheckPromptCard
-                disabled={checksLocked}
-                onStart={checkRun.begin}
-              />
-            </Disabled>
+            <ConnectorsCheckPromptCard
+              disabled={checksLocked}
+              onStart={checkRun.begin}
+            />
           )}
         </Section>
       )}
