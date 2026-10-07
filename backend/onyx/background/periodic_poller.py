@@ -123,8 +123,8 @@ def _run_oauth_provider_cleanup() -> None:
     )
     from shared_configs.contextvars import get_current_tenant_id
 
-    cleanup_oauth_provider_grants(tenant_id=get_current_tenant_id())
-    cleanup_oauth_provider_clients()
+    cleanup_oauth_provider_grants.run(tenant_id=get_current_tenant_id())
+    cleanup_oauth_provider_clients.run()
 
 
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
