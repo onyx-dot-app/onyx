@@ -1,4 +1,5 @@
 import ipaddress
+import logging
 import socket
 
 import pytest
@@ -115,14 +116,20 @@ def test_empty_invalid_or_mixed_dns_fails_closed(
     assert is_destination_blocked(parse_destination_policy(""), "service.example", 443)
 
 
-def test_dns_error_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dns_error_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     def fail(*_args: object, **_kwargs: object) -> None:
         raise socket.gaierror("unavailable")
 
     monkeypatch.setattr(socket, "getaddrinfo", fail)
+    caplog.set_level(logging.WARNING)
     assert is_destination_blocked(
         parse_destination_policy("http://service.example"), "service.example", 80
     )
+    assert "service.example" in caplog.text
+    assert "port=80" in caplog.text
+    assert "unavailable" in caplog.text
 
 
 @pytest.mark.parametrize(

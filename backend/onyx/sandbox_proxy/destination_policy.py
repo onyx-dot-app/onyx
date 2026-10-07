@@ -11,11 +11,14 @@ from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, urlsplit
 
 from onyx.sandbox_proxy.models import DestinationPolicyConfig, IPNetwork
+from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
     from socket import _RetAddress
 
 IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+
+logger = setup_logger()
 
 _NAT64_NETWORK = ipaddress.IPv6Network("64:ff9b::/96")
 _destination: ContextVar[tuple[str, int, tuple[str, ...]] | None] = ContextVar(
@@ -85,7 +88,10 @@ def resolve_destination(
                 proto=socket.IPPROTO_TCP,
             )
             addresses = [ipaddress.ip_address(str(answer[4][0])) for answer in answers]
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "Destination resolution failed host=%s port=%s: %s", host, port, exc
+            )
             return None
     if not addresses:
         return None
