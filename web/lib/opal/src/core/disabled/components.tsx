@@ -94,8 +94,14 @@ function Disabled({
         region can take focus to open it, so the reason is also kept here for
         assistive technology. It is polite and always rendered, so a change of
         reason is announced and unlocking announces nothing. */}
-      <span className="sr-only" aria-live="polite" aria-atomic="true">
-        {disabled && tooltip ? toPlainString(tooltip) : ""}
+      {/* sr-only text is absolutely positioned. Unpositioned, its containing
+        block could sit outside the nearest scroll container (often the body),
+        so it would make the page scrollable. This zero-size box positions and
+        clips it inside the region instead. */}
+      <span className="relative block h-0 w-0 overflow-hidden">
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {disabled && tooltip ? toPlainString(tooltip) : ""}
+        </span>
       </span>
       <fieldset disabled={blockKeyboard} className="contents">
         {children}
