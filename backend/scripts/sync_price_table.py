@@ -505,6 +505,15 @@ def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> Non
 # ---------------------------------------------------------------------------
 
 
+def _is_unbounded_router(raw: dict[str, Any]) -> bool:
+    """OpenRouter meta-model with no declared upstream endpoint: tokenizer
+    "Router" and a null top_provider context, so its advertised limits are
+    the pool maximum rather than a per-request guarantee."""
+    if (raw.get("architecture") or {}).get("tokenizer") != "Router":
+        return False
+    return (raw.get("top_provider") or {}).get("context_length") is None
+
+
 def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
     pricing = raw.get("pricing") or {}
     try:
@@ -559,6 +568,8 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
         "response_format" in params
     )
     entry["reasoning"] = "reasoning" in params
+    if _is_unbounded_router(raw):
+        entry["unbounded"] = True
     return entry
 
 
@@ -574,12 +585,19 @@ def merge_openrouter(
         model_id = raw.get("id")
         if not model_id:
             continue
-        merged = _openrouter_entry(raw)
-        if merged is None:
-            continue
         existing = models.get(model_id)
         if existing is None:
             existing = models.get(section["aliases"].get(model_id, ""))
+        # Router status is independent of pricing — a free router still has
+        # no declared endpoint.
+        if existing is not None:
+            if _is_unbounded_router(raw):
+                existing["unbounded"] = True
+            else:
+                existing.pop("unbounded", None)
+        merged = _openrouter_entry(raw)
+        if merged is None:
+            continue
         if existing is None:
             models[model_id] = merged
             added += 1
@@ -590,6 +608,33 @@ def merge_openrouter(
                 cost[key] = value
                 filled += 1
     print(f"openrouter merge: filled {filled} missing rates, added {added} models")
+
+
+def _preserve_unbounded_flags(providers: dict[str, Any], output_dir: Path) -> None:
+    """Carry `unbounded` router flags over from the vendored openrouter.json
+    when the OpenRouter feed is unreachable and the merge cannot re-derive
+    them — a transient outage must not silently restore bogus output limits."""
+    section: dict[str, Any] | None = providers.get("openrouter")
+    if section is None:
+        return
+    try:
+        vendored: dict[str, Any] = json.loads(
+            (output_dir / "openrouter.json").read_text()
+        )
+    except Exception:
+        return
+    vendored_models: dict[str, Any] = vendored.get("models") or {}
+    restored: int = 0
+    for model_id, entry in section["models"].items():
+        if (vendored_models.get(model_id) or {}).get("unbounded"):
+            entry["unbounded"] = True
+            restored += 1
+    if restored:
+        print(
+            f"OpenRouter feed unavailable: preserved unbounded flags on "
+            f"{restored} vendored entries",
+            file=sys.stderr,
+        )
 
 
 def _check_litellm_schema(litellm_map: dict[str, Any]) -> None:
@@ -718,6 +763,8 @@ def main() -> int:
     if openrouter_models:
         _check_openrouter_schema(openrouter_models)
         merge_openrouter(providers, openrouter_models)
+    else:
+        _preserve_unbounded_flags(providers, args.output_dir)
 
     table = {
         "schema_version": 2,
