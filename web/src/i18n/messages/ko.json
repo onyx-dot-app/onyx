@@ -8885,7 +8885,7 @@
         "fold": "접기",
         "expand": "펼치기"
       },
-      "titleCount": "({passed}/{total})",
+      "titleCount": "({complete}/{total})",
       "summary": {
         "failed": "실패 {count}개",
         "unverified": "미확인 {count}개",

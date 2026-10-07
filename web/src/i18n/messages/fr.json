@@ -8885,7 +8885,7 @@
         "fold": "Réduire",
         "expand": "Développer"
       },
-      "titleCount": "({passed}/{total})",
+      "titleCount": "({complete}/{total})",
       "summary": {
         "failed": "{count} échouées",
         "unverified": "{count} non vérifiées",

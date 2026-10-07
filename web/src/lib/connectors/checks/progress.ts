@@ -15,9 +15,9 @@ export interface ChecksRing {
 export interface ChecksProgress {
   /** The ring to draw, or `null` to show the spinner while a run starts. */
   ring: ChecksRing | null;
-  /** Checks that passed, for the `(passed/counted)` suffix. */
-  passed: number;
-  /** Checks the ring and the suffix count. */
+  /** Checks that finished, whatever the outcome: the suffix's `N`. */
+  complete: number;
+  /** Checks that run or will run: the suffix's `M`. */
   counted: number;
 }
 
@@ -25,11 +25,12 @@ export interface ChecksProgress {
  * How a run's checks show as the header ring and its `(N/M)` count. One place
  * decides both, so they always agree:
  *
- * - passed is green, failed red, indeterminate amber (it blocks, but is not a
- *   failure), running grey;
+ * - passed and skipped are green (finished, not blocking), failed red,
+ *   indeterminate amber (it blocks, but is not a failure), running grey;
  * - pending and waiting checks have not started, so they leave a gap;
- * - skipped and not-applicable checks are not counted: neither blocks, and a
- *   finished run would otherwise never fill the ring.
+ * - the count is the finished checks out of every check that runs or will
+ *   run, so it matches the ring's coloured share less the running arc;
+ * - not-applicable checks do not run for this form, so neither counts them.
  *
  * The ring shows the spinner while nothing has started, and a full green
  * ring when there is nothing to count. A run that is starting has no checks
@@ -40,7 +41,7 @@ export function checksProgress(
   status: ConnectorChecksStatus
 ): ChecksProgress {
   const ring: ChecksRing = {
-    success: counts.passed,
+    success: counts.passed + counts.skipped,
     error: counts.failed,
     warning: counts.indeterminate,
     neutral: counts.running,
@@ -50,7 +51,8 @@ export function checksProgress(
     ring.success + ring.error + ring.warning + ring.neutral + ring.rest;
   return {
     ring: counted === 0 && status === "running" ? null : ring,
-    passed: counts.passed,
+    complete:
+      counts.passed + counts.failed + counts.indeterminate + counts.skipped,
     counted,
   };
 }

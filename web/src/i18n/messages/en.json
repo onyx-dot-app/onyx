@@ -8885,7 +8885,7 @@
         "fold": "Fold",
         "expand": "Expand"
       },
-      "titleCount": "({passed}/{total})",
+      "titleCount": "({complete}/{total})",
       "summary": {
         "failed": "{count} failed",
         "unverified": "{count} unverified",

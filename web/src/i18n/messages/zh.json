@@ -8885,7 +8885,7 @@
         "fold": "收起",
         "expand": "展开"
       },
-      "titleCount": "（{passed}/{total}）",
+      "titleCount": "（{complete}/{total}）",
       "summary": {
         "failed": "{count} 项失败",
         "unverified": "{count} 项未验证",

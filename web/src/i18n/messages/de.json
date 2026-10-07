@@ -8885,7 +8885,7 @@
         "fold": "Einklappen",
         "expand": "Ausklappen"
       },
-      "titleCount": "({passed}/{total})",
+      "titleCount": "({complete}/{total})",
       "summary": {
         "failed": "{count} fehlgeschlagen",
         "unverified": "{count} nicht verifiziert",

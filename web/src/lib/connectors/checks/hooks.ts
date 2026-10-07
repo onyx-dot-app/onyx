@@ -314,7 +314,7 @@ export function useResetConnectorChecks(source: ConfigurableSources): void {
 export interface ConnectorChecksProgress {
   /** The header icon: the ring, or the spinner before anything starts. */
   icon: IconFunctionComponent;
-  /** The `(passed/counted)` title suffix; absent with nothing to count. */
+  /** The `(complete/counted)` title suffix; absent with nothing to count. */
   suffix: string | undefined;
 }
 
@@ -327,7 +327,7 @@ export function useConnectorChecksProgress(
   status: ConnectorChecksStatus
 ): ConnectorChecksProgress {
   const t = useTranslations("admin.connectorChecks");
-  const { ring, passed, counted } = checksProgress(counts, status);
+  const { ring, complete, counted } = checksProgress(counts, status);
   const success = ring?.success;
   const error = ring?.error;
   const warning = ring?.warning;
@@ -353,6 +353,6 @@ export function useConnectorChecksProgress(
   return {
     icon,
     suffix:
-      counted > 0 ? t("titleCount", { passed, total: counted }) : undefined,
+      counted > 0 ? t("titleCount", { complete, total: counted }) : undefined,
   };
 }
