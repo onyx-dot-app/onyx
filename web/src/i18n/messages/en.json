@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "Configure OneDrive connector",
         "indexingScope": {
-          "label": "Whose OneDrive files should Onyx index?",
+          "label": "OneDrive files to index",
           "general": {
             "label": "General",
             "description": "Index all eligible users that the Microsoft application can access."
@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "Excluded Paths",
-          "description": "Glob patterns matched against each file path and filename, such as '*.tmp' or 'Archive/*'."
+          "description": "Glob patterns matched against each file path and filename, such as `*.tmp` or `Archive/*`."
         },
         "organizationLinks": {
           "label": "Treat organization links as public",
@@ -2653,9 +2653,6 @@
         "title": "Failed to load credentials."
       },
       "field": {
-        "optional": {
-          "label": "(optional)"
-        },
         "optionalSuffix": {
           "label": "optional"
         }
@@ -2888,22 +2885,13 @@
           "title": "Error during submission."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Configuration"
-        }
+      "content": {
+        "title": "Connector Content",
+        "description": "Select content to index for this connector."
       },
       "selectInput": {
         "emptyOption": {
           "label": "Select an option"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "Add New"
-        },
-        "removeButton": {
-          "tooltip": "Remove"
         }
       },
       "tabs": {
@@ -2915,8 +2903,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "Paste your site URL. {connectorName}'s REST API must be reachable there."
+      },
       "boundFields": {
-        "advancedOptions": "Advanced Options",
         "errors": {
           "missing": "Enter a value.",
           "invalid": "This value is not valid: {detail}"
@@ -11338,6 +11328,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {Choose files} other {Choose a file}}"
+      },
+      "prompt": "{multiple, select, true {Or drag and drop files here.} other {Or drag and drop a file here.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "Add New"
+      },
+      "removeButton": {
+        "tooltip": "Remove"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "Open Sidebar"

@@ -9,6 +9,13 @@ import {
 } from "@/lib/connectors/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
 
+// Field descriptions render as Opal markdown. Under Jest, react-markdown's
+// default export loads as a module object, so render the source text as is.
+jest.mock("react-markdown", () => ({
+  __esModule: true,
+  default: ({ children }: { children?: string }) => children ?? null,
+}));
+
 function ZoomForm() {
   const config = connectorConfigs.zoom;
   return (
@@ -80,8 +87,10 @@ test("the plan select offers exactly the tiers the backend parses", async () => 
 test("the rate limit share is an advanced number field", () => {
   render(<ZoomForm />);
 
-  const rateLimit = screen.getByRole("spinbutton");
-  expect(rateLimit).toHaveAttribute("name", "rate_limit_percent");
+  const rateLimit = screen.getByLabelText(/Zoom API Rate Limit/);
+  expect(rateLimit).toHaveAttribute("id", "rate_limit_percent");
+  // Connector number fields allow -1, so the pattern takes a leading minus.
+  expect(rateLimit).toHaveAttribute("pattern", "-?[0-9]*");
 });
 
 test("the plan has to be chosen", async () => {

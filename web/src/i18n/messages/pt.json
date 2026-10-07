@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "Configurar o conector do OneDrive",
         "indexingScope": {
-          "label": "Quais arquivos do OneDrive o Onyx deve indexar?",
+          "label": "Arquivos do OneDrive para indexar",
           "general": {
             "label": "Geral",
             "description": "Indexe todos os usuários qualificados que o aplicativo da Microsoft pode acessar."
@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "Caminhos excluídos",
-          "description": "Padrões glob comparados com cada caminho e nome de arquivo, como '*.tmp' ou 'Archive/*'."
+          "description": "Padrões glob comparados com cada caminho e nome de arquivo, como `*.tmp` ou `Archive/*`."
         },
         "organizationLinks": {
           "label": "Tratar links da organização como públicos",
@@ -2653,9 +2653,6 @@
         "title": "Falha ao carregar as credenciais."
       },
       "field": {
-        "optional": {
-          "label": "(opcional)"
-        },
         "optionalSuffix": {
           "label": "opcional"
         }
@@ -2888,22 +2885,13 @@
           "title": "Erro durante o envio."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Configuração"
-        }
+      "content": {
+        "title": "Conteúdo do conector",
+        "description": "Selecione o conteúdo a ser indexado para este conector."
       },
       "selectInput": {
         "emptyOption": {
           "label": "Selecione uma opção"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "Adicionar novo"
-        },
-        "removeButton": {
-          "tooltip": "Remover"
         }
       },
       "tabs": {
@@ -2915,8 +2903,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "Cole a URL do seu site. A API REST do {connectorName} deve estar acessível nele."
+      },
       "boundFields": {
-        "advancedOptions": "Opções avançadas",
         "errors": {
           "missing": "Insira um valor.",
           "invalid": "Este valor não é válido: {detail}"
@@ -11338,6 +11328,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {Escolher arquivos} other {Escolher um arquivo}}"
+      },
+      "prompt": "{multiple, select, true {Ou arraste e solte arquivos aqui.} other {Ou arraste e solte um arquivo aqui.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "Adicionar novo"
+      },
+      "removeButton": {
+        "tooltip": "Remover"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "Abrir barra lateral"

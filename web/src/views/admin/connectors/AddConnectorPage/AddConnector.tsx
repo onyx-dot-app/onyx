@@ -1,6 +1,18 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
+import { PageLoader, IconLoader } from "@opal/loaders";
+import {
+  IllustrationContent,
+  PageCenter,
+  Section,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
+import { SvgPlugBroken } from "@opal/illustrations";
+import { escapeMarkdown, markdown } from "@opal/utils";
+import { Divider, MessageCard, Button } from "@opal/components";
+import { SvgArrowExchange } from "@opal/icons";
+import { Disabled } from "@opal/core";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
@@ -14,9 +26,9 @@ import { linkCredential } from "@/lib/credentials/svc";
 import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
 import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
-import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
-import ConnectorSettings from "@/views/admin/connectors/AddConnectorPage/form/ConnectorSettings";
-import DynamicConnectionForm from "@/views/admin/connectors/AddConnectorPage/form/DynamicConnectorCreationForm";
+import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
+import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
+import ConnectorContentSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorContentSection";
 import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
 import {
@@ -45,8 +57,6 @@ import type {
   ConnectorBase,
 } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
-import { Card, Divider, MessageCard } from "@opal/components";
-import { Disabled } from "@opal/core";
 import {
   useGmailCredentials,
   useCredentialLoad,
@@ -54,20 +64,7 @@ import {
 } from "@/lib/credentials/hooks";
 import { Formik } from "formik";
 import { useRouter } from "next/navigation";
-import { Button } from "@opal/components";
-import {
-  Content,
-  IllustrationContent,
-  PageCenter,
-  Section,
-  SettingsLayouts,
-  toast,
-} from "@opal/layouts";
-import { PageLoader } from "@opal/loaders";
-import { SvgPlugBroken } from "@opal/illustrations";
-import { escapeMarkdown, markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
-import { SvgArrowExchange } from "@opal/icons";
 import { useTranslations } from "next-intl";
 import {
   SYNC_RESTRICTED_ACCESS_TYPE,
@@ -142,13 +139,15 @@ export async function submitConnector<T>(
   }
 }
 
-export default function AddConnector({
-  connector,
-}: {
+export interface AddConnectorProps {
   connector: ConfigurableSources;
-}) {
+}
+
+export default function AddConnector({ connector }: AddConnectorProps) {
   const t = useTranslations("admin.connectorsList");
   const oneDriveT = useTranslations("admin.connectorsList.oneDrive");
+  // The string-pair editor (InputKeyValue) shows these same messages.
+  const keyValueT = useTranslations("opal.keyValue");
   const router = useRouter();
   const settings = useSettings();
   const defaultPruneFreqHours = settings.default_pruning_freq
@@ -266,6 +265,8 @@ export default function AddConnector({
           specificGroupsRequired: t(
             "settings.documentAccess.specificGroups.required"
           ),
+          stringPairEmptyKey: keyValueT("emptyKey"),
+          stringPairDuplicateKey: keyValueT("duplicateKey"),
         }
       )}
       onSubmit={async (values) => {
@@ -628,7 +629,7 @@ export default function AddConnector({
                         {!noCredentials && (
                           <Divider
                             paddingParallel={0}
-                            paddingPerpendicular={2}
+                            paddingPerpendicular={0}
                           />
                         )}
                       </>
@@ -643,87 +644,49 @@ export default function AddConnector({
                       />
                     )}
 
-                    {/* The wizard could not reach these sections without a
-                      valid credential; on one page they stay disabled until
-                      the credential and the bound fields are valid instead. */}
-                    <Disabled
-                      disabled={!configUnlocked}
-                      tooltip={gateMessage ?? undefined}
-                    >
-                      <Card
-                        border="solid"
-                        rounding={4}
-                        padding={6}
-                        disabled={!configUnlocked}
-                      >
-                        {/* A disabled fieldset also takes the controls out of
-                          the tab order; the wrapper above only blocks the
-                          pointer. */}
-                        <fieldset
-                          disabled={!configUnlocked}
-                          className="contents"
-                          data-testid="connector-form"
-                        >
-                          <Section gap={4} alignItems="start" width="full">
-                            {/* Announces why the configuration is locked
-                              when the reason changes. */}
-                            <Section
-                              alignItems="start"
-                              width="full"
-                              height="fit"
-                              aria-live="polite"
-                            >
-                              <Content
-                                title={t("sections.configuration.title")}
-                                description={gateMessage ?? undefined}
-                                sizePreset="main-content"
-                                variant="section"
-                              />
-                            </Section>
-                            <DynamicConnectionForm
-                              values={formikProps.values}
-                              config={credentialBoundFields.rest}
-                              connector={connector}
-                              currentCredential={formCredential}
-                            />
-                          </Section>
-                        </fieldset>
-                      </Card>
-                    </Disabled>
+                    {(!noCredentials || hasVisibleBoundFields) && (
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
+                    )}
 
-                    <Divider paddingParallel={0} paddingPerpendicular={0} />
+                    {/* The wizard could not reach these sections without a
+                      valid credential; on one page they stay locked, under one
+                      Disabled that blocks pointer and keyboard, until the
+                      credential and the bound fields are valid. */}
                     <Disabled
                       disabled={!configUnlocked}
                       tooltip={gateMessage ?? undefined}
+                      data-testid="connector-form"
                     >
-                      <fieldset disabled={!configUnlocked} className="contents">
-                        <ConnectorSettings
+                      <Section gap={6} alignItems="stretch" width="full">
+                        <ConnectorContentSection
+                          config={credentialBoundFields.rest}
+                          values={formikProps.values}
                           connector={connector}
                           currentCredential={formCredential}
                           disabled={!configUnlocked}
                         />
-                      </fieldset>
-                    </Disabled>
 
-                    {connector !== "file" && (
-                      <>
                         <Divider paddingParallel={0} paddingPerpendicular={0} />
-                        <Disabled
+                        <ConnectorSettingsSection
+                          connector={connector}
+                          currentCredential={formCredential}
                           disabled={!configUnlocked}
-                          tooltip={gateMessage ?? undefined}
-                        >
-                          <fieldset
-                            disabled={!configUnlocked}
-                            className="contents"
-                          >
-                            <AdvancedFormPage
+                        />
+
+                        {connector !== "file" && (
+                          <>
+                            <Divider
+                              paddingParallel={0}
+                              paddingPerpendicular={0}
+                            />
+                            <ScheduleSection
                               defaultPruneFreqHours={defaultPruneFreqHours}
                               disabled={!configUnlocked}
                             />
-                          </fieldset>
-                        </Disabled>
-                      </>
-                    )}
+                          </>
+                        )}
+                      </Section>
+                    </Disabled>
                   </Section>
                 </>
               )}

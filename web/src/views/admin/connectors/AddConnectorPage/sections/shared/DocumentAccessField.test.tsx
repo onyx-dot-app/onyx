@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { Formik } from "formik";
-import DocumentAccessField from "@/lib/connectors/components/DocumentAccessField";
+import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/sections/shared/DocumentAccessField";
 import {
   ConfigurableSources,
   ValidSources,
@@ -12,10 +12,13 @@ jest.mock("@/lib/permissions/hooks", () => ({
 jest.mock("@/hooks/useTierAtLeast", () => ({
   useTierAtLeast: jest.fn(),
 }));
-jest.mock("@/lib/connectors/components/AutoSyncOptions", () => ({
-  __esModule: true,
-  default: () => null,
-}));
+jest.mock(
+  "@/views/admin/connectors/AddConnectorPage/sections/shared/AutoSyncOptions",
+  () => ({
+    __esModule: true,
+    default: () => null,
+  })
+);
 jest.mock("@/lib/connectors/components/GroupShareList", () => ({
   __esModule: true,
   default: () => null,

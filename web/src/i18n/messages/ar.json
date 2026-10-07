@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "تهيئة موصل OneDrive",
         "indexingScope": {
-          "label": "ملفات OneDrive الخاصة بمن يجب أن يفهرسها Onyx؟",
+          "label": "ملفات OneDrive المراد فهرستها",
           "general": {
             "label": "عام",
             "description": "فهرسة جميع المستخدمين المؤهلين الذين يمكن لتطبيق Microsoft الوصول إليهم."
@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "المسارات المستبعدة",
-          "description": "أنماط Glob المطابقة لكل مسار ملف واسم ملف، مثل '*.tmp' أو 'Archive/*'."
+          "description": "أنماط Glob المطابقة لكل مسار ملف واسم ملف، مثل `*.tmp` أو `Archive/*`."
         },
         "organizationLinks": {
           "label": "معاملة روابط المؤسسة كروابط عامة",
@@ -2653,9 +2653,6 @@
         "title": "فشل تحميل بيانات الاعتماد."
       },
       "field": {
-        "optional": {
-          "label": "(اختياري)"
-        },
         "optionalSuffix": {
           "label": "اختياري"
         }
@@ -2888,22 +2885,13 @@
           "title": "خطأ أثناء الإرسال."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "الإعدادات"
-        }
+      "content": {
+        "title": "محتوى الموصل",
+        "description": "حدد المحتوى المراد فهرسته لهذا الموصل."
       },
       "selectInput": {
         "emptyOption": {
           "label": "اختر خيارًا"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "إضافة جديد"
-        },
-        "removeButton": {
-          "tooltip": "إزالة"
         }
       },
       "tabs": {
@@ -2915,8 +2903,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "الصق عنوان URL لموقعك. يجب أن تكون واجهة REST API الخاصة بـ {connectorName} قابلة للوصول هناك."
+      },
       "boundFields": {
-        "advancedOptions": "خيارات متقدمة",
         "errors": {
           "missing": "أدخل قيمة.",
           "invalid": "هذه القيمة غير صالحة: {detail}"
@@ -11338,6 +11328,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {اختر ملفات} other {اختر ملفًا}}"
+      },
+      "prompt": "{multiple, select, true {أو اسحب الملفات وأفلتها هنا.} other {أو اسحب ملفًا وأفلته هنا.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "إضافة جديد"
+      },
+      "removeButton": {
+        "tooltip": "إزالة"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "فتح الشريط الجانبي"

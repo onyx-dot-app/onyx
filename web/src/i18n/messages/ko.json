@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "OneDrive 커넥터 구성",
         "indexingScope": {
-          "label": "Onyx가 인덱싱할 OneDrive 파일의 소유자를 선택하세요",
+          "label": "인덱싱할 OneDrive 파일",
           "general": {
             "label": "일반",
             "description": "Microsoft 애플리케이션이 액세스할 수 있는 모든 적격 사용자를 인덱싱합니다."
@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "제외 경로",
-          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: '*.tmp' 또는 'Archive/*')."
+          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: `*.tmp` 또는 `Archive/*`)."
         },
         "organizationLinks": {
           "label": "조직 링크를 공개로 처리",
@@ -2653,9 +2653,6 @@
         "title": "자격 증명을 불러오지 못했습니다."
       },
       "field": {
-        "optional": {
-          "label": "(선택 사항)"
-        },
         "optionalSuffix": {
           "label": "선택 사항"
         }
@@ -2888,22 +2885,13 @@
           "title": "제출 중 오류가 발생했습니다."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "구성"
-        }
+      "content": {
+        "title": "커넥터 콘텐츠",
+        "description": "이 커넥터에서 인덱싱할 콘텐츠를 선택하세요."
       },
       "selectInput": {
         "emptyOption": {
           "label": "옵션 선택"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "새로 추가"
-        },
-        "removeButton": {
-          "tooltip": "제거"
         }
       },
       "tabs": {
@@ -2915,8 +2903,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "사이트 URL을 붙여 넣으세요. 해당 위치에서 {connectorName} REST API에 액세스할 수 있어야 합니다."
+      },
       "boundFields": {
-        "advancedOptions": "고급 옵션",
         "errors": {
           "missing": "값을 입력하세요.",
           "invalid": "이 값은 올바르지 않습니다: {detail}"
@@ -11338,6 +11328,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {파일 선택} other {파일 선택}}"
+      },
+      "prompt": "{multiple, select, true {또는 파일을 여기로 끌어다 놓으세요.} other {또는 파일을 여기로 끌어다 놓으세요.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "새로 추가"
+      },
+      "removeButton": {
+        "tooltip": "제거"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "사이드바 열기"
