@@ -20,6 +20,13 @@ on:
   schedule:
     - cron: "0 15 * * 1" # weekly, Monday 15:00 UTC (off the 13:00 recommended-models slot)
   workflow_dispatch:
+    inputs:
+      announce:
+        # cve-alerts.yml passes false: its own #cve-reviews post already names
+        # the refreshed PRs as the fix, so a second ping would be noise.
+        description: "Post the refreshed PRs to #ai-pr-reviews"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -177,7 +184,7 @@ jobs:
           echo "links=${pr_links}" >> "${GITHUB_OUTPUT}"
 
       - name: Notify Slack about PRs ready for review
-        if: steps.pr.outputs.links != ''
+        if: steps.pr.outputs.links != '' && inputs.announce != false
         continue-on-error: true
         uses: ./.github/actions/slack-post-message
         with:
