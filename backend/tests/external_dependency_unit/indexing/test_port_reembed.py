@@ -142,16 +142,7 @@ def _ss(
 
 def test_select_reembed_strategy() -> None:
     base = _ss()
-    # RAG off in the FUTURE always strips: the index may hold context from
-    # before Contextual Retrieval was turned off without a re-index.
-    assert select_reembed_strategy(base, _ss()) is ReembedStrategy.AUGMENTATION
-    assert (
-        select_reembed_strategy(
-            _ss(enable_contextual_rag=True, contextual_rag_model_configuration_id=1),
-            _ss(),
-        )
-        is ReembedStrategy.AUGMENTATION
-    )
+    assert select_reembed_strategy(base, _ss()) is ReembedStrategy.MODEL_ONLY
     assert (
         select_reembed_strategy(base, _ss(enable_contextual_rag=True))
         is ReembedStrategy.AUGMENTATION
@@ -169,6 +160,15 @@ def test_select_reembed_strategy() -> None:
         select_reembed_strategy(
             _ss(enable_contextual_rag=True, contextual_rag_model_configuration_id=1),
             _ss(enable_contextual_rag=True, contextual_rag_model_configuration_id=1),
+        )
+        is ReembedStrategy.MODEL_ONLY
+    )
+    # RAG OFF in both: a stale model-id difference is irrelevant (no enrichment in
+    # either index) -> MODEL_ONLY, not a spurious AUGMENTATION.
+    assert (
+        select_reembed_strategy(
+            _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=1),
+            _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=2),
         )
         is ReembedStrategy.MODEL_ONLY
     )
@@ -532,6 +532,32 @@ def test_augmentation_mixed_docs_enrich_per_document(
     assert results[0].doc_summary == "[doc-a:a-first a-second] "
     assert results[1].doc_summary == "[doc-b:b-only] "
     assert results[2].doc_summary == "[doc-a:a-first a-second] "
+
+
+def test_model_only_strips_stored_context_when_asked() -> None:
+    """With the FUTURE off, a MODEL_ONLY re-embed drops the doc summary and
+    chunk context a forward-only disable left in the stored content."""
+    chunk = _stored_chunk(
+        "Summary. body text Context.",
+        title=None,
+        doc_summary="Summary. ",
+        chunk_context=" Context.",
+    )
+    embedder = cast(IndexingEmbedder, _ContentVecEmbedder())
+
+    kept = re_embed_chunks(
+        [chunk], ReembedStrategy.MODEL_ONLY, embedder, present_tokenizer=_TOKENIZER
+    )
+    stripped = re_embed_chunks(
+        [chunk],
+        ReembedStrategy.MODEL_ONLY,
+        embedder,
+        present_tokenizer=_TOKENIZER,
+        strip_stored_context=True,
+    )
+
+    assert kept[0].content_vector == _vec("Summary. body text Context.")
+    assert stripped[0].content_vector == _vec("body text")
 
 
 def test_reembed_pairs_embeddings_by_identity_not_position() -> None:

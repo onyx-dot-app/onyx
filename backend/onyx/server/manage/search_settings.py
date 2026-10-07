@@ -693,6 +693,9 @@ def update_saved_search_settings(
             "Contextual RAG disabled in Onyx Cloud",
         )
 
+    # Locked before the guards, so a re-index submitted meanwhile (it locks
+    # PRESENT too) cannot slip between the check and the write.
+    current = get_current_search_settings(db_session, for_update=True)
     if (
         get_secondary_search_settings(db_session) is not None
         or _active_port_settings(db_session) is not None
@@ -703,7 +706,6 @@ def update_saved_search_settings(
             "Contextual Retrieval.",
         )
 
-    current = get_current_search_settings(db_session)
     if not current.enable_contextual_rag:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -752,9 +754,13 @@ def update_saved_search_settings(
         resource_type="search_settings",
         resource_id=current.id,
         extra={
-            "enable_contextual_rag": search_settings.enable_contextual_rag,
             "previous_model_configuration_id": previous_model_configuration_id,
             "model_configuration_id": search_settings.contextual_rag_model_configuration_id,
+            **(
+                {}
+                if search_settings.enable_contextual_rag
+                else {"enable_contextual_rag": False}
+            ),
         },
     )
     return ContextualRagModelUpdateResponse(

@@ -10,7 +10,7 @@ Two strategies, chosen by comparing PRESENT vs FUTURE settings:
   the same text. The only catch is that the stored `content` ends with the
   *keyword* metadata tail while indexing embedded the *semantic* tail, so we
   swap just that tail back.
-- AUGMENTATION (FUTURE has contextual RAG off, or on with a change): the enriched text
+- AUGMENTATION (contextual-RAG toggle or model changed): the enriched text
   itself changes, so we strip the stored augmentation back to the bare chunk
   text, re-glue under FUTURE settings, then re-embed. Two sub-cases keyed on the
   FUTURE `enable_contextual_rag`:
@@ -96,20 +96,28 @@ class AugmentationReembedContext:
 def select_reembed_strategy(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> ReembedStrategy:
-    """AUGMENTATION when the embedded text must change, otherwise MODEL_ONLY.
-    A FUTURE with Contextual Retrieval off always strips: the index may hold
-    context from before it was turned off without a re-index, and the strip
-    is a no-op on chunks without any. A FUTURE with it on re-generates when
-    PRESENT had it off or used another model."""
-    if not future_ss.enable_contextual_rag:
-        return ReembedStrategy.AUGMENTATION
-    if (
-        not present_ss.enable_contextual_rag
-        or present_ss.contextual_rag_model_configuration_id
-        != future_ss.contextual_rag_model_configuration_id
-    ):
-        return ReembedStrategy.AUGMENTATION
-    return ReembedStrategy.MODEL_ONLY
+    """AUGMENTATION when the contextual-RAG *enrichment* differs (the embedded
+    text changes), otherwise MODEL_ONLY. A change in
+    `contextual_rag_model_configuration_id` only matters when contextual RAG is
+    on in present or future — if it is off in both, no enrichment exists in
+    either index, so a stale model-id difference must not force AUGMENTATION.
+    Model/prefix/normalize/dimension and multipass changes only alter the vectors
+    (or large/mini chunks the port doesn't read), so they fall through to
+    MODEL_ONLY."""
+    rag_relevant = present_ss.enable_contextual_rag or future_ss.enable_contextual_rag
+    augmentation_changed = (
+        present_ss.enable_contextual_rag != future_ss.enable_contextual_rag
+        or (
+            rag_relevant
+            and present_ss.contextual_rag_model_configuration_id
+            != future_ss.contextual_rag_model_configuration_id
+        )
+    )
+    return (
+        ReembedStrategy.AUGMENTATION
+        if augmentation_changed
+        else ReembedStrategy.MODEL_ONLY
+    )
 
 
 def rebuild_semantic_tail(chunk: DocumentChunkWithoutVectors) -> str:
@@ -263,6 +271,7 @@ def re_embed_chunks(
     embedder: IndexingEmbedder,
     augmentation_ctx: AugmentationReembedContext | None = None,
     present_tokenizer: BaseTokenizer | None = None,
+    strip_stored_context: bool = False,
 ) -> list[DocumentChunk]:
     """Re-embed stored chunks under a prebuilt strategy + embedder (no DB access).
 
@@ -280,6 +289,10 @@ def re_embed_chunks(
     exactly. The FUTURE embedder's tokenizer must NOT be substituted: on a model
     change it can count the tail differently and flip the threshold, re-embedding
     text the PRESENT index never did.
+
+    `strip_stored_context` (the FUTURE has contextual RAG off) drops a chunk's
+    stored doc summary and chunk context from the MODEL_ONLY input: after a
+    forward-only disable the PRESENT index still holds them with the flag off.
     """
     if not stored_chunks:
         return []
@@ -293,7 +306,12 @@ def re_embed_chunks(
     if present_tokenizer is None:
         raise ValueError("MODEL_ONLY re-embed requires the PRESENT tokenizer")
     embed_inputs = [
-        recover_embedding_input(chunk, present_tokenizer) for chunk in stored_chunks
+        _without_stored_context(
+            chunk, recover_embedding_input(chunk, present_tokenizer)
+        )
+        if strip_stored_context
+        else recover_embedding_input(chunk, present_tokenizer)
+        for chunk in stored_chunks
     ]
     doc_aware_chunks = [
         _stored_chunk_to_doc_aware(chunk, embed_input)
@@ -311,6 +329,15 @@ def re_embed_chunks(
         )
         for stored, index_chunk in zip(stored_chunks, matched, strict=True)
     ]
+
+
+def _without_stored_context(chunk: DocumentChunkWithoutVectors, text: str) -> str:
+    """``text`` minus the chunk's stored doc summary and chunk context, each
+    removed once. A no-op for a chunk that holds neither."""
+    for piece in (chunk.doc_summary, chunk.chunk_context):
+        if piece:
+            text = text.replace(piece, "", 1)
+    return text
 
 
 def _bare_contents(stored_chunks: list[DocumentChunkWithoutVectors]) -> list[str]:
