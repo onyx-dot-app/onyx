@@ -1,5 +1,6 @@
 import hashlib
 import tempfile
+import threading
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -897,7 +898,22 @@ def get_azure_file_store() -> "AzureBlobBackedFileStore":
     )
 
 
+# Built once per process: a store carries no tenant or request state (keys take
+# the tenant from the context at call time) and its client is safe to share,
+# while building one costs tens of milliseconds, mostly the S3 client.
+_DEFAULT_FILE_STORE: FileStore | None = None
+_DEFAULT_FILE_STORE_LOCK = threading.Lock()
+
+
 def get_default_file_store() -> FileStore:
+    global _DEFAULT_FILE_STORE
+    with _DEFAULT_FILE_STORE_LOCK:
+        if _DEFAULT_FILE_STORE is None:
+            _DEFAULT_FILE_STORE = _build_default_file_store()
+        return _DEFAULT_FILE_STORE
+
+
+def _build_default_file_store() -> FileStore:
     """
     Returns the configured file store implementation based on FILE_STORE_BACKEND.
 
