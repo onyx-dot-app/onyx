@@ -6,7 +6,7 @@ drops every per-mailbox document, so each Outlook connector is marked for a
 full re-index to carry the rest over.
 
 Revision ID: 1b26b1dfdc54
-Revises: 84c15650b1ad
+Revises: e22aca06966a
 
 """
 
@@ -15,7 +15,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "1b26b1dfdc54"
-down_revision = "84c15650b1ad"
+down_revision = "e22aca06966a"
 branch_labels = None
 depends_on = None
 
