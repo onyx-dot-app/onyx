@@ -355,6 +355,8 @@ def _index_batch_with_handler(
 
 def _raise_for_bad_doc(**kwargs: Any) -> IndexingPipelineResult:
     documents = kwargs["document_batch"]
+    # "a" is up to date, so prepare() selects only the other two.
+    kwargs["on_prepared"]({doc.id for doc in documents if doc.id != "a"})
     if any(doc.id == "bad" for doc in documents):
         raise RuntimeError("cannot index bad")
     return IndexingPipelineResult(
@@ -375,16 +377,11 @@ def test_batch_handler_fails_only_the_document_that_raises() -> None:
     assert result.total_chunks == 4
     assert _failed_ids(result) == ["bad"]
     assert result.failures[0].failure_message == "cannot index bad"
-    # The batch once, then each document on its own with the change gates off,
-    # since the first prepare() already committed what the gates compare.
+    # The batch once, then each document on its own. Only the documents the
+    # batch had prepared skip the change gates, "a" was up to date.
     assert [
         call.kwargs["force_update"] for call in index_doc_batch_mock.call_args_list
-    ] == [
-        False,
-        True,
-        True,
-        True,
-    ]
+    ] == [False, False, True, True]
 
 
 def test_batch_handler_does_not_retry_a_failed_document_push() -> None:

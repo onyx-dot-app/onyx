@@ -469,6 +469,10 @@ def index_doc_batch_with_handler(
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
 ) -> IndexingPipelineResult:
+    # Documents whose prepare() committed before the batch raised. Their change
+    # gates would now see nothing to do, so a retry of them forces the update.
+    prepared: set[str] = set()
+
     def _index(
         documents: list[Document], force_update: bool
     ) -> IndexingPipelineResult | Exception:
@@ -491,6 +495,7 @@ def index_doc_batch_with_handler(
                 image_summarization_llm=image_summarization_llm,
                 llm=llm,
                 force_update=force_update,
+                on_prepared=prepared.update,
             )
         except ConnectorStopSignal as e:
             logger.warning(
@@ -548,13 +553,13 @@ def index_doc_batch_with_handler(
     if len(document_batch) == 1 or isinstance(batch_result, DocumentPushFailure):
         return _failure_result(document_batch, batch_result)
 
-    # One bad document raises for the whole batch, so retry each alone. The
-    # first prepare() already committed new readers, so the retry skips the
-    # change gates or a permission-only update would look like nothing to do.
+    # One bad document raises for the whole batch, so retry each alone. Only
+    # the documents the batch had prepared skip the change gates. The rest
+    # were up to date and stay that way.
     results: list[IndexingPipelineResult] = []
     for document in document_batch:
         result: IndexingPipelineResult | Exception = _index(
-            [document], force_update=True
+            [document], force_update=document.id in prepared
         )
         if isinstance(result, Exception):
             result = _failure_result([document], result)
@@ -1419,6 +1424,7 @@ def index_doc_batch(
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
     force_update: bool = False,
+    on_prepared: Callable[[set[str]], None] | None = None,
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
     from_beginning: bool = False,
@@ -1467,6 +1473,8 @@ def index_doc_batch(
         result = IndexingPipelineResult.empty(len(filtered_documents))
         result.failures.extend(filter_failures)
         return result
+    if on_prepared is not None:
+        on_prepared({document.id for document in context.updatable_docs})
 
     enrichment_partition = _partition_documents_blocked_by_llm_spend_limit(
         context.updatable_docs,
