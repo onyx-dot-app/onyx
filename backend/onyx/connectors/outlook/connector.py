@@ -1185,7 +1185,7 @@ class OutlookConnector(
             )
         # The listing is too large to hold, so it goes through a thread table
         # of its own and is read back one bucket at a time.
-        table = ThreadTable(uuid4().hex)
+        table: ThreadTable = ThreadTable(uuid4().hex)
         pages: int = 0
         rows: int = 0
         pending: list[ThreadListing] = []

@@ -243,7 +243,7 @@ class ThreadTable:
         if manifest.next_page > first_page:
             return manifest.next_page
         buffers: list[list[bytes]] = [[] for _ in range(bucket_count)]
-        buffered = 0
+        buffered: int = 0
         cut: int = 0
 
         def flush(bucket: int) -> None:
