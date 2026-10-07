@@ -61,7 +61,8 @@ class SavedSearchSettings(IndexingSetting):
 
 
 class ContextualRagModelUpdateResponse(BaseModel):
-    contextual_rag_model_configuration_id: int
+    # PRESENT's model after the update. Turning Contextual Retrieval off keeps it.
+    contextual_rag_model_configuration_id: int | None
 
 
 class Tag(BaseModel):

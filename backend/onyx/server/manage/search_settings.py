@@ -56,7 +56,6 @@ from onyx.db.search_settings import (
     clear_reclaim_intent__no_commit,
     create_search_settings,
     delete_search_settings,
-    disable_contextual_rag__no_commit,
     find_unreclaimed_past_by_index_name,
     get_current_search_settings,
     get_embedding_provider_from_provider_type,
@@ -96,7 +95,11 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import ALT_INDEX_SUFFIX, MULTI_TENANT
+from shared_configs.configs import (
+    ALT_INDEX_SUFFIX,
+    MULTI_TENANT,
+    PRESERVED_SEARCH_FIELDS,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search-settings")
@@ -643,35 +646,35 @@ def get_all_search_settings(
     )
 
 
-def _reindex_in_progress(db_session: Session) -> bool:
-    return (
-        get_secondary_search_settings(db_session) is not None
-        or _active_port_settings(db_session) is not None
-    )
-
-
-def _validate_contextual_model_only_update(
+def _validate_forward_only_update(
     current: SearchSettings,
     requested: SavedSearchSettings,
-) -> int:
-    model_configuration_id = requested.contextual_rag_model_configuration_id
-    if model_configuration_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Select a Contextual Retrieval model.",
-        )
+) -> None:
+    """Rejects anything but the one change PRESENT takes without a re-index: a
+    new Contextual Retrieval model, or Contextual Retrieval turned off with
+    its model left as it is."""
+    if requested.enable_contextual_rag:
+        if requested.contextual_rag_model_configuration_id is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Select a Contextual Retrieval model.",
+            )
+        model_configuration_id = requested.contextual_rag_model_configuration_id
+    else:
+        model_configuration_id = current.contextual_rag_model_configuration_id
 
     expected = SavedSearchSettings.from_db_model(current).model_copy(
         update={
+            "enable_contextual_rag": requested.enable_contextual_rag,
             "contextual_rag_model_configuration_id": model_configuration_id,
         }
     )
     if requested != expected:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Only the Contextual Retrieval model can be updated without re-indexing.",
+            "Only the Contextual Retrieval model can be changed, or Contextual "
+            "Retrieval turned off, without re-indexing.",
         )
-    return model_configuration_id
 
 
 @router.post("/update-inference-settings")
@@ -680,6 +683,9 @@ def update_saved_search_settings(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ContextualRagModelUpdateResponse:
+    """Applies a Contextual Retrieval change to PRESENT without a re-index: a
+    new model, or off. Documents already indexed keep their generated context
+    until they are updated or re-indexed."""
     # Disallow contextual RAG for cloud deployments
     if MULTI_TENANT and search_settings.enable_contextual_rag:
         raise OnyxError(
@@ -687,40 +693,57 @@ def update_saved_search_settings(
             "Contextual RAG disabled in Onyx Cloud",
         )
 
-    if _reindex_in_progress(db_session):
+    if (
+        get_secondary_search_settings(db_session) is not None
+        or _active_port_settings(db_session) is not None
+    ):
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
-            "A re-index is in progress. Wait for it to finish before updating the "
-            "Contextual Retrieval model.",
+            "A re-index is in progress. Wait for it to finish before changing "
+            "Contextual Retrieval.",
         )
 
     current = get_current_search_settings(db_session)
     if not current.enable_contextual_rag:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Contextual Retrieval must be enabled before its model can be updated "
+            "Contextual Retrieval must be enabled before it can be changed "
             "without re-indexing.",
         )
 
-    model_configuration_id = _validate_contextual_model_only_update(
-        current, search_settings
-    )
-    validate_contextual_rag_model(
-        model_configuration_id=model_configuration_id,
-        db_session=db_session,
-        enable_contextual_rag=True,
-    )
+    _validate_forward_only_update(current, search_settings)
+    if search_settings.enable_contextual_rag:
+        validate_contextual_rag_model(
+            model_configuration_id=search_settings.contextual_rag_model_configuration_id,
+            db_session=db_session,
+            enable_contextual_rag=True,
+        )
+    elif ENABLE_CONTEXTUAL_RAG:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The ENABLE_CONTEXTUAL_RAG environment variable keeps Contextual "
+            "Retrieval on. Unset it and restart to turn Contextual Retrieval off.",
+        )
 
     previous_model_configuration_id = current.contextual_rag_model_configuration_id
     update_current_search_settings(
-        search_settings=search_settings, db_session=db_session
+        search_settings=search_settings,
+        db_session=db_session,
+        # The flag is normally fixed for the life of an index. Turning it off
+        # is the one change this endpoint applies to it.
+        preserved_fields=[
+            field
+            for field in PRESERVED_SEARCH_FIELDS
+            if field != "enable_contextual_rag"
+        ],
     )
     _sync_default_contextual_model(db_session)
 
     logger.info(
-        "Updated current contextual retrieval model from %s to %s",
+        "Updated current contextual retrieval: enabled=%s model %s -> %s",
+        search_settings.enable_contextual_rag,
         previous_model_configuration_id,
-        model_configuration_id,
+        search_settings.contextual_rag_model_configuration_id,
     )
     emit_audit_event(
         AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE,
@@ -729,55 +752,13 @@ def update_saved_search_settings(
         resource_type="search_settings",
         resource_id=current.id,
         extra={
+            "enable_contextual_rag": search_settings.enable_contextual_rag,
             "previous_model_configuration_id": previous_model_configuration_id,
-            "model_configuration_id": model_configuration_id,
+            "model_configuration_id": search_settings.contextual_rag_model_configuration_id,
         },
     )
     return ContextualRagModelUpdateResponse(
-        contextual_rag_model_configuration_id=model_configuration_id
-    )
-
-
-@router.post("/disable-contextual-rag")
-def disable_contextual_rag(
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> None:
-    """Stops Contextual Retrieval for documents indexed from now on, without a
-    re-index. Documents already indexed keep their generated context until
-    they are updated or re-indexed."""
-    if ENABLE_CONTEXTUAL_RAG:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "The ENABLE_CONTEXTUAL_RAG environment variable keeps Contextual "
-            "Retrieval on. Unset it and restart to turn Contextual Retrieval off.",
-        )
-
-    # Locked before the guards, so a re-index submitted meanwhile (it locks
-    # PRESENT too) cannot slip between the check and the write.
-    current: SearchSettings = get_current_search_settings(db_session, for_update=True)
-    if _reindex_in_progress(db_session):
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "A re-index is in progress. Wait for it to finish before turning "
-            "Contextual Retrieval off.",
-        )
-    if not current.enable_contextual_rag:
-        return
-
-    model_configuration_id: int | None = current.contextual_rag_model_configuration_id
-    disable_contextual_rag__no_commit(current)
-    db_session.commit()
-    _sync_default_contextual_model(db_session)
-
-    logger.info("Turned contextual retrieval off on the current search settings")
-    emit_audit_event(
-        AuditAction.CONTEXTUAL_RAG_DISABLE,
-        AuditOutcome.SUCCESS,
-        actor=actor_from_user(user),
-        resource_type="search_settings",
-        resource_id=current.id,
-        extra={"model_configuration_id": model_configuration_id},
+        contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id
     )
 
 

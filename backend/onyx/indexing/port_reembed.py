@@ -10,7 +10,7 @@ Two strategies, chosen by comparing PRESENT vs FUTURE settings:
   the same text. The only catch is that the stored `content` ends with the
   *keyword* metadata tail while indexing embedded the *semantic* tail, so we
   swap just that tail back.
-- AUGMENTATION (contextual-RAG toggle or model changed): the enriched text
+- AUGMENTATION (FUTURE has contextual RAG off, or on with a change): the enriched text
   itself changes, so we strip the stored augmentation back to the bare chunk
   text, re-glue under FUTURE settings, then re-embed. Two sub-cases keyed on the
   FUTURE `enable_contextual_rag`:
@@ -96,35 +96,20 @@ class AugmentationReembedContext:
 def select_reembed_strategy(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> ReembedStrategy:
-    """AUGMENTATION when the contextual-RAG *enrichment* differs (the embedded
-    text changes), otherwise MODEL_ONLY. PRESENT may hold generated context
-    with the flag off: turning Contextual Retrieval off without a re-index
-    clears the flag and keeps the model id as the sign of that, so a model id
-    on PRESENT counts as context to strip or re-generate. Model/prefix/
-    normalize/dimension and multipass changes only alter the vectors (or
-    large/mini chunks the port doesn't read), so they fall through to
-    MODEL_ONLY."""
-    present_holds_context: bool = (
-        present_ss.enable_contextual_rag
-        or present_ss.contextual_rag_model_configuration_id is not None
-    )
-    rag_relevant: bool = present_holds_context or future_ss.enable_contextual_rag
-    # Flag flips always re-glue: after a forward-only disable the index mixes
-    # chunks with and without context, so a re-enable must generate for all.
-    augmentation_changed: bool = (
-        present_ss.enable_contextual_rag != future_ss.enable_contextual_rag
-        or present_holds_context != future_ss.enable_contextual_rag
-        or (
-            rag_relevant
-            and present_ss.contextual_rag_model_configuration_id
-            != future_ss.contextual_rag_model_configuration_id
-        )
-    )
-    return (
-        ReembedStrategy.AUGMENTATION
-        if augmentation_changed
-        else ReembedStrategy.MODEL_ONLY
-    )
+    """AUGMENTATION when the embedded text must change, otherwise MODEL_ONLY.
+    A FUTURE with Contextual Retrieval off always strips: the index may hold
+    context from before it was turned off without a re-index, and the strip
+    is a no-op on chunks without any. A FUTURE with it on re-generates when
+    PRESENT had it off or used another model."""
+    if not future_ss.enable_contextual_rag:
+        return ReembedStrategy.AUGMENTATION
+    if (
+        not present_ss.enable_contextual_rag
+        or present_ss.contextual_rag_model_configuration_id
+        != future_ss.contextual_rag_model_configuration_id
+    ):
+        return ReembedStrategy.AUGMENTATION
+    return ReembedStrategy.MODEL_ONLY
 
 
 def rebuild_semantic_tail(chunk: DocumentChunkWithoutVectors) -> str:

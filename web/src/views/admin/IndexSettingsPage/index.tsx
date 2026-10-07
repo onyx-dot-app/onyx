@@ -90,7 +90,6 @@ import {
 import {
   saveAdminSettings,
   cancelNewEmbedding,
-  disableContextualRag,
   disconnectEmbeddingProvider,
   setNewSearchSettings,
   updateInferenceSettings,
@@ -746,6 +745,27 @@ function resolveApplyStrategy(
     : stored;
 }
 
+type BannerCopy =
+  | "contextualModelMissing"
+  | "contextualDisableOnly"
+  | "contextualModelOnly"
+  | "doNotReindex"
+  | "reindex"
+  | "default";
+
+/** The `changesBanner.*` copy for the staged changes. Forward-only modes name their own copy. */
+function bannerCopyFor(
+  contextualRagModelMissing: boolean,
+  mode: BannerMode,
+  strategyCopy: "doNotReindex" | "reindex" | null
+): BannerCopy {
+  if (contextualRagModelMissing) return "contextualModelMissing";
+  if (mode === "contextualDisableOnly" || mode === "contextualModelOnly") {
+    return mode;
+  }
+  return strategyCopy ?? "default";
+}
+
 type ImagePersistResult = "skipped" | "saved" | "failed";
 
 export default function IndexSettingsPage() {
@@ -1048,12 +1068,14 @@ export default function IndexSettingsPage() {
         ? t("toasts.contextualRetrievalDisableFailed")
         : t("toasts.contextualModelUpdateFailed");
       try {
-        const response = disabling
-          ? await disableContextualRag()
-          : await updateInferenceSettings({
-              ...searchSettings,
-              contextual_rag_model_configuration_id: modelConfigurationId,
-            });
+        const response = await updateInferenceSettings(
+          disabling
+            ? { ...searchSettings, enable_contextual_rag: false }
+            : {
+                ...searchSettings,
+                contextual_rag_model_configuration_id: modelConfigurationId,
+              }
+        );
         if (!response.ok) {
           toast.error(await parseErrorDetail(response, failedToast));
           return false;
@@ -1294,13 +1316,14 @@ export default function IndexSettingsPage() {
               // them. Do Not Re-index touches no index, so it reads as info
               // rather than as the warning the re-index strategies carry.
               const stagedVariant = saveOnly ? "info" : "warning";
-              const bannerCopy = contextualRagModelMissing
-                ? "contextualModelMissing"
-                : contextualDisableOnlyChange
-                  ? "contextualDisableOnly"
-                  : contextualForwardChange
-                    ? "contextualModelOnly"
-                    : (strategyCopy ?? "default");
+              const bannerCopy = bannerCopyFor(
+                contextualRagModelMissing,
+                bannerMode,
+                strategyCopy
+              );
+              const forwardModalKey = contextualDisableOnlyChange
+                ? "disableForwardModal"
+                : "forwardOnlyModal";
               // The banner is reserved for indexing prompts: staged changes
               // and the contextual model a re-index needs. A captioning
               // model missing is a card-level setting warning, not a banner.
@@ -1442,11 +1465,7 @@ export default function IndexSettingsPage() {
                   <forwardOnlyModal.Provider>
                     <ConfirmationModalLayout
                       icon={SvgArrowExchange}
-                      title={
-                        contextualDisableOnlyChange
-                          ? t("disableForwardModal.title")
-                          : t("forwardOnlyModal.title")
-                      }
+                      title={t(`${forwardModalKey}.title`)}
                       submit={
                         <Button
                           disabled={applyBlocked}
@@ -1464,9 +1483,7 @@ export default function IndexSettingsPage() {
                       }
                     >
                       <Text font="main-ui-body" color="text-03" as="p">
-                        {contextualDisableOnlyChange
-                          ? t("disableForwardModal.description")
-                          : t("forwardOnlyModal.description")}
+                        {t(`${forwardModalKey}.description`)}
                       </Text>
                     </ConfirmationModalLayout>
                   </forwardOnlyModal.Provider>

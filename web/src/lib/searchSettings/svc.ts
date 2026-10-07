@@ -253,10 +253,3 @@ export async function updateInferenceSettings(
     body: JSON.stringify(settings),
   });
 }
-
-/** Switches Contextual Retrieval off for documents indexed from now on. */
-export async function disableContextualRag(): Promise<Response> {
-  return await fetch("/api/search-settings/disable-contextual-rag", {
-    method: "POST",
-  });
-}
