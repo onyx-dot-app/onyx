@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { createElement, useCallback, useEffect, useMemo } from "react";
+import { useTranslations } from "next-intl";
+import { SvgProgressRing } from "@opal/icons";
+import { IconLoader } from "@opal/loaders";
+import type { IconFunctionComponent, IconProps } from "@opal/types";
 import useSWR, { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -10,12 +14,14 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useConnectorConfiguration } from "@/lib/connectors/connectors";
 import { splitCredentialBoundFields } from "@/lib/connectors/utils";
 import { toWireAccess } from "@/lib/connectors/accessType";
+import { checksProgress } from "@/lib/connectors/checks/progress";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
   ConnectorChecksStatus,
   DraftCheckRunSnapshot,
   DraftCheckState,
+  DraftCheckStateKind,
   DraftRerunMode,
 } from "@/lib/connectors/checks/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
@@ -79,6 +85,31 @@ function toCheckResult(
   };
 }
 
+const NO_CHECKS: Record<DraftCheckStateKind, number> = {
+  pending: 0,
+  running: 0,
+  passed: 0,
+  failed: 0,
+  indeterminate: 0,
+  skipped: 0,
+  waiting: 0,
+  not_applicable: 0,
+};
+
+function countStates(
+  checks: DraftCheckState[],
+  broken: boolean
+): Record<DraftCheckStateKind, number> {
+  const counts = { ...NO_CHECKS };
+  for (const check of checks) counts[check.state] += 1;
+  // A run that broke will not finish its open checks.
+  if (broken) {
+    counts.pending = 0;
+    counts.running = 0;
+  }
+  return counts;
+}
+
 function formAccessType(values: Record<string, unknown>): AccessType {
   const formValue: unknown = values.access_type;
   const accessType: AccessType =
@@ -109,6 +140,8 @@ export interface UseConnectorChecksResult {
   inProgressCount: number;
   /** Checks waiting on a form field before they can run. */
   expectedCount: number;
+  /** The latest run's checks, counted per state. */
+  stateCounts: Record<DraftCheckStateKind, number>;
   /** Starts a run. */
   begin: () => void;
   /** Starts a run that ignores every cached result. */
@@ -259,6 +292,7 @@ export function useConnectorChecks({
             (check) => check.state === "pending" || check.state === "running"
           ).length,
     expectedCount: checks.filter((check) => check.state === "waiting").length,
+    stateCounts: countStates(checks, status === "failedToRun"),
     begin: () => void start("none"),
     rerun: () => void start("all"),
   };
@@ -275,4 +309,50 @@ export function useResetConnectorChecks(source: ConfigurableSources): void {
       revalidate: false,
     });
   }, [source, mutate]);
+}
+
+export interface ConnectorChecksProgress {
+  /** The header icon: the ring, or the spinner before anything starts. */
+  icon: IconFunctionComponent;
+  /** The `(passed/counted)` title suffix; absent with nothing to count. */
+  suffix: string | undefined;
+}
+
+/**
+ * The checks' header icon and count, both from `checksProgress`, ready for a
+ * `Content` icon slot and suffix.
+ */
+export function useConnectorChecksProgress(
+  counts: Record<DraftCheckStateKind, number>,
+  status: ConnectorChecksStatus
+): ConnectorChecksProgress {
+  const t = useTranslations("admin.connectorChecks");
+  const { ring, passed, counted } = checksProgress(counts, status);
+  const success = ring?.success;
+  const error = ring?.error;
+  const warning = ring?.warning;
+  const neutral = ring?.neutral;
+  const rest = ring?.rest;
+  const showRing: boolean = ring !== null;
+  const icon = useMemo<IconFunctionComponent>(
+    () =>
+      showRing
+        ? function ChecksRingIcon(props: IconProps) {
+            return createElement(SvgProgressRing, {
+              ...props,
+              success,
+              error,
+              warning,
+              neutral,
+              rest,
+            });
+          }
+        : IconLoader,
+    [showRing, success, error, warning, neutral, rest]
+  );
+  return {
+    icon,
+    suffix:
+      counted > 0 ? t("titleCount", { passed, total: counted }) : undefined,
+  };
 }

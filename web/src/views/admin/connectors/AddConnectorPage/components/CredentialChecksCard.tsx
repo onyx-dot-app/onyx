@@ -22,9 +22,13 @@ import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
   ConnectorChecksStatus,
+  DraftCheckStateKind,
 } from "@/lib/connectors/checks/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import { useConnectorChecks } from "@/lib/connectors/checks/hooks";
+import {
+  useConnectorChecks,
+  useConnectorChecksProgress,
+} from "@/lib/connectors/checks/hooks";
 import ConnectorsCheckPromptCard from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckPromptCard";
 
 export interface CredentialChecksCardProps {
@@ -43,6 +47,8 @@ interface CheckCardViewProps {
   inProgressCount: number;
   /** Checks waiting on a form field before they can run. */
   expectedCount: number;
+  /** The run's checks, counted per state. */
+  stateCounts: Record<DraftCheckStateKind, number>;
   onRerun: () => void;
 }
 
@@ -236,6 +242,7 @@ export default function CredentialChecksCard({
       results={checks.results}
       inProgressCount={checks.inProgressCount}
       expectedCount={checks.expectedCount}
+      stateCounts={checks.stateCounts}
       onRerun={checks.rerun}
     />
   );
@@ -251,6 +258,7 @@ function CheckCardView({
   results,
   inProgressCount,
   expectedCount,
+  stateCounts,
   onRerun,
 }: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
@@ -270,8 +278,6 @@ function CheckCardView({
       results.filter((result) => result.status === status).length,
     [results]
   );
-  const passed: number = count("passed");
-  const failed: number = count("failed");
   const isRunning: boolean = status === "running";
   // A broken run or a changed configuration outranks the counts.
   const notice: string | undefined =
@@ -315,32 +321,15 @@ function CheckCardView({
     format,
   ]);
 
-  // The icon slot wants a component; this one draws the ring.
-  const HeaderIcon = useMemo<IconFunctionComponent>(
-    () =>
-      function HeaderIcon(props: IconProps) {
-        return (
-          <SvgProgressRing
-            {...props}
-            succeeded={passed}
-            failed={failed}
-            inProgress={inProgressCount}
-            // The ring has no state yet for unverified or skipped checks, so
-            // they leave a gap with the checks still waiting.
-            queued={total - passed - failed - inProgressCount}
-          />
-        );
-      },
-    [total, passed, failed, inProgressCount]
-  );
+  const progress = useConnectorChecksProgress(stateCounts, status);
 
   return (
     <Card border="solid" rounding={4} padding={2}>
       <div className="flex flex-col gap-3">
         <ContentAction
-          icon={HeaderIcon}
+          icon={progress.icon}
           title={t("title")}
-          suffix={hasChecks ? t("titleCount", { passed, total }) : undefined}
+          suffix={progress.suffix}
           description={collapsed ? summary : undefined}
           sizePreset="main-content"
           variant="section"
