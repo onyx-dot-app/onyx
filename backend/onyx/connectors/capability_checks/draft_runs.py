@@ -136,6 +136,18 @@ class DraftCheckRunSnapshot(BaseModel):
     checks: list[DraftCheckState]
 
 
+class DraftCheckPlan(BaseModel):
+    """The checks a draft run would hold for a form, each in its state before
+    anything runs: pending, waiting or not applicable."""
+
+    source: DocumentSource
+    access_type: AccessType | None
+    # Field name to error message, for the form.
+    form_errors: dict[str, str]
+    unknown_fields: list[str]
+    checks: list[DraftCheckState]
+
+
 class StoredDraftRun(BaseModel):
     user_id: UUID
     snapshot: DraftCheckRunSnapshot
