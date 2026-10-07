@@ -14661,5 +14661,17 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch 需要更多资源",
+    "disk": "OpenSearch 数据节点的磁盘使用率至少为 85%。磁盘空间耗尽时，索引可能停止。",
+    "jvmMemory": "多次检查显示 OpenSearch JVM 内存使用率持续超过 85%。搜索和索引可能失败。",
+    "vectorMemory": "OpenSearch 向量内存接近满载或已达到上限。搜索和索引可能失败。",
+    "contact": "请联系系统管理员或通过 [support@onyx.app](mailto:support@onyx.app) 联系 Onyx 团队。",
+    "stale": "最新检查不可用。此警告反映上次成功检查的结果，尚未确认恢复。",
+    "dismiss": "关闭",
+    "diskTitle": "磁盘空间",
+    "jvmMemoryTitle": "JVM 内存",
+    "vectorMemoryTitle": "向量内存"
   }
 }

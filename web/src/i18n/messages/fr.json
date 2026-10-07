@@ -14661,5 +14661,17 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch a besoin de plus de ressources",
+    "disk": "L’utilisation du disque OpenSearch atteint au moins 85 % sur un nœud de données. L’indexation peut s’arrêter si le disque se remplit.",
+    "jvmMemory": "L’utilisation de la mémoire JVM d’OpenSearch est restée supérieure à 85 % lors de contrôles répétés. La recherche et l’indexation peuvent échouer.",
+    "vectorMemory": "La mémoire vectorielle d’OpenSearch est presque pleine ou a atteint sa limite. La recherche et l’indexation peuvent échouer.",
+    "contact": "Contactez votre administrateur système ou l’équipe Onyx à [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "Le dernier contrôle est indisponible. Cet avertissement reflète le dernier contrôle réussi ; le rétablissement n’a pas été confirmé.",
+    "dismiss": "Fermer",
+    "diskTitle": "Espace disque",
+    "jvmMemoryTitle": "Mémoire JVM",
+    "vectorMemoryTitle": "Mémoire vectorielle"
   }
 }

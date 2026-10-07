@@ -47,6 +47,7 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.search_settings import get_active_search_settings_list
+from onyx.document_index.opensearch.resource_health import refresh_resource_health
 from onyx.redis.redis_pool import (
     get_redis_client,
     get_shared_redis_client,
@@ -1204,3 +1205,12 @@ def emit_version_telemetry(*, tenant_id: str) -> None:
     if not delivered:
         # release the slot so the next hourly tick retries
         redis_std.delete(_VERSION_TELEMETRY_EMITTED_KEY)
+
+
+@shared_task(
+    name=OnyxCeleryTask.MONITOR_OPENSEARCH_RESOURCES,
+    ignore_result=True,
+    queue=OnyxCeleryQueues.MONITORING,
+)
+def monitor_opensearch_resources(*, tenant_id: str | None = None) -> None:  # noqa: ARG001
+    refresh_resource_health()

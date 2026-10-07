@@ -333,6 +333,12 @@ other workers. Light is the exception: it reads
 
 ## 5. Contracts and invariants
 
+The `monitor_opensearch_resources` task runs on the monitoring queue every five minutes.
+It runs once per cluster, including in cloud deployments, and expires after five minutes.
+`DISABLE_VECTOR_DB` disables it. A shared Redis lease prevents duplicate probes.
+Each of its two statistics requests has a three-second timeout and no retries.
+See [[document-index]] for the cached admin warnings it supplies.
+
 1. **Every tenant-scoped task that reaches a worker must carry `tenant_id` in its kwargs.** Cloud system-wide tasks are exempt. For example, `cloud_monitor_celery_queues` takes no `tenant_id`.
    `TenantAwareTask.__call__` falls back to `POSTGRES_DEFAULT_SCHEMA` when it is
    missing, which is not an error, it is a silent wrong-tenant execution risk.

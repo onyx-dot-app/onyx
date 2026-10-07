@@ -17,6 +17,9 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
+from onyx.document_index.opensearch.constants import (
+    RESOURCE_CHECK_INTERVAL_SECONDS,
+)
 from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
 from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
 from shared_configs.configs import MULTI_TENANT
@@ -472,6 +475,26 @@ if not MULTI_TENANT:
         _self_hosted_template["options"].pop("skip_gated", None)
         _self_hosted_template["options"].pop("work_gated", None)
         tasks_to_schedule.append(_self_hosted_template)
+
+
+if not DISABLE_VECTOR_DB:
+    # Cluster-wide in cloud; never fan this probe out to each tenant.
+    _resource_health_task = {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-opensearch-resources"
+        if MULTI_TENANT
+        else "monitor-opensearch-resources",
+        "task": OnyxCeleryTask.MONITOR_OPENSEARCH_RESOURCES,
+        "schedule": timedelta(seconds=RESOURCE_CHECK_INTERVAL_SECONDS),
+        "options": {
+            "queue": OnyxCeleryQueues.MONITORING,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": RESOURCE_CHECK_INTERVAL_SECONDS,
+        },
+    }
+    if MULTI_TENANT:
+        beat_cloud_tasks.append(_resource_health_task)
+    else:
+        tasks_to_schedule.append(_resource_health_task)
 
 
 def generate_cloud_tasks(

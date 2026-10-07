@@ -14661,5 +14661,17 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch에 더 많은 리소스가 필요합니다",
+    "disk": "OpenSearch 데이터 노드의 디스크 사용률이 85% 이상입니다. 디스크가 가득 차면 인덱싱이 중단될 수 있습니다.",
+    "jvmMemory": "반복 검사에서 OpenSearch JVM 메모리 사용률이 85%를 초과했습니다. 검색 및 인덱싱이 실패할 수 있습니다.",
+    "vectorMemory": "OpenSearch 벡터 메모리가 거의 가득 찼거나 한도에 도달했습니다. 검색 및 인덱싱이 실패할 수 있습니다.",
+    "contact": "시스템 관리자 또는 Onyx 팀([support@onyx.app](mailto:support@onyx.app))에 문의하세요.",
+    "stale": "최신 검사를 사용할 수 없습니다. 이 경고는 마지막으로 성공한 검사를 반영하며 복구는 확인되지 않았습니다.",
+    "dismiss": "닫기",
+    "diskTitle": "디스크 공간",
+    "jvmMemoryTitle": "JVM 메모리",
+    "vectorMemoryTitle": "벡터 메모리"
   }
 }
