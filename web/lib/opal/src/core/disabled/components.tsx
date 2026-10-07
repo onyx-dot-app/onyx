@@ -93,8 +93,14 @@ function Disabled({
       {/* The tooltip only exists while hovered, and nothing inside a disabled
         region can take focus to open it, so the reason is also kept here for
         assistive technology. It is polite and always rendered, so a change of
-        reason is announced and unlocking announces nothing. */}
-      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        reason is announced and unlocking announces nothing. It is hidden like
+        sr-only, but fixed rather than absolute: a fixed box never adds to a
+        scroll area's height, so it cannot make the page scrollable. */}
+      <span
+        className="fixed size-px overflow-hidden whitespace-nowrap [clip-path:inset(50%)]"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {disabled && tooltip ? toPlainString(tooltip) : ""}
       </span>
       <fieldset disabled={blockKeyboard} className="contents">

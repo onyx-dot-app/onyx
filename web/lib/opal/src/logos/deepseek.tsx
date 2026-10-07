@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgDeepseek = ({ size, ...props }: IconProps) => (
+const SvgDeepSeek = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -14,4 +14,4 @@ const SvgDeepseek = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgDeepseek;
+export default SvgDeepSeek;
