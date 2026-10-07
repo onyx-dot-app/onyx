@@ -836,7 +836,11 @@ class BoundedTelemetry:
         ready: list[dict[str, Any]] = []
         for event in events:
             data = event["data"]
-            if event["event_type"] != "attempt" or data.get("counter_mode") != "delta":
+            if (
+                event["event_type"] != "attempt"
+                or data.get("counter_mode") != "delta"
+                or "attempt_id" not in data
+            ):
                 ready.append(event)
                 continue
             key = tuple(
