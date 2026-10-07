@@ -125,7 +125,7 @@ def capture_user_file_metadata(
 
 def get_user_file_metadata(user_file_id: UUID, db_session: Session) -> UserFileMetadata:
     """Capture one file for content loading after the session closes."""
-    user_file = get_user_file_by_id(user_file_id, db_session)
+    user_file: UserFile | None = get_user_file_by_id(user_file_id, db_session)
     if user_file is None:
         raise ValueError(f"User file with id {user_file_id} not found")
     return UserFileMetadata.model_validate(user_file)
