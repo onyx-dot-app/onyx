@@ -291,6 +291,9 @@ search team knowledge), and a persona with attached user files is scoped to
 those files via `persona_id_filter`. See `[[internal-search]]` for the full
 filter-composition rules.
 
+Lazy file descriptors share one byte loader and cache across shallow and deep copies.
+Concurrent first reads load the bytes once. Serialization excludes this shared resource.
+
 ### 4.5 Token counting
 
 Computed **at upload time**, before any chat turn runs:
