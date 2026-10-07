@@ -14,6 +14,7 @@ import { getArtifactUrl } from "@/lib/build/client";
 interface PptxPreviewProps {
   sessionId: string;
   filePath: string;
+  revision?: string;
   refreshKey?: number;
 }
 
@@ -25,6 +26,7 @@ interface PptxPreviewProps {
 export default function PptxPreview({
   sessionId,
   filePath,
+  revision,
   refreshKey,
 }: PptxPreviewProps) {
   const t = useTranslations("craft.pptxPreview");
@@ -32,13 +34,19 @@ export default function PptxPreview({
   const [imageLoading, setImageLoading] = useState(true);
 
   const { data, error, isLoading } = useSWR(
-    [SWR_KEYS.buildSessionPptxPreview(sessionId, filePath), refreshKey ?? 0],
+    [
+      SWR_KEYS.buildSessionPptxPreview(sessionId, filePath),
+      revision,
+      refreshKey ?? 0,
+    ],
     async () => ({
       ...(await fetchPptxPreview(sessionId, filePath)),
       imageRevision: crypto.randomUUID(),
     }),
     {
       revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: revision === undefined,
       dedupingInterval: 10000,
     }
   );

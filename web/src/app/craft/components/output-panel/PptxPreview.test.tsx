@@ -149,3 +149,70 @@ it("does not reuse old slide URLs when the session refresh counter resets", asyn
   const refreshedImage = await screen.findByRole("img");
   expect(refreshedImage).not.toHaveAttribute("src", originalUrl);
 });
+
+it("reuses an unchanged preview across tabs after the deduplication window", async () => {
+  jest.useFakeTimers();
+  try {
+    jest.mocked(fetchPptxPreview).mockResolvedValue({
+      slide_count: 1,
+      slide_paths: ["outputs/.pptx-preview/deck/slide-1.jpg"],
+      cached: false,
+    });
+    const preview = (
+      <PptxPreview
+        sessionId="cached-deck"
+        filePath="outputs/deck.pptx"
+        revision="123:100"
+      />
+    );
+    const { rerender } = render(preview);
+    const originalUrl = (await screen.findByRole("img")).getAttribute("src");
+    const requests = jest.mocked(fetchPptxPreview).mock.calls.length;
+    rerender(<div />);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(11000);
+    });
+    rerender(preview);
+    expect(await screen.findByRole("img")).toHaveAttribute("src", originalUrl);
+    expect(fetchPptxPreview).toHaveBeenCalledTimes(requests);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+it("reloads an edited deck by revision and preserves explicit reloads", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 1,
+    slide_paths: ["outputs/.pptx-preview/deck/slide-1.jpg"],
+    cached: false,
+  });
+  const { rerender } = render(
+    <PptxPreview
+      sessionId="edited-deck"
+      filePath="outputs/deck.pptx"
+      revision="123:100"
+    />
+  );
+  const originalUrl = (await screen.findByRole("img")).getAttribute("src");
+  const requests = jest.mocked(fetchPptxPreview).mock.calls.length;
+  rerender(
+    <PptxPreview
+      sessionId="edited-deck"
+      filePath="outputs/deck.pptx"
+      revision="456:100"
+    />
+  );
+  const updatedUrl = (await screen.findByRole("img")).getAttribute("src");
+  expect(updatedUrl).not.toBe(originalUrl);
+  expect(fetchPptxPreview).toHaveBeenCalledTimes(requests + 1);
+  rerender(
+    <PptxPreview
+      sessionId="edited-deck"
+      filePath="outputs/deck.pptx"
+      revision="456:100"
+      refreshKey={1}
+    />
+  );
+  expect(await screen.findByRole("img")).not.toHaveAttribute("src", updatedUrl);
+  expect(fetchPptxPreview).toHaveBeenCalledTimes(requests + 2);
+});
