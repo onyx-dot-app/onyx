@@ -534,6 +534,58 @@ def test_augmentation_mixed_docs_enrich_per_document(
     assert results[2].doc_summary == "[doc-a:a-first a-second] "
 
 
+def test_model_only_strips_stored_context_when_asked() -> None:
+    """With the FUTURE off, a MODEL_ONLY re-embed drops the doc summary and
+    chunk context a forward-only disable left in the stored chunk, from the
+    vector and from the stored fields. Only the copies indexing appended go,
+    so a body sentence the context repeats stays where it was."""
+    chunk = _stored_chunk(
+        "Summary. Context. body text Context.",
+        title=None,
+        doc_summary="Summary. ",
+        chunk_context=" Context.",
+    )
+    embedder = cast(IndexingEmbedder, _ContentVecEmbedder())
+
+    kept = re_embed_chunks(
+        [chunk], ReembedStrategy.MODEL_ONLY, embedder, present_tokenizer=_TOKENIZER
+    )
+    stripped = re_embed_chunks(
+        [chunk],
+        ReembedStrategy.MODEL_ONLY,
+        embedder,
+        present_tokenizer=_TOKENIZER,
+        strip_stored_context=True,
+    )
+
+    assert kept[0].content_vector == _vec("Summary. Context. body text Context.")
+    assert kept[0].doc_summary == "Summary. "
+    assert stripped[0].content_vector == _vec("Context. body text")
+    assert stripped[0].content == "Context. body text"
+    assert stripped[0].doc_summary == ""
+    assert stripped[0].chunk_context == ""
+
+
+def test_model_only_strip_leaves_a_title_that_repeats_the_summary() -> None:
+    """The summary is removed after the title prefix even when the title
+    contains the same words."""
+    chunk = _stored_chunk(
+        f"Summary{RETURN_SEPARATOR}Summary body",
+        title="Summary",
+        doc_summary="Summary",
+    )
+
+    stripped = re_embed_chunks(
+        [chunk],
+        ReembedStrategy.MODEL_ONLY,
+        cast(IndexingEmbedder, _ContentVecEmbedder()),
+        present_tokenizer=_TOKENIZER,
+        strip_stored_context=True,
+    )
+
+    assert stripped[0].content == f"Summary{RETURN_SEPARATOR} body"
+
+
 def test_reembed_pairs_embeddings_by_identity_not_position() -> None:
     """The embedder may return chunks in a different order than it was given (e.g.
     grouped by document for batching); each stored chunk must still get ITS OWN

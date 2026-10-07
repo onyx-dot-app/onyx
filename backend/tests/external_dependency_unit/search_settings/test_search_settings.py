@@ -302,6 +302,81 @@ def test_contextual_model_update_rejects_unknown_model(
     assert str(unknown_model_configuration_id) in exc.value.detail
 
 
+def _enable_contextual_rag_on_current(db_session: Session) -> int:
+    """Puts the PRESENT settings in the state a finished re-index leaves them
+    in with Contextual Retrieval on. Returns the model configuration id."""
+    mc_id = _create_llm_provider_and_model(
+        db_session=db_session,
+        provider_name=TEST_PROVIDER_NAME,
+        model_name=TEST_MODEL_NAME,
+    )
+    current = get_current_search_settings(db_session)
+    current.enable_contextual_rag = True
+    current.contextual_rag_model_configuration_id = mc_id
+    db_session.commit()
+    update_default_contextual_model(
+        db_session=db_session,
+        enable_contextual_rag=True,
+        model_configuration_id=mc_id,
+    )
+    return mc_id
+
+
+def test_contextual_off_applies_without_a_reindex(
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    mc_id = _enable_contextual_rag_on_current(db_session)
+    current_id = get_current_search_settings(db_session).id
+    assert fetch_default_contextual_rag_model(db_session) is not None
+
+    with patch(
+        "onyx.server.manage.search_settings.emit_audit_event"
+    ) as mock_emit_audit_event:
+        response = update_saved_search_settings(
+            search_settings=SavedSearchSettings.from_db_model(
+                get_current_search_settings(db_session)
+            ).model_copy(update={"enable_contextual_rag": False}),
+            user=MagicMock(),
+            db_session=db_session,
+        )
+
+    current = get_current_search_settings(db_session)
+    assert current.id == current_id
+    assert current.enable_contextual_rag is False
+    assert current.contextual_rag_model_configuration_id == mc_id
+    assert response.contextual_rag_model_configuration_id == mc_id
+    assert get_secondary_search_settings(db_session) is None
+    assert fetch_default_contextual_rag_model(db_session) is None
+    audit_args, audit_kwargs = mock_emit_audit_event.call_args
+    assert audit_args == (
+        AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE,
+        AuditOutcome.SUCCESS,
+    )
+    assert audit_kwargs["resource_id"] == current_id
+    assert audit_kwargs["extra"]["enable_contextual_rag"] is False
+
+
+@patch("onyx.server.manage.search_settings.ENABLE_CONTEXTUAL_RAG", True)
+def test_contextual_off_rejects_the_env_override(
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    _enable_contextual_rag_on_current(db_session)
+
+    with pytest.raises(OnyxError) as exc:
+        update_saved_search_settings(
+            search_settings=SavedSearchSettings.from_db_model(
+                get_current_search_settings(db_session)
+            ).model_copy(update={"enable_contextual_rag": False}),
+            user=MagicMock(),
+            db_session=db_session,
+        )
+
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert get_current_search_settings(db_session).enable_contextual_rag is True
+
+
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 def test_port_seed_excludes_invalid_cc_pair(
     mock_get_default_doc_index: MagicMock,  # noqa: ARG001
