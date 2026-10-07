@@ -5,6 +5,7 @@ from starlette.concurrency import run_in_threadpool
 from onyx.auth.constants import (
     OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX,
     OAUTH_PROVIDER_REFRESH_TOKEN_PREFIX,
+    OAUTH_PROVIDER_SCOPE,
 )
 from onyx.auth.oauth_provider import OAuthProviderTokenKind, parse_oauth_provider_token
 from onyx.auth.permissions import has_global_permission
@@ -122,9 +123,9 @@ async def authenticate_oauth_provider_request(
         raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE) from error
     if not is_member:
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
-    if set(info.grant.scopes) != {
-        Permission.READ_SEARCH.value
-    } or not has_global_permission(user, Permission.READ_SEARCH):
+    if set(info.grant.scopes) != {OAUTH_PROVIDER_SCOPE} or not has_global_permission(
+        user, Permission.READ_SEARCH
+    ):
         raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
     request.state.token_scopes = [Permission.READ_SEARCH]
     request.state.usage_credential = UsageCredentialIdentity(

@@ -10,9 +10,11 @@ from mcp.server.auth.routes import build_resource_metadata_url
 from pydantic import AnyHttpUrl, ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from onyx.auth.constants import OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX
+from onyx.auth.constants import (
+    OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX,
+    OAUTH_PROVIDER_SCOPE,
+)
 from onyx.configs import app_configs
-from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
 from onyx.mcp_server.utils import get_http_client
@@ -115,7 +117,7 @@ class OnyxTokenVerifier(TokenVerifier):
                 headers={
                     "WWW-Authenticate": (
                         'Bearer error="insufficient_scope", '
-                        f'scope="{Permission.READ_SEARCH.value}", '
+                        f'scope="{OAUTH_PROVIDER_SCOPE}", '
                         f'resource_metadata="{metadata_url}"'
                     )
                 },
@@ -131,7 +133,7 @@ class OnyxTokenVerifier(TokenVerifier):
         if (
             info.resource != get_oauth_provider_settings().mcp_resource_url
             or info.expires_at <= time.time()
-            or set(info.scopes) != {Permission.READ_SEARCH.value}
+            or set(info.scopes) != {OAUTH_PROVIDER_SCOPE}
             or not info.client_id
         ):
             record_mcp_auth_result(MCPAuthResult.REJECTED)
@@ -156,5 +158,5 @@ def build_mcp_server_auth() -> TokenVerifier | RemoteAuthProvider:
         token_verifier=verifier,
         authorization_servers=[AnyHttpUrl(settings.issuer_url)],
         base_url=settings.mcp_resource_url.rstrip("/"),
-        scopes_supported=[Permission.READ_SEARCH.value],
+        scopes_supported=[OAUTH_PROVIDER_SCOPE],
     )
