@@ -960,6 +960,10 @@ def test_initial_discovery_aws_and_health_run_once_then_follow_intervals(
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     discovery = Mock(return_value=["public"])
     monkeypatch.setattr(source, "tenant_schemas", discovery)
+    opensearch = Mock()
+    monkeypatch.setattr(
+        "onyx.utils.fleet_telemetry_opensearch.collect_opensearch_health", opensearch
+    )
     managed = Mock(return_value=False)
     monkeypatch.setattr("onyx.utils.fleet_telemetry_aws.collect_aws_resources", managed)
     sender = client()
@@ -974,6 +978,7 @@ def test_initial_discovery_aws_and_health_run_once_then_follow_intervals(
     collector.tick()
     discovery.assert_called_once()
     managed.assert_called_once()
+    opensearch.assert_called_once()
     assert not sender._take_batch()
     clock[0] += 60
     collector.tick()
@@ -982,6 +987,7 @@ def test_initial_discovery_aws_and_health_run_once_then_follow_intervals(
     clock[0] += 240
     collector.tick()
     assert managed.call_count == 2 and collector.aws_consecutive_errors == 2
+    assert opensearch.call_count == 2
 
 
 @pytest.mark.parametrize("uptime", [0.0, 1.0])

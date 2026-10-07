@@ -28,6 +28,7 @@ from onyx.db.fleet_telemetry import (
     email_domain_page,
     job_page,
     license_snapshot,
+    stage_metric_page,
     tenant_schemas,
 )
 from onyx.utils.fleet_telemetry import (
@@ -178,6 +179,10 @@ class FleetCollector:
         self.email_domain_errors = 0
         self.license_errors = 0
         self._last_license: dict[str, float] = {}
+        self._stage_cursor: dict[str, tuple[datetime, int]] = {}
+        self._last_stages: dict[str, float] = {}
+        self.stage_errors = 0
+        self._last_opensearch: float | None = None
         self._attempt_cursor: dict[str, tuple[datetime, int]] = {}
         self._job_cursor: dict[str, tuple[datetime, str]] = {}
         self._active_job_cursor: dict[str, str] = {}
@@ -309,6 +314,58 @@ class FleetCollector:
             self._last_license[schema] = now
         return sent
 
+    def collect_stages(self, schema: str, now: float) -> None:
+        if not poll_due(
+            self._last_stages.get(schema),
+            now,
+            self.client.settings["connector_interval_seconds"],
+        ):
+            return
+        scan_started = datetime.now(timezone.utc)
+        oldest = scan_started - timedelta(days=30)
+        since, after_id = self._stage_cursor.get(schema, (oldest, 0))
+        try:
+            rows = stage_metric_page(self.engine, schema, max(since, oldest), after_id)
+            for row in rows:
+                data = {
+                    key: row[key]
+                    for key in (
+                        "attempt_id",
+                        "connector_id",
+                        "cc_pair_id",
+                        "event_count",
+                        "total_duration_ms",
+                        "min_duration_ms",
+                        "max_duration_ms",
+                        "m2_duration_ms",
+                    )
+                }
+                data.update(
+                    stage_name=row["stage"],
+                    connector_type=row["connector_type"].lower(),
+                    first_event_at=_iso(row["first_event_at"]),
+                    last_event_at=_iso(row["last_event_at"]),
+                )
+                updated = row["last_event_at"]
+                if not self._event(
+                    "stage",
+                    data,
+                    schema,
+                    updated,
+                    str(row["id"]),
+                    durable_id=True,
+                    observed_at=updated,
+                ):
+                    return
+                self._stage_cursor[schema] = (updated, row["id"])
+            if len(rows) < 200:
+                # Reconcile small timestamp overlaps, including a source commit arriving late.
+                self._stage_cursor[schema] = (scan_started - timedelta(minutes=5), 0)
+                self._last_stages[schema] = now
+        except Exception:
+            self.stage_errors += 1
+            self._last_stages[schema] = now
+
     def collect_one_schema(self) -> bool:
         if not self.schemas:
             return False
@@ -317,6 +374,7 @@ class FleetCollector:
         now = time.monotonic()
         if self._failed_schema.get(schema, (0, 0))[0] > now:
             return False
+        self.collect_stages(schema, now)
         collected = self.collect_email_domains(schema, now)
         collected = self.collect_license(schema, now) or collected
         if poll_due(
@@ -588,7 +646,22 @@ class FleetCollector:
                 self.aws_errors += 1
                 self.aws_consecutive_errors += 1
             self._last_aws = time.monotonic()
+        if self.shard_index == 0 and poll_due(
+            self._last_opensearch,
+            time.monotonic(),
+            self.client.settings["resource_interval_seconds"],
+        ):
+            self._last_opensearch = time.monotonic()
+            try:
+                from onyx.utils.fleet_telemetry_opensearch import (
+                    collect_opensearch_health,
+                )
+
+                collect_opensearch_health(self.client)
+            except Exception:
+                self.source_errors += 1
         self.client.health = {
+            "stage_errors": self.stage_errors,
             "email_domain_errors": self.email_domain_errors,
             "license_errors": self.license_errors,
             "source_errors": self.source_errors,

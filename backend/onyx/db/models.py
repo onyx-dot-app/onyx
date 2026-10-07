@@ -3053,6 +3053,7 @@ class IndexAttemptStageMetric(Base):
             "stage",
             name="uq_index_attempt_stage_metric_attempt_stage",
         ),
+        Index("ix_stage_metric_updated_id", "time_last_event", "id"),
     )
 
 

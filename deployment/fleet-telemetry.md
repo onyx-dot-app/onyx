@@ -115,6 +115,7 @@ GRANT SELECT ON public.connector,
     public.connector_credential_pair,
     public.index_attempt,
     public.index_attempt_errors,
+    public.index_attempt_stage_metric,
     public.sync_record,
     public.doc_permission_sync_attempt,
     public.external_group_permission_sync_attempt,
@@ -187,3 +188,24 @@ The standalone collector reads it every connector interval and reports `license_
 License set/removal hooks enqueue after commit, with no additional database or network request.
 A configured license sets the automatic registry default to Customer; absent means Free User.
 Operator POC/Customer/Free User tags take precedence. Presence does not establish validity or expiry.
+
+## OpenSearch health and native stage summaries
+
+Collector shard zero checks OpenSearch once per resource interval. It uses the same OpenSearch
+connection settings as Onyx, with a two-second request timeout and no retries. It reads the existing
+shared Redis resource-health snapshot with a 200ms timeout; configure the standard Onyx Redis
+connection variables on the collector too. The OpenSearch identity needs cluster-health read access.
+Only cluster status, counts and pressure flags leave the process. Node/index/cluster names and raw
+errors are excluded. A failed check reports unavailable, while missing/stale cached pressure stays
+unknown. All checks run in the isolated collector, outside application requests and indexing work.
+
+The collector also reads `index_attempt_stage_metric`, which Onyx already maintains. The migration
+adds a concurrent `(time_last_event,id)` index. Grant the collector SELECT on this table as above.
+Changed summaries are read in 200-row pages on the connector interval, with 30-day initial backfill
+and a five-minute reconciliation overlap. Events carry the canonical stage, attempt/connector IDs,
+count, duration sum/min/max/M2, and first/last sample times. They contain no document or source labels.
+This adds no per-document emit calls and cannot block application threads.
+
+The fleet service routes these summaries and legacy stage deltas to short-lived storage: 30-day
+queryable retention, no cold archive. Attempt outcomes and document totals keep their existing
+history policy. Deploy the updated fleet service before enabling this collector version.

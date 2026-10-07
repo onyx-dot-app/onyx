@@ -36,6 +36,7 @@ def source_schema() -> Generator[tuple[str, str], None, None]:
         "connector_credential_pair",
         "index_attempt",
         "index_attempt_errors",
+        "index_attempt_stage_metric",
         "sync_record",
         "doc_permission_sync_attempt",
         "external_group_permission_sync_attempt",
@@ -247,4 +248,55 @@ def test_domain_view_exposes_only_domains_and_signup_times(
         finally:
             collector.engine.dispose()
     finally:
+        engine.dispose()
+
+
+def test_stage_summaries_page_by_update_and_reconcile_without_source_payloads(
+    source_schema: tuple[str, str],
+) -> None:
+    source_url, schema = source_schema
+    engine = create_engine(source_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(f'''INSERT INTO "{schema}".index_attempt
+          (id,connector_credential_pair_id,from_beginning,status)
+          SELECT 1000+n,1,true,'IN_PROGRESS' FROM generate_series(1,210) n''')
+        )  # noqa: S608 - Generated test schema only.
+        connection.execute(
+            text(f'''INSERT INTO "{schema}".index_attempt_stage_metric
+          (id,index_attempt_id,stage,event_count,total_duration_ms,m2_duration_ms,min_duration_ms,max_duration_ms,time_first_event,time_last_event)
+          SELECT n,1000+n,'EMBEDDING',10,10000,500000,100,1500,now()-interval '2 minutes',now()
+          FROM generate_series(1,210) n''')
+        )  # noqa: S608 - Generated test schema only.
+    sender = _sender()
+    collector = FleetCollector(sender, source_url, [schema])
+    try:
+        collector.collect_stages(schema, 0)
+        assert collector._stage_cursor[schema][1] == 200
+        collector.collect_stages(schema, 1)
+        assert collector._stage_cursor[schema][1] == 0
+        events = []
+        while batch := sender._take_batch():
+            events.extend(batch)
+        assert len(events) == 210
+        assert {event["data"]["attempt_id"] for event in events} == set(
+            range(1001, 1211)
+        )
+        assert all(event["event_type"] == "stage" for event in events)
+        assert all(
+            event["data"]["connector_type"] == "google_drive" for event in events
+        )
+        assert all(
+            event["data"]["last_event_at"] == event["occurred_at"] for event in events
+        )
+        assert "PRIVATE" not in json.dumps(events)
+        assert collector.stage_errors == 0
+        collector.collect_stages(schema, 2)
+        assert not sender._take_batch()
+        # Overlap deliberately replays identical IDs; source totals never become deltas.
+        collector.collect_stages(schema, 301)
+        repeated = sender._take_batch()
+        assert repeated[0]["event_id"] == events[0]["event_id"]
+    finally:
+        collector.engine.dispose()
         engine.dispose()

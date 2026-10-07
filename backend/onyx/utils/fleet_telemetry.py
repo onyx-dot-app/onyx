@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from onyx.configs.constants import DocumentSource, OnyxCeleryQueues
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -181,6 +182,22 @@ _COUNTERS = frozenset(
     }
 )
 _FIELDS: dict[str, frozenset[str]] = {
+    "stage": frozenset(
+        {
+            "attempt_id",
+            "connector_id",
+            "cc_pair_id",
+            "connector_type",
+            "stage_name",
+            "event_count",
+            "total_duration_ms",
+            "min_duration_ms",
+            "max_duration_ms",
+            "m2_duration_ms",
+            "first_event_at",
+            "last_event_at",
+        }
+    ),
     "license": frozenset({"license_present", "action", "first_set_at"}),
     "tenant_domain": frozenset({"domain", "first_signup_at"}),
     "query": frozenset(
@@ -277,6 +294,20 @@ _FIELDS: dict[str, frozenset[str]] = {
     ),
     "resource": frozenset(
         {
+            "opensearch_status",
+            "opensearch_checked_at",
+            "opensearch_resource_checked_at",
+            "opensearch_resource_stale",
+            "opensearch_disk_pressure",
+            "opensearch_heap_pressure",
+            "opensearch_vector_pressure",
+            "opensearch_number_of_nodes",
+            "opensearch_number_of_data_nodes",
+            "opensearch_active_shards",
+            "opensearch_unassigned_shards",
+            "opensearch_initializing_shards",
+            "opensearch_relocating_shards",
+            "opensearch_number_of_pending_tasks",
             "service_instance_id",
             "memory_bytes",
             "memory_limit_bytes",
@@ -303,6 +334,7 @@ _FIELDS: dict[str, frozenset[str]] = {
     "heartbeat": frozenset(
         {
             "email_domain_errors",
+            "stage_errors",
             "license_errors",
             "config_revision",
             "dropped_events",
@@ -334,6 +366,8 @@ _ENUM_FIELDS = {
     "outcome": frozenset(
         {"success", "failure", "partial", "canceled", "disconnected", "timeout"}
     ),
+    "stage_name": frozenset(stage.value for stage in IndexAttemptStage),
+    "opensearch_status": frozenset({"green", "yellow", "red", "unavailable"}),
     "queue": _QUEUES,
     "job_type": _JOB_TYPES,
     "counter_mode": frozenset({"snapshot", "delta"}),
@@ -450,7 +484,7 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
         elif (
             type(value) in {bool, int, float}
             and math.isfinite(value)
-            and 0 <= value <= 1e18
+            and 0 <= value <= (1e30 if key == "m2_duration_ms" else 1e18)
         ):
             safe[key] = value
         else:

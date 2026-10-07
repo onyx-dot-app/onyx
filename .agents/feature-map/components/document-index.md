@@ -39,6 +39,11 @@ through the monitoring worker. The API only reads cached results. Stale warnings
 in the banner, but cannot trigger a popup. See `backend/onyx/document_index/opensearch/README.md`
 for thresholds, timeouts, and recovery behavior.
 
+The optional isolated fleet collector also reports allowlisted cluster status/counts and cached
+resource pressure through `backend/onyx/utils/fleet_telemetry_opensearch.py`. Network reads have
+short timeouts and run outside application requests. Cluster, node, index names and raw errors
+are excluded. Missing/stale pressure remains unknown. See `deployment/fleet-telemetry.md`.
+
 An admin experiences it directly on the embedding-model page. They pick a new
 embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, Bifrost,
 and more), optionally run a sample embedding test (a fixed test string, not a document), and start a re-index. Bifrost

@@ -125,6 +125,12 @@ plus the aggregate `BATCH_TOTAL` and the derived, never-written
 `BATCH_UNACCOUNTED`. `StageScope` marks each as `ATTEMPT_LEVEL` (one event) or
 `BATCH_LEVEL` (many, per docprocessing task).
 
+The optional isolated fleet collector reads these existing rows in bounded pages via
+`backend/onyx/db/fleet_telemetry.py:stage_metric_page`, using the concurrent
+`ix_stage_metric_updated_id` index. It sends cumulative numeric summaries, never per-document
+payloads, to the separate fleet service. Details expire there after 30 days without archive;
+source retention and pipeline write behavior are unchanged. See `deployment/fleet-telemetry.md`.
+
 ### `Document`, `DocumentByConnectorCredentialPair`, `Tag` (`onyx/db/models.py`, `onyx/db/document.py`, `onyx/db/tag.py`)
 
 `Document` is the durable Postgres row per source document: `content_hash` (used by

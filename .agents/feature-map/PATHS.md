@@ -22,6 +22,8 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
+| `backend/onyx/utils/fleet_telemetry_opensearch.py` | document-index |
+| `backend/onyx/db/fleet_telemetry.py`, `backend/onyx/utils/fleet_telemetry_collector.py`, `backend/onyx/utils/fleet_telemetry.py` | indexing-pipeline, document-index |
 | `backend/onyx/chat/llm_loop.py`, `backend/onyx/chat/llm_step.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_state.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/chat/emitter.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
 | `backend/onyx/chat/prompt_utils.py`, `compression.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |

@@ -296,3 +296,37 @@ def tenant_schemas(engine: Engine) -> list[str]:
                 )
             ).scalars()
         )
+
+
+def stage_metric_page(
+    engine: Engine, schema: str, since: datetime, after_id: int = 0, limit: int = 200
+) -> list[dict[str, Any]]:
+    """Read changed numeric stage summaries using the timestamp/id index."""
+    scoped = _schema(schema)
+    statement = f"""
+        SELECT m.id, m.index_attempt_id AS attempt_id, m.stage, m.event_count,
+          m.total_duration_ms, m.min_duration_ms, m.max_duration_ms,
+          m.m2_duration_ms, m.time_first_event AS first_event_at,
+          m.time_last_event AS last_event_at,
+          a.connector_credential_pair_id AS cc_pair_id,
+          p.connector_id, c.source AS connector_type
+        FROM {scoped}.index_attempt_stage_metric m
+        JOIN {scoped}.index_attempt a ON a.id=m.index_attempt_id
+        JOIN {scoped}.connector_credential_pair p ON p.id=a.connector_credential_pair_id
+        JOIN {scoped}.connector c ON c.id=p.connector_id
+        WHERE (m.time_last_event,m.id) > (:since,:after_id)
+          AND m.time_last_event > now()-interval '30 days' AND NOT a.is_synthetic_seed
+        ORDER BY m.time_last_event,m.id LIMIT :limit
+    """  # noqa: S608 - Validated schema; all cursor values are bound.
+    with engine.connect() as connection:
+        return [
+            dict(row)
+            for row in connection.execute(
+                text(statement),
+                {
+                    "since": since,
+                    "after_id": after_id,
+                    "limit": min(200, max(1, limit)),
+                },
+            ).mappings()
+        ]
