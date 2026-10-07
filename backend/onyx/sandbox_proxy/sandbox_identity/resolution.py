@@ -21,6 +21,7 @@ from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import BuildSession, Sandbox
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -148,3 +149,16 @@ class IdentityResolver:
                 .where(BuildSession.user_id == user_id)
             )
             return db.scalar(stmt)
+
+
+def build_ip_lookup() -> SandboxIPLookup:
+    """Build the configured backend without importing the other backend SDK."""
+    if SANDBOX_BACKEND is SandboxBackend.KUBERNETES:
+        from onyx.sandbox_proxy.sandbox_identity.kubernetes import K8sInformerLookup
+
+        return K8sInformerLookup()
+    if SANDBOX_BACKEND is SandboxBackend.DOCKER:
+        from onyx.sandbox_proxy.sandbox_identity.docker import DockerEventsLookup
+
+        return DockerEventsLookup()
+    raise RuntimeError(f"Unsupported SANDBOX_BACKEND={SANDBOX_BACKEND!r}.")
