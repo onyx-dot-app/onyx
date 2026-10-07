@@ -159,6 +159,7 @@ def test_connection_falls_back_without_resolving_hostname_again(
         with socket.socket(
             socket.AF_INET6 if ":" in refused_host else socket.AF_INET
         ) as refused:
+            refused.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             refused.bind((refused_host, port))
         try:
             addresses = resolve_destination(

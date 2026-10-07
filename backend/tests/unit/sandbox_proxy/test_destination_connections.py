@@ -214,6 +214,7 @@ def test_proxy_falls_back_to_second_validated_address(
                 socket.AF_INET6 if ":" in refused else socket.AF_INET,
                 socket.SOCK_STREAM,
             ) as reservation:
+                reservation.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 reservation.bind((refused, port))
                 unpinned: list[int] = _dns(
                     monkeypatch,
