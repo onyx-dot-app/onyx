@@ -977,6 +977,79 @@ def test_a_poll_writes_documents_for_the_holders_it_did_not_list() -> None:
     ) == [BOB.id, DAVE.id]
 
 
+def test_a_poll_skips_an_unlisted_holder_graph_refuses() -> None:
+    """Dave's mailbox is refused at the probe, so it was never opened and the
+    thread is still built for everyone else without a failure."""
+    gateway = _private_reply_gateway()
+    list_everyone = gateway.fetch_folder_delta_page.side_effect
+    gateway.fetch_folder_delta_page.side_effect = lambda *, mailbox_id, **kw: (
+        list_everyone(mailbox_id=mailbox_id, **kw)
+        if mailbox_id == ALICE.id
+        else OutlookDeltaPage(changes=[])
+    )
+
+    def probe(*, mailbox_id: str) -> OutlookFolder:
+        if mailbox_id == DAVE.id:
+            raise OutlookGraphError(403, "ErrorAccessDenied", "out of scope")
+        return folder()
+
+    find_held = gateway.find_message_by_internet_message_id.side_effect
+
+    def find(*, mailbox_id: str, **kw: Any) -> OutlookMessageChange | None:
+        if mailbox_id == DAVE.id:
+            raise OutlookGraphError(403, "ErrorAccessDenied", "out of scope")
+        return find_held(mailbox_id=mailbox_id, **kw)
+
+    gateway.probe_mailbox.side_effect = probe
+    gateway.find_message_by_internet_message_id.side_effect = find
+
+    items = _run(_connector(gateway), include_permissions=True)
+
+    documents = {item.id: item for item in items if isinstance(item, Document)}
+    key = thread_doc_id(CONVERSATION_ID).split(":", 1)[1]
+    assert set(documents) == {
+        thread_doc_id(CONVERSATION_ID),
+        copy_document_id(key, BOB),
+    }
+    assert not [item for item in items if isinstance(item, ConnectorFailure)]
+
+
+def test_an_unlisted_holder_keeps_its_own_folder_exclusions() -> None:
+    """Bob's copy of the root sits in his Archive, which the connector
+    excludes by name, so his document holds the answer alone."""
+    gateway = _private_reply_gateway()
+    list_everyone = gateway.fetch_folder_delta_page.side_effect
+    gateway.fetch_folder_delta_page.side_effect = lambda *, mailbox_id, **kw: (
+        list_everyone(mailbox_id=mailbox_id, **kw)
+        if mailbox_id == ALICE.id
+        else OutlookDeltaPage(changes=[])
+    )
+    read_everyone = gateway.fetch_conversation_messages_page.side_effect
+
+    def bobs_root_is_archived(*, mailbox_id: str, **kw: Any) -> OutlookMessagePage:
+        page = read_everyone(mailbox_id=mailbox_id, **kw)
+        if mailbox_id != BOB.id:
+            return page
+        return OutlookMessagePage(
+            messages=[
+                m.model_copy(update={"parent_folder_id": ARCHIVE_ID})
+                if m.id == "root"
+                else m
+                for m in page.messages
+            ]
+        )
+
+    gateway.fetch_conversation_messages_page.side_effect = bobs_root_is_archived
+
+    items = _run(
+        _connector(gateway, excluded_folders=["Archive"]), include_permissions=True
+    )
+
+    documents = {item.id: item for item in items if isinstance(item, Document)}
+    key = thread_doc_id(CONVERSATION_ID).split(":", 1)[1]
+    assert len(documents[copy_document_id(key, BOB)].sections) == 1
+
+
 def test_a_listing_from_the_beginning_never_looks_for_unlisted_holders() -> None:
     gateway = _private_reply_gateway()
 

@@ -1820,7 +1820,7 @@ class OutlookConnector(
             )
             unlisted: list[tuple[ThreadCopy, list[OutlookMessage]]] = []
             if not listing_complete:
-                unlisted = self._unlisted_copies(table, group, kept, cutoff)
+                unlisted = self._unlisted_copies(table, group, kept, cutoff, exclusions)
             document_ids: set[str] = (
                 wanted if wanted is not None else {m.match_id for m in kept}
             )
@@ -1876,13 +1876,15 @@ class OutlookConnector(
         group: ThreadGroup,
         kept: list[OutlookMessage],
         cutoff: datetime | None,
+        exclusions: dict[str, set[str]],
     ) -> list[tuple[ThreadCopy, list[OutlookMessage]]]:
         """Copies of the thread in the run's mailboxes that the poll did not
         list, each with its messages: a participant of the builder's mail that
         received none of the new messages. Found by the newest message naming
-        it, read whole, so it keeps a document of its own when it cannot read
-        the thread's. Named folder exclusions are resolved only for listed
-        mailboxes, so only the well-known ones apply here."""
+        it, read whole under the mailbox's own folder exclusions, so it keeps
+        a document of its own when it cannot read the thread's. A mailbox the
+        run never walked has no saved exclusions and is skipped, as is one
+        Graph refuses."""
         listed: set[str] = {copy.mailbox.id for copy in group.copies}
         roster: dict[str, OutlookMailbox] = self._run_roster(table)
         found: list[tuple[ThreadCopy, list[OutlookMessage]]] = []
@@ -1894,16 +1896,26 @@ class OutlookConnector(
                 if mailbox is None or mailbox.id in listed:
                     continue
                 listed.add(mailbox.id)
-                held = self.ops.find_message_by_internet_message_id(
-                    mailbox_id=mailbox.id,
-                    internet_message_id=message.internet_message_id,
-                )
-                if held is None or held.conversation_id is None:
+                excluded: set[str] | None = exclusions.get(mailbox.id)
+                if excluded is None:
                     continue
-                copy = ThreadCopy(mailbox=mailbox, conversation_id=held.conversation_id)
-                messages: list[OutlookMessage] = self._copy_messages(
-                    copy, self._excluded_well_known_folder_ids(mailbox), cutoff
-                )
+                try:
+                    held = self.ops.find_message_by_internet_message_id(
+                        mailbox_id=mailbox.id,
+                        internet_message_id=message.internet_message_id,
+                    )
+                    if held is None or held.conversation_id is None:
+                        continue
+                    copy = ThreadCopy(
+                        mailbox=mailbox, conversation_id=held.conversation_id
+                    )
+                    messages: list[OutlookMessage] = self._copy_messages(
+                        copy, excluded, cutoff
+                    )
+                except OutlookGraphError as e:
+                    if e.is_permanent_refusal:
+                        continue
+                    raise
                 if messages:
                     found.append((copy, messages))
         return found
