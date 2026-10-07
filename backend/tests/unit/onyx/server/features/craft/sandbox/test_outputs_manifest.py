@@ -37,7 +37,7 @@ _DAEMON_DIR = (
 # runs first the other's cache guard sees every module and reuses it, and no
 # model class gets two identities in one session.
 _DAEMON_MODULES = (
-    "contract",
+    "models",
     "extract",
     "snapshot",
     "opencode_history",

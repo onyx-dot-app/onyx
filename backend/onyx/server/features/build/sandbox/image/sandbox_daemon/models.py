@@ -1,7 +1,7 @@
 """HTTP contract shared between the sandbox daemon and the api-server.
 
 Both sides import these constants and request models to keep the sidecar wire
-contract in sync. The daemon imports this as ``sandbox_daemon.contract`` (the
+contract in sync. The daemon imports this as ``sandbox_daemon.models`` (the
 Dockerfile copies ``sandbox_daemon/`` to ``/workspace/sandbox_daemon/``); the
 api-server imports the full module path.
 """

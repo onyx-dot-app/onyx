@@ -78,7 +78,7 @@ from onyx.server.features.build.configs import (
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
 )
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
