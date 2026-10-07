@@ -184,7 +184,9 @@ jobs:
           echo "links=${pr_links}" >> "${GITHUB_OUTPUT}"
 
       - name: Notify Slack about PRs ready for review
-        if: steps.pr.outputs.links != '' && inputs.announce != false
+        # Scheduled runs have no inputs context; only a dispatch that passes
+        # announce=false (the CVE Alerts one) skips the post.
+        if: steps.pr.outputs.links != '' && (github.event_name != 'workflow_dispatch' || inputs.announce)
         continue-on-error: true
         uses: ./.github/actions/slack-post-message
         with:
