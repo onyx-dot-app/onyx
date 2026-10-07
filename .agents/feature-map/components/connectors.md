@@ -305,6 +305,44 @@ range:
 | Google Drive (`google_drive/connector.py:GoogleDriveConnector`) | `SlimConnector`, `SlimConnectorWithPermSync`, `CheckpointedConnectorWithPermSync`, `Resolver` | `GoogleDriveCheckpoint` (`google_drive/models.py`): a multi-stage state machine (`DriveRetrievalStage`: `START → OAUTH_FILES → USER_EMAILS → MY_DRIVE_FILES → DRIVE_IDS → SHARED_DRIVE_FILES → DONE`) plus a per-impersonated-user completion map. Not a simple cursor. | Splits source-API logic across `file_retrieval.py`, `doc_conversion.py`, `section_extraction.py` rather than a single `source_operations.py`. |
 | Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. `external_access` is assigned inline on yielded documents, not in a separate pass. |
 
+### 4.6.1 Outlook: one document per mail thread
+
+`outlook/connector.py:OutlookConnector` is the one connector whose document is
+not a source object but a thread shared across mailboxes, so its run has a
+shape the table above does not cover:
+
+- **Thread key.** Every message copy carries a `conversationIndex`; its 22-byte
+  root is the same in every mailbox that holds the thread (`threads.py:thread_key`).
+  Copies are matched message by message on the Internet Message-ID
+  (`OutlookMessageIdentity.match_id`).
+- **Listing, then bucketing, then building.** Each mailbox's folders are read
+  through delta pages of metadata only. The rows go to a per-run `ThreadTable`
+  in the file store (`listing-N.jsonl`), are re-read and hashed by thread key
+  into buckets of 50k rows (`bucket-B-C.jsonl`, resumable through
+  a manifest file), and each bucket is grouped so every copy of a thread is in
+  hand without holding the tenant in memory. The checkpoint
+  (`OutlookCheckpoint`) holds cursors and counters only, 202 KB at 3,000
+  mailboxes in the synthetic scale run.
+- **Builder and readers.** Candidates are the copies holding the thread's newest
+  message. The builder is the largest candidate (`threads.py:choose_builder`),
+  its newest 100 indexable messages (found among the newest 500) make the
+  document `outlook-thread:<key>`, and the
+  readers are the candidates holding every one of them (`readers_of`). A copy
+  that lacks a message (a private reply it never received) gets
+  `outlook-thread:<key>:<mailbox id>`, readable by its owner only
+  (`partial_copies`).
+- **Polls.** Only mailboxes with new mail are listed. Every holder of the
+  newest message is among them, so builder and readers are complete, but a
+  holder that received none of the new mail is not. `_unlisted_copies` finds
+  those from the builder's sender and recipients within the run's mailbox
+  roster (a file in the table), looks each up by Message-ID
+  (`find_message_by_internet_message_id`) and writes its own document, or
+  counts it as a reader when it holds every message of the thread's.
+- **Prune and permission sync.** `_slim_docs` runs the same listing, bucketing
+  and grouping read-only and yields ids and readers, so the slim diff (§4.5)
+  and the doc sync see the same documents indexing built. `mail_history_days`
+  bounds every one of these walks at the same cutoff.
+
 ### 4.7 The `SourceOperations` gateway pattern
 
 `source_operations.py` defines an ABC, `SourceOperations`, that a connector's

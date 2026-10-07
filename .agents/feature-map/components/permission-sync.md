@@ -89,7 +89,7 @@ ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED:`). Both are
 | GitHub | `GITHUB_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | `GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
 | Slack | `SLACK_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync (§4.5) |
 | Teams | `TEAMS_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | `TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
-| Outlook | `OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync |
+| Outlook | `OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync; the doc sync relists every mailbox through the connector's thread table (connectors §4.6.1), so one sync is a full metadata walk |
 | SharePoint | `SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
 | OneDrive | `ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
 | Gmail | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync |
