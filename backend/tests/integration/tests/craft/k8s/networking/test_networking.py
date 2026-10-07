@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from tests.common.craft.local_http_probe import LOCAL_HTTP_PROBE
+from tests.common.craft.proxy_probe import PROXY_PROBE
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
@@ -142,24 +143,6 @@ def api_url(sandbox: Sandbox) -> str:
     return exec_sandbox(sandbox, "printenv", "ONYX_SERVER_URL").strip()
 
 
-_PROBE = """
-import http.client, json, os, socket, sys
-from urllib.parse import SplitResult, urlsplit
-spec = json.loads(sys.argv[1])
-proxy = urlsplit(os.environ['HTTP_PROXY']) if not spec.get('local') else None
-peer = (proxy.hostname, proxy.port or 8080) if proxy else (spec['local'], spec['proxy_port'])
-authority = ('[' + spec['host'] + ']' if ':' in spec['host'] else spec['host']) + ':' + str(spec['port'])
-target = authority if spec['method'] == 'CONNECT' else spec.get('scheme', 'http') + '://' + authority + spec.get('path', '/')
-with socket.create_connection(peer, timeout=15) as connection:
-    connection.settimeout(15)
-    connection.sendall((spec['method'] + ' ' + target + ' HTTP/1.1\\r\\nHost: ' + authority + '\\r\\nConnection: close\\r\\n\\r\\n').encode())
-    response = http.client.HTTPResponse(connection)
-    response.begin()
-    body = b'' if spec['method'] == 'CONNECT' and response.status == 200 else response.read()
-    print(json.dumps({'status': response.status, 'body': body.decode(errors='replace')}))
-"""
-
-
 def proxy_probe(
     sandbox: Sandbox,
     method: str,
@@ -174,7 +157,7 @@ def proxy_probe(
             sandbox,
             "python3",
             "-c",
-            _PROBE,
+            PROXY_PROBE,
             json.dumps(
                 {
                     "method": method,
@@ -364,7 +347,7 @@ def test_unknown_client_rejected(sandbox: Sandbox, method: str) -> None:
         exec_proxy(
             "python3",
             "-c",
-            _PROBE,
+            PROXY_PROBE,
             json.dumps(
                 {
                     "method": method,

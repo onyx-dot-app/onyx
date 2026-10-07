@@ -372,3 +372,36 @@ IPv6 also permits neighbor solicitations and advertisements with hop limit 255. 
 - [OpenCode Documentation](https://docs.opencode.ai)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [shadcn/ui Components](https://ui.shadcn.com)
+
+
+### IPv6-only Docker sandboxes
+
+IPv4 remains the default. Use Docker Engine 28 or later for an IPv6-only sandbox bridge.
+Before the first Craft install, create the external bridge:
+
+```sh
+docker network create --ipv4=false --ipv6 --subnet fd42:6f6e:7978::/64 onyx_craft_sandbox
+```
+
+Set these values in the Compose `.env` file:
+
+```dotenv
+ONYX_SERVER_URL=http://api_server:8080
+SANDBOX_PROXY_LISTEN_HOST=::
+SANDBOX_PROXY_INTERNAL_CIDRS=fd42:6f6e:7978::/64
+```
+
+Add all your internal VPC, host, and Docker ranges to `SANDBOX_PROXY_INTERNAL_CIDRS`.
+The example covers only the new sandbox bridge. The proxy requires a CIDR list for IPv6 listeners.
+Use the normal Craft Compose overlay and installer. They reuse the external bridge.
+Docker networks are immutable; migrate an existing deployment only after draining its sandboxes.
+
+The manager derives the sandbox listener from the bridge. IPv6-only bridges use `::`;
+IPv4 and dual-stack bridges retain `0.0.0.0`. Do not set a separate sandbox listener flag.
+The API and databases keep their existing Compose network. Set `ONYX_SERVER_URL` to `http://api_server:8080`, or your public reverse proxy API base.
+The proxy reaches that endpoint through the same exact host and port exception. Sandboxes remain attached only to their dedicated bridge.
+
+ULA clients work with the default global-client restriction. For globally routable sandbox addresses,
+set `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS=true` only when host firewall rules restrict proxy ingress.
+Known sandbox identity, destination validation, and both firewall chains remain required.
+IPv6 internet access also requires working routing on the Docker host.
