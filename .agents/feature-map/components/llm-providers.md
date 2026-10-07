@@ -241,6 +241,8 @@ can explicitly set `supports_images=False` to disable fallback.
 The client shallow-copies string-valued custom configuration at construction.
 It deep-copies model settings after merging deployment headers and body defaults.
 Explicit image capability overrides skip catalog lookup.
+Chat image replay uses this resolved capability; only `None` falls back to the DB/catalog lookup.
+Capability remains fixed for that client, including across model steps.
 Later caller mutations do not change the client's captured settings.
 
 ### 4.5 Streaming contract
