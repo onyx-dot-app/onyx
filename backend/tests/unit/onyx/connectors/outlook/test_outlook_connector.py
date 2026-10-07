@@ -10,11 +10,17 @@ from typing import Any
 from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
+from pydantic import ValidationError
 
 from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.connector_runner import ConnectorRunner
-from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError as OutlookAuthError,
 )
@@ -29,6 +35,7 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.outlook import connector as connector_module
+from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.connector import (
     ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
     CONVERSATION_FETCH_LIMIT,
@@ -326,6 +333,42 @@ def test_walk_filters_delta_by_the_poll_window_start() -> None:
     )
 
 
+def test_mail_history_cutoff_bounds_a_walk_from_the_beginning() -> None:
+    gateway = _happy_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], mail_history_days=30)
+    before = datetime.now(timezone.utc) - timedelta(days=30)
+
+    generator = connector.load_from_checkpoint(0, END, _folder_checkpoint())
+    with pytest.raises(StopIteration):
+        while True:
+            next(generator)
+
+    received_after = gateway.fetch_folder_delta_page.call_args.kwargs["received_after"]
+    assert before <= received_after <= datetime.now(timezone.utc) - timedelta(days=30)
+
+
+def test_mail_history_cutoff_never_widens_a_later_poll_window() -> None:
+    gateway = _happy_gateway()
+    connector = _connector(
+        gateway, mailboxes=[MAILBOX_ADDRESS], mail_history_days=100_000
+    )
+
+    _step(connector, _folder_checkpoint())
+
+    received_after = gateway.fetch_folder_delta_page.call_args.kwargs["received_after"]
+    assert received_after == datetime.fromtimestamp(START, tz=timezone.utc)
+
+
+def test_config_rejects_a_non_positive_mail_history() -> None:
+    with pytest.raises(ValidationError):
+        OutlookConnectorConfig(mail_history_days=0)
+
+
+def test_mail_history_days_must_be_positive() -> None:
+    with pytest.raises(ConnectorValidationError):
+        OutlookConnector(mail_history_days=0)
+
+
 def test_walk_excludes_junk_deleted_hidden_and_search_folders() -> None:
     gateway = _happy_gateway()
 
@@ -495,6 +538,139 @@ def test_failures_are_yielded_only_once_every_address_resolved() -> None:
 
     with pytest.raises(Exception, match="ServiceUnavailable"):
         next(generator)
+
+
+def _group_gateway() -> MagicMock:
+    gateway = _happy_gateway()
+    gateway.resolve_groups.return_value = [EntraGroup(id="group-1")]
+    gateway.list_group_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox()]
+    )
+    return gateway
+
+
+def _walked_mailbox_ids(gateway: MagicMock) -> list[str]:
+    return [c.kwargs["mailbox_id"] for c in gateway.probe_mailbox.call_args_list]
+
+
+def test_group_mode_walks_the_group_members_instead_of_every_user() -> None:
+    gateway = _group_gateway()
+    gateway.list_group_mailbox_users.side_effect = [
+        OutlookMailboxPage(mailboxes=[mailbox()], next_link="https://graph/next"),
+        OutlookMailboxPage(mailboxes=[mailbox(id="user-2")]),
+    ]
+
+    _run(_connector(gateway, mailbox_groups=["Onyx Users"]))
+
+    gateway.resolve_groups.assert_called_once_with(identifier="Onyx Users")
+    assert gateway.list_group_mailbox_users.call_args_list == [
+        call(group_id="group-1", next_link=None),
+        call(group_id="group-1", next_link="https://graph/next"),
+    ]
+    gateway.list_mailbox_users.assert_not_called()
+    assert sorted(_walked_mailbox_ids(gateway)) == sorted([mailbox().id, "user-2"])
+
+
+def test_named_mailboxes_and_group_members_are_walked_together_once() -> None:
+    gateway = _group_gateway()
+    gateway.list_group_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox(), mailbox(id="user-2")]
+    )
+
+    _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS], mailbox_groups=["g"]))
+
+    assert sorted(_walked_mailbox_ids(gateway)) == sorted([mailbox().id, "user-2"])
+
+
+@pytest.mark.parametrize(
+    ("matches", "reason"),
+    [
+        ([], "No group matches Sales"),
+        (
+            [EntraGroup(id="group-1"), EntraGroup(id="group-2")],
+            "More than one group is named Sales",
+        ),
+    ],
+)
+def test_group_that_does_not_name_one_group_is_a_recorded_failure(
+    matches: list[EntraGroup], reason: str
+) -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.return_value = matches
+
+    items = _run(_connector(gateway, mailbox_groups=["Sales"]))
+
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert failures[0].failed_entity is not None
+    assert failures[0].failed_entity.entity_id == "Sales"
+    assert reason in failures[0].failure_message
+    gateway.list_group_mailbox_users.assert_not_called()
+    gateway.list_mailbox_users.assert_not_called()
+
+
+def test_failed_group_lookup_fails_the_attempt_instead_of_dropping_it() -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.side_effect = graph_error(503, "ServiceUnavailable")
+
+    with pytest.raises(Exception, match="ServiceUnavailable"):
+        _run(_connector(gateway, mailbox_groups=["Sales"]))
+
+
+def test_validation_names_groups_that_do_not_resolve() -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.return_value = []
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        _connector(gateway, mailbox_groups=["Sales"]).validate_connector_settings()
+
+    assert "No group matches Sales" in str(exc_info.value)
+    gateway.list_mailbox_users.assert_not_called()
+
+
+def test_validation_maps_a_denied_group_read_to_the_group_permission() -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.side_effect = graph_error(403, "Authorization_RequestDenied")
+
+    with pytest.raises(InsufficientPermissionsError, match="GroupMember.Read.All"):
+        _connector(gateway, mailbox_groups=["Sales"]).validate_connector_settings()
+
+
+def test_pruning_stops_at_an_unresolved_group() -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.return_value = []
+    connector = _connector(gateway, mailbox_groups=["Sales"])
+
+    with pytest.raises(ConnectorValidationError, match="cannot be resolved: Sales"):
+        list(connector.retrieve_all_slim_docs())
+
+
+def test_pruning_drops_mail_older_than_the_history_cutoff() -> None:
+    gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = None
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
+        changes=[
+            change(),
+            change(
+                id="msg-old",
+                conversation_id="conv-old",
+                received_at=RECEIVED - timedelta(days=4000),
+            ),
+        ]
+    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], mail_history_days=30)
+
+    ids = [
+        d.id
+        for batch in connector.retrieve_all_slim_docs()
+        for d in batch
+        if isinstance(d, SlimDocument)
+    ]
+
+    assert conversation_document_id(mailbox(), "conv-old") not in ids
+    assert (
+        gateway.fetch_folder_delta_page.call_args.kwargs.get("received_after") is None
+    )
 
 
 def test_denied_mailbox_is_a_failure_when_named_and_a_skip_otherwise() -> None:
