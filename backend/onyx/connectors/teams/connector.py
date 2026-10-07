@@ -578,12 +578,10 @@ class TeamsConnector(
         team or channel is listed either."""
         if not walk.lists_threads and self._files is None:
             return
-        # A file's readers come from SharePoint REST, whose client is not safe
-        # across threads, so only the ids-alone walk reads channels side by side.
         yield from walk.fan_out(
             self._channels(),
             lambda channel: self._slim_channel(channel, walk),
-            1 if walk.with_readers else self.max_workers,
+            self.max_workers,
         )
 
     def _slim_organizers(self, walk: SlimWalk) -> Iterator[SlimDocument]:

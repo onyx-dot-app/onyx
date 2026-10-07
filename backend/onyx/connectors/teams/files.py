@@ -2,6 +2,7 @@
 readable by the people SharePoint grants it to. A channel's files live in a
 SharePoint document library, so its readers come from SharePoint REST."""
 
+import threading
 import time
 from collections.abc import Callable, Iterable, Iterator
 from datetime import datetime, timezone
@@ -102,8 +103,9 @@ class FileSource:
         # A channel's library, opened once per channel per attempt. None is a
         # channel whose library would not open, so every page does not try again.
         self._libraries: dict[str, ChannelLibrary | None] = {}
-        # One REST context per channel site, rebuilt after _REST_CTX_MAX_AGE_S.
-        self._rest_contexts: dict[str, tuple[ClientContext, float]] = {}
+        # One REST context per channel site and thread, since the SDK's context
+        # queues requests on the instance, rebuilt after _REST_CTX_MAX_AGE_S.
+        self._rest_contexts: dict[tuple[str, int], tuple[ClientContext, float]] = {}
         # Group expansions SharePoint resolves, shared across files.
         self._permission_cache = SharepointPermissionCache()
 
@@ -234,8 +236,10 @@ class FileSource:
 
     def rest_context(self, site_url: str) -> ClientContext:
         """SharePoint REST for a channel's site, the way the SharePoint connector
-        opens it: one context per site, rebuilt once its token could be stale."""
-        cached = self._rest_contexts.get(site_url)
+        opens it: one context per site on the calling thread, rebuilt once its
+        token could be stale."""
+        key = (site_url, threading.get_ident())
+        cached = self._rest_contexts.get(key)
         if cached and time.monotonic() - cached[1] <= _REST_CTX_MAX_AGE_S:
             return cached[0]
         msal_app = self._msal_app()
@@ -244,7 +248,7 @@ class FileSource:
         context = ClientContext(site_url).with_access_token(
             lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
         )
-        self._rest_contexts[site_url] = (context, time.monotonic())
+        self._rest_contexts[key] = (context, time.monotonic())
         return context
 
     def _file_access(

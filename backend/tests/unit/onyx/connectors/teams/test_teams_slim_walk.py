@@ -150,23 +150,21 @@ def _two_channels(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     )
 
 
-def test_a_walk_with_readers_stays_on_the_calling_thread(
+def test_a_walk_with_readers_reads_channels_side_by_side_too(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _two_channels(monkeypatch)
     answer = client.execute_request_direct.side_effect
-    threads_used: set[str] = set()
+    both_in_flight = threading.Barrier(2, timeout=5)
 
-    def record(url: str) -> Any:
-        threads_used.add(threading.current_thread().name)
+    def meet(url: str) -> Any:
+        if "messages/delta" in url:
+            both_in_flight.wait()
         return answer(url)
 
-    client.execute_request_direct.side_effect = record
+    client.execute_request_direct.side_effect = meet
 
     assert _ids(connector(client).retrieve_all_slim_docs_perm_sync()) == {"m1", "m2"}
-    # A file's readers come from SharePoint REST, whose client is not safe
-    # across threads, so a walk that reads readers takes no worker thread.
-    assert threads_used == {threading.current_thread().name}
 
 
 def test_a_refused_channel_fails_the_pruning_walk(
@@ -190,11 +188,13 @@ def test_every_batch_of_channels_reports_progress_and_honors_a_stop(
     client = _two_channels(monkeypatch)
     callback = MagicMock()
     callback.should_stop.side_effect = [False, True]
+    teams_connector = connector(client)
+    # One channel per batch, so the stop lands between the two channels. The
+    # runner's lock lives on the progress reports.
+    teams_connector.max_workers = 1
 
-    # A walk with readers takes one channel per batch. The runner's lock lives
-    # on the progress reports, and a stop is honored before the next channel.
     with pytest.raises(RuntimeError, match="Stop signal"):
-        list(connector(client).retrieve_all_slim_docs_perm_sync(callback=callback))
+        list(teams_connector.retrieve_all_slim_docs_perm_sync(callback=callback))
     assert callback.progress.call_args_list == [call(SLIM_WALK, 1)]
     requested = [c.args[0] for c in client.execute_request_direct.call_args_list]
     assert _delta_url(CHANNELS[1]) not in requested

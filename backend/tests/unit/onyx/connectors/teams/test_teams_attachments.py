@@ -1,6 +1,7 @@
 """Channel files as documents of their own: what is indexed, who may read it,
 and what the connector refuses to do without a certificate."""
 
+import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -479,6 +480,24 @@ def test_the_rest_context_is_reused_per_site_until_its_token_ages(
     assert teams_connector.rest_context(SITE_URL) is first
     assert teams_connector.rest_context(SITE_URL) is not first
     assert _rest_context_calls() == [(SITE_URL,), (SITE_URL,)]
+
+
+@pytest.mark.usefixtures("library")
+def test_each_thread_gets_its_own_rest_context_for_a_site() -> None:
+    """The SDK's context queues requests on the instance, so the walk that
+    reads file readers side by side cannot share one across workers."""
+    teams_connector = connector(graph_client({}), include_attachments=True)
+    first = teams_connector.rest_context(SITE_URL)
+    seen: list[Any] = []
+
+    worker = threading.Thread(
+        target=lambda: seen.append(teams_connector.rest_context(SITE_URL))
+    )
+    worker.start()
+    worker.join()
+
+    assert seen[0] is not first
+    assert teams_connector.rest_context(SITE_URL) is first
 
 
 def test_channel_site_urls_are_distinct_and_a_refused_channel_is_left_out(
