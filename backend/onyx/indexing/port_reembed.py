@@ -347,9 +347,14 @@ def _strip_stored_context(
     if chunk.chunk_context and content.endswith(chunk.chunk_context):
         content = content.removesuffix(chunk.chunk_context)
     if chunk.doc_summary:
-        at = content.find(chunk.doc_summary)
-        if 0 <= at <= len(_title_prefix(chunk)):
-            content = content[:at] + content[at + len(chunk.doc_summary) :]
+        # The summary starts right after the title prefix, whose separator a
+        # title never contains, so the first separator marks that spot.
+        separator_at = content.find(RETURN_SEPARATOR) if chunk.title else -1
+        summary_at = separator_at + len(RETURN_SEPARATOR) if separator_at >= 0 else 0
+        if content.startswith(chunk.doc_summary, summary_at):
+            content = (
+                content[:summary_at] + content[summary_at + len(chunk.doc_summary) :]
+            )
     return chunk.model_copy(
         update={"content": content + suffix, "doc_summary": "", "chunk_context": ""}
     )
