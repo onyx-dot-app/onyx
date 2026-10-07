@@ -16,8 +16,8 @@ class _LazyContent:
     """
 
     def __init__(self, loader: Callable[[], bytes]) -> None:
-        self._loader = loader
-        self._lock = threading.Lock()
+        self._loader: Callable[[], bytes] = loader
+        self._lock: threading.Lock = threading.Lock()
         self._content: bytes | None = None
 
     def __deepcopy__(self, memo: dict[int, Any] | None = None) -> Self:
@@ -44,8 +44,8 @@ def install_lazy_content_loader(
 
 def maybe_materialize_lazy_content(instance: BaseModel) -> None:
     """Read shared content without copying loaders, locks, or cached bytes."""
-    fields = object.__getattribute__(instance, "__dict__")
-    resource = fields.get("_lazy_content")
+    fields: dict[str, Any] = object.__getattribute__(instance, "__dict__")
+    resource: object | None = fields.get("_lazy_content")
     if isinstance(resource, _LazyContent) and not fields.get(
         "_lazy_materialized", False
     ):
