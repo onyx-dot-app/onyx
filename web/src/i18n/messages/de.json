@@ -5060,6 +5060,10 @@
         "title": "LLM für Bildbeschreibungen"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "Erzeugen Sie ab sofort keinen Kontext mehr für neue und aktualisierte Dokumente, oder bauen Sie alle Dokumente neu auf, um auch den bereits erzeugten Kontext zu entfernen.",
+          "title": "Wählen Sie, wie Contextual Retrieval deaktiviert wird"
+        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval ist aktiviert, aber es ist kein Modell ausgewählt. Wählen Sie unten ein LLM für Contextual Retrieval, bevor Sie neu indizieren — ohne ein solches Modell kann die Neuindizierung nicht laufen.",
           "title": "Wählen Sie ein LLM für Contextual Retrieval"
@@ -5176,6 +5180,10 @@
       "forwardOnlyModal": {
         "description": "Vorhandene Dokumente behalten den vom vorherigen Modell erzeugten Kontext. Das neue Modell wird nur angewendet, wenn Dokumente hinzugefügt oder aktualisiert werden. Die kontextuelle Anreicherung kann sich zwischen Dokumenten unterscheiden.",
         "title": "LLM für Contextual Retrieval ab jetzt anwenden"
+      },
+      "disableForwardModal": {
+        "description": "Contextual Retrieval wird für Dokumente beendet, die ab jetzt hinzugefügt oder aktualisiert werden. Vorhandene Dokumente behalten den bereits erzeugten Kontext, bis sie aktualisiert werden oder Sie neu indexieren.",
+        "title": "Contextual Retrieval ab jetzt deaktivieren"
       },
       "header": {
         "description": "Konfigurieren Sie, wie Dokumente indiziert, eingebettet und für Suche und Retrieval vorbereitet werden."
@@ -5395,6 +5403,8 @@
         "contextualModelRequired": "Wählen Sie ein LLM für Contextual Retrieval, bevor Sie neu indizieren.",
         "contextualModelUpdateFailed": "Das LLM für Contextual Retrieval konnte nicht aktualisiert werden",
         "contextualModelUpdated": "LLM für Contextual Retrieval aktualisiert",
+        "contextualRetrievalDisableFailed": "Contextual Retrieval konnte nicht deaktiviert werden",
+        "contextualRetrievalDisabled": "Contextual Retrieval deaktiviert",
         "modelNotFound": "Das ausgewählte Modell konnte nicht gefunden werden",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
         "reindexCanceled": "Neuindizierung abgebrochen",

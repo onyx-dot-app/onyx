@@ -91,6 +91,7 @@ def copy_present_chunks_to_future(
     augmentation_ctx: AugmentationReembedContext | None = None,
     surviving_doc_ids: Callable[[], set[str]] | None = None,
     should_abort: Callable[[], bool] | None = None,
+    strip_stored_context: bool = False,
 ) -> tuple[int, bool]:
     """Port one batch PRESENT -> FUTURE; returns (chunks written, aborted).
     aborted=True means should_abort stopped the copy mid-batch, so the caller must not
@@ -133,6 +134,7 @@ def copy_present_chunks_to_future(
             embedder,
             augmentation_ctx=augmentation_ctx,
             present_tokenizer=present_tokenizer,
+            strip_stored_context=strip_stored_context,
         )
         if not reembedded:
             continue
@@ -224,6 +226,8 @@ class PortCopier:
         self._augmentation_ctx: AugmentationReembedContext | None = None
         if self._strategy is ReembedStrategy.AUGMENTATION:
             self._augmentation_ctx = _build_augmentation_ctx(future_search_settings)
+        # Context left in PRESENT by a forward-only disable must not be embedded.
+        self._strip_stored_context = not future_search_settings.enable_contextual_rag
 
     def delete_port_written(self, document_ids: list[str]) -> int:
         """Delete only the port-written chunks of these docs from the target index —
@@ -248,4 +252,5 @@ class PortCopier:
             augmentation_ctx=self._augmentation_ctx,
             surviving_doc_ids=surviving_doc_ids,
             should_abort=should_abort,
+            strip_stored_context=self._strip_stored_context,
         )
