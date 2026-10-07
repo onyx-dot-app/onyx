@@ -858,32 +858,39 @@ class TestNonVisionImageStripping:
         assert _attached_image_file_ids(user_msg) == ["img0"]
         assert any(isinstance(p, ImageContentPart) for p in user_msg.content)
 
+    @pytest.mark.parametrize("supports_images", [None, False, True])
     def test_capability_not_checked_without_images(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, supports_images: bool | None
     ) -> None:
         def _boom(*_: object) -> bool:
             raise AssertionError("capability check should not run for text-only")
 
         monkeypatch.setattr(llm_step_module, "model_supports_image_input", _boom)
         history = [_make_user_msg("just text")]
-        translated = translate_history_to_llm_format(
-            history=history, llm_config=_make_llm_config(OPENAI_PROVIDER_NAME)
-        )
+        config: LLMConfig = _make_llm_config(OPENAI_PROVIDER_NAME)
+        config.supports_images = supports_images
+        translated = translate_history_to_llm_format(history=history, llm_config=config)
         assert isinstance(translated, list)
         assert len(translated) == 1
 
 
 @pytest.mark.parametrize("cache_enabled", [False, True])
 @pytest.mark.parametrize("supports_images", [False, True])
+@pytest.mark.parametrize("use_client_capability", [False, True])
 def test_cache_stats_reuse_request_image_decisions(
-    monkeypatch: pytest.MonkeyPatch, cache_enabled: bool, supports_images: bool
+    monkeypatch: pytest.MonkeyPatch,
+    cache_enabled: bool,
+    supports_images: bool,
+    use_client_capability: bool,
 ) -> None:
     from contextlib import nullcontext
 
     monkeypatch.setattr(llm_step_module, "PROMPT_CACHE_CHAT_HISTORY", cache_enabled)
     monkeypatch.setattr(llm_step_module, "ENABLE_AZURE_IMAGE_CAP", True)
     monkeypatch.setattr(llm_step_module, "_AZURE_DEFAULT_IMAGE_CAP", 1)
-    capability_check = MagicMock(return_value=supports_images)
+    capability_check: MagicMock = MagicMock(
+        return_value=not supports_images if use_client_capability else supports_images
+    )
     monkeypatch.setattr(llm_step_module, "model_supports_image_input", capability_check)
     image_selector = MagicMock(wraps=llm_step_module._select_recent_image_indices)
     monkeypatch.setattr(llm_step_module, "_select_recent_image_indices", image_selector)
@@ -900,6 +907,7 @@ def test_cache_stats_reuse_request_image_decisions(
     message.should_cache = True
     llm = MagicMock(spec=LitellmLLM)
     llm.config = _make_llm_config(AZURE_PROVIDER_NAME)
+    llm.config.supports_images = supports_images if use_client_capability else None
     llm.stream_raw.return_value = iter(())
     span = MagicMock()
     span.span_data.model_config = {}
@@ -919,7 +927,12 @@ def test_cache_stats_reuse_request_image_decisions(
         )
     )
 
-    capability_check.assert_called_once()
+    if use_client_capability:
+        capability_check.assert_not_called()
+    else:
+        capability_check.assert_called_once_with(
+            "test-model", AZURE_PROVIDER_NAME, None
+        )
     assert image_selector.call_count == int(supports_images)
     stats: dict[str, str] = span.span_data.model_config
     assert stats["prompt_cache_chat_history"] == ("on" if cache_enabled else "off")

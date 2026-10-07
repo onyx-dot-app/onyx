@@ -194,7 +194,9 @@ Token-budget truncation drops the oldest history first and emits a "forgotten fi
 notice so the model knows content was removed rather than silently losing it.
 
 Before each inference, `llm_step.py:_resolve_history_image_replay` resolves image
-support and the provider image cap once. Translation and cache telemetry reuse
+support and the provider image cap once. It uses `LLMConfig.supports_images`
+when set, otherwise the existing DB/catalog lookup. Text-only history skips this check.
+Translation and cache telemetry reuse
 the same `HistoryImageReplay`. Non-vision models receive text markers. Capped
 images contribute no tokens to the estimated cacheable prefix.
 

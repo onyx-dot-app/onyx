@@ -234,6 +234,17 @@ tool-calling params, and reasoning params accordingly. On a `BadRequestError`
 naming a rejected kwarg, a retry ladder (`_retry_attempts`) strips that kwarg
 and retries with a narrower request, up to the ladder's length.
 
+`LLMConfig.supports_images` records the resolved image capability. A configured
+`supports_image_input=True` overrides catalog values. Configured `False` permits
+catalog fallback. Unknown catalog capability stays `None`. Direct client callers
+can explicitly set `supports_images=False` to disable fallback.
+The client shallow-copies string-valued custom configuration at construction.
+It deep-copies model settings after merging deployment headers and body defaults.
+Explicit image capability overrides skip catalog lookup.
+Chat image replay uses this resolved capability; only `None` falls back to the DB/catalog lookup.
+Capability remains fixed for that client, including across model steps.
+Later caller mutations do not change the client's captured settings.
+
 ### 4.5 Streaming contract
 
 `interfaces.py:LLM.invoke(request: GenerationRequest, context)` returns one

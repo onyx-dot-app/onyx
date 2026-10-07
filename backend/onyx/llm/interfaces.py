@@ -51,6 +51,7 @@ class LLMConfig(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
     max_input_tokens: int
+    supports_images: bool | None = None
     # Here rather than in the chat loop, so every invoke path gets it.
     reasoning_effort_default: ReasoningEffort | None = None
     reasoning_effort_user_default: ReasoningEffort | None = None

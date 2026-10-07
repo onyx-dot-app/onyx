@@ -533,10 +533,14 @@ def _resolve_history_image_replay(
 ) -> HistoryImageReplay:
     supports_image_input: bool = True
     if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
-        supports_image_input = model_supports_image_input(
-            llm_config.model_name,
-            llm_config.model_provider,
-            llm_config.deployment_name,
+        supports_image_input = (
+            llm_config.supports_images
+            if llm_config.supports_images is not None
+            else model_supports_image_input(
+                llm_config.model_name,
+                llm_config.model_provider,
+                llm_config.deployment_name,
+            )
         )
     image_cap: int | None = (
         resolve_image_cap(llm_config.model_provider) if supports_image_input else None
