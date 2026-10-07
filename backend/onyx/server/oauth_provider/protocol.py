@@ -39,6 +39,7 @@ from onyx.oauth_provider.config import (
     canonical_mcp_resource,
     get_oauth_provider_settings,
 )
+from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
 from onyx.server.oauth_provider.provider import (
     AuthorizationClientSnapshot,
     OAuthClientMetadataUnavailable,
@@ -141,7 +142,7 @@ def _no_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object
     return result
 
 
-router = APIRouter(prefix="/oauth-provider")
+router = APIRouter(prefix="/oauth-provider", dependencies=get_auth_rate_limiters())
 
 
 @router.api_route("/metadata", methods=["GET", "OPTIONS"])
