@@ -110,7 +110,7 @@ def test_partial_ack_retains_only_retry_missing_indices_and_same_ids() -> None:
     captured = []
 
     def partial(*_args: Any, **kwargs: Any) -> Response:
-        captured.append(json.loads(kwargs["data"])["events"])
+        captured.append(json.loads(gzip.decompress(kwargs["data"]))["events"])
         return Response(
             {
                 "results": [
@@ -131,7 +131,7 @@ def test_partial_ack_retains_only_retry_missing_indices_and_same_ids() -> None:
     sender._blocked_until = 0
 
     def accept(*_args: Any, **kwargs: Any) -> Response:
-        events = json.loads(kwargs["data"])["events"]
+        events = json.loads(gzip.decompress(kwargs["data"]))["events"]
         assert events == sender._pending
         return Response(
             {
@@ -186,6 +186,96 @@ def test_emit_latency_and_bounded_memory_under_overload() -> None:
     assert len(sender._queue) == sender.config.capacity
     assert sender.dropped == 5000 - sender.config.capacity
     assert statistics.quantiles(elapsed, n=100)[98] < 1_000_000
+
+
+def test_stage_coalescing_preserves_counters_and_bypasses_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [100.0]
+    monkeypatch.setattr(fleet.time, "monotonic", lambda: clock[0])
+    sender = client()
+    data = {
+        "attempt_id": 1,
+        "stage": "embed",
+        "counter_mode": "delta",
+        "counters": {"embed_chunks": 30},
+        "duration_ms": 5,
+    }
+    for _ in range(3):
+        assert sender.emit("attempt", data)
+    assert sender._coalesce_stages(sender._take_batch()) == []
+    clock[0] += 30
+    combined = sender._coalesce_stages([])
+    assert len(combined) == 1
+    assert combined[0]["data"]["counters"]["embed_chunks"] == 90
+    assert combined[0]["data"]["duration_ms"] == 15
+    assert sender.emit("attempt", data)
+    assert sender._coalesce_stages(sender._take_batch()) == []
+    assert sender.emit("attempt", {**data, "error_count": 1})
+    failed = sender._coalesce_stages(sender._take_batch())
+    assert len(failed) == 1 and failed[0]["data"]["error_count"] == 1
+    assert failed[0]["data"]["counters"]["embed_chunks"] == 60
+    assert not sender._stage_pending
+
+
+def test_unchanged_metadata_reconciles_after_loss_and_six_hours(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.utils import fleet_telemetry_collector as source
+
+    clock = [100.0]
+    monkeypatch.setattr(source.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
+    sender = client()
+    collector = FleetCollector(sender, "postgresql://unused", ["public"])
+    data = {"license_present": True, "action": "snapshot"}
+    at = datetime.now(timezone.utc)
+    assert collector._event("license", data, "public", at, "license", durable_id=False)
+    assert len(sender._take_batch()) == 1
+    clock[0] += 300
+    assert collector._event("license", data, "public", at, "license", durable_id=False)
+    assert sender._take_batch() == []
+    sender.dropped += 1
+    assert collector._event("license", data, "public", at, "license", durable_id=False)
+    assert len(sender._take_batch()) == 1
+    clock[0] += 21600
+    assert collector._event("license", data, "public", at, "license", durable_id=False)
+    assert len(sender._take_batch()) == 1
+    assert collector._event(
+        "license",
+        {**data, "license_present": False},
+        "public",
+        at,
+        "license",
+        durable_id=False,
+    )
+    assert len(sender._take_batch()) == 1
+
+
+def test_sender_reuses_http_session_and_compresses_in_background(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def accept(*_args: Any, **kwargs: Any) -> Response:
+        assert kwargs["headers"]["Content-Encoding"] == "gzip"
+        events = json.loads(gzip.decompress(kwargs["data"]))["events"]
+        return Response(
+            {
+                "results": [
+                    {"index": i, "status": "accepted"} for i in range(len(events))
+                ]
+            }
+        )
+
+    session = Mock()
+    session.post.side_effect = accept
+    factory = Mock(return_value=session)
+    monkeypatch.setattr(fleet.requests, "Session", factory)
+    sender = client()
+    for _ in range(2):
+        assert sender.emit("heartbeat", {"dropped_events": 0})
+        assert sender.flush_once()
+    factory.assert_called_once()
+    assert session.post.call_count == 2 and sender.sent == 2
 
 
 def test_source_configuration_returns_only_structural_metadata() -> None:
@@ -978,7 +1068,7 @@ def test_initial_discovery_aws_and_health_run_once_then_follow_intervals(
     clock[0] += 60
     collector.tick()
     assert discovery.call_count == 2 and managed.call_count == 1
-    assert sender._take_batch()[0]["event_type"] == "heartbeat"
+    assert not sender._take_batch()
     clock[0] += 240
     collector.tick()
     assert managed.call_count == 2 and collector.aws_consecutive_errors == 2

@@ -9,6 +9,10 @@ The API and workers emit reviewed fields into one bounded memory queue per proce
 Emissions perform no database, network, disk, serialization, or logging operations.
 Queue contention, overload, and disabled collection drop events without waiting.
 One sender retries retained batches with stable IDs and exponential backoff.
+It reuses an HTTP session and gzip-compresses batches at level 1 in its background thread.
+Batch indexing counters are combined by deployment, attempt, stage and generation for up to
+30 seconds (at most 256 active keys). Error counters bypass this window. No aggregation or
+compression runs on application request or indexing threads.
 Shutdown does not wait for the sender. Query events can be lost during outages.
 Terminal attempts and jobs are recovered from authoritative source rows by a separate collector.
 
@@ -63,6 +67,10 @@ enables discovery for Cloud instead of restricting collection to `public`.
 
 Collection schedules are source-owned. The collector never fetches fleet-service settings.
 The intervals are five minutes for connectors/resources and ten minutes for queues.
+Collector health reports every five minutes and immediately on a failure-level transition.
+License snapshots and signup-domain metadata are sent when changed, after observed delivery loss,
+and at least every six hours while connected. The source still reads them on its normal schedule;
+license set/remove events are sent immediately. The metadata cache is capped at 20,000 entries.
 
 Enable `ONYX_TELEMETRY_KUBERNETES=true` for namespace-scoped pod health and resource reads.
 The Helm collector Role permits only pod and pod-metrics reads in its namespace.

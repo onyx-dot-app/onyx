@@ -559,3 +559,13 @@ Fleet-service labels, classifications, and alert thresholds cannot change deploy
 ### Legacy callhome removal
 
 Timing decorators now write local logs only. The obsolete print_only export option is removed from their callers.
+
+### Bounded transport and counter aggregation
+
+The fleet sender compresses batches and reuses its HTTP session in its background thread.
+Fetch/embed/write batch deltas are combined for up to 30 seconds by deployment, attempt, stage
+and generation, capped at 256 active keys; error counters bypass that window. Native cumulative
+stage summaries keep their collector schedule and 30-day central retention. Application threads
+still only sanitize allowlisted fields and try a nonblocking bounded enqueue. Unchanged license
+and signup-domain metadata is reconciled every six hours, after delivery loss, or when changed.
+See `backend/tests/unit/onyx/utils/test_fleet_telemetry.py` for sum, failure, retry, and hot-path checks.

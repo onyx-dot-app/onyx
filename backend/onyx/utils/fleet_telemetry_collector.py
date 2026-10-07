@@ -14,6 +14,7 @@ import signal
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -194,6 +195,9 @@ class FleetCollector:
         self._last_queues: float | None = None
         self._last_aws: float | None = None
         self._last_health: float | None = None
+        self._metadata: OrderedDict[tuple[str, str, str], tuple[str, float, int]] = (
+            OrderedDict()
+        )
         self._last_issue_level = 0
         self._source_success: dict[str, float] = {}
         self.source_errors = 0
@@ -240,7 +244,24 @@ class FleetCollector:
             if durable_id
             else None
         )
-        return self.client.emit(
+        metadata_key = (event_type, schema, entity)
+        signature = ""
+        observed = time.monotonic()
+        loss = self.client.dropped + self.client.rejected
+        if event_type == "tenant_domain" or (
+            event_type == "license" and data.get("action") == "snapshot"
+        ):
+            signature = json.dumps(data, sort_keys=True, separators=(",", ":"))
+            previous = self._metadata.get(metadata_key)
+            if (
+                previous
+                and previous[0] == signature
+                and observed - previous[1] < 21600
+                and previous[2] == loss
+                and not self.client.failures
+            ):
+                return True
+        emitted = self.client.emit(
             event_type,
             data,
             tenant_id=schema if MULTI_TENANT else None,
@@ -248,6 +269,12 @@ class FleetCollector:
             occurred_at=(observed_at or revision).timestamp(),
             revision=SOURCE_EVENT_REVISION,
         )
+        if emitted and signature:
+            self._metadata[metadata_key] = (signature, observed, loss)
+            self._metadata.move_to_end(metadata_key)
+            while len(self._metadata) > 20000:
+                self._metadata.popitem(last=False)
+        return emitted
 
     def collect_email_domains(self, schema: str, now: float) -> bool:
         if not poll_due(
@@ -686,7 +713,7 @@ class FleetCollector:
             "last_aws_success_at": self.last_aws_success_at,
         }
         level = self.client.health["source_consecutive_errors"]
-        if poll_due(self._last_health, time.monotonic(), 60) or (
+        if poll_due(self._last_health, time.monotonic(), 300) or (
             level >= 3 and self._last_issue_level < 3
         ):
             self.client.emit(

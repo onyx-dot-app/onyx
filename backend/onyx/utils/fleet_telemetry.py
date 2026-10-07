@@ -1,5 +1,6 @@
 """Bounded, lossy fleet telemetry. Application threads never perform telemetry I/O."""
 
+import gzip
 import hashlib
 import hmac
 import json
@@ -9,11 +10,13 @@ import re
 import threading
 import time
 import uuid
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
+
+import requests
 
 from onyx.configs.constants import DocumentSource, OnyxCeleryQueues
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
@@ -598,6 +601,11 @@ class BoundedTelemetry:
         self.failures = 0
         self._blocked_until = 0.0
         self._pending: list[dict[str, Any]] = []
+        self._session: requests.Session | None = None
+        self._stage_pending: OrderedDict[tuple[str, ...], dict[str, Any]] = (
+            OrderedDict()
+        )
+        self._last_stage_flush = time.monotonic()
         self.health: dict[str, Any] = {}
         # Source-owned schedule. Delivery receipts never change these settings.
         self.settings: dict[str, Any] = {
@@ -744,22 +752,29 @@ class BoundedTelemetry:
         if time.monotonic() < self._blocked_until:
             return False
         if not self._pending:
-            self._pending = self._take_batch()
+            self._pending = self._coalesce_stages(self._take_batch())
         if not self._pending:
             return True
         try:
             if transport is None:
-                import requests
-
-                transport = requests.post
+                if self._session is None:
+                    self._session = requests.Session()
+                transport = self._session.post
             response = transport(
                 self.config.endpoint + "/v1/events",
                 headers={
                     "Authorization": "Bearer " + self.config.token,
                     "Content-Type": "application/json",
                     "Accept-Encoding": "identity",
+                    "Content-Encoding": "gzip",
                 },
-                data=json.dumps({"events": self._pending}, separators=(",", ":")),
+                data=gzip.compress(
+                    json.dumps(
+                        {"events": self._pending}, separators=(",", ":")
+                    ).encode(),
+                    compresslevel=1,
+                    mtime=0,
+                ),
                 timeout=(1, 2),
                 allow_redirects=False,
                 stream=True,
@@ -816,6 +831,64 @@ class BoundedTelemetry:
             self._blocked_until = time.monotonic() + min(300, 2**self.failures)
             return False
 
+    def _coalesce_stages(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Combine batch counters in the sender thread; errors bypass the short window."""
+        ready: list[dict[str, Any]] = []
+        for event in events:
+            data = event["data"]
+            if event["event_type"] != "attempt" or data.get("counter_mode") != "delta":
+                ready.append(event)
+                continue
+            key = tuple(
+                str(event.get(k, ""))
+                for k in (
+                    "customer_uuid",
+                    "deployment_id",
+                    "service",
+                    "installation_epoch",
+                )
+            ) + (
+                str(data["attempt_id"]),
+                str(data.get("stage", "unknown")),
+                str(data.get("generation", 0)),
+            )
+            previous = self._stage_pending.pop(key, None)
+            if previous:
+                old = previous["data"]
+                counters = dict(old.get("counters", {}))
+                for name, value in data.get("counters", {}).items():
+                    counters[name] = counters.get(name, 0) + value
+                data["counters"] = counters
+                for name in (
+                    "duration_ms",
+                    "fetch_docs",
+                    "embed_chunks",
+                    "write_docs",
+                    "write_chunks",
+                    "write_errors",
+                    "write_rejected",
+                    "error_count",
+                ):
+                    if name in old:
+                        data[name] = data.get(name, 0) + old[name]
+            if any(
+                data.get(name) or data.get("counters", {}).get(name)
+                for name in ("error_count", "write_errors", "write_rejected")
+            ):
+                ready.append(event)
+            else:
+                self._stage_pending[key] = event
+            if len(self._stage_pending) > 256:
+                ready.append(self._stage_pending.popitem(last=False)[1])
+        if time.monotonic() - self._last_stage_flush >= 30:
+            while self._stage_pending and len(ready) < self.config.batch_size:
+                ready.append(self._stage_pending.popitem(last=False)[1])
+            if not self._stage_pending:
+                self._last_stage_flush = time.monotonic()
+        if len(ready) > self.config.batch_size:
+            self.dropped += len(ready) - self.config.batch_size
+        return ready[: self.config.batch_size]
+
     def delivery_health(self) -> dict[str, int]:
         """Background observations distinguish new loss from historical totals."""
         dropped = self.dropped
@@ -832,7 +905,9 @@ class BoundedTelemetry:
             "recent_dropped_events": self._recent_dropped,
             "rejected_events": self.rejected,
             "invalid_events": self.invalid,
-            "spool_events": len(self._queue) + len(self._pending),
+            "spool_events": len(self._queue)
+            + len(self._pending)
+            + len(self._stage_pending),
         }
 
     def _run(self) -> None:
@@ -883,6 +958,9 @@ class BoundedTelemetry:
         except Exception:
             # Telemetry failure never reaches the application, including initialization.
             pass
+        finally:
+            if self._session is not None:
+                self._session.close()
 
 
 def poll_due(previous: float | None, now: float, interval: float) -> bool:

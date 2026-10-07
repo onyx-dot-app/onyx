@@ -712,3 +712,13 @@ Fleet-service labels, classifications, and alert thresholds cannot change deploy
 
 Index-attempt transitions emit directly to the bounded fleet sender. The legacy RecordType adapter and duplicate progress export are removed.
 The per-batch database read used only for the old export is removed; native stage metrics and coordination writes remain.
+
+### Bounded transport and counter aggregation
+
+The fleet sender compresses batches and reuses its HTTP session in its background thread.
+Fetch/embed/write batch deltas are combined for up to 30 seconds by deployment, attempt, stage
+and generation, capped at 256 active keys; error counters bypass that window. Native cumulative
+stage summaries keep their collector schedule and 30-day central retention. Application threads
+still only sanitize allowlisted fields and try a nonblocking bounded enqueue. Unchanged license
+and signup-domain metadata is reconciled every six hours, after delivery loss, or when changed.
+See `backend/tests/unit/onyx/utils/test_fleet_telemetry.py` for sum, failure, retry, and hot-path checks.
