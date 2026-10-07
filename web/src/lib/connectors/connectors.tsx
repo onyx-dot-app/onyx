@@ -1186,8 +1186,8 @@ export const connectorConfigs: Record<
         optional: true,
         default: 730,
         description:
-          "Threads whose newest message is older than this are not indexed. " +
-          "A thread that gained a message within the window is indexed whole. " +
+          "Messages older than this are not indexed. A thread whose newest message is older is skipped, " +
+          "and a thread that gained mail keeps only its messages within the window. " +
           "Leave empty to index all mail, which can take very long on a large tenant.",
       },
       buildIncludeAttachmentsOption(
