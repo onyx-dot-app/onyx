@@ -1,6 +1,7 @@
 """What the connector asks of every content source, whatever it indexes."""
 
-from collections.abc import Callable, Iterable, Iterator
+from collections import deque
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import TypeVar
 
@@ -41,27 +42,49 @@ class SlimWalk:
         items: Iterable[T],
         listing: Callable[[T], Iterator[SlimDocument]],
         workers: int,
+        batch: int | None = None,
     ) -> Iterator[SlimDocument]:
-        """``workers`` items at a time, with a stop check and a progress report
-        per batch: the runner's lock lives on those reports. Each listing honors
-        a stop before every page of its own."""
-        for batch in batch_generator(items, workers):
+        """Batches of ``batch`` items drained by ``workers``, with a stop check
+        and a progress report per batch: the runner's lock lives on those
+        reports. Each listing honors a stop before every page of its own."""
+        for items_batch in batch_generator(items, batch or workers):
             self.raise_if_stopped()
             if self.callback:
-                self.callback.progress(SLIM_WALK, len(batch))
-            if workers == 1:
-                for item in batch:
-                    yield from listing(item)
-                continue
-            yield from parallel_yield(
-                [listing(item) for item in batch], max_workers=workers
-            )
+                self.callback.progress(SLIM_WALK, len(items_batch))
+            yield from drain(items_batch, listing, workers)
 
     def batch_signals(self) -> None:
         """The stop and progress signals the runner gets before every batch."""
         self.raise_if_stopped()
         if self.callback:
             self.callback.progress(SLIM_WALK, 1)
+
+
+R = TypeVar("R")
+
+
+def drain(
+    items: Sequence[T], listing: Callable[[T], Iterator[R]], workers: int
+) -> Iterator[R]:
+    """Every item listed, ``workers`` at a time, each worker taking the next
+    item off a shared queue so a slow item holds back only its own worker."""
+    if workers <= 1 or len(items) <= 1:
+        for item in items:
+            yield from listing(item)
+        return
+    queue: deque[T] = deque(items)
+
+    def worker() -> Iterator[R]:
+        while queue:
+            try:
+                item = queue.popleft()
+            except IndexError:
+                return
+            yield from listing(item)
+
+    yield from parallel_yield(
+        [worker() for _ in range(min(workers, len(items)))], max_workers=workers
+    )
 
 
 @dataclass

@@ -262,6 +262,7 @@ def test_every_batch_of_channels_reports_progress_and_honors_a_stop(
     # One channel per batch, so the stop lands between the two channels. The
     # runner's lock lives on the progress reports.
     teams_connector.max_workers = 1
+    monkeypatch.setattr("onyx.connectors.teams.connector.CHANNEL_BATCH_PER_WORKER", 1)
 
     with pytest.raises(RuntimeError, match="Stop signal"):
         list(teams_connector.retrieve_all_slim_docs_perm_sync(callback=callback))
@@ -329,3 +330,25 @@ def test_a_first_index_writes_nothing_for_a_deleted_thread() -> None:
     items, _ = step(connector(client), channel_checkpoint())
 
     assert items == []
+
+
+def test_a_slow_item_holds_back_only_its_own_worker() -> None:
+    """Three items, two workers: the first item waits for the third to start,
+    which only happens when a worker takes the next item off the queue instead
+    of the batch waiting for its slowest member."""
+    from onyx.connectors.teams.sources import drain
+
+    third_started = threading.Event()
+
+    def listing(item: str) -> Any:
+        if item == "first":
+            assert third_started.wait(timeout=5), "the third item never started"
+        if item == "third":
+            third_started.set()
+        yield item
+
+    assert sorted(drain(["first", "second", "third"], listing, workers=2)) == [
+        "first",
+        "second",
+        "third",
+    ]

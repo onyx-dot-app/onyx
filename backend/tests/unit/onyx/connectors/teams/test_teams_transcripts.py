@@ -213,7 +213,7 @@ def test_a_transcript_becomes_a_document_with_its_meeting_and_readers() -> None:
 
 
 @pytest.mark.parametrize(
-    ("workers", "steps"),
+    ("batch", "steps"),
     [
         # Each step sheds one batch from the checkpoint, so a resumed attempt
         # repeats one batch at most.
@@ -223,9 +223,9 @@ def test_a_transcript_becomes_a_document_with_its_meeting_and_readers() -> None:
     ],
 )
 def test_each_step_indexes_a_batch_of_organizers(
-    monkeypatch: pytest.MonkeyPatch, workers: int, steps: list[list[str]]
+    monkeypatch: pytest.MonkeyPatch, batch: int, steps: list[list[str]]
 ) -> None:
-    monkeypatch.setattr(organizers_module, "ORGANIZER_WORKERS", workers)
+    monkeypatch.setattr(organizers_module, "ORGANIZER_BATCH", batch)
     bobs_content = "users/user-2/onlineMeetings/meeting-2/transcripts/t2/content"
     bobs_transcript = {
         "id": "t2",
@@ -689,6 +689,7 @@ def test_the_slim_walk_honors_a_stop_between_organizers(
 ) -> None:
     # One organizer per batch, so the order of the checks is not a thread race.
     monkeypatch.setattr(organizers_module, "ORGANIZER_WORKERS", 1)
+    monkeypatch.setattr(organizers_module, "ORGANIZER_BATCH", 1)
     routes = {
         ALL_USERS_URL: {"value": [ADA, BOB]},
         _transcripts_url("user-1", LOOKBACK_WINDOW): {"value": [_transcript()]},
