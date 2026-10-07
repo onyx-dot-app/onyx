@@ -59,6 +59,7 @@ import {
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
+import { DEFAULT_LOCALE, LOCALE_OPTIONS, type Locale } from "@/i18n/config";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import {
   SEARCH_TOOL_ID,
@@ -1183,8 +1184,25 @@ export default function ChatPreferencesPage() {
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-          {/* Team Context */}
+          {/* Workspace language and team context */}
           <Section gap={4}>
+            <InputVertical
+              title={t("defaultLanguage.title")}
+              subDescription={t("defaultLanguage.description")}
+              withLabel
+            >
+              <InputSingleSelect
+                value={s.default_language}
+                onValueChange={(value) => {
+                  // SAFETY: LOCALE_OPTIONS only carries SUPPORTED_LOCALES values.
+                  void saveSettings({ default_language: value as Locale });
+                }}
+                defaultOption={DEFAULT_LOCALE}
+                placeholder={tInputSelect("placeholder.fallback")}
+                options={LOCALE_OPTIONS}
+              />
+            </InputVertical>
+
             <InputVertical
               title={t("teamName.title")}
               subDescription={t("teamName.description")}

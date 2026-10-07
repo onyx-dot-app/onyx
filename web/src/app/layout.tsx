@@ -66,13 +66,13 @@ interface LayoutProps {
 }
 
 export default async function Layout({ children }: LayoutProps) {
-  // The runtime tag comes from the NEXT_LOCALE cookie (see src/i18n/request.ts),
-  // which the backend sets from the stored language.
+  // The runtime tag comes from the NEXT_LOCALE cookie, or the workspace
+  // default when there is none (see src/i18n/request.ts).
   const locale = await getLocale();
   const messages = await getMessages();
-  // <html lang> and the direction follow the stored language, not the runtime
-  // tag: UserProvider refreshes whenever <html lang> differs from the stored
-  // language, and the numbering system belongs to Intl, not the document.
+  // <html lang> and the direction follow the effective language, not the
+  // runtime tag: UserProvider refreshes whenever <html lang> differs from the
+  // effective language, and the numbering system belongs to Intl, not the document.
   const language = messageLocale(locale);
 
   let dir: HtmlDir = htmlDirForLocale(language);
