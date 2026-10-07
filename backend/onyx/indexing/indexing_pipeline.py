@@ -532,7 +532,7 @@ def index_doc_batch_with_handler(
             ],
         )
 
-    batch_result = _index(document_batch)
+    batch_result: IndexingPipelineResult | Exception = _index(document_batch)
     if not isinstance(batch_result, Exception):
         return batch_result
     if len(document_batch) == 1 or isinstance(batch_result, DocumentPushFailure):
@@ -543,7 +543,7 @@ def index_doc_batch_with_handler(
     # stamped only after a successful vector write, so they stay updatable.
     results: list[IndexingPipelineResult] = []
     for document in document_batch:
-        result = _index([document])
+        result: IndexingPipelineResult | Exception = _index([document])
         if isinstance(result, Exception):
             result = _failure_result([document], result)
         results.append(result)
