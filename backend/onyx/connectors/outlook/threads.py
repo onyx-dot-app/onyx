@@ -133,7 +133,7 @@ def candidate_copies(group: ThreadGroup) -> list[ThreadCopy]:
     it, since a poll window covers every mailbox. Receipt times can differ by
     mailbox, so a message on the window's edge may be listed in one run for
     one mailbox and in the next for another, which grants fewer readers until
-    the next permission sync, never more."""
+    the next poll lists it or the next permission sync, never more."""
     return [copy for copy in group.copies if group.newest_message_id in copy.received]
 
 

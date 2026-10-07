@@ -862,7 +862,7 @@ class OutlookConnector(
                 checkpoint,
                 table,
                 include_permissions,
-                listing_complete=self._listing_covers_history(start),
+                listing_complete=self._listed_from_the_beginning(start),
             )
             return checkpoint
         table.delete_all()
@@ -986,8 +986,8 @@ class OutlookConnector(
         self._grouped_bucket = ((run_id, bucket), groups)
         return groups
 
-    def _listing_covers_history(self, start: SecondsSinceUnixEpoch) -> bool:
-        """True when the listing window opens at the beginning, so the listing
+    def _listed_from_the_beginning(self, start: SecondsSinceUnixEpoch) -> bool:
+        """True when the listing window has no lower bound, so the listing
         holds every indexable message of each copy and no outline needs to be
         read."""
         return _poll_bound(start) is None
@@ -1190,8 +1190,8 @@ class OutlookConnector(
         rows: int = 0
         pending: list[ThreadListing] = []
         try:
-            # Pages are written and progress reported from this thread only,
-            # since the heartbeat reacquires a lock the workers do not hold.
+            # Workers only produce pages: the table counters, the heartbeat
+            # and the yields live on this thread.
             queue: deque[OutlookMailbox] = deque(mailboxes)
             workers: list[Iterator[_SlimPage]] = [
                 self._slim_worker_pages(queue, include_permissions)
@@ -1252,8 +1252,8 @@ class OutlookConnector(
 
     def _slim_worker_pages(
         self, queue: deque[OutlookMailbox], include_permissions: bool
-    ) -> Generator["_SlimPage", None, None]:
-        """Mailboxes read one after another off the shared queue, so the
+    ) -> Generator[_SlimPage, None, None]:
+        """Each worker drains the shared queue one mailbox at a time, so the
         walk's threads stay busy until it is empty."""
         while queue:
             try:
@@ -1264,14 +1264,14 @@ class OutlookConnector(
 
     def _slim_mailbox_pages(
         self, mailbox: OutlookMailbox, include_permissions: bool
-    ) -> Generator["_SlimPage", None, None]:
+    ) -> Generator[_SlimPage, None, None]:
         """One mailbox's part of the slim walk: its folder nodes, one page of
         listing rows per delta page, then its events. Nothing for a mailbox
-        that is gone. A 404 past the probe is a folder that vanished mid-walk,
-        not the mailbox, so it aborts the walk like any other error."""
+        that is gone."""
         try:
             self.ops.probe_mailbox(mailbox_id=mailbox.id)
         except OutlookGraphError as e:
+            # Past the probe a 404 is a vanished folder, which aborts the walk.
             if e.status == 404:
                 logger.info(
                     "Outlook: %s is gone, listing nothing for it", mailbox.address
@@ -1771,8 +1771,8 @@ class OutlookConnector(
         candidates: list[ThreadCopy] = candidate_copies(group)
         items: list[Document | ConnectorFailure] = []
         try:
-            # Copies are compared on the listing when it covers the history
-            # and on their outlines otherwise.
+            # Copies are compared on the listing when it ran from the
+            # beginning and on their outlines otherwise.
             # A sole candidate is the builder and the only reader.
             wanted: set[str] | None = None
             readers: list[OutlookMailbox]

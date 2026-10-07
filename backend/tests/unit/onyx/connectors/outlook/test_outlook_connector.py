@@ -1041,10 +1041,10 @@ def test_a_listing_from_the_beginning_compares_copies_without_reading_outlines()
     assert documents == with_outlines
 
 
-def test_listing_covers_the_history_only_from_the_beginning() -> None:
+def test_only_an_unbounded_listing_counts_as_listed_from_the_beginning() -> None:
     connector = _connector(_happy_gateway())
-    assert connector._listing_covers_history(0)
-    assert not connector._listing_covers_history(START)
+    assert connector._listed_from_the_beginning(0)
+    assert not connector._listed_from_the_beginning(START)
 
 
 def test_slim_walk_yields_the_documents_indexing_builds_with_the_same_readers() -> None:
@@ -2081,8 +2081,8 @@ def test_slim_docs_batch_and_report_progress() -> None:
     # batched once every mailbox is read, with one report for the bucket.
     slim_batches = [b for b in batches if isinstance(b[0], SlimDocument)]
     assert [len(b) for b in slim_batches] == [SLIM_BATCH_SIZE] * 3 + [3]
-    # The four are the mailbox's folder nodes, the zero is the heartbeat
-    # of the cut into buckets.
+    # The four are the mailbox root and its three folders, the zero is the
+    # heartbeat of the cut into buckets.
     assert callback.progress.call_args_list == [call("outlook_slim_docs", 4)] + [
         call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)
     ] * 3 + [
