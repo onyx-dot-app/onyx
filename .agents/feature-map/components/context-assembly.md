@@ -385,15 +385,19 @@ conversation in an out-of-Postgres store for the session's lifetime
 (`incognito_context.py:load_incognito_context`,
 `incognito_context.py:append_incognito_message`).
 
-`incognito_context.py:_update_incognito_state` owns conditional Redis updates.
-It watches the history key and agent hash, reads both, and commits both
-replacements atomically with the same idle TTL. Callbacks receive values,
-not Redis commands. The existing history save preserves agent fields and
-rejects stale versions without retrying. Agent-history callers follow in
-later SDK changes. Teardown writes the tombstone and deletes the agent hash
-in one transaction, preventing in-flight saves from recreating ended state.
-Conflict retries are bounded and rerun the callback against fresh values;
-callbacks must not perform external writes.
+`incognito_context.py:_locked_incognito_state` supplies one tenant/session lock
+for saves and teardown. `_update_incognito_state` reads history and agent fields
+under that lock and commits both replacements atomically with the same idle
+TTL. Callbacks receive values, not Redis commands. The existing history save
+preserves agent fields and rejects stale versions without retrying. Agent-history
+callers follow in later SDK changes. Teardown uses the same lock to write the
+tombstone and delete the agent hash together.
+
+Lock acquisition waits at most five seconds per attempt. The lease lasts 60
+seconds; ownership is checked immediately before writing. Work must finish
+within the lease, following the existing Redis lock pattern. Bounded lock
+retries reload state and rerun the callback; callbacks must not perform
+external writes.
 
 ### Worked examples (from `chat/README.md`)
 

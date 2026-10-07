@@ -8,11 +8,14 @@ under a unique tenant so runs cannot collide, mirroring test_tenant_redis.py.
 
 import time
 from collections.abc import Generator
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from threading import Event
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
+from redis.lock import Lock as RedisLock
 
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.incognito_context import (
@@ -20,7 +23,9 @@ from onyx.chat.incognito_context import (
     IncognitoContext,
     _agents_key,
     _context_key,
+    _IncognitoLockError,
     _IncognitoWrite,
+    _locked_incognito_state,
     _update_incognito_state,
     incognito_context_available,
     load_incognito_context,
@@ -31,7 +36,6 @@ from onyx.chat.models import ChatLoadedFile, ChatMessageSimple, ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
-from onyx.redis.tenant_redis_client import TenantRedisPipeline
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
@@ -235,43 +239,52 @@ def test_availability_follows_the_cache_backend() -> None:
         assert not incognito_context_available()
 
 
-@pytest.mark.parametrize("conflict", ["history", "agents", "teardown"])
-def test_save_rejects_changes_during_commit(conflict: str) -> None:
+@pytest.mark.parametrize("operation", ["save", "teardown"])
+def test_save_and_teardown_use_the_same_session_lock(operation: str) -> None:
     session_id: UUID = uuid4()
     client = get_redis_client()
     assert _save(session_id, [_message("before")])
     client.hset(_agents_key(session_id), "existing", "record")
-    context: IncognitoContext = load_incognito_context(session_id)
-    context.messages.append(_message("stale"))
-    execute = TenantRedisPipeline.execute
+    acquire_started = Event()
+    acquire = RedisLock.acquire
 
-    def concurrent_execute(pipeline: TenantRedisPipeline) -> list[Any]:
-        if conflict == "history":
-            client.set(_context_key(session_id), b"2:[]")
-        elif conflict == "agents":
-            client.hset(_agents_key(session_id), "concurrent", "record")
-        else:
-            # Teardown also executes a pipeline; restore it before calling.
-            with patch.object(TenantRedisPipeline, "execute", execute):
-                teardown_incognito_session(session_id)
-        return execute(pipeline)
+    def acquire_with_signal(
+        lock: RedisLock,
+        blocking: bool = True,
+        blocking_timeout: float | None = None,
+    ) -> bool:
+        acquire_started.set()
+        return bool(acquire(lock, blocking=blocking, blocking_timeout=blocking_timeout))
 
-    with patch.object(TenantRedisPipeline, "execute", concurrent_execute):
-        assert not save_incognito_context(session_id, context)
-    if conflict == "history":
+    def worker() -> bool | None:
+        if operation == "teardown":
+            return teardown_incognito_session(session_id)
+        return _save(session_id, [_message("stale")], version=1)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with _locked_incognito_state(session_id):
+            with patch.object(RedisLock, "acquire", acquire_with_signal):
+                future = executor.submit(copy_context().run, worker)
+                assert acquire_started.wait(timeout=2)
+                assert not future.done()
+                client.set(_context_key(session_id), b"2:[]")
+                client.hset(_agents_key(session_id), "concurrent", "record")
+        result = future.result(timeout=10)
+    if operation == "save":
+        assert result is False
         assert client.get(_context_key(session_id)) == b"2:[]"
-    elif conflict == "agents":
-        assert load_incognito_context(session_id).messages == [_message("before")]
-        assert client.hget(_agents_key(session_id), "concurrent") == b"record"
+        assert client.hmget(_agents_key(session_id), ["existing", "concurrent"]) == [
+            b"record",
+            b"record",
+        ]
     else:
         assert client.get(_context_key(session_id)) == b"tombstone"
         assert not client.exists(_agents_key(session_id))
-    if conflict != "teardown":
-        assert client.hget(_agents_key(session_id), "existing") == b"record"
+        assert not _save(session_id, [_message("resurrected")], version=2)
 
 
 @pytest.mark.parametrize("max_attempts", [1, 2])
-def test_paired_update_retries_with_fresh_state(max_attempts: int) -> None:
+def test_lost_lock_retries_with_fresh_state(max_attempts: int) -> None:
     session_id: UUID = uuid4()
     client = get_redis_client()
     assert _save(session_id, [_message("before")])
@@ -281,6 +294,7 @@ def test_paired_update_retries_with_fresh_state(max_attempts: int) -> None:
     def update(raw: bytes | None, agents: dict[bytes, bytes]) -> _IncognitoWrite:
         snapshots.append((raw, dict(agents)))
         if len(snapshots) == 1:
+            client.delete(f"{_context_key(session_id)}:lock")
             client.set(_context_key(session_id), b"2:[]")
             client.hset(_agents_key(session_id), "concurrent", "record")
         agents[b"new"] = b"record"
@@ -329,7 +343,7 @@ def test_rejected_update_leaves_both_stores_unchanged() -> None:
     ]
 
 
-def test_paired_update_stops_after_repeated_conflicts() -> None:
+def test_lost_lock_stops_after_bounded_retries() -> None:
     session_id: UUID = uuid4()
     client = get_redis_client()
     assert _save(session_id, [_message("before")])
@@ -338,6 +352,7 @@ def test_paired_update_stops_after_repeated_conflicts() -> None:
     def update(_raw: bytes | None, agents: dict[bytes, bytes]) -> _IncognitoWrite:
         nonlocal attempts
         attempts += 1
+        client.delete(f"{_context_key(session_id)}:lock")
         client.set(_context_key(session_id), f"{attempts + 1}:[]")
         client.hset(_agents_key(session_id), "concurrent", str(attempts))
         return _IncognitoWrite(context=b"99:[]", agents=agents)
@@ -346,3 +361,18 @@ def test_paired_update_stops_after_repeated_conflicts() -> None:
     assert attempts == 2
     assert client.get(_context_key(session_id)) == b"3:[]"
     assert client.hget(_agents_key(session_id), "concurrent") == b"2"
+
+
+def test_busy_lock_rejects_save_and_teardown_without_writing() -> None:
+    session_id: UUID = uuid4()
+    client = get_redis_client()
+    assert _save(session_id, [_message("before")])
+    client.hset(_agents_key(session_id), "existing", "record")
+    with _locked_incognito_state(session_id):
+        with patch("onyx.chat.incognito_context._STATE_LOCK_WAIT_SECONDS", 0):
+            assert not _save(session_id, [_message("after")], version=1)
+            with pytest.raises(_IncognitoLockError, match="busy"):
+                teardown_incognito_session(session_id)
+    assert load_incognito_context(session_id).messages == [_message("before")]
+    assert client.hget(_agents_key(session_id), "existing") == b"record"
+    assert _save(session_id, [_message("after")], version=1)

@@ -12,17 +12,21 @@ version. A lost save means a concurrent writer won or the session ended, and
 the caller must not retry with the history it loaded.
 """
 
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Generator
+from contextlib import contextmanager
+from typing import cast
 from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
-from redis.exceptions import WatchError
+from redis.exceptions import LockNotOwnedError
+from redis.lock import Lock as RedisLock
 
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
 from onyx.configs import app_configs
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -32,6 +36,8 @@ logger = setup_logger()
 INCOGNITO_CONTEXT_TTL_SECONDS = 3600
 # Long enough that an in-flight turn cannot resurrect a torn-down context.
 _TOMBSTONE_TTL_SECONDS = INCOGNITO_CONTEXT_TTL_SECONDS
+_STATE_LOCK_SECONDS = 60.0
+_STATE_LOCK_WAIT_SECONDS = 5.0
 # Raw-storage caps. Token budgeting trims context further at prompt build.
 # These only bound what one session may hold in Redis.
 _MAX_CONTEXT_MESSAGES = 200
@@ -124,45 +130,73 @@ def _agents_key(chat_session_id: UUID) -> str:
     return f"{_KEY_PREFIX}:{chat_session_id}:agents"
 
 
+class _IncognitoLockError(RuntimeError):
+    """The session state lock could not be acquired or was lost."""
+
+
+@contextmanager
+def _locked_incognito_state(
+    chat_session_id: UUID,
+) -> Generator[tuple[TenantRedisClient, RedisLock], None, None]:
+    """Serialize saves and teardown under one tenant/session lock."""
+    client = get_redis_client()
+    lock = client.lock(
+        f"{_context_key(chat_session_id)}:lock", timeout=_STATE_LOCK_SECONDS
+    )
+    if not lock.acquire(blocking=True, blocking_timeout=_STATE_LOCK_WAIT_SECONDS):
+        raise _IncognitoLockError("Incognito state is busy")
+    try:
+        yield client, lock
+    finally:
+        try:
+            lock.release()
+        except LockNotOwnedError:
+            logger.warning(
+                "Incognito state lock expired for session %s", chat_session_id
+            )
+
+
 def _update_incognito_state(
     chat_session_id: UUID,
     update: Callable[[bytes | None, dict[bytes, bytes]], _IncognitoWrite | None],
     *,
     max_attempts: int = 1,
 ) -> bool:
-    """Commit both stores from a watched snapshot; reject tombstoned sessions.
+    """Commit both stores under the session lock; reject tombstoned sessions.
 
     The callback returns replacement state or None to skip the write.
-    Conflict retries read fresh state and rerun the callback. Callbacks must
-    not perform external writes. A stale full-history save must not retry.
+    Lock retries reload state and rerun the callback. Callbacks must not
+    perform external writes. A stale full-history save must not retry.
     """
     if max_attempts < 1:
         raise ValueError("max_attempts must be positive")
-    client = get_redis_client()
     context_key = _context_key(chat_session_id)
     agents_key = _agents_key(chat_session_id)
     for _ in range(max_attempts):
         try:
-            with client.pipeline() as pipeline:
-                pipeline.watch(context_key, agents_key)
-                raw = pipeline.get_watched(context_key)
-                if raw == _TOMBSTONE:
-                    return False
-                agents = pipeline.hgetall_watched(agents_key)
-                state = update(raw, agents)
-                if state is None:
-                    return False
-                pipeline.multi()
-                pipeline.set(
-                    context_key, state.context, ex=INCOGNITO_CONTEXT_TTL_SECONDS
-                )
-                pipeline.delete(agents_key)
-                if state.agents:
-                    pipeline.hset(agents_key, state.agents)
-                    pipeline.expire(agents_key, INCOGNITO_CONTEXT_TTL_SECONDS)
-                pipeline.execute()
-            return True
-        except WatchError:
+            with _locked_incognito_state(chat_session_id) as (client, lock):
+                with client.pipeline() as pipeline:
+                    pipeline.get(context_key).hgetall(agents_key)
+                    values = pipeline.execute()
+                    raw = cast(bytes | None, values[0])
+                    agents = cast(dict[bytes, bytes], values[1])
+                    if raw == _TOMBSTONE:
+                        return False
+                    state = update(raw, agents)
+                    if state is None:
+                        return False
+                    pipeline.set(
+                        context_key, state.context, ex=INCOGNITO_CONTEXT_TTL_SECONDS
+                    )
+                    pipeline.delete(agents_key)
+                    if state.agents:
+                        pipeline.hset(agents_key, state.agents)
+                        pipeline.expire(agents_key, INCOGNITO_CONTEXT_TTL_SECONDS)
+                    if not lock.owned():
+                        raise _IncognitoLockError("Incognito state lock was lost")
+                    pipeline.execute()
+                return True
+        except _IncognitoLockError:
             continue
     return False
 
@@ -258,13 +292,15 @@ def teardown_incognito_session(chat_session_id: UUID) -> None:
     """End the session now: tombstone the context so an in-flight turn cannot
     recreate it (a missing key reads as version zero), and delete the buffered
     stream chunks holding the streamed answer NDJSON."""
-    client = get_redis_client()
-    with client.pipeline() as pipeline:
-        pipeline.set(
-            _context_key(chat_session_id), _TOMBSTONE, ex=_TOMBSTONE_TTL_SECONDS
-        )
-        pipeline.delete(_agents_key(chat_session_id))
-        pipeline.execute()
+    with _locked_incognito_state(chat_session_id) as (client, lock):
+        with client.pipeline() as pipeline:
+            pipeline.set(
+                _context_key(chat_session_id), _TOMBSTONE, ex=_TOMBSTONE_TTL_SECONDS
+            )
+            pipeline.delete(_agents_key(chat_session_id))
+            if not lock.owned():
+                raise _IncognitoLockError("Incognito state lock was lost")
+            pipeline.execute()
     buffered = list(client.scan_iter(match=stream_buffer_key_pattern(chat_session_id)))
     if buffered:
         client.delete(*buffered)
