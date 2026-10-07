@@ -225,7 +225,10 @@ POST /license/downgrade                       ee/onyx/server/license/api.py:down
   LICENSE_ENFORCEMENT_ENABLED false -> OnyxError(VALIDATION_ERROR)
   make_all_cc_pairs_public__no_commit         ee/onyx/db/community_downgrade.py
   remove_custom_user_groups__no_commit        ee/onyx/db/community_downgrade.py
-  db_session.commit()                         one commit for both steps
+  disable_paid_features__no_commit            ee/onyx/db/community_downgrade.py
+  db_session.commit()                         one commit for the three steps
+  reset_settings()                            ee/onyx/server/enterprise_settings/store.py
+  clear_chat_retention()                      onyx/server/settings/store.py
   delete_license(db_session)                  ee/onyx/db/license.py
   -> CommunityDowngradeResponse(connectors_made_public, user_groups_removed)
 ```
@@ -246,6 +249,16 @@ expired license gates the other routes. No frontend code calls it.
 - `remove_custom_user_groups__no_commit` deletes every non-default user group.
   First it makes the resources shared with those groups public, and it keeps
   the members in the default groups. See [[access-control]] §3.
+- `disable_paid_features__no_commit` deletes every token rate limit,
+  soft-deletes every hook (`deleted=True`, `is_active=False`), deactivates
+  every standard answer and SCIM token, and removes every API key with its
+  service-account user, except the Discord bot's service key, which has no
+  owner (`db/api_key.py:remove_all_api_keys__no_commit`).
+- `reset_settings` stores a default `EnterpriseSettings`, deletes the custom
+  analytics script, and deletes the logo and logotype files.
+  `clear_chat_retention` sets `maximum_chat_retention_days` to `None` under
+  `settings_write_lock`. A chat deletion chain that started under the old
+  limit ends at its next batch ([[chat-persistence]]).
 
 ---
 
@@ -305,7 +318,7 @@ expired license gates the other routes. No frontend code calls it.
    Tier.X)` for tier-specific gates.
 9. **The Community downgrade deletes the license last.**
    `ee/onyx/server/license/api.py:downgrade_to_community` commits the database
-   changes before it calls `delete_license`. A failure
+   changes and resets the settings before it calls `delete_license`. A failure
    before that call leaves a licensed deployment, and a second call completes
    the downgrade. A change that deletes the license earlier breaks this.
 
@@ -370,6 +383,7 @@ cd backend && uv run pytest tests/unit/ee/onyx/utils/test_tier.py
 cd backend && uv run pytest tests/unit/ee/onyx/db/test_license.py
 cd backend && uv run pytest tests/external_dependency_unit/ee/onyx/db/test_community_downgrade.py
 cd backend && uv run pytest tests/external_dependency_unit/ee/onyx/db/test_community_downgrade_groups.py
+cd backend && uv run pytest tests/external_dependency_unit/ee/onyx/db/test_community_downgrade_paid_features.py
 ```
 
 Frontend:

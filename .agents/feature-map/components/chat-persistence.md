@@ -83,7 +83,7 @@ data being gone.
 | Setting | Where | Effect |
 |---|---|---|
 | `HARD_DELETE_CHATS` | `backend/onyx/configs/chat_configs.py` | Session delete removes rows instead of setting `deleted=True`. |
-| `maximum_chat_retention_days` | Admin `Settings` (`server/settings/models.py`), EE only | Age past which `perform_ttl_management_task` hard-deletes a session. |
+| `maximum_chat_retention_days` | Admin `Settings` (`server/settings/models.py`), EE only | Age past which `perform_ttl_management_task` hard-deletes a session. Each batch of a running chain reads it again and ends the chain when it is `None`. The Community downgrade sets it to `None` (`server/settings/store.py:clear_chat_retention`, see [[billing]] §4.5). |
 | Incognito record mode | Admin security settings, read via `resolve_incognito_record_mode` (`chat/incognito.py`) | `FULL_HISTORY` or `USAGE_ONLY`; pinned per session at creation. |
 
 ---

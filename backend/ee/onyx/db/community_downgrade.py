@@ -7,6 +7,7 @@ from sqlalchemy import ColumnElement, Select, and_, delete, null, or_, select, u
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from onyx.db.api_key import remove_all_api_keys__no_commit
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
@@ -22,6 +23,7 @@ from onyx.db.models import (
     DocumentSet,
     DocumentSet__UserGroup,
     HierarchyNode,
+    Hook,
     LLMProvider,
     LLMProvider__UserGroup,
     MCPServer,
@@ -31,8 +33,10 @@ from onyx.db.models import (
     Persona__UserFile,
     Persona__UserGroup,
     PublicExternalUserGroup,
+    ScimToken,
     Skill,
     Skill__UserGroup,
+    StandardAnswer,
     TokenRateLimit,
     TokenRateLimit__UserGroup,
     User,
@@ -326,3 +330,25 @@ def remove_custom_user_groups__no_commit(db_session: Session) -> int:
 
     recompute_user_permissions__no_commit(member_ids, db_session)
     return len(group_ids)
+
+
+def disable_paid_features__no_commit(db_session: Session) -> None:
+    """Switches off the paid features whose leftover rows keep taking effect.
+    Their admin routes are refused below their tier, so a row left active could
+    not be turned off afterwards. Each one gets what its own delete does."""
+    db_session.execute(delete(TokenRateLimit__UserGroup))
+    db_session.execute(delete(TokenRateLimit))
+    db_session.execute(
+        update(Hook)
+        .where(Hook.deleted.is_(False))
+        .values(deleted=True, is_active=False)
+    )
+    db_session.execute(
+        update(StandardAnswer)
+        .where(StandardAnswer.active.is_(True))
+        .values(active=False)
+    )
+    db_session.execute(
+        update(ScimToken).where(ScimToken.is_active.is_(True)).values(is_active=False)
+    )
+    remove_all_api_keys__no_commit(db_session)

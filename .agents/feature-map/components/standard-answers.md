@@ -51,7 +51,8 @@ All admin endpoints require `Permission.FULL_ADMIN_PANEL_ACCESS`
 or a regex pattern, depending on `match_regex`), `answer` text, `active`
 (soft-delete flag), `match_regex`, `match_any_keywords`. A partial unique index
 enforces one active answer per `keyword` (`unique_keyword_active`, `postgresql_where=(active == True)`), so a deactivated keyword
-can be reused by a new answer.
+can be reused by a new answer. The Community downgrade sets `active=False` on every answer
+(`ee/onyx/db/community_downgrade.py:disable_paid_features__no_commit`, see [[billing]] §4.5).
 
 `StandardAnswerCategory` (`models.py:StandardAnswerCategory`): just an `id` and unique `name`.
 
