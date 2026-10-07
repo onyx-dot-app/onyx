@@ -1,4 +1,8 @@
 import { within } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { NextIntlClientProvider } from "next-intl";
+import { SWRConfig } from "swr";
+import englishMessages from "@/i18n/messages/en.json";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import OAuthProviderConnections from "@/sections/oauth-provider/OAuthProviderConnections";
 
@@ -31,6 +35,21 @@ beforeEach(() => {
 });
 
 afterEach(() => jest.restoreAllMocks());
+
+test("server rendering shows loading without fetching or formatting grant dates", () => {
+  const fetchMock = jest.spyOn(global, "fetch");
+  const html: string = renderToString(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <NextIntlClientProvider locale="en" messages={englishMessages}>
+        <OAuthProviderConnections />
+      </NextIntlClientProvider>
+    </SWRConfig>
+  );
+
+  expect(html).toContain(englishMessages.mcpOAuth.connections.loading);
+  expect(html).not.toContain("Expires");
+  expect(fetchMock).not.toHaveBeenCalled();
+});
 
 test("hides the section and makes no request when OAuth provider is unavailable", () => {
   mockEnabled = false;
