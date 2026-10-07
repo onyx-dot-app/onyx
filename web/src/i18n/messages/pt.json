@@ -14706,5 +14706,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "O OpenSearch precisa de mais recursos",
+    "disk": "O uso de disco do OpenSearch é de pelo menos 85% em um nó de dados. A indexação pode parar se o disco ficar cheio.",
+    "jvmMemory": "O uso de memória JVM do OpenSearch permaneceu acima de 85% em verificações repetidas. A pesquisa e a indexação podem falhar.",
+    "vectorMemory": "A memória vetorial do OpenSearch está quase cheia ou atingiu seu limite. A pesquisa e a indexação podem falhar.",
+    "contact": "Entre em contato com o administrador do sistema ou com a equipe Onyx em [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "A última verificação está indisponível. Este aviso reflete a última verificação bem-sucedida; a recuperação não foi confirmada.",
+    "dismiss": "Fechar",
+    "diskTitle": "Espaço em disco",
+    "jvmMemoryTitle": "Memória da JVM",
+    "vectorMemoryTitle": "Memória vetorial",
+    "viewDetails": "Ver detalhes"
   }
 }

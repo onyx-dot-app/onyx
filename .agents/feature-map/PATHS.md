@@ -54,6 +54,7 @@ here. Read the component that documents the setting in its env table.
 |---|---|
 | `backend/onyx/context/` | internal-search |
 | `backend/onyx/document_index/` | document-index |
+| `backend/onyx/server/manage/opensearch_health/`, `web/src/lib/opensearch-health/`, `web/src/sections/banners/OpenSearchResourceWarning.tsx` | document-index |
 | `backend/onyx/natural_language_processing/` | document-index, internal-search |
 | `backend/onyx/db/search_settings.py`, `db/swap_index.py` | document-index |
 | `backend/onyx/server/manage/search_settings.py`, `server/manage/embedding/` | document-index |

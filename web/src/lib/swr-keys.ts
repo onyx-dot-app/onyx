@@ -12,6 +12,7 @@ export const SWR_KEYS = {
 
   // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
+  opensearchResourceHealth: "/api/manage/admin/opensearch-health",
   version: "/api/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────

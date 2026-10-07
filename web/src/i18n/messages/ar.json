@@ -14706,5 +14706,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "يحتاج OpenSearch إلى موارد إضافية",
+    "disk": "يبلغ استخدام قرص OpenSearch ‏85% على الأقل على إحدى عقد البيانات. قد تتوقف الفهرسة عند امتلاء القرص.",
+    "jvmMemory": "ظل استخدام ذاكرة JVM في OpenSearch أعلى من 85% عبر فحوصات متكررة. قد يفشل البحث والفهرسة.",
+    "vectorMemory": "ذاكرة المتجهات في OpenSearch شبه ممتلئة أو وصلت إلى حدها. قد يفشل البحث والفهرسة.",
+    "contact": "تواصل مع مسؤول النظام أو فريق Onyx على [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "الفحص الأخير غير متاح. يعكس هذا التحذير آخر فحص ناجح؛ لم يتم تأكيد التعافي.",
+    "dismiss": "إغلاق",
+    "diskTitle": "مساحة القرص",
+    "jvmMemoryTitle": "ذاكرة JVM",
+    "vectorMemoryTitle": "ذاكرة المتجهات",
+    "viewDetails": "عرض التفاصيل"
   }
 }

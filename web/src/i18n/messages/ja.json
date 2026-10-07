@@ -14706,5 +14706,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearchのリソースが不足しています",
+    "disk": "OpenSearchのデータノードでディスク使用率が85%以上です。ディスクがいっぱいになるとインデックス作成が停止する可能性があります。",
+    "jvmMemory": "OpenSearchのJVMメモリ使用率が複数回のチェックで85%を超えています。検索やインデックス作成が失敗する可能性があります。",
+    "vectorMemory": "OpenSearchのベクトルメモリがほぼ満杯、または上限に達しています。検索やインデックス作成が失敗する可能性があります。",
+    "contact": "システム管理者、またはOnyxチーム（[support@onyx.app](mailto:support@onyx.app)）にお問い合わせください。",
+    "stale": "最新のチェックを利用できません。この警告は最後に成功したチェックに基づいており、復旧は確認されていません。",
+    "dismiss": "閉じる",
+    "diskTitle": "ディスク容量",
+    "jvmMemoryTitle": "JVMメモリ",
+    "vectorMemoryTitle": "ベクトルメモリ",
+    "viewDetails": "詳細を表示"
   }
 }

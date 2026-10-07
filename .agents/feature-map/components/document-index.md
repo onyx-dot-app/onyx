@@ -31,6 +31,14 @@ Most users never see this component directly. It is the layer that makes search 
 and correct: which documents a query can see, how well a query matches a chunk, and
 whether the index is healthy.
 
+Full admins see a resource-warning popup when entering Onyx, at most once per 24 hours.
+A compact persistent admin banner opens details for disk, JVM heap, and native vector-cache pressure.
+Both direct admins to their system administrator or support@onyx.app.
+`backend/onyx/document_index/opensearch/resource_health.py` checks the cluster every five minutes
+through the monitoring worker. The API only reads cached results. Stale warnings remain
+in the banner, but cannot trigger a popup. See `backend/onyx/document_index/opensearch/README.md`
+for thresholds, timeouts, and recovery behavior.
+
 An admin experiences it directly on the embedding-model page. They pick a new
 embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, and
 more), optionally run a sample embedding test (a fixed test string, not a document), and start a re-index. From that point,
@@ -53,6 +61,8 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
+| GET | `/manage/admin/opensearch-health` | `read_resource_health` | Cached resource pressure; requires `FULL_ADMIN_PANEL_ACCESS`. |
+| POST | `/manage/admin/opensearch-health/popup` | `claim_resource_popup` | Claims a tenant-scoped, per-admin 24-hour popup allowance in Redis. |
 | POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. |
 | POST | `/search-settings/cancel-new-embedding` | `cancel_new_embedding` | Cancels the in-flight FUTURE re-index. |
 | DELETE | `/search-settings/delete-search-settings` | | |

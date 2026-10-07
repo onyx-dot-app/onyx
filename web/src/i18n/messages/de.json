@@ -14706,5 +14706,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch benötigt mehr Ressourcen",
+    "disk": "Die OpenSearch-Festplattenbelegung beträgt auf einem Datenknoten mindestens 85 %. Bei voller Festplatte kann die Indexierung stoppen.",
+    "jvmMemory": "Die JVM-Speicherbelegung von OpenSearch lag bei wiederholten Prüfungen über 85 %. Suche und Indexierung können fehlschlagen.",
+    "vectorMemory": "Der Vektorspeicher von OpenSearch ist fast voll oder hat sein Limit erreicht. Suche und Indexierung können fehlschlagen.",
+    "contact": "Wenden Sie sich an Ihre Systemadministration oder das Onyx-Team unter [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "Die aktuelle Prüfung ist nicht verfügbar. Diese Warnung basiert auf der letzten erfolgreichen Prüfung; eine Erholung wurde nicht bestätigt.",
+    "dismiss": "Schließen",
+    "diskTitle": "Festplattenspeicher",
+    "jvmMemoryTitle": "JVM-Arbeitsspeicher",
+    "vectorMemoryTitle": "Vektorspeicher",
+    "viewDetails": "Details anzeigen"
   }
 }

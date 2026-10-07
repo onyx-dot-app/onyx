@@ -14706,5 +14706,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch needs more resources",
+    "disk": "OpenSearch disk usage is at least 85% on a data node. Indexing may stop as the disk fills.",
+    "jvmMemory": "OpenSearch JVM memory usage stayed above 85% across repeated checks. Search and indexing may fail.",
+    "vectorMemory": "OpenSearch vector memory is nearly full or has reached its limit. Search and indexing may fail.",
+    "contact": "Contact your system administrator or the Onyx team at [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "The latest check is unavailable. This warning reflects the last successful check; recovery has not been confirmed.",
+    "dismiss": "Dismiss",
+    "diskTitle": "Disk space",
+    "jvmMemoryTitle": "JVM memory",
+    "vectorMemoryTitle": "Vector memory",
+    "viewDetails": "View details"
   }
 }

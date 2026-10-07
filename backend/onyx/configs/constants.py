@@ -683,6 +683,7 @@ class OnyxCeleryTask:
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
+    MONITOR_OPENSEARCH_RESOURCES = "monitor_opensearch_resources"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
     EMIT_VERSION_TELEMETRY = "emit_version_telemetry"
