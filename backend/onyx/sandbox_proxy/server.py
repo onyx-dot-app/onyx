@@ -179,20 +179,18 @@ def _build_cache_factory() -> Callable[[str], CacheBackend]:
     return _factory
 
 
-def _build_mitm_options() -> Options:
-    return Options(
-        listen_host=SANDBOX_PROXY_LISTEN_HOST,
-        listen_port=SANDBOX_PROXY_LISTEN_PORT,
-        confdir=_MITM_CONFDIR,
-        mode=["regular"],
-        ssl_insecure=False,
-        ssl_verify_upstream_trusted_ca=SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
-    )
-
-
 def _build_mitm_master() -> DumpMaster:
     master: DumpMaster = DumpMaster(
-        options=_build_mitm_options(), with_termlog=False, with_dumper=False
+        options=Options(
+            listen_host=SANDBOX_PROXY_LISTEN_HOST,
+            listen_port=SANDBOX_PROXY_LISTEN_PORT,
+            confdir=_MITM_CONFDIR,
+            mode=["regular"],
+            ssl_insecure=False,
+            ssl_verify_upstream_trusted_ca=SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
+        ),
+        with_termlog=False,
+        with_dumper=False,
     )
     # DumpMaster registers block_global; gate still requires pod identity.
     master.options.update(block_global=not SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS)

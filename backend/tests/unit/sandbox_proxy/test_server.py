@@ -2,9 +2,11 @@
 
 import asyncio
 import tempfile
+from unittest.mock import patch
 
 import pytest
 from mitmproxy import http
+from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.sandbox_proxy import server
@@ -22,7 +24,9 @@ def test_mitm_options_use_custom_upstream_ca_when_configured(
         "/var/run/sandbox-proxy/upstream-ca-bundle.crt",
     )
 
-    options = server._build_mitm_options()
+    with patch.object(server, "DumpMaster") as build_master:
+        server._build_mitm_master()
+    options: Options = build_master.call_args.kwargs["options"]
 
     assert (
         options.ssl_verify_upstream_trusted_ca
@@ -36,7 +40,9 @@ def test_mitm_options_keep_default_trust_store_without_custom_ca(
 ) -> None:
     monkeypatch.setattr(server, "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", None)
 
-    options = server._build_mitm_options()
+    with patch.object(server, "DumpMaster") as build_master:
+        server._build_mitm_master()
+    options: Options = build_master.call_args.kwargs["options"]
 
     assert options.ssl_verify_upstream_trusted_ca is None
     assert options.ssl_insecure is False
