@@ -53,6 +53,10 @@ class MockLLMScript:
         )
         response.raise_for_status()
 
+    def release_gate(self, gate_id: str) -> None:
+        """Allow a paused response to emit its remaining chunks."""
+        self._client.post(f"{self._url}/gates/{gate_id}/release").raise_for_status()
+
     def _state(self) -> ScriptState:
         response = self._client.get(self._url)
         response.raise_for_status()
