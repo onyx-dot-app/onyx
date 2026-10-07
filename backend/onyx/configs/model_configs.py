@@ -142,3 +142,22 @@ ENABLE_PROMPT_CACHING = (
 PROMPT_CACHE_REDIS_TTL_MULTIPLIER = float(
     os.environ.get("PROMPT_CACHE_REDIS_TTL_MULTIPLIER") or 1.2
 )
+
+#####
+# Remote Model Catalog
+#####
+# When a model is missing from the vendored price_table (e.g. released after
+# this deployment shipped), lazily fetch the provider's price_table file from
+# main and resolve limits/pricing there. Strictly additive: vendored entries
+# never consult the network, and a failed fetch (offline/air-gapped) degrades
+# to the same miss as before. Set to "false" to disable remote lookups.
+MODEL_CATALOG_REMOTE_LOOKUP = (
+    os.environ.get("MODEL_CATALOG_REMOTE_LOOKUP", "true").lower() == "true"
+)
+MODEL_CATALOG_REMOTE_URL = os.environ.get(
+    "MODEL_CATALOG_REMOTE_URL",
+    "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/onyx/llm/price_table",
+)
+MODEL_CATALOG_REMOTE_TTL_SECONDS = int(
+    os.environ.get("MODEL_CATALOG_REMOTE_TTL_SECONDS", 1800)  # 30 minutes
+)

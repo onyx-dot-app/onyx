@@ -116,6 +116,16 @@ def find_model_obj(
         if model_obj and not (chat_only and not _is_chat_entry(model_obj)):
             return model_obj
 
+    # Catalog miss — the model may be vendored upstream but newer than this
+    # release's table; try the remote catalog and stamp any hit into the map.
+    from onyx.llm.model_catalog import find_remote_model_obj
+
+    remote = find_remote_model_obj(provider, filtered_model_names)
+    if remote is not None and not (chat_only and not _is_chat_entry(remote)):
+        for name in filtered_model_names:
+            model_map.setdefault(f"{provider}/{name}", remote)
+        return remote
+
     return None
 
 
