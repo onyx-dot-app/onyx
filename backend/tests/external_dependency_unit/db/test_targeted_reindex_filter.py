@@ -595,7 +595,7 @@ def test_get_last_successful_poll_range_end_holds_for_entity_error(
     from datetime import datetime, timezone
 
     settings: SearchSettings = get_current_search_settings(db_session)
-    clean_end = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    clean_end: datetime = datetime(2026, 1, 1, tzinfo=timezone.utc)
     clean: IndexAttempt = _make_attempt(
         db_session, cc_pair.id, settings.id, status=IndexingStatus.SUCCESS
     )
