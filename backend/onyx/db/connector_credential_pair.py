@@ -136,18 +136,26 @@ def build_restricted_acl_guard(
     return or_(~has_cc_pair(hidden_restricted_pair), has_cc_pair(visible_acl_pair))
 
 
-def has_sync_restricted_cc_pairs(db_session: Session) -> bool:
+def _has_cc_pair_with_access_type(
+    db_session: Session, access_types: list[AccessType]
+) -> bool:
     return bool(
         db_session.scalar(
             select(
                 select(ConnectorCredentialPair.id)
-                .where(
-                    ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED
-                )
+                .where(ConnectorCredentialPair.access_type.in_(access_types))
                 .exists()
             )
         )
     )
+
+
+def has_perm_synced_cc_pairs(db_session: Session) -> bool:
+    return _has_cc_pair_with_access_type(db_session, AccessType.perm_synced_types())
+
+
+def has_sync_restricted_cc_pairs(db_session: Session) -> bool:
+    return _has_cc_pair_with_access_type(db_session, [AccessType.SYNC_RESTRICTED])
 
 
 class CCPairAccessSets(BaseModel):

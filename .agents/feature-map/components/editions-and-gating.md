@@ -38,7 +38,7 @@ upload or claim a license via the `/license` endpoints
 surfaces, seat limits, and tier-gated features unlock. A cloud (`MULTI_TENANT`)
 deployment still registers the license routes. `GET /license`, `GET /license/seats`,
 and `POST /license/refresh` are callable only for ungated tenants. Claim, upload,
-and delete reject cloud requests with a `MULTI_TENANT` check. Gating there is
+delete, and downgrade reject cloud requests with a `MULTI_TENANT` check. Gating there is
 external, through the control plane:
 `backend/ee/onyx/server/middleware/tenant_tracking.py` calls
 `backend/ee/onyx/server/tenants/product_gating.py:is_tenant_gated`. For a gated
@@ -80,6 +80,7 @@ been decided (comment at `variable_functionality.py`).
 | POST | `/license/upload` | `upload_license` | Manual signed license file upload, for air-gapped deployments. Rejects on `MULTI_TENANT`. |
 | POST | `/license/refresh` | `refresh_license_cache_endpoint` | Re-reads the local DB cache; does not contact the control plane. |
 | DELETE | `/license` | `delete_license` | Rejects on `MULTI_TENANT`. |
+| POST | `/license/downgrade` | `downgrade_to_community` | Drops the deployment to the Community tier and deletes the license. See [[billing]] §4.5. Rejects on `MULTI_TENANT`. |
 
 All handlers gate on `require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)`
 and are sync `def` (not `async def`) because the work underneath is blocking
@@ -257,6 +258,17 @@ by `backend/ee/onyx/server/settings/api.py:check_ee_features_enabled` and
 `backend/ee/onyx/utils/tier.py:get_tier`: EE code loading is necessary but not
 sufficient for a paid feature to respond.
 
+`GET /settings` reports the license state through
+`backend/ee/onyx/server/settings/api.py:apply_license_status_to_settings`
+(self-hosted, license enforcement on). With no license in the cache or the DB,
+it sets `application_status` to `GATED_ACCESS` only when
+`ENTERPRISE_EDITION_ENABLED` is true and a perm-synced cc-pair exists
+(`_has_perm_synced_cc_pairs`, which calls
+`backend/onyx/db/connector_credential_pair.py:has_perm_synced_cc_pairs`). A DB
+error in that check counts as true, so it fails closed. The Community downgrade
+([[billing]] §4.5) leaves no perm-synced pair, so a downgraded deployment with
+the legacy flag is not gated.
+
 ---
 
 ## 5. Contracts and invariants
@@ -348,7 +360,7 @@ sufficient for a paid feature to respond.
 | changes an EE flag's default (`ENABLE_PAID_ENTERPRISE_EDITION_FEATURES`, `LICENSE_ENFORCEMENT_ENABLED`) | every place that reads the flag directly rather than through `global_version` (`beat_schedule.py`, `ee/onyx/server/middleware/license_enforcement.py`, `ee/onyx/utils/tier.py`, `ee/onyx/server/settings/api.py`, `ee/onyx/server/tenants/proxy.py`); the unit-suite `_reset_leaked_ee_state` fixture assumption in `backend/tests/unit/conftest.py` |
 | changes the Dockerfile's `ee` copy or the `ee` requirements split | `backend/Dockerfile:COPY ./ee`, `backend/requirements/ee.txt`; a build that stops shipping `ee` flips every standard deployment's default resolution from EE to CE, which is the whole safety story in §5 point 2 |
 | adds a feature flag | whether it is a per-user boolean (`feature_enabled_for_user_tenant`) or a tenant-wide variant (`feature_variant_for_tenant`); what an unresolvable flag must do, since the first returns `False` when it cannot resolve; whether `MULTI_TENANT` gating on the PostHog provider is the intended scope, since self-hosted always gets `NoOpFeatureFlagProvider` unless `DEV_MODE` |
-| changes licensing (claim/upload/refresh/delete, or `get_tier`) | `MULTI_TENANT` rejection branches in `ee/onyx/server/license/api.py`; `check_ee_features_enabled` in `ee/onyx/server/settings/api.py`; seat-limit and `GATED_ACCESS` behaviour in `license_enforcement.py` |
+| changes licensing (claim/upload/refresh/delete/downgrade, or `get_tier`) | `MULTI_TENANT` rejection branches in `ee/onyx/server/license/api.py`; `check_ee_features_enabled` and `apply_license_status_to_settings` in `ee/onyx/server/settings/api.py`; seat-limit and `GATED_ACCESS` behaviour in `license_enforcement.py` |
 | changes `gated_app`/`GatedActionPolicy` policy resolution | every consumer: `server/features/mcp/api.py`, `server/features/build/external_apps/api.py`, `sandbox_proxy/addons/gate.py`, `external_apps/matching/engine.py`; this is unrelated to CE/EE dispatch and must not be conflated with it |
 
 ---

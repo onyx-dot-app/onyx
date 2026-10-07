@@ -180,6 +180,14 @@ OpenSearch chunk document
   `is_public` / `external_user_emails` / `external_user_group_ids` columns set
   from `NodeExternalAccess`, separate from but structurally identical to
   `Document`'s.
+- The Community downgrade
+  (`ee/onyx/db/community_downgrade.py:make_all_cc_pairs_public__no_commit`)
+  sets every cc-pair to `PUBLIC`. It clears `external_user_emails` and
+  `external_user_group_ids` on every `Document` and `HierarchyNode`, sets
+  `Document.is_public` to false, and deletes every `User__ExternalUserGroupId`
+  and `PublicExternalUserGroup` row. `HierarchyNode.is_public` stays. Access
+  then comes from the `PUBLIC` pair. The indexed chunk ACL stays as it was
+  until the metadata sync rewrites the marked documents.
 - `DocumentAccess` (`access/models.py`): the in-memory union of `user_emails`,
   `user_groups`, `external_user_emails`, `external_user_group_ids`, `is_public`.
   `DocumentAccess.to_acl()` formats the indexed ACL (write path). The read path

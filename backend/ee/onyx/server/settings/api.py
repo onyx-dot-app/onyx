@@ -8,6 +8,7 @@ from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cach
 from ee.onyx.utils.tier import get_tier, tier_from_license_metadata
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.db.connector_credential_pair import has_perm_synced_cc_pairs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus, Settings, Tier
 from onyx.utils.logger import setup_logger
@@ -63,6 +64,16 @@ def check_ee_features_enabled() -> bool:
 
     # No license or GATED_ACCESS - no EE features
     return False
+
+
+def _has_perm_synced_cc_pairs() -> bool:
+    try:
+        with get_session_with_current_tenant() as db_session:
+            return has_perm_synced_cc_pairs(db_session)
+    except SQLAlchemyError as e:
+        logger.warning("Failed to check for perm-synced connectors: %s", e)
+        # Fail closed: an unreadable DB must not unlock the deployment.
+        return True
 
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:
@@ -126,9 +137,9 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                 settings.ee_features_enabled = True
         else:
             # No license found in cache or DB.
-            if ENTERPRISE_EDITION_ENABLED:
-                # Legacy EE flag is set → prior EE usage (e.g. permission
-                # syncing) means indexed data may need protection.
+            if ENTERPRISE_EDITION_ENABLED and _has_perm_synced_cc_pairs():
+                # Legacy EE flag with a perm-synced connector: the UI stays
+                # locked until a license or a downgrade.
                 settings.application_status = _BLOCKING_STATUS
             settings.ee_features_enabled = False
         settings.tier = tier_from_license_metadata(metadata)
