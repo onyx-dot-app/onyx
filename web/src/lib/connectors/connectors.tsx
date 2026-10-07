@@ -1178,18 +1178,6 @@ export const connectorConfigs: Record<
           "members of nested groups included, so a tenant can be limited to the people who use Onyx. " +
           "Needs the GroupMember.Read.All application permission.",
       },
-      {
-        type: "number",
-        query: "Days of mail history to index:",
-        label: "Mail History Days",
-        name: "mail_history_days",
-        optional: true,
-        default: 730,
-        description:
-          "Messages older than this are not indexed. A thread whose newest message is older is skipped, " +
-          "and a thread that gained mail keeps only its messages within the window. " +
-          "Leave empty to index all mail, which can take very long on a large tenant.",
-      },
       buildIncludeAttachmentsOption(
         false,
         "Index the text of file attachments. Inline images, nested items and cloud links are skipped."

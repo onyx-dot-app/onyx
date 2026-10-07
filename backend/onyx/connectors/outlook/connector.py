@@ -23,7 +23,7 @@ until it gains a message or a full re-index rebuilds it.
 """
 
 from collections import deque
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -32,7 +32,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from babel.core import get_global
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
@@ -145,7 +145,10 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.process_isolation import run_in_isolated_process
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import (
+    parallel_yield,
+    run_functions_tuples_in_parallel,
+)
 
 logger = setup_logger()
 
@@ -229,6 +232,14 @@ SKIPPED_EVENT_SENSITIVITIES = frozenset({"private", "confidential"})
 
 # What one listing step yields per mailbox, thread listings included.
 _ListingItem = HierarchyNode | Document | ConnectorFailure | ThreadListing
+
+
+class _SlimPage(BaseModel):
+    """One unit of a mailbox's slim walk: listing rows for the thread table,
+    or folder nodes and documents to yield."""
+
+    rows: list[ThreadListing] = []
+    documents: list[SlimDocument | HierarchyNode] = []
 
 
 class OutlookCheckpoint(ConnectorCheckpoint):
@@ -373,12 +384,10 @@ T = TypeVar("T", bound=OutlookMessageIdentity)
 def _conversation_pages(
     fetch: Callable[[str | None], tuple[list[T], str | None]],
     limit: int,
-    cutoff: datetime | None,
 ) -> Generator[list[T], None, None]:
-    """A conversation's pages, newest first, until the next link runs out,
-    ``limit`` raw messages have been read, or a page ends before the history
-    cutoff. The budget applies to raw messages, so a final page is cut to
-    what is left of it."""
+    """A conversation's pages, newest first, until the next link runs out or
+    ``limit`` raw messages have been read. The budget applies to raw messages,
+    so a final page is cut to what is left of it."""
     fetched = 0
     next_link: str | None = None
     while fetched < limit:
@@ -386,29 +395,8 @@ def _conversation_pages(
         within_budget = items[: limit - fetched]
         fetched += len(within_budget)
         yield within_budget
-        if next_link is None or _page_ends_before(within_budget, cutoff):
+        if next_link is None:
             return
-
-
-def _page_ends_before(
-    items: Sequence[OutlookMessageIdentity], cutoff: datetime | None
-) -> bool:
-    """True when the oldest message of a newest-first page is older than the
-    cutoff, so every later page is too."""
-    if cutoff is None or not items:
-        return False
-    oldest = items[-1].received_at
-    return oldest is not None and oldest < cutoff
-
-
-def _within_history(
-    received: dict[str, datetime | None], cutoff: datetime | None
-) -> dict[str, datetime | None]:
-    """The listed messages not older than the cutoff. Mailboxes are listed at
-    different moments, so one cutoff is applied again when copies are compared."""
-    if cutoff is None:
-        return received
-    return {m: at for m, at in received.items() if at is None or at >= cutoff}
 
 
 def _participants(message: OutlookMessage) -> set[str]:
@@ -423,24 +411,16 @@ def _participants(message: OutlookMessage) -> set[str]:
 
 
 def is_indexable(
-    message: OutlookMessageIdentity,
-    excluded_folder_ids: set[str],
-    cutoff: datetime | None,
+    message: OutlookMessageIdentity, excluded_folder_ids: set[str]
 ) -> bool:
-    """False for drafts, messages in excluded folders and mail older than the cutoff."""
-    return (
-        not message.is_draft
-        and message.parent_folder_id not in excluded_folder_ids
-        and not (cutoff and message.received_at and message.received_at < cutoff)
-    )
+    """False for drafts and messages in excluded folders."""
+    return not message.is_draft and message.parent_folder_id not in excluded_folder_ids
 
 
 def indexable_messages(
-    messages: list[OutlookMessage],
-    excluded_folder_ids: set[str],
-    cutoff: datetime | None = None,
+    messages: list[OutlookMessage], excluded_folder_ids: set[str]
 ) -> list[OutlookMessage]:
-    return [m for m in messages if is_indexable(m, excluded_folder_ids, cutoff)]
+    return [m for m in messages if is_indexable(m, excluded_folder_ids)]
 
 
 def attachment_skip_reason(attachment: OutlookAttachment) -> str | None:
@@ -716,7 +696,6 @@ class OutlookConnector(
         self,
         mailboxes: list[str] | None = None,
         mailbox_groups: list[str] | None = None,
-        mail_history_days: int | None = None,
         excluded_folders: list[str] | None = None,
         include_attachments: bool = False,
         include_calendar: bool = False,
@@ -732,12 +711,6 @@ class OutlookConnector(
         self.mailbox_groups = clean_names(mailbox_groups)
         self.include_attachments = include_attachments
         self.include_calendar = include_calendar
-        if mail_history_days is not None and mail_history_days <= 0:
-            raise ConnectorValidationError(
-                "Mail history days must be positive. Leave it empty for all mail."
-            )
-        # Mail received longer ago than this is never read. None reads it all.
-        self.mail_history_days = mail_history_days
         if calendar_past_days < 0 or calendar_future_days < 0:
             raise ConnectorValidationError("Calendar window days cannot be negative.")
         self.calendar_past_days = calendar_past_days
@@ -1014,14 +987,10 @@ class OutlookConnector(
         return groups
 
     def _listing_covers_history(self, start: SecondsSinceUnixEpoch) -> bool:
-        """True when the listing window opens at or before the history
-        cutoff, so the listing holds every indexable message of each copy
-        and no outline needs to be read."""
-        window_start: datetime | None = _poll_bound(start)
-        if window_start is None:
-            return True
-        cutoff: datetime | None = self._history_cutoff()
-        return cutoff is not None and window_start <= cutoff
+        """True when the listing window opens at the beginning, so the listing
+        holds every indexable message of each copy and no outline needs to be
+        read."""
+        return _poll_bound(start) is None
 
     def _advance_mailbox(
         self,
@@ -1221,36 +1190,31 @@ class OutlookConnector(
         rows: int = 0
         pending: list[ThreadListing] = []
         try:
-            for mailbox in mailboxes:
-                try:
-                    self.ops.probe_mailbox(mailbox_id=mailbox.id)
-                except OutlookGraphError as e:
-                    if e.status == 404:
-                        logger.info(
-                            "Outlook: %s is gone, listing nothing for it",
-                            mailbox.address,
-                        )
-                        continue
-                    raise
-                # A 404 past the probe is a folder that vanished mid-walk, not
-                # the mailbox, so it aborts the walk like any other error.
-                excluded = self._excluded_well_known_folder_ids(mailbox)
-                tree = list(self._walk_folder_tree(mailbox, excluded))
-                access = owner_access(mailbox) if include_permissions else None
-                yield list(self._hierarchy_nodes(mailbox, tree, access))
-                for page in self._thread_listing_pages(mailbox, tree):
-                    pending.extend(page)
-                    if len(pending) >= SLIM_LISTING_ROWS_PER_PAGE:
-                        table.write_page(pages, pending)
-                        pages += 1
-                        rows += len(pending)
-                        pending = []
-                    if callback is not None:
-                        callback.progress("outlook_slim_docs", len(page))
-                if self.include_calendar:
-                    yield from self._slim_batches(
-                        self._event_slim_pages(mailbox, include_permissions), callback
+            # Pages are written and progress reported from this thread only,
+            # since the heartbeat reacquires a lock the workers do not hold.
+            queue: deque[OutlookMailbox] = deque(mailboxes)
+            workers: list[Iterator[_SlimPage]] = [
+                self._slim_worker_pages(queue, include_permissions)
+                for _ in range(min(MAILBOX_WORKERS, len(mailboxes)))
+            ]
+            batch: list[SlimDocument | HierarchyNode] = []
+            for page in parallel_yield(workers, max_workers=MAILBOX_WORKERS):
+                if callback is not None:
+                    callback.progress(
+                        "outlook_slim_docs", len(page.rows) + len(page.documents)
                     )
+                pending.extend(page.rows)
+                if len(pending) >= SLIM_LISTING_ROWS_PER_PAGE:
+                    table.write_page(pages, pending)
+                    pages += 1
+                    rows += len(pending)
+                    pending = []
+                batch.extend(page.documents)
+                while len(batch) >= SLIM_BATCH_SIZE:
+                    yield batch[:SLIM_BATCH_SIZE]
+                    batch = batch[SLIM_BATCH_SIZE:]
+            if batch:
+                yield batch
             # A thread is listed once every mailbox has been read, so its
             # readers come from the full set of copies.
             if pending:
@@ -1286,6 +1250,48 @@ class OutlookConnector(
         finally:
             table.delete_all()
 
+    def _slim_worker_pages(
+        self, queue: deque[OutlookMailbox], include_permissions: bool
+    ) -> Generator["_SlimPage", None, None]:
+        """Mailboxes read one after another off the shared queue, so the
+        walk's threads stay busy until it is empty."""
+        while queue:
+            try:
+                mailbox = queue.popleft()
+            except IndexError:
+                return
+            yield from self._slim_mailbox_pages(mailbox, include_permissions)
+
+    def _slim_mailbox_pages(
+        self, mailbox: OutlookMailbox, include_permissions: bool
+    ) -> Generator["_SlimPage", None, None]:
+        """One mailbox's part of the slim walk: its folder nodes, one page of
+        listing rows per delta page, then its events. Nothing for a mailbox
+        that is gone. A 404 past the probe is a folder that vanished mid-walk,
+        not the mailbox, so it aborts the walk like any other error."""
+        try:
+            self.ops.probe_mailbox(mailbox_id=mailbox.id)
+        except OutlookGraphError as e:
+            if e.status == 404:
+                logger.info(
+                    "Outlook: %s is gone, listing nothing for it", mailbox.address
+                )
+                return
+            raise
+        excluded = self._excluded_well_known_folder_ids(mailbox)
+        tree = list(self._walk_folder_tree(mailbox, excluded))
+        access = owner_access(mailbox) if include_permissions else None
+        nodes: list[SlimDocument | HierarchyNode] = list(
+            self._hierarchy_nodes(mailbox, tree, access)
+        )
+        yield _SlimPage(documents=nodes)
+        for rows in self._thread_listing_pages(mailbox, tree):
+            yield _SlimPage(rows=rows)
+        if self.include_calendar:
+            for events in self._event_slim_pages(mailbox, include_permissions):
+                documents: list[SlimDocument | HierarchyNode] = [*events]
+                yield _SlimPage(documents=documents)
+
     def _slim_batches(
         self,
         pages: Iterable[list[SlimDocument]],
@@ -1309,7 +1315,6 @@ class OutlookConnector(
         """The message copies of every folder in the tree, one list per delta page.
         Any Graph error raises, since pruning and permission sync must both
         see the whole mailbox or nothing."""
-        cutoff: datetime | None = self._history_cutoff()
         for folder, _ in tree:
             next_link: str | None = None
             while True:
@@ -1319,15 +1324,10 @@ class OutlookConnector(
                 page = self.ops.fetch_folder_delta_page(
                     mailbox_id=mailbox.id, folder_id=folder.id, next_link=next_link
                 )
-                # Unfiltered, since a filtered round caps at FILTERED_DELTA_CAP,
-                # so mail older than the cutoff is dropped here and pruned.
                 yield [
                     listing
                     for change in page.changes
-                    if not (
-                        cutoff and change.received_at and change.received_at < cutoff
-                    )
-                    and (listing := self._thread_listing(mailbox, change)) is not None
+                    if (listing := self._thread_listing(mailbox, change)) is not None
                 ]
                 next_link = page.next_link
                 if next_link is None:
@@ -1534,7 +1534,7 @@ class OutlookConnector(
         if folder is None:
             raise ValueError("Cannot read a folder page without a current folder")
 
-        window_start = self._mail_window_start(start)
+        window_start = _poll_bound(start)
         try:
             page = self.ops.fetch_folder_delta_page(
                 mailbox_id=mailbox.id,
@@ -1629,20 +1629,6 @@ class OutlookConnector(
             message_id=change.match_id,
             received_at=change.received_at,
         )
-
-    def _history_cutoff(self) -> datetime | None:
-        """The oldest receipt time still indexed, None when all mail is."""
-        if self.mail_history_days is None:
-            return None
-        return datetime.now(timezone.utc) - timedelta(days=self.mail_history_days)
-
-    def _mail_window_start(self, start: SecondsSinceUnixEpoch) -> datetime | None:
-        """The poll window start, held to the mail history cutoff when one is set."""
-        window_start: datetime | None = _poll_bound(start)
-        cutoff: datetime | None = self._history_cutoff()
-        if cutoff is None:
-            return window_start
-        return max(window_start, cutoff) if window_start else cutoff
 
     def _calendar_window(self) -> tuple[datetime, datetime]:
         """The event times the calendar view covers, around the moment of the call."""
@@ -1782,12 +1768,11 @@ class OutlookConnector(
         in it, plus one document per copy that cannot read it. A poll lists
         only the copies with new mail, so the holders it missed are found
         from the builder's sender and recipients."""
-        cutoff: datetime | None = self._history_cutoff()
         candidates: list[ThreadCopy] = candidate_copies(group)
         items: list[Document | ConnectorFailure] = []
         try:
             # Copies are compared on the listing when it covers the history
-            # and on their outlines otherwise, under one cutoff either way.
+            # and on their outlines otherwise.
             # A sole candidate is the builder and the only reader.
             wanted: set[str] | None = None
             readers: list[OutlookMailbox]
@@ -1797,10 +1782,10 @@ class OutlookConnector(
                         copy.model_copy(
                             update={
                                 "received": (
-                                    _within_history(copy.received, cutoff)
+                                    copy.received
                                     if listing_complete
                                     else self._conversation_outline(
-                                        copy, exclusions[copy.mailbox.id], cutoff
+                                        copy, exclusions[copy.mailbox.id]
                                     )
                                 )
                             }
@@ -1816,11 +1801,11 @@ class OutlookConnector(
                 builder = candidates[0]
                 readers = [builder.mailbox]
             kept: list[OutlookMessage] = self._copy_messages(
-                builder, exclusions[builder.mailbox.id], cutoff, wanted
+                builder, exclusions[builder.mailbox.id], wanted
             )
             unlisted: list[tuple[ThreadCopy, list[OutlookMessage]]] = []
             if not listing_complete:
-                unlisted = self._unlisted_copies(table, group, kept, cutoff, exclusions)
+                unlisted = self._unlisted_copies(table, group, kept, exclusions)
             document_ids: set[str] = (
                 wanted if wanted is not None else {m.match_id for m in kept}
             )
@@ -1841,7 +1826,7 @@ class OutlookConnector(
             if document is not None:
                 items.append(document)
             partials: list[tuple[ThreadCopy, list[OutlookMessage]]] = [
-                (copy, self._copy_messages(copy, exclusions[copy.mailbox.id], cutoff))
+                (copy, self._copy_messages(copy, exclusions[copy.mailbox.id]))
                 for copy in partial_copies(group, readers)
             ] + partial_unlisted
             for copy, messages in partials:
@@ -1875,7 +1860,6 @@ class OutlookConnector(
         table: ThreadTable,
         group: ThreadGroup,
         kept: list[OutlookMessage],
-        cutoff: datetime | None,
         exclusions: dict[str, set[str]],
     ) -> list[tuple[ThreadCopy, list[OutlookMessage]]]:
         """Copies of the thread in the run's mailboxes that the poll did not
@@ -1909,9 +1893,7 @@ class OutlookConnector(
                     copy = ThreadCopy(
                         mailbox=mailbox, conversation_id=held.conversation_id
                     )
-                    messages: list[OutlookMessage] = self._copy_messages(
-                        copy, excluded, cutoff
-                    )
+                    messages: list[OutlookMessage] = self._copy_messages(copy, excluded)
                 except OutlookGraphError as e:
                     if e.is_permanent_refusal:
                         continue
@@ -1934,7 +1916,6 @@ class OutlookConnector(
         self,
         copy: ThreadCopy,
         excluded_folder_ids: set[str],
-        cutoff: datetime | None,
     ) -> dict[str, datetime | None]:
         """The copy's newest CONVERSATION_FETCH_LIMIT indexable messages by
         Message-ID with receipt times, no bodies."""
@@ -1950,9 +1931,9 @@ class OutlookConnector(
             return page.changes, page.next_link
 
         received: dict[str, datetime | None] = {}
-        for changes in _conversation_pages(fetch, COMPARED_FETCH_LIMIT, cutoff):
+        for changes in _conversation_pages(fetch, COMPARED_FETCH_LIMIT):
             for change in changes:
-                if is_indexable(change, excluded_folder_ids, cutoff):
+                if is_indexable(change, excluded_folder_ids):
                     received[change.match_id] = change.received_at
             if len(received) >= CONVERSATION_FETCH_LIMIT:
                 break
@@ -1962,7 +1943,6 @@ class OutlookConnector(
         self,
         copy: ThreadCopy,
         excluded_folder_ids: set[str],
-        cutoff: datetime | None,
         wanted: set[str] | None = None,
     ) -> list[OutlookMessage]:
         """The newest indexable messages of one copy, with bodies: the ones
@@ -1984,10 +1964,10 @@ class OutlookConnector(
         limit: int = (
             CONVERSATION_FETCH_LIMIT if wanted is None else COMPARED_FETCH_LIMIT
         )
-        for messages in _conversation_pages(fetch, limit, cutoff):
+        for messages in _conversation_pages(fetch, limit):
             kept.extend(
                 m
-                for m in indexable_messages(messages, excluded_folder_ids, cutoff)
+                for m in indexable_messages(messages, excluded_folder_ids)
                 if wanted is None or m.match_id in wanted
             )
             if len(kept) >= enough:

@@ -340,8 +340,8 @@ shape the table above does not cover:
   counts it as a reader when it holds every message of the thread's.
 - **Prune and permission sync.** `_slim_docs` runs the same listing, bucketing
   and grouping read-only and yields ids and readers, so the slim diff (§4.5)
-  and the doc sync see the same documents indexing built. `mail_history_days`
-  bounds every one of these walks at the same cutoff.
+  and the doc sync see the same documents indexing built, eight mailboxes side
+  by side like the listing.
 
 ### 4.7 The `SourceOperations` gateway pattern
 

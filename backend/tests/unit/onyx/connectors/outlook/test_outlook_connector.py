@@ -12,7 +12,6 @@ from typing import Any
 from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
-from pydantic import ValidationError
 
 from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.connector_runner import ConnectorRunner
@@ -40,7 +39,6 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.outlook import connector as connector_module
-from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.connector import (
     ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
     CONVERSATION_FETCH_LIMIT,
@@ -408,42 +406,6 @@ def test_walk_filters_delta_by_the_poll_window_start() -> None:
     )
 
 
-def test_mail_history_cutoff_bounds_a_walk_from_the_beginning() -> None:
-    gateway = _happy_gateway()
-    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], mail_history_days=30)
-    before = datetime.now(timezone.utc) - timedelta(days=30)
-
-    generator = connector.load_from_checkpoint(0, END, _folder_checkpoint())
-    with pytest.raises(StopIteration):
-        while True:
-            next(generator)
-
-    received_after = gateway.fetch_folder_delta_page.call_args.kwargs["received_after"]
-    assert before <= received_after <= datetime.now(timezone.utc) - timedelta(days=30)
-
-
-def test_mail_history_cutoff_never_widens_a_later_poll_window() -> None:
-    gateway = _happy_gateway()
-    connector = _connector(
-        gateway, mailboxes=[MAILBOX_ADDRESS], mail_history_days=100_000
-    )
-
-    _step(connector, _folder_checkpoint())
-
-    received_after = gateway.fetch_folder_delta_page.call_args.kwargs["received_after"]
-    assert received_after == datetime.fromtimestamp(START, tz=timezone.utc)
-
-
-def test_config_rejects_a_non_positive_mail_history() -> None:
-    with pytest.raises(ValidationError):
-        OutlookConnectorConfig(mail_history_days=0)
-
-
-def test_mail_history_days_must_be_positive() -> None:
-    with pytest.raises(ConnectorValidationError):
-        OutlookConnector(mail_history_days=0)
-
-
 def test_walk_excludes_junk_deleted_hidden_and_search_folders() -> None:
     gateway = _happy_gateway()
 
@@ -780,36 +742,6 @@ def test_pruning_stops_at_an_unresolved_group() -> None:
         list(connector.retrieve_all_slim_docs())
 
 
-def test_pruning_drops_mail_older_than_the_history_cutoff() -> None:
-    gateway = _happy_gateway()
-    gateway.fetch_folder_delta_page.side_effect = None
-    now = datetime.now(timezone.utc)
-    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
-        changes=[
-            change(received_at=now - timedelta(days=1)),
-            change(
-                id="msg-old",
-                conversation_id="conv-old",
-                received_at=now - timedelta(days=4000),
-            ),
-        ]
-    )
-    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], mail_history_days=30)
-
-    ids = [
-        d.id
-        for batch in connector.retrieve_all_slim_docs()
-        for d in batch
-        if isinstance(d, SlimDocument)
-    ]
-
-    assert thread_doc_id("conv-old") not in ids
-    assert thread_doc_id(CONVERSATION_ID) in ids
-    assert (
-        gateway.fetch_folder_delta_page.call_args.kwargs.get("received_after") is None
-    )
-
-
 def _many_mailbox_gateway(count: int) -> MagicMock:
     gateway = _happy_gateway()
     gateway.list_mailbox_users.return_value = OutlookMailboxPage(
@@ -1109,19 +1041,10 @@ def test_a_listing_from_the_beginning_compares_copies_without_reading_outlines()
     assert documents == with_outlines
 
 
-def test_listing_covers_the_history_from_the_beginning_or_from_before_the_cutoff() -> (
-    None
-):
-    unbounded = _connector(_happy_gateway())
-    assert unbounded._listing_covers_history(0)
-    assert not unbounded._listing_covers_history(START)
-
-    bounded = _connector(_happy_gateway(), mail_history_days=30)
-    now = datetime.now(timezone.utc)
-    assert bounded._listing_covers_history(int((now - timedelta(days=45)).timestamp()))
-    assert not bounded._listing_covers_history(
-        int((now - timedelta(days=5)).timestamp())
-    )
+def test_listing_covers_the_history_only_from_the_beginning() -> None:
+    connector = _connector(_happy_gateway())
+    assert connector._listing_covers_history(0)
+    assert not connector._listing_covers_history(START)
 
 
 def test_slim_walk_yields_the_documents_indexing_builds_with_the_same_readers() -> None:
@@ -1321,46 +1244,6 @@ def test_shared_messages_buried_under_trashed_ones_still_reach_the_document() ->
     assert thread.metadata["mailbox"] == BOB.address
     assert _readers(thread) == {ALICE.address, BOB.address}
     assert set(documents) == {thread.id}
-
-
-def test_outline_stops_paging_once_a_page_is_older_than_the_history_cutoff() -> None:
-    """Pages arrive newest first, so a page that ends before the cutoff means
-    nothing older can matter. 150 recent messages end in the second page,
-    which closes with ancient ones, so the last three pages are never read."""
-    now = datetime.now(timezone.utc)
-    recent = [
-        message(id=f"m-{i}", received_at=now - timedelta(hours=i)) for i in range(150)
-    ]
-    ancient = [
-        message(id=f"a-{i}", received_at=now - timedelta(days=400 + i))
-        for i in range(300)
-    ]
-    gateway = _two_copy_gateway({ALICE.id: recent + ancient, BOB.id: recent + ancient})
-    connector = _connector(gateway, mail_history_days=30)
-
-    checkpoint = connector.build_dummy_checkpoint()
-    generator = connector.load_from_checkpoint(
-        int((now - timedelta(days=2)).timestamp()), int(now.timestamp()), checkpoint
-    )
-    for _ in range(50):
-        try:
-            next(generator)
-        except StopIteration as stop:
-            checkpoint = stop.value
-            if not checkpoint.has_more:
-                break
-            generator = connector.load_from_checkpoint(
-                int((now - timedelta(days=2)).timestamp()),
-                int(now.timestamp()),
-                checkpoint,
-            )
-
-    outline_pages = [
-        c.kwargs.get("next_link")
-        for c in gateway.fetch_conversation_outline_page.call_args_list
-        if c.kwargs["mailbox_id"] == ALICE.id
-    ]
-    assert outline_pages == [None, "https://graph/messages?skip=100"]
 
 
 def test_failure_in_one_mailbox_leaves_the_whole_step_to_be_retried() -> None:
@@ -2151,6 +2034,36 @@ def test_slim_docs_abort_when_delta_state_expires_mid_folder() -> None:
         list(connector.retrieve_all_slim_docs())
 
 
+def test_slim_docs_read_mailboxes_side_by_side_and_list_them_all() -> None:
+    gateway = _many_mailbox_gateway(MAILBOX_WORKERS + 2)
+    # The first wave of probes has to arrive together or the barrier breaks.
+    barrier = threading.Barrier(MAILBOX_WORKERS, timeout=5)
+    probed: list[str] = []
+    lock = threading.Lock()
+
+    def probe(*, mailbox_id: str) -> None:
+        with lock:
+            probed.append(mailbox_id)
+            first_wave = len(probed) <= MAILBOX_WORKERS
+        if first_wave:
+            barrier.wait()
+
+    gateway.probe_mailbox.side_effect = probe
+    connector = _connector(gateway)
+
+    batches = list(connector.retrieve_all_slim_docs())
+
+    assert sorted(probed) == sorted(f"user-{n}" for n in range(MAILBOX_WORKERS + 2))
+    roots = [
+        item
+        for batch in batches
+        for item in batch
+        if isinstance(item, HierarchyNode) and item.raw_parent_id is None
+    ]
+    assert len(roots) == MAILBOX_WORKERS + 2
+    assert _slim_ids(batches).count(thread_doc_id(CONVERSATION_ID)) == 1
+
+
 def test_slim_docs_batch_and_report_progress() -> None:
     gateway = _happy_gateway()
     gateway.fetch_folder_delta_page.side_effect = lambda **kwargs: OutlookDeltaPage(
@@ -2168,8 +2081,9 @@ def test_slim_docs_batch_and_report_progress() -> None:
     # batched once every mailbox is read, with one report for the bucket.
     slim_batches = [b for b in batches if isinstance(b[0], SlimDocument)]
     assert [len(b) for b in slim_batches] == [SLIM_BATCH_SIZE] * 3 + [3]
-    # The zero is the heartbeat of the cut into buckets.
-    assert callback.progress.call_args_list == [
+    # The four are the mailbox's folder nodes, the zero is the heartbeat
+    # of the cut into buckets.
+    assert callback.progress.call_args_list == [call("outlook_slim_docs", 4)] + [
         call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)
     ] * 3 + [
         call("outlook_slim_docs", 0),

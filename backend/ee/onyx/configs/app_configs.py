@@ -120,8 +120,10 @@ TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 #####
 # Outlook
 #####
+# Who can read a thread follows who holds the mail, which the indexing poll
+# keeps current, so the sync only catches deletions and runs daily.
 OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY = int(
-    os.environ.get("OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+    os.environ.get("OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY") or 24 * 60 * 60
 )
 
 #####
