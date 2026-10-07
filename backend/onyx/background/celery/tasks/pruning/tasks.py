@@ -63,6 +63,7 @@ from onyx.db.hierarchy import (
     get_hierarchy_node_ids_with_ancestors,
     persist_hierarchy_nodes_for_cc_pair,
     remove_stale_hierarchy_node_cc_pair_entries,
+    source_has_document_hierarchy_nodes,
     update_document_parent_hierarchy_nodes,
 )
 from onyx.db.models import ConnectorCredentialPair
@@ -196,7 +197,13 @@ def _get_live_hierarchy_node_ids(
         source=source,
         raw_node_ids=parent_raw_ids,
         node_ids=yielded_node_ids,
-        document_ids=set(extraction_result.raw_id_to_parent),
+        # One cheap check per prune saves a walk per batch of documents for a
+        # source whose documents are never nodes.
+        document_ids=(
+            set(extraction_result.raw_id_to_parent)
+            if source_has_document_hierarchy_nodes(db_session, source)
+            else set()
+        ),
     )
 
 

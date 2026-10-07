@@ -920,6 +920,25 @@ def _get_ids_with_ancestors(db_session: Session, seed: ColumnElement[bool]) -> s
     return set(db_session.execute(select(walk.c.id)).scalars().all())
 
 
+def source_has_document_hierarchy_nodes(
+    db_session: Session, source: DocumentSource
+) -> bool:
+    """True when a hierarchy node of ``source`` is also a document (e.g. a
+    Confluence page). Without one, a document-id seed matches no node."""
+    return bool(
+        db_session.scalar(
+            select(
+                select(HierarchyNode.id)
+                .where(
+                    HierarchyNode.source == source,
+                    HierarchyNode.document_id.is_not(None),
+                )
+                .exists()
+            )
+        )
+    )
+
+
 def get_hierarchy_node_ids_with_ancestors(
     db_session: Session,
     source: DocumentSource,

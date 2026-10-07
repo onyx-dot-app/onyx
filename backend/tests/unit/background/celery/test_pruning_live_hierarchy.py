@@ -45,11 +45,17 @@ def test_full_listing_keeps_only_the_yielded_nodes(
     walk.assert_not_called()
 
 
+@pytest.mark.parametrize("documents_are_nodes", [True, False])
 def test_dated_listing_adds_the_ancestors_of_kept_documents(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, documents_are_nodes: bool
 ) -> None:
     walk = MagicMock(return_value={1, 2, 3, 4})
     monkeypatch.setattr(pruning_tasks, "get_hierarchy_node_ids_with_ancestors", walk)
+    monkeypatch.setattr(
+        pruning_tasks,
+        "source_has_document_hierarchy_nodes",
+        MagicMock(return_value=documents_are_nodes),
+    )
     db_session = MagicMock()
 
     live = pruning_tasks._get_live_hierarchy_node_ids(
@@ -60,11 +66,14 @@ def test_dated_listing_adds_the_ancestors_of_kept_documents(
     )
 
     assert live == {1, 2, 3, 4}
-    # Each parent once; a document with no parent adds no seed.
+    # Each parent once; a document with no parent adds no seed. Documents
+    # seed only for a source where a node can be a document.
     walk.assert_called_once_with(
         db_session=db_session,
         source=_SOURCE,
         raw_node_ids={"folder-1", "folder-2"},
         node_ids=_YIELDED_NODE_IDS,
-        document_ids={"doc-a", "doc-b", "doc-c", "doc-d"},
+        document_ids=(
+            {"doc-a", "doc-b", "doc-c", "doc-d"} if documents_are_nodes else set()
+        ),
     )

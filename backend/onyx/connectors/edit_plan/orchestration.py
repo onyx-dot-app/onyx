@@ -203,10 +203,20 @@ def with_latest_dry_run_results(
     db_session: Session, stored: StoredEditPlan
 ) -> StoredEditPlan:
     """The plan with the pair's dry-run results cached now for its proposed
-    state, so a dry run started after planning shows. Writes nothing."""
+    state, so a dry run started after planning shows. Writes nothing.
+
+    Raises:
+        OnyxError: CREDENTIAL_NOT_FOUND when the proposed credential was
+            deleted after planning.
+    """
     proposed = stored.proposed
     credential = fetch_credential_by_id(proposed.credential_id, db_session)
-    if credential is None or proposed.source not in CONNECTOR_CLASS_MAP:
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {proposed.credential_id} does not exist.",
+        )
+    if proposed.source not in CONNECTOR_CLASS_MAP:
         return stored
     results = get_cc_pair_dry_run_results(
         cc_pair_id=stored.cc_pair_id,

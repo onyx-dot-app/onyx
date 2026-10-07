@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, model_validator
 
+from onyx.db.enums import IndexingStatus
+
 
 def _is_aware(value: datetime) -> bool:
     # A tzinfo whose utcoffset() returns None still makes a naive datetime.
@@ -41,3 +43,19 @@ class PendingBackfill(BaseModel):
     failure_count: int = 0
     # DB time before which the beat does not retry it after a failure.
     retry_after: datetime | None = None
+
+
+class FailedBackfillAttempt(BaseModel):
+    # The released request, with its new failure count and retry time.
+    pending: PendingBackfill
+    # None when the attempt no longer exists.
+    status: IndexingStatus | None
+
+
+class BackfillAttemptResolution(BaseModel):
+    # An attempt of a pending backfill is still active.
+    attempt_active: bool = False
+    succeeded: list[PendingBackfill] = []
+    failed: list[FailedBackfillAttempt] = []
+    # Released with no failure.
+    interrupted: list[PendingBackfill] = []

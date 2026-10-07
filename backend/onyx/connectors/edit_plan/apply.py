@@ -33,9 +33,11 @@ from onyx.connectors.edit_plan.planner import (
 )
 from onyx.connectors.edit_plan.state import fetch_current_pair_state
 from onyx.connectors.edit_plan.store import (
+    claim_edit_plan_for_apply,
     delete_edit_plan,
     ensure_base_state_matches,
     load_edit_plan,
+    release_edit_plan_claim,
 )
 from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import validate_and_record_pairing
@@ -46,6 +48,7 @@ from onyx.db.backfill_models import BackfillSpec
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_edit_requests import (
     apply_access_change__no_commit,
+    clip_pending_backfills_to_start__no_commit,
     has_restartable_attempt,
     lock_cc_pair_for_edit__no_commit,
     reactivate_invalid_cc_pair__no_commit,
@@ -288,6 +291,14 @@ def _write_edit__no_commit(
         task_ids = request_attempt_restart__no_commit(
             db_session, cc_pair_id, IndexingMode.UPDATE
         )
+    # Older backfills must not fetch documents from before a later start,
+    # which this edit's prune removes. The restart above released every
+    # backfill whose attempt was active. No start means no floor.
+    new_start = proposed.indexing_start
+    if new_start is not None and (
+        current.indexing_start is None or new_start > current.indexing_start
+    ):
+        clip_pending_backfills_to_start__no_commit(db_session, cc_pair_id, new_start)
     if EditStepKind.FULL_REINDEX_THEN_PRUNE in kinds:
         request_prune_after_reindex__no_commit(db_session, cc_pair_id)
     if EditStepKind.FULL_REINDEX in kinds:
@@ -301,6 +312,17 @@ def _write_edit__no_commit(
     return task_ids
 
 
+def _safe_retire_applied_plan(plan_id: UUID) -> None:
+    """Deletes a plan whose edit committed, then frees its claim. A failure
+    here must not fail the committed apply: the claim then stays until it
+    expires, and keeps refusing the plan until then."""
+    try:
+        delete_edit_plan(plan_id)
+        release_edit_plan_claim(plan_id)
+    except Exception:
+        logger.exception("Could not delete an applied edit plan: plan_id=%s", plan_id)
+
+
 def apply_connector_edit(
     db_session: Session,
     *,
@@ -308,15 +330,41 @@ def apply_connector_edit(
     choices: EditPlanChoices,
     user: User,
 ) -> AppliedConnectorEdit:
-    """Applies ``stored`` with the admin's ``choices`` and commits. The plan
-    is single use: it is deleted in the same locked section.
+    """Applies ``stored`` with the admin's ``choices`` and commits.
+
+    The plan is single use. An apply claims it first and deletes it only
+    after the commit, so a failed apply leaves it usable. A second apply of
+    the plan gets CONFLICT while the first holds the claim, and NOT_FOUND
+    once the first deleted the plan. The base-state check alone would not
+    refuse it: a settings-only edit leaves the base state unchanged.
 
     Raises:
         OnyxError: EDIT_PLAN_STALE when the pair changed after planning;
             INVALID_INPUT for invalid choices, a failed validation or an
-            invalid setting; NOT_FOUND when a concurrent apply used the plan;
-            CONFLICT for a DELETING pair. Nothing is written then.
+            invalid setting; NOT_FOUND when another apply used the plan;
+            CONFLICT while another apply of the plan runs, or for a DELETING
+            pair. Nothing is written then.
     """
+    if not claim_edit_plan_for_apply(stored.plan_id):
+        raise OnyxError(OnyxErrorCode.CONFLICT, "This edit plan is being applied.")
+    try:
+        applied = _apply_claimed_plan(
+            db_session, stored=stored, choices=choices, user=user
+        )
+    except Exception:
+        release_edit_plan_claim(stored.plan_id)
+        raise
+    _safe_retire_applied_plan(stored.plan_id)
+    return applied
+
+
+def _apply_claimed_plan(
+    db_session: Session,
+    *,
+    stored: StoredEditPlan,
+    choices: EditPlanChoices,
+    user: User,
+) -> AppliedConnectorEdit:
     cc_pair_id = stored.cc_pair_id
     proposed = stored.proposed
 
@@ -356,7 +404,6 @@ def apply_connector_edit(
         reactivated = validated and reactivate_invalid_cc_pair__no_commit(
             db_session, cc_pair_id
         )
-        delete_edit_plan(stored.plan_id)
         db_session.commit()
     except Exception:
         db_session.rollback()

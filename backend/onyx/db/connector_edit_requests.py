@@ -8,11 +8,16 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
-from onyx.db.backfill_models import BackfillSpec, PendingBackfill
+from onyx.db.backfill_models import (
+    BackfillAttemptResolution,
+    BackfillSpec,
+    FailedBackfillAttempt,
+    PendingBackfill,
+)
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
@@ -50,27 +55,6 @@ def request_retry_delay(failure_count: int) -> timedelta:
     return timedelta(
         seconds=min(_RETRY_BASE_SECONDS * 2 ** (failure_count - 1), _RETRY_MAX_SECONDS)
     )
-
-
-# A failed backfill retries after 5 minutes, doubling up to 6 hours.
-_BACKFILL_RETRY_BASE_SECONDS = 5 * 60
-_BACKFILL_RETRY_MAX_SECONDS = 6 * 60 * 60
-
-
-class FailedBackfillAttempt(BaseModel):
-    # The released request, with its new failure count and retry time.
-    pending: PendingBackfill
-    # None when the attempt no longer exists.
-    status: IndexingStatus | None
-
-
-class BackfillAttemptResolution(BaseModel):
-    # An attempt of a pending backfill is still active.
-    attempt_active: bool = False
-    succeeded: list[PendingBackfill] = []
-    failed: list[FailedBackfillAttempt] = []
-    # Released with no failure.
-    interrupted: list[PendingBackfill] = []
 
 
 def _lock_cc_pair_row(
@@ -272,6 +256,35 @@ def request_backfills__no_commit(
     ]
 
 
+def clip_pending_backfills_to_start__no_commit(
+    db_session: Session, cc_pair_id: int, indexing_start: datetime
+) -> None:
+    """Moves each pending backfill window that starts before
+    ``indexing_start`` (aware) up to it, and drops a backfill whose window is
+    then empty, so no backfill fetches documents from before the pair's
+    start. A tracked backfill is clipped too: the spec is read only when an
+    attempt is created for it, so an ended attempt that fails retries the
+    clipped window."""
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    clipped: list[PendingBackfill] = []
+    for pending in cc_pair.pending_backfills:
+        window = pending.backfill
+        if window.window_start >= indexing_start:
+            clipped.append(pending)
+        elif window.window_end > indexing_start:
+            clipped.append(
+                pending.model_copy(
+                    update={
+                        "backfill": window.model_copy(
+                            update={"window_start": indexing_start}
+                        )
+                    }
+                )
+            )
+    if clipped != cc_pair.pending_backfills:
+        cc_pair.pending_backfills = clipped
+
+
 def create_pending_backfill_attempt__no_commit(
     db_session: Session,
     *,
@@ -333,15 +346,6 @@ def create_pending_backfill_attempt__no_commit(
     return attempt.id
 
 
-def _backfill_retry_delay(failure_count: int) -> timedelta:
-    return timedelta(
-        seconds=min(
-            _BACKFILL_RETRY_BASE_SECONDS * 2 ** (failure_count - 1),
-            _BACKFILL_RETRY_MAX_SECONDS,
-        )
-    )
-
-
 def resolve_backfill_attempts__no_commit(
     db_session: Session, cc_pair_id: int, now: datetime
 ) -> BackfillAttemptResolution:
@@ -393,7 +397,7 @@ def resolve_backfill_attempts__no_commit(
             update={
                 "attempt_id": None,
                 "failure_count": failure_count,
-                "retry_after": now + _backfill_retry_delay(failure_count),
+                "retry_after": now + request_retry_delay(failure_count),
             }
         )
         resolution.failed.append(FailedBackfillAttempt(pending=failed, status=status))
@@ -498,9 +502,10 @@ def promote_prune_after_reindex_request__no_commit(
 def get_reindex_request_backoff(
     db_session: Session, cc_pair_id: int, search_settings_id: int
 ) -> ReindexRequestBackoff | None:
-    """The backoff of the pair's pending prune-after-reindex request on these
-    search settings, from the FAILED attempts that served it. None when none
-    failed. A new request has a new time, so it starts with no backoff."""
+    """The backoff of the pair's pending prune-after-reindex and full re-index
+    requests on these search settings, from the FAILED attempts that served
+    either. None when none failed. A new request has a new time, so it starts
+    with no backoff."""
     failure_count, last_failed_at = db_session.execute(
         select(func.count(IndexAttempt.id), func.max(IndexAttempt.time_updated))
         .join(
@@ -511,8 +516,12 @@ def get_reindex_request_backoff(
             ConnectorCredentialPair.id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings_id,
             IndexAttempt.status == IndexingStatus.FAILED,
-            IndexAttempt.prune_after_reindex_requested_at
-            == ConnectorCredentialPair.prune_after_reindex_requested_at,
+            or_(
+                IndexAttempt.prune_after_reindex_requested_at
+                == ConnectorCredentialPair.prune_after_reindex_requested_at,
+                IndexAttempt.full_reindex_requested_at
+                == ConnectorCredentialPair.full_reindex_requested_at,
+            ),
         )
     ).one()
     if failure_count == 0 or last_failed_at is None:

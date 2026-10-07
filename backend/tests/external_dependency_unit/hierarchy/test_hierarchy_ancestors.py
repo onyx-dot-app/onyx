@@ -15,6 +15,7 @@ from onyx.db.hierarchy import (
     ensure_source_node_exists,
     get_hierarchy_node_by_raw_id,
     get_hierarchy_node_ids_with_ancestors,
+    source_has_document_hierarchy_nodes,
     upsert_hierarchy_nodes_batch,
 )
 from onyx.db.models import Document
@@ -126,11 +127,14 @@ def test_document_seed_selects_the_node_of_that_document(
     document_id = f"ancestors_doc_{uuid4().hex[:8]}"
     db_session.add(Document(id=document_id, semantic_id="page"))
     db_session.flush()
+    assert not source_has_document_hierarchy_nodes(db_session, _SOURCE)
     node = hierarchy_db.get_hierarchy_node_by_id(db_session, tree["c"])
     if node is None:
         raise RuntimeError("node c not found")
     node.document_id = document_id
     db_session.flush()
+    assert source_has_document_hierarchy_nodes(db_session, _SOURCE)
+    assert not source_has_document_hierarchy_nodes(db_session, _OTHER_SOURCE)
 
     result = get_hierarchy_node_ids_with_ancestors(
         db_session,

@@ -321,8 +321,13 @@ def test_a_failed_full_reindex_runs_again_and_keeps_its_backfills(
     assert cc_pair.pending_backfills[0].attempt_id == first.id
 
     # A failed re-index leaves the request, so the next run is a full
-    # re-index too, and it covers the backfill again.
+    # re-index too, and it covers the backfill again. It waits for the
+    # backoff: 5 minutes after one failure.
     _finish(db_session, first, IndexingStatus.FAILED)
+    _run_beat(db_session, cc_pair, search_settings)
+    assert len(_attempts(db_session, cc_pair.id)) == 2
+    first.time_updated = datetime.now(tz=timezone.utc) - timedelta(minutes=6)
+    db_session.commit()
     _run_beat(db_session, cc_pair, search_settings)
     [_, _, second] = _attempts(db_session, cc_pair.id)
     assert second.from_beginning

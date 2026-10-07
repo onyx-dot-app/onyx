@@ -43,7 +43,8 @@ Drive. Saving creates the connector and kicks off an initial index run. The
 admin watches the connector's status move from indexing to a document count and
 a "last successful index" timestamp on the connector status page. From then on,
 a background job polls for new and changed documents on a schedule the admin
-sets, and a separate job prunes documents that were deleted at the source.
+sets, and a separate job prunes documents that were deleted at the source, or
+that fall before the connector's indexing start.
 
 For connectors that implement `validate_connector_settings` or named capability
 checks (§4), the admin sees a validation error at connector-creation time if
@@ -294,6 +295,14 @@ loads `all_indexed_document_ids` for the cc-pair from Postgres, calls
 `all_connector_doc_ids` from the slim connector, and computes
 `doc_ids_to_remove = all_indexed_document_ids - all_connector_doc_ids.keys()`.
 See §5 for the invariant this depends on.
+
+When the pair has an `indexing_start`, `extract_ids_from_runnable_connector`
+lists only the documents from that time on, if
+`connectors/interfaces.py:prune_listing_honors_indexing_start` says the
+connector's listing filters by the same date as indexing. A slim connector
+opts in with `BaseConnector.slim_listing_honors_indexing_start`. Such a prune
+also removes documents that still exist at the source but were last updated
+before the start. Other connectors list every document.
 
 ### 4.6 Three representative shapes
 
@@ -616,7 +625,9 @@ lack of a key, ask instead. The shared helper
 
 - No `ConnectorMissingException` at run time for a source with a registry entry.
 - Index count matches the source's actual document count after a full run.
-- A prune run removes only documents actually deleted at the source.
+- A prune run removes only documents deleted at the source, or, for a
+  connector whose listing honors the indexing start, documents last updated
+  before it.
 - A resumed checkpointed run does not reprocess documents from before the
   checkpoint, and does not skip documents added after it.
 

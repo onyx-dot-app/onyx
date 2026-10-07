@@ -30,7 +30,12 @@ from onyx.connectors.edit_plan.models import (
 )
 from onyx.connectors.edit_plan.orchestration import plan_connector_edit
 from onyx.connectors.edit_plan.state import fetch_current_pair_state
-from onyx.connectors.edit_plan.store import load_edit_plan, save_edit_plan
+from onyx.connectors.edit_plan.store import (
+    claim_edit_plan_for_apply,
+    load_edit_plan,
+    release_edit_plan_claim,
+    save_edit_plan,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import InputType
 from onyx.db.backfill_models import BackfillSpec, PendingBackfill
@@ -744,3 +749,141 @@ def test_authorization_rejections(
         db_session.commit()
         delete_test_user(db_session, basic)
         db_session.commit()
+
+
+def _pending(
+    start: datetime, end: datetime, attempt_id: int | None = None
+) -> PendingBackfill:
+    return PendingBackfill(
+        request_id=uuid4(),
+        requested_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        backfill=BackfillSpec(window_start=start, window_end=end),
+        attempt_id=attempt_id,
+    )
+
+
+def test_later_indexing_start_clips_pending_backfills(
+    db_session: Session,
+    slack_pair: ConnectorCredentialPair,
+    admin: User,
+    validation: _Validation,  # noqa: ARG001
+) -> None:
+    def utc(year: int, month: int) -> datetime:
+        return datetime(year, month, 1, tzinfo=timezone.utc)
+
+    new_start = utc(2025, 3)
+    running = IndexAttempt(
+        connector_credential_pair_id=slack_pair.id,
+        search_settings_id=get_current_search_settings(db_session).id,
+        from_beginning=False,
+        status=IndexingStatus.IN_PROGRESS,
+        celery_task_id=f"edit_apply_{uuid4().hex[:8]}",
+        is_backfill=True,
+    )
+    db_session.add(running)
+    db_session.commit()
+    straddling = _pending(utc(2025, 1), utc(2025, 5))
+    before = _pending(utc(2025, 1), utc(2025, 2))
+    after = _pending(utc(2025, 4), utc(2025, 5))
+    tracked = _pending(utc(2025, 1), utc(2025, 6), attempt_id=running.id)
+    slack_pair.pending_backfills = [straddling, before, after, tracked]
+    db_session.commit()
+
+    stored = _plan(db_session, slack_pair, admin, indexing_start=new_start)
+    applied = _apply(db_session, stored, admin)
+
+    # The running backfill restarts, so its request is released and clipped.
+    assert applied.restarted_task_ids == [running.celery_task_id]
+    _reload(db_session, slack_pair)
+    by_id = {pending.request_id: pending for pending in slack_pair.pending_backfills}
+    assert set(by_id) == {straddling.request_id, after.request_id, tracked.request_id}
+    assert by_id[straddling.request_id].backfill.window_start == new_start
+    assert by_id[straddling.request_id].backfill.window_end == utc(2025, 5)
+    assert by_id[after.request_id] == after
+    assert by_id[tracked.request_id].backfill.window_start == new_start
+    assert by_id[tracked.request_id].attempt_id is None
+
+
+def test_earlier_indexing_start_keeps_pending_backfills(
+    db_session: Session,
+    slack_pair: ConnectorCredentialPair,
+    admin: User,
+    validation: _Validation,  # noqa: ARG001
+) -> None:
+    pending = _pending(
+        datetime(2025, 2, 1, tzinfo=timezone.utc),
+        datetime(2025, 5, 1, tzinfo=timezone.utc),
+    )
+    slack_pair.pending_backfills = [pending]
+    db_session.commit()
+
+    stored = _plan(
+        db_session,
+        slack_pair,
+        admin,
+        indexing_start=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+    _apply(db_session, stored, admin)
+
+    _reload(db_session, slack_pair)
+    assert pending in slack_pair.pending_backfills
+
+
+def test_failed_commit_leaves_the_plan_usable(
+    db_session: Session,
+    slack_pair: ConnectorCredentialPair,
+    admin: User,
+    validation: _Validation,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stored = _plan(
+        db_session, slack_pair, admin, connector_specific_config=_NARROWED_CONFIG
+    )
+    real_commit = db_session.commit
+
+    def failing_commit() -> None:
+        raise RuntimeError("commit failed")
+
+    monkeypatch.setattr(db_session, "commit", failing_commit)
+    with pytest.raises(RuntimeError):
+        _apply(db_session, stored, admin)
+    monkeypatch.setattr(db_session, "commit", real_commit)
+
+    _reload(db_session, slack_pair)
+    assert slack_pair.connector.connector_specific_config == _STORED_CONFIG
+    assert load_edit_plan(stored.plan_id, slack_pair.id) is not None
+
+    _apply(db_session, stored, admin)
+    _reload(db_session, slack_pair)
+    assert slack_pair.connector.connector_specific_config == _NARROWED_CONFIG
+    assert load_edit_plan(stored.plan_id, slack_pair.id) is None
+
+
+def test_second_apply_of_a_settings_only_plan_is_refused(
+    db_session: Session,
+    slack_pair: ConnectorCredentialPair,
+    admin: User,
+    validation: _Validation,  # noqa: ARG001
+) -> None:
+    # A rename leaves the base state as it was, so only the plan's claim and
+    # its deletion refuse a second apply.
+    stored = _plan(db_session, slack_pair, admin, name="renamed")
+    loaded = load_plan_for_user(stored.plan_id, slack_pair.id, admin)
+
+    # Another apply of the plan holds the claim.
+    assert claim_edit_plan_for_apply(stored.plan_id)
+    with pytest.raises(OnyxError) as exc:
+        apply_connector_edit(
+            db_session, stored=loaded, choices=EditPlanChoices(), user=admin
+        )
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    release_edit_plan_claim(stored.plan_id)
+
+    _apply(db_session, stored, admin)
+    _reload(db_session, slack_pair)
+    assert slack_pair.name == "renamed"
+    with pytest.raises(OnyxError) as exc:
+        apply_connector_edit(
+            db_session, stored=loaded, choices=EditPlanChoices(), user=admin
+        )
+    assert exc.value.error_code == OnyxErrorCode.NOT_FOUND

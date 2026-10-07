@@ -30,7 +30,10 @@ from onyx.connectors.edit_plan.models import (
     EditStepKind,
     ProposedPairState,
 )
-from onyx.connectors.edit_plan.orchestration import plan_connector_edit
+from onyx.connectors.edit_plan.orchestration import (
+    plan_connector_edit,
+    with_latest_dry_run_results,
+)
 from onyx.connectors.edit_plan.state import fetch_current_pair_state
 from onyx.connectors.edit_plan.store import (
     ensure_base_state_matches,
@@ -133,9 +136,10 @@ def other_credential(
     credential = Credential(source=DocumentSource.SLACK, credential_json={})
     db_session.add(credential)
     db_session.commit()
+    credential_id = credential.id
     yield credential
     db_session.rollback()
-    db_session.execute(delete(Credential).where(Credential.id == credential.id))
+    db_session.execute(delete(Credential).where(Credential.id == credential_id))
     db_session.commit()
 
 
@@ -335,6 +339,8 @@ def test_rename_of_a_pair_without_a_connector_class(
         assert stored.plan.changed_settings == ["name"]
         assert stored.plan.steps == []
         validation.validate.assert_not_called()
+        # No connector class: the stored plan comes back without a dry run.
+        assert with_latest_dry_run_results(db_session, stored) == stored
     finally:
         db_session.rollback()
         cleanup_cc_pair(db_session, pair)
@@ -358,6 +364,28 @@ def test_credential_change_validates_the_new_credential(
     assert validation.read_dry_runs.call_args.kwargs["credential"].id == (
         other_credential.id
     )
+
+
+def test_plan_refresh_refuses_a_deleted_proposed_credential(
+    db_session: Session,
+    slack_pair: ConnectorCredentialPair,
+    other_credential: Credential,
+    admin: User,
+    validation: _Validation,
+) -> None:
+    proposed = _proposed(db_session, slack_pair, credential_id=other_credential.id)
+    stored = plan_connector_edit(
+        db_session, cc_pair_id=slack_pair.id, proposed=proposed, user=admin
+    )
+    refreshed = with_latest_dry_run_results(db_session, stored)
+    assert refreshed.plan.dry_run_results == validation.dry_run_results
+
+    db_session.execute(delete(Credential).where(Credential.id == other_credential.id))
+    db_session.commit()
+
+    with pytest.raises(OnyxError) as exc:
+        with_latest_dry_run_results(db_session, stored)
+    assert exc.value.error_code == OnyxErrorCode.CREDENTIAL_NOT_FOUND
 
 
 def test_credential_of_another_source_is_rejected(
