@@ -79,9 +79,18 @@ export interface EmbeddingModel {
   passagePrefix?: string | null;
   // Absent for custom models, which have no registry description.
   descriptionKey?: IndexSettingsMessageKey;
+
+  /**
+   * Model-level counterpart of `EmbeddingProvider.deprecated`: existing usage
+   * is allowed, but selecting it as a new embedding model is blocked.
+   */
+  deprecated?: boolean;
 }
 
-export type EmbeddingModelSpec = Omit<EmbeddingModel, "descriptionKey">;
+export type EmbeddingModelSpec = Omit<
+  EmbeddingModel,
+  "descriptionKey" | "deprecated"
+>;
 
 /**
  * Always write all three fields together. A name without its spec and provider forces
