@@ -6,7 +6,7 @@ turns into a prune request only when a full re-index started after it
 succeeds; the manual re-index never prunes."""
 
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -27,9 +27,11 @@ from onyx.background.celery.tasks.pruning.tasks import (
 )
 from onyx.background.indexing.attempt_restart import revoke_restarted_attempt_tasks
 from onyx.db.connector_edit_requests import (
+    get_reindex_request_backoff,
     request_attempt_restart__no_commit,
     request_prune__no_commit,
     request_prune_after_reindex__no_commit,
+    request_retry_delay,
 )
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
@@ -500,8 +502,9 @@ def test_prune_after_reindex_waits_for_a_successful_full_reindex(
     assert first.prune_after_reindex_requested_at == requested_at
 
     # A failed re-index passes the request to the next run, which is a full
-    # re-index even without a trigger.
+    # re-index even without a trigger, once the backoff passes.
     first.status = IndexingStatus.FAILED
+    first.time_updated = datetime.now(tz=timezone.utc) - timedelta(minutes=6)
     db_session.commit()
     db_session.refresh(cc_pair)
     assert cc_pair.indexing_trigger is None
@@ -579,3 +582,94 @@ def test_manual_reindex_does_not_prune(
     _complete(db_session, attempt)
     db_session.refresh(cc_pair)
     assert cc_pair.prune_requested_at is None
+
+
+def _fail(
+    db_session: Session, attempt: IndexAttempt, *, minutes_ago: float = 0
+) -> None:
+    attempt.status = IndexingStatus.FAILED
+    attempt.time_updated = datetime.now(tz=timezone.utc) - timedelta(
+        minutes=minutes_ago
+    )
+    db_session.commit()
+
+
+def test_request_retry_delay_doubles_up_to_a_cap() -> None:
+    assert request_retry_delay(1) == timedelta(minutes=5)
+    assert request_retry_delay(2) == timedelta(minutes=10)
+    assert request_retry_delay(3) == timedelta(minutes=20)
+    assert request_retry_delay(50) == timedelta(hours=6)
+
+
+def test_prune_after_reindex_backs_off_after_failed_attempts(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> None:
+    request_prune_after_reindex__no_commit(db_session, cc_pair.id)
+    db_session.commit()
+
+    # The first attempt is not delayed.
+    _run_beat(db_session, cc_pair, search_settings)
+    (first,) = _attempts(db_session, cc_pair.id)
+
+    # One failure waits 5 minutes.
+    _fail(db_session, first)
+    _run_beat(db_session, cc_pair, search_settings)
+    assert len(_attempts(db_session, cc_pair.id)) == 1
+    _fail(db_session, first, minutes_ago=6)
+    _run_beat(db_session, cc_pair, search_settings)
+    _, second = _attempts(db_session, cc_pair.id)
+    assert second.from_beginning
+
+    # Two failures wait 10 minutes, from the latest failure.
+    _fail(db_session, second, minutes_ago=6)
+    _run_beat(db_session, cc_pair, search_settings)
+    assert len(_attempts(db_session, cc_pair.id)) == 2
+    backoff = get_reindex_request_backoff(db_session, cc_pair.id, search_settings.id)
+    assert backoff is not None
+    assert backoff.failure_count == 2
+
+    _fail(db_session, first, minutes_ago=16)
+    _fail(db_session, second, minutes_ago=11)
+    _run_beat(db_session, cc_pair, search_settings)
+    *_, third = _attempts(db_session, cc_pair.id)
+    assert third.id != second.id
+    assert third.from_beginning
+
+    # A manual trigger does not wait for the backoff.
+    _fail(db_session, third)
+    db_session.refresh(cc_pair)
+    cc_pair.indexing_trigger = IndexingMode.UPDATE
+    db_session.commit()
+    _run_beat(db_session, cc_pair, search_settings)
+    assert len(_attempts(db_session, cc_pair.id)) == 4
+
+
+def test_a_served_request_resets_the_backoff(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> None:
+    request_prune_after_reindex__no_commit(db_session, cc_pair.id)
+    db_session.commit()
+    _run_beat(db_session, cc_pair, search_settings)
+    (first,) = _attempts(db_session, cc_pair.id)
+    _fail(db_session, first, minutes_ago=6)
+    _run_beat(db_session, cc_pair, search_settings)
+    _, second = _attempts(db_session, cc_pair.id)
+
+    _complete(db_session, second)
+    db_session.refresh(cc_pair)
+    assert cc_pair.prune_after_reindex_requested_at is None
+
+    # A new request starts with no backoff, though an attempt failed before.
+    request_prune_after_reindex__no_commit(db_session, cc_pair.id)
+    db_session.commit()
+    assert (
+        get_reindex_request_backoff(db_session, cc_pair.id, search_settings.id) is None
+    )
+    _run_beat(db_session, cc_pair, search_settings)
+    *_, third = _attempts(db_session, cc_pair.id)
+    assert third.id != second.id
+    assert third.from_beginning

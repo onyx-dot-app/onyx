@@ -2,8 +2,9 @@
 index attempts, a prune, and a prune after the next full re-index. Callers
 commit, so the requests land in the same transaction as the edit."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,25 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 _RESTART_CANCEL_REASON = "Connector configuration changed."
+
+# A failed request retries after 5 minutes, doubling up to 6 hours.
+_RETRY_BASE_SECONDS = 5 * 60
+_RETRY_MAX_SECONDS = 6 * 60 * 60
+
+
+class ReindexRequestBackoff(BaseModel):
+    # Failed full re-index attempts that served the pending request.
+    failure_count: int
+    # DB time before which the beat does not retry the request.
+    retry_after: datetime
+
+
+def request_retry_delay(failure_count: int) -> timedelta:
+    """The wait before retrying a request after ``failure_count`` (at least
+    1) failed attempts: capped exponential, so a request never expires."""
+    return timedelta(
+        seconds=min(_RETRY_BASE_SECONDS * 2 ** (failure_count - 1), _RETRY_MAX_SECONDS)
+    )
 
 
 def _lock_cc_pair_for_request(
@@ -128,4 +148,32 @@ def promote_prune_after_reindex_request__no_commit(
             == served_request_at,
         )
         .values(prune_after_reindex_requested_at=None)
+    )
+
+
+def get_reindex_request_backoff(
+    db_session: Session, cc_pair_id: int, search_settings_id: int
+) -> ReindexRequestBackoff | None:
+    """The backoff of the pair's pending prune-after-reindex request on these
+    search settings, from the FAILED attempts that served it. None when none
+    failed. A new request has a new time, so it starts with no backoff."""
+    failure_count, last_failed_at = db_session.execute(
+        select(func.count(IndexAttempt.id), func.max(IndexAttempt.time_updated))
+        .join(
+            ConnectorCredentialPair,
+            ConnectorCredentialPair.id == IndexAttempt.connector_credential_pair_id,
+        )
+        .where(
+            ConnectorCredentialPair.id == cc_pair_id,
+            IndexAttempt.search_settings_id == search_settings_id,
+            IndexAttempt.status == IndexingStatus.FAILED,
+            IndexAttempt.prune_after_reindex_requested_at
+            == ConnectorCredentialPair.prune_after_reindex_requested_at,
+        )
+    ).one()
+    if failure_count == 0 or last_failed_at is None:
+        return None
+    return ReindexRequestBackoff(
+        failure_count=failure_count,
+        retry_after=last_failed_at + request_retry_delay(failure_count),
     )
