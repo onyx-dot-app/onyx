@@ -37,6 +37,7 @@ from onyx.utils.fleet_telemetry import (
     poll_due,
     start_telemetry,
     stop_telemetry,
+    telemetry_disabled,
 )
 from shared_configs.configs import MULTI_TENANT
 
@@ -705,6 +706,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
+    stopped = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stopped.set())
+    signal.signal(signal.SIGINT, lambda *_: stopped.set())
+    if telemetry_disabled():
+        # Keep long-running containers idle instead of entering a restart loop.
+        if not args.once:
+            stopped.wait()
+        return
     client = start_telemetry("collector")
     if client is None:
         raise SystemExit("Telemetry configuration is missing or invalid")
@@ -717,7 +726,6 @@ def main() -> None:
         if value
     ]
     collector = FleetCollector(client, database_url, schemas)
-    stopped = threading.Event()
     from onyx.utils.fleet_telemetry_kubernetes import KubernetesCollector
 
     kubernetes = (
@@ -725,8 +733,6 @@ def main() -> None:
         if os.environ.get("ONYX_TELEMETRY_KUBERNETES", "").lower() == "true"
         else None
     )
-    signal.signal(signal.SIGTERM, lambda *_: stopped.set())
-    signal.signal(signal.SIGINT, lambda *_: stopped.set())
     try:
         while not stopped.is_set():
             collector.tick()

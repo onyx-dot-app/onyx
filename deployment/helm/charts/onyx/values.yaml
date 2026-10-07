@@ -1848,7 +1848,7 @@ configMap:
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
   # Logging
-  # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
+  # Set "true" to disable callhome and fleet telemetry, including the collector.
   DISABLE_TELEMETRY: ""
   # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
   # api_server, model_server, slack/discord bots, AND all Celery workers. Empty

@@ -29,7 +29,13 @@ Set these variables on API pods, workers, and the collector:
 - `ONYX_TELEMETRY_INSTANCE_DOMAIN`: optional instance host; defaults to `WEB_DOMAIN`.
   Startup canonicalizes the host and stores only its installation-keyed HMAC in telemetry.
 - `ONYX_TELEMETRY_PRIVACY_KEY`: separate random installation key with at least 32 characters.
-- `DISABLE_TELEMETRY=true`: disable the fleet sender.
+- `DISABLE_TELEMETRY=true`: disable callhome and all fleet collection and sending.
+  This takes precedence over valid fleet credentials and enablement settings.
+  Set it on all application services and separately deployed collector containers, then restart them.
+  Disabled collectors do not create sender threads or read PostgreSQL, Redis, Kubernetes, OpenSearch, or AWS.
+  A long-running disabled collector waits idle for shutdown; `--once` exits successfully.
+  In Helm, set `configMap.DISABLE_TELEMETRY: "true"`. This also omits fleet collector workloads and RBAC.
+  Compose services read the value from their deployment environment file.
 
 Rotate `ONYX_TELEMETRY_DEPLOYMENT_ID` whenever a source database is reset or replaced.
 This prevents reused numeric connector/attempt IDs from merging with the prior installation.
@@ -55,9 +61,8 @@ In Helm, set `fleetTelemetry.collector.image` to the standalone image and set
 `schemaShardIndex`/`schemaShardCount` for each collector. Empty `collector.schemas`
 enables discovery for Cloud instead of restricting collection to `public`.
 
-The server config controls connector, queue, and resource upload intervals.
-Configuration reads run in the sender worker every minute. Each interval has a 60–3,600 second local bound.
-The defaults are five minutes for connectors/resources and ten minutes for queues.
+Collection schedules are source-owned. The collector never fetches fleet-service settings.
+The intervals are five minutes for connectors/resources and ten minutes for queues.
 
 Enable `ONYX_TELEMETRY_KUBERNETES=true` for namespace-scoped pod health and resource reads.
 The Helm collector Role permits only pod and pod-metrics reads in its namespace.

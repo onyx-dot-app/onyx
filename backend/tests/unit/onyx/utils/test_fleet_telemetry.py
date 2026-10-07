@@ -1163,3 +1163,52 @@ def test_delivery_receipts_cannot_change_collection_settings() -> None:
     assert sender.flush_once(lambda *_args, **_kwargs: response)
     assert sender.settings == before
     assert sender.emit("heartbeat", {"collector_enabled": True})
+
+
+@pytest.mark.parametrize(
+    "service", ["api", "collector", "docfetching", "docprocessing", "slack", "discord"]
+)
+@pytest.mark.parametrize("value", ["true", "TRUE"])
+def test_deployment_kill_switch_prevents_sender_startup(
+    monkeypatch: pytest.MonkeyPatch, service: str, value: str
+) -> None:
+    monkeypatch.setenv("DISABLE_TELEMETRY", value)
+    monkeypatch.setenv("ONYX_TELEMETRY_ENDPOINT", "https://telemetry.onyx.app")
+    monkeypatch.setenv("ONYX_TELEMETRY_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "ONYX_TELEMETRY_CUSTOMER_UUID", "11111111-1111-4111-8111-111111111111"
+    )
+    monkeypatch.setenv("ONYX_TELEMETRY_DEPLOYMENT_ID", "test")
+    monkeypatch.setenv(
+        "ONYX_TELEMETRY_PRIVACY_KEY", "installation-secret-not-central-token"
+    )
+    monkeypatch.setattr(fleet, "_client", None)
+    sender = Mock(
+        side_effect=AssertionError("Disabled telemetry must not create a sender")
+    )
+    monkeypatch.setattr(fleet, "BoundedTelemetry", sender)
+    assert fleet.TelemetryConfig.from_env(service) is None
+    assert fleet.start_telemetry(service) is None
+    assert not fleet.emit_telemetry("heartbeat", {})
+    sender.assert_not_called()
+
+
+@pytest.mark.parametrize("once", [False, True])
+def test_disabled_collector_does_not_start_or_open_sources(
+    monkeypatch: pytest.MonkeyPatch, once: bool
+) -> None:
+    from onyx.utils import fleet_telemetry_collector as source
+
+    monkeypatch.setenv("DISABLE_TELEMETRY", "true")
+    monkeypatch.setattr("sys.argv", ["collector"] + (["--once"] if once else []))
+    blocked = Mock(
+        side_effect=AssertionError("Disabled collector must do no collection")
+    )
+    monkeypatch.setattr(source, "start_telemetry", blocked)
+    monkeypatch.setattr(source, "FleetCollector", blocked)
+    monkeypatch.setattr(source.signal, "signal", Mock())
+    stopped = Mock()
+    monkeypatch.setattr(source.threading, "Event", Mock(return_value=stopped))
+    source.main()
+    blocked.assert_not_called()
+    assert stopped.wait.call_count == (0 if once else 1)

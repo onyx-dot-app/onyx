@@ -705,3 +705,5 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 Fleet telemetry sends events and reads bounded delivery receipts only. It never fetches remote collection settings.
 Collection uses a source-owned schedule: connectors and resources every 300 seconds; queues every 600 seconds.
 Fleet-service labels, classifications, and alert thresholds cannot change deployment behavior.
+
+`DISABLE_TELEMETRY=true` prevents fleet sender startup and all isolated collection. Helm omits the collector when this flag is set.

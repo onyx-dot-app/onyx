@@ -492,6 +492,11 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
     return safe
 
 
+def telemetry_disabled() -> bool:
+    """Deployment-owned kill switch, shared with legacy callhome telemetry."""
+    return os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
+
+
 @dataclass(frozen=True)
 class TelemetryConfig:
     endpoint: str
@@ -508,7 +513,7 @@ class TelemetryConfig:
     @classmethod
     def from_env(cls, service: str) -> "TelemetryConfig | None":
         try:
-            if os.environ.get("DISABLE_TELEMETRY", "").lower() == "true":
+            if telemetry_disabled():
                 return None
             endpoint = os.environ["ONYX_TELEMETRY_ENDPOINT"].rstrip("/")
             parsed = urlsplit(endpoint)
@@ -890,6 +895,8 @@ _client: BoundedTelemetry | None = None
 
 def start_telemetry(service: str = "api") -> BoundedTelemetry | None:
     global _client
+    if telemetry_disabled():
+        return None
     try:
         if (
             _client is not None

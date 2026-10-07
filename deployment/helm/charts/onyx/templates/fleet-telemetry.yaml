@@ -1,5 +1,5 @@
 {{- define "onyx.fleetTelemetryEnv" -}}
-{{- if .Values.fleetTelemetry.enabled }}
+{{- if and .Values.fleetTelemetry.enabled (ne (lower (toString .Values.configMap.DISABLE_TELEMETRY)) "true") }}
 - name: ONYX_TELEMETRY_ENDPOINT
   value: {{ .Values.fleetTelemetry.endpoint | quote }}
 - name: ONYX_TELEMETRY_CUSTOMER_UUID
@@ -18,7 +18,7 @@
       key: ONYX_TELEMETRY_PRIVACY_KEY
 {{- end }}
 {{- end }}
-{{- if and .Values.fleetTelemetry.enabled .Values.fleetTelemetry.collector.enabled }}
+{{- if and .Values.fleetTelemetry.enabled .Values.fleetTelemetry.collector.enabled (ne (lower (toString .Values.configMap.DISABLE_TELEMETRY)) "true") }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -103,6 +103,12 @@ spec:
           resources:
             {{- toYaml .Values.fleetTelemetry.collector.resources | nindent 12 }}
           env:
+            - name: DISABLE_TELEMETRY
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.config.envConfigMapName }}
+                  key: DISABLE_TELEMETRY
+                  optional: true
             {{- include "onyx.fleetTelemetryEnv" . | nindent 12 }}
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
