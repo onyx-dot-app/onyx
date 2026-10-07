@@ -1,14 +1,12 @@
 import hashlib
 import json
 import time
-from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from mcp.server.auth.provider import construct_redirect_uri
 from mcp.shared.auth import InvalidRedirectUriError
-from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from onyx.auth.constants import (
@@ -41,6 +39,11 @@ from onyx.oauth_provider.attempts import (
 )
 from onyx.oauth_provider.config import get_oauth_provider_settings
 from onyx.oauth_provider.models import OAuthProviderGrantInfo, StoredOAuthProviderCode
+from onyx.server.oauth_provider.models import (
+    OAuthConsentDecision,
+    OAuthConsentInfo,
+    OAuthConsentResult,
+)
 from onyx.server.oauth_provider.provider import OnyxOAuthProvider
 from onyx.server.settings.store import load_settings
 from shared_configs.configs import MULTI_TENANT
@@ -48,27 +51,6 @@ from shared_configs.contextvars import UsageCredentialIdentity, get_current_tena
 from shared_configs.enums import UsageCredentialType
 
 router = APIRouter(prefix="/oauth-provider")
-
-
-class OAuthConsentInfo(BaseModel):
-    client_name: str
-    redirect_origin: str
-    account_email: str
-    workspace_name: str
-    scopes: list[str]
-    csrf_token: str = Field(repr=False)
-
-
-class OAuthConsentDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    request_id: str = Field(pattern=rf"^{OAUTH_PROVIDER_SECRET_PATTERN}$")
-    csrf_token: str = Field(pattern=rf"^{OAUTH_PROVIDER_SECRET_PATTERN}$", repr=False)
-    decision: Literal["allow", "deny"]
-
-
-class OAuthConsentResult(BaseModel):
-    redirect_url: str
 
 
 def _session_hash(request: Request, user: User) -> str:
