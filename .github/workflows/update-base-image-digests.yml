@@ -146,6 +146,14 @@ jobs:
             fi
 
             git commit --all -m "chore(deps): update ${family} base image digests"
+
+            # Announce only when the pins the PR carries actually changed. A
+            # re-dispatch that reproduces the same commit is not new work.
+            same_pins=false
+            if git fetch --quiet origin "${branch}" \
+               && git diff --quiet FETCH_HEAD HEAD -- $(git diff --name-only main HEAD); then
+              same_pins=true
+            fi
             git push --force origin "${branch}"
 
             {
@@ -174,7 +182,7 @@ jobs:
                 --body-file "${RUNNER_TEMP}/pr-body-${family}.md"
             fi
             pr_url="$(gh pr view "${branch}" --json url --jq .url)" || pr_url=""
-            if [ -n "${pr_url}" ]; then
+            if [ -n "${pr_url}" ] && [ "${same_pins}" != "true" ]; then
               gh pr edit "${pr_url}" --add-reviewer rohoswagger \
                 || echo "::warning::Could not request review on ${pr_url}"
               if [[ " ${SKIP_ANNOUNCE_FAMILIES} " != *" ${family} "* ]]; then
