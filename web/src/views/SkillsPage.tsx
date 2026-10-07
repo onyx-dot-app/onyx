@@ -25,7 +25,7 @@ import {
   SvgPlus,
   SvgUploadCloud,
 } from "@opal/icons";
-import { SvgGithub } from "@opal/logos";
+import { SvgGitHub } from "@opal/logos";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -325,7 +325,7 @@ export default function SkillsPage() {
                 {
                   kind: "action",
                   id: "github",
-                  icon: SvgGithub,
+                  icon: SvgGitHub,
                   title: t("page.createMenu.github.title"),
                   description: t("page.createMenu.github.description"),
                   onSelect: () => setGitHubImportOpen(true),

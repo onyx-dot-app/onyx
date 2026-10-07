@@ -245,6 +245,13 @@ aggregate token count of eligible files fits under
 `(llm_max_context_window - reserved_token_count) * 0.6`
 ([[context-assembly]] §4.3 owns this ceiling and the reasoning behind 60%).
 
+Before parallel content reads, `db/user_file.py:capture_user_file_metadata`
+copies authorized file fields into immutable `UserFileMetadata` values.
+`load_in_memory_chat_files` passes these values to workers, without ORM records
+or the caller's database session. `FileReaderTool` closes its metadata session
+before `load_user_file_content` reads storage. Chat preparation retains its
+existing outer session.
+
 **Path A: inlined as text.** Below the ceiling, `extract_context_files` calls
 `file_store/utils.py:load_in_memory_chat_files` to pull the plaintext (or
 original bytes for non-text types) into memory, and returns `file_texts` that
@@ -290,6 +297,9 @@ chat inside a project is scoped to that project's files
 search team knowledge), and a persona with attached user files is scoped to
 those files via `persona_id_filter`. See `[[internal-search]]` for the full
 filter-composition rules.
+
+Lazy file descriptors share one byte loader and cache across shallow and deep copies.
+Concurrent first reads load the bytes once. Serialization excludes this shared resource.
 
 ### 4.5 Token counting
 

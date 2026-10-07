@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "OneDrive 커넥터 구성",
         "indexingScope": {
-          "label": "Onyx가 인덱싱할 OneDrive 파일의 소유자를 선택하세요",
+          "label": "인덱싱할 OneDrive 파일",
           "general": {
             "label": "일반",
             "description": "Microsoft 애플리케이션이 액세스할 수 있는 모든 적격 사용자를 인덱싱합니다."
@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "제외 경로",
-          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: '*.tmp' 또는 'Archive/*')."
+          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: `*.tmp` 또는 `Archive/*`)."
         },
         "organizationLinks": {
           "label": "조직 링크를 공개로 처리",
@@ -2653,9 +2653,6 @@
         "title": "자격 증명을 불러오지 못했습니다."
       },
       "field": {
-        "optional": {
-          "label": "(선택 사항)"
-        },
         "optionalSuffix": {
           "label": "선택 사항"
         }
@@ -2888,22 +2885,13 @@
           "title": "제출 중 오류가 발생했습니다."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "구성"
-        }
+      "content": {
+        "title": "커넥터 콘텐츠",
+        "description": "이 커넥터에서 인덱싱할 콘텐츠를 선택하세요."
       },
       "selectInput": {
         "emptyOption": {
           "label": "옵션 선택"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "새로 추가"
-        },
-        "removeButton": {
-          "tooltip": "제거"
         }
       },
       "tabs": {
@@ -2915,8 +2903,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "사이트 URL을 붙여 넣으세요. 해당 위치에서 {connectorName} REST API에 액세스할 수 있어야 합니다."
+      },
       "boundFields": {
-        "advancedOptions": "고급 옵션",
         "errors": {
           "missing": "값을 입력하세요.",
           "invalid": "이 값은 올바르지 않습니다: {detail}"
@@ -5070,6 +5060,10 @@
         "title": "캡션 생성 LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "새 문서와 업데이트된 문서에 대한 컨텍스트 생성을 지금 중지하거나, 모든 문서를 다시 구축하여 이미 생성된 컨텍스트도 제거하세요.",
+          "title": "컨텍스트 검색을 끄는 방식을 선택하세요"
+        },
         "contextualModelMissing": {
           "description": "컨텍스트 검색이 활성화되어 있지만 선택된 모델이 없습니다. 재인덱싱 전에 아래에서 컨텍스트 검색 LLM을 선택하세요. 모델이 없으면 재인덱싱을 실행할 수 없습니다.",
           "title": "컨텍스트 검색 LLM 선택"
@@ -5186,6 +5180,10 @@
       "forwardOnlyModal": {
         "description": "기존 문서는 이전 모델이 생성한 컨텍스트를 그대로 유지합니다. 새 모델은 문서가 추가되거나 업데이트될 때만 적용됩니다. 문서마다 컨텍스트 보강 결과가 다를 수 있습니다.",
         "title": "컨텍스트 검색 LLM을 이후 문서에만 적용"
+      },
+      "disableForwardModal": {
+        "description": "지금부터 추가되거나 업데이트되는 문서에는 컨텍스트 검색이 적용되지 않습니다. 기존 문서는 업데이트되거나 다시 인덱싱할 때까지 이미 생성된 컨텍스트를 유지합니다.",
+        "title": "이후 문서부터 컨텍스트 검색 끄기"
       },
       "header": {
         "description": "문서를 인덱싱하고 embedding하여 검색과 조회에 사용할 방식을 설정합니다."
@@ -5405,6 +5403,8 @@
         "contextualModelRequired": "재인덱싱 전에 컨텍스트 검색 LLM을 선택하세요.",
         "contextualModelUpdateFailed": "컨텍스트 검색 LLM 업데이트에 실패했습니다",
         "contextualModelUpdated": "컨텍스트 검색 LLM을 업데이트했습니다",
+        "contextualRetrievalDisableFailed": "컨텍스트 검색을 끄지 못했습니다",
+        "contextualRetrievalDisabled": "컨텍스트 검색을 껐습니다",
         "modelNotFound": "선택한 모델을 찾을 수 없습니다",
         "providerResolveFailed": "제공업체를 확인할 수 없습니다",
         "reindexCanceled": "재인덱싱을 취소했습니다",
@@ -11338,6 +11338,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {파일 선택} other {파일 선택}}"
+      },
+      "prompt": "{multiple, select, true {또는 파일을 여기로 끌어다 놓으세요.} other {또는 파일을 여기로 끌어다 놓으세요.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "새로 추가"
+      },
+      "removeButton": {
+        "tooltip": "제거"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "사이드바 열기"

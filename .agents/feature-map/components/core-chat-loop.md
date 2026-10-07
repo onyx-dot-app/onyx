@@ -168,6 +168,9 @@ stream buffer and reader tee in arrival order. `_read_stream` is the generator t
 yields them to the caller. A failing worker yields a `StreamingError` for that model only;
 the others keep running.
 
+See [[file-store-and-user-files]] §4.4 for project/persona file-loading
+session boundaries.
+
 ### 4.4 Context assembly per cycle
 
 `construct_message_history` (`llm_loop.py`) produces this order:
