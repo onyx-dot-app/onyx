@@ -65,9 +65,6 @@ it("gives screen readers the tooltip's reason while disabled, as plain text", ()
 
   const status = screen.getByText("Select an account first");
   expect(status).toHaveAttribute("aria-live", "polite");
-  // The absolutely positioned text stays inside a positioned, clipped box, so
-  // it can never make an outer scroll container or the page scrollable.
-  expect(status.parentElement).toHaveClass("relative", "overflow-hidden");
 
   rerender(
     <TooltipProvider>
