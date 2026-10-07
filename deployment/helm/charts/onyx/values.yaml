@@ -1909,11 +1909,10 @@ sandboxProxy:
   # Deny sandbox requests to these VPC, pod, Service, and node networks.
   # Required for IPv6 or global clients, including globally routable internal ranges.
   internalCIDRs: []
-  # Allow IPv6 (::/0 minus link-local/IMDS) egress from the proxy. OFF by default: the AWS
-  # VPC CNI network-policy agent intermittently fails to program IPv6 ipBlocks into the
-  # egress eBPF map (EINVAL), leaving it empty and fail-closed (proxy pods crash-loop), and
-  # single-stack IPv4 clusters have no IPv6 egress to gate. Enable on IPv6-only or dual-stack
-  # clusters, where an Egress policy without an IPv6 allow silently drops all IPv6 egress.
+  # Allow public IPv6 egress from the proxy; requires internalCIDRs.
+  # Enable for IPv6-only clusters. This does not select the sandbox address family.
+  # Listeners and Services must use the primary pod IP family; secondary IPv6
+  # sandbox addresses on IPv4-primary dual-stack clusters are not supported.
   egressAllowIPv6: false
   replicaCount: 2
   terminationGracePeriodSeconds: 200
