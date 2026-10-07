@@ -446,9 +446,7 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    # email.utils.getaddresses honors RFC 5322 quoting, so display names that
-    # contain commas (e.g. ``"Doe, John" <john@example.com>``) are parsed as a
-    # single address instead of being split on the comma.
+    # getaddresses honors RFC 5322 quoting, so a comma in a quoted name is kept.
     return [(name, addr) for name, addr in getaddresses([raw_header]) if addr]
 
 
