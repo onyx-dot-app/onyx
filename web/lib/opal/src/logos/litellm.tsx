@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgLitellm = ({ size, ...props }: IconProps) => (
+const SvgLiteLLM = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -29,4 +29,4 @@ const SvgLitellm = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgLitellm;
+export default SvgLiteLLM;

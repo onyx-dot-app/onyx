@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgIbm = ({ size, ...props }: IconProps) => (
+const SvgIBM = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -42,4 +42,4 @@ const SvgIbm = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgIbm;
+export default SvgIBM;

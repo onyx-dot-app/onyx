@@ -3,7 +3,7 @@ import {
   SvgExa,
   SvgFirecrawl,
   SvgGoogle,
-  SvgSearxng,
+  SvgSearXNG,
   SvgSerper,
   SvgTavily,
 } from "@opal/logos";
@@ -55,7 +55,7 @@ export const SEARCH_PROVIDER_DETAILS: Record<
   searxng: {
     label: "SearXNG",
     subtitle: "SearXNG",
-    logo: SvgSearxng,
+    logo: SvgSearXNG,
   },
   tavily: {
     label: "Tavily",

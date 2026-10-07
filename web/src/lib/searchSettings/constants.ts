@@ -3,10 +3,10 @@ import {
   SvgAzure,
   SvgCohere,
   SvgGoogle,
-  SvgLitellm,
+  SvgLiteLLM,
   SvgMicrosoft,
   SvgNomic,
-  SvgOpenai,
+  SvgOpenAI,
   SvgVoyage,
 } from "@opal/logos";
 import {
@@ -57,7 +57,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
   {
     providerName: EmbeddingProviderName.OPENAI,
     displayName: "OpenAI",
-    icon: SvgOpenai,
+    icon: SvgOpenAI,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     apiLink: "https://platform.openai.com/api-keys",
     costslink: "https://openai.com/pricing",
@@ -152,7 +152,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
   {
     providerName: EmbeddingProviderName.LITELLM,
     displayName: "LiteLLM",
-    icon: SvgLitellm,
+    icon: SvgLiteLLM,
     apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
     embeddingModels: [],
   },
