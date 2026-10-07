@@ -220,6 +220,22 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
   );
   const configUnlocked = gate?.status === "unlocked";
   const gateMessage = useBindingGateMessage(gate?.reason ?? null);
+  // The rest of the form also waits for the capability checks, which the
+  // Authentication Account section reports. Sources without a credential
+  // step have no checks.
+  const [checksPassed, setChecksPassed] = useState<boolean>(false);
+  const onChecksPassedChange = useCallback(
+    (passed: boolean) => setChecksPassed(passed),
+    []
+  );
+  const checksT = useTranslations("admin.connectorChecks");
+  const formUnlocked: boolean =
+    configUnlocked && (noCredentials || checksPassed);
+  const formLockReason: string | undefined = !configUnlocked
+    ? (gateMessage ?? undefined)
+    : formUnlocked
+      ? undefined
+      : checksT("lockReason");
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
@@ -550,7 +566,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                     credentialsLoading ||
                     credentialsFailed ||
                     !formikProps.isValid ||
-                    !configUnlocked ||
+                    !formUnlocked ||
                     busy
                   }
                   icon={busy ? IconLoader : undefined}
@@ -641,6 +657,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                         checkedCredential={canCreate ? formCredential : null}
                         checksLocked={!configUnlocked}
                         checksLockedReason={gateMessage ?? undefined}
+                        onChecksPassedChange={onChecksPassedChange}
                       />
                     )}
 
@@ -651,10 +668,11 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                     {/* The wizard could not reach these sections without a
                       valid credential; on one page they stay locked, under one
                       Disabled that blocks pointer and keyboard, until the
-                      credential and the bound fields are valid. */}
+                      credential and the bound fields are valid and the
+                      capability checks pass. */}
                     <Disabled
-                      disabled={!configUnlocked}
-                      tooltip={gateMessage ?? undefined}
+                      disabled={!formUnlocked}
+                      tooltip={formLockReason}
                       data-testid="connector-form"
                     >
                       <Section gap={6} alignItems="stretch" width="full">
@@ -663,14 +681,14 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                           values={formikProps.values}
                           connector={connector}
                           currentCredential={formCredential}
-                          disabled={!configUnlocked}
+                          disabled={!formUnlocked}
                         />
 
                         <Divider paddingParallel={0} paddingPerpendicular={0} />
                         <ConnectorSettingsSection
                           connector={connector}
                           currentCredential={formCredential}
-                          disabled={!configUnlocked}
+                          disabled={!formUnlocked}
                         />
 
                         {connector !== "file" && (
@@ -681,7 +699,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                             />
                             <ScheduleSection
                               defaultPruneFreqHours={defaultPruneFreqHours}
-                              disabled={!configUnlocked}
+                              disabled={!formUnlocked}
                             />
                           </>
                         )}

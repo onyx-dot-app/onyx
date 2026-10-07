@@ -8845,6 +8845,7 @@
       }
     },
     "connectorChecks": {
+      "lockReason": "请先运行上方的连接器检查，并解决所有失败项，然后继续。",
       "prompt": {
         "title": "测试连接",
         "description": "{appName} 将在继续之前运行检查，以验证所需的权限范围。",

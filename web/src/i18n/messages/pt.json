@@ -8845,6 +8845,7 @@
       }
     },
     "connectorChecks": {
+      "lockReason": "Execute as verificações do conector acima e resolva quaisquer falhas para continuar.",
       "prompt": {
         "title": "Testar conexão",
         "description": "{appName} executará verificações para validar os escopos necessários antes de continuar.",

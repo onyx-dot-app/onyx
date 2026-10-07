@@ -8845,6 +8845,7 @@
       }
     },
     "connectorChecks": {
+      "lockReason": "Lancez les vérifications du connecteur ci-dessus et corrigez les échecs pour continuer.",
       "prompt": {
         "title": "Tester la connexion",
         "description": "{appName} effectuera des vérifications pour valider les autorisations requises avant de continuer.",

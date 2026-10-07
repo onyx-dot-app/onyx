@@ -8845,6 +8845,7 @@
       }
     },
     "connectorChecks": {
+      "lockReason": "Run the connector checks above, and resolve any failures, to continue.",
       "prompt": {
         "title": "Test Connection",
         "description": "{appName} will run checks to validate required scopes before proceeding.",

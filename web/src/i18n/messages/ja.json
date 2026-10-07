@@ -8845,6 +8845,7 @@
       }
     },
     "connectorChecks": {
+      "lockReason": "続行するには、上のコネクタのチェックを実行し、失敗を解消してください。",
       "prompt": {
         "title": "接続をテスト",
         "description": "{appName} は続行する前に、必要なスコープを確認するチェックを実行します。",

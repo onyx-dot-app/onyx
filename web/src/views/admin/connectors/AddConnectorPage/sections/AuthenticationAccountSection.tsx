@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
 import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
@@ -21,6 +21,7 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import { useConnectorConfiguration } from "@/lib/connectors/connectors";
 import { toWireAccess } from "@/lib/connectors/accessType";
+import { splitCredentialBoundFields } from "@/lib/connectors/utils";
 import {
   useDraftCheckRun,
   type UseDraftCheckRunResult,
@@ -79,12 +80,15 @@ interface AuthenticationAccountSectionProps {
   checksLocked: boolean;
   /** Why the prompt is locked, for its tooltip. */
   checksLockedReason?: string;
+  /** Reports whether the checks pass, which unlocks the rest of the form. */
+  onChecksPassedChange: (passed: boolean) => void;
 }
 
 /**
  * The credential step of the connector setup page: pick a saved credential,
- * create one, or authorize the source through OAuth. Once a credential is
- * picked, its capability checks run against the unsaved form below it.
+ * create one, or authorize the source through OAuth. Once the credential
+ * section is valid, the user can run the capability checks against the
+ * unsaved form; the rest of the form unlocks when they pass.
  */
 export default function AuthenticationAccountSection({
   connector,
@@ -94,6 +98,7 @@ export default function AuthenticationAccountSection({
   checkedCredential,
   checksLocked,
   checksLockedReason,
+  onChecksPassedChange,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
   const settings = useSettings();
@@ -104,6 +109,16 @@ export default function AuthenticationAccountSection({
     () => connectorFormState(configuration, values),
     [configuration, values]
   );
+  // The credential and its bound fields. A check result only counts for the
+  // configuration it ran with, so a change here asks for a rerun.
+  const bindingKey: string = useMemo(() => {
+    const bound = splitCredentialBoundFields(connector, configuration);
+    const boundValues: unknown[] = [...bound.values, ...bound.advancedValues]
+      .map((field) => field.name)
+      .sort()
+      .map((name) => values[name]);
+    return JSON.stringify([checkedCredential?.id ?? null, boundValues]);
+  }, [connector, configuration, values, checkedCredential]);
   const checkRun: UseDraftCheckRunResult = useDraftCheckRun({
     source: connector,
     credentialId: checkedCredential?.id ?? null,
@@ -116,8 +131,12 @@ export default function AuthenticationAccountSection({
         : [],
     }).access_type,
     formState,
+    bindingKey,
   });
   const checks: DraftCheckState[] = checkRun.snapshot?.checks ?? [];
+  useEffect(() => {
+    onChecksPassedChange(checkRun.passed);
+  }, [checkRun.passed, onChecksPassedChange]);
   const {
     displayName,
     credentials,

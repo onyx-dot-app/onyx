@@ -8845,6 +8845,7 @@
       }
     },
     "connectorChecks": {
+      "lockReason": "계속하려면 위의 커넥터 검사를 실행하고 실패한 항목을 해결하세요.",
       "prompt": {
         "title": "연결 테스트",
         "description": "{appName}이(가) 계속하기 전에 필요한 범위를 확인하는 검사를 실행합니다.",
