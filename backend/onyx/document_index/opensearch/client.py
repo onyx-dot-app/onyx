@@ -338,7 +338,7 @@ class OpenSearchClient(AbstractContextManager):
         )
 
     def get_node_resource_stats(self) -> NodesResourceStats:
-        response = self._client.nodes.stats(
+        response: dict[str, Any] = self._client.nodes.stats(
             node_id="data:true",
             metric="jvm,fs",
             params={
@@ -350,7 +350,7 @@ class OpenSearchClient(AbstractContextManager):
         return NodesResourceStats.model_validate(response)
 
     def get_vector_resource_stats(self) -> VectorResourceStats:
-        response = self._client.transport.perform_request(
+        response: dict[str, Any] = self._client.transport.perform_request(
             "GET",
             "/_plugins/_knn/stats/circuit_breaker_triggered,graph_memory_usage_percentage",
             params={

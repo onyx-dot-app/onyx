@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import {
   act,
+  fireEvent,
   render,
   screen,
   setupUser,
@@ -17,7 +18,7 @@ import type {
 } from "@/lib/opensearch-health/types";
 
 let mockAdminId: string | null = "admin-one";
-let mockPathname = "/app";
+let mockPathname: string = "/app";
 jest.mock("next/navigation", () => ({
   usePathname: () => mockPathname,
 }));
@@ -78,11 +79,13 @@ test("the banner retries failed cache reads and clears after recovery", async ()
     .spyOn(global, "fetch")
     .mockResolvedValueOnce(jsonResponse(unhealthy))
     .mockResolvedValueOnce(new Response("{}", { status: 503 }))
-    .mockResolvedValueOnce(jsonResponse({ ...unhealthy, issues: [] }));
+    .mockResolvedValueOnce(jsonResponse({ ...unhealthy, issues: [] }))
+    .mockResolvedValueOnce(jsonResponse(unhealthy));
   render(<OpenSearchResourceBanner />, {
     swrConfig: { shouldRetryOnError: true },
   });
   await screen.findByRole("status");
+  fireEvent.click(screen.getByRole("button", { name: "View details" }));
   await act(async () => {
     await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
   });
@@ -93,7 +96,13 @@ test("the banner retries failed cache reads and clears after recovery", async ()
     await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
   });
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
-  expect(fetchSpy).toHaveBeenCalledTimes(3);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
+  });
+  expect(screen.getByRole("status")).toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(fetchSpy).toHaveBeenCalledTimes(4);
 });
 
 test("dismisses the entry popup while keeping the admin banner and avoids repeat requests", async () => {
@@ -117,7 +126,9 @@ test("dismisses the entry popup while keeping the admin banner and avoids repeat
   await user.click(within(popup).getByRole("button", { name: "Dismiss" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(
-    within(screen.getByRole("status")).getByText(/disk usage/)
+    within(screen.getByRole("status")).getByText(
+      "OpenSearch needs more resources"
+    )
   ).toBeInTheDocument();
   rerender(<Alerts />);
   expect(
@@ -136,13 +147,20 @@ test("honors the server daily limit and keeps a stale warning visible", async ()
       )
     );
   render(<Alerts />);
-  expect(
-    await screen.findByText(/recovery has not been confirmed/)
-  ).toBeInTheDocument();
+  const user = setupUser();
+  const banner = await screen.findByRole("status");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(within(banner).queryByText(/disk usage/)).not.toBeInTheDocument();
+  await user.click(
+    within(banner).getByRole("button", { name: "View details" })
+  );
+  const dialog = await screen.findByRole("dialog");
   expect(
-    within(screen.getByRole("status")).queryByRole("button")
-  ).not.toBeInTheDocument();
+    within(dialog).getByText(/recovery has not been confirmed/)
+  ).toBeInTheDocument();
+  await user.click(within(dialog).getByRole("button", { name: "Dismiss" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toBeInTheDocument();
 });
 
 test("does not request health or show warnings for non-admins", () => {

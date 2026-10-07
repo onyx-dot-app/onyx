@@ -14,16 +14,17 @@ from onyx.document_index.opensearch.models import (
     VectorResourceStats,
 )
 from onyx.redis.redis_pool import get_shared_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-RESOURCE_STALE_SECONDS = 3 * RESOURCE_CHECK_INTERVAL_SECONDS
-DISK_USAGE_THRESHOLD_PERCENT = 85
-HEAP_USAGE_THRESHOLD_PERCENT = 85
-VECTOR_USAGE_THRESHOLD_PERCENT = 90
-RESOURCE_SNAPSHOT_KEY = "opensearch_resource_snapshot"
-RESOURCE_CHECK_LEASE_KEY = "opensearch_resource_check_lease"
+RESOURCE_STALE_SECONDS: int = 3 * RESOURCE_CHECK_INTERVAL_SECONDS
+DISK_USAGE_THRESHOLD_PERCENT: int = 85
+HEAP_USAGE_THRESHOLD_PERCENT: int = 85
+VECTOR_USAGE_THRESHOLD_PERCENT: int = 90
+RESOURCE_SNAPSHOT_KEY: str = "opensearch_resource_snapshot"
+RESOURCE_CHECK_LEASE_KEY: str = "opensearch_resource_check_lease"
 
 
 def evaluate_resource_health(
@@ -35,12 +36,12 @@ def evaluate_resource_health(
     if nodes.failed or vectors.failed:
         raise ValueError("OpenSearch resource statistics are incomplete")
 
-    heap_high_nodes = {
+    heap_high_nodes: set[str] = {
         node_id
         for node_id, node in nodes.nodes.items()
         if node.heap_used_percent >= HEAP_USAGE_THRESHOLD_PERCENT
     }
-    vector_high_nodes = {
+    vector_high_nodes: set[str] = {
         node_id
         for node_id, node in vectors.nodes.items()
         if node.graph_memory_usage_percentage >= VECTOR_USAGE_THRESHOLD_PERCENT
@@ -55,7 +56,7 @@ def evaluate_resource_health(
         issues.append(ResourceIssue.DISK)
 
     # Require repeated pressure on the same node, separated by a scheduled check.
-    previous_is_recent = previous is not None and (
+    previous_is_recent: bool = previous is not None and (
         RESOURCE_CHECK_INTERVAL_SECONDS / 2
         <= (now - previous.checked_at).total_seconds()
         <= RESOURCE_STALE_SECONDS
@@ -83,10 +84,10 @@ def evaluate_resource_health(
 def get_resource_health() -> ResourceHealth:
     if DISABLE_VECTOR_DB:
         return ResourceHealth()
-    raw = get_shared_redis_client().get(RESOURCE_SNAPSHOT_KEY)
+    raw: bytes | str | None = get_shared_redis_client().get(RESOURCE_SNAPSHOT_KEY)
     if raw is None:
         return ResourceHealth()
-    snapshot = ResourceSnapshot.model_validate_json(raw)
+    snapshot: ResourceSnapshot = ResourceSnapshot.model_validate_json(raw)
     return ResourceHealth(
         checked_at=snapshot.checked_at,
         issues=snapshot.issues,
@@ -99,20 +100,22 @@ def refresh_resource_health() -> None:
     if DISABLE_VECTOR_DB:
         return
     try:
-        redis = get_shared_redis_client()
+        redis: TenantRedisClient = get_shared_redis_client()
         # Retain the lease on failure too, so duplicate tasks cannot hammer an unhealthy cluster.
         if not redis.set(
             RESOURCE_CHECK_LEASE_KEY, "1", nx=True, ex=RESOURCE_CHECK_INTERVAL_SECONDS
         ):
             return
-        raw = redis.get(RESOURCE_SNAPSHOT_KEY)
-        previous = ResourceSnapshot.model_validate_json(raw) if raw else None
+        raw: bytes | str | None = redis.get(RESOURCE_SNAPSHOT_KEY)
+        previous: ResourceSnapshot | None = (
+            ResourceSnapshot.model_validate_json(raw) if raw else None
+        )
         with OpenSearchClient(
             timeout=RESOURCE_CHECK_TIMEOUT_SECONDS, max_retries=0
         ) as client:
-            nodes = client.get_node_resource_stats()
-            vectors = client.get_vector_resource_stats()
-        snapshot = evaluate_resource_health(
+            nodes: NodesResourceStats = client.get_node_resource_stats()
+            vectors: VectorResourceStats = client.get_vector_resource_stats()
+        snapshot: ResourceSnapshot = evaluate_resource_health(
             nodes, vectors, previous, datetime.now(timezone.utc)
         )
         # Keep the last observation on failure; the API marks old observations stale.

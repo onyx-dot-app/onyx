@@ -14672,6 +14672,7 @@
     "dismiss": "Dismiss",
     "diskTitle": "Disk space",
     "jvmMemoryTitle": "JVM memory",
-    "vectorMemoryTitle": "Vector memory"
+    "vectorMemoryTitle": "Vector memory",
+    "viewDetails": "View details"
   }
 }

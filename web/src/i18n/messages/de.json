@@ -14672,6 +14672,7 @@
     "dismiss": "Schließen",
     "diskTitle": "Festplattenspeicher",
     "jvmMemoryTitle": "JVM-Arbeitsspeicher",
-    "vectorMemoryTitle": "Vektorspeicher"
+    "vectorMemoryTitle": "Vektorspeicher",
+    "viewDetails": "Details anzeigen"
   }
 }

@@ -8,7 +8,7 @@ from onyx.document_index.opensearch.resource_health import get_resource_health
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.opensearch_health.models import ResourcePopupResponse
 
-router = APIRouter(prefix="/manage/admin/opensearch-health")
+router: APIRouter = APIRouter(prefix="/manage/admin/opensearch-health")
 POPUP_INTERVAL_SECONDS = 24 * 60 * 60
 POPUP_KEY_PREFIX = "opensearch_resource_popup"
 
@@ -24,8 +24,8 @@ def read_resource_health(
 def claim_resource_popup(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> ResourcePopupResponse:
-    health = get_resource_health()
-    show_popup = bool(
+    health: ResourceHealth = get_resource_health()
+    show_popup: bool = bool(
         health.issues
         and not health.stale
         and get_redis_client().set(

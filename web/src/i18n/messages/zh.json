@@ -14672,6 +14672,7 @@
     "dismiss": "关闭",
     "diskTitle": "磁盘空间",
     "jvmMemoryTitle": "JVM 内存",
-    "vectorMemoryTitle": "向量内存"
+    "vectorMemoryTitle": "向量内存",
+    "viewDetails": "查看详情"
   }
 }

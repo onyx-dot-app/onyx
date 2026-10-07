@@ -14672,6 +14672,7 @@
     "dismiss": "閉じる",
     "diskTitle": "ディスク容量",
     "jvmMemoryTitle": "JVMメモリ",
-    "vectorMemoryTitle": "ベクトルメモリ"
+    "vectorMemoryTitle": "ベクトルメモリ",
+    "viewDetails": "詳細を表示"
   }
 }

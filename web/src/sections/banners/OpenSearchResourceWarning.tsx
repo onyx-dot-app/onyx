@@ -1,29 +1,34 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactElement, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, MessageCard, Modal, Text } from "@opal/components";
 import { SvgAlertTriangle } from "@opal/icons";
 import { markdown } from "@opal/utils";
+import { useOpenSearchResourceHealth } from "@/lib/opensearch-health/hooks";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
-  RESOURCE_HEALTH_URL,
-  useOpenSearchResourceHealth,
-} from "@/lib/opensearch-health/hooks";
-import {
+  ResourceIssue,
   ResourceHealth,
   ResourcePopupResponse,
 } from "@/lib/opensearch-health/types";
 import { useUser } from "@/providers/UserProvider";
 import { isAuthPath } from "@/lib/auth/paths";
 
-const ISSUE_MESSAGE_KEYS = {
+const ISSUE_MESSAGE_KEYS: Record<
+  ResourceIssue,
+  {
+    title: "diskTitle" | "jvmMemoryTitle" | "vectorMemoryTitle";
+    description: "disk" | "jvmMemory" | "vectorMemory";
+  }
+> = {
   disk: { title: "diskTitle", description: "disk" },
   jvm_memory: { title: "jvmMemoryTitle", description: "jvmMemory" },
   vector_memory: { title: "vectorMemoryTitle", description: "vectorMemory" },
 } as const;
 
-function ResourceDetails({ health }: { health: ResourceHealth }) {
+function ResourceDetails({ health }: { health: ResourceHealth }): ReactElement {
   const t = useTranslations("opensearchHealth");
   return (
     <div className="flex flex-col gap-4">
@@ -59,10 +64,15 @@ function ResourceDetails({ health }: { health: ResourceHealth }) {
   );
 }
 
-export function OpenSearchResourceBanner() {
+export function OpenSearchResourceBanner(): ReactElement | null {
   const t = useTranslations("opensearchHealth");
-  const { isAdmin } = useUser();
+  const { user, isAdmin } = useUser();
   const { data, error } = useOpenSearchResourceHealth();
+  const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
+  const hasIssues: boolean = !!data?.issues.length;
+  useEffect(() => {
+    setDetailsOpen(false);
+  }, [user?.id, hasIssues]);
   if (!isAdmin || !data?.issues.length) return null;
 
   return (
@@ -70,29 +80,44 @@ export function OpenSearchResourceBanner() {
       <MessageCard
         variant="warning"
         title={t("title")}
-        bottomChildren={
-          <ResourceDetails health={{ ...data, stale: data.stale || !!error }} />
+        rightChildren={
+          <Button
+            prominence="secondary"
+            size="sm"
+            onClick={() => setDetailsOpen(true)}
+          >
+            {t("viewDetails")}
+          </Button>
         }
       />
+      {detailsOpen && (
+        <ResourceDialog
+          health={{ ...data, stale: data.stale || !!error }}
+          onClose={() => setDetailsOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
 async function claimPopup(): Promise<ResourcePopupResponse> {
-  const response = await fetch(`${RESOURCE_HEALTH_URL}/popup`, {
-    method: "POST",
-  });
+  const response: Response = await fetch(
+    `${SWR_KEYS.opensearchResourceHealth}/popup`,
+    {
+      method: "POST",
+    }
+  );
   if (!response.ok)
     throw new Error("Unable to check OpenSearch resource warning");
   return response.json();
 }
 
-export function OpenSearchResourcePopup() {
-  const t = useTranslations("opensearchHealth");
-  const pathname = usePathname();
+export function OpenSearchResourcePopup(): ReactElement | null {
+  const pathname: string = usePathname();
   const { user, isAdmin } = useUser();
   // Login refreshes the user before redirecting; claim only after entering the app.
-  const userId = isAdmin && !isAuthPath(pathname) ? user?.id : undefined;
+  const userId: string | undefined =
+    isAdmin && !isAuthPath(pathname) ? user?.id : undefined;
   const [warning, setWarning] = useState<{
     userId: string;
     health: ResourceHealth;
@@ -112,7 +137,7 @@ export function OpenSearchResourcePopup() {
     if (request.current?.userId !== userId) {
       request.current = { userId, result: claimPopup() };
     }
-    let active = true;
+    let active: boolean = true;
     request.current.result
       .then((response) => {
         if (active && response.show_popup) {
@@ -128,20 +153,32 @@ export function OpenSearchResourcePopup() {
   }, [userId]);
 
   if (!warning || warning.userId !== userId) return null;
-  const close = () => setWarning(null);
   return (
-    <Modal open onOpenChange={close}>
+    <ResourceDialog health={warning.health} onClose={() => setWarning(null)} />
+  );
+}
+
+function ResourceDialog({
+  health,
+  onClose,
+}: {
+  health: ResourceHealth;
+  onClose: () => void;
+}): ReactElement {
+  const t = useTranslations("opensearchHealth");
+  return (
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgAlertTriangle}
           title={t("title")}
-          onClose={close}
+          onClose={onClose}
         />
         <Modal.Body>
-          <ResourceDetails health={warning.health} />
+          <ResourceDetails health={health} />
         </Modal.Body>
         <Modal.Footer>
-          <Button onClick={close}>{t("dismiss")}</Button>
+          <Button onClick={onClose}>{t("dismiss")}</Button>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

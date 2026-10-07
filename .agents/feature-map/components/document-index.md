@@ -32,7 +32,7 @@ and correct: which documents a query can see, how well a query matches a chunk, 
 whether the index is healthy.
 
 Full admins see a resource-warning popup when entering Onyx, at most once per 24 hours.
-A persistent admin banner lists disk, JVM heap, and native vector-cache pressure.
+A compact persistent admin banner opens details for disk, JVM heap, and native vector-cache pressure.
 Both direct admins to their system administrator or support@onyx.app.
 `backend/onyx/document_index/opensearch/resource_health.py` checks the cluster every five minutes
 through the monitoring worker. The API only reads cached results. Stale warnings remain

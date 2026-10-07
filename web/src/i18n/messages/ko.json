@@ -14672,6 +14672,7 @@
     "dismiss": "닫기",
     "diskTitle": "디스크 공간",
     "jvmMemoryTitle": "JVM 메모리",
-    "vectorMemoryTitle": "벡터 메모리"
+    "vectorMemoryTitle": "벡터 메모리",
+    "viewDetails": "세부 정보 보기"
   }
 }

@@ -14672,6 +14672,7 @@
     "dismiss": "إغلاق",
     "diskTitle": "مساحة القرص",
     "jvmMemoryTitle": "ذاكرة JVM",
-    "vectorMemoryTitle": "ذاكرة المتجهات"
+    "vectorMemoryTitle": "ذاكرة المتجهات",
+    "viewDetails": "عرض التفاصيل"
   }
 }

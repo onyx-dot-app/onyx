@@ -479,7 +479,7 @@ if not MULTI_TENANT:
 
 if not DISABLE_VECTOR_DB:
     # Cluster-wide in cloud; never fan this probe out to each tenant.
-    _resource_health_task = {
+    _resource_health_task: dict[str, Any] = {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-opensearch-resources"
         if MULTI_TENANT
         else "monitor-opensearch-resources",

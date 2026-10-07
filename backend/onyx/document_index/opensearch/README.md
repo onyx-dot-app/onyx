@@ -22,7 +22,8 @@ Lucene and memory-mapped vectors are not fully represented by this statistic.
 
 Each full admin can receive one popup per 24 hours when entering Onyx. An atomic,
 tenant-scoped Redis key enforces this across tabs and browsers. Dismissing the popup
-does not dismiss the banner pinned above admin-page content. The banner refreshes
+does not dismiss the compact banner pinned above admin-page content. Its details button
+opens the numbered issues in a scrollable modal, preserving space on short screens. The banner refreshes
 from the cache every five minutes and clears after a successful recovery check.
 Observations older than fifteen minutes retain their warnings with an unverified
 recovery message; they do not trigger new popups. Redis eviction or reset also resets

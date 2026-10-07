@@ -1,15 +1,18 @@
-import useSWR from "swr";
+import useSWR, { type SWRResponse } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher, isAuthStatusError } from "@/lib/fetcher";
 import { ResourceHealth } from "@/lib/opensearch-health/types";
 import { useUser } from "@/providers/UserProvider";
 
-export const RESOURCE_HEALTH_URL = "/api/manage/admin/opensearch-health";
-const HEALTH_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const HEALTH_REFRESH_INTERVAL_MS: number = 5 * 60 * 1000;
 
-export function useOpenSearchResourceHealth() {
+export function useOpenSearchResourceHealth(): SWRResponse<
+  ResourceHealth,
+  Error
+> {
   const { user, isAdmin } = useUser();
-  return useSWR<ResourceHealth>(
-    isAdmin && user ? [RESOURCE_HEALTH_URL, user.id] : null,
+  return useSWR<ResourceHealth, Error>(
+    isAdmin && user ? [SWR_KEYS.opensearchResourceHealth, user.id] : null,
     ([url]: [string, string]) => errorHandlingFetcher<ResourceHealth>(url),
     {
       refreshInterval: HEALTH_REFRESH_INTERVAL_MS,
