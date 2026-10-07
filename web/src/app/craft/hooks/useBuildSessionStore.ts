@@ -2011,6 +2011,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const updatedSession: BuildSessionData = {
         ...session,
+        outputPanelOpen: true,
         panelTabs,
         activePanelTabId: tabId,
         tabHistory: {

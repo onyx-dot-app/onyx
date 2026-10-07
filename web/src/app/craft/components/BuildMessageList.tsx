@@ -200,6 +200,7 @@ export default function BuildMessageList({
           return (
             <div key={item.id} className={cn(topMargin)}>
               <TextChunk
+                sessionId={sessionId}
                 content={item.content}
                 isStreaming={opts.isCurrentStream && item.isStreaming}
               />
@@ -324,7 +325,7 @@ export default function BuildMessageList({
                 {visibleSavedRender.nodes}
               </>
             ) : (
-              <TextChunk content={message.content} />
+              <TextChunk sessionId={sessionId} content={message.content} />
             )}
             {message.content.trim() && (
               <Hoverable.Item

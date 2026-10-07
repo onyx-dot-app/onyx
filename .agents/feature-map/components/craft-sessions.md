@@ -546,6 +546,17 @@ auto-named by a different one.
 
 ---
 
+### Output links in assistant messages
+
+`TextChunk.tsx` recognizes relative output links in live and saved messages.
+Validated links open the selected file and its output panel on click. The message
+supplies the session ID; a link cannot select another session. Links use the existing
+owner-checked artifact routes. Rendering the message does not open or fetch artifacts.
+`pathSanitizer.ts:parseOutputLink` rejects traversal, hidden segments, encoded
+separators, control characters, and query or fragment syntax. Invalid output links
+render as text. Other links retain the existing Markdown behavior.
+These frontend files live under `web/src/app/craft/`.
+
 ## 5. Contracts and invariants
 
 1. **A turn must be serialized per session.** `prompt_slot` plus the
