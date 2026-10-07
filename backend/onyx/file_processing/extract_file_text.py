@@ -36,6 +36,7 @@ from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     unstructured_to_text,
 )
+from onyx.file_processing.webvtt import parse_vtt_transcript
 from onyx.file_processing.zip_limits import (
     assert_zip_container_within_limits,
     assert_zip_within_limits,
@@ -803,6 +804,15 @@ def extract_file_text(
         return ""
 
 
+def vtt_to_text(file: IO[Any]) -> str:
+    """A WebVTT transcript as prose, without its cue numbers and timing lines.
+
+    Speakers are kept, so a transcript arriving as a file reads the same as the
+    one the Teams connector pulls from the meeting it came from.
+    """
+    return parse_vtt_transcript(file_io_to_text(file), keep_speakers=True)
+
+
 def extract_file_text_locally(
     file: IO[Any],
     file_name: str,
@@ -825,6 +835,7 @@ def extract_file_text_locally(
         ".eml": eml_to_text,
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
+        ".vtt": vtt_to_text,
     }
     if extension is None:
         extension = get_file_ext(file_name)
@@ -991,6 +1002,11 @@ def _extract_text_and_images(
                 text_content=parse_html_page_basic(file),
                 embedded_images=[],
                 metadata={},
+            )
+
+        if extension == ".vtt":
+            return ExtractionResult(
+                text_content=vtt_to_text(file), embedded_images=[], metadata={}
             )
 
         # If we reach here and it's a recognized text extension

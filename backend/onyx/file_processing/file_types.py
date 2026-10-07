@@ -98,6 +98,9 @@ class OnyxFileExtensions:
         ".yml",
         ".yaml",
         ".sql",
+        # WebVTT. Routed to parse_vtt_transcript rather than read verbatim, but
+        # it belongs here so the connectors do not drop it before download.
+        ".vtt",
     }
     DOCUMENT_EXTENSIONS = {
         ".pdf",
