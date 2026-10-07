@@ -113,6 +113,7 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.process_isolation import run_in_isolated_process
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
@@ -129,6 +130,10 @@ MAX_MESSAGES_PER_CONVERSATION = 100
 # Raw messages read per conversation while looking for indexable ones, so a
 # thread that is mostly drafts or trashed replies stays bounded.
 CONVERSATION_FETCH_LIMIT = 500
+
+# Conversations of one delta page rebuilt at a time. Each is its own Graph
+# read, and Exchange throttles concurrent requests per app and mailbox.
+CONVERSATION_REBUILD_WORKERS = 4
 
 # Conversation ids a mailbox remembers this attempt so a thread is rebuilt once
 # however many of its messages the delta lists. The checkpoint is written after
@@ -1200,6 +1205,8 @@ class OutlookConnector(
 
         end_at = _poll_bound(end)
         excluded = set(checkpoint.excluded_folder_ids)
+        # Keyed by id so a thread the page lists twice is rebuilt once.
+        conversation_ids: dict[str, None] = {}
         for change in page.changes:
             if change.removed or not change.conversation_id:
                 continue
@@ -1215,12 +1222,24 @@ class OutlookConnector(
                 continue
             if change.conversation_id in checkpoint.seen_conversation_ids:
                 continue
-            result = self._rebuild_conversation(
-                mailbox, change.conversation_id, excluded, include_permissions
+            conversation_ids[change.conversation_id] = None
+
+        # A raise from any rebuild fails the step with nothing remembered, so
+        # the retry reads the whole page again.
+        results: list[Document | ConnectorFailure | None] = (
+            run_functions_tuples_in_parallel(
+                [
+                    (
+                        self._rebuild_conversation,
+                        (mailbox, conversation_id, excluded, include_permissions),
+                    )
+                    for conversation_id in conversation_ids
+                ],
+                max_workers=CONVERSATION_REBUILD_WORKERS,
             )
-            _remember_conversation(
-                checkpoint.seen_conversation_ids, change.conversation_id
-            )
+        )
+        for conversation_id, result in zip(conversation_ids, results, strict=True):
+            _remember_conversation(checkpoint.seen_conversation_ids, conversation_id)
             if result is not None:
                 yield result
 

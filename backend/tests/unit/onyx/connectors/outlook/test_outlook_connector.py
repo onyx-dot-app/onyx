@@ -4,6 +4,7 @@ The gateway is autospecced, so these tests drive the real checkpoint state
 machine and document assembly against the gateway's plain models.
 """
 
+import threading
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -788,12 +789,42 @@ def test_conversation_tracking_is_capped_per_mailbox(
         call.kwargs["conversation_id"]
         for call in gateway.fetch_conversation_messages_page.call_args_list
     ]
-    assert rebuilt == [CONVERSATION_ID, "conv-b", CONVERSATION_ID]
-    assert checkpoint.seen_conversation_ids == {CONVERSATION_ID: None}
+    # Each thread of the page is rebuilt once, in no fixed order.
+    assert sorted(rebuilt) == sorted([CONVERSATION_ID, "conv-b"])
+    assert checkpoint.seen_conversation_ids == {"conv-b": None}
+
+
+def test_conversations_of_a_page_are_yielded_in_page_order() -> None:
+    """Rebuilds run side by side, so the first thread finishing last must not
+    reorder the documents."""
+    gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = None
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
+        changes=[change(), change(id="msg-b", conversation_id="conv-b")]
+    )
+    first_may_finish = threading.Event()
+
+    def messages(*, conversation_id: str, **_: Any) -> OutlookMessagePage:
+        if conversation_id == CONVERSATION_ID:
+            assert first_may_finish.wait(timeout=5)
+        else:
+            first_may_finish.set()
+        return OutlookMessagePage(messages=[message()])
+
+    gateway.fetch_conversation_messages_page.side_effect = messages
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    items, _ = _step(connector, _folder_checkpoint())
+
+    assert [item.id for item in items if isinstance(item, Document)] == [
+        conversation_document_id(mailbox(), CONVERSATION_ID),
+        conversation_document_id(mailbox(), "conv-b"),
+    ]
 
 
 def test_failure_part_way_through_a_page_leaves_the_page_uncounted() -> None:
-    """The replayed page must not count twice toward the filtered delta cap."""
+    """The replayed page must not count twice toward the filtered delta cap,
+    and none of its threads may be remembered as rebuilt."""
     gateway = _happy_gateway()
     gateway.fetch_folder_delta_page.side_effect = None
     gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
@@ -812,7 +843,7 @@ def test_failure_part_way_through_a_page_leaves_the_page_uncounted() -> None:
 
     assert checkpoint.folder_change_count == 4997
     assert checkpoint.delta_next_link is None
-    assert checkpoint.seen_conversation_ids == {CONVERSATION_ID: None}
+    assert checkpoint.seen_conversation_ids == {}
 
 
 def test_expired_delta_state_restarts_the_folder_round() -> None:
