@@ -151,7 +151,13 @@ a failed init retries on the next call (`factory.py:20-57`):
   dedicated bridge network, snapshots streamed through `docker exec` instead of
   a sidecar HTTP API. There is **no sidecar container** on Docker; filesystem
   and snapshot operations exec directly into the sandbox container
-  (`docker_sandbox_manager.py`, module docstring, "Snapshots").
+  (`docker_sandbox_manager.py`, module docstring, "Snapshots"). The manager
+  reads the bridge's `EnableIPv4` flag. IPv6-only bridges inject
+  `SANDBOX_LISTEN_HOST=::`; IPv4 and dual-stack bridges retain `0.0.0.0`.
+  Proxy listener configuration is separate: use `SANDBOX_PROXY_LISTEN_HOST=::`
+  for an IPv6-only bridge, with complete internal CIDRs. The API can remain
+  on the original Compose network because the proxy forwards sandbox API
+  traffic. Existing IPv4 bridge behavior remains the default.
 
 Where they diverge, by design (`docker_sandbox_manager.py` module docstring,
 "Threat model: Docker vs Kubernetes parity gap"):
