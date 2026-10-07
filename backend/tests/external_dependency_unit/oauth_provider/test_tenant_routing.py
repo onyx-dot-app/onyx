@@ -90,7 +90,6 @@ async def test_cloud_token_tenant_wins_over_cookie_without_membership_bypass(
     )
     monkeypatch.setattr(oauth_provider_db, "MULTI_TENANT", True)
     monkeypatch.setattr(tenant_tracking, "MULTI_TENANT", True)
-    monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
     monkeypatch.setattr(
         oauth_config,

@@ -30,7 +30,6 @@ _OAUTH_ACCESS_TOKEN_BYTES = _OAUTH_ACCESS_TOKEN.encode("ascii")
 
 @pytest.fixture
 def introspection_backend(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
-    monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "https://onyx.example")
     monkeypatch.setattr(
         oauth_config,
@@ -202,7 +201,6 @@ async def test_introspection_preserves_billing_and_outage_status(
     status_code: int,
     error_code: OnyxErrorCode,
 ) -> None:
-    monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
     monkeypatch.setattr(
         oauth_config,
@@ -230,7 +228,6 @@ async def test_introspection_preserves_billing_and_outage_status(
 async def test_insufficient_scope_has_discovery_challenge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
     monkeypatch.setattr(
         oauth_config,
@@ -276,7 +273,6 @@ async def test_insufficient_scope_has_discovery_challenge(
 async def test_discovery_aliases_and_challenge_point_to_same_resource(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
     monkeypatch.setattr(
         oauth_config,
@@ -310,7 +306,6 @@ async def test_discovery_aliases_and_challenge_point_to_same_resource(
 async def test_disabled_feature_advertises_no_oauth_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", False)
     monkeypatch.setattr(oauth_config, "OAUTH_PROVIDER_SETTINGS", None)
     server = FastMCP("disabled-test", auth=mcp_auth.build_mcp_server_auth())
     monkeypatch.setattr(mcp_api, "mcp_server", server)
