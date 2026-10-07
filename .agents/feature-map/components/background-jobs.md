@@ -163,8 +163,7 @@ lists plus its own additions):
 
 The per-tenant `cleanup-oauth-provider-grants` template deletes expired OAuth
 provider grants daily; their tokens cascade. Without Celery (`DISABLE_VECTOR_DB`),
-`periodic_poller.py:_build_periodic_tasks` runs both OAuth cleanups daily when
-`OAUTH_PROVIDER_ENABLED` is set.
+`periodic_poller.py:_build_periodic_tasks` runs both OAuth cleanups daily.
 
 Every schedule entry sets `expires` (default `BEAT_EXPIRES_DEFAULT = 15 * 60`
 seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the

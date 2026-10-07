@@ -139,7 +139,6 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
         AUTO_LLM_CONFIG_URL,
         AUTO_LLM_UPDATE_INTERVAL_SECONDS,
         CACHE_BACKEND,
-        OAUTH_PROVIDER_ENABLED,
         SCHEDULED_EVAL_DATASET_NAMES,
     )
     from onyx.utils.variable_functionality import global_version
@@ -183,15 +182,14 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
                 run_fn=_run_license_reclaim,
             )
         )
-    if OAUTH_PROVIDER_ENABLED:
-        tasks.append(
-            _PeriodicTaskDef(
-                name="oauth-provider-cleanup",
-                interval_seconds=_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS,
-                lock_id=PERIODIC_TASK_LOCK_BASE + 4,
-                run_fn=_run_oauth_provider_cleanup,
-            )
+    tasks.append(
+        _PeriodicTaskDef(
+            name="oauth-provider-cleanup",
+            interval_seconds=_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS,
+            lock_id=PERIODIC_TASK_LOCK_BASE + 4,
+            run_fn=_run_oauth_provider_cleanup,
         )
+    )
     return tasks
 
 

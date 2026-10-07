@@ -8,19 +8,12 @@ from onyx.background.periodic_poller import (
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
-def _task_names(*, enabled: bool) -> list[str]:
-    with patch("onyx.configs.app_configs.OAUTH_PROVIDER_ENABLED", enabled):
-        return [t.name for t in _build_periodic_tasks()]
-
-
-def test_oauth_provider_cleanup_follows_provider_flag() -> None:
-    assert "oauth-provider-cleanup" in _task_names(enabled=True)
-    assert "oauth-provider-cleanup" not in _task_names(enabled=False)
+def test_oauth_provider_cleanup_always_runs() -> None:
+    assert "oauth-provider-cleanup" in [t.name for t in _build_periodic_tasks()]
 
 
 def test_oauth_provider_cleanup_lock_id_is_unique() -> None:
     with (
-        patch("onyx.configs.app_configs.OAUTH_PROVIDER_ENABLED", True),
         patch("onyx.configs.app_configs.AUTO_LLM_CONFIG_URL", "http://llm"),
         patch("onyx.configs.app_configs.SCHEDULED_EVAL_DATASET_NAMES", ["ds"]),
         patch("onyx.utils.variable_functionality.global_version") as mock_version,
