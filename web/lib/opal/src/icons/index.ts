@@ -153,6 +153,7 @@ export { default as SvgPlus } from "@opal/icons/plus";
 export { default as SvgPlusCircle } from "@opal/icons/plus-circle";
 export { default as SvgProgressBars } from "@opal/icons/progress-bars";
 export { default as SvgProgressCircle } from "@opal/icons/progress-circle";
+export { default as SvgProgressRing } from "@opal/icons/progress-ring";
 export { default as SvgQuestionMarkSmall } from "@opal/icons/question-mark-small";
 export { default as SvgQuoteEnd } from "@opal/icons/quote-end";
 export { default as SvgQuoteStart } from "@opal/icons/quote-start";
