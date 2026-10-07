@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "OneDrive-Connector konfigurieren",
         "indexingScope": {
-          "label": "Wessen OneDrive-Dateien soll Onyx indizieren?",
+          "label": "Zu indexierende OneDrive-Dateien",
           "general": {
             "label": "Allgemein",
             "description": "Alle berechtigten Benutzer indizieren, auf die die Microsoft-Anwendung zugreifen kann."
@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "Ausgeschlossene Pfade",
-          "description": "Glob-Muster für Dateipfade und Dateinamen, zum Beispiel '*.tmp' oder 'Archive/*'."
+          "description": "Glob-Muster für Dateipfade und Dateinamen, zum Beispiel `*.tmp` oder `Archive/*`."
         },
         "organizationLinks": {
           "label": "Organisationslinks als öffentlich behandeln",
@@ -2653,9 +2653,6 @@
         "title": "Die Anmeldedaten konnten nicht geladen werden."
       },
       "field": {
-        "optional": {
-          "label": "(optional)"
-        },
         "optionalSuffix": {
           "label": "optional"
         }
@@ -2888,22 +2885,13 @@
           "title": "Fehler beim Senden."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Konfiguration"
-        }
+      "content": {
+        "title": "Connector-Inhalte",
+        "description": "Wählen Sie die Inhalte aus, die für diesen Connector indexiert werden sollen."
       },
       "selectInput": {
         "emptyOption": {
           "label": "Option auswählen"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "Neu hinzufügen"
-        },
-        "removeButton": {
-          "tooltip": "Entfernen"
         }
       },
       "tabs": {
@@ -2915,8 +2903,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "Fügen Sie die URL Ihrer Website ein. Die REST-API von {connectorName} muss dort erreichbar sein."
+      },
       "boundFields": {
-        "advancedOptions": "Erweiterte Optionen",
         "errors": {
           "missing": "Geben Sie einen Wert ein.",
           "invalid": "Dieser Wert ist ungültig: {detail}"
@@ -5070,6 +5060,10 @@
         "title": "LLM für Bildbeschreibungen"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "Erzeugen Sie ab sofort keinen Kontext mehr für neue und aktualisierte Dokumente, oder bauen Sie alle Dokumente neu auf, um auch den bereits erzeugten Kontext zu entfernen.",
+          "title": "Wählen Sie, wie Contextual Retrieval deaktiviert wird"
+        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval ist aktiviert, aber es ist kein Modell ausgewählt. Wählen Sie unten ein LLM für Contextual Retrieval, bevor Sie neu indizieren — ohne ein solches Modell kann die Neuindizierung nicht laufen.",
           "title": "Wählen Sie ein LLM für Contextual Retrieval"
@@ -5186,6 +5180,10 @@
       "forwardOnlyModal": {
         "description": "Vorhandene Dokumente behalten den vom vorherigen Modell erzeugten Kontext. Das neue Modell wird nur angewendet, wenn Dokumente hinzugefügt oder aktualisiert werden. Die kontextuelle Anreicherung kann sich zwischen Dokumenten unterscheiden.",
         "title": "LLM für Contextual Retrieval ab jetzt anwenden"
+      },
+      "disableForwardModal": {
+        "description": "Contextual Retrieval wird für Dokumente beendet, die ab jetzt hinzugefügt oder aktualisiert werden. Vorhandene Dokumente behalten den bereits erzeugten Kontext, bis sie aktualisiert werden oder Sie neu indexieren.",
+        "title": "Contextual Retrieval ab jetzt deaktivieren"
       },
       "header": {
         "description": "Konfigurieren Sie, wie Dokumente indiziert, eingebettet und für Suche und Retrieval vorbereitet werden."
@@ -5405,6 +5403,8 @@
         "contextualModelRequired": "Wählen Sie ein LLM für Contextual Retrieval, bevor Sie neu indizieren.",
         "contextualModelUpdateFailed": "Das LLM für Contextual Retrieval konnte nicht aktualisiert werden",
         "contextualModelUpdated": "LLM für Contextual Retrieval aktualisiert",
+        "contextualRetrievalDisableFailed": "Contextual Retrieval konnte nicht deaktiviert werden",
+        "contextualRetrievalDisabled": "Contextual Retrieval deaktiviert",
         "modelNotFound": "Das ausgewählte Modell konnte nicht gefunden werden",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
         "reindexCanceled": "Neuindizierung abgebrochen",
@@ -11338,6 +11338,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {Dateien auswählen} other {Datei auswählen}}"
+      },
+      "prompt": "{multiple, select, true {Oder ziehen Sie Dateien hierher.} other {Oder ziehen Sie eine Datei hierher.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "Neu hinzufügen"
+      },
+      "removeButton": {
+        "tooltip": "Entfernen"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "Seitenleiste öffnen"

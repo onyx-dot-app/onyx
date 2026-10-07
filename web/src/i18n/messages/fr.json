@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "Configurer le connecteur OneDrive",
         "indexingScope": {
-          "label": "Quels fichiers OneDrive Onyx doit-il indexer ?",
+          "label": "Fichiers OneDrive à indexer",
           "general": {
             "label": "Général",
             "description": "Indexer tous les utilisateurs admissibles auxquels l’application Microsoft peut accéder."
@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "Chemins exclus",
-          "description": "Motifs glob appliqués à chaque chemin et nom de fichier, tels que '*.tmp' ou 'Archive/*'."
+          "description": "Motifs glob appliqués à chaque chemin et nom de fichier, tels que `*.tmp` ou `Archive/*`."
         },
         "organizationLinks": {
           "label": "Traiter les liens de l’organisation comme publics",
@@ -2653,9 +2653,6 @@
         "title": "Échec du chargement des identifiants."
       },
       "field": {
-        "optional": {
-          "label": "(facultatif)"
-        },
         "optionalSuffix": {
           "label": "facultatif"
         }
@@ -2888,22 +2885,13 @@
           "title": "Erreur lors de l'envoi."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Configuration"
-        }
+      "content": {
+        "title": "Contenu du connecteur",
+        "description": "Sélectionnez le contenu à indexer pour ce connecteur."
       },
       "selectInput": {
         "emptyOption": {
           "label": "Sélectionnez une option"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "Ajouter"
-        },
-        "removeButton": {
-          "tooltip": "Retirer"
         }
       },
       "tabs": {
@@ -2915,8 +2903,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "Collez l'URL de votre site. L'API REST de {connectorName} doit y être accessible."
+      },
       "boundFields": {
-        "advancedOptions": "Options avancées",
         "errors": {
           "missing": "Saisissez une valeur.",
           "invalid": "Cette valeur n’est pas valide : {detail}"
@@ -5070,6 +5060,10 @@
         "title": "LLM de légendage"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "Arrêtez dès maintenant de générer du contexte pour les documents nouveaux et mis à jour, ou reconstruisez tous les documents pour supprimer aussi le contexte déjà généré.",
+          "title": "Choisissez comment désactiver la récupération contextuelle"
+        },
         "contextualModelMissing": {
           "description": "La récupération contextuelle est activée mais aucun modèle n'est sélectionné. Choisissez un LLM de récupération contextuelle ci-dessous avant de réindexer : sans modèle, la réindexation ne peut pas démarrer.",
           "title": "Sélectionnez un LLM de récupération contextuelle"
@@ -5186,6 +5180,10 @@
       "forwardOnlyModal": {
         "description": "Les documents existants conserveront le contexte généré par le modèle précédent. Le nouveau modèle s'appliquera uniquement lors de l'ajout ou de la mise à jour de documents. L'enrichissement contextuel peut donc varier d'un document à l'autre.",
         "title": "Appliquer le LLM de récupération contextuelle à partir de maintenant"
+      },
+      "disableForwardModal": {
+        "description": "La récupération contextuelle s'arrête pour les documents ajoutés ou mis à jour à partir de maintenant. Les documents existants conservent le contexte déjà généré jusqu'à leur mise à jour ou jusqu'à la prochaine réindexation.",
+        "title": "Désactiver la récupération contextuelle à partir de maintenant"
       },
       "header": {
         "description": "Configurez la façon dont les documents sont indexés, encodés et préparés pour la recherche et la récupération."
@@ -5405,6 +5403,8 @@
         "contextualModelRequired": "Sélectionnez un LLM de récupération contextuelle avant de réindexer.",
         "contextualModelUpdateFailed": "Échec de la mise à jour du LLM de récupération contextuelle",
         "contextualModelUpdated": "LLM de récupération contextuelle mis à jour",
+        "contextualRetrievalDisableFailed": "Échec de la désactivation de la récupération contextuelle",
+        "contextualRetrievalDisabled": "Récupération contextuelle désactivée",
         "modelNotFound": "Impossible de trouver le modèle sélectionné",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
         "reindexCanceled": "Réindexation annulée",
@@ -11338,6 +11338,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {Choisir des fichiers} other {Choisir un fichier}}"
+      },
+      "prompt": "{multiple, select, true {Ou glissez-déposez des fichiers ici.} other {Ou glissez-déposez un fichier ici.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "Ajouter"
+      },
+      "removeButton": {
+        "tooltip": "Retirer"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "Ouvrir la barre latérale"

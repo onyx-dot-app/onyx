@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "配置 OneDrive 连接器",
         "indexingScope": {
-          "label": "Onyx 应为哪些用户的 OneDrive 文件建立索引？",
+          "label": "要索引的 OneDrive 文件",
           "general": {
             "label": "常规",
             "description": "为 Microsoft 应用程序可以访问的所有符合条件的用户建立索引。"
@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "排除的路径",
-          "description": "与每个文件路径和文件名匹配的 glob 模式，例如“*.tmp”或“Archive/*”。"
+          "description": "与每个文件路径和文件名匹配的 glob 模式，例如`*.tmp`或`Archive/*`。"
         },
         "organizationLinks": {
           "label": "将组织链接视为公开链接",
@@ -2653,9 +2653,6 @@
         "title": "加载凭据失败。"
       },
       "field": {
-        "optional": {
-          "label": "（可选）"
-        },
         "optionalSuffix": {
           "label": "可选"
         }
@@ -2888,22 +2885,13 @@
           "title": "提交时出错。"
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "配置"
-        }
+      "content": {
+        "title": "连接器内容",
+        "description": "选择此连接器要索引的内容。"
       },
       "selectInput": {
         "emptyOption": {
           "label": "选择一个选项"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "新增"
-        },
-        "removeButton": {
-          "tooltip": "移除"
         }
       },
       "tabs": {
@@ -2915,8 +2903,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "粘贴你的站点 URL。{connectorName} 的 REST API 必须能在该地址访问。"
+      },
       "boundFields": {
-        "advancedOptions": "高级选项",
         "errors": {
           "missing": "请输入一个值。",
           "invalid": "此值无效：{detail}"
@@ -5070,6 +5060,10 @@
         "title": "图像描述 LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "立即停止为新增和更新的文档生成上下文，或者重建所有文档以同时移除已生成的上下文。",
+          "title": "选择关闭上下文检索的方式"
+        },
         "contextualModelMissing": {
           "description": "上下文检索已启用，但尚未选择模型。请先在下方选择上下文检索 LLM，再重新索引——没有模型，重新索引无法运行。",
           "title": "选择上下文检索 LLM"
@@ -5186,6 +5180,10 @@
       "forwardOnlyModal": {
         "description": "现有文档将保留由之前的模型生成的上下文。新模型仅在文档新增或更新时生效。不同文档之间的上下文增强可能存在差异。",
         "title": "今后应用上下文检索 LLM"
+      },
+      "disableForwardModal": {
+        "description": "此后新增或更新的文档将不再使用上下文检索。现有文档会保留已生成的上下文，直到它们被更新或您重新索引。",
+        "title": "今后关闭上下文检索"
       },
       "header": {
         "description": "配置文档的索引方式、embedding 方式，以及为搜索和检索所做的准备。"
@@ -5405,6 +5403,8 @@
         "contextualModelRequired": "请在重新索引前选择上下文检索 LLM。",
         "contextualModelUpdateFailed": "更新上下文检索 LLM 失败",
         "contextualModelUpdated": "已更新上下文检索 LLM",
+        "contextualRetrievalDisableFailed": "关闭上下文检索失败",
+        "contextualRetrievalDisabled": "已关闭上下文检索",
         "modelNotFound": "找不到所选模型",
         "providerResolveFailed": "无法解析提供商",
         "reindexCanceled": "已取消重新索引",
@@ -11338,6 +11338,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {选择文件} other {选择文件}}"
+      },
+      "prompt": "{multiple, select, true {或将文件拖放到此处。} other {或将文件拖放到此处。}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "新增"
+      },
+      "removeButton": {
+        "tooltip": "移除"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "打开侧边栏"

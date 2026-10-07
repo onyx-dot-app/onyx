@@ -2530,7 +2530,7 @@
       "oneDrive": {
         "description": "OneDrive コネクタを設定",
         "indexingScope": {
-          "label": "Onyx でインデックスを作成する OneDrive ファイルの所有者",
+          "label": "インデックスする OneDrive ファイル",
           "general": {
             "label": "一般",
             "description": "Microsoft アプリケーションがアクセスできるすべての対象ユーザーをインデックス化します。"
@@ -2546,7 +2546,7 @@
         },
         "excludedPaths": {
           "label": "除外するパス",
-          "description": "各ファイルパスとファイル名に照合する glob パターン（例: '*.tmp'、'Archive/*'）。"
+          "description": "各ファイルパスとファイル名に照合する glob パターン（例: `*.tmp`、`Archive/*`）。"
         },
         "organizationLinks": {
           "label": "組織リンクを公開として扱う",
@@ -2653,9 +2653,6 @@
         "title": "認証情報の読み込みに失敗しました。"
       },
       "field": {
-        "optional": {
-          "label": "（任意）"
-        },
         "optionalSuffix": {
           "label": "任意"
         }
@@ -2888,22 +2885,13 @@
           "title": "送信中にエラーが発生しました。"
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "設定"
-        }
+      "content": {
+        "title": "コネクタのコンテンツ",
+        "description": "このコネクタでインデックスするコンテンツを選択してください。"
       },
       "selectInput": {
         "emptyOption": {
           "label": "選択してください"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "新規追加"
-        },
-        "removeButton": {
-          "tooltip": "削除"
         }
       },
       "tabs": {
@@ -2915,8 +2903,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "サイトの URL を貼り付けてください。そこで {connectorName} の REST API にアクセスできる必要があります。"
+      },
       "boundFields": {
-        "advancedOptions": "詳細オプション",
         "errors": {
           "missing": "値を入力してください。",
           "invalid": "この値は無効です: {detail}"
@@ -5070,6 +5060,10 @@
         "title": "キャプション生成 LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "新規および更新されたドキュメントのコンテキスト生成を今すぐ停止するか、すべてのドキュメントを再構築して生成済みのコンテキストも削除します。",
+          "title": "コンテキスト検索をオフにする方法を選択してください"
+        },
         "contextualModelMissing": {
           "description": "コンテキスト検索は有効ですが、モデルが選択されていません。再インデックスの前に、下でコンテキスト検索 LLM を選択してください。選択しないと再インデックスは実行できません。",
           "title": "コンテキスト検索 LLM を選択してください"
@@ -5186,6 +5180,10 @@
       "forwardOnlyModal": {
         "description": "既存のドキュメントは以前のモデルが生成したコンテキストを保持します。新しいモデルは、ドキュメントの追加時または更新時にのみ適用されます。コンテキストの内容がドキュメントによって異なる場合があります。",
         "title": "コンテキスト検索 LLM を以降のドキュメントに適用"
+      },
+      "disableForwardModal": {
+        "description": "今後追加または更新されるドキュメントではコンテキスト検索が停止します。既存のドキュメントは、更新されるか再インデックスするまで生成済みのコンテキストを保持します。",
+        "title": "コンテキスト検索を以降のドキュメントでオフにする"
       },
       "header": {
         "description": "ドキュメントのインデックス作成、embedding の生成、検索と取得に向けた準備の方法を設定します。"
@@ -5405,6 +5403,8 @@
         "contextualModelRequired": "再インデックスの前にコンテキスト検索 LLM を選択してください。",
         "contextualModelUpdateFailed": "コンテキスト検索 LLM を更新できませんでした",
         "contextualModelUpdated": "コンテキスト検索 LLM を更新しました",
+        "contextualRetrievalDisableFailed": "コンテキスト検索をオフにできませんでした",
+        "contextualRetrievalDisabled": "コンテキスト検索をオフにしました",
         "modelNotFound": "選択したモデルが見つかりませんでした",
         "providerResolveFailed": "プロバイダーを特定できませんでした",
         "reindexCanceled": "再インデックスをキャンセルしました",
@@ -11338,6 +11338,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {ファイルを選択} other {ファイルを選択}}"
+      },
+      "prompt": "{multiple, select, true {またはここにファイルをドラッグ＆ドロップしてください。} other {またはここにファイルをドラッグ＆ドロップしてください。}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "新規追加"
+      },
+      "removeButton": {
+        "tooltip": "削除"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "サイドバーを開く"

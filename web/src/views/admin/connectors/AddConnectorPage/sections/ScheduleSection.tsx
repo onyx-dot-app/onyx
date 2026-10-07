@@ -15,8 +15,9 @@ import {
   MIN_REFRESH_FREQ_MINUTES,
 } from "@/lib/connectors/connectors";
 
-interface AdvancedFormPageProps {
+interface ScheduleSectionProps {
   defaultPruneFreqHours?: number;
+  /** Freezes the section while the page locks the configuration. */
   disabled?: boolean;
 }
 
@@ -37,10 +38,10 @@ function formatIndexingStart(date: Date | null): string {
 }
 
 /** The connector's schedule: refresh and prune frequency, and the start date. */
-export default function AdvancedFormPage({
+export default function ScheduleSection({
   defaultPruneFreqHours = 600,
   disabled,
-}: AdvancedFormPageProps) {
+}: ScheduleSectionProps) {
   const t = useTranslations("admin.connectorsList.scheduled");
 
   return (

@@ -268,6 +268,12 @@ Each `(k8s)` config has `telepresence intercept onyx-api-server` as its
 connects + (re)creates the intercept idempotently. No manual telepresence
 invocation needed.
 
+The task checks for an unregistered traffic-agent with a recent stale-session
+error. It restarts only `onyx-api-server`, waits up to 120 seconds for the
+rollout, and creates the intercept. If the session becomes stale during intercept
+creation, it checks again and retries after recovery. Recovery runs at most once
+per launch. Other failures stop the task and show the original error.
+
 The intercept points cluster ingress to your local api_server using the same
 labels, secrets, and service account as the real pod — NetworkPolicies and
 pod-selector auth work transparently.
