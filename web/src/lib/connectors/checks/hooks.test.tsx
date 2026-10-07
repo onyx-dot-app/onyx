@@ -11,7 +11,6 @@ import { ValidSources } from "@/lib/connectors/types/source";
 
 jest.mock("@/lib/connectors/checks/svc", () => ({
   startDraftCheckRun: jest.fn(),
-  draftCheckRunUrl: (runId: string) => `/runs/${runId}`,
 }));
 // The run is seeded from the start response, so polling never fetches.
 jest.mock("@/lib/fetcher", () => ({ errorHandlingFetcher: jest.fn() }));

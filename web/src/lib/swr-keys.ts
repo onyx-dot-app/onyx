@@ -77,6 +77,9 @@ export const SWR_KEYS = {
   adminConnectorStatus: "/api/manage/admin/connector/status",
   federatedConnectors: "/api/federated",
   connectorGroupRestrictions: "/api/manage/connector-group-restrictions",
+  // One capability-check run for an unsaved connector form.
+  connectorCheckRun: (runId: string) =>
+    `/api/manage/admin/connector-checks/runs/${runId}`,
 
   // ── Google Connectors ─────────────────────────────────────────────────────
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>

@@ -242,7 +242,12 @@ function CheckGroup({ status, results }: CheckGroupProps) {
     >
       <div className="flex flex-col">
         {results.map((result) => (
-          <CheckRow key={result.check_id} result={result} />
+          // The backend repeats some checks across capabilities under the
+          // same ID, so the capability keeps the key unique.
+          <CheckRow
+            key={`${result.capability}:${result.check_id}`}
+            result={result}
+          />
         ))}
       </div>
     </Divider>

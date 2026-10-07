@@ -3,10 +3,8 @@
 import { useCallback, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import {
-  draftCheckRunUrl,
-  startDraftCheckRun,
-} from "@/lib/connectors/checks/svc";
+import { startDraftCheckRun } from "@/lib/connectors/checks/svc";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   DraftCheckRunSnapshot,
   DraftRerunMode,
@@ -86,7 +84,7 @@ export function useDraftCheckRun({
 
   const { mutate } = useSWRConfig();
   const { data } = useSWR<DraftCheckRunSnapshot>(
-    runId ? draftCheckRunUrl(runId) : null,
+    runId ? SWR_KEYS.connectorCheckRun(runId) : null,
     errorHandlingFetcher,
     {
       refreshInterval: (latest) =>
@@ -114,7 +112,7 @@ export function useDraftCheckRun({
         setError(null);
         // Seed the new run's cache entry first, so the card shows the
         // accepted run at once and polling starts from it.
-        await mutate(draftCheckRunUrl(accepted.run_id), accepted, {
+        await mutate(SWR_KEYS.connectorCheckRun(accepted.run_id), accepted, {
           revalidate: false,
         });
         setRunId(accepted.run_id);
