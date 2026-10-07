@@ -1710,6 +1710,10 @@
         "description": "跨网络和已连接来源工作的智能体研究系统。每次查询消耗的 token 明显更多。",
         "title": "深度研究"
       },
+      "defaultLanguage": {
+        "description": "未在个人设置中选择语言的用户所使用的界面语言。",
+        "title": "默认语言"
+      },
       "disableDefaultChat": {
         "description": "这会强制用户始终在智能体中开始对话。新对话将在其第一个已固定的智能体中创建。设置精选智能体可帮助新用户快速上手。",
         "title": "禁用默认对话"
@@ -13685,7 +13689,8 @@
       "title": "语言",
       "toasts": {
         "updateFailed": "更新语言偏好设置失败"
-      }
+      },
+      "workspaceDefault": "工作区默认 ({language})"
     },
     "layout": {
       "header": {

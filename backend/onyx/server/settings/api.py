@@ -145,6 +145,15 @@ def admin_patch_settings(
                 extra={"craft_default_enabled": merged.craft_default_enabled},
             )
 
+        if merged.default_language != existing.default_language:
+            emit_audit_event(
+                AuditAction.DEFAULT_LANGUAGE_CHANGE,
+                AuditOutcome.SUCCESS,
+                actor=actor_from_user(current_user),
+                resource_type="settings",
+                extra={"default_language": merged.default_language.value},
+            )
+
         if merged.llm_gateway_enabled != existing.llm_gateway_enabled:
             emit_audit_event(
                 AuditAction.LLM_GATEWAY_ENABLED_CHANGE,

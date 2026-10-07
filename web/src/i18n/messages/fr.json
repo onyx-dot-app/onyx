@@ -1710,6 +1710,10 @@
         "description": "Système de recherche agentique qui travaille sur le web et les sources connectées. Consomme beaucoup plus de jetons par requête.",
         "title": "Recherche approfondie"
       },
+      "defaultLanguage": {
+        "description": "La langue de l'interface pour les utilisateurs qui n'en ont pas choisi une dans leurs paramètres.",
+        "title": "Langue par défaut"
+      },
       "disableDefaultChat": {
         "description": "Cette option oblige les utilisateurs à toujours démarrer dans un agent. Les nouvelles discussions seront créées dans leur premier agent épinglé. Mettez des agents en avant pour aider les nouveaux utilisateurs à démarrer.",
         "title": "Désactiver la discussion par défaut"
@@ -13685,7 +13689,8 @@
       "title": "Langue",
       "toasts": {
         "updateFailed": "Impossible de mettre à jour la préférence de langue"
-      }
+      },
+      "workspaceDefault": "Par défaut ({language})"
     },
     "layout": {
       "header": {

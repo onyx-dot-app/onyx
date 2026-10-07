@@ -15,6 +15,7 @@ import {
   Settings,
 } from "@/lib/settings/types";
 import { EE_ENABLED } from "@/lib/constants";
+import { DEFAULT_LOCALE } from "@/i18n/config";
 
 const SETTINGS_ERROR_RETRY_INTERVAL = 5_000;
 
@@ -32,6 +33,7 @@ const DEFAULT_SETTINGS: Settings = {
   temperature_override_enabled: true,
   reasoning_override_enabled: true,
   query_history_type: QueryHistoryType.NORMAL,
+  default_language: DEFAULT_LOCALE,
 };
 
 // A CE backend never registers the enterprise-settings route, so its 404

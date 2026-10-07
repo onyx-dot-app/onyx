@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
+from onyx.db.enums import SupportedLanguage
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings import api as settings_api
@@ -121,3 +122,19 @@ def test_llm_gateway_enabled_updates_on_business_tier(
         tier=Tier.BUSINESS,
     )
     assert result.llm_gateway_enabled is False
+
+
+def test_default_language_updates_and_is_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _patch_settings({"default_language": "fr"}, Settings(), monkeypatch)
+    assert result.default_language == SupportedLanguage.FR
+
+    # A patch to an unrelated field keeps the workspace language.
+    preserved = _patch_settings({"company_name": "x"}, result, monkeypatch)
+    assert preserved.default_language == SupportedLanguage.FR
+
+
+def test_unsupported_default_language_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate({"default_language": "xx"})
