@@ -19,7 +19,7 @@ sources and document sets that a search may be filtered by. Add
 `read:chat` or `write:chat` only if the client needs the chat surfaces. An unscoped token carries
 the user's full access, so prefer a scoped one.
 
-OAuth-capable MCP clients can connect through the public web URL when `OAUTH_PROVIDER_ENABLED=true`. The OAuth provider requires the shared Redis cache backend, so Lite deployments that use the Postgres cache do not support it yet. PAT and API-key authentication remain available.
+OAuth-capable MCP clients can connect through the public web URL when `OAUTH_PROVIDER_ENABLED=true`. PAT and API-key authentication remain available.
 
 ### OAuth
 
@@ -46,7 +46,7 @@ The reverse proxy must expose these discovery URLs without requiring a session:
 - `/.well-known/oauth-authorization-server/api/oauth-provider`
 - `/.well-known/oauth-protected-resource/mcp/`
 
-The provided nginx, Helm, and Next.js routes handle these paths. PostgreSQL stores hashed credentials and grants. Shared Redis stores short-lived consent requests and authorization codes. All API replicas must use the same databases and Redis. Deployments that set `CACHE_BACKEND=postgres` do not support MCP OAuth yet.
+The provided nginx, Helm, and Next.js routes handle these paths. PostgreSQL stores hashed credentials and grants. The cache backend (Redis, or PostgreSQL with `CACHE_BACKEND=postgres`) stores short-lived consent requests and authorization codes. All API replicas must use the same database and cache.
 
 Each refresh deletes the grant's expired access tokens. The primary worker deletes expired grants, with their tokens, once a day. The default cloud multiplier makes it eight days. Catalog cleanup removes client registrations idle for 90 days. Lite deployments run both cleanups from the API server. Authentication enforces expiry immediately and does not wait for cleanup. Refresh history remains until the grant expires.
 
@@ -206,7 +206,7 @@ Expected response:
 - `MCP_SERVER_ENABLED`: Enable MCP server (set to "true" to enable, default: disabled)
 - `MCP_SERVER_PORT`: Port for MCP server (default: 8090)
 - `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
-- `OAUTH_PROVIDER_ENABLED`: Let MCP clients connect with OAuth (set to "true" to enable, default: disabled). Requires Redis and an HTTPS `WEB_DOMAIN`, except on loopback hosts. Set identically on API and MCP servers.
+- `OAUTH_PROVIDER_ENABLED`: Let MCP clients connect with OAuth (set to "true" to enable, default: disabled). Requires an HTTPS `WEB_DOMAIN`, except on loopback hosts. Set identically on API and MCP servers.
 
 **API Server Connection:**
 - `API_SERVER_PROTOCOL`: Protocol for API server connection (default: "http")
