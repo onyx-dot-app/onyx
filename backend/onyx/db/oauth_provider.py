@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.constants import (
     OAUTH_PROVIDER_ACCESS_LIFETIME,
+    OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME,
     OAUTH_PROVIDER_GRANT_LIFETIME,
     OAUTH_PROVIDER_SCOPE,
 )
@@ -43,7 +44,6 @@ from onyx.oauth_provider.models import (
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
-OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME = timedelta(days=90)
 OAUTH_PROVIDER_STORAGE_ERRORS = (
     SQLAlchemyError,
     ShardConfigurationError,
