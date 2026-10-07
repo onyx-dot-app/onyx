@@ -6,11 +6,15 @@ import os
 import subprocess
 from collections.abc import Generator
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 
+from onyx.server.features.build.models import UploadResponse
+from onyx.server.features.build.session.models import DetailedSessionResponse
+from tests.common.craft.local_http_probe import LOCAL_HTTP_PROBE
 from tests.common.craft.proxy_probe import PROXY_PROBE
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -21,7 +25,7 @@ from tests.integration.tests.craft.docker_e2e.conftest import (
     SANDBOX_EXEC_ENV,
     SANDBOX_EXEC_USER,
     DockerSandbox,
-    _docker_exec,
+    exec_container,
     start_session_webapp,
 )
 from tests.integration.tests.craft.webapp_preview import (
@@ -37,7 +41,7 @@ def docker(*args: str, timeout: int = 60) -> str:
 
 
 def execute(sandbox: DockerSandbox, *args: str) -> str:
-    result = _docker_exec(
+    result: subprocess.CompletedProcess[str] = exec_container(
         sandbox.container_name,
         list(args),
         user=SANDBOX_EXEC_USER,
@@ -55,15 +59,17 @@ def owner() -> DATestUser:
 
 @pytest.fixture(scope="module")
 def sandbox(owner: DATestUser) -> Generator[DockerSandbox, None, None]:
-    session = BuildSessionManager.create(owner, headless=False)
+    session: DetailedSessionResponse = BuildSessionManager.create(owner, headless=False)
     assert session.sandbox
-    container = f"sandbox-{session.sandbox.id.split('-')[0]}"
-    result = DockerSandbox(session_id=UUID(session.id), container_name=container)
+    container: str = f"sandbox-{session.sandbox.id.split('-')[0]}"
+    result: DockerSandbox = DockerSandbox(
+        session_id=UUID(session.id), container_name=container
+    )
     try:
         yield result
     finally:
         try:
-            response = client.delete(
+            response: httpx.Response = client.delete(
                 f"{API_SERVER_URL}/build/sessions/{session.id}",
                 headers=owner.headers,
                 cookies=owner.cookies,
@@ -101,11 +107,11 @@ def probe(
 
 
 def test_bridge_address_and_listener(sandbox: DockerSandbox) -> None:
-    info = json.loads(docker("inspect", sandbox.container_name))[0]
-    bridges = info["NetworkSettings"]["Networks"]
+    info: dict[str, Any] = json.loads(docker("inspect", sandbox.container_name))[0]
+    bridges: dict[str, dict[str, Any]] = info["NetworkSettings"]["Networks"]
     assert len(bridges) == 1, bridges
-    bridge = next(iter(bridges.values()))
-    family = os.environ["SANDBOX_TEST_IP_FAMILY"]
+    bridge: dict[str, Any] = next(iter(bridges.values()))
+    family: str = os.environ["SANDBOX_TEST_IP_FAMILY"]
     if family == "ipv6":
         assert not bridge["IPAddress"], bridge
         assert ipaddress.ip_address(bridge["GlobalIPv6Address"]).version == 6
@@ -113,7 +119,7 @@ def test_bridge_address_and_listener(sandbox: DockerSandbox) -> None:
     else:
         assert ipaddress.ip_address(bridge["IPAddress"]).version == 4
         assert not bridge["GlobalIPv6Address"], bridge
-    status = execute(
+    status: str = execute(
         sandbox, "sh", "-c", 'cat /proc/$(pgrep -f "opencode serve" | head -n 1)/status'
     )
     assert (
@@ -127,6 +133,15 @@ def test_bridge_address_and_listener(sandbox: DockerSandbox) -> None:
             line for line in status.splitlines() if line.startswith("CapBnd:")
         ).split()[1]
         == "0000000000000000"
+    )
+
+
+def test_local_http_bypasses_proxy(sandbox: DockerSandbox) -> None:
+    host: str = "::1" if os.environ["SANDBOX_TEST_IP_FAMILY"] == "ipv6" else "127.0.0.1"
+    # Curl inherits the sandbox's proxy settings. A local request must bypass the proxy.
+    assert (
+        execute(sandbox, "python3", "-c", LOCAL_HTTP_PROBE, host)
+        == "sandbox loopback verified"
     )
 
 
@@ -144,10 +159,10 @@ def test_public_https(sandbox: DockerSandbox) -> None:
 
 
 def test_api_identity(sandbox: DockerSandbox, owner: DATestUser) -> None:
-    api = urlsplit(execute(sandbox, "printenv", "ONYX_SERVER_URL"))
+    api: SplitResult = urlsplit(execute(sandbox, "printenv", "ONYX_SERVER_URL"))
     assert api.hostname
-    port = api.port or (443 if api.scheme == "https" else 80)
-    result = probe(
+    port: int = api.port or (443 if api.scheme == "https" else 80)
+    result: dict[str, Any] = probe(
         sandbox, "GET", api.hostname, port, api.path.rstrip("/") + "/me", api.scheme
     )
     assert result["status"] == 200, result
@@ -171,7 +186,7 @@ def test_api_identity(sandbox: DockerSandbox, owner: DATestUser) -> None:
 def test_internal_destinations_denied(
     sandbox: DockerSandbox, method: str, host: str
 ) -> None:
-    result = probe(sandbox, method, host, 80)
+    result: dict[str, Any] = probe(sandbox, method, host, 80)
     assert result["status"] == 403, result
     assert json.loads(result["body"])["error"] == "destination_blocked"
 
@@ -179,9 +194,9 @@ def test_internal_destinations_denied(
 def test_direct_egress_denied(sandbox: DockerSandbox) -> None:
     # The proxy is reachable on the sandbox bridge. Its health port is reachable
     # from the host but is deliberately excluded from the sandbox firewall.
-    proxy = urlsplit(execute(sandbox, "printenv", "HTTP_PROXY"))
+    proxy: SplitResult = urlsplit(execute(sandbox, "printenv", "HTTP_PROXY"))
     assert proxy.hostname
-    addresses = json.loads(
+    addresses: list[str] = json.loads(
         execute(
             sandbox,
             "python3",
@@ -190,16 +205,16 @@ def test_direct_egress_denied(sandbox: DockerSandbox) -> None:
             proxy.hostname,
         )
     )
-    address = addresses[0]
-    container = json.loads(docker("inspect", sandbox.container_name))[0]
-    network = next(iter(container["NetworkSettings"]["Networks"]))
-    proxy_info = json.loads(docker("network", "inspect", network))[0]
-    proxies = [
+    address: str = addresses[0]
+    container: dict[str, Any] = json.loads(docker("inspect", sandbox.container_name))[0]
+    network: str = next(iter(container["NetworkSettings"]["Networks"]))
+    proxy_info: dict[str, Any] = json.loads(docker("network", "inspect", network))[0]
+    proxies: list[dict[str, str]] = [
         c for c in proxy_info["Containers"].values() if "sandbox-proxy" in c["Name"]
     ]
     assert len(proxies) == 1, proxies
 
-    authority = f"[{address}]" if ":" in address else address
+    authority: str = f"[{address}]" if ":" in address else address
     assert docker(
         "run",
         "--rm",
@@ -214,7 +229,7 @@ def test_direct_egress_denied(sandbox: DockerSandbox) -> None:
         "*",
         f"http://{authority}:8081/healthz",
     )
-    rc = execute(
+    rc: str = execute(
         sandbox,
         "sh",
         "-c",
@@ -226,10 +241,10 @@ def test_direct_egress_denied(sandbox: DockerSandbox) -> None:
 
 
 def test_unknown_client_denied(sandbox: DockerSandbox) -> None:
-    info = json.loads(docker("inspect", sandbox.container_name))[0]
-    network = next(iter(info["NetworkSettings"]["Networks"]))
-    image = info["Config"]["Image"]
-    proxy = execute(sandbox, "printenv", "HTTP_PROXY")
+    info: dict[str, Any] = json.loads(docker("inspect", sandbox.container_name))[0]
+    network: str = next(iter(info["NetworkSettings"]["Networks"]))
+    image: str = info["Config"]["Image"]
+    proxy: str = execute(sandbox, "printenv", "HTTP_PROXY")
     assert (
         docker(
             "run",
@@ -255,8 +270,8 @@ def test_unknown_client_denied(sandbox: DockerSandbox) -> None:
 
 
 def test_upload_and_preview(sandbox: DockerSandbox, owner: DATestUser) -> None:
-    content = b"docker networking verified"
-    uploaded = BuildSessionManager.upload_file(
+    content: bytes = b"docker networking verified"
+    uploaded: UploadResponse = BuildSessionManager.upload_file(
         owner, sandbox.session_id, "networking.txt", content
     )
     assert uploaded.size_bytes == len(content)
@@ -267,8 +282,8 @@ def test_upload_and_preview(sandbox: DockerSandbox, owner: DATestUser) -> None:
         == content.decode()
     )
     start_session_webapp(sandbox.container_name, sandbox.session_id)
-    base = f"/workspace/sessions/{sandbox.session_id}/outputs/web/app"
-    files = {
+    base: str = f"/workspace/sessions/{sandbox.session_id}/outputs/web/app"
+    files: dict[str, str] = {
         f"{base}/layout.tsx": "export default function Layout({children}:{children:React.ReactNode}){return <html><body>{children}</body></html>}",
         f"{base}/page.tsx": "export default function Page(){return <main>docker networking verified</main>}",
     }
@@ -280,6 +295,6 @@ def test_upload_and_preview(sandbox: DockerSandbox, owner: DATestUser) -> None:
         json.dumps(files),
     )
     wait_for_webapp_ready(owner, str(sandbox.session_id))
-    response = proxy_get(owner, str(sandbox.session_id))
+    response: httpx.Response = proxy_get(owner, str(sandbox.session_id))
     assert response.status_code == 200, response.text
     assert "docker networking verified" in response.text

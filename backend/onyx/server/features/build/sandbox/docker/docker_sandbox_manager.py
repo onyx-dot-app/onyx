@@ -77,6 +77,7 @@ from uuid import UUID
 from docker import DockerClient
 from docker.errors import APIError, NotFound
 from docker.models.containers import Container
+from docker.models.networks import Network
 
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
@@ -422,7 +423,7 @@ def build_sandbox_labels(
 # Sandbox should reach loopback directly; everything else (api server included)
 # goes through the proxy.
 _IPV4_LISTEN_HOST = "0.0.0.0"  # noqa: S104 — isolated sandbox bridge listener
-_NO_PROXY_LIST = "127.0.0.1,localhost"
+_NO_PROXY_LIST = "127.0.0.1,localhost,::1"
 
 
 def _proxy_env_vars(
@@ -1024,9 +1025,9 @@ class DockerSandboxManager(SandboxManager):
         # build_container_create_kwargs to layer on the legacy posture without
         # bifurcating this call site.
         proxy_host = SANDBOX_PROXY_HOST or None
-        network = self._docker.networks.get(self._network_name)
+        network: Network = self._docker.networks.get(self._network_name)
         # Match the sandbox bridge; dual-stack bridges retain IPv4 listeners.
-        listen_host = (
+        listen_host: str = (
             "::"
             if network.attrs.get("EnableIPv4", True) is False
             else _IPV4_LISTEN_HOST

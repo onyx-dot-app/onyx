@@ -17,7 +17,8 @@ from tests.integration.common_utils.http_client import (
 def deployed_frontend() -> str:
     frontend: str | None = os.environ.get("SANDBOX_TEST_FRONTEND_URL")
     family: str | None = os.environ.get("SANDBOX_TEST_IP_FAMILY")
-    if not any((frontend, family)):
+    context: str | None = os.environ.get("SANDBOX_TEST_KUBE_CONTEXT")
+    if not any((frontend, context, family)):
         pytest.skip("Set SANDBOX_TEST_FRONTEND_URL and SANDBOX_TEST_IP_FAMILY")
     if not frontend or family not in {"ipv4", "ipv6"}:
         pytest.fail(

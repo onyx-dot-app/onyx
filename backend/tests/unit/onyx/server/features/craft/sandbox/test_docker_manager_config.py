@@ -715,7 +715,7 @@ def test_proxy_kwargs_env_contains_proxy_and_ca_keys(
     assert env["HTTP_PROXY"] == "http://sandbox-proxy:8080"
     assert env["http_proxy"] == "http://sandbox-proxy:8080"
     # NO_PROXY is loopback only; api-server traffic goes through the proxy too.
-    assert env["NO_PROXY"] == "127.0.0.1,localhost"
+    assert env["NO_PROXY"] == "127.0.0.1,localhost,::1"
     # Case-doubled like the other proxy vars; HTTP libs split on which they
     # read.
     assert env["no_proxy"] == env["NO_PROXY"]
