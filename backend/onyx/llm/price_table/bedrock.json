@@ -3,6 +3,8 @@
     "amazon.nova-premier": "us.amazon.nova-premier-v1:0",
     "amazon.nova-premier-v1:0": "us.amazon.nova-premier-v1:0",
     "deepseek.v3": "deepseek.v3-v1:0",
+    "in.anthropic.claude-haiku-4-5": "in.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "in.anthropic.claude-haiku-4-5-20251001": "in.anthropic.claude-haiku-4-5-20251001-v1:0",
     "qwen.qwen3-235b-a22b-2507": "qwen.qwen3-235b-a22b-2507-v1:0",
     "qwen.qwen3-32b": "qwen.qwen3-32b-v1:0",
     "qwen.qwen3-coder-30b-a3b": "qwen.qwen3-coder-30b-a3b-v1:0",
@@ -58,6 +60,14 @@
       },
       "mode": "image_generation",
       "name": "512-x-512/max-steps/stability.stable-diffusion-xl-v0"
+    },
+    "amazon.nova-2-5-sonic": {
+      "cost": {
+        "input": 0.33,
+        "output": 2.75
+      },
+      "mode": "realtime",
+      "name": "amazon.nova-2-5-sonic"
     },
     "amazon.nova-2-lite-v1:0": {
       "attachment": true,
@@ -684,6 +694,37 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic.claude-sonnet-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
       "structured_output": false,
       "temperature": false,
       "tool_call": true
@@ -1728,6 +1769,37 @@
       "temperature": false,
       "tool_call": true
     },
+    "eu.anthropic.claude-sonnet-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5.5 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
     "eu.mistral.pixtral-large-2502-v1:0": {
       "attachment": true,
       "cost": {
@@ -2205,6 +2277,37 @@
       "temperature": false,
       "tool_call": true
     },
+    "global.anthropic.claude-sonnet-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5.5 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
     "global.cohere.embed-v4:0": {
       "cost": {
         "input": 0.12,
@@ -2227,7 +2330,7 @@
       "family": "kimi-k3",
       "limit": {
         "context": 1048576,
-        "output": 131072
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -2540,6 +2643,55 @@
       "temperature": false,
       "tool_call": true
     },
+    "global.openai.gpt-6.1-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Sol (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-29",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "global.xai.grok-4.6": {
       "attachment": true,
       "cost": {
@@ -2566,6 +2718,65 @@
       "reasoning": true,
       "release_date": "2026-08-12",
       "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.xai.grok-4.7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "input": 2,
+        "output": 6
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Grok 4.7 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "global.zai.glm-5.3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.312,
+        "cache_write": 2.1,
+        "input": 1.68,
+        "output": 5.28
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3 (Global)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -2605,7 +2816,7 @@
       },
       "family": "gemma",
       "limit": {
-        "context": 202752,
+        "context": 131072,
         "output": 8192
       },
       "modalities": {
@@ -2743,6 +2954,98 @@
     "guardrails": {
       "mode": "guardrail",
       "name": "guardrails"
+    },
+    "in.anthropic.claude-haiku-4-5-20251001-v1:0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 1.375,
+        "input": 1.1,
+        "output": 5.5
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 200000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 4.5 (India)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-10-15",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "in.anthropic.claude-opus-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "cache_write": 6.875,
+        "input": 5.5,
+        "output": 27.5
+      },
+      "family": "claude-opus",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Opus 5 (India)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-07-24",
+      "temperature": false,
+      "tool_call": true
+    },
+    "in.anthropic.claude-sonnet-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5 (India)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
     },
     "in.openai.gpt-5.6-luna": {
       "attachment": true,
@@ -3308,7 +3611,7 @@
       },
       "family": "minimax",
       "limit": {
-        "context": 204800,
+        "context": 196608,
         "output": 131072
       },
       "modalities": {
@@ -3362,7 +3665,7 @@
       },
       "family": "devstral",
       "limit": {
-        "context": 256000,
+        "context": 262144,
         "output": 8192
       },
       "modalities": {
@@ -3501,7 +3804,7 @@
       },
       "family": "mistral-large",
       "limit": {
-        "context": 256000,
+        "context": 262144,
         "output": 8192
       },
       "modalities": {
@@ -3612,7 +3915,7 @@
       },
       "family": "kimi-thinking",
       "limit": {
-        "context": 262143,
+        "context": 262144,
         "output": 16000
       },
       "modalities": {
@@ -3639,7 +3942,7 @@
       },
       "family": "kimi-k2",
       "limit": {
-        "context": 262143,
+        "context": 262144,
         "output": 16384
       },
       "modalities": {
@@ -3668,7 +3971,7 @@
       },
       "family": "nemotron",
       "limit": {
-        "context": 128000,
+        "context": 131072,
         "output": 8192
       },
       "modalities": {
@@ -3778,7 +4081,7 @@
       },
       "family": "gpt",
       "limit": {
-        "context": 272000,
+        "context": 1000000,
         "output": 128000
       },
       "modalities": {
@@ -3808,7 +4111,7 @@
       },
       "family": "gpt",
       "limit": {
-        "context": 272000,
+        "context": 1000000,
         "output": 128000
       },
       "modalities": {
@@ -4029,6 +4332,156 @@
       "temperature": false,
       "tool_call": true
     },
+    "openai.gpt-6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.011,
+        "cache_write": 0.1375,
+        "context_over_200k": {
+          "cache_read": 0.022,
+          "cache_write": 0.275,
+          "input": 0.22,
+          "output": 0.825
+        },
+        "input": 0.11,
+        "output": 0.55,
+        "tiers": [
+          {
+            "cache_read": 0.022,
+            "cache_write": 0.275,
+            "input": 0.22,
+            "output": 0.825,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Luna",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.44,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 16.5
+        },
+        "input": 2.2,
+        "output": 11,
+        "tiers": [
+          {
+            "cache_read": 0.44,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 16.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-6.1-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.22,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 16.5
+        },
+        "input": 2.2,
+        "output": 11,
+        "tiers": [
+          {
+            "cache_read": 0.22,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 16.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-29",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "openai.gpt-oss-120b": {
       "attachment": false,
       "cost": {
@@ -4037,8 +4490,8 @@
       },
       "family": "gpt-oss",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 131072,
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -4064,8 +4517,8 @@
       },
       "family": "gpt-oss",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 131072,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -4091,8 +4544,8 @@
       },
       "family": "gpt-oss",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 131072,
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -4118,8 +4571,8 @@
       },
       "family": "gpt-oss",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 131072,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -5295,6 +5748,37 @@
       "temperature": false,
       "tool_call": true
     },
+    "us.anthropic.claude-sonnet-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "input": 2.2,
+        "output": 11
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5.5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
     "us.cohere.embed-v4:0": {
       "cost": {
         "input": 0.12,
@@ -5504,7 +5988,7 @@
       "family": "kimi-k3",
       "limit": {
         "context": 1048576,
-        "output": 131072
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -5817,6 +6301,55 @@
       "temperature": false,
       "tool_call": true
     },
+    "us.openai.gpt-6.1-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.11,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.22,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 16.5
+        },
+        "input": 2.2,
+        "output": 11,
+        "tiers": [
+          {
+            "cache_read": 0.22,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 16.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Sol (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-29",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "us.twelvelabs.marengo-embed-2-7-v1:0": {
       "cost": {
         "image_input": 0.0001,
@@ -5918,6 +6451,65 @@
       "reasoning": true,
       "release_date": "2026-08-12",
       "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.xai.grok-4.7": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.55,
+        "input": 2.2,
+        "output": 6.6
+      },
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Grok 4.7 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.zai.glm-5.3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.3432,
+        "cache_write": 2.31,
+        "input": 1.848,
+        "output": 5.808
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3 (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -6040,7 +6632,7 @@
       },
       "family": "glm",
       "limit": {
-        "context": 204800,
+        "context": 202752,
         "output": 131072
       },
       "modalities": {
@@ -6067,7 +6659,7 @@
       },
       "family": "glm-flash",
       "limit": {
-        "context": 200000,
+        "context": 202752,
         "output": 131072
       },
       "modalities": {

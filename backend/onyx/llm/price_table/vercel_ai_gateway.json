@@ -10207,6 +10207,66 @@
       "temperature": true,
       "tool_call": true
     },
+    "topaz/proteus": {
+      "attachment": false,
+      "limit": {
+        "context": 0,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "video"
+        ]
+      },
+      "name": "Proteus",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-10-06",
+      "tool_call": false
+    },
+    "topaz/starlight-precise-2.6": {
+      "attachment": false,
+      "limit": {
+        "context": 0,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "video"
+        ]
+      },
+      "name": "Starlight Precise 2.6",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-10-06",
+      "tool_call": false
+    },
+    "topaz/wonder-3.5": {
+      "attachment": false,
+      "limit": {
+        "context": 0,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "image"
+        ]
+      },
+      "name": "Wonder 3.5",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-10-06",
+      "tool_call": false
+    },
     "voyage/rerank-2.5": {
       "attachment": false,
       "family": "voyage",
