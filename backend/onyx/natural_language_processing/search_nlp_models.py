@@ -99,6 +99,9 @@ _RETRY_TRIES = 8 if INDEXING_ONLY else 2
 _OPENAI_MAX_INPUT_LEN = 2048
 # Cohere allows up to 96 embeddings in a single embedding calling
 _COHERE_MAX_INPUT_LEN = 96
+# Voyage caps total tokens per request (120k for voyage-4-large and
+# voyage-3-large). 128 full chunks stay under that at any chunk size we use.
+_VOYAGE_MAX_INPUT_LEN = 128
 
 # Authentication error string constants
 _AUTH_ERROR_401 = "401"
@@ -414,13 +417,16 @@ class CloudEmbedding:
             api_key=self._resolve_api_key(), timeout=API_BASED_EMBEDDING_TIMEOUT
         )
 
-        response = await client.embed(
-            texts=texts,
-            model=model,
-            input_type=embedding_type,
-            truncation=True,
-        )
-        return response.embeddings
+        final_embeddings: list[Embedding] = []
+        for text_batch in batch_list(texts, _VOYAGE_MAX_INPUT_LEN):
+            response = await client.embed(
+                texts=text_batch,
+                model=model,
+                input_type=embedding_type,
+                truncation=True,
+            )
+            final_embeddings.extend(response.embeddings)
+        return final_embeddings
 
     async def _embed_azure(
         self, texts: list[str], model: str | None
