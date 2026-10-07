@@ -14,6 +14,7 @@ models), and OpenRouter (gap-fill pricing for its section).
 
 import json
 import re
+import threading
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -218,33 +219,45 @@ _REMOTE_FETCH_TIMEOUT_SECONDS = 5.0
 # provider -> (fetched_at epoch, section or None). None negative-caches
 # failures so repeated misses don't refetch every lookup.
 _remote_sections: dict[str, tuple[float, dict[str, Any] | None]] = {}
+# Serializes fetches per cache window so workers missing the same provider
+# don't repeat the download.
+_remote_lock = threading.Lock()
 
 
 def _remote_section(provider: str) -> dict[str, Any] | None:
     """The provider's price_table file from main, TTL + negative cached."""
     if ONYX_AIRGAPPED or provider in _LOCAL_PROVIDERS:
         return None
-    now = time.time()
-    cached = _remote_sections.get(provider)
+    now: float = time.time()
+    cached: tuple[float, dict[str, Any] | None] | None = _remote_sections.get(provider)
     if cached is not None and now - cached[0] < _REMOTE_TTL_SECONDS:
         return cached[1]
-    section: dict[str, Any] | None = None
-    try:
-        response = httpx.get(
-            f"{_REMOTE_CATALOG_URL}/{provider}.json",
-            timeout=_REMOTE_FETCH_TIMEOUT_SECONDS,
-            follow_redirects=True,
-        )
-        if response.status_code == 200:
-            data = response.json()
-            section = {
-                "models": data.get("models") or {},
-                "aliases": data.get("aliases") or {},
-            }
-    except Exception as e:
-        logger.warning("Remote catalog fetch failed for %s: %s", provider, e)
-    _remote_sections[provider] = (now, section)
-    return section
+    with _remote_lock:
+        # Another worker may have fetched while we waited on the lock.
+        cached = _remote_sections.get(provider)
+        if cached is not None and now - cached[0] < _REMOTE_TTL_SECONDS:
+            return cached[1]
+        section: dict[str, Any] | None = None
+        try:
+            response: httpx.Response = httpx.get(
+                f"{_REMOTE_CATALOG_URL}/{provider}.json",
+                timeout=_REMOTE_FETCH_TIMEOUT_SECONDS,
+                follow_redirects=True,
+            )
+            if response.status_code == 200:
+                data: Any = response.json()
+                # Reject malformed payloads instead of caching shapes that
+                # would raise inside _lookup_section / _compat_entry.
+                if isinstance(data, dict) and isinstance(data.get("models"), dict):
+                    aliases: Any = data.get("aliases")
+                    section = {
+                        "models": data["models"],
+                        "aliases": aliases if isinstance(aliases, dict) else {},
+                    }
+        except Exception as e:
+            logger.warning("Remote catalog fetch failed for %s: %s", provider, e)
+        _remote_sections[provider] = (now, section)
+        return section
 
 
 def find_remote_model_entry(

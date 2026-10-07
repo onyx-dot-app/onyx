@@ -5,6 +5,7 @@ Unit tests assume OSS resolution unless they opt into EE via the shared
 """
 
 from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
 
@@ -12,6 +13,23 @@ from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_remote_catalog_fetch() -> Generator[None, None, None]:
+    """Keeps the unit suite offline: catalog misses must not reach GitHub.
+
+    Remote-catalog tests override this by patching ``model_catalog.httpx.get``
+    themselves.
+    """
+    from onyx.llm import model_catalog
+
+    with patch.object(
+        model_catalog.httpx,
+        "get",
+        side_effect=RuntimeError("remote catalog fetch in unit test"),
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)

@@ -120,7 +120,9 @@ def find_model_obj(
     # release's table; try the remote catalog and stamp any hit into the map.
     from onyx.llm.model_catalog import find_remote_model_obj
 
-    remote = find_remote_model_obj(provider, filtered_model_names)
+    remote: dict[str, Any] | None = find_remote_model_obj(
+        provider, filtered_model_names
+    )
     if remote is not None and not (chat_only and not _is_chat_entry(remote)):
         for name in filtered_model_names:
             model_map.setdefault(f"{provider}/{name}", remote)
