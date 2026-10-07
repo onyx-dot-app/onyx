@@ -31,8 +31,8 @@ export default function PptxPreview({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imageLoading, setImageLoading] = useState(true);
 
-  const { data, error, isLoading, mutate } = useSWR(
-    SWR_KEYS.buildSessionPptxPreview(sessionId, filePath),
+  const { data, error, isLoading } = useSWR(
+    [SWR_KEYS.buildSessionPptxPreview(sessionId, filePath), refreshKey ?? 0],
     () => fetchPptxPreview(sessionId, filePath),
     {
       revalidateOnFocus: false,
@@ -41,12 +41,23 @@ export default function PptxPreview({
   );
 
   const slideCount = data?.slide_count ?? 0;
+  const activeSlide = Math.min(currentSlide, Math.max(0, slideCount - 1));
+
+  // An updated deck can have fewer slides than the current selection.
+  useEffect(() => {
+    if (data) {
+      setCurrentSlide((index) =>
+        Math.min(index, Math.max(0, data.slide_count - 1))
+      );
+    }
+  }, [data]);
 
   const goToPrev = useCallback(() => {
     setCurrentSlide((prev) => Math.max(0, prev - 1));
   }, []);
 
   const goToNext = useCallback(() => {
+    if (slideCount === 0) return;
     setCurrentSlide((prev) => Math.min(slideCount - 1, prev + 1));
   }, [slideCount]);
 
@@ -59,13 +70,6 @@ export default function PptxPreview({
   useEffect(() => {
     setImageLoading(true);
   }, [currentSlide, data]);
-
-  // Re-fetch when refreshKey changes
-  useEffect(() => {
-    if (refreshKey && refreshKey > 0) {
-      mutate();
-    }
-  }, [refreshKey, mutate]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -134,8 +138,9 @@ export default function PptxPreview({
     );
   }
 
-  const slidePath = data.slide_paths[currentSlide] ?? "";
-  const slideUrl = getArtifactUrl(sessionId, slidePath);
+  const slidePath = data.slide_paths[activeSlide] ?? "";
+  // Wait for this revision's conversion, then bypass the old slide image cache.
+  const slideUrl = `${getArtifactUrl(sessionId, slidePath)}?revision=${refreshKey ?? 0}`;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -151,7 +156,7 @@ export default function PptxPreview({
         <img
           src={slideUrl}
           alt={t("slide.counter", {
-            current: currentSlide + 1,
+            current: activeSlide + 1,
             total: slideCount,
           })}
           className={cn(
@@ -168,10 +173,10 @@ export default function PptxPreview({
         <div className="flex items-center justify-center gap-3 p-2 border-t border-border-02">
           <button
             onClick={goToPrev}
-            disabled={currentSlide === 0}
+            disabled={activeSlide === 0}
             className={cn(
               "p-1 rounded-sm",
-              currentSlide === 0
+              activeSlide === 0
                 ? "opacity-30 cursor-not-allowed"
                 : "hover:bg-background-neutral-03 cursor-pointer"
             )}
@@ -180,16 +185,16 @@ export default function PptxPreview({
           </button>
           <Text font="secondary-body" color="text-03">
             {t("slide.counter", {
-              current: currentSlide + 1,
+              current: activeSlide + 1,
               total: slideCount,
             })}
           </Text>
           <button
             onClick={goToNext}
-            disabled={currentSlide === slideCount - 1}
+            disabled={activeSlide === slideCount - 1}
             className={cn(
               "p-1 rounded-sm",
-              currentSlide === slideCount - 1
+              activeSlide === slideCount - 1
                 ? "opacity-30 cursor-not-allowed"
                 : "hover:bg-background-neutral-03 cursor-pointer"
             )}

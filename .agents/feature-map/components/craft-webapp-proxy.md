@@ -200,6 +200,15 @@ provisioning entirely, since nothing will view them live.
 
 ---
 
+### Artifact preview refresh
+
+PowerPoint previews use the supplied refresh revision in their conversion cache key
+and slide image URLs. A refreshed deck can have fewer slides; selection stays within
+its new bounds. Next-slide input is ignored while conversion has no slides.
+PDF previews bypass the browser cache when fetching the artifact.
+These behaviors live in `PptxPreview.tsx` and `PdfPreview.tsx` under
+`web/src/app/craft/components/output-panel/`.
+
 ## 5. Contracts and invariants
 
 1. **A preview must only be reachable by someone entitled to that session.**

@@ -49,7 +49,7 @@ export default function PdfPreview({
       .join("/");
     const artifactUrl = getArtifactUrl(sessionId, encodedPath);
 
-    fetch(artifactUrl, { signal: controller.signal })
+    fetch(artifactUrl, { signal: controller.signal, cache: "no-store" })
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to fetch PDF: ${res.status}`);
         return res.blob();
