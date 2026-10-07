@@ -505,6 +505,15 @@ def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> Non
 # ---------------------------------------------------------------------------
 
 
+def _is_unbounded_router(raw: dict[str, Any]) -> bool:
+    """OpenRouter meta-model with no declared upstream endpoint: tokenizer
+    "Router" and a null top_provider context, so its advertised limits are
+    the pool maximum rather than a per-request guarantee."""
+    if (raw.get("architecture") or {}).get("tokenizer") != "Router":
+        return False
+    return (raw.get("top_provider") or {}).get("context_length") is None
+
+
 def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
     pricing = raw.get("pricing") or {}
     try:
@@ -559,6 +568,8 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
         "response_format" in params
     )
     entry["reasoning"] = "reasoning" in params
+    if _is_unbounded_router(raw):
+        entry["unbounded"] = True
     return entry
 
 
@@ -574,12 +585,19 @@ def merge_openrouter(
         model_id = raw.get("id")
         if not model_id:
             continue
-        merged = _openrouter_entry(raw)
-        if merged is None:
-            continue
         existing = models.get(model_id)
         if existing is None:
             existing = models.get(section["aliases"].get(model_id, ""))
+        # Router status is independent of pricing — a free router still has
+        # no declared endpoint.
+        if existing is not None:
+            if _is_unbounded_router(raw):
+                existing["unbounded"] = True
+            else:
+                existing.pop("unbounded", None)
+        merged = _openrouter_entry(raw)
+        if merged is None:
+            continue
         if existing is None:
             models[model_id] = merged
             added += 1

@@ -240,12 +240,19 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
     inputs = modalities.get("input") or []
     display_name = re.sub(r"\s*\(latest\)\s*$", "", entry.get("name") or "")
 
+    # Meta-models (openrouter/auto and friends) route each request to a
+    # pool endpoint smaller than their advertised pool-max limits. Emitting
+    # no output limit keeps callers from sending a max_tokens the routed
+    # endpoint then rejects.
+    unbounded = bool(entry.get("unbounded"))
+
     return {
         "litellm_provider": provider,
         "mode": entry.get("mode") or "chat",
         "max_input_tokens": limit.get("input") or limit.get("context"),
         "max_tokens": limit.get("context"),
-        "max_output_tokens": limit.get("output"),
+        "max_output_tokens": None if unbounded else limit.get("output"),
+        "unbounded": unbounded or None,
         "supports_vision": "image" in inputs,
         "supports_reasoning": entry.get("reasoning"),
         "supports_none_reasoning_effort": entry.get("supports_none_reasoning_effort"),

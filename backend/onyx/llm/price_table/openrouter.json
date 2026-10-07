@@ -2073,8 +2073,8 @@
     "deepseek/deepseek-v4-flash": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0005,
-        "input": 0.0005,
+        "cache_read": 0.0299,
+        "input": 0.0299,
         "output": 1.28
       },
       "family": "deepseek-flash",
@@ -2102,8 +2102,8 @@
     "deepseek/deepseek-v4-flash-0731": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0079,
-        "input": 0.0079,
+        "cache_read": 0.015,
+        "input": 0.015,
         "output": 1.28
       },
       "family": "deepseek-flash",
@@ -2219,8 +2219,8 @@
     "deepseek/deepseek-v4.1-flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.015,
-        "input": 0.019474,
+        "cache_read": 0.006,
+        "input": 0.3,
         "output": 1.2
       },
       "family": "deepseek-flash",
@@ -3415,6 +3415,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Nano Banana 2.1",
       "open_weights": false,
       "reasoning": true,
@@ -3542,9 +3543,9 @@
     "google/gemma-4-26b-a4b-it": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.05,
-        "input": 0.09,
-        "output": 0.3
+        "cache_read": 0.0425,
+        "input": 0.0765,
+        "output": 0.255
       },
       "family": "gemma",
       "limit": {
@@ -5223,6 +5224,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Mistral Large 4",
       "open_weights": false,
       "reasoning": true,
@@ -5809,8 +5811,8 @@
     "moonshotai/kimi-k3": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.23,
-        "input": 0.69,
+        "cache_read": 0.29,
+        "input": 0.89,
         "output": 15
       },
       "family": "kimi-k3",
@@ -6369,7 +6371,8 @@
       "name": "NVIDIA: Switchyard",
       "reasoning": false,
       "structured_output": false,
-      "tool_call": false
+      "tool_call": false,
+      "unbounded": true
     },
     "openai/gpt-3.5-turbo": {
       "attachment": false,
@@ -9676,7 +9679,8 @@
       "release_date": "2023-11-08",
       "structured_output": true,
       "temperature": true,
-      "tool_call": true
+      "tool_call": true,
+      "unbounded": true
     },
     "openrouter/auto-beta": {
       "cost": {
@@ -9702,7 +9706,8 @@
       "name": "Auto Router (Beta)",
       "reasoning": true,
       "structured_output": true,
-      "tool_call": true
+      "tool_call": true,
+      "unbounded": true
     },
     "openrouter/bodybuilder": {
       "attachment": false,
@@ -9729,7 +9734,8 @@
       "release_date": "2025-12-05",
       "structured_output": false,
       "temperature": false,
-      "tool_call": false
+      "tool_call": false,
+      "unbounded": true
     },
     "openrouter/free": {
       "attachment": true,
@@ -9758,7 +9764,8 @@
       "release_date": "2026-02-01",
       "structured_output": true,
       "temperature": true,
-      "tool_call": true
+      "tool_call": true,
+      "unbounded": true
     },
     "openrouter/fusion": {
       "attachment": false,
@@ -9784,7 +9791,8 @@
       "release_date": "2026-06-13",
       "structured_output": false,
       "temperature": false,
-      "tool_call": false
+      "tool_call": false,
+      "unbounded": true
     },
     "openrouter/pareto-code": {
       "attachment": false,
@@ -9810,7 +9818,8 @@
       "release_date": "2026-04-21",
       "structured_output": false,
       "temperature": false,
-      "tool_call": false
+      "tool_call": false,
+      "unbounded": true
     },
     "perceptron/perceptron-mk1": {
       "attachment": true,
@@ -10424,7 +10433,6 @@
     "qwen/qwen3-235b-a22b-2507": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0175,
         "input": 0.09,
         "output": 0.55
       },
@@ -12807,7 +12815,8 @@
       "name": "TypeSafe: Jev Router",
       "reasoning": true,
       "structured_output": true,
-      "tool_call": true
+      "tool_call": true,
+      "unbounded": true
     },
     "unbiased/pareto": {
       "attachment": true,
@@ -14181,9 +14190,9 @@
     "~deepseek/deepseek-flash-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.015,
-        "input": 0.019474,
-        "output": 1.2
+        "cache_read": 0.002,
+        "input": 0.002,
+        "output": 2.4
       },
       "family": "deepseek-flash",
       "limit": {
@@ -14240,8 +14249,8 @@
     "~deepseek/deepseek-v4-flash-latest": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0079,
-        "input": 0.0079,
+        "cache_read": 0.015,
+        "input": 0.015,
         "output": 1.28
       },
       "family": "deepseek",
@@ -14358,7 +14367,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.45,
-        "input": 0.68,
+        "input": 0.83,
         "output": 13
       },
       "family": "kimi",
@@ -14666,8 +14675,8 @@
     "~z-ai/glm-flash-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.0214,
-        "input": 0.0214,
+        "cache_read": 0.0244,
+        "input": 0.0244,
         "output": 0.5
       },
       "family": "glm-flash",

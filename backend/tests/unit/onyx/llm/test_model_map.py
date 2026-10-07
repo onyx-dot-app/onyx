@@ -135,6 +135,45 @@ def test_model_is_reasoning_model_handles_none_in_model_map() -> None:
             _reset_caches()
 
 
+def test_unbounded_entry_drops_max_output_tokens() -> None:
+    """Router meta-models flagged `unbounded` (e.g. openrouter/auto) route to
+    endpoints smaller than their advertised limits, so the model map must not
+    emit an output limit callers would send as max_tokens."""
+    mock_catalog = {
+        "openrouter": {
+            "models": {
+                "openrouter/auto": {
+                    "limit": {"context": 2_000_000, "output": 2_000_000},
+                    "unbounded": True,
+                },
+                "vendor/real-model": {
+                    "limit": {"context": 2_000_000, "output": 2_000_000},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            router = find_model_obj(
+                model_map, LlmProviderNames.OPENROUTER, "openrouter/auto"
+            )
+            assert router is not None
+            assert router["max_output_tokens"] is None
+            assert router["unbounded"] is True
+
+            bounded = find_model_obj(
+                model_map, LlmProviderNames.OPENROUTER, "vendor/real-model"
+            )
+            assert bounded is not None
+            assert bounded["max_output_tokens"] == 2_000_000
+            assert bounded["unbounded"] is None
+        finally:
+            _reset_caches()
+
+
 def test_twelvelabs_pegasus_override_present() -> None:
     model_map = _fresh_model_map()
     try:

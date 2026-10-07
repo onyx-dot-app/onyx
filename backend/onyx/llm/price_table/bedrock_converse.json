@@ -2751,6 +2751,35 @@
       "temperature": true,
       "tool_call": true
     },
+    "global.zai.glm-5.3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.312,
+        "cache_write": 2.1,
+        "input": 1.68,
+        "output": 5.28
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3 (Global)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "google.gemma-3-12b-it": {
       "attachment": true,
       "cost": {
@@ -6451,6 +6480,35 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "us.zai.glm-5.3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.3432,
+        "cache_write": 2.31,
+        "input": 1.848,
+        "output": 5.808
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3 (US)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
