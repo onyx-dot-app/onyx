@@ -196,8 +196,8 @@ CORS_ALLOW_CREDENTIALS: bool = cors_allow_credentials(CORS_ALLOWED_ORIGIN)
 MULTI_TENANT = os.environ.get("MULTI_TENANT", "").lower() == "true"
 
 # Air-gapped deployment: no outbound calls to onyx-controlled endpoints
-# (recommended-models sync, remote model catalog lookup). Inbound traffic and
-# user-configured integrations are unaffected.
+# (recommended-models sync, remote model catalog lookup, release notes).
+# Inbound traffic and user-configured integrations are unaffected.
 ONYX_AIRGAPPED = os.environ.get("ONYX_AIRGAPPED", "").lower() == "true"
 
 # How often to check GitHub for updated onyx-published LLM config
