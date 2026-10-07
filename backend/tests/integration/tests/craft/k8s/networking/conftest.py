@@ -85,6 +85,7 @@ def _test_client(_deployment_configuration: str) -> Generator[httpx.Client, None
         request.url = httpx.URL(
             _deployment_configuration + "/api/" + str(request.url)[len(prefix) :]
         )
+        request.headers["host"] = request.url.netloc.decode("ascii")
 
     with httpx.Client(
         transport=RetryingTransport(),

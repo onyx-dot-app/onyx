@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from tests.common.craft.local_http_probe import LOCAL_HTTP_PROBE
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
@@ -417,3 +418,11 @@ def test_generated_webapp_preview(sandbox: Sandbox) -> None:
     response = proxy_get(sandbox.owner, str(sandbox.session_id))
     assert response.status_code == 200, response.text[:500]
     assert "networking preview verified" in response.text
+
+
+def test_local_http_bypasses_proxy(sandbox: Sandbox) -> None:
+    host: str = "::1" if os.environ["SANDBOX_TEST_IP_FAMILY"] == "ipv6" else "127.0.0.1"
+    assert (
+        exec_sandbox(sandbox, "python3", "-c", LOCAL_HTTP_PROBE, host).strip()
+        == "sandbox loopback verified"
+    )
