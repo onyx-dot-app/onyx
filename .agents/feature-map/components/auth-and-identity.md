@@ -130,7 +130,7 @@ the coding-agent sandbox).
 | `DISPOSABLE_EMAIL_DOMAINS_URL` | `configs/app_configs.py` | | Remote disposable-domain blocklist, refreshed stale-while-revalidate. |
 | `MOBILE_ALLOWED_REDIRECT_URIS` | `configs/app_configs.py` | | Allowlist mobile SSO completion redirects against. |
 | `OIDC_DISCOVERY_CACHE_TTL_SECONDS` | `auth/oauth_refresher.py` | 3600 | OIDC discovery-document cache for token-refresh endpoint resolution. |
-| `OAUTH_PROVIDER_ENABLED` | `configs/app_configs.py` | `false` | Mounts the OAuth provider routers (`main.py`). `get_oauth_provider_settings` then requires `WEB_DOMAIN` to be HTTPS, or HTTP on a loopback host, and fails startup otherwise. The MCP resource is always `{WEB_DOMAIN}/mcp/`. |
+| `OAUTH_PROVIDER_ENABLED` | `configs/app_configs.py` | `false` | Turns on the OAuth provider. `oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS` is computed once at import and is `None` unless the flag is on and `WEB_DOMAIN` is HTTPS (or HTTP on a loopback host); an unusable `WEB_DOMAIN` logs a warning and leaves the provider off. `main.py` mounts the routers only when it is set. The MCP resource is always `{WEB_DOMAIN}/mcp/`. |
 
 **Admin-configured (DB rows) and the legacy env path:** `SSOProvider` rows
 (`db/sso_provider.py`) hold the multi-provider OAuth/OIDC/SAML settings. The

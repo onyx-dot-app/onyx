@@ -37,7 +37,7 @@ from onyx.db.oauth_provider import (
 )
 from onyx.oauth_provider.config import (
     canonical_mcp_resource,
-    get_oauth_provider_settings,
+    require_oauth_provider_settings,
 )
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
 from onyx.server.oauth_provider.provider import (
@@ -147,7 +147,7 @@ router = APIRouter(prefix="/oauth-provider", dependencies=get_auth_rate_limiters
 
 @router.api_route("/metadata", methods=["GET", "OPTIONS"])
 async def metadata(request: Request) -> Response:
-    settings = get_oauth_provider_settings()
+    settings = require_oauth_provider_settings()
     if request.method == "OPTIONS":
         return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
     issuer = settings.issuer_url
@@ -173,7 +173,7 @@ async def metadata(request: Request) -> Response:
 
 @router.api_route("/register", methods=["POST", "OPTIONS"])
 async def register(request: Request) -> Response:
-    settings = get_oauth_provider_settings()
+    settings = require_oauth_provider_settings()
     if request.method == "OPTIONS":
         return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
     try:
@@ -215,7 +215,7 @@ async def register(request: Request) -> Response:
 
 @router.api_route("/authorize", methods=["GET", "POST"])
 async def authorize(request: Request) -> Response:
-    settings = get_oauth_provider_settings()
+    settings = require_oauth_provider_settings()
     try:
         if request.method == "GET":
             if len(request.url.query.encode("utf-8")) > _MAX_BODY_BYTES:
@@ -269,7 +269,7 @@ async def authorize(request: Request) -> Response:
 
 @router.api_route("/token", methods=["POST", "OPTIONS"])
 async def token(request: Request) -> Response:
-    settings = get_oauth_provider_settings()
+    settings = require_oauth_provider_settings()
     if request.method == "OPTIONS":
         return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
     try:
@@ -316,7 +316,7 @@ async def token(request: Request) -> Response:
 
 @router.api_route("/revoke", methods=["POST", "OPTIONS"])
 async def revoke(request: Request) -> Response:
-    settings = get_oauth_provider_settings()
+    settings = require_oauth_provider_settings()
     if request.method == "OPTIONS":
         return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
     try:

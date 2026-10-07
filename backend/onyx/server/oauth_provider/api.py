@@ -37,7 +37,7 @@ from onyx.oauth_provider.attempts import (
     get_authorization_request,
     store_authorization_code,
 )
-from onyx.oauth_provider.config import get_oauth_provider_settings
+from onyx.oauth_provider.config import require_oauth_provider_settings
 from onyx.oauth_provider.models import OAuthProviderGrantInfo, StoredOAuthProviderCode
 from onyx.server.oauth_provider.models import (
     OAuthConsentDecision,
@@ -152,7 +152,7 @@ async def consent_details(
         redirect_origin=f"{destination.scheme}://{destination.netloc}",
         account_email=user.email,
         workspace_name=settings.company_name
-        or urlsplit(get_oauth_provider_settings().web_url).netloc,
+        or urlsplit(require_oauth_provider_settings().web_url).netloc,
         scopes=pending.params.scopes or [],
         csrf_token=binding.csrf_token,
     )
@@ -165,7 +165,7 @@ async def decide_consent(
     response: Response,
     user: User = Depends(require_permission(Permission.CREATE_USER_API_KEYS)),
 ) -> OAuthConsentResult:
-    settings = get_oauth_provider_settings()
+    settings = require_oauth_provider_settings()
     if request.headers.get("origin") != settings.web_origin:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Invalid authorization origin")
     session_hash = await _authorization_session(request, user)
@@ -242,7 +242,7 @@ def disconnect_client(
     user: User = Depends(current_limited_user),
 ) -> dict[str, bool]:
     _session_hash(request, user)
-    if request.headers.get("origin") != get_oauth_provider_settings().web_origin:
+    if request.headers.get("origin") != require_oauth_provider_settings().web_origin:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Invalid authorization origin")
     with get_session_with_current_tenant() as session:
         revoked = revoke_oauth_provider_grant__no_commit(

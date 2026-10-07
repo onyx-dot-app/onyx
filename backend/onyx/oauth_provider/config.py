@@ -5,7 +5,12 @@ from pydantic import AnyUrl
 
 from onyx.auth.constants import OAUTH_PROVIDER_MAX_URL_LENGTH
 from onyx.configs import app_configs
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.oauth_provider.models import OAuthProviderSettings
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def is_loopback_host(hostname: str | None) -> bool:
@@ -48,8 +53,20 @@ def validate_oauth_url(value: str, *, allow_query: bool) -> str:
     raise ValueError("Invalid OAuth provider URL")
 
 
-def get_oauth_provider_settings() -> OAuthProviderSettings:
-    web_url = validate_oauth_url(app_configs.WEB_DOMAIN, allow_query=False).rstrip("/")
+def load_oauth_provider_settings() -> OAuthProviderSettings | None:
+    """Settings for the OAuth provider, or None when it cannot run: the flag is off,
+    or `WEB_DOMAIN` is not HTTPS (plain HTTP only on a loopback host)."""
+    if not app_configs.OAUTH_PROVIDER_ENABLED:
+        return None
+    try:
+        web_url = validate_oauth_url(app_configs.WEB_DOMAIN, allow_query=False).rstrip(
+            "/"
+        )
+    except ValueError:
+        logger.warning(
+            "OAuth provider is off: WEB_DOMAIN must be HTTPS, or HTTP on localhost"
+        )
+        return None
     split = urlsplit(web_url)
     return OAuthProviderSettings(
         issuer_url=f"{web_url}/api/oauth-provider",
@@ -57,6 +74,15 @@ def get_oauth_provider_settings() -> OAuthProviderSettings:
         web_url=web_url,
         web_origin=f"{split.scheme}://{split.netloc}",
     )
+
+
+OAUTH_PROVIDER_SETTINGS = load_oauth_provider_settings()
+
+
+def require_oauth_provider_settings() -> OAuthProviderSettings:
+    if OAUTH_PROVIDER_SETTINGS is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND)
+    return OAUTH_PROVIDER_SETTINGS
 
 
 def canonical_mcp_resource(value: str, settings: OAuthProviderSettings) -> str:

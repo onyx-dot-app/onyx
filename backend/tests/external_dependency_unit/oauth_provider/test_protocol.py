@@ -33,7 +33,7 @@ from onyx.db.engine.sql_engine import get_catalog_session
 from onyx.db.enums import Permission
 from onyx.db.models import OAuthProviderClient, OAuthProviderGrant, User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
-from onyx.oauth_provider.config import get_oauth_provider_settings
+from onyx.oauth_provider import config as oauth_config
 from onyx.server.auth_check import check_router_auth
 from onyx.server.oauth_provider import api as oauth_api
 from onyx.server.oauth_provider import provider as oauth_provider
@@ -78,6 +78,11 @@ async def protocol_client(
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", _ORIGIN)
+    monkeypatch.setattr(
+        oauth_config,
+        "OAUTH_PROVIDER_SETTINGS",
+        oauth_config.load_oauth_provider_settings(),
+    )
     user = create_test_user(db_session, "mcp_protocol", assign_default_group=False)
     user.effective_permissions = [
         Permission.READ_SEARCH.value,
@@ -208,7 +213,9 @@ async def _exchange(
 
 
 async def _access_token_is_live(token: str) -> bool:
-    provider = oauth_provider.OnyxOAuthProvider(get_oauth_provider_settings())
+    provider = oauth_provider.OnyxOAuthProvider(
+        oauth_config.require_oauth_provider_settings()
+    )
     return await provider.load_access_token(token) is not None
 
 
@@ -223,7 +230,7 @@ async def test_complete_consent_exchange_refresh_and_revoke(
         tokens = response.json()
         assert tokens["scope"] == "read:search"
         access = await oauth_provider.OnyxOAuthProvider(
-            get_oauth_provider_settings()
+            oauth_config.require_oauth_provider_settings()
         ).load_access_token(tokens["access_token"])
         assert access is not None
         assert access.resource == _RESOURCE
