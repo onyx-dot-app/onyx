@@ -147,11 +147,14 @@ jobs:
 
             git commit --all -m "chore(deps): update ${family} base image digests"
 
-            # Announce only when the pins the PR carries actually changed. A
-            # re-dispatch that reproduces the same commit is not new work.
+            # Announce only when the change the PR carries actually moved: a
+            # re-dispatch that reproduces the same pins is not new work.
+            # Patch-ids compare each side's own commit, so a merge moving
+            # another family's lines in a shared file does not re-ping this PR.
             same_pins=false
-            if git fetch --quiet origin "${branch}" \
-               && git diff --quiet FETCH_HEAD HEAD -- $(git diff --name-only main HEAD); then
+            if git fetch --depth=2 --quiet origin "${branch}" \
+               && [ "$(git diff --unified=0 FETCH_HEAD~1 FETCH_HEAD | git patch-id | cut -d' ' -f1)" = \
+                    "$(git diff --unified=0 main HEAD | git patch-id | cut -d' ' -f1)" ]; then
               same_pins=true
             fi
             git push --force origin "${branch}"
@@ -181,6 +184,9 @@ jobs:
                 --title "${title}" \
                 --body-file "${RUNNER_TEMP}/pr-body-${family}.md"
             fi
+            # A PR the run just created needs review even if an earlier push
+            # left identical pins on the branch.
+            [ -n "${existing_pr}" ] || same_pins=false
             pr_url="$(gh pr view "${branch}" --json url --jq .url)" || pr_url=""
             if [ -n "${pr_url}" ] && [ "${same_pins}" != "true" ]; then
               gh pr edit "${pr_url}" --add-reviewer rohoswagger \
