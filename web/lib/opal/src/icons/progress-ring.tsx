@@ -24,7 +24,7 @@ type ProgressRingPart = Exclude<keyof SvgProgressRingProps, keyof IconProps>;
 const PARTS: ReadonlyArray<[ProgressRingPart, string | null]> = [
   ["success", "stroke-status-success-05"],
   ["error", "stroke-status-error-05"],
-  ["warning", "stroke-status-warning-05"],
+  ["warning", "stroke-theme-amber-05"],
   ["neutral", "stroke-text-01"],
   ["rest", null],
 ];
