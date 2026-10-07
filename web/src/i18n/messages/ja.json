@@ -8885,7 +8885,7 @@
         "fold": "折りたたむ",
         "expand": "展開"
       },
-      "titleWithCount": "コネクターチェック ({passed}/{total})",
+      "titleCount": "（{passed}/{total}）",
       "summary": {
         "failed": "失敗 {count} 件",
         "unverified": "未検証 {count} 件",

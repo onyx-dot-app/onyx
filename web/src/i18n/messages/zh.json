@@ -8885,7 +8885,7 @@
         "fold": "收起",
         "expand": "展开"
       },
-      "titleWithCount": "连接器检查 ({passed}/{total})",
+      "titleCount": "（{passed}/{total}）",
       "summary": {
         "failed": "{count} 项失败",
         "unverified": "{count} 项未验证",

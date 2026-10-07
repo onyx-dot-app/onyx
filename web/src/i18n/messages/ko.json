@@ -8885,7 +8885,7 @@
         "fold": "접기",
         "expand": "펼치기"
       },
-      "titleWithCount": "커넥터 검사 ({passed}/{total})",
+      "titleCount": "({passed}/{total})",
       "summary": {
         "failed": "실패 {count}개",
         "unverified": "미확인 {count}개",

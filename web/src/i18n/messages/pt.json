@@ -8885,7 +8885,7 @@
         "fold": "Recolher",
         "expand": "Expandir"
       },
-      "titleWithCount": "Verificações do conector ({passed}/{total})",
+      "titleCount": "({passed}/{total})",
       "summary": {
         "failed": "{count} com falha",
         "unverified": "{count} não verificadas",

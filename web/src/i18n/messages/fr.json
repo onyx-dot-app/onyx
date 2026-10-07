@@ -8885,7 +8885,7 @@
         "fold": "Réduire",
         "expand": "Développer"
       },
-      "titleWithCount": "Vérifications du connecteur ({passed}/{total})",
+      "titleCount": "({passed}/{total})",
       "summary": {
         "failed": "{count} échouées",
         "unverified": "{count} non vérifiées",

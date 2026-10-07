@@ -16,7 +16,7 @@ import { shouldRedirectToOAuth } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import ConnectorsCheckCard from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckCard";
+import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 
 interface AuthenticationAccountSectionProps {
   /** The source being set up. */
@@ -293,7 +293,7 @@ export default function AuthenticationAccountSection({
             </SelectCard>
           </Section>
 
-          <ConnectorsCheckCard
+          <CredentialChecksCard
             source={connector}
             credentialId={checkedCredential?.id ?? null}
             locked={checksLocked || !checkedCredential}

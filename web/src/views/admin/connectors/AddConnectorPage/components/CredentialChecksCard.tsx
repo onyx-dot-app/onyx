@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Content } from "@opal/layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { useCallback, useMemo, useState } from "react";
+import { ContentAction, Section } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Divider, Tag, Text, Tooltip } from "@opal/components";
 import {
@@ -14,6 +13,7 @@ import {
   SvgMinusCircle,
   SvgRefreshCw,
   SvgXCircle,
+  SvgProgressRing,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import type { TextColor } from "@onyx-ai/shared/contracts";
@@ -27,7 +27,7 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { useConnectorChecks } from "@/lib/connectors/checks/hooks";
 import ConnectorsCheckPromptCard from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckPromptCard";
 
-export interface ConnectorsCheckCardProps {
+export interface CredentialChecksCardProps {
   source: ConfigurableSources;
   /** The credential the checks run with; `null` until one is usable. */
   credentialId: number | null;
@@ -92,61 +92,6 @@ const DETAIL_COLORS: Record<CapabilityCheckStatus, TextColor> = {
   passed: "text-05",
   skipped: "text-03",
 };
-
-// ---------------------------------------------------------------------------
-// ProgressRing — passed and failed shares of the total, as arcs
-// ---------------------------------------------------------------------------
-
-interface ProgressRingProps extends Pick<IconProps, "className"> {
-  passed: number;
-  failed: number;
-  total: number;
-}
-
-function ProgressRing({ passed, failed, total, className }: ProgressRingProps) {
-  const size = 20;
-  const strokeWidth = 2.5;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const arc = (count: number) =>
-    total === 0 ? 0 : (count / total) * circumference;
-  const passedArc = arc(passed);
-  const failedArc = arc(failed);
-  const shared = {
-    cx: size / 2,
-    cy: size / 2,
-    r: radius,
-    strokeWidth,
-    fill: "none",
-  };
-
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className={cn("shrink-0 -rotate-90", className)}
-      aria-hidden
-    >
-      <circle {...shared} className="stroke-border-02" />
-      {passedArc > 0 && (
-        <circle
-          {...shared}
-          className="stroke-status-success-05"
-          strokeDasharray={`${passedArc} ${circumference - passedArc}`}
-        />
-      )}
-      {failedArc > 0 && (
-        <circle
-          {...shared}
-          className="stroke-status-error-05"
-          strokeDasharray={`${failedArc} ${circumference - failedArc}`}
-          strokeDashoffset={-passedArc}
-        />
-      )}
-    </svg>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // CheckRow
@@ -266,7 +211,7 @@ function CheckGroup({ status, results }: CheckGroupProps) {
 }
 
 // ---------------------------------------------------------------------------
-// ConnectorsCheckCard
+// CredentialChecksCard
 // ---------------------------------------------------------------------------
 
 /**
@@ -274,11 +219,11 @@ function CheckGroup({ status, results }: CheckGroupProps) {
  * check session itself: before a run it shows the Start Checks prompt, after
  * one the results card.
  */
-export default function ConnectorsCheckCard({
+export default function CredentialChecksCard({
   source,
   credentialId,
   locked,
-}: ConnectorsCheckCardProps) {
+}: CredentialChecksCardProps) {
   const checks = useConnectorChecks({ source, credentialId });
   if (checks.status === "notStarted") {
     return (
@@ -320,8 +265,13 @@ function CheckCardView({
       })).filter((group) => group.results.length > 0),
     [results]
   );
-  const passed = results.filter((result) => result.status === "passed").length;
-  const failed = results.filter((result) => result.status === "failed").length;
+  const count = useCallback(
+    (status: CapabilityCheckStatus): number =>
+      results.filter((result) => result.status === status).length,
+    [results]
+  );
+  const passed: number = count("passed");
+  const failed: number = count("failed");
   const isRunning: boolean = status === "running";
   // A broken run or a changed configuration outranks the counts.
   const notice: string | undefined =
@@ -339,8 +289,6 @@ function CheckCardView({
   const summary = useMemo(() => {
     if (notice) return notice;
     if (!hasChecks) return isRunning ? t("running.label") : t("empty.label");
-    const count = (status: CapabilityCheckStatus) =>
-      results.filter((result) => result.status === status).length;
     const parts: Array<[string, number]> = [
       [t("summary.failed", { count: count("failed") }), count("failed")],
       [
@@ -360,74 +308,70 @@ function CheckCardView({
     notice,
     hasChecks,
     isRunning,
-    results,
+    count,
     inProgressCount,
     expectedCount,
     t,
     format,
   ]);
 
-  // Content wants an icon component; this one is the ring.
+  // The icon slot wants a component; this one draws the ring.
   const HeaderIcon = useMemo<IconFunctionComponent>(
     () =>
-      function HeaderIcon({ className }: IconProps) {
+      function HeaderIcon(props: IconProps) {
         return (
-          <ProgressRing
-            passed={passed}
+          <SvgProgressRing
+            {...props}
+            succeeded={passed}
             failed={failed}
-            total={total}
-            className={className}
+            inProgress={inProgressCount}
+            // The ring has no state yet for unverified or skipped checks, so
+            // they leave a gap with the checks still waiting.
+            queued={total - passed - failed - inProgressCount}
           />
         );
       },
-    [passed, failed, total]
+    [total, passed, failed, inProgressCount]
   );
 
   return (
     <Card border="solid" rounding={4} padding={2}>
       <div className="flex flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <GeneralLayouts.Section
-            padding={1}
-            height="fit"
-            alignItems="start"
-            className="min-w-0 flex-1"
-          >
-            <Content
-              icon={HeaderIcon}
-              title={
-                hasChecks ? t("titleWithCount", { passed, total }) : t("title")
-              }
-              description={collapsed ? summary : undefined}
-              sizePreset="section"
-              variant="section"
-            />
-          </GeneralLayouts.Section>
-          <div className="flex items-center">
-            {!collapsed && (
+        <ContentAction
+          icon={HeaderIcon}
+          title={t("title")}
+          suffix={hasChecks ? t("titleCount", { passed, total }) : undefined}
+          description={collapsed ? summary : undefined}
+          sizePreset="main-content"
+          variant="section"
+          padding={1}
+          rightChildren={
+            <Section flexDirection="row" width="fit" height="fit" gap={0}>
+              {!collapsed && (
+                <Button
+                  icon={SvgRefreshCw}
+                  prominence="internal"
+                  tooltip={t("rerunButton.label")}
+                  aria-label={t("rerunButton.label")}
+                  disabled={isRunning}
+                  onClick={onRerun}
+                />
+              )}
               <Button
-                icon={SvgRefreshCw}
+                icon={collapsed ? SvgExpand : SvgFold}
                 prominence="internal"
-                tooltip={t("rerunButton.label")}
-                aria-label={t("rerunButton.label")}
-                disabled={isRunning}
-                onClick={onRerun}
+                tooltip={
+                  collapsed ? t("foldButton.expand") : t("foldButton.fold")
+                }
+                aria-label={
+                  collapsed ? t("foldButton.expand") : t("foldButton.fold")
+                }
+                aria-expanded={!collapsed}
+                onClick={() => setCollapsed((value) => !value)}
               />
-            )}
-            <Button
-              icon={collapsed ? SvgExpand : SvgFold}
-              prominence="internal"
-              tooltip={
-                collapsed ? t("foldButton.expand") : t("foldButton.fold")
-              }
-              aria-label={
-                collapsed ? t("foldButton.expand") : t("foldButton.fold")
-              }
-              aria-expanded={!collapsed}
-              onClick={() => setCollapsed((value) => !value)}
-            />
-          </div>
-        </div>
+            </Section>
+          }
+        />
 
         {!collapsed && notice && (
           <Text

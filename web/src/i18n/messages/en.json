@@ -8885,7 +8885,7 @@
         "fold": "Fold",
         "expand": "Expand"
       },
-      "titleWithCount": "Connector Checks ({passed}/{total})",
+      "titleCount": "({passed}/{total})",
       "summary": {
         "failed": "{count} failed",
         "unverified": "{count} unverified",

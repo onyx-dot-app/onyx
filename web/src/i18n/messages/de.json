@@ -8885,7 +8885,7 @@
         "fold": "Einklappen",
         "expand": "Ausklappen"
       },
-      "titleWithCount": "Connector-Prüfungen ({passed}/{total})",
+      "titleCount": "({passed}/{total})",
       "summary": {
         "failed": "{count} fehlgeschlagen",
         "unverified": "{count} nicht verifiziert",

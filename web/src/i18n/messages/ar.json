@@ -8885,7 +8885,7 @@
         "fold": "طي",
         "expand": "توسيع"
       },
-      "titleWithCount": "فحوصات الموصّل ({passed}/{total})",
+      "titleCount": "({passed}/{total})",
       "summary": {
         "failed": "{count} فشلت",
         "unverified": "{count} لم يتم التحقق منها",
