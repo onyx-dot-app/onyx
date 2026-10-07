@@ -411,6 +411,17 @@ def _within_history(
     return {m: at for m, at in received.items() if at is None or at >= cutoff}
 
 
+def _participants(message: OutlookMessage) -> set[str]:
+    """Lower-cased addresses of the sender and every recipient."""
+    recipients: list[OutlookRecipient] = [
+        *message.to_recipients,
+        *message.cc_recipients,
+    ]
+    if message.sender is not None:
+        recipients.append(message.sender)
+    return {recipient.address.lower() for recipient in recipients}
+
+
 def is_indexable(
     message: OutlookMessageIdentity,
     excluded_folder_ids: set[str],
@@ -960,7 +971,13 @@ class OutlookConnector(
                 [
                     (
                         self._build_thread,
-                        (group, exclusions, include_permissions, listing_complete),
+                        (
+                            group,
+                            exclusions,
+                            include_permissions,
+                            listing_complete,
+                            table,
+                        ),
                     )
                     for group in step
                 ],
@@ -1144,6 +1161,7 @@ class OutlookConnector(
         self, checkpoint: OutlookCheckpoint
     ) -> Generator[ConnectorFailure, None, None]:
         mailboxes, failures = self._resolve_mailboxes()
+        self._thread_table(checkpoint.run_id).write_mailboxes(mailboxes)
         # Popped from the end, so reverse to keep the configured order.
         checkpoint.mailboxes = list(reversed(mailboxes))
         # Yielded once the checkpoint is complete, so a lookup that raises
@@ -1757,10 +1775,13 @@ class OutlookConnector(
         exclusions: dict[str, set[str]],
         include_permissions: bool,
         listing_complete: bool,
+        table: ThreadTable,
     ) -> list[Document | ConnectorFailure]:
         """The thread's document from the copy that holds its newest message
         and the most messages, readable by the copies holding every message
-        in it, plus one document per copy that cannot read it."""
+        in it, plus one document per copy that cannot read it. A poll lists
+        only the copies with new mail, so the holders it missed are found
+        from the builder's sender and recipients."""
         cutoff: datetime | None = self._history_cutoff()
         candidates: list[ThreadCopy] = candidate_copies(group)
         items: list[Document | ConnectorFailure] = []
@@ -1797,6 +1818,19 @@ class OutlookConnector(
             kept: list[OutlookMessage] = self._copy_messages(
                 builder, exclusions[builder.mailbox.id], cutoff, wanted
             )
+            unlisted: list[tuple[ThreadCopy, list[OutlookMessage]]] = []
+            if not listing_complete:
+                unlisted = self._unlisted_copies(table, group, kept, cutoff)
+            document_ids: set[str] = (
+                wanted if wanted is not None else {m.match_id for m in kept}
+            )
+            # A found copy holding every message reads the document. The rest get their own.
+            partial_unlisted: list[tuple[ThreadCopy, list[OutlookMessage]]] = []
+            for copy, messages in unlisted:
+                if {m.match_id for m in messages} >= document_ids:
+                    readers.append(copy.mailbox)
+                else:
+                    partial_unlisted.append((copy, messages))
             document: Document | None = self._copy_document(
                 thread_document_id(group.key),
                 builder,
@@ -1806,11 +1840,15 @@ class OutlookConnector(
             )
             if document is not None:
                 items.append(document)
-            for copy in partial_copies(group, readers):
+            partials: list[tuple[ThreadCopy, list[OutlookMessage]]] = [
+                (copy, self._copy_messages(copy, exclusions[copy.mailbox.id], cutoff))
+                for copy in partial_copies(group, readers)
+            ] + partial_unlisted
+            for copy, messages in partials:
                 document = self._copy_document(
                     copy_document_id(group.key, copy.mailbox),
                     copy,
-                    self._copy_messages(copy, exclusions[copy.mailbox.id], cutoff),
+                    messages,
                     [copy.mailbox],
                     include_permissions,
                 )
@@ -1831,6 +1869,54 @@ class OutlookConnector(
                 )
             )
         return items
+
+    def _unlisted_copies(
+        self,
+        table: ThreadTable,
+        group: ThreadGroup,
+        kept: list[OutlookMessage],
+        cutoff: datetime | None,
+    ) -> list[tuple[ThreadCopy, list[OutlookMessage]]]:
+        """Copies of the thread in the run's mailboxes that the poll did not
+        list, each with its messages: a participant of the builder's mail that
+        received none of the new messages. Found by the newest message naming
+        it, read whole, so it keeps a document of its own when it cannot read
+        the thread's. Named folder exclusions are resolved only for listed
+        mailboxes, so only the well-known ones apply here."""
+        listed: set[str] = {copy.mailbox.id for copy in group.copies}
+        roster: dict[str, OutlookMailbox] = self._run_roster(table)
+        found: list[tuple[ThreadCopy, list[OutlookMessage]]] = []
+        for message in kept:
+            if message.internet_message_id is None:
+                continue
+            for address in _participants(message):
+                mailbox: OutlookMailbox | None = roster.get(address)
+                if mailbox is None or mailbox.id in listed:
+                    continue
+                listed.add(mailbox.id)
+                held = self.ops.find_message_by_internet_message_id(
+                    mailbox_id=mailbox.id,
+                    internet_message_id=message.internet_message_id,
+                )
+                if held is None or held.conversation_id is None:
+                    continue
+                copy = ThreadCopy(mailbox=mailbox, conversation_id=held.conversation_id)
+                messages: list[OutlookMessage] = self._copy_messages(
+                    copy, self._excluded_well_known_folder_ids(mailbox), cutoff
+                )
+                if messages:
+                    found.append((copy, messages))
+        return found
+
+    def _run_roster(self, table: ThreadTable) -> dict[str, OutlookMailbox]:
+        """The run's mailboxes by lower-cased address. A run started before the
+        roster was written resolves them again and writes it."""
+        roster: dict[str, OutlookMailbox] | None = table.mailboxes_by_address()
+        if roster is None:
+            mailboxes, _ = self._resolve_mailboxes()
+            table.write_mailboxes(mailboxes)
+            roster = {mailbox.address.lower(): mailbox for mailbox in mailboxes}
+        return roster
 
     def _conversation_outline(
         self,

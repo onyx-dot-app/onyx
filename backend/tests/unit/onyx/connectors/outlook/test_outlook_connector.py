@@ -73,6 +73,7 @@ from onyx.connectors.outlook.models import (
     OutlookFolderPage,
     OutlookMailboxPage,
     OutlookMessage,
+    OutlookMessageChange,
     OutlookMessagePage,
     OutlookRecipient,
 )
@@ -876,7 +877,12 @@ def _private_reply_gateway() -> MagicMock:
     """Alice and Bob share a thread. Dave replied to Alice alone, then Alice
     answered Bob. Alice holds three messages, Bob two, Dave one."""
     root = message(id="root", received_at=RECEIVED)
-    private = message(id="private", received_at=RECEIVED + timedelta(hours=1))
+    private = message(
+        id="private",
+        received_at=RECEIVED + timedelta(hours=1),
+        sender=OutlookRecipient(address=DAVE.address, name="Dave"),
+        to_recipients=[OutlookRecipient(address=ALICE.address, name="Alice")],
+    )
     answer = message(id="answer", received_at=RECEIVED + timedelta(hours=2))
     held: dict[str, list[OutlookMessage]] = {
         ALICE.id: [answer, private, root],
@@ -917,10 +923,66 @@ def _private_reply_gateway() -> MagicMock:
             ]
         )
 
+    def find(
+        *, mailbox_id: str, internet_message_id: str
+    ) -> OutlookMessageChange | None:
+        for m in held[mailbox_id]:
+            if m.internet_message_id == internet_message_id:
+                return change(
+                    id=m.id,
+                    conversation_id=m.conversation_id,
+                    received_at=m.received_at,
+                )
+        return None
+
     gateway.fetch_folder_delta_page.side_effect = delta
     gateway.fetch_conversation_messages_page.side_effect = messages
     gateway.fetch_conversation_outline_page.side_effect = outline
+    gateway.find_message_by_internet_message_id.side_effect = find
     return gateway
+
+
+def test_a_poll_writes_documents_for_the_holders_it_did_not_list() -> None:
+    """Only Alice's copy changed in the window, so only Alice is listed. Bob
+    and Dave are found from the messages' recipients and get the documents a
+    full listing would have given them."""
+    gateway = _private_reply_gateway()
+    list_everyone = gateway.fetch_folder_delta_page.side_effect
+
+    def alice_only(*, mailbox_id: str, **kwargs: Any) -> OutlookDeltaPage:
+        if mailbox_id != ALICE.id:
+            return OutlookDeltaPage(changes=[])
+        return list_everyone(mailbox_id=mailbox_id, **kwargs)
+
+    gateway.fetch_folder_delta_page.side_effect = alice_only
+
+    items = _run(_connector(gateway), include_permissions=True)
+
+    documents = {item.id: item for item in items if isinstance(item, Document)}
+    thread = documents[thread_doc_id(CONVERSATION_ID)]
+    assert len(thread.sections) == 3
+    assert _readers(thread) == {"alice@contoso.com"}
+    key = thread.id.split(":", 1)[1]
+    assert len(documents[copy_document_id(key, BOB)].sections) == 2
+    assert _readers(documents[copy_document_id(key, BOB)]) == {"bob@contoso.com"}
+    assert len(documents[copy_document_id(key, DAVE)].sections) == 1
+    assert set(documents) == {
+        thread.id,
+        copy_document_id(key, BOB),
+        copy_document_id(key, DAVE),
+    }
+    assert sorted(
+        c.kwargs["mailbox_id"]
+        for c in gateway.find_message_by_internet_message_id.call_args_list
+    ) == [BOB.id, DAVE.id]
+
+
+def test_a_listing_from_the_beginning_never_looks_for_unlisted_holders() -> None:
+    gateway = _private_reply_gateway()
+
+    _run(_connector(gateway), include_permissions=True, start=0)
+
+    gateway.find_message_by_internet_message_id.assert_not_called()
 
 
 def test_a_private_reply_is_readable_only_by_the_mailboxes_that_hold_it() -> None:

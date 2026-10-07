@@ -882,6 +882,29 @@ class OutlookSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         untested=(
+            "Needs a Message-ID a second mailbox holds, which only a shared thread "
+            "produces. The mail-read check proves the fields on the mailbox-wide route."
+        ),
+    )
+    def find_message_by_internet_message_id(
+        self, *, mailbox_id: str, internet_message_id: str
+    ) -> OutlookMessageChange | None:
+        """The mailbox's copy of one message by its Internet Message-ID, the
+        CHANGE_SELECT fields only. None when the mailbox holds none."""
+        raw = self._first_item(
+            f"{self._user_url(mailbox_id)}/messages",
+            {
+                "$filter": f"internetMessageId eq '{_odata_quote(internet_message_id)}'",
+                "$select": CHANGE_SELECT,
+                "$top": "1",
+            },
+        )
+        return _parse_change(raw) if raw else None
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
             "Needs a conversation id, which only the delta walk produces. The "
             "mail-read check proves the fields on the mailbox-wide route."
         ),

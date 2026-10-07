@@ -262,6 +262,9 @@ def memory_file_store() -> MagicMock:
             if f.startswith(prefix)
         ]
 
+    def has_file(file_id: str, *_: object) -> bool:
+        return file_id in files
+
     def delete_file(file_id: str, error_on_missing: bool = True) -> None:  # noqa: ARG001
         files.pop(file_id, None)
 
@@ -269,5 +272,6 @@ def memory_file_store() -> MagicMock:
     store.read_file.side_effect = read_file
     store.list_files_by_prefix.side_effect = list_files_by_prefix
     store.delete_file.side_effect = delete_file
+    store.has_file.side_effect = has_file
     store.files = files
     return store

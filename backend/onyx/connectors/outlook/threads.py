@@ -48,10 +48,12 @@ BUCKETING_ROWS_PER_STEP = 1_000_000
 _EXCLUSIONS = "exclusions.json"
 _MANIFEST = "buckets.json"
 _TOUCH = "touch.json"
+_MAILBOXES = "mailboxes.json"
 
 _OLDEST = datetime.min.replace(tzinfo=timezone.utc)
 _ROWS = TypeAdapter(list[ThreadListing])
 _STRINGS = TypeAdapter(list[str])
+_MAILBOX_LIST = TypeAdapter(list[OutlookMailbox])
 _EXCLUSIONS_BY_MAILBOX = TypeAdapter(dict[str, list[str]])
 
 
@@ -185,6 +187,7 @@ class ThreadTable:
         self.run_id = run_id
         self._prefix = f"{_FILE_PREFIX}/{run_id}/"
         self._chunk_counts: list[int] | None = None
+        self._mailboxes: dict[str, OutlookMailbox] | None = None
         # One store, so its S3 client is built once rather than per file.
         self._store = get_default_file_store()
 
@@ -298,6 +301,30 @@ class ThreadTable:
         return BucketManifest.model_validate_json(
             self._read(f"{self._prefix}{_MANIFEST}")
         )
+
+    def write_mailboxes(self, mailboxes: Sequence[OutlookMailbox]) -> None:
+        """The run's mailboxes, so a poll can tell a tenant address apart
+        from an outside one after the checkpoint queue has drained."""
+        self._write(
+            f"{self._prefix}{_MAILBOXES}",
+            [mailbox.model_dump(mode="json") for mailbox in mailboxes],
+        )
+        self._mailboxes = None
+
+    def mailboxes_by_address(self) -> dict[str, OutlookMailbox] | None:
+        """The run's mailboxes by lower-cased address, read once. None for a run
+        started before the roster was written."""
+        if self._mailboxes is None:
+            file_id = f"{self._prefix}{_MAILBOXES}"
+            if not self._store.has_file(
+                file_id, FileOrigin.INDEXING_CHECKPOINT, "application/json"
+            ):
+                return None
+            self._mailboxes = {
+                mailbox.address.lower(): mailbox
+                for mailbox in _MAILBOX_LIST.validate_json(self._read(file_id))
+            }
+        return self._mailboxes
 
     def _write_manifest(self, manifest: BucketManifest) -> None:
         self._write(f"{self._prefix}{_MANIFEST}", manifest.model_dump(mode="json"))
