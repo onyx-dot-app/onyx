@@ -16,7 +16,7 @@ interface ConnectorsCheckPromptCardProps {
  * Where the checks card will be, before the user asks for the checks. They
  * run only on request, so a page visit costs no credential calls.
  */
-export function ConnectorsCheckPromptCard({
+export default function ConnectorsCheckPromptCard({
   disabled,
   onStart,
 }: ConnectorsCheckPromptCardProps) {

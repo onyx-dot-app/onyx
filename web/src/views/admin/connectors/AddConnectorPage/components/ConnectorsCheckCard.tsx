@@ -258,7 +258,7 @@ function CheckGroup({ status, results }: CheckGroupProps) {
  * grouped by outcome like a pull request's checks panel. The ring and the
  * title count every check, so a run fills them in as checks finish.
  */
-export function ConnectorsCheckCard({
+export default function ConnectorsCheckCard({
   results,
   inProgressCount = 0,
   expectedCount = 0,

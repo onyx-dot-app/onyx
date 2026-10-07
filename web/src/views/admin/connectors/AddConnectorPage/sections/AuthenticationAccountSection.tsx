@@ -32,8 +32,8 @@ import type {
   CapabilityCheckStatus,
   DraftCheckState,
 } from "@/lib/connectors/checks/types";
-import { ConnectorsCheckCard } from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckCard";
-import { ConnectorsCheckPromptCard } from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckPromptCard";
+import ConnectorsCheckCard from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckCard";
+import ConnectorsCheckPromptCard from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckPromptCard";
 
 const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
   "passed",
