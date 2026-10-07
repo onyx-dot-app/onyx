@@ -65,6 +65,9 @@ it("gives screen readers the tooltip's reason while disabled, as plain text", ()
 
   const status = screen.getByText("Select an account first");
   expect(status).toHaveAttribute("aria-live", "polite");
+  // Fixed, not absolute, so the hidden text never makes the page scrollable.
+  expect(status).toHaveClass("fixed");
+  expect(status).not.toHaveClass("sr-only");
 
   rerender(
     <TooltipProvider>
