@@ -266,6 +266,7 @@ class IndexingBatchAdapter(Protocol):
         documents: list[Document],
         ignore_time_skip: bool,
         index_to_secondary: bool,
+        force_update: bool = False,
     ) -> Optional["DocumentBatchPrepareContext"]: ...
 
     @contextlib.contextmanager
