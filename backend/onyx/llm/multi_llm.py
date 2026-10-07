@@ -679,10 +679,16 @@ class LitellmLLM(LLM):
             )
 
         self._model_kwargs = model_kwargs
-        model_map = get_model_map()
-        identities = resolve_model_identity_names(model_name, deployment_name)
-        known = [find_model_obj(model_map, model_provider, name) for name in identities]
-        vision_values = [entry.get("supports_vision") for entry in known if entry]
+        model_map: dict[str, dict[str, Any]] = get_model_map()
+        identities: list[str] = resolve_model_identity_names(
+            model_name, deployment_name
+        )
+        known: list[dict[str, Any] | None] = [
+            find_model_obj(model_map, model_provider, name) for name in identities
+        ]
+        vision_values: list[bool | None] = [
+            entry.get("supports_vision") for entry in known if entry
+        ]
         if supports_images is None and any(
             value is not None for value in vision_values
         ):
