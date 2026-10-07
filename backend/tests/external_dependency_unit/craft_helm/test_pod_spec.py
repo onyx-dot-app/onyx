@@ -493,7 +493,7 @@ def test_no_proxy_is_loopback_only(pod: client.V1Pod) -> None:
     """Only loopback may bypass the proxy; the Onyx API host must route through
     it so the PAT can be injected on the wire."""
     env = {e.name: e.value for e in _container(pod, "sandbox").env}
-    assert set(env["NO_PROXY"].split(",")) == {"127.0.0.1", "localhost"}
+    assert set(env["NO_PROXY"].split(",")) == {"127.0.0.1", "localhost", "::1"}
     assert env["no_proxy"] == env["NO_PROXY"]
 
 
