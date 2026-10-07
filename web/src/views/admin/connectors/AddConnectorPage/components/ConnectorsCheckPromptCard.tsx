@@ -24,13 +24,14 @@ export default function ConnectorsCheckPromptCard({
   const { appName } = useSettings();
 
   return (
-    <Card border="solid" rounding={4} padding={2}>
+    <Card border="solid" rounding={4} padding={4}>
       <ContentAction
         title={t("title")}
         description={t("description", { appName })}
         sizePreset="main-content"
         variant="section"
         center
+        padding={0}
         rightChildren={
           <Button icon={SvgPlay} disabled={disabled} onClick={onStart}>
             {t("startButton.label")}
