@@ -5350,9 +5350,6 @@
           },
           "title": "أضف تهيئات لموفري التضمين لديك من {provider}."
         },
-        "deprecated": {
-          "suffix": "(مهمل)"
-        },
         "disconnect": {
           "errorToast": "فشل قطع الاتصال بـ {provider}",
           "successToast": "تم قطع الاتصال بـ {provider}"

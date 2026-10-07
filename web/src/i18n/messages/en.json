@@ -5350,9 +5350,6 @@
           },
           "title": "Add configs for your {provider} embedding providers."
         },
-        "deprecated": {
-          "suffix": "(deprecated)"
-        },
         "disconnect": {
           "errorToast": "Failed to disconnect {provider}",
           "successToast": "Disconnected {provider}"

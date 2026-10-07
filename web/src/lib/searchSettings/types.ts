@@ -62,13 +62,6 @@ export interface EmbeddingProvider {
   costslink?: string;
   apiLink?: string;
   embeddingModels: EmbeddingModel[];
-
-  /**
-   * When true, this provider is no longer recommended for new deployments.
-   * Existing usage is allowed, but selecting it as a new embedding model is
-   * blocked in the UI.
-   */
-  deprecated?: boolean;
 }
 
 export interface EmbeddingModel {
@@ -81,8 +74,8 @@ export interface EmbeddingModel {
   descriptionKey?: IndexSettingsMessageKey;
 
   /**
-   * Model-level counterpart of `EmbeddingProvider.deprecated`: existing usage
-   * is allowed, but selecting it as a new embedding model is blocked.
+   * When true, existing usage is allowed, but selecting it as a new embedding
+   * model is blocked.
    */
   deprecated?: boolean;
 }

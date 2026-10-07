@@ -5350,9 +5350,6 @@
           },
           "title": "{provider} embedding 제공업체의 구성을 추가하세요."
         },
-        "deprecated": {
-          "suffix": "(지원 중단됨)"
-        },
         "disconnect": {
           "errorToast": "{provider} 연결 해제에 실패했습니다",
           "successToast": "{provider} 연결을 해제했습니다"

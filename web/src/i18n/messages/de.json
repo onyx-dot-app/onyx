@@ -5350,9 +5350,6 @@
           },
           "title": "Fügen Sie Konfigurationen für Ihre {provider}-Embedding-Anbieter hinzu."
         },
-        "deprecated": {
-          "suffix": "(veraltet)"
-        },
         "disconnect": {
           "errorToast": "{provider} konnte nicht getrennt werden",
           "successToast": "{provider} getrennt"
