@@ -131,16 +131,20 @@ def test_configured_listener_answers_real_requests(
 ) -> None:
     monkeypatch.setattr(proxy_server, "SANDBOX_PROXY_LISTEN_HOST", host)
     monkeypatch.setattr(proxy_server, "SANDBOX_PROXY_HEALTHZ_PORT", 0)
-    readiness = _Readiness()
+    readiness: _Readiness = _Readiness()
     readiness.ca_ready = True
-    server = proxy_server._start_healthz_server(readiness, _FakeLookup(synced=True))
-    connection = http.client.HTTPConnection(host, server.server_port, timeout=5)
+    server: HTTPServer = proxy_server._start_healthz_server(
+        readiness, _FakeLookup(synced=True)
+    )
+    connection: http.client.HTTPConnection = http.client.HTTPConnection(
+        host, server.server_port, timeout=5
+    )
     try:
         assert server.address_family == (
             socket.AF_INET6 if ":" in host else socket.AF_INET
         )
         connection.request("GET", "/healthz")
-        response = connection.getresponse()
+        response: http.client.HTTPResponse = connection.getresponse()
         assert response.status == 200
         assert response.read() == b"ok\n"
     finally:

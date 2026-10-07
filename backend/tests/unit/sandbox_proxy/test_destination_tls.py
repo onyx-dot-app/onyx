@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from mitmproxy import tls
 from mitmproxy.proxy import server_hooks
+from mitmproxy.tools.dump import DumpMaster
 
 from onyx.sandbox_proxy import server
 from onyx.sandbox_proxy.addons.gate import GateAddon
@@ -49,10 +50,12 @@ class _Connections:
 
 
 def _tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Path]:
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
-    now = dt.datetime.now(dt.timezone.utc)
-    certificate = (
+    key: rsa.RSAPrivateKey = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048
+    )
+    subject: x509.Name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
+    now: dt.datetime = dt.datetime.now(dt.timezone.utc)
+    certificate: x509.Certificate = (
         x509.CertificateBuilder()
         .subject_name(subject)
         .issuer_name(subject)
@@ -66,8 +69,8 @@ def _tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Path]:
         )
         .sign(key, hashes.SHA256())
     )
-    cert_path = tmp_path / "upstream.crt"
-    key_path = tmp_path / "upstream.key"
+    cert_path: Path = tmp_path / "upstream.crt"
+    key_path: Path = tmp_path / "upstream.key"
     cert_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
     key_path.write_bytes(
         key.private_bytes(
@@ -76,7 +79,7 @@ def _tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Path]:
             serialization.NoEncryption(),
         )
     )
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context: ssl.SSLContext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(cert_path, key_path)
     return context, cert_path
 
@@ -159,6 +162,8 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
     loopback: str,
 ) -> None:
     async def exercise() -> None:
+        context: ssl.SSLContext
+        upstream_ca: Path
         context, upstream_ca = _tls_context(tmp_path, certificate_host)
         server_names: list[str | None] = []
         requests: list[bytes] = []
@@ -178,12 +183,12 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
             try:
                 while True:
                     try:
-                        request = await reader.readuntil(b"\r\n\r\n")
+                        request: bytes = await reader.readuntil(b"\r\n\r\n")
                     except asyncio.IncompleteReadError:
                         return
                     requests.append(request)
-                    close = len(requests) >= 2
-                    connection = b"close" if close else b"keep-alive"
+                    close: bool = len(requests) >= 2
+                    connection: bytes = b"close" if close else b"keep-alive"
                     writer.write(
                         b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: "
                         + connection
@@ -196,8 +201,10 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
                 writer.close()
                 await writer.wait_closed()
 
-        upstream = await asyncio.start_server(serve, loopback, 0, ssl=context)
-        upstream_port = upstream.sockets[0].getsockname()[1]
+        upstream: asyncio.Server = await asyncio.start_server(
+            serve, loopback, 0, ssl=context
+        )
+        upstream_port: int = upstream.sockets[0].getsockname()[1]
 
         _mock_dns(monkeypatch, loopback)
         monkeypatch.setattr(server, "SANDBOX_PROXY_LISTEN_HOST", loopback)
@@ -206,11 +213,11 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
         monkeypatch.setattr(
             server, "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", str(upstream_ca)
         )
-        master = server._build_mitm_master()
+        master: DumpMaster = server._build_mitm_master()
         master.options.update(connection_strategy="eager")
-        connected = _Connections()
+        connected: _Connections = _Connections()
         master.addons.add(connected)
-        credential = RecordingCredentialResolver(
+        credential: RecordingCredentialResolver = RecordingCredentialResolver(
             headers={"Authorization": "Bearer injected"}
         )
         master.addons.add(
@@ -225,14 +232,14 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
                 ),
             )
         )
-        task = asyncio.create_task(master.run())
+        task: asyncio.Task[None] = asyncio.create_task(master.run())
         writer: asyncio.StreamWriter | None = None
         try:
             port: int = await wait_for_proxy_listener(master, task)
             reader: asyncio.StreamReader
             reader, writer = await asyncio.open_connection(loopback, port)
             await _send_connect(reader, writer, upstream_port)
-            client_context = ssl.create_default_context(
+            client_context: ssl.SSLContext = ssl.create_default_context(
                 cafile=str(tmp_path / "mitm" / "mitmproxy-ca-cert.pem")
             )
             responses: list[bytes] = []
