@@ -113,7 +113,7 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdin_to_container,
     stream_stdout_from_container,
 )
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.labels import (

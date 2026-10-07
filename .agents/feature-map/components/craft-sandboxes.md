@@ -19,7 +19,7 @@
 `backend/onyx/server/features/build/sandbox/docker/` (`docker_sandbox_manager.py`,
 `dev_mode_serve.py`, `internal/exec_helpers.py`),
 `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/` (`server.py`,
-`snapshot.py`, `extract.py`, `filesystem.py`, `manifest.py`, `contract.py`,
+`snapshot.py`, `extract.py`, `filesystem.py`, `manifest.py`, `models.py`,
 `opencode_history.py`),
 `backend/onyx/server/features/build/sandbox/util/` (`agent_instructions.py`,
 `opencode_config.py`, `mcp_config.py`, `api_url_check.py`),
@@ -289,7 +289,7 @@ entry): it starts before the main container, keeps running for the pod's whole
 life, and can be restarted independently by the kubelet without restarting the
 main container. It runs `sandbox_daemon/server.py`
 (`image/sandbox_daemon/server.py`), a FastAPI app on port 8731
-(`PUSH_DAEMON_PORT`, `contract.py:16`) that owns nearly all filesystem access:
+(`PUSH_DAEMON_PORT`, `models.py`) that owns nearly all filesystem access:
 `/push` (file bundle install), `/filesystem/list`, `/filesystem/outputs-manifest`,
 `/snapshot/create`, `/snapshot/restore/{session_id}`,
 `/opencode-history/{create,restore,mark-restored}`, `/health`, `/ready`. Every
@@ -558,7 +558,7 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
 | changes the sandbox image (`image/Dockerfile`, `initial-requirements.txt`) | the app-image/sandbox-image tag coupling (`docs/craft/infra/image-architecture.md`); the prepuller DaemonSet's pinned tag (`sandbox-image-prepuller.yaml`); `ENABLE_SKILLS` build-arg gating; re-run the spinup benchmark (`kubernetes/scripts/bench-sandbox-spinup.sh`) |
 | changes the pod template (`sandbox-podtemplate.yaml`) | `_overlay_dynamic_fields`/`_require_container` (version-skew handling); the dynamic fields Python still owns; resource requests vs the CI/localdev values overlays; the Service's port range staying in sync with the template's container ports |
 | changes the snapshot format (what's included/excluded, archive layout) | `sandbox_daemon/snapshot.py`'s `_SNAPSHOT_ROOTS`/`_SNAPSHOT_GENERATED_*` sets; `restore_snapshot`'s webapp-restore path; existing snapshots in FileStore become unreadable by a format change unless restore stays backward-compatible |
-| changes the sidecar contract (`contract.py`, `server.py` routes) | both `sidecar_client.py` (api-server side) and every route in `sandbox_daemon/server.py`; the image must ship the updated daemon in the same release as the api-server that calls it (version skew is a real risk, no negotiation exists) |
+| changes the sidecar contract (`models.py`, `server.py` routes) | both `sidecar_client.py` (api-server side) and every route in `sandbox_daemon/server.py`; the image must ship the updated daemon in the same release as the api-server that calls it (version skew is a real risk, no negotiation exists) |
 | changes RBAC (`sandbox-rbac.yaml`) | `_wait_for_pod_ready`'s `watch.Watch()` usage needs `pods:watch`; removing it makes every provision fail with an `ApiException`, and no unit test catches it (see §9); `pods/exec` is still needed for the many residual exec call sites; `_create_sandbox_pod`'s `podtemplates:get` |
 | changes network policy (`network-policy-sandbox-*.yaml`) | the in-pod iptables lockdown (`firewall-init.sh`) stays authoritative regardless of CNI enforcement; keep the allow-list in sync with whichever worker consumes the `sandbox` Celery queue (currently `celery-worker-heavy`) |
 | changes idle timeout or snapshot cadence | the `SNAPSHOT_INTERVAL_DIVISOR` relationship between idle timeout and background-snapshot freshness bound; opencode-history durability exposure scales with this gap |
