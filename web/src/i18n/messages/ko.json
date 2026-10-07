@@ -2,7 +2,7 @@
   "mcpOAuth": {
     "consent": {
       "title": "Onyx에 연결",
-      "request": "{clientName}이 Onyx를 검색하도록 허용할까요?",
+      "request": "{clientName}에게 Onyx 검색을 허용할까요?",
       "account": "로그인 계정: {email}",
       "workspace": "워크스페이스: {workspaceName}",
       "appAddress": "앱 주소: {origin}",
