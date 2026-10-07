@@ -294,10 +294,10 @@ def create_app() -> FastAPI:
 
     @app.post("/scripts/{script_id}/v1/chat/completions")
     async def chat_completions(script_id: str, request: Request) -> Response:
-        entry = scripts.get(script_id)
+        body: dict[str, Any] = await request.json()
+        entry: _Entry | None = scripts.get(script_id)
         if entry is None:
             return _error(f"mock_llm_server: unknown script {script_id}")
-        body: dict[str, Any] = await request.json()
         recorded = _parse_request(body)
         entry.requests.append(recorded)
         reply = _serve(entry, recorded)
