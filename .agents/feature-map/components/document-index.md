@@ -226,10 +226,7 @@ now-stale trailing chunks when a re-indexed document got shorter (using
 
 `Updatable.update(update_requests)` patches ACL, document-set membership, boost,
 hidden, project/persona membership, and `secondary_index_updated` without a
-re-embed. The OpenSearch implementation updates chunks by ID from the document's
-chunk count. A document whose chunk count is unknown (indexed before
-`Document.chunk_count` existed, or being indexed now) is updated by query on its
-document ID (`opensearch/search.py:DocumentQuery.set_properties_query`). `MetadataUpdateRequest` can raise `SecondaryIndexDocumentMissingError`
+re-embed. `MetadataUpdateRequest` can raise `SecondaryIndexDocumentMissingError`
 mid-port, when a metadata update lands on the primary before the reindex port has
 copied that document into the FUTURE index; callers use this to defer the secondary
 sync instead of failing outright.

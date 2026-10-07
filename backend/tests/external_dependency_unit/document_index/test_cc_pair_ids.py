@@ -23,11 +23,7 @@ from onyx.background.celery.tasks.vespa.tasks import document_index_metadata_syn
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_non_deleting_cc_pair_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.enums import (
-    AccessType,
-    ConnectorCredentialPairStatus,
-    VectorQuantization,
-)
+from onyx.db.enums import ConnectorCredentialPairStatus, VectorQuantization
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
 from onyx.document_index.interfaces import TenantState
@@ -239,43 +235,6 @@ def test_metadata_sync_and_cleanup_update_cc_pair_ids(
         )
         assert result.successful(), result.traceback
     assert _read_cc_pair_ids(test_index_name, doc_id) == [pairs.first.id]
-
-
-def test_metadata_sync_rewrites_a_document_with_an_unknown_chunk_count(
-    db_session: Session,
-    pairs: _Pairs,
-    opensearch_index: OpenSearchDocumentIndex,
-    test_index_name: str,
-) -> None:
-    # Indexed before chunk counts were stored: public chunks, NULL chunk_count.
-    doc_id = f"cc-pair-legacy-{uuid4().hex[:8]}"
-    _add_document(db_session, [pairs.first], doc_id)
-    legacy_doc = db_session.get(DbDocument, doc_id)
-    assert legacy_doc is not None
-    legacy_doc.chunk_count = None
-    db_session.commit()
-    _index_without_cc_pair_ids(opensearch_index, doc_id)
-    OpenSearchIndexClient(index_name=test_index_name).refresh_index()
-
-    pairs.first.access_type = AccessType.SYNC
-    db_session.commit()
-    with patch(
-        "onyx.background.celery.tasks.vespa.tasks.get_default_document_index",
-        return_value=opensearch_index,
-    ):
-        result = document_index_metadata_sync_task.apply(
-            args=(doc_id,),
-            kwargs={"tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE},
-        )
-        assert result.successful(), result.traceback
-
-    chunk = OpenSearchIndexClient(index_name=test_index_name).get_document(
-        get_opensearch_doc_chunk_id(
-            tenant_state=_TENANT_STATE, document_id=doc_id, chunk_index=0
-        )
-    )
-    assert not chunk.public
-    assert chunk.cc_pair_ids == [pairs.first.id]
 
 
 @pytest.mark.usefixtures("kv_progress_restored")

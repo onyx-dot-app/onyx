@@ -352,34 +352,6 @@ class DocumentQuery:
         }
 
     @staticmethod
-    def set_properties_query(
-        document_ids: list[str],
-        properties: dict[str, Any],
-        tenant_state: TenantState,
-    ) -> dict[str, Any]:
-        """Update-by-query that sets the same properties on every chunk of the
-        given documents in this tenant."""
-        filter_clauses: list[dict[str, Any]] = [
-            {"terms": {DOCUMENT_ID_FIELD_NAME: document_ids}},
-        ]
-        # Single-tenant indices have no tenant_id field. Mirror _get_search_filters.
-        if tenant_state.multitenant:
-            filter_clauses.append(
-                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
-            )
-        return {
-            "query": {"bool": {"filter": filter_clauses}},
-            "script": {
-                "lang": "painless",
-                "source": (
-                    "for (entry in params.properties.entrySet()) "
-                    "{ ctx._source[entry.getKey()] = entry.getValue(); }"
-                ),
-                "params": {"properties": properties},
-            },
-        }
-
-    @staticmethod
     def get_cc_pair_access_shadow_query(
         tenant_state: TenantState,
         index_filters: IndexFilters,

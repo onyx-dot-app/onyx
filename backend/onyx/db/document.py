@@ -1264,17 +1264,6 @@ def update_docs_last_modified__no_commit(
         doc.last_modified = now
 
 
-def _document_has_chunks_clause() -> ColumnElement[bool]:
-    """The document of the joined DocumentByConnectorCredentialPair row has
-    chunks in the document index. A NULL chunk_count is either a document
-    indexed before the column existed (the pair's has_been_indexed is set) or
-    a row that was never indexed, such as one a permission sync added."""
-    return or_(
-        DbDocument.chunk_count.is_not(None),
-        DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
-    )
-
-
 def mark_cc_pair_documents_for_sync__no_commit(
     db_session: Session, cc_pair_ids: Collection[int]
 ) -> None:
@@ -1284,7 +1273,6 @@ def mark_cc_pair_documents_for_sync__no_commit(
         return
     cc_pair_document_ids = (
         select(DocumentByConnectorCredentialPair.id)
-        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
         .join(
             ConnectorCredentialPair,
             and_(
@@ -1294,14 +1282,14 @@ def mark_cc_pair_documents_for_sync__no_commit(
                 == ConnectorCredentialPair.credential_id,
             ),
         )
-        .where(
-            ConnectorCredentialPair.id.in_(cc_pair_ids),
-            _document_has_chunks_clause(),
-        )
+        .where(ConnectorCredentialPair.id.in_(cc_pair_ids))
     )
     db_session.execute(
         update(DbDocument)
-        .where(DbDocument.id.in_(cc_pair_document_ids))
+        .where(
+            DbDocument.id.in_(cc_pair_document_ids),
+            DbDocument.chunk_count.is_not(None),
+        )
         .values(last_modified=datetime.now(timezone.utc))
     )
 
@@ -1309,7 +1297,12 @@ def mark_cc_pair_documents_for_sync__no_commit(
 def build_cc_pair_has_unsynced_documents_clause() -> ColumnElement[bool]:
     """EXISTS over the indexed documents of the enclosing query's
     ConnectorCredentialPair row that wait for metadata sync: the documents
-    mark_cc_pair_documents_for_sync__no_commit marks, not yet synced."""
+    mark_cc_pair_documents_for_sync__no_commit marks, not yet synced.
+
+    Documents with a NULL chunk_count (indexed before the column existed) are
+    left out. Metadata sync skips their chunks and still marks them synced, so
+    waiting for them protects nothing. Only a re-index rewrites their access,
+    and the perm-sync-pending guarantee does not cover them."""
     return (
         select(DocumentByConnectorCredentialPair.id)
         .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
@@ -1318,7 +1311,7 @@ def build_cc_pair_has_unsynced_documents_clause() -> ColumnElement[bool]:
             == ConnectorCredentialPair.connector_id,
             DocumentByConnectorCredentialPair.credential_id
             == ConnectorCredentialPair.credential_id,
-            _document_has_chunks_clause(),
+            DbDocument.chunk_count.is_not(None),
             or_(
                 DbDocument.last_modified > DbDocument.last_synced,
                 DbDocument.last_synced.is_(None),

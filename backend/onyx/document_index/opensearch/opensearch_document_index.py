@@ -692,10 +692,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         This may be due to a concurrent ongoing indexing operation. In that
         event callers are expected to retry after a bit once the state of the
         document index is updated.
-        NOTE: Documents whose chunk count is 0 (e.g. concurrently deleted) are
-        skipped with a warning rather than raising. Documents whose chunk count
-        is unknown (indexed before it was stored, or being indexed now) are
-        updated by query on their document ID.
+        NOTE: Documents whose chunk count is unknown (not yet indexed) or 0
+        (e.g. concurrently deleted) are skipped with a warning rather than
+        raising. The indexing pipeline will write the latest metadata shortly.
         NOTE: Will no-op if an update request has no fields to update.
 
         TODO(andrei): Consider exploring a batch API for OpenSearch for this
@@ -785,15 +784,22 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
             doc_chunk_ids_to_update: list[str] = []
             chunk_id_to_doc_id: dict[str, str] = {}
-            unknown_chunk_count_doc_ids: list[str] = []
             for doc_id in update_request.document_ids:
                 doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
                 if doc_chunk_count < 0:
-                    # Indexed before chunk counts were stored, or being indexed
-                    # for the first time now. The chunk IDs are not known, so
-                    # update by query; a document with no chunks yet matches
-                    # nothing, and its indexing writes the latest metadata.
-                    unknown_chunk_count_doc_ids.append(doc_id)
+                    # The chunk count is not known. This is a benign race between
+                    # doc indexing and this update step, which run concurrently
+                    # when a doc is indexed. The indexing step will set the chunk
+                    # count (and write the latest metadata/permissions) shortly,
+                    # so skip this doc rather than failing the whole update.
+                    # TODO(andrei): Fix the aforementioned race condition.
+                    logger.warning(
+                        "[OpenSearchDocumentIndex] Skipping update for document %s: "
+                        "its chunk count is not yet known. The document was likely just "
+                        "added to the indexing pipeline and the chunk count will be "
+                        "updated shortly.",
+                        doc_id,
+                    )
                     continue
                 if doc_chunk_count == 0:
                     # A chunk count of 0 typically reflects a concurrent delete +
@@ -832,19 +838,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     chunk_id_to_doc_id[cid]
                     for cid in e.missing_chunk_ids
                     if cid in chunk_id_to_doc_id
-                )
-
-            if unknown_chunk_count_doc_ids:
-                # Access fields must not be left stale on a chunk that a
-                # concurrent write raced: raise, so the sync retries and the
-                # document stays unsynced.
-                self._client.update_by_query(
-                    DocumentQuery.set_properties_query(
-                        document_ids=unknown_chunk_count_doc_ids,
-                        properties=properties_to_update,
-                        tenant_state=self._tenant_state,
-                    ),
-                    fail_on_conflict=True,
                 )
 
         if missing_chunk_ids:
