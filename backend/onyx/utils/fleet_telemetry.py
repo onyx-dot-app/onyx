@@ -594,6 +594,7 @@ class BoundedTelemetry:
         self._blocked_until = 0.0
         self._pending: list[dict[str, Any]] = []
         self.health: dict[str, Any] = {}
+        # Source-owned schedule. Delivery receipts never change these settings.
         self.settings: dict[str, Any] = {
             "config_revision": 0,
             "enabled": True,
@@ -810,52 +811,6 @@ class BoundedTelemetry:
             self._blocked_until = time.monotonic() + min(300, 2**self.failures)
             return False
 
-    def _poll_settings(self) -> None:
-        try:
-            import requests
-
-            response = requests.get(
-                self.config.endpoint + "/v1/config",
-                headers={
-                    "Authorization": "Bearer " + self.config.token,
-                    "Accept-Encoding": "identity",
-                },
-                params={
-                    "deployment_id": self.config.deployment_id,
-                    "customer_uuid": self.config.customer_uuid,
-                },
-                timeout=(1, 2),
-                allow_redirects=False,
-                stream=True,
-            )
-            with response:
-                if not response.ok or response.headers.get(
-                    "Content-Encoding", "identity"
-                ) not in {"", "identity"}:
-                    return
-                body = response.raw.read(8193)
-                if len(body) > 8192:
-                    return
-                remote = json.loads(body)
-            if not isinstance(remote, dict):
-                return
-            settings = dict(self.settings)
-            for key in {
-                "connector_interval_seconds",
-                "queue_interval_seconds",
-                "resource_interval_seconds",
-            }:
-                value = remote.get(key)
-                if type(value) is int and 60 <= value <= 3600:
-                    settings[key] = value
-            if type(remote.get("config_revision")) is int:
-                settings["config_revision"] = max(0, remote["config_revision"])
-            if type(remote.get("enabled")) is bool:
-                settings["enabled"] = remote["enabled"]
-            self.settings = settings
-        except Exception:
-            pass
-
     def delivery_health(self) -> dict[str, int]:
         """Background observations distinguish new loss from historical totals."""
         dropped = self.dropped
@@ -877,7 +832,6 @@ class BoundedTelemetry:
 
     def _run(self) -> None:
         last_resource: float | None = None
-        last_config: float | None = None
         try:
             self.emit(
                 "runtime",
@@ -901,9 +855,6 @@ class BoundedTelemetry:
             self.emit("version", version_data)
             while not self._stop.is_set():
                 now = time.monotonic()
-                if poll_due(last_config, now, 60):
-                    self._poll_settings()
-                    last_config = now
                 if self.settings["enabled"] and poll_due(
                     last_resource, now, self.settings["resource_interval_seconds"]
                 ):

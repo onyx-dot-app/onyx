@@ -699,3 +699,9 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
   read.** `get_document_push_config()` is `lru_cache(maxsize=1)`, so changing
   `DOCUMENT_PUSH_ENDPOINT_URL` at runtime (without a process restart) will not be
   picked up.
+
+### Emission-only fleet telemetry
+
+Fleet telemetry sends events and reads bounded delivery receipts only. It never fetches remote collection settings.
+Collection uses a source-owned schedule: connectors and resources every 300 seconds; queues every 600 seconds.
+Fleet-service labels, classifications, and alert thresholds cannot change deployment behavior.

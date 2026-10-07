@@ -807,9 +807,6 @@ def test_bounded_http_reads_negotiate_identity_instead_of_gzip(
     pod_page = watcher._get("/api/v1/namespaces/default/pods", {"limit": 25})
     assert pod_page is not None and len(pod_page["items"]) == 25
     assert watcher.errors == 0
-    sender._poll_settings()
-    assert sender.settings["config_revision"] == 3
-    assert sender.settings["resource_interval_seconds"] == 60
     sender.emit("heartbeat", {"collector_enabled": True})
 
     def post(*_args: Any, **kwargs: Any) -> Response:
@@ -842,8 +839,6 @@ def test_unexpected_compression_fails_closed_with_bounded_retry(
     monkeypatch.setattr("requests.get", compressed)
     assert watcher._get("/api/v1/namespaces/default/pods") is None
     assert watcher.errors == 1 and sender.health["kubernetes_errors"] == 1
-    sender._poll_settings()
-    assert sender.settings["config_revision"] == 0
     sender.emit("heartbeat", {"collector_enabled": True})
     assert not sender.flush_once(compressed)
     assert sender.failures == 1 and len(sender._pending) == 1
@@ -1015,7 +1010,7 @@ def test_initial_kubernetes_reads_run_once_and_failed_reads_keep_cadence(
 
 
 @pytest.mark.parametrize("uptime", [0.0, 1.0])
-def test_sender_initial_policy_and_resources_run_once_at_low_host_uptime(
+def test_sender_only_emits_and_samples_resources_at_low_host_uptime(
     monkeypatch: pytest.MonkeyPatch, uptime: float
 ) -> None:
     monkeypatch.setattr(
@@ -1026,9 +1021,9 @@ def test_sender_initial_policy_and_resources_run_once_at_low_host_uptime(
     monkeypatch.setattr("onyx.__version__", "Development")
     monkeypatch.setenv("ONYX_BUILD_SHA", "a" * 40)
     sender = client()
-    policy = Mock()
+    remote_get = Mock(side_effect=AssertionError("No telemetry configuration reads"))
     resource = Mock()
-    monkeypatch.setattr(sender, "_poll_settings", policy)
+    monkeypatch.setattr("requests.get", remote_get)
     monkeypatch.setattr(
         "onyx.utils.fleet_telemetry_resources.collect_process_resource", resource
     )
@@ -1038,7 +1033,7 @@ def test_sender_initial_policy_and_resources_run_once_at_low_host_uptime(
     monkeypatch.setattr(sender, "flush_once", flushed)
     monkeypatch.setattr(sender._stop, "wait", Mock())
     sender._run()
-    policy.assert_called_once()
+    remote_get.assert_not_called()
     resource.assert_called_once_with(sender)
     events = sender._take_batch()
     assert next(event for event in events if event["event_type"] == "version")[
@@ -1150,3 +1145,21 @@ def test_license_telemetry_excludes_credentials_and_fails_open(monkeypatch) -> N
     )
     monkeypatch.setattr(sender, "emit", Mock(side_effect=RuntimeError("unavailable")))
     telemetry.emit_license_state(False, "removed")
+
+
+def test_delivery_receipts_cannot_change_collection_settings() -> None:
+    sender = client()
+    before = dict(sender.settings)
+    sender.emit("heartbeat", {"collector_enabled": True})
+    response = Response(
+        {
+            "results": [{"index": 0, "status": "accepted"}],
+            "enabled": False,
+            "connector_interval_seconds": 60,
+            "config_revision": 99,
+            "config": {"enabled": False},
+        }
+    )
+    assert sender.flush_once(lambda *_args, **_kwargs: response)
+    assert sender.settings == before
+    assert sender.emit("heartbeat", {"collector_enabled": True})

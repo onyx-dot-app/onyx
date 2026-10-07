@@ -209,3 +209,9 @@ This adds no per-document emit calls and cannot block application threads.
 The fleet service routes these summaries and legacy stage deltas to short-lived storage: 30-day
 queryable retention, no cold archive. Attempt outcomes and document totals keep their existing
 history policy. Deploy the updated fleet service before enabling this collector version.
+
+### Emission-only fleet telemetry
+
+Fleet telemetry sends events and reads bounded delivery receipts only. It never fetches remote collection settings.
+Collection uses a source-owned schedule: connectors and resources every 300 seconds; queues every 600 seconds.
+Fleet-service labels, classifications, and alert thresholds cannot change deployment behavior.

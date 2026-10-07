@@ -547,3 +547,9 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 
 Cross-links: [[internal-search]], [[indexing-pipeline]], [[access-control]],
 [[connectors]], [[background-jobs]], [[multi-tenancy]].
+
+### Emission-only fleet telemetry
+
+Fleet telemetry sends events and reads bounded delivery receipts only. It never fetches remote collection settings.
+Collection uses a source-owned schedule: connectors and resources every 300 seconds; queues every 600 seconds.
+Fleet-service labels, classifications, and alert thresholds cannot change deployment behavior.
