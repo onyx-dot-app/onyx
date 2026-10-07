@@ -1,12 +1,23 @@
+import ipaddress
 from urllib.parse import urlsplit
 
 from pydantic import AnyUrl
 
+from onyx.auth.constants import OAUTH_PROVIDER_MAX_URL_LENGTH
 from onyx.configs import app_configs
 from onyx.oauth_provider.models import OAuthProviderSettings
 
-_MAX_URL_LENGTH = 2048
-_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+def is_loopback_host(hostname: str | None) -> bool:
+    """`localhost` or a loopback IP address (RFC 8252 7.3)."""
+    if hostname is None:
+        return False
+    if hostname == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
 
 
 def validate_oauth_url(value: str, *, allow_query: bool) -> str:
@@ -18,7 +29,7 @@ def validate_oauth_url(value: str, *, allow_query: bool) -> str:
         split = urlsplit(value)
         hostname = split.hostname
         if (
-            len(value) <= _MAX_URL_LENGTH
+            len(value) <= OAUTH_PROVIDER_MAX_URL_LENGTH
             and not any(ord(c) < 32 or ord(c) == 127 or c.isspace() for c in value)
             and "*" not in value
             and "#" not in value
@@ -28,7 +39,7 @@ def validate_oauth_url(value: str, *, allow_query: bool) -> str:
             and (allow_query or "?" not in value)
             and (
                 split.scheme == "https"
-                or (split.scheme == "http" and hostname in _LOOPBACK_HOSTS)
+                or (split.scheme == "http" and is_loopback_host(hostname))
             )
         ):
             return str(AnyUrl(value))

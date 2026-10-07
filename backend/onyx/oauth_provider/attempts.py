@@ -7,6 +7,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
+from onyx.auth.constants import (
+    AUTHORIZATION_CODE_TTL_SECONDS,
+    AUTHORIZATION_REQUEST_TTL_SECONDS,
+    OAUTH_PROVIDER_SECRET_PATTERN,
+)
 from onyx.auth.oauth_provider import (
     generate_oauth_provider_code,
     parse_oauth_provider_code_tenant,
@@ -18,10 +23,7 @@ from onyx.oauth_provider.models import (
     StoredOAuthProviderCode,
 )
 
-AUTHORIZATION_REQUEST_TTL_SECONDS = 10 * 60
-AUTHORIZATION_CODE_TTL_SECONDS = 60
-
-_HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
+_HANDLE_PATTERN = re.compile(OAUTH_PROVIDER_SECRET_PATTERN)
 _REQUEST_KEY_PREFIX = "oauth_provider:request"
 _CODE_KEY_PREFIX = "oauth_provider:code"
 

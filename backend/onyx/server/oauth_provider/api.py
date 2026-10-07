@@ -11,6 +11,10 @@ from mcp.shared.auth import InvalidRedirectUriError
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from onyx.auth.constants import (
+    NO_STORE_HEADERS,
+    OAUTH_PROVIDER_SECRET_PATTERN,
+)
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.users import current_limited_user, get_jwt_strategy
@@ -37,7 +41,6 @@ from onyx.oauth_provider.attempts import (
 )
 from onyx.oauth_provider.config import get_oauth_provider_settings
 from onyx.oauth_provider.models import OAuthProviderGrantInfo, StoredOAuthProviderCode
-from onyx.server.oauth_provider.protocol import NO_STORE_HEADERS
 from onyx.server.oauth_provider.provider import OnyxOAuthProvider
 from onyx.server.settings.store import load_settings
 from shared_configs.configs import MULTI_TENANT
@@ -59,8 +62,8 @@ class OAuthConsentInfo(BaseModel):
 class OAuthConsentDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    request_id: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$", max_length=43)
-    csrf_token: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$", max_length=43, repr=False)
+    request_id: str = Field(pattern=rf"^{OAUTH_PROVIDER_SECRET_PATTERN}$")
+    csrf_token: str = Field(pattern=rf"^{OAUTH_PROVIDER_SECRET_PATTERN}$", repr=False)
     decision: Literal["allow", "deny"]
 
 
@@ -139,7 +142,7 @@ async def consent_details(
     request: Request,
     response: Response,
     authorization_request: str = Query(
-        alias="request", pattern=r"^[A-Za-z0-9_-]{43}$", max_length=43
+        alias="request", pattern=rf"^{OAUTH_PROVIDER_SECRET_PATTERN}$"
     ),
     user: User = Depends(require_permission(Permission.CREATE_USER_API_KEYS)),
 ) -> OAuthConsentInfo:

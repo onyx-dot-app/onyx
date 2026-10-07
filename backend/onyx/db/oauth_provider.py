@@ -10,6 +10,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from onyx.auth.constants import (
+    OAUTH_PROVIDER_ACCESS_LIFETIME,
+    OAUTH_PROVIDER_GRANT_LIFETIME,
+    OAUTH_PROVIDER_SCOPE,
+)
 from onyx.auth.oauth_provider import (
     OAuthProviderTokenKind,
     generate_oauth_provider_token,
@@ -38,8 +43,6 @@ from onyx.oauth_provider.models import (
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
-OAUTH_PROVIDER_ACCESS_LIFETIME = timedelta(minutes=15)
-OAUTH_PROVIDER_GRANT_LIFETIME = timedelta(days=30)
 OAUTH_PROVIDER_STORAGE_ERRORS = (
     SQLAlchemyError,
     ShardConfigurationError,
@@ -163,7 +166,7 @@ def create_oauth_provider_grant__no_commit(
         client_id=client_id,
         client_name=client_name,
         resource=resource,
-        scopes=[Permission.READ_SEARCH.value],
+        scopes=[OAUTH_PROVIDER_SCOPE],
         created_at=now,
         expires_at=now
         + (

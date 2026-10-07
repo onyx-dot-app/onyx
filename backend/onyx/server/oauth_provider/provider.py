@@ -1,4 +1,3 @@
-import ipaddress
 import re
 import socket
 import time
@@ -27,9 +26,13 @@ from mcp.shared.auth import (
 from pydantic import AnyUrl, BaseModel, ConfigDict
 from starlette.concurrency import run_in_threadpool
 
+from onyx.auth.constants import (
+    OAUTH_PROVIDER_MAX_URL_LENGTH,
+    OAUTH_PROVIDER_SCOPE,
+    OAUTH_PROVIDER_SECRET_PATTERN,
+)
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import Permission
 from onyx.db.oauth_provider import (
     create_oauth_provider_grant__no_commit,
     get_oauth_provider_client,
@@ -52,6 +55,7 @@ from onyx.oauth_provider.attempts import (
 )
 from onyx.oauth_provider.config import (
     canonical_mcp_resource,
+    is_loopback_host,
     validate_oauth_url,
 )
 from onyx.oauth_provider.models import (
@@ -63,28 +67,17 @@ from onyx.oauth_provider.models import (
 )
 from shared_configs.contextvars import get_current_tenant_id
 
-_PKCE_CHALLENGE = re.compile(r"[A-Za-z0-9_-]{43}")
-
-
-def _is_loopback_host(hostname: str | None) -> bool:
-    if hostname is None:
-        return False
-    if hostname == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(hostname).is_loopback
-    except ValueError:
-        return False
+_PKCE_CHALLENGE = re.compile(OAUTH_PROVIDER_SECRET_PATTERN)
 
 
 def _matches_loopback_redirect(requested: AnyUrl, registered: list[AnyUrl]) -> bool:
     requested_parts = urlsplit(str(requested))
-    if not _is_loopback_host(requested_parts.hostname):
+    if not is_loopback_host(requested_parts.hostname):
         return False
     for candidate in registered:
         registered_parts = urlsplit(str(candidate))
         if (
-            _is_loopback_host(registered_parts.hostname)
+            is_loopback_host(registered_parts.hostname)
             and registered_parts.scheme == requested_parts.scheme
             and registered_parts.hostname == requested_parts.hostname
             and registered_parts.path == requested_parts.path
@@ -133,7 +126,7 @@ def _cimd_fetcher(_client_id: str) -> CIMDFetcher:
 def validate_public_oauth_client(client: OAuthClientInformationFull) -> None:
     if client.token_endpoint_auth_method != "none" or client.client_secret is not None:
         raise ValueError("Only public clients with PKCE are supported")
-    if not client.client_id or len(client.client_id) > 2048:
+    if not client.client_id or len(client.client_id) > OAUTH_PROVIDER_MAX_URL_LENGTH:
         raise ValueError("Invalid client identifier")
     if client.client_name is not None and (
         len(client.client_name) > 256
@@ -150,9 +143,7 @@ def validate_public_oauth_client(client: OAuthClientInformationFull) -> None:
         or client.response_types != ["code"]
     ):
         raise ValueError("Unsupported OAuth grant or response type")
-    if client.scope is not None and set(client.scope.split()) != {
-        Permission.READ_SEARCH.value
-    }:
+    if client.scope is not None and set(client.scope.split()) != {OAUTH_PROVIDER_SCOPE}:
         raise ValueError("Only read:search access is supported")
 
 
@@ -227,8 +218,8 @@ class OnyxOAuthProvider(OAuthProvider):
             base_url=settings.issuer_url,
             client_registration_options=ClientRegistrationOptions(
                 enabled=True,
-                valid_scopes=[Permission.READ_SEARCH.value],
-                default_scopes=[Permission.READ_SEARCH.value],
+                valid_scopes=[OAUTH_PROVIDER_SCOPE],
+                default_scopes=[OAUTH_PROVIDER_SCOPE],
             ),
             revocation_options=RevocationOptions(enabled=True),
         )
@@ -241,7 +232,7 @@ class OnyxOAuthProvider(OAuthProvider):
             and self.authorization_client.client_id == client_id
         ):
             return self.authorization_client.client
-        if len(client_id) > 2048:
+        if len(client_id) > OAUTH_PROVIDER_MAX_URL_LENGTH:
             return None
         if not client_id.startswith("https://"):
             stored = await run_in_threadpool(get_oauth_provider_client, client_id)
@@ -262,7 +253,7 @@ class OnyxOAuthProvider(OAuthProvider):
                 ],
                 grant_types=document.grant_types,
                 response_types=document.response_types,
-                scope=document.scope or Permission.READ_SEARCH.value,
+                scope=document.scope or OAUTH_PROVIDER_SCOPE,
                 token_endpoint_auth_method=document.token_endpoint_auth_method,
             )
             validate_public_oauth_client(client)
@@ -295,8 +286,8 @@ class OnyxOAuthProvider(OAuthProvider):
             resource = canonical_mcp_resource(params.resource or "", self.settings)
         except ValueError as error:
             raise AuthorizeError("invalid_request", "Invalid resource") from error
-        scopes = params.scopes or [Permission.READ_SEARCH.value]
-        if set(scopes) != {Permission.READ_SEARCH.value}:
+        scopes = params.scopes or [OAUTH_PROVIDER_SCOPE]
+        if set(scopes) != {OAUTH_PROVIDER_SCOPE}:
             raise AuthorizeError(
                 "invalid_scope", "Only read:search access is supported"
             )
@@ -307,7 +298,7 @@ class OnyxOAuthProvider(OAuthProvider):
         if not client.client_id:
             raise AuthorizeError("invalid_request", "Client identifier is required")
         normalized = params.model_copy(
-            update={"resource": resource, "scopes": [Permission.READ_SEARCH.value]}
+            update={"resource": resource, "scopes": [OAUTH_PROVIDER_SCOPE]}
         )
         request_id = await run_in_threadpool(
             store_authorization_request,
@@ -398,7 +389,7 @@ class OnyxOAuthProvider(OAuthProvider):
         scopes: list[str],
     ) -> OAuthToken:
         client_id = client.client_id
-        if not client_id or set(scopes) != {Permission.READ_SEARCH.value}:
+        if not client_id or set(scopes) != {OAUTH_PROVIDER_SCOPE}:
             raise TokenError("invalid_scope", "Only read:search access is supported")
         pair = await run_in_threadpool(
             lambda: _with_authorized_refresh(

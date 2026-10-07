@@ -22,12 +22,15 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 from starlette.types import Message
 
+from onyx.auth.constants import (
+    NO_STORE_HEADERS,
+    OAUTH_PROVIDER_SCOPE,
+)
 from onyx.auth.oauth_provider import (
     OAuthProviderTokenKind,
     parse_oauth_provider_code_tenant,
     parse_oauth_provider_token,
 )
-from onyx.db.enums import Permission
 from onyx.db.oauth_provider import (
     OAUTH_PROVIDER_STORAGE_ERRORS,
     oauth_provider_tenant_has_members,
@@ -50,7 +53,6 @@ logger = setup_logger()
 _MAX_BODY_BYTES = 16 * 1024
 _MAX_FORM_FIELDS = 16
 _PKCE_VERIFIER = re.compile(r"[A-Za-z0-9._~-]{43,128}")
-NO_STORE_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 _CORS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -155,7 +157,7 @@ async def metadata(request: Request) -> Response:
             "token_endpoint": f"{issuer}/token",
             "registration_endpoint": f"{issuer}/register",
             "revocation_endpoint": f"{issuer}/revoke",
-            "scopes_supported": [Permission.READ_SEARCH.value],
+            "scopes_supported": [OAUTH_PROVIDER_SCOPE],
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "token_endpoint_auth_methods_supported": ["none"],
@@ -187,7 +189,7 @@ async def register(request: Request) -> Response:
         if "token_endpoint_auth_method" not in payload:
             payload["token_endpoint_auth_method"] = "none"
         if "scope" not in payload:
-            payload["scope"] = Permission.READ_SEARCH.value
+            payload["scope"] = OAUTH_PROVIDER_SCOPE
         client_metadata = OAuthClientMetadata.model_validate(payload)
         client = OAuthClientInformationFull(
             **client_metadata.model_dump(),

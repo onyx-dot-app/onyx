@@ -10,6 +10,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from onyx.auth.constants import OAUTH_PROVIDER_ACCESS_LIFETIME
 from onyx.auth.pat import hash_pat
 from onyx.db.engine.async_sql_engine import (
     get_async_session_context_manager,
@@ -27,7 +28,6 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.oauth_provider import (
-    OAUTH_PROVIDER_ACCESS_LIFETIME,
     create_oauth_provider_grant__no_commit,
     get_oauth_provider_client,
     load_oauth_provider_refresh__no_commit,
