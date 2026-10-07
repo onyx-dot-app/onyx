@@ -29,7 +29,9 @@ export async function submitOAuthProviderConsent(
   const target: URL = new URL(payload.redirect_url);
   const localHttp: boolean =
     target.protocol === "http:" &&
-    ["localhost", "127.0.0.1", "[::1]"].includes(target.hostname);
+    (target.hostname === "localhost" ||
+      target.hostname === "[::1]" ||
+      /^127(?:\.\d{1,3}){3}$/.test(target.hostname));
   if (
     (target.protocol !== "https:" && !localHttp) ||
     target.username ||
