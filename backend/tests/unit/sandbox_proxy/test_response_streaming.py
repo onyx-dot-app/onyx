@@ -29,9 +29,13 @@ from mitmproxy import http as mitm_http
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
-from onyx.sandbox_proxy.addons import gate
+from onyx.sandbox_proxy import destination_policy
 from onyx.sandbox_proxy.addons.gate import GateAddon, _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
+from onyx.sandbox_proxy.destination_policy import (
+    UpstreamEventLoop,
+    parse_destination_policy,
+)
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 
@@ -162,7 +166,9 @@ def _allow_loopback_egress(monkeypatch: pytest.MonkeyPatch) -> None:
     """These tests route through 127.0.0.1 (loopback = internal), which the egress
     guard correctly blocks in production. They exercise response streaming, not the
     egress boundary, so bypass the guard here."""
-    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
+    monkeypatch.setattr(
+        destination_policy, "is_internal", lambda _config, _address: False
+    )
 
 
 def _start_proxy(
@@ -174,6 +180,7 @@ def _start_proxy(
     mitmproxy binds it), so it's resilient under parallel test runs.
     """
     gate = GateAddon(
+        destination_policy=parse_destination_policy(""),
         identity=_StubResolver(),
         request_evaluator=_NonGatingMatcher(),
         cache_factory=_unused_factory,
@@ -207,7 +214,10 @@ def _start_proxy(
             await master.run()
 
         thread = threading.Thread(
-            target=lambda p=port: asyncio.run(_amain(p)), daemon=True
+            target=lambda p=port: asyncio.run(
+                _amain(p), loop_factory=UpstreamEventLoop
+            ),
+            daemon=True,
         )
         thread.start()
 

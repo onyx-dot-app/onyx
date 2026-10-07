@@ -1,10 +1,12 @@
 import http.client
+import socket
 import threading
 from collections.abc import Iterator
 from http.server import HTTPServer
 
 import pytest
 
+from onyx.sandbox_proxy import server as proxy_server
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.server import _build_healthz_handler, _Readiness
 
@@ -121,3 +123,27 @@ def test_loses_readiness_on_watch_disconnect_even_after_initial_sync(
 
     lookup._synced = False
     assert _get(port, "/healthz")[0] == 503
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "::1"])
+def test_configured_listener_answers_real_requests(
+    monkeypatch: pytest.MonkeyPatch, host: str
+) -> None:
+    monkeypatch.setattr(proxy_server, "SANDBOX_PROXY_LISTEN_HOST", host)
+    monkeypatch.setattr(proxy_server, "SANDBOX_PROXY_HEALTHZ_PORT", 0)
+    readiness = _Readiness()
+    readiness.ca_ready = True
+    server = proxy_server._start_healthz_server(readiness, _FakeLookup(synced=True))
+    connection = http.client.HTTPConnection(host, server.server_port, timeout=5)
+    try:
+        assert server.address_family == (
+            socket.AF_INET6 if ":" in host else socket.AF_INET
+        )
+        connection.request("GET", "/healthz")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert response.read() == b"ok\n"
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
