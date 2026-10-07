@@ -150,13 +150,21 @@ lists plus its own additions):
   `beat_schedule.py:beat_task_templates`
 - `beat_cloud_tasks`: system-wide tasks that exist once regardless of tenant
   count (`monitor-celery-queues`, `monitor-alembic`, `check-available-tenants`,
-  `monitor-celery-pidbox`), always routed to `OnyxCeleryQueues.MONITORING`.
+  `monitor-celery-pidbox`), routed to `OnyxCeleryQueues.MONITORING`. The
+  exception is `cleanup-oauth-provider-clients`, which deletes idle OAuth
+  provider clients from the shared catalog schema on `OnyxCeleryQueues.PRIMARY`.
   `beat_schedule.py:beat_cloud_tasks`
 - `tasks_to_schedule`: the self-hosted (non-`MULTI_TENANT`) schedule, built by
   taking `beat_task_templates` (with the cloud-only `skip_gated`/`work_gated`
   option keys stripped) and adding self-hosted-only entries
   (`monitor-celery-queues`, `monitor-process-memory`, `celery-beat-heartbeat`,
-  `emit-version-telemetry`). `beat_schedule.py:tasks_to_schedule`
+  `emit-version-telemetry`, `cleanup-oauth-provider-clients`).
+  `beat_schedule.py:tasks_to_schedule`
+
+The per-tenant `cleanup-oauth-provider-grants` template deletes expired OAuth
+provider grants daily; their tokens cascade. Without Celery (`DISABLE_VECTOR_DB`),
+`periodic_poller.py:_build_periodic_tasks` runs both OAuth cleanups daily when
+`OAUTH_PROVIDER_ENABLED` is set.
 
 Every schedule entry sets `expires` (default `BEAT_EXPIRES_DEFAULT = 15 * 60`
 seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
