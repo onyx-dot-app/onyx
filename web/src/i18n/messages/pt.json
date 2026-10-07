@@ -8893,7 +8893,9 @@
         "expected": "{count} a mais previstas",
         "skipped": "{count} ignoradas",
         "successful": "{count} bem-sucedidas"
-      }
+      },
+      "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
+      "stale": "A conta ou as configurações dela mudaram desde que essas verificações foram executadas. Execute-as novamente para continuar."
     }
   },
   "agents": {

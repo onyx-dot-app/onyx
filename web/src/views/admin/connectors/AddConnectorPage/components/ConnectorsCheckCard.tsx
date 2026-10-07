@@ -21,18 +21,29 @@ import { cn } from "@opal/utils";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
+  ConnectorChecksStatus,
 } from "@/lib/connectors/checks/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import { useConnectorChecks } from "@/lib/connectors/checks/hooks";
+import ConnectorsCheckPromptCard from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckPromptCard";
 
 export interface ConnectorsCheckCardProps {
+  source: ConfigurableSources;
+  /** The credential the checks run with; `null` until one is usable. */
+  credentialId: number | null;
+  /** Locks the Start Checks prompt until the credential section is valid. */
+  locked: boolean;
+}
+
+interface CheckCardViewProps {
+  status: ConnectorChecksStatus;
   /** The finished checks, in any order. */
   results: CapabilityCheckResult[];
   /** Checks queued or running now. */
-  inProgressCount?: number;
+  inProgressCount: number;
   /** Checks waiting on a form field before they can run. */
-  expectedCount?: number;
-  /** True while a run is in flight. */
-  running?: boolean;
-  onRerun?: () => void;
+  expectedCount: number;
+  onRerun: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -259,17 +270,44 @@ function CheckGroup({ status, results }: CheckGroupProps) {
 // ---------------------------------------------------------------------------
 
 /**
- * The capability checks for a credential and the connector being set up,
- * grouped by outcome like a pull request's checks panel. The ring and the
- * title count every check, so a run fills them in as checks finish.
+ * The capability checks for the connector being set up. Reads the shared
+ * check session itself: before a run it shows the Start Checks prompt, after
+ * one the results card.
  */
 export default function ConnectorsCheckCard({
-  results,
-  inProgressCount = 0,
-  expectedCount = 0,
-  running = false,
-  onRerun,
+  source,
+  credentialId,
+  locked,
 }: ConnectorsCheckCardProps) {
+  const checks = useConnectorChecks({ source, credentialId });
+  if (checks.status === "notStarted") {
+    return (
+      <ConnectorsCheckPromptCard disabled={locked} onStart={checks.begin} />
+    );
+  }
+  return (
+    <CheckCardView
+      status={checks.status}
+      results={checks.results}
+      inProgressCount={checks.inProgressCount}
+      expectedCount={checks.expectedCount}
+      onRerun={checks.rerun}
+    />
+  );
+}
+
+/**
+ * The results card, grouped by outcome like a pull request's checks panel.
+ * The ring and the title count every check, so a run fills them in as checks
+ * finish.
+ */
+function CheckCardView({
+  status,
+  results,
+  inProgressCount,
+  expectedCount,
+  onRerun,
+}: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
   const format = useFormatter();
   const [collapsed, setCollapsed] = useState(false);
@@ -284,7 +322,14 @@ export default function ConnectorsCheckCard({
   );
   const passed = results.filter((result) => result.status === "passed").length;
   const failed = results.filter((result) => result.status === "failed").length;
-  const isRunning: boolean = running;
+  const isRunning: boolean = status === "running";
+  // A broken run or a changed configuration outranks the counts.
+  const notice: string | undefined =
+    status === "failedToRun"
+      ? t("failedToRun")
+      : status === "stale"
+        ? t("stale")
+        : undefined;
   const hasResults: boolean = results.length > 0;
   const total: number = results.length + inProgressCount + expectedCount;
   const hasChecks: boolean = total > 0;
@@ -292,6 +337,7 @@ export default function ConnectorsCheckCard({
   // What the fold hides, as one comma-separated line in a fixed order, e.g.
   // "2 failed, 1 skipped, 5 successful". Zero counts are left out.
   const summary = useMemo(() => {
+    if (notice) return notice;
     if (!hasChecks) return isRunning ? t("running.label") : t("empty.label");
     const count = (status: CapabilityCheckStatus) =>
       results.filter((result) => result.status === status).length;
@@ -311,6 +357,7 @@ export default function ConnectorsCheckCard({
       { type: "unit" }
     );
   }, [
+    notice,
     hasChecks,
     isRunning,
     results,
@@ -357,7 +404,7 @@ export default function ConnectorsCheckCard({
             />
           </GeneralLayouts.Section>
           <div className="flex items-center">
-            {onRerun && !collapsed && (
+            {!collapsed && (
               <Button
                 icon={SvgRefreshCw}
                 prominence="internal"
@@ -382,6 +429,16 @@ export default function ConnectorsCheckCard({
           </div>
         </div>
 
+        {!collapsed && notice && (
+          <Text
+            font="main-ui-body"
+            color={status === "failedToRun" ? "status-error-05" : "text-04"}
+            role={status === "failedToRun" ? "alert" : "status"}
+          >
+            {notice}
+          </Text>
+        )}
+
         {!collapsed &&
           (hasResults ? (
             <div className="flex flex-col gap-2">
@@ -394,9 +451,11 @@ export default function ConnectorsCheckCard({
               ))}
             </div>
           ) : (
-            <Text font="main-ui-body" color="text-03">
-              {isRunning ? t("running.label") : t("empty.label")}
-            </Text>
+            !notice && (
+              <Text font="main-ui-body" color="text-03">
+                {isRunning ? t("running.label") : t("empty.label")}
+              </Text>
+            )
           ))}
       </div>
     </Card>

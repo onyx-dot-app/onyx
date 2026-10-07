@@ -77,6 +77,12 @@ export const SWR_KEYS = {
   adminConnectorStatus: "/api/manage/admin/connector/status",
   federatedConnectors: "/api/federated",
   connectorGroupRestrictions: "/api/manage/connector-group-restrictions",
+  // The add-connector form's check session, client state shared by the
+  // checks card, the configuration lock and the Connect button.
+  connectorCheckSession: (source: string) => [
+    "connector-check-session",
+    source,
+  ],
   // One capability-check run for an unsaved connector form.
   connectorCheckRun: (runId: string) =>
     `/api/manage/admin/connector-checks/runs/${runId}`,

@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { useFormikContext } from "formik";
 import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
@@ -18,52 +16,7 @@ import { shouldRedirectToOAuth } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import type { ConnectionConfiguration } from "@/lib/connectors/types";
-import { useConnectorConfiguration } from "@/lib/connectors/connectors";
-import { toWireAccess } from "@/lib/connectors/accessType";
-import { splitCredentialBoundFields } from "@/lib/connectors/utils";
-import {
-  useDraftCheckRun,
-  type UseDraftCheckRunResult,
-} from "@/lib/connectors/checks/hooks";
-import { connectorFormState } from "@/lib/connectors/checks/formState";
-import type {
-  CapabilityCheckResult,
-  CapabilityCheckStatus,
-  DraftCheckState,
-} from "@/lib/connectors/checks/types";
 import ConnectorsCheckCard from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckCard";
-import ConnectorsCheckPromptCard from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckPromptCard";
-
-const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
-  "passed",
-  "failed",
-  "indeterminate",
-  "skipped",
-]);
-
-/** A check that has an outcome. Not-applicable checks never get one. */
-function isFinished(
-  check: DraftCheckState
-): check is DraftCheckState & { state: CapabilityCheckStatus } {
-  return FINISHED_STATES.has(check.state);
-}
-
-function toCheckResult(
-  check: DraftCheckState & { state: CapabilityCheckStatus }
-): CapabilityCheckResult {
-  return {
-    capability: check.capability,
-    check_id: check.check_id,
-    display_name: check.display_name,
-    required: check.required,
-    status: check.state,
-    message: check.message,
-    remediation: check.remediation,
-    docs_link: check.docs_link,
-    duration_ms: check.duration_ms,
-  };
-}
 
 interface AuthenticationAccountSectionProps {
   /** The source being set up. */
@@ -74,14 +27,10 @@ interface AuthenticationAccountSectionProps {
   currentCredential: Credential<any> | null;
   /** Called when the user picks or creates a credential. */
   onCredentialChange: (credential: Credential<any>) => void;
-  /** The credential the capability checks run with; `null` hides them. */
+  /** The credential the capability checks run with; `null` locks them. */
   checkedCredential: Credential<any> | null;
   /** Locks the Start Checks prompt, as the configuration below is locked. */
   checksLocked: boolean;
-  /** Why the prompt is locked, for its tooltip. */
-  checksLockedReason?: string;
-  /** Reports whether the checks pass, which unlocks the rest of the form. */
-  onChecksPassedChange: (passed: boolean) => void;
 }
 
 /**
@@ -97,46 +46,9 @@ export default function AuthenticationAccountSection({
   onCredentialChange,
   checkedCredential,
   checksLocked,
-  checksLockedReason,
-  onChecksPassedChange,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
   const settings = useSettings();
-  const { values } = useFormikContext<Record<string, unknown>>();
-  const configuration: ConnectionConfiguration =
-    useConnectorConfiguration(connector);
-  const formState: Record<string, unknown> = useMemo(
-    () => connectorFormState(configuration, values),
-    [configuration, values]
-  );
-  // The credential and its bound fields. A check result only counts for the
-  // configuration it ran with, so a change here asks for a rerun.
-  const bindingKey: string = useMemo(() => {
-    const bound = splitCredentialBoundFields(connector, configuration);
-    const boundValues: unknown[] = [...bound.values, ...bound.advancedValues]
-      .map((field) => field.name)
-      .sort()
-      .map((name) => values[name]);
-    return JSON.stringify([checkedCredential?.id ?? null, boundValues]);
-  }, [connector, configuration, values, checkedCredential]);
-  const checkRun: UseDraftCheckRunResult = useDraftCheckRun({
-    source: connector,
-    credentialId: checkedCredential?.id ?? null,
-    accessType: toWireAccess(accessType, {
-      restrict_access_to_groups: values.restrict_access_to_groups === true,
-      restriction_group_ids: Array.isArray(values.restriction_group_ids)
-        ? values.restriction_group_ids.filter(
-            (id): id is number => typeof id === "number"
-          )
-        : [],
-    }).access_type,
-    formState,
-    bindingKey,
-  });
-  const checks: DraftCheckState[] = checkRun.snapshot?.checks ?? [];
-  useEffect(() => {
-    onChecksPassedChange(checkRun.passed);
-  }, [checkRun.passed, onChecksPassedChange]);
   const {
     displayName,
     credentials,
@@ -381,31 +293,11 @@ export default function AuthenticationAccountSection({
             </SelectCard>
           </Section>
 
-          {/* The checks run only on request: a prompt holds their place until
-          the user starts them, or after a start request fails. */}
-          {checkRun.started && checkedCredential && !checkRun.error ? (
-            <ConnectorsCheckCard
-              results={checks.flatMap((check) =>
-                isFinished(check) ? [toCheckResult(check)] : []
-              )}
-              inProgressCount={
-                checks.filter(
-                  (check) =>
-                    check.state === "pending" || check.state === "running"
-                ).length
-              }
-              expectedCount={
-                checks.filter((check) => check.state === "waiting").length
-              }
-              running={checkRun.running}
-              onRerun={checkRun.rerun}
-            />
-          ) : (
-            <ConnectorsCheckPromptCard
-              disabled={checksLocked}
-              onStart={checkRun.begin}
-            />
-          )}
+          <ConnectorsCheckCard
+            source={connector}
+            credentialId={checkedCredential?.id ?? null}
+            locked={checksLocked || !checkedCredential}
+          />
         </Section>
       )}
     </Section>

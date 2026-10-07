@@ -8893,7 +8893,9 @@
         "expected": "예정 {count}개",
         "skipped": "건너뜀 {count}개",
         "successful": "성공 {count}개"
-      }
+      },
+      "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
+      "stale": "이 검사를 실행한 후 계정 또는 설정이 변경되었습니다. 계속하려면 다시 실행하세요."
     }
   },
   "agents": {

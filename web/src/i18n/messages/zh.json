@@ -8893,7 +8893,9 @@
         "expected": "{count} 项待执行",
         "skipped": "{count} 项跳过",
         "successful": "{count} 项成功"
-      }
+      },
+      "failedToRun": "检查未能运行。请重试。",
+      "stale": "自这些检查运行以来，账户或其设置已更改。请重新运行以继续。"
     }
   },
   "agents": {

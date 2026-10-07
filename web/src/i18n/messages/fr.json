@@ -8893,7 +8893,9 @@
         "expected": "{count} autres attendues",
         "skipped": "{count} ignorées",
         "successful": "{count} réussies"
-      }
+      },
+      "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
+      "stale": "Le compte ou ses paramètres ont changé depuis ces vérifications. Relancez-les pour continuer."
     }
   },
   "agents": {

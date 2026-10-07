@@ -8893,7 +8893,9 @@
         "expected": "{count} más pendientes",
         "skipped": "{count} omitidas",
         "successful": "{count} correctas"
-      }
+      },
+      "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo.",
+      "stale": "La cuenta o su configuración cambió desde que se ejecutaron estas comprobaciones. Vuelve a ejecutarlas para continuar."
     }
   },
   "agents": {

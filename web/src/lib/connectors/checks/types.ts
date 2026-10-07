@@ -55,6 +55,24 @@ export type DraftRunStatus =
   | "superseded"
   | "failed_to_run";
 
+/**
+ * Where the connector checks stand for the current form, as the checks card,
+ * the configuration lock and the Connect button see them.
+ */
+export type ConnectorChecksStatus =
+  /** No run yet: the Start Checks prompt shows. */
+  | "notStarted"
+  /** A run is starting or in flight. */
+  | "running"
+  /** The run completed, and no required check that could run is blocking. */
+  | "passed"
+  /** The run completed, and a required check failed or is unverified. */
+  | "failed"
+  /** The run itself broke: it could not start, crashed, or its worker died. */
+  | "failedToRun"
+  /** The credential or its bound fields changed since the run started. */
+  | "stale";
+
 /** Which cached results a new draft run ignores. */
 export type DraftRerunMode = "none" | "failed" | "all";
 

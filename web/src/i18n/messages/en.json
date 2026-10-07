@@ -8893,7 +8893,9 @@
         "expected": "{count} more expected",
         "skipped": "{count} skipped",
         "successful": "{count} successful"
-      }
+      },
+      "failedToRun": "Checks failed to run. Try again.",
+      "stale": "The account or its settings changed since these checks ran. Run them again to continue."
     }
   },
   "agents": {
