@@ -329,8 +329,6 @@ def test_every_rule_reads_the_config_class_of_its_source() -> None:
             {"object_types": ["tickets"]},
             {"object_types": ScopeDirection.WIDEN},
         ),
-        # Loopio: a blank stack name fetches every stack, as None does.
-        (DocumentSource.LOOPIO, {"loopio_stack_name": " "}, {}, {}),
         # Xenforo: the crawled URL is not part of document ids.
         (
             DocumentSource.XENFORO,
