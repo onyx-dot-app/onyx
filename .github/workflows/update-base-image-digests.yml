@@ -147,15 +147,21 @@ jobs:
 
             git commit --all -m "chore(deps): update ${family} base image digests"
 
-            # Announce only when the change the PR carries actually moved: a
-            # re-dispatch that reproduces the same pins is not new work.
-            # Patch-ids compare each side's own commit, so a merge moving
-            # another family's lines in a shared file does not re-ping this PR.
+            # A re-dispatch that reproduces the pins an open PR already carries
+            # is not new work: skip the push (it would retrigger the PR's CI)
+            # and the announcement. Patch-ids compare each side's own commit,
+            # so a merge moving another family's lines in a shared file does
+            # not count as a change here.
             same_pins=false
             if git fetch --depth=2 --quiet origin "${branch}" \
                && [ "$(git diff --unified=0 FETCH_HEAD~1 FETCH_HEAD | git patch-id | cut -d' ' -f1)" = \
                     "$(git diff --unified=0 main HEAD | git patch-id | cut -d' ' -f1)" ]; then
               same_pins=true
+            fi
+            existing_pr="$(gh pr list --state open --head "${branch}" --json number --jq '.[0].number')"
+            if [ "${same_pins}" = "true" ] && [ -n "${existing_pr}" ]; then
+              echo "${family} already carries identical pins in #${existing_pr}, skipping."
+              continue
             fi
             git push --force origin "${branch}"
 
@@ -173,7 +179,6 @@ jobs:
             } > "${RUNNER_TEMP}/pr-body-${family}.md"
 
             title="chore(deps): update ${family} base image digests"
-            existing_pr="$(gh pr list --state open --head "${branch}" --json number --jq '.[0].number')"
             if [ -n "${existing_pr}" ]; then
               gh pr edit "${existing_pr}" --body-file "${RUNNER_TEMP}/pr-body-${family}.md"
               echo "Refreshed existing PR #${existing_pr} via force-push."
@@ -184,11 +189,8 @@ jobs:
                 --title "${title}" \
                 --body-file "${RUNNER_TEMP}/pr-body-${family}.md"
             fi
-            # A PR the run just created needs review even if an earlier push
-            # left identical pins on the branch.
-            [ -n "${existing_pr}" ] || same_pins=false
             pr_url="$(gh pr view "${branch}" --json url --jq .url)" || pr_url=""
-            if [ -n "${pr_url}" ] && [ "${same_pins}" != "true" ]; then
+            if [ -n "${pr_url}" ]; then
               gh pr edit "${pr_url}" --add-reviewer rohoswagger \
                 || echo "::warning::Could not request review on ${pr_url}"
               if [[ " ${SKIP_ANNOUNCE_FAMILIES} " != *" ${family} "* ]]; then
