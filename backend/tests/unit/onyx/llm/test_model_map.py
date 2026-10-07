@@ -333,8 +333,7 @@ def test_remote_catalog_resolves_missing_models() -> None:
 
 
 def test_remote_catalog_fails_closed() -> None:
-    """Fetch failures degrade to the normal miss and are negative-cached;
-    the kill switch skips the network entirely."""
+    """Fetch failures degrade to the normal miss and are negative-cached."""
     calls: list[str] = []
 
     def failing_get(url: str, **_: Any) -> Any:
@@ -351,23 +350,6 @@ def test_remote_catalog_fails_closed() -> None:
             assert find_model_obj(model_map, "wandb", "vendor/x") is None
             assert find_model_obj(model_map, "wandb", "vendor/y") is None
             assert len(calls) == 1
-        finally:
-            _reset_caches()
-            model_catalog.reset_remote_cache()
-
-    with (
-        patch.object(model_catalog, "_catalog", return_value={}),
-        patch.object(model_catalog, "MODEL_CATALOG_REMOTE_LOOKUP", False),
-        patch.object(
-            model_catalog.httpx,
-            "get",
-            side_effect=AssertionError("must not fetch when disabled"),
-        ),
-    ):
-        model_catalog.reset_remote_cache()
-        model_map = _fresh_model_map()
-        try:
-            assert find_model_obj(model_map, "wandb", "vendor/x") is None
         finally:
             _reset_caches()
             model_catalog.reset_remote_cache()

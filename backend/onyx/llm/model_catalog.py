@@ -21,11 +21,6 @@ from typing import Any
 
 import httpx
 
-from onyx.configs.model_configs import (
-    MODEL_CATALOG_REMOTE_LOOKUP,
-    MODEL_CATALOG_REMOTE_TTL_SECONDS,
-    MODEL_CATALOG_REMOTE_URL,
-)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -212,6 +207,12 @@ _LOCAL_PROVIDERS = frozenset({"ollama_chat", "lm_studio"})
 # a failed fetch (offline/air-gapped) degrades to the same miss as before.
 # ---------------------------------------------------------------------------
 
+_REMOTE_CATALOG_URL = (
+    "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/"
+    "backend/onyx/llm/price_table"
+)
+# Same cadence as AUTO_LLM_UPDATE_INTERVAL_SECONDS.
+_REMOTE_TTL_SECONDS = 1800
 _REMOTE_FETCH_TIMEOUT_SECONDS = 5.0
 # provider -> (fetched_at epoch, section or None). None negative-caches
 # failures so repeated misses don't refetch every lookup.
@@ -220,16 +221,16 @@ _remote_sections: dict[str, tuple[float, dict[str, Any] | None]] = {}
 
 def _remote_section(provider: str) -> dict[str, Any] | None:
     """The provider's price_table file from main, TTL + negative cached."""
-    if not MODEL_CATALOG_REMOTE_LOOKUP or provider in _LOCAL_PROVIDERS:
+    if provider in _LOCAL_PROVIDERS:
         return None
     now = time.time()
     cached = _remote_sections.get(provider)
-    if cached is not None and now - cached[0] < MODEL_CATALOG_REMOTE_TTL_SECONDS:
+    if cached is not None and now - cached[0] < _REMOTE_TTL_SECONDS:
         return cached[1]
     section: dict[str, Any] | None = None
     try:
         response = httpx.get(
-            f"{MODEL_CATALOG_REMOTE_URL}/{provider}.json",
+            f"{_REMOTE_CATALOG_URL}/{provider}.json",
             timeout=_REMOTE_FETCH_TIMEOUT_SECONDS,
             follow_redirects=True,
         )
