@@ -22,6 +22,7 @@ from typing import Any
 import httpx
 
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import ONYX_AIRGAPPED
 
 logger = setup_logger()
 
@@ -221,7 +222,7 @@ _remote_sections: dict[str, tuple[float, dict[str, Any] | None]] = {}
 
 def _remote_section(provider: str) -> dict[str, Any] | None:
     """The provider's price_table file from main, TTL + negative cached."""
-    if provider in _LOCAL_PROVIDERS:
+    if ONYX_AIRGAPPED or provider in _LOCAL_PROVIDERS:
         return None
     now = time.time()
     cached = _remote_sections.get(provider)

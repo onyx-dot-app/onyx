@@ -195,6 +195,11 @@ CORS_ALLOW_CREDENTIALS: bool = cors_allow_credentials(CORS_ALLOWED_ORIGIN)
 # Multi-tenancy configuration
 MULTI_TENANT = os.environ.get("MULTI_TENANT", "").lower() == "true"
 
+# Air-gapped deployment: no outbound calls to onyx-controlled endpoints
+# (recommended-models sync, remote model catalog lookup). Inbound traffic and
+# user-configured integrations are unaffected.
+ONYX_AIRGAPPED = os.environ.get("ONYX_AIRGAPPED", "").lower() == "true"
+
 # Outside this file, should almost always use `POSTGRES_DEFAULT_SCHEMA` unless you
 # have a very good reason
 POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE = "public"

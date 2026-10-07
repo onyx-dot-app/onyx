@@ -355,6 +355,26 @@ def test_remote_catalog_fails_closed() -> None:
             model_catalog.reset_remote_cache()
 
 
+def test_remote_catalog_respects_airgap() -> None:
+    """ONYX_AIRGAPPED deployments never consult the remote catalog."""
+    with (
+        patch.object(model_catalog, "_catalog", return_value={}),
+        patch.object(model_catalog, "ONYX_AIRGAPPED", True),
+        patch.object(
+            model_catalog.httpx,
+            "get",
+            side_effect=AssertionError("must not fetch when air-gapped"),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map = _fresh_model_map()
+        try:
+            assert find_model_obj(model_map, "wandb", "vendor/x") is None
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
 def test_remote_catalog_respects_chat_only() -> None:
     """A remote non-chat entry resolves unfiltered but not under chat_only."""
     remote_section: dict[str, Any] = {
