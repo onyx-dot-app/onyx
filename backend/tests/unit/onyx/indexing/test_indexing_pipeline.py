@@ -447,6 +447,55 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
         )
 
 
+def test_batch_handler_forces_only_the_documents_the_batch_prepared() -> None:
+    """Through the real index_doc_batch: prepare() selects one of two documents,
+    the batch raises after that, and only the selected document is retried
+    with the change gates off."""
+    prepared = _make_doc("prepared")
+    unchanged = _make_doc("unchanged")
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    # The batch prepares one document. Each retry then finds nothing to do.
+    adapter.prepare.side_effect = [
+        DocumentBatchPrepareContext(updatable_docs=[prepared], id_to_boost_map={}),
+        None,
+        None,
+    ]
+    adapter.lock_context.return_value = _make_ctx()
+    chunker = MagicMock()
+    chunker.chunk.side_effect = RuntimeError("chunker down")
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.sentry_sdk"),
+    ):
+        result = index_doc_batch_with_handler(
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            document_batch=[prepared, unchanged],
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+        )
+
+    assert result.failures == []
+    # (documents, ignore_time_skip, index_to_secondary, force_update) per call.
+    assert [
+        ([doc.id for doc in call.args[0]], call.args[3])
+        for call in adapter.prepare.call_args_list
+    ] == [
+        (["prepared", "unchanged"], False),
+        (["prepared"], True),
+        (["unchanged"], False),
+    ]
+
+
 def test_batch_handler_does_not_retry_a_single_document_batch() -> None:
     index_doc_batch_mock = MagicMock(side_effect=_raise_for_bad_doc)
 
