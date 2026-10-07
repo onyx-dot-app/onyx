@@ -1,4 +1,5 @@
 {{- if and .Values.ingress.enabled .Values.mcpServer.enabled -}}
+{{- $hosts := list .Values.ingress.api.host .Values.ingress.webserver.host | uniq -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -15,19 +16,26 @@ spec:
   ingressClassName: {{ .Values.ingress.className }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.api.host }}
+    {{- range $host := $hosts }}
+    - host: {{ $host }}
       http:
         paths:
           - path: /mcp(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
-                name: {{ include "onyx.resourceName" (list . "mcp-server-service") }}
+                name: {{ include "onyx.resourceName" (list $ "mcp-server-service") }}
                 port:
-                  number: {{ .Values.mcpServer.service.servicePort }}
+                  number: {{ $.Values.mcpServer.service.servicePort }}
+    {{- end }}
   tls:
+    {{- range $host := $hosts }}
     - hosts:
-        - {{ .Values.ingress.api.host }}
-      secretName: {{ include "onyx.resourceName" (list . "ingress-mcp-tls") }}
+        - {{ $host }}
+      {{- if eq $host $.Values.ingress.webserver.host }}
+      secretName: {{ include "onyx.resourceName" (list $ "ingress-webserver-tls") }}
+      {{- else }}
+      secretName: {{ include "onyx.resourceName" (list $ "ingress-mcp-tls") }}
+      {{- end }}
+    {{- end }}
 {{- end }}
-

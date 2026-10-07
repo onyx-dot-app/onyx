@@ -210,6 +210,8 @@ Onyx issuer. The tokens come from the OAuth provider in [[auth-and-identity]] §
 Discovery advertises `{WEB_DOMAIN}/mcp` without a trailing slash so clients can
 connect with either `/mcp` or `/mcp/`. Stored token audiences remain `/mcp/`.
 The internal MCP mount path does not change the advertised public resource.
+On Helm deployments, `/mcp/` also routes on the web host so the endpoint and
+protected-resource metadata match the resource derived from `WEB_DOMAIN`.
 
 ### 4.3 A search call, end to end
 

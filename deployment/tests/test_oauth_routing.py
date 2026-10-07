@@ -1,7 +1,83 @@
 import re
+import shutil
+import subprocess
 from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("api_host", ["web.example.com", "api.example.com"])
+def test_rendered_mcp_routes_match_the_web_domain_resource(
+    tmp_path: Path, api_host: str
+) -> None:
+    chart: Path = REPO_ROOT / "deployment/helm/charts/onyx"
+    templates: Path = tmp_path / "templates"
+    templates.mkdir()
+    (tmp_path / "Chart.yaml").write_text("apiVersion: v2\nname: onyx\nversion: 0.9.4\n")
+    shutil.copyfile(chart / "values.yaml", tmp_path / "values.yaml")
+    for name in (
+        "_helpers.tpl",
+        "ingress-mcp.yaml",
+        "ingress-mcp-oauth-callback.yaml",
+        "ingress-mcp-oauth-discovery.yaml",
+    ):
+        shutil.copyfile(chart / "templates" / name, templates / name)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [
+            "helm",
+            "template",
+            "onyx",
+            str(tmp_path),
+            "--set",
+            "ingress.enabled=true",
+            "--set",
+            "mcpServer.enabled=true",
+            "--set",
+            "ingress.webserver.host=web.example.com",
+            "--set",
+            f"ingress.api.host={api_host}",
+            "--set",
+            "configMap.WEB_DOMAIN=https://web.example.com",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    ingresses: dict[str, Any] = {
+        document["metadata"]["name"]: document
+        for document in yaml.safe_load_all(result.stdout)
+        if document is not None
+    }
+    metadata: dict[str, Any] = ingresses["onyx-ingress-mcp-resource-metadata"]
+    rule: dict[str, Any] = metadata["spec"]["rules"][0]
+    assert rule["host"] == "web.example.com"
+    assert (
+        rule["http"]["paths"][0]["backend"]["service"]["name"]
+        == "onyx-mcp-server-service"
+    )
+    assert metadata["spec"]["tls"][0]["hosts"] == ["web.example.com"]
+    assert metadata["spec"]["tls"][0]["secretName"] == "onyx-ingress-webserver-tls"
+    mcp: dict[str, Any] = ingresses["onyx-ingress-mcp"]
+    hosts: list[str] = [rule["host"] for rule in mcp["spec"]["rules"]]
+    assert set(hosts) == {"web.example.com", api_host}
+    assert len(hosts) == len(set(hosts))
+    for rule in mcp["spec"]["rules"]:
+        assert (
+            rule["http"]["paths"][0]["backend"]["service"]["name"]
+            == "onyx-mcp-server-service"
+        )
+
+    callback: dict[str, Any] = ingresses["onyx-ingress-mcp-oauth-callback"]
+    assert {rule["host"] for rule in callback["spec"]["rules"]} == set(hosts)
+    for rule in callback["spec"]["rules"]:
+        path: dict[str, Any] = rule["http"]["paths"][0]
+        assert path["path"] == "/mcp/oauth/callback"
+        assert path["pathType"] == "Exact"
+        assert path["backend"]["service"]["name"] == "onyx-webserver"
 
 
 def _read(relative_path: str) -> str:

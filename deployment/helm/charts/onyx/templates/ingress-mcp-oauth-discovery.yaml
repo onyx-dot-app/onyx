@@ -13,7 +13,7 @@ spec:
   ingressClassName: {{ .Values.ingress.className }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.api.host }}
+    - host: {{ .Values.ingress.webserver.host }}
       http:
         paths:
           - path: /\.well-known/oauth-protected-resource(/|$)(.*)
@@ -25,8 +25,8 @@ spec:
                   number: {{ .Values.mcpServer.service.servicePort }}
   tls:
     - hosts:
-        - {{ .Values.ingress.api.host }}
-      secretName: {{ include "onyx.resourceName" (list . "ingress-mcp-tls") }}
+        - {{ .Values.ingress.webserver.host }}
+      secretName: {{ include "onyx.resourceName" (list . "ingress-webserver-tls") }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
