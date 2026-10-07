@@ -843,6 +843,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Mistral Large 4",
       "open_weights": false,
       "reasoning": true,
@@ -850,6 +851,30 @@
       "status": "beta",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "mistral-large-4-0": {
+      "cost": {
+        "cache_read": 0.068,
+        "input": 0.6799999999999999,
+        "output": 2.09
+      },
+      "limit": {
+        "context": 524288
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-large-4-0",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "mistral-large-latest": {
