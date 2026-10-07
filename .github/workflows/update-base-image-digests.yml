@@ -21,12 +21,12 @@ on:
     - cron: "0 15 * * 1" # weekly, Monday 15:00 UTC (off the 13:00 recommended-models slot)
   workflow_dispatch:
     inputs:
-      announce:
-        # cve-alerts.yml passes false: its own #cve-reviews post already names
-        # the refreshed PRs as the fix, so a second ping would be noise.
-        description: "Post the refreshed PRs to #ai-pr-reviews"
-        type: boolean
-        default: true
+      skip-announce-families:
+        # cve-alerts.yml passes the families its #cve-reviews posts already
+        # name as fix PRs, so they are not announced a second time here.
+        description: "Space-separated base families to leave out of the #ai-pr-reviews post"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -119,6 +119,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           CACHE_FILE: ${{ runner.temp }}/digests.json
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SKIP_ANNOUNCE_FAMILIES: ${{ inputs.skip-announce-families }}
         run: |
           if [ ! -s "${RUNNER_TEMP}/stale-families.txt" ]; then
             echo "All pinned digests are current. Nothing to do."
@@ -176,7 +177,9 @@ jobs:
             if [ -n "${pr_url}" ]; then
               gh pr edit "${pr_url}" --add-reviewer rohoswagger \
                 || echo "::warning::Could not request review on ${pr_url}"
-              pr_links+="<${pr_url}|${family} base image update> "
+              if [[ " ${SKIP_ANNOUNCE_FAMILIES} " != *" ${family} "* ]]; then
+                pr_links+="<${pr_url}|${family} base image update> "
+              fi
             fi
           done
 
@@ -184,9 +187,7 @@ jobs:
           echo "links=${pr_links}" >> "${GITHUB_OUTPUT}"
 
       - name: Notify Slack about PRs ready for review
-        # Scheduled runs have no inputs context; only a dispatch that passes
-        # announce=false (the CVE Alerts one) skips the post.
-        if: steps.pr.outputs.links != '' && (github.event_name != 'workflow_dispatch' || inputs.announce)
+        if: steps.pr.outputs.links != ''
         continue-on-error: true
         uses: ./.github/actions/slack-post-message
         with:
