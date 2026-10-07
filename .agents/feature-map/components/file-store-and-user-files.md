@@ -382,7 +382,8 @@ access-control consequence of this.
   pass failed, driven by the `INCOGNITO_SESSION_METADATA_KEY` stamp every
   `FileRecord` gets when written under a content-free session
   (`db/file_record.py:upsert_filerecord`); `db/file_record.py:get_incognito_file_ids`
-  / `get_session_ids_with_incognito_files` are its query surface.
+  / `get_session_ids_with_incognito_files` are its query surface. The same job
+  retries pending Redis context teardown; [[context-assembly]] §4.10 owns that flow.
 - **Staged files** (large tabular sections materialized during extraction,
   `file_store/staging.py:stage_raw_file`) are cleaned up by the caller
   explicitly (`tasks.py:_load_user_file_documents`'s

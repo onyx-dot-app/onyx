@@ -391,7 +391,12 @@ under that lock and commits both replacements atomically with the same idle
 TTL. Callbacks receive values, not Redis commands. The existing history save
 preserves agent fields and rejects stale versions without retrying. Agent-history
 callers follow in later SDK changes. Teardown uses the same lock to write the
-tombstone and delete the agent hash together.
+tombstone and delete the agent hash together. Before attempting teardown, it
+retains the session ID in a tenant-prefixed pending set. A busy lock queues
+the existing incognito cleanup task after 60 seconds. That task also runs
+periodically and retries pending sessions without waiting on busy locks.
+Requests remain pending until history, agent records, and buffered answers
+have been cleared, including when task publication fails.
 
 Lock acquisition waits at most five seconds per attempt. The lease lasts 60
 seconds; ownership is checked immediately before writing. Work must finish
