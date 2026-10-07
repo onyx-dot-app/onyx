@@ -179,8 +179,12 @@ Run backend services (API server, model server) with environment loaded from
 `.vscode/.env`. On first run, copies `.vscode/env_template.txt` to `.vscode/.env`
 if the `.env` file does not already exist.
 
-Enterprise Edition features are enabled by default with license enforcement
-disabled, matching the `compose` command behavior.
+Paid features need a license in the database. When `ONYX_DEV_LICENSE` is set, in
+the shell or in `.vscode/.env`, `backend api` seeds it before the server starts.
+`compose` reads it from the shell only and seeds it into the api_server once the
+stack is healthy, except with `--infra`, with `--wait=false`, and for the
+multitenant profile. With no license in the database Onyx runs as Community
+Edition.
 
 ```shell
 ods backend <subcommand>
@@ -195,7 +199,6 @@ ods backend <subcommand>
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--no-ee` | `false` | Disable Enterprise Edition features (enabled by default) |
 | `--port` | `8080` (api) / `9000` (model_server) | Port to listen on |
 
 Shell environment takes precedence over `.env` file values, so inline overrides
@@ -209,9 +212,6 @@ ods backend api
 
 # Start the API server on a custom port
 ods backend api --port 9090
-
-# Start without Enterprise Edition
-ods backend api --no-ee
 
 # Start the model server
 ods backend model_server
