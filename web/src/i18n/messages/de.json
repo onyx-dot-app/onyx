@@ -8845,6 +8845,13 @@
       }
     },
     "connectorChecks": {
+      "prompt": {
+        "title": "Verbindung testen",
+        "description": "{appName} führt Prüfungen durch, um die erforderlichen Berechtigungen zu bestätigen, bevor es weitergeht.",
+        "startButton": {
+          "label": "Prüfungen starten"
+        }
+      },
       "title": "Connector-Prüfungen",
       "groups": {
         "failed": "{count} Fehlgeschlagen",

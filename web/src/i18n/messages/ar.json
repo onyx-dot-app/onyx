@@ -8845,6 +8845,13 @@
       }
     },
     "connectorChecks": {
+      "prompt": {
+        "title": "اختبار الاتصال",
+        "description": "سيُجري {appName} فحوصات للتحقق من النطاقات المطلوبة قبل المتابعة.",
+        "startButton": {
+          "label": "بدء الفحوصات"
+        }
+      },
       "title": "فحوصات الموصّل",
       "groups": {
         "failed": "{count} فشلت",

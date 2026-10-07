@@ -8845,6 +8845,13 @@
       }
     },
     "connectorChecks": {
+      "prompt": {
+        "title": "Testar conexão",
+        "description": "{appName} executará verificações para validar os escopos necessários antes de continuar.",
+        "startButton": {
+          "label": "Iniciar verificações"
+        }
+      },
       "title": "Verificações do conector",
       "groups": {
         "failed": "{count} com falha",

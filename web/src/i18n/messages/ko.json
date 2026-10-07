@@ -8845,6 +8845,13 @@
       }
     },
     "connectorChecks": {
+      "prompt": {
+        "title": "연결 테스트",
+        "description": "{appName}이(가) 계속하기 전에 필요한 범위를 확인하는 검사를 실행합니다.",
+        "startButton": {
+          "label": "검사 시작"
+        }
+      },
       "title": "커넥터 검사",
       "groups": {
         "failed": "실패 {count}개",

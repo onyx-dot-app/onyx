@@ -146,6 +146,7 @@ export { default as SvgPencilRuler } from "@opal/icons/pencil-ruler";
 export { default as SvgPieChart } from "@opal/icons/pie-chart";
 export { default as SvgPin } from "@opal/icons/pin";
 export { default as SvgPinned } from "@opal/icons/pinned";
+export { default as SvgPlay } from "@opal/icons/play";
 export { default as SvgPlayCircle } from "@opal/icons/play-circle";
 export { default as SvgPlug } from "@opal/icons/plug";
 export { default as SvgPlus } from "@opal/icons/plus";

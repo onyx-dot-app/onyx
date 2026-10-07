@@ -8845,6 +8845,13 @@
       }
     },
     "connectorChecks": {
+      "prompt": {
+        "title": "测试连接",
+        "description": "{appName} 将在继续之前运行检查，以验证所需的权限范围。",
+        "startButton": {
+          "label": "开始检查"
+        }
+      },
       "title": "连接器检查",
       "groups": {
         "failed": "{count} 项失败",

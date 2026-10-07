@@ -8845,6 +8845,13 @@
       }
     },
     "connectorChecks": {
+      "prompt": {
+        "title": "Tester la connexion",
+        "description": "{appName} effectuera des vérifications pour valider les autorisations requises avant de continuer.",
+        "startButton": {
+          "label": "Lancer les vérifications"
+        }
+      },
       "title": "Vérifications du connecteur",
       "groups": {
         "failed": "{count} échouées",

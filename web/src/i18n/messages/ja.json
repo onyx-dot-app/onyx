@@ -8845,6 +8845,13 @@
       }
     },
     "connectorChecks": {
+      "prompt": {
+        "title": "接続をテスト",
+        "description": "{appName} は続行する前に、必要なスコープを確認するチェックを実行します。",
+        "startButton": {
+          "label": "チェックを開始"
+        }
+      },
       "title": "コネクターチェック",
       "groups": {
         "failed": "失敗 {count} 件",

@@ -28,6 +28,10 @@ export interface UseDraftCheckRunInput {
 }
 
 export interface UseDraftCheckRunResult {
+  /** The user asked for the checks. Nothing runs before that. */
+  started: boolean;
+  /** Starts the checks, or retries them: the run starts at once. */
+  begin: () => void;
   /** The latest run; `null` before the first one starts. */
   snapshot: DraftCheckRunSnapshot | null;
   /** True from a start request until the run leaves `running`. */
@@ -38,10 +42,10 @@ export interface UseDraftCheckRunResult {
 }
 
 /**
- * The capability checks for an unsaved connector form. A run starts when a
- * credential is picked and again once the form settles after an edit; each
- * run supersedes the last for this form session. Polls while a run is in
- * flight.
+ * The capability checks for an unsaved connector form. Nothing runs until
+ * `begin` is called. Then a run starts at once, and again once the credential
+ * changes or the form settles after an edit; each run supersedes the last for
+ * this form session. Polls while a run is in flight.
  */
 export function useDraftCheckRun({
   source,
@@ -54,6 +58,10 @@ export function useDraftCheckRun({
   const [runId, setRunId] = useState<string | null>(null);
   const [requesting, setRequesting] = useState<boolean>(false);
   const [error, setError] = useState<unknown>(null);
+  const [started, setStarted] = useState<boolean>(false);
+  // The first run follows the user's click, so it does not wait for the form
+  // to settle.
+  const firstRun = useRef<boolean>(true);
   // Only the newest start request may set the run id.
   const latestRequest = useRef<number>(0);
 
@@ -103,19 +111,23 @@ export function useDraftCheckRun({
   }, [start]);
   const formKey: string = JSON.stringify(formState);
   useEffect(() => {
-    if (credentialId === null) return;
-    const timer = setTimeout(
-      () => void startRef.current("none"),
-      FORM_SETTLE_DELAY_MS
-    );
+    if (!started || credentialId === null) return;
+    const delay: number = firstRun.current ? 0 : FORM_SETTLE_DELAY_MS;
+    const timer = setTimeout(() => {
+      firstRun.current = false;
+      void startRef.current("none");
+    }, delay);
     return () => clearTimeout(timer);
-  }, [credentialId, accessType, formKey, source]);
+  }, [started, credentialId, accessType, formKey, source]);
 
   // A superseded snapshot belongs to an older run.
   const snapshot: DraftCheckRunSnapshot | null =
     data && data.run_id === runId && data.status !== "superseded" ? data : null;
 
   return {
+    started,
+    // Once started, a second start (after a failed request) retries at once.
+    begin: () => (started ? void start("none") : setStarted(true)),
     snapshot,
     running: requesting || snapshot?.status === "running",
     error,

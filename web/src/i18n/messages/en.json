@@ -8845,6 +8845,13 @@
       }
     },
     "connectorChecks": {
+      "prompt": {
+        "title": "Test Connection",
+        "description": "{appName} will run checks to validate required scopes before proceeding.",
+        "startButton": {
+          "label": "Start Checks"
+        }
+      },
       "title": "Connector Checks",
       "groups": {
         "failed": "{count} Failed",

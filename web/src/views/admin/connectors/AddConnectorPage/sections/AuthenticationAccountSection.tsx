@@ -32,6 +32,7 @@ import type {
   DraftCheckState,
 } from "@/lib/connectors/checks/types";
 import { ConnectorsCheckCard } from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckCard";
+import { ConnectorsCheckPromptCard } from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckPromptCard";
 
 const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
   "passed",
@@ -249,42 +250,115 @@ export default function AuthenticationAccountSection({
       and shows its own loader and error until then; the guard only keeps
       the types honest. */}
       {!credentials ? null : (
-        <Section gap={4} alignItems="stretch" width="full">
-          <Card border="solid" rounding={4} padding={6}>
-            <Section gap={4} alignItems="start" width="full">
-              <ModifyCredential
-                showIfEmpty
-                accessType={accessType}
-                defaultedCredential={currentCredential!}
-                credentials={credentials}
-                onDeleteCredential={onDeleteCredential}
-                onSwitch={onSwap}
-              />
+        <Section gap={6} alignItems="stretch" width="full">
+          <Section gap={4} alignItems="stretch" width="full">
+            <Card border="solid" rounding={4} padding={6}>
+              <Section gap={4} alignItems="start" width="full">
+                <ModifyCredential
+                  showIfEmpty
+                  accessType={accessType}
+                  defaultedCredential={currentCredential!}
+                  credentials={credentials}
+                  onDeleteCredential={onDeleteCredential}
+                  onSwitch={onSwap}
+                />
 
-              {canAuthorize && (
-                <Section
-                  flexDirection="row"
-                  justifyContent="start"
-                  gap={1}
-                  className="mt-6"
-                >
-                  <Button
-                    disabled={isAuthorizing}
-                    variant="action"
-                    onClick={handleAuthorize}
+                {canAuthorize && (
+                  <Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    gap={1}
+                    className="mt-6"
                   >
-                    {isAuthorizing
-                      ? t("add.authorizeButton.pendingLabel")
-                      : t("add.authorizeButton.label", {
-                          source: displayName,
-                        })}
-                  </Button>
-                </Section>
-              )}
-            </Section>
-          </Card>
+                    <Button
+                      disabled={isAuthorizing}
+                      variant="action"
+                      onClick={handleAuthorize}
+                    >
+                      {isAuthorizing
+                        ? t("add.authorizeButton.pendingLabel")
+                        : t("add.authorizeButton.label", {
+                            source: displayName,
+                          })}
+                    </Button>
+                  </Section>
+                )}
+              </Section>
+            </Card>
 
-          {checkedCredential && !checkRun.error && (
+            {/* One card creates a credential. Its header toggles it; the fold
+          below is a plain container, so a click in the open form cannot fold
+          it away. The routes into the source are tabs inside the fold. */}
+            <SelectCard
+              expandable
+              expanded={isCreating}
+              expandableContentHeight="full"
+              border="solid"
+              state={isCreating ? "filled" : "empty"}
+              rounding={4}
+              padding={2}
+              // The card is one action, so it names itself. Nothing inside the
+              // interactive half is focusable, so a role here folds no other
+              // control into that name.
+              role="button"
+              aria-label={newAccountLabel}
+              tabIndex={0}
+              expandedContent={
+                <div className="p-4" data-testid="credential-form">
+                  {namesMethods ? (
+                    <Tabs
+                      gap={4}
+                      value={openMethod ?? defaultMethod}
+                      onValueChange={(value) => {
+                        // Matched against the real methods rather than cast:
+                        // the tab strip hands back a plain string.
+                        const picked = methods.find(
+                          (method) => method === value
+                        );
+                        if (picked) selectMethod(picked);
+                      }}
+                    >
+                      <Tabs.List>
+                        {orderedMethods.map((method) => (
+                          <Tabs.Trigger key={method} value={method}>
+                            {method === CredentialCreationMethod.OAuth
+                              ? t("add.connectWithTab.label")
+                              : t("add.manualTab.label")}
+                          </Tabs.Trigger>
+                        ))}
+                      </Tabs.List>
+                      {/* A tab switch keeps what the user typed in the other
+                      route. */}
+                      {orderedMethods.map((method) => (
+                        <Tabs.Content key={method} value={method} keepMounted>
+                          {renderCredentialForm(method)}
+                        </Tabs.Content>
+                      ))}
+                    </Tabs>
+                  ) : (
+                    renderCredentialForm(defaultMethod)
+                  )}
+                </div>
+              }
+              onClick={() =>
+                isCreating ? close() : selectMethod(defaultMethod)
+              }
+            >
+              <Section padding={2} width="full">
+                <Content
+                  icon={SvgPlusCircle}
+                  title={newAccountLabel}
+                  sizePreset="main-ui"
+                  variant="body"
+                  color={isCreating ? "interactive" : "muted"}
+                />
+              </Section>
+            </SelectCard>
+          </Section>
+
+          {/* The checks run only on request: a prompt holds their place until
+          the user starts them, or after a start request fails. */}
+          {checkRun.started && checkedCredential && !checkRun.error ? (
             <ConnectorsCheckCard
               results={checks.flatMap((check) =>
                 isFinished(check) ? [toCheckResult(check)] : []
@@ -301,72 +375,12 @@ export default function AuthenticationAccountSection({
               running={checkRun.running}
               onRerun={checkRun.rerun}
             />
+          ) : (
+            <ConnectorsCheckPromptCard
+              disabled={!checkedCredential}
+              onStart={checkRun.begin}
+            />
           )}
-
-          {/* One card creates a credential. Its header toggles it; the fold
-          below is a plain container, so a click in the open form cannot fold
-          it away. The routes into the source are tabs inside the fold. */}
-          <SelectCard
-            expandable
-            expanded={isCreating}
-            expandableContentHeight="full"
-            border="solid"
-            state={isCreating ? "filled" : "empty"}
-            rounding={4}
-            padding={2}
-            // The card is one action, so it names itself. Nothing inside the
-            // interactive half is focusable, so a role here folds no other
-            // control into that name.
-            role="button"
-            aria-label={newAccountLabel}
-            tabIndex={0}
-            expandedContent={
-              <div className="p-4" data-testid="credential-form">
-                {namesMethods ? (
-                  <Tabs
-                    gap={4}
-                    value={openMethod ?? defaultMethod}
-                    onValueChange={(value) => {
-                      // Matched against the real methods rather than cast:
-                      // the tab strip hands back a plain string.
-                      const picked = methods.find((method) => method === value);
-                      if (picked) selectMethod(picked);
-                    }}
-                  >
-                    <Tabs.List>
-                      {orderedMethods.map((method) => (
-                        <Tabs.Trigger key={method} value={method}>
-                          {method === CredentialCreationMethod.OAuth
-                            ? t("add.connectWithTab.label")
-                            : t("add.manualTab.label")}
-                        </Tabs.Trigger>
-                      ))}
-                    </Tabs.List>
-                    {/* A tab switch keeps what the user typed in the other
-                      route. */}
-                    {orderedMethods.map((method) => (
-                      <Tabs.Content key={method} value={method} keepMounted>
-                        {renderCredentialForm(method)}
-                      </Tabs.Content>
-                    ))}
-                  </Tabs>
-                ) : (
-                  renderCredentialForm(defaultMethod)
-                )}
-              </div>
-            }
-            onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
-          >
-            <Section padding={2} width="full">
-              <Content
-                icon={SvgPlusCircle}
-                title={newAccountLabel}
-                sizePreset="main-ui"
-                variant="body"
-                color={isCreating ? "interactive" : "muted"}
-              />
-            </Section>
-          </SelectCard>
         </Section>
       )}
     </Section>
