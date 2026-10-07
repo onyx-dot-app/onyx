@@ -71,6 +71,39 @@ async def test_cache_policy_applies_across_provider_instances(
 
 
 @pytest.mark.asyncio
+async def test_client_advertising_extra_grant_types_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    claude_client_id = "https://claude.ai/oauth/mcp-oauth-client-metadata"
+    document = {
+        "client_id": claude_client_id,
+        "client_name": "Claude",
+        "client_uri": "https://claude.ai",
+        "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+        "grant_types": [
+            "authorization_code",
+            "refresh_token",
+            "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        ],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "none",
+    }
+    fetch = AsyncMock(
+        return_value=SSRFFetchResponse(
+            content=json.dumps(document).encode(),
+            status_code=200,
+            headers={"Cache-Control": "max-age=300"},
+        )
+    )
+    monkeypatch.setattr(cimd, "ssrf_safe_fetch_response", fetch)
+
+    client = await OnyxOAuthProvider(SETTINGS).get_client(claude_client_id)
+
+    assert client is not None
+    assert client.client_name == "Claude"
+
+
+@pytest.mark.asyncio
 async def test_cache_evicts_oldest_client(monkeypatch: pytest.MonkeyPatch) -> None:
     identifiers = [f"https://client.example/{index}.json" for index in range(129)]
     fetch = AsyncMock(

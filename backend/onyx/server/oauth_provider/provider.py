@@ -137,12 +137,13 @@ def validate_public_oauth_client(client: OAuthClientInformationFull) -> None:
         raise ValueError("Between one and ten redirect URIs are required")
     for redirect_uri in client.redirect_uris:
         validate_oauth_url(str(redirect_uri), allow_query=True)
+    # Clients may advertise grants we do not serve (Claude lists jwt-bearer);
+    # the token endpoint rejects those, so only the code flow is required here.
     if (
         "authorization_code" not in client.grant_types
-        or set(client.grant_types) - {"authorization_code", "refresh_token"}
-        or client.response_types != ["code"]
+        or "code" not in client.response_types
     ):
-        raise ValueError("Unsupported OAuth grant or response type")
+        raise ValueError("The client must support the authorization code flow")
     if client.scope is not None and set(client.scope.split()) != {OAUTH_PROVIDER_SCOPE}:
         raise ValueError("Only read:search access is supported")
 
