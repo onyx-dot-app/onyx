@@ -1,22 +1,29 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { Formik, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
-import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Modal } from "@opal/components";
-import { toast } from "@opal/layouts";
+import { InputVertical, toast } from "@opal/layouts";
+import { InputSingleSelectField } from "@opal/form";
 import {
   EmbeddingModelRequest,
   EmbeddingProviderName,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
   type EmbeddingProvider,
-} from "@/lib/indexing/types";
-import { connectEmbeddingProvider, testEmbedding } from "@/lib/indexing/svc";
+  type VertexEmbeddingConfig,
+} from "@/lib/searchSettings/types";
+import {
+  connectEmbeddingProvider,
+  testEmbedding,
+} from "@/lib/searchSettings/svc";
 import {
   ApiKeyField,
   ApiUrlField,
@@ -76,7 +83,7 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           <Button
             disabled={!isValid || !dirty || isSubmitting}
             onClick={submitForm}
-            icon={isSubmitting ? SvgSimpleLoader : undefined}
+            icon={isSubmitting ? IconLoader : undefined}
           >
             {isEditing
               ? t("modal.updateButton.label")
@@ -106,6 +113,7 @@ async function testAndSaveProviderCredentials({
   modelName = "",
   apiVersion = null,
   deploymentName = null,
+  vertexConfig,
 }: {
   provider: EmbeddingProvider;
   apiKey: string | null;
@@ -115,6 +123,7 @@ async function testAndSaveProviderCredentials({
   modelName?: string;
   apiVersion?: string | null;
   deploymentName?: string | null;
+  vertexConfig?: VertexEmbeddingConfig | null;
 }): Promise<boolean> {
   try {
     await connectEmbeddingProvider({
@@ -124,6 +133,7 @@ async function testAndSaveProviderCredentials({
       modelName,
       apiVersion,
       deploymentName,
+      vertexConfig,
     });
     return true;
   } catch (error: unknown) {
@@ -140,10 +150,8 @@ interface ProviderModalProps {
   provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   /**
-   * Current model spec for THIS provider, when the active embedding model
-   * belongs to it. `LiteLLMProviderModal` and `CustomSelfHostedModal` use
-   * this to preload model-spec fields (modelName, modelDim, prefixes,
-   * normalize) so the user doesn't have to retype them when editing.
+   * Model being connected, selected, or edited for this provider. Google
+   * tests this model. Custom providers also use it to preload model fields.
    */
   existingModel?: EmbeddingModel;
   /**
@@ -211,40 +219,118 @@ function StandardProviderModal({
 
 interface GoogleFormValues {
   apiKey: string;
+  authMethod: VertexEmbeddingConfig["auth_method"];
+  projectId: string;
+  location: string;
 }
+
+function GoogleAuthenticationFields() {
+  const t = useTranslations("admin.indexSettings");
+  const tVertex = useTranslations("admin.languageModels.modals.vertexAi");
+  const tSelect = useTranslations("common.inputSelect");
+  const { values, setFieldValue } = useFormikContext<GoogleFormValues>();
+  const settings = useSettings();
+  return (
+    <>
+      {settings.hooks_enabled && (
+        <InputVertical
+          withLabel="authMethod"
+          title={tVertex("authMethodField.title")}
+        >
+          <InputSingleSelectField
+            name="authMethod"
+            defaultOption="service_account_json"
+            placeholder={tSelect("placeholder.fallback")}
+            options={[
+              {
+                value: "service_account_json",
+                title: tVertex("authMethodField.serviceAccount.label"),
+              },
+              {
+                value: "workload_identity",
+                title: tVertex("authMethodField.workloadIdentity.label"),
+              },
+            ]}
+            onValueChange={() => {
+              void setFieldValue("apiKey", "");
+            }}
+          />
+        </InputVertical>
+      )}
+      {values.authMethod === "workload_identity" ? (
+        <TextField
+          name="projectId"
+          title={tVertex("projectField.title")}
+          subDescription={t("fields.googleWorkloadIdentity.description")}
+          placeholder={tVertex("projectField.placeholder")}
+        />
+      ) : (
+        <GoogleCredentialsField />
+      )}
+      <TextField
+        name="location"
+        title={tVertex("locationField.title")}
+        subDescription={tVertex("locationField.description")}
+        placeholder={tVertex("locationField.placeholder")}
+      />
+    </>
+  );
+}
+
 function GoogleProviderModal({
   provider,
   existingCredentials,
+  existingModel,
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingCredentials;
+  const existingConfig = existingCredentials?.vertex_config;
 
   const schema = Yup.object({
-    apiKey: isEditing
-      ? Yup.string()
-      : Yup.string()
-          .required(t("validation.serviceAccountJsonRequired"))
-          .test(
-            "service-account-json",
-            t("validation.serviceAccountJsonInvalid"),
-            (value) => {
-              if (!value) return false;
-              try {
-                const parsed = JSON.parse(value);
-                return (
-                  parsed.type === "service_account" &&
-                  typeof parsed.client_email === "string" &&
-                  typeof parsed.private_key === "string"
-                );
-              } catch {
-                return false;
-              }
+    authMethod: Yup.string()
+      .oneOf(["service_account_json", "workload_identity"])
+      .required(),
+    projectId: Yup.string()
+      .trim()
+      .when("authMethod", {
+        is: "workload_identity",
+        then: (schema) =>
+          schema.required(t("validation.googleProjectRequired")),
+      }),
+    location: Yup.string().trim(),
+    apiKey: Yup.string().when("authMethod", {
+      is: "service_account_json",
+      then: (schema) =>
+        schema.test(
+          "service-account-json",
+          t("validation.serviceAccountJsonInvalid"),
+          (value) => {
+            if (!value)
+              return (
+                isEditing && existingConfig?.auth_method !== "workload_identity"
+              );
+            try {
+              const parsed = JSON.parse(value);
+              return (
+                parsed.type === "service_account" &&
+                typeof parsed.client_email === "string" &&
+                typeof parsed.private_key === "string"
+              );
+            } catch {
+              return false;
             }
-          ),
+          }
+        ),
+    }),
   });
 
-  const initialValues: GoogleFormValues = { apiKey: "" };
+  const initialValues: GoogleFormValues = {
+    apiKey: "",
+    authMethod: existingConfig?.auth_method ?? "service_account_json",
+    projectId: existingConfig?.project_id ?? "",
+    location: existingConfig?.location ?? "",
+  };
 
   return (
     <Formik<GoogleFormValues>
@@ -256,6 +342,18 @@ function GoogleProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey: values.apiKey || null,
+            vertexConfig: {
+              auth_method: values.authMethod,
+              project_id:
+                values.authMethod === "workload_identity"
+                  ? values.projectId.trim()
+                  : null,
+              location: values.location.trim() || null,
+            },
+            modelName:
+              existingModel?.modelName ??
+              provider.embeddingModels[0]?.modelName ??
+              "",
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
@@ -264,7 +362,7 @@ function GoogleProviderModal({
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing}>
-        <GoogleCredentialsField />
+        <GoogleAuthenticationFields />
       </ModalShell>
     </Formik>
   );
@@ -292,6 +390,7 @@ function AzureProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
@@ -372,7 +471,9 @@ function AzureProviderModal({
         />
 
         <ModelSpecFields
-          modelNameSubDescription={t("azure.modelName.description")}
+          modelNameSubDescription={t("azure.modelName.description", {
+            appName,
+          })}
         />
       </ModalShell>
     </Formik>
@@ -399,6 +500,7 @@ function LiteLLMProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
@@ -464,6 +566,7 @@ function LiteLLMProviderModal({
         <ModelSpecFields
           modelNameSubDescription={t("litellm.modelName.description", {
             provider: provider.displayName,
+            appName,
           })}
         />
       </ModalShell>

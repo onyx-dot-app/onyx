@@ -15,12 +15,12 @@ import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
   startMCPUserOAuth,
-} from "@/lib/tools/svc";
+} from "@/lib/mcp/svc";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   MCPServer,
-} from "@/lib/tools/types";
+} from "@/lib/mcp/types";
 import { getActionIcon } from "@/lib/tools/utils";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 

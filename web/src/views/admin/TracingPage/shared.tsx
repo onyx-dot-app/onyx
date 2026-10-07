@@ -13,20 +13,23 @@ interface SecretFieldProps {
 
 export function SecretField({ field }: SecretFieldProps) {
   const t = useTranslations("admin.tracing");
+  const label = t(field.labelKey);
 
   return (
     <InputVertical
-      title={
-        field.optional
-          ? t("field.optional.title", { label: field.label })
-          : field.label
-      }
+      title={field.optional ? t("field.optional.title", { label }) : label}
       withLabel={field.name}
-      subDescription={field.help ? markdown(field.help) : undefined}
+      subDescription={
+        field.descriptionKey ? markdown(t(field.descriptionKey)) : undefined
+      }
     >
       <PasswordInputTypeInField
         name={field.name}
-        placeholder={field.placeholder ?? field.label}
+        placeholder={
+          field.placeholderKey
+            ? t(field.placeholderKey)
+            : (field.placeholder ?? label)
+        }
       />
     </InputVertical>
   );
@@ -38,20 +41,23 @@ interface ConfigFieldProps {
 
 export function ConfigField({ field }: ConfigFieldProps) {
   const t = useTranslations("admin.tracing");
+  const label = t(field.labelKey);
 
   return (
     <InputVertical
-      title={
-        field.optional
-          ? t("field.optional.title", { label: field.label })
-          : field.label
-      }
+      title={field.optional ? t("field.optional.title", { label }) : label}
       withLabel={field.name}
-      subDescription={field.help ? markdown(field.help) : undefined}
+      subDescription={
+        field.descriptionKey ? markdown(t(field.descriptionKey)) : undefined
+      }
     >
       <InputTypeInField
         name={field.name}
-        placeholder={field.placeholder ?? ""}
+        placeholder={
+          field.placeholderKey
+            ? t(field.placeholderKey)
+            : (field.placeholder ?? "")
+        }
       />
     </InputVertical>
   );

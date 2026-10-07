@@ -1,20 +1,16 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import {
   BasicModalFooter,
   Button,
-  InputTags,
+  InputTypeInTag,
   Modal,
   type TagItem,
 } from "@opal/components";
-import {
-  SvgAlertTriangle,
-  SvgCheckCircle,
-  SvgSimpleLoader,
-  SvgUsers,
-} from "@opal/icons";
+import { SvgAlertTriangle, SvgCheckCircle, SvgUsers } from "@opal/icons";
 import type { ColorTypes, IconFunctionComponent } from "@opal/types";
 import { Content, toast } from "@opal/layouts";
 import { mutate } from "swr";
@@ -66,20 +62,20 @@ function buildMessage(
   if (tags.some((tag) => tag.error)) {
     return {
       icon: SvgAlertTriangle,
-      color: "muted-warning",
+      color: "warning",
       text: copy.someInvalid,
     };
   }
   if (validCount === 0) {
     return {
       icon: SvgAlertTriangle,
-      color: "muted-warning",
+      color: "warning",
       text: copy.needsValidEmail,
     };
   }
   return {
     icon: SvgCheckCircle,
-    color: "muted-success",
+    color: "success",
     text: copy.readyCount,
   };
 }
@@ -231,7 +227,7 @@ export default function InviteUsersModal({
         />
 
         <Modal.Body alignItems="stretch" gap={1}>
-          <InputTags
+          <InputTypeInTag
             tags={tags}
             onRemoveTag={removeTag}
             onAdd={handleAdd}
@@ -267,7 +263,7 @@ export default function InviteUsersModal({
             submit={
               <Button
                 disabled={isSubmitting || validCount === 0}
-                icon={isSubmitting ? SvgSimpleLoader : undefined}
+                icon={isSubmitting ? IconLoader : undefined}
                 onClick={handleInvite}
               >
                 {t("inviteModal.submitButton.label")}

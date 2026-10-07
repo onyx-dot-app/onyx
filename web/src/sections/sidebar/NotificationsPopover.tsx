@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
   useEffect,
@@ -9,7 +10,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
@@ -30,7 +31,6 @@ import {
   SvgNotificationBubble,
   SvgCheckSquare,
   SvgChevronLeft,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   Button,
@@ -65,6 +65,7 @@ function NotificationItem({
   dismiss,
 }: NotificationItemProps) {
   const t = useTranslations("sidebar");
+  const locale = useLocale();
 
   return (
     <Hoverable.Root group="notifications-popover/NotificationItem">
@@ -80,7 +81,7 @@ function NotificationItem({
           <Section justifyContent="start">
             <Section height="fit" gap={2} flexDirection="row">
               <Text font="secondary-body" color="text-02">
-                {timeAgo(notification.first_shown) ?? ""}
+                {timeAgo(notification.first_shown, locale) ?? ""}
               </Text>
               {state === "new" && (
                 <div className="w-4 flex flex-col items-center justify-center">
@@ -332,6 +333,8 @@ export default function NotificationsPopover({
       {pinnedAnnouncement && (
         <div className="px-1 pb-1">
           <MessageCard
+            outerPadding={1}
+            innerPadding={1}
             variant="info"
             icon={getNotificationIcon(pinnedAnnouncement.notif_type)}
             title={pinnedAnnouncement.title}
@@ -344,7 +347,7 @@ export default function NotificationsPopover({
       {isLoading ? (
         <div className="h-(--notifications-popover)">
           <Section>
-            <SvgSimpleLoader />
+            <IconLoader />
           </Section>
         </div>
       ) : newNotifications.length === 0 && olderNotifications.length === 0 ? (
@@ -404,7 +407,8 @@ export default function NotificationsPopover({
               ref={sentinelRef}
               className="h-8 flex items-center justify-center transition-opacity duration-300"
             >
-              <SvgSimpleLoader
+              <IconLoader
+                size={16}
                 className={isLoadingMore ? "opacity-100" : "opacity-40"}
               />
             </div>

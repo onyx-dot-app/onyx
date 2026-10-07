@@ -23,6 +23,7 @@ export type AdminNavItemId =
   | "voice"
   | "codeInterpreter"
   | "chatPreferences"
+  | "llmGateway"
   | "craftAccess"
   | "craftApps"
   | "craftPreferences"
@@ -30,8 +31,8 @@ export type AdminNavItemId =
   | "agents"
   | "mcpActions"
   | "openapiActions"
-  | "existingConnectors"
-  | "addConnector"
+  | "indexingStatus"
+  | "connectors"
   | "documentSets"
   | "indexSettings"
   | "serviceAccounts"
@@ -79,6 +80,7 @@ export const NAV_ITEM_IDS: Record<
   VOICE: "voice",
   CODE_INTERPRETER: "codeInterpreter",
   CHAT_PREFERENCES: "chatPreferences",
+  LLM_GATEWAY: "llmGateway",
   CRAFT_ACCESS: "craftAccess",
   CRAFT_APPS: "craftApps",
   CRAFT_PREFERENCES: "craftPreferences",
@@ -86,8 +88,8 @@ export const NAV_ITEM_IDS: Record<
   AGENTS: "agents",
   MCP_ACTIONS: "mcpActions",
   OPENAPI_ACTIONS: "openapiActions",
-  INDEXING_STATUS: "existingConnectors",
-  ADD_CONNECTOR: "addConnector",
+  INDEXING_STATUS: "indexingStatus",
+  CONNECTORS: "connectors",
   DOCUMENT_SETS: "documentSets",
   DOCUMENT_EXPLORER: null,
   DOCUMENT_FEEDBACK: null,

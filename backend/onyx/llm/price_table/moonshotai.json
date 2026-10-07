@@ -1,0 +1,313 @@
+{
+  "aliases": {},
+  "models": {
+    "kimi-k2.5": {
+      "cost": {
+        "cache_read": 0.09999999999999999,
+        "input": 0.6,
+        "output": 3.0
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "kimi-k2.5",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "kimi-k2.6": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.16,
+        "input": 0.95,
+        "output": 4
+      },
+      "family": "kimi-k2",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K2.6",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "kimi-k2.7-code": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.19,
+        "input": 0.95,
+        "output": 4
+      },
+      "family": "kimi-k2",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K2.7 Code",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-12",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "kimi-k2.7-code-highspeed": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.38,
+        "input": 1.9,
+        "output": 8
+      },
+      "family": "kimi-k2",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K2.7 Code HighSpeed",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-12",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "kimi-k3": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "input": 3,
+        "output": 15
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "moonshot-v1-128k": {
+      "cost": {
+        "input": 2.0,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "moonshot-v1-128k",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "moonshot-v1-128k-vision-preview": {
+      "cost": {
+        "input": 2.0,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "moonshot-v1-128k-vision-preview",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "moonshot-v1-32k": {
+      "cost": {
+        "input": 1.0,
+        "output": 3.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "moonshot-v1-32k",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "moonshot-v1-32k-vision-preview": {
+      "cost": {
+        "input": 1.0,
+        "output": 3.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "moonshot-v1-32k-vision-preview",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "moonshot-v1-8k": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 8192,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "moonshot-v1-8k",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "moonshot-v1-8k-vision-preview": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 8192,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "moonshot-v1-8k-vision-preview",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "moonshot-v1-auto": {
+      "cost": {
+        "input": 2.0,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "moonshot-v1-auto",
+      "structured_output": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "moonshotai"
+  ]
+}

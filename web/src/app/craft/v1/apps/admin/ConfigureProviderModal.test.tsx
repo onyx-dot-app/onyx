@@ -184,7 +184,7 @@ describe("ConfigureProviderModal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(
-      screen.getByRole("button", { name: /^Start from scratch/ })
+      screen.getByRole("menuitem", { name: /^Start from scratch/ })
     );
 
     expect(mockRouterPush).not.toHaveBeenCalled();
@@ -204,7 +204,7 @@ describe("ConfigureProviderModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
 
     expect(
-      screen.getByRole("button", { name: /Import from GitHub/ })
+      screen.getByRole("menuitem", { name: /Import from GitHub/ })
     ).toHaveAttribute("aria-disabled", "true");
     expect(
       screen.getByText(
@@ -219,7 +219,7 @@ describe("ConfigureProviderModal", () => {
       target: { value: "updated-token" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
 
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
@@ -233,7 +233,7 @@ describe("ConfigureProviderModal", () => {
   it("confirms before accidentally closing a selected upload", () => {
     const { onClose } = renderExistingProvider();
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
 
     fireEvent.keyDown(document, { key: "Escape" });
@@ -264,7 +264,7 @@ describe("ConfigureProviderModal", () => {
       target: { value: "unsaved-token" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
     expect(mockRouterPush).not.toHaveBeenCalled();
@@ -326,7 +326,7 @@ describe("ConfigureProviderModal", () => {
     expect(await screen.findByText("Add skills to Slack")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
@@ -380,12 +380,10 @@ describe("ConfigureProviderModal", () => {
     expect(await screen.findByText("Add skills to Slack")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Associate slack-helper" })
-    );
+    fireEvent.click(screen.getByRole("option", { name: /^slack-helper/ }));
     expect(screen.getByRole("button", { name: "Save skills" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
     expect(mockRouterPush).not.toHaveBeenCalled();

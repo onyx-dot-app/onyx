@@ -12,41 +12,32 @@ import {
 import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./admin/connectors/types";
-import { StringOrNumberOption } from "@/components/Dropdown";
-import {
-  Select,
-  SelectItem,
-  SelectContent,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { InputSingleSelect } from "@opal/components";
 import { FiInfo, FiX } from "react-icons/fi";
 import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import { Button, Checkbox } from "@opal/components";
-
-import { Section } from "@/layouts/general-layouts";
-import { transformLinkUri } from "@/lib/utils";
-import { cn } from "@opal/utils";
-import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
-import { RichTextSubtext } from "./RichTextSubtext";
 import {
-  TypedFile,
-  createTypedFile,
-  getFileTypeDefinitionForField,
-  FILE_TYPE_DEFINITIONS,
-} from "@/lib/connectors/fileTypes";
-import Text from "@/refresh-components/texts/Text";
-
-import {
+  Button,
+  InputCheckbox,
+  InputDatePicker,
   InputTextArea,
   type InputTextAreaProps,
   Tooltip,
 } from "@opal/components";
+
+import { Section } from "@/layouts/general-layouts";
+import { transformLinkUri } from "@/lib/utils";
+import { cn } from "@opal/utils";
+import FileDropzoneField from "@/refresh-components/form/FileDropzoneField";
+import { RichTextSubtext } from "./RichTextSubtext";
+import { TypedFile, FILE_TYPE_DEFINITIONS } from "@/lib/connectors/fileTypes";
+import { createTypedFile } from "@/lib/connectors/utils";
+import { getCredentialFileType } from "@/lib/credentials/utils";
+import Text from "@/refresh-components/texts/Text";
+
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
 
 export function SectionHeader({
@@ -430,7 +421,7 @@ export function FileUploadFormField({
   return (
     <div className="w-full">
       <FieldLabel name={name} label={label} subtext={subtext} />
-      <FileInput name={fileName} multiple={false} hideError />
+      <FileDropzoneField name={fileName} multiple={false} />
     </div>
   );
 }
@@ -451,7 +442,7 @@ export function TypedFileUploadFormField({
   const [description, setDescription] = useState<string>("");
 
   useEffect(() => {
-    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    const typeDefinitionKey = getCredentialFileType(name);
     if (typeDefinitionKey) {
       setDescription(
         FILE_TYPE_DEFINITIONS[typeDefinitionKey].description || ""
@@ -506,7 +497,7 @@ export function TypedFileUploadFormField({
       return;
     }
 
-    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    const typeDefinitionKey = getCredentialFileType(name);
 
     if (!typeDefinitionKey) {
       setCustomError(t("fileValidation.noTypeDefinition", { name }));
@@ -770,7 +761,7 @@ export const BooleanFormField = memo(function BooleanFormField({
                     removeIndent ? "me-2" : "mx-3"
                   )}
                 >
-                  <Checkbox
+                  <InputCheckbox
                     aria-label={`${label
                       .toLowerCase()
                       .replace(" ", "-")}-checkbox`}
@@ -939,14 +930,23 @@ export function TextArrayFieldBuilder<T extends Yup.AnyObject>(
   return _TextArrayField;
 }
 
+export interface Option<T> {
+  name: string;
+  value: T;
+  description?: string;
+  icon?: (props: { size?: number; className?: string }) => JSX.Element;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
+export type StringOrNumberOption = Option<string | number>;
+
 interface SelectorFormFieldProps {
   name: string;
   label?: string;
   options: StringOrNumberOption[];
   subtext?: string | JSX.Element;
   includeDefault?: boolean;
-  side?: "top" | "right" | "bottom" | "left";
-  maxHeight?: string;
   onSelect?: (selected: string | number | null) => void;
   defaultValue?: string;
   tooltip?: string;
@@ -956,13 +956,13 @@ interface SelectorFormFieldProps {
   disabled?: boolean;
 }
 
+const NONE_VALUE = "__none__";
+
 export function SelectorFormField({
   name,
   label,
   options,
   subtext,
-  side = "bottom",
-  maxHeight,
   onSelect,
   defaultValue,
   tooltip,
@@ -974,11 +974,6 @@ export function SelectorFormField({
   const t = useTranslations("common.field");
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
-  const [container, setContainer] = useState<HTMLDivElement | null>(null);
-
-  const currentlySelected = options.find(
-    (option) => option.value?.toString() === field.value?.toString()
-  );
 
   const textSizeClasses = {
     sm: {
@@ -1011,63 +1006,33 @@ export function SelectorFormField({
         </div>
       )}
       {subtext && <SubLabel>{subtext}</SubLabel>}
-      <div className="mt-2" ref={setContainer}>
-        <Select
-          value={field.value || defaultValue}
-          onValueChange={
-            onSelect ||
-            ((selected) =>
-              selected == "__none__"
-                ? setFieldValue(name, null)
-                : setFieldValue(name, selected))
-          }
-          defaultValue={defaultValue}
+      <div className="mt-2">
+        <InputSingleSelect
+          value={field.value?.toString() ?? defaultValue ?? ""}
+          onValueChange={(selected) => {
+            // A re-pick emits "": the pick stands. Clearing is the reset row.
+            if (selected === "") return;
+            const value = selected === NONE_VALUE ? null : selected;
+            if (onSelect) onSelect(value);
+            else setFieldValue(name, value);
+          }}
+          placeholder={t("selector.placeholder")}
           disabled={disabled}
-        >
-          <SelectTrigger className={sizeClass.input} disabled={disabled}>
-            <SelectValue placeholder={t("selector.placeholder")}>
-              {currentlySelected?.name || defaultValue || ""}
-            </SelectValue>
-          </SelectTrigger>
-
-          {container && (
-            <SelectContent
-              side={side}
-              className={`
-               ${maxHeight ? `${maxHeight}` : "max-h-72"}
-               overflow-y-scroll
-               ${sizeClass.input}
-              `}
-              container={container}
-            >
-              {options.length === 0 ? (
-                <SelectItem value="default">
-                  {t("selector.placeholder")}
-                </SelectItem>
-              ) : (
-                options.map((option) => (
-                  <SelectItem
-                    hideCheck
-                    icon={option.icon}
-                    key={option.value}
-                    value={String(option.value)}
-                    selected={field.value === option.value}
-                  >
-                    {option.name}
-                  </SelectItem>
-                ))
-              )}
-              {includeReset && (
-                <SelectItem
-                  value={"__none__"}
-                  onSelect={() => setFieldValue(name, null)}
-                >
-                  {t("selector.noneOption")}
-                </SelectItem>
-              )}
-            </SelectContent>
-          )}
-        </Select>
+          options={[
+            {
+              options: [
+                ...options.map((option) => ({
+                  value: String(option.value),
+                  title: option.name,
+                  ...(option.icon && { icon: option.icon }),
+                })),
+                ...(includeReset
+                  ? [{ value: NONE_VALUE, title: t("selector.noneOption") }]
+                  : []),
+              ],
+            },
+          ]}
+        />
       </div>
 
       <ErrorMessage
@@ -1100,9 +1065,10 @@ export function DatePickerField({
     <div>
       <FieldLabel label={label} name={name} subtext={subtext} />
       <InputDatePicker
-        selectedDate={field.value}
-        setSelectedDate={helper.setValue}
-        startYear={startYear}
+        id={name}
+        value={field.value}
+        onChange={helper.setValue}
+        minDate={new Date(startYear, 0, 1)}
         disabled={disabled}
       />
     </div>

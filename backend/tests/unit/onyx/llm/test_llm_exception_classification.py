@@ -11,7 +11,7 @@ from litellm.exceptions import (
     ContextWindowExceededError,
 )
 
-from onyx.llm.utils import litellm_exception_to_error_msg
+from onyx.llm.exceptions import litellm_exception_to_error_msg
 
 
 def _err(exc_cls: type[BadRequestError]) -> BadRequestError:

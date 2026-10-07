@@ -763,7 +763,7 @@ class KubernetesSandboxManager(SandboxManager):
                 container=container_name,
                 tail_lines=100,  # Get last 100 lines
             )
-            return logs if logs else "(no logs available)"
+            return logs or "(no logs available)"
         except ApiException as e:
             return f"(failed to retrieve logs: {e})"
 

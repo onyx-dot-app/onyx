@@ -4,11 +4,10 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-
 from onyx.cache.interface import CacheBackend
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.models import (
+    AvailableFiles,
     ChatLoadedFile,
     ChatMessageSimple,
     ExtractedContextFiles,
@@ -23,7 +22,7 @@ from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.tools.models import ChatFile, ToolCallInfo
+from onyx.tools.models import ChatFile, PersonaToolConfiguration, ToolCallInfo
 
 # Type alias for search doc deduplication key
 # Simple key: just document_id (str)
@@ -183,15 +182,6 @@ class ChatStateContainer:
             return self._emitted_citations.copy()
 
 
-class AvailableFiles(BaseModel):
-    """Separated file IDs for the FileReaderTool so it knows which loader to use."""
-
-    # IDs from the ``user_file`` table (project / persona-attached files).
-    user_file_ids: list[UUID] = []
-    # IDs from the ``file_record`` table (chat-attached files).
-    chat_file_ids: list[UUID] = []
-
-
 @dataclass(frozen=True)
 class ChatTurnSetup:
     """Immutable context produced by ``build_chat_turn`` and consumed by ``_run_models``.
@@ -214,6 +204,7 @@ class ChatTurnSetup:
     # The session's pinned recording policy. None is an ordinary chat.
     incognito_record_mode: IncognitoRecordMode | None
     persona: Persona
+    tool_configuration: PersonaToolConfiguration
     user_message_id: int
     user_identity: LLMUserIdentity
     llms: list[LLM]  # length 1 for single-model, N for multi-model
@@ -221,8 +212,8 @@ class ChatTurnSetup:
     simple_chat_history: list[ChatMessageSimple]
     extracted_context_files: ExtractedContextFiles
     reserved_messages: list[ChatMessage]  # length 1 for single, N for multi
-    # Processing-fence value and stream-buffer key — single source for the run id
-    processing_run_id: int
+    # Processing-fence value, stream-buffer key, and Stop-request key
+    processing_stream_id: int
     reserved_token_count: int
     reasoning_effort: ReasoningEffort
     search_params: SearchParams
@@ -239,7 +230,6 @@ class ChatTurnSetup:
     check_is_connected: Callable[[], bool]
     cache: CacheBackend
     # Execution params forwarded to per-model tool construction
-    bypass_acl: bool
     slack_context: SlackContext | None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None

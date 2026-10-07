@@ -1,11 +1,11 @@
 /**
- * Page Object Model for the add-connector wizard
- * (`/admin/connectors/<source>?step=1`).
+ * Page Object Model for the connector setup page
+ * (`/admin/connectors/<source>`).
  *
- * The wizard renders every connector's configuration form through the shared
+ * The page renders every connector's configuration form through the shared
  * `RenderField`/`TextFormField` machinery, so text fields are addressable by
- * their config `name` (exposed as `data-testid`) and select fields by their
- * native `<select name=...>` element.
+ * their config `name` (exposed as `data-testid`) and select fields by the
+ * `InputSingleSelect` whose input carries that name as its id.
  */
 
 import { expect, type Locator, type Page } from "@playwright/test";
@@ -17,15 +17,27 @@ export class ConnectorSetupPage {
   readonly pageTitle: Locator;
   readonly connectorNameInput: Locator;
   readonly createConnectorButton: Locator;
+  /** The "Document Access" picker: everyone, specific groups, or auto sync. */
+  readonly accessTypeSelect: Locator;
+  /** The group picker that follows a "Specific Groups" pick. */
+  readonly groupAccessPrompt: Locator;
 
   constructor(page: Page, source: string) {
     this.page = page;
     this.source = source;
     this.pageTitle = page.locator('[aria-label="admin-page-title"]');
-    this.connectorNameInput = page.getByTestId("name");
+    // Its own test id: a credential form on the same page has a name field too.
+    this.connectorNameInput = page.getByTestId("connector-name");
     this.createConnectorButton = page.getByRole("button", {
-      name: "Create Connector",
+      name: "Connect",
+      exact: true,
     });
+    this.accessTypeSelect = page.getByRole("combobox", {
+      name: "Document Access",
+    });
+    this.groupAccessPrompt = page.getByPlaceholder(
+      "Add groups to restrict access to this connector"
+    );
   }
 
   /** A single-line text field from the connector config, by its config name. */
@@ -33,17 +45,48 @@ export class ConnectorSetupPage {
     return this.page.getByTestId(fieldName);
   }
 
-  /** A select field from the connector config, by its config name. */
+  /** A select field's combobox from the connector config, by its config name. */
   selectField(fieldName: string): Locator {
-    return this.page.locator(`select[name="${fieldName}"]`);
+    return this.page.locator(`#${fieldName}`);
+  }
+
+  /** Open a select field and pick the option with this title. */
+  async pickOption(fieldName: string, title: string): Promise<void> {
+    await this.pick(this.selectField(fieldName), title);
+  }
+
+  /** Open the access type picker and pick an option by its title. */
+  async pickAccessType(
+    title: "Everyone in Your Organization" | "Specific Groups"
+  ): Promise<void> {
+    await this.pick(this.accessTypeSelect, title);
+  }
+
+  private async pick(select: Locator, title: string): Promise<void> {
+    await select.click();
+    // An option's accessible name is its title followed by its description.
+    const startsWithTitle = new RegExp(
+      `^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`
+    );
+    await this.page.getByRole("option", { name: startsWithTitle }).click();
+  }
+
+  /** The row for a credential in the credential section, by its name. */
+  credentialRow(credentialName: string): Locator {
+    return this.page.getByRole("row", { name: credentialName });
+  }
+
+  /** Pick a credential in the credential section by its name. */
+  async selectCredential(credentialName: string) {
+    await this.credentialRow(credentialName).getByRole("radio").click();
   }
 
   /**
-   * Navigate straight to the configuration step of the wizard. Connectors
-   * without a credential step (e.g. web) render their form here.
+   * Navigate to the setup page. Every section renders on one page; connectors
+   * without a credential (e.g. web) skip the credential section.
    */
   async goto() {
-    await this.page.goto(`/admin/connectors/${this.source}?step=1`);
+    await this.page.goto(`/admin/connectors/${this.source}`);
     await expect(this.pageTitle).toBeVisible({ timeout: 10_000 });
   }
 
@@ -54,12 +97,12 @@ export class ConnectorSetupPage {
    */
   async submitAndWaitForCreation() {
     await this.createConnectorButton.click();
-    await this.page.waitForURL("**/admin/indexing/status**", {
+    await this.page.waitForURL("**/admin/indexing-status**", {
       timeout: 30_000,
     });
   }
 
-  /** Capture a full-page visual snapshot of the wizard. */
+  /** Capture a full-page visual snapshot of the setup page. */
   async expectScreenshot(name: string) {
     await expectScreenshot(this.page, { name });
   }

@@ -11,6 +11,7 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useEffect, useRef, useState, useImperativeHandle } from "react";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,7 +76,7 @@ interface ContentMdProps {
 
   /**
    * Muted suffix rendered beside the title.
-   * Use `"optional"` for the standard "(Optional)" label, or pass any string.
+   * Use `"optional"` for the translated "(Optional)" label (`OpalStrings.contentOptional`), or pass any string.
    */
   suffix?: ContentMdSuffix;
 
@@ -168,6 +169,7 @@ function ContentMd({
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
+  const strings = useOpalStrings();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Move focus to the edit input as soon as editing starts.
@@ -260,6 +262,8 @@ function ContentMd({
             </div>
           ) : (
             <Text
+              // Lets a host (a toast) measure whether a clamped title overflows.
+              data-opal-content-title=""
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
@@ -272,11 +276,11 @@ function ContentMd({
           )}
 
           {suffix && (
-            <span className="opal-content-md-suffix">
-              <Text font={config.optionalFont} color="inherit">
-                {suffix === "optional" ? "(Optional)" : suffix}
+            <div className="opal-content-md-suffix">
+              <Text as="p" font={config.optionalFont} color="inherit">
+                {suffix === "optional" ? strings.contentOptional : suffix}
               </Text>
-            </span>
+            </div>
           )}
 
           {auxIcon &&
@@ -311,7 +315,7 @@ function ContentMd({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
-                tooltip="Edit"
+                tooltip={strings.edit}
                 tooltipSide="right"
                 onClick={startEditing}
               />

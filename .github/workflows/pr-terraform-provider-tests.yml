@@ -32,7 +32,6 @@ on:
     - cron: "0 8 * * *" # 08:00 UTC nightly
   merge_group:
   pull_request:
-    branches: [main]
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test job runs. This avoids
     # the dual-workflow skip pattern where a `paths-ignore`'d skip workflow can
@@ -46,13 +45,13 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26.5"
+  GO_VERSION: "1.27.1"
   IMAGE_TAG: "latest"
   POSTGRES_USER: "postgres"
   POSTGRES_PASSWORD: "password"
   # Pin defensively. Compose's ${VAR:-default} prefers a leaked host value over
   # the --env-file one.
-  S3_ENDPOINT_URL: "http://minio:9000"
+  S3_ENDPOINT_URL: "http://object-store:8333"
 
 jobs:
   changes:
@@ -184,6 +183,8 @@ jobs:
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:tf-provider-backend-${{ github.run_id }}
+          # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+          labels: ci.run-id=${{ github.run_id }}
           push: true
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
@@ -272,7 +273,7 @@ jobs:
           EOF
 
       # api_server and background are named; depends_on pulls in db / cache /
-      # opensearch / model servers / minio. web_server + nginx are omitted.
+      # opensearch / model servers / object store. web_server + nginx are omitted.
       - name: Bring up the stack
         working-directory: deployment/docker_compose
         run: |

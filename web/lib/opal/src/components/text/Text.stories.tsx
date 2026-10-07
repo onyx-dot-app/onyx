@@ -43,9 +43,82 @@ export const AsParagraph: Story = {
 export const Nowrap: Story = {
   render: () => (
     <div className="w-48 border border-border-02 rounded-sm p-2">
-      <Text font="main-ui-body" color="text-05" nowrap>
+      <Text font="main-ui-body" color="text-05" wordWrap="whitespace-nowrap">
         This text will not wrap even though the container is narrow
       </Text>
+    </div>
+  ),
+};
+
+// ---------------------------------------------------------------------------
+// Wrapping
+// ---------------------------------------------------------------------------
+
+// A long token with no whitespace in it, which is the case ordinary wrapping
+// cannot handle: there is nowhere to break, so it overflows instead.
+const UNBROKEN = "supercalifragilisticexpialidocious".repeat(3);
+
+/** Every `wordWrap` value against the same unbreakable string, in one narrow box. */
+export const Wrapping: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4">
+      {(
+        [
+          "wrap-normal",
+          "whitespace-nowrap",
+          "wrap-break-word",
+          "wrap-anywhere",
+          "break-all",
+          "break-keep",
+        ] as const
+      ).map((mode) => (
+        <div key={mode} className="flex flex-col gap-1">
+          <Text font="secondary-mono" color="text-03">
+            {mode}
+          </Text>
+          <div className="w-48 border border-border-02 rounded-sm p-2">
+            <Text font="main-ui-body" color="text-05" wordWrap={mode}>
+              {UNBROKEN}
+            </Text>
+          </div>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+// ---------------------------------------------------------------------------
+// Alignment
+// ---------------------------------------------------------------------------
+
+/**
+ * `textPosition` needs a block box to align within, so it is only offered when
+ * `as` is a block tag — `<Text textPosition="text-center">` on the default
+ * inline `span` does not compile.
+ */
+export const Alignment: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4">
+      {(["text-start", "text-center", "text-end", "text-justify"] as const).map(
+        (position) => (
+          <div key={position} className="flex flex-col gap-1">
+            <Text font="secondary-mono" color="text-03">
+              {position}
+            </Text>
+            <div className="w-96 border border-border-02 rounded-sm p-2">
+              <Text
+                as="p"
+                font="main-ui-body"
+                color="text-05"
+                textPosition={position}
+              >
+                The quick brown fox jumps over the lazy dog, and then keeps
+                going for long enough to occupy more than a single line.
+              </Text>
+            </div>
+          </div>
+        )
+      )}
     </div>
   ),
 };

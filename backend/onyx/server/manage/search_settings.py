@@ -13,6 +13,8 @@ from onyx.background.celery.tasks.port.tasks import (
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import (
     DISABLE_INDEX_UPDATE_ON_SWAP,
+    DISABLE_VECTOR_DB,
+    ENABLE_CONTEXTUAL_RAG,
     OLD_INDEX_RECLAIM_ENABLED,
 )
 from onyx.context.search.models import (
@@ -28,7 +30,12 @@ from onyx.db.connector_credential_pair import (
     resync_cc_pair,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import IndexReclaimStatus, Permission, SwitchoverType
+from onyx.db.enums import (
+    IndexReclaimStatus,
+    Permission,
+    SwitchoverType,
+    VectorQuantization,
+)
 from onyx.db.index_attempt import create_synthetic_seed_attempt, expire_index_attempts
 from onyx.db.llm import (
     fetch_default_contextual_rag_model,
@@ -58,11 +65,10 @@ from onyx.db.search_settings import (
     update_current_search_settings,
     update_search_settings_status,
 )
-from onyx.document_index.factory import (
-    get_all_document_indices,
-    get_default_document_index,
-)
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import TenantState
+from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.constants import LUCENE_SCALAR_QUANTIZATION
 from onyx.document_index.opensearch.index_reclaim import (
     ReclaimOutcome,
     reclaim_index_data,
@@ -76,7 +82,10 @@ from onyx.file_processing.unstructured import (
 )
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
-from onyx.server.manage.models import FullModelVersionResponse
+from onyx.server.manage.models import (
+    FullModelVersionResponse,
+    UnstructuredApiKeyRequest,
+)
 from onyx.server.models import IdReturn
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.audit import (
@@ -86,7 +95,11 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import ALT_INDEX_SUFFIX, MULTI_TENANT
+from shared_configs.configs import (
+    ALT_INDEX_SUFFIX,
+    MULTI_TENANT,
+    PRESERVED_SEARCH_FIELDS,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search-settings")
@@ -99,9 +112,11 @@ def set_new_search_settings(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> IdReturn:
-    """
-    Creates a new SearchSettings row and cancels the previous secondary indexing
-    if any exists.
+    """Create the new SearchSettings row that the port flow re-embeds into.
+
+    Only one re-index runs at a time. This raises CONFLICT instead of superseding an
+    existing one: either a secondary FUTURE is already in flight, or an INSTANT
+    switchover is still backfilling the live index. Cancel the running re-index first.
     """
     if search_settings_new.index_name:
         logger.warning("Index name was specified by request, this is not suggested")
@@ -130,6 +145,7 @@ def set_new_search_settings(
         db_session=db_session,
         enable_contextual_rag=search_settings_new.enable_contextual_rag,
     )
+    _validate_vector_quantization_supported(search_settings_new.vector_quantization)
 
     # Lock PRESENT so concurrent reindex submissions serialize: without it two racers both
     # pass the no-FUTURE guard below and the loser trips the FUTURE unique index (raw 500).
@@ -207,15 +223,13 @@ def set_new_search_settings(
         commit=False,
     )
 
-    # Ensure the document indices have the new index immediately.
-    document_indices = get_all_document_indices(search_settings, new_search_settings)
-    for document_index in document_indices:
-        # Pair instances already know about their secondary search settings via
-        # the factory; only the primary embedding info needs to be passed in.
-        document_index.verify_and_create_index_if_necessary(
-            embedding_dim=search_settings.final_embedding_dim,
-            embedding_precision=search_settings.embedding_precision,
-        )
+    # Ensure the document index has the new index immediately. The pair already
+    # knows about its secondary search settings via the factory; only the primary
+    # embedding info needs to be passed in.
+    document_index = get_default_document_index(search_settings, new_search_settings)
+    document_index.verify_and_create_index_if_necessary(
+        embedding_dim=search_settings.final_embedding_dim,
+    )
 
     # Pause index attempts for the currently in-use index to preserve resources.
     if DISABLE_INDEX_UPDATE_ON_SWAP:
@@ -266,6 +280,30 @@ def set_new_search_settings(
     return IdReturn(id=new_search_settings.id)
 
 
+def _validate_vector_quantization_supported(
+    vector_quantization: VectorQuantization,
+) -> None:
+    """Rejects a quantization level that the OpenSearch cluster cannot index.
+
+    Runs before anything is written, so an older external cluster gets a clear
+    error instead of a failed index creation. A cluster that does not report
+    its OpenSearch version is not checked.
+    """
+    lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
+    if lucene_scalar_quantization is None or DISABLE_VECTOR_DB:
+        return
+    with OpenSearchClient() as opensearch_client:
+        cluster_version = opensearch_client.get_opensearch_version()
+    min_version = lucene_scalar_quantization.min_opensearch_version
+    if cluster_version is not None and cluster_version < min_version:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"The {vector_quantization.value} vector quantization needs OpenSearch "
+            f"{min_version[0]}.{min_version[1]} or later. This cluster runs "
+            f"OpenSearch {cluster_version[0]}.{cluster_version[1]}.",
+        )
+
+
 def _compute_index_name(
     requested: SearchSettingsCreationRequest, present: SearchSettings
 ) -> str:
@@ -307,7 +345,7 @@ def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
     for occupant in occupants:
         enqueue_index_reclaim(client_app, tenant_id, occupant.id)
     raise OnyxError(
-        OnyxErrorCode.CONFLICT,
+        OnyxErrorCode.INDEX_NAME_RECLAIMING,
         "An index of the same name from an earlier re-index still holds data; it's being "
         "cleaned up now. Start the re-index again in a moment.",
     )
@@ -457,12 +495,9 @@ def cancel_new_embedding(
         clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
     db_session.commit()
 
-    document_index = get_default_document_index(
-        primary_search_settings, None, db_session
-    )
+    document_index = get_default_document_index(primary_search_settings, None)
     document_index.verify_and_create_index_if_necessary(
         embedding_dim=primary_search_settings.final_embedding_dim,
-        embedding_precision=primary_search_settings.embedding_precision,
     )
 
     # Kick off reclamation now instead of waiting for the reclaim beat. Safe no-op if the
@@ -611,28 +646,35 @@ def get_all_search_settings(
     )
 
 
-def _validate_contextual_model_only_update(
+def _validate_forward_only_update(
     current: SearchSettings,
     requested: SavedSearchSettings,
-) -> int:
-    model_configuration_id = requested.contextual_rag_model_configuration_id
-    if model_configuration_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Select a Contextual Retrieval model.",
-        )
+) -> None:
+    """Rejects anything but the one change PRESENT takes without a re-index: a
+    new Contextual Retrieval model, or Contextual Retrieval turned off with
+    its model left as it is."""
+    if requested.enable_contextual_rag:
+        if requested.contextual_rag_model_configuration_id is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Select a Contextual Retrieval model.",
+            )
+        model_configuration_id = requested.contextual_rag_model_configuration_id
+    else:
+        model_configuration_id = current.contextual_rag_model_configuration_id
 
     expected = SavedSearchSettings.from_db_model(current).model_copy(
         update={
+            "enable_contextual_rag": requested.enable_contextual_rag,
             "contextual_rag_model_configuration_id": model_configuration_id,
         }
     )
     if requested != expected:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Only the Contextual Retrieval model can be updated without re-indexing.",
+            "Only the Contextual Retrieval model can be changed, or Contextual "
+            "Retrieval turned off, without re-indexing.",
         )
-    return model_configuration_id
 
 
 @router.post("/update-inference-settings")
@@ -641,6 +683,9 @@ def update_saved_search_settings(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ContextualRagModelUpdateResponse:
+    """Applies a Contextual Retrieval change to PRESENT without a re-index: a
+    new model, or off. Documents already indexed keep their generated context
+    until they are updated or re-indexed."""
     # Disallow contextual RAG for cloud deployments
     if MULTI_TENANT and search_settings.enable_contextual_rag:
         raise OnyxError(
@@ -648,43 +693,59 @@ def update_saved_search_settings(
             "Contextual RAG disabled in Onyx Cloud",
         )
 
+    # Locked before the guards, so a re-index submitted meanwhile (it locks
+    # PRESENT too) cannot slip between the check and the write.
+    current = get_current_search_settings(db_session, for_update=True)
     if (
         get_secondary_search_settings(db_session) is not None
         or _active_port_settings(db_session) is not None
     ):
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
-            "A re-index is in progress. Wait for it to finish before updating the "
-            "Contextual Retrieval model.",
+            "A re-index is in progress. Wait for it to finish before changing "
+            "Contextual Retrieval.",
         )
 
-    current = get_current_search_settings(db_session)
     if not current.enable_contextual_rag:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Contextual Retrieval must be enabled before its model can be updated "
+            "Contextual Retrieval must be enabled before it can be changed "
             "without re-indexing.",
         )
 
-    model_configuration_id = _validate_contextual_model_only_update(
-        current, search_settings
-    )
-    validate_contextual_rag_model(
-        model_configuration_id=model_configuration_id,
-        db_session=db_session,
-        enable_contextual_rag=True,
-    )
+    _validate_forward_only_update(current, search_settings)
+    if search_settings.enable_contextual_rag:
+        validate_contextual_rag_model(
+            model_configuration_id=search_settings.contextual_rag_model_configuration_id,
+            db_session=db_session,
+            enable_contextual_rag=True,
+        )
+    elif ENABLE_CONTEXTUAL_RAG:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The ENABLE_CONTEXTUAL_RAG environment variable keeps Contextual "
+            "Retrieval on. Unset it and restart to turn Contextual Retrieval off.",
+        )
 
     previous_model_configuration_id = current.contextual_rag_model_configuration_id
     update_current_search_settings(
-        search_settings=search_settings, db_session=db_session
+        search_settings=search_settings,
+        db_session=db_session,
+        # The flag is normally fixed for the life of an index. Turning it off
+        # is the one change this endpoint applies to it.
+        preserved_fields=[
+            field
+            for field in PRESERVED_SEARCH_FIELDS
+            if field != "enable_contextual_rag"
+        ],
     )
     _sync_default_contextual_model(db_session)
 
     logger.info(
-        "Updated current contextual retrieval model from %s to %s",
+        "Updated current contextual retrieval: enabled=%s model %s -> %s",
+        search_settings.enable_contextual_rag,
         previous_model_configuration_id,
-        model_configuration_id,
+        search_settings.contextual_rag_model_configuration_id,
     )
     emit_audit_event(
         AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE,
@@ -694,11 +755,16 @@ def update_saved_search_settings(
         resource_id=current.id,
         extra={
             "previous_model_configuration_id": previous_model_configuration_id,
-            "model_configuration_id": model_configuration_id,
+            "model_configuration_id": search_settings.contextual_rag_model_configuration_id,
+            **(
+                {}
+                if search_settings.enable_contextual_rag
+                else {"enable_contextual_rag": False}
+            ),
         },
     )
     return ContextualRagModelUpdateResponse(
-        contextual_rag_model_configuration_id=model_configuration_id
+        contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id
     )
 
 
@@ -712,10 +778,10 @@ def unstructured_api_key_set(
 
 @router.put("/upsert-unstructured-api-key")
 def upsert_unstructured_api_key(
-    unstructured_api_key: str,
+    request: UnstructuredApiKeyRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
-    update_unstructured_api_key(unstructured_api_key)
+    update_unstructured_api_key(request.unstructured_api_key)
 
 
 @router.delete("/delete-unstructured-api-key")

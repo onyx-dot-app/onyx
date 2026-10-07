@@ -10,6 +10,8 @@ from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
+_SEARXNG_TIMEOUT_SECONDS = (5, 30)
+
 
 class SearXNGClient(WebSearchProvider):
     def __init__(
@@ -33,6 +35,7 @@ class SearXNGClient(WebSearchProvider):
         response = requests.post(
             f"{self._searxng_base_url}/search",
             data=payload,
+            timeout=_SEARXNG_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
 
@@ -53,7 +56,10 @@ class SearXNGClient(WebSearchProvider):
     def test_connection(self) -> dict[str, str]:
         try:
             logger.debug("Testing connection to %s/config", self._searxng_base_url)
-            response = requests.get(f"{self._searxng_base_url}/config")
+            response = requests.get(
+                f"{self._searxng_base_url}/config",
+                timeout=_SEARXNG_TIMEOUT_SECONDS,
+            )
             logger.debug("Response: %s, text: %s", response.status_code, response.text)
             response.raise_for_status()
         except requests.HTTPError as e:

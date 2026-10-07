@@ -61,7 +61,11 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
           delegated subagent you can open, without washing the whole surface. */}
       <SvgCpu className="w-4 h-4 stroke-action-selection-05 shrink-0" />
       <span className="min-w-0 flex-1 truncate">
-        <Text font="main-ui-action" color="text-04" nowrap>
+        <Text
+          font="main-ui-action"
+          color="text-04"
+          wordWrap="whitespace-nowrap"
+        >
           {label}
         </Text>
       </span>

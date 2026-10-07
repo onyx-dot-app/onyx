@@ -18,7 +18,7 @@
   --app-container-lg: 62rem;
   --app-container-full: 100%;
 
-  --toast-width: 25rem;
+  --toast-width: 50rem;
 
   --sidebar-width-expanded: 15rem;
   --sidebar-width-folded: 3.25rem;
@@ -78,6 +78,7 @@
   --block-width-form-label-column-max: 30rem;
   --block-width-form-input-column-max: 15rem;
   --block-width-form-input-min: 10rem;
+  --block-width-dropdown-min: 17.5rem;
   --block-width-form-value-min: 5rem;
 
   --block-width-tag-label-max: 10rem;

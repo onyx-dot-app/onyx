@@ -20,11 +20,11 @@ from onyx.background.celery.celery_redis import (
     celery_get_queued_task_ids,
     celery_get_unacked_task_ids,
 )
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
     try_creating_docfetching_task,
+    try_dispatching_waiting_attempt,
 )
 from onyx.background.celery.tasks.docprocessing.heartbeat import (
     start_heartbeat,
@@ -47,12 +47,7 @@ from onyx.background.indexing.index_attempt_utils import (
     cleanup_index_attempts,
     get_old_index_attempt_ids,
 )
-from onyx.configs.app_configs import (
-    MANAGED_VESPA,
-    PERSISTENT_INDEXING,
-    VESPA_CLOUD_CERT_PATH,
-    VESPA_CLOUD_KEY_PATH,
-)
+from onyx.configs.app_configs import PERSISTENT_INDEXING
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_INDEXING_LOCK_TIMEOUT,
@@ -66,6 +61,7 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
     OnyxRedisSignals,
 )
+from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
 from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_alerts import (
@@ -88,10 +84,13 @@ from onyx.db.enums import (
 )
 from onyx.db.index_attempt import (
     IndexAttemptError,
+    cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
+    get_active_index_attempts_without_task,
     get_index_attempt,
     get_index_attempt_errors_for_cc_pair,
     get_stale_not_started_index_attempts,
+    get_waiting_index_attempt,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
@@ -109,27 +108,12 @@ from onyx.db.search_settings import (
     get_secondary_search_settings,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.document_index.factory import get_all_document_indices
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
     get_document_batch_storage,
 )
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
-from onyx.httpx.httpx_pool import HttpxPool
-from onyx.indexing.adapters.document_indexing_adapter import (
-    DocumentIndexingBatchAdapter,
-)
-from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.indexing.persistent_indexing import (
-    build_generic_connector_failure,
-    record_generic_failure,
-)
-from onyx.natural_language_processing.search_nlp_models import (
-    EmbeddingModel,
-    warm_up_bi_encoder,
-)
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import (
@@ -758,6 +742,50 @@ class _KickoffResult:
         )
 
 
+def _dispatch_pair_waiting_attempt(
+    celery_app: Celery,
+    db_session: Session,
+    *,
+    cc_pair_id: int,
+    search_settings: SearchSettings,
+    redis_client: TenantRedisClient,
+    tenant_id: str,
+) -> bool:
+    """Sends the task of the pair's attempt that waits for the capability
+    checks, when they pass. False when no attempt waits or it still waits."""
+    waiting = get_waiting_index_attempt(db_session, cc_pair_id, search_settings.id)
+    if waiting is None:
+        return False
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if cc_pair is None:
+        task_logger.debug(
+            f"Waiting index attempt has no cc_pair: index_attempt={waiting.id} "
+            f"cc_pair={cc_pair_id}"
+        )
+        return False
+    # Most beats find the hold still in place; check it before taking the
+    # creation lock. The dispatch checks it again under the lock.
+    if get_first_indexing_hold(db_session, cc_pair) is not None:
+        return False
+    dispatched = try_dispatching_waiting_attempt(
+        celery_app,
+        cc_pair,
+        search_settings,
+        waiting.id,
+        db_session,
+        redis_client,
+        tenant_id,
+    )
+    if dispatched:
+        task_logger.info(
+            f"Waiting index attempt dispatched: index_attempt={waiting.id} "
+            f"cc_pair={cc_pair_id} search_settings={search_settings.id}"
+        )
+    return dispatched
+
+
 def _kickoff_indexing_tasks(
     celery_app: Celery,
     db_session: Session,
@@ -783,7 +811,19 @@ def _kickoff_indexing_tasks(
             search_settings_id=search_settings.id,
             db_session=db_session,
         ):
-            result.skipped_active += 1
+            # A first attempt that waits for the capability checks starts here
+            # once they pass.
+            if _dispatch_pair_waiting_attempt(
+                celery_app,
+                db_session,
+                cc_pair_id=cc_pair_id,
+                search_settings=search_settings,
+                redis_client=redis_client,
+                tenant_id=tenant_id,
+            ):
+                result.created += 1
+            else:
+                result.skipped_active += 1
             continue
 
         cc_pair = get_connector_credential_pair_from_id(
@@ -859,6 +899,38 @@ def _kickoff_indexing_tasks(
     return result
 
 
+def fail_inconsistent_index_attempts(db_session: Session, lock_beat: RedisLock) -> None:
+    """Fails active attempts without a Celery task. A first attempt that waits
+    for the capability checks has no task by design, so it is left alone."""
+    for attempt in get_active_index_attempts_without_task(db_session):
+        lock_beat.reacquire()
+
+        # Double-check the attempt still has the inconsistent state
+        fresh_attempt = get_index_attempt(db_session, attempt.id)
+        if (
+            not fresh_attempt
+            or fresh_attempt.celery_task_id
+            or fresh_attempt.status.is_terminal()
+        ):
+            continue
+        if (
+            fresh_attempt.status == IndexingStatus.NOT_STARTED
+            and not cc_pair_has_dispatched_index_attempts(
+                db_session, fresh_attempt.connector_credential_pair_id
+            )
+        ):
+            continue
+
+        failure_reason = (
+            f"Inconsistent index attempt found - active status without Celery task: "
+            f"index_attempt={attempt.id} "
+            f"cc_pair={attempt.connector_credential_pair_id} "
+            f"search_settings={attempt.search_settings_id}"
+        )
+        task_logger.error(failure_reason)
+        mark_attempt_failed(attempt.id, db_session, failure_reason=failure_reason)
+
+
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_INDEXING,
     soft_time_limit=300,
@@ -877,6 +949,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     All the logic for determining what state the indexing pipeline is in
     w.r.t previous failed attempt, checkpointing, etc is handled in the docfetching task.
     """
+
+    from onyx.natural_language_processing.search_nlp_models import (
+        EmbeddingModel,
+        warm_up_bi_encoder,
+    )
 
     time_start = time.monotonic()
     task_logger.warning("check_for_indexing - Starting")
@@ -1104,42 +1181,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         # This can happen if attempt creation fails partway through
         lock_beat.reacquire()
         with get_session_with_current_tenant() as db_session:
-            inconsistent_attempts = (
-                db_session.execute(
-                    select(IndexAttempt).where(
-                        IndexAttempt.status.in_(
-                            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                        ),
-                        IndexAttempt.celery_task_id.is_(None),
-                        IndexAttempt.targeted_reindex_job_id.is_(None),
-                    )
-                )
-                .scalars()
-                .all()
-            )
-
-            for attempt in inconsistent_attempts:
-                lock_beat.reacquire()
-
-                # Double-check the attempt still has the inconsistent state
-                fresh_attempt = get_index_attempt(db_session, attempt.id)
-                if (
-                    not fresh_attempt
-                    or fresh_attempt.celery_task_id
-                    or fresh_attempt.status.is_terminal()
-                ):
-                    continue
-
-                failure_reason = (
-                    f"Inconsistent index attempt found - active status without Celery task: "
-                    f"index_attempt={attempt.id} "
-                    f"cc_pair={attempt.connector_credential_pair_id} "
-                    f"search_settings={attempt.search_settings_id}"
-                )
-                task_logger.error(failure_reason)
-                mark_attempt_failed(
-                    attempt.id, db_session, failure_reason=failure_reason
-                )
+            fail_inconsistent_index_attempts(db_session, lock_beat)
 
         lock_beat.reacquire()
         # we want to run this less frequently than the overall task
@@ -1552,6 +1594,11 @@ def _record_docprocessing_failure_persistent(
 
     Every step is wrapped so a follow-on error here does not re-raise out of
     the Celery task — we have already swallowed the original exception."""
+    from onyx.indexing.persistent_indexing import (
+        build_generic_connector_failure,
+        record_generic_failure,
+    )
+
     task_logger.info(
         "PERSISTENT_INDEXING enabled; recording docprocessing failure for "
         "attempt=%s batch=%s",
@@ -1693,14 +1740,6 @@ def _docprocessing_task(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     r = get_redis_client(tenant_id=tenant_id)
 
-    # 20 is the documented default for httpx max_keepalive_connections
-    if MANAGED_VESPA:
-        httpx_init_vespa_pool(
-            20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-        )
-    else:
-        httpx_init_vespa_pool(20)
-
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None
 
@@ -1710,6 +1749,14 @@ def _docprocessing_task(
     cross_batch_db_lock: RedisLock | None = None
 
     try:
+        # Inside the try so a failed first-use import still marks the attempt failed.
+        from onyx.document_index.factory import get_default_document_index
+        from onyx.indexing.adapters.document_indexing_adapter import (
+            DocumentIndexingBatchAdapter,
+        )
+        from onyx.indexing.embedder import DefaultIndexingEmbedder
+        from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+
         # FIX: Monitor memory before loading documents to track problematic batches
         emit_process_memory(
             os.getpid(),
@@ -1751,7 +1798,8 @@ def _docprocessing_task(
         )
 
         # Phase 1: fast DB reads to set up the pipeline. Session closes before
-        # the slow embedding + Vespa work begins, returning the connection to the pool.
+        # the slow embedding + document index work begins, returning the connection
+        # to the pool.
         with get_session_with_current_tenant() as db_session:
             # matches parts of _run_indexing
             index_attempt = get_index_attempt(
@@ -1794,10 +1842,9 @@ def _docprocessing_task(
                 callback=callback,
             )
 
-            document_indices = get_all_document_indices(
+            document_index = get_default_document_index(
                 index_attempt.search_settings,
                 None,
-                httpx_client=HttpxPool.get("vespa"),
             )
 
             # Set up metadata for this batch
@@ -1852,7 +1899,7 @@ def _docprocessing_task(
         # real work happens here!
         index_pipeline_result = run_indexing_pipeline(
             embedder=embedding_model,
-            document_indices=document_indices,
+            document_index=document_index,
             ignore_time_skip=True,  # Documents are already filtered during extraction
             index_to_secondary=index_to_secondary,
             tenant_id=tenant_id,

@@ -1,11 +1,12 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SettingsLayouts } from "@opal/layouts";
-import { SvgClock, SvgSimpleLoader } from "@opal/icons";
+import { SvgClock } from "@opal/icons";
 import { Text } from "@opal/components";
 import ScheduleTaskForm, {
   type ScheduleTaskFormInitial,
@@ -39,7 +40,7 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title={t("fallbackTitle")}
-          backButton={handleBack}
+          cancel={handleBack}
           divider
         />
         <SettingsLayouts.Body>
@@ -57,13 +58,13 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title={data ? t("title", { name: data.name }) : t("fallbackTitle")}
-          backButton={handleBack}
+          cancel={handleBack}
           divider
         />
         <SettingsLayouts.Body>
           {isLoading ? (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           ) : (
             <Text font="main-ui-body" color="text-03">

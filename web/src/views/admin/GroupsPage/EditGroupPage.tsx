@@ -1,17 +1,20 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
+import { displayGroupName } from "@/views/admin/GroupsPage/utils";
 import {
   Button,
   Card,
   Divider,
   MessageCard,
-  Switch,
+  InputSwitch,
   Table,
+  type TableColumn,
 } from "@opal/components";
 import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
 import {
@@ -19,7 +22,6 @@ import {
   SvgTrash,
   SvgMinusCircle,
   SvgPlusCircle,
-  SvgSimpleLoader,
   SvgUserShield,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
@@ -40,7 +42,6 @@ import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
 import {
   makeBaseColumns,
   makeMemberTableColumns,
-  tc,
   PAGE_SIZE,
   type MemberColumnLabels,
 } from "./shared";
@@ -238,11 +239,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     return allRows.filter((r) => selected.has(r.id ?? r.email));
   }, [allRows, selectedUserIds]);
 
-  const currentRowSelection = useMemo(() => {
-    const sel: Record<string, boolean> = {};
-    for (const id of selectedUserIds) sel[id] = true;
-    return sel;
-  }, [selectedUserIds]);
+  const selectedValues = useMemo(
+    () => new Set(selectedUserIds),
+    [selectedUserIds]
+  );
 
   const handleRemoveMember = useCallback((userId: string) => {
     setSelectedUserIds((prev) => prev.filter((id) => id !== userId));
@@ -320,11 +320,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   );
 
   const memberColumns = useMemo(
-    () => [
+    (): TableColumn<MemberRow>[] => [
       ...makeBaseColumns(columnLabels, (row) =>
         managerIds.has(row.id ?? row.email)
       ),
-      tc.actions({
+      {
+        kind: "actions",
         showSorting: false,
         showColumnVisibility: false,
         cell: (row: MemberRow) => {
@@ -339,7 +340,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             <div className="flex items-center gap-1">
               {canManage && (
                 <Button
-                  icon={isPending ? SvgSimpleLoader : SvgUserShield}
+                  icon={isPending ? IconLoader : SvgUserShield}
                   prominence="tertiary"
                   interaction={isManager ? "hover" : "rest"}
                   disabled={!isPersisted || isPending || isOwnManager}
@@ -383,7 +384,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             </div>
           );
         },
-      }),
+      },
     ],
     [
       columnLabels,
@@ -412,9 +413,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   // Without this, TanStack fires onSelectionChange before all rows are loaded,
   // which overwrites selectedUserIds with a partial set.
   const handleSelectionChange = useCallback(
-    (ids: string[]) => {
+    (kept: ReadonlySet<string>) => {
       if (!initialized) return;
-      const kept = new Set(ids);
       // Both rules run: one deselection can strip your own row and a last-group
       // member at once, and returning after the first leaves the other removed.
       const forcedIds: string[] = [];
@@ -447,7 +447,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         forcedIds.push(...strandedIds);
       }
 
-      setSelectedUserIds([...forcedIds, ...ids, ...hiddenMemberIds]);
+      setSelectedUserIds([
+        ...new Set([...forcedIds, ...kept, ...hiddenMemberIds]),
+      ]);
     },
     [
       initialized,
@@ -470,9 +472,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
 
     // Re-fetch group to check sync status before saving
-    const freshGroups = await fetch(SWR_KEYS.adminUserGroupsWithDefault).then(
-      (r) => r.json()
-    );
+    const freshGroups: UserGroup[] = await fetch(
+      SWR_KEYS.adminUserGroupsWithDefault
+    ).then((r) => r.json());
     const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
     if (freshGroup && !freshGroup.is_up_to_date) {
       toast.error(t("edit.toasts.syncing"));
@@ -584,29 +586,22 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     );
   }
 
-  const headerActions = (
-    <Section flexDirection="row" gap={2} width="auto" height="auto">
-      <Button
-        prominence="secondary"
-        onClick={() => router.push("/admin/groups")}
-      >
-        {t("form.cancel.label")}
-      </Button>
-      <Button
-        onClick={handleSave}
-        disabled={
-          !groupName.trim() || isSubmitting || isSyncing || !canManageMembers
-        }
-        tooltip={isSyncing ? t("edit.syncing.tooltip") : undefined}
-      >
-        {isSubmitting
-          ? t("edit.saving.label")
-          : isSyncing
-            ? t("edit.syncing.label")
-            : t("edit.submit.label")}
-      </Button>
-    </Section>
-  );
+  const headerActions = [
+    <Button
+      key="submit"
+      onClick={handleSave}
+      disabled={
+        !groupName.trim() || isSubmitting || isSyncing || !canManageMembers
+      }
+      tooltip={isSyncing ? t("edit.syncing.tooltip") : undefined}
+    >
+      {isSubmitting
+        ? t("edit.saving.label")
+        : isSyncing
+          ? t("edit.syncing.label")
+          : t("edit.submit.label")}
+    </Button>,
+  ];
 
   return (
     <>
@@ -615,11 +610,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           icon={SvgUsers}
           title={t("edit.header.title")}
           divider
-          rightChildren={headerActions}
+          cancel={() => router.push("/admin/groups")}
+          actions={headerActions}
         />
 
         <SettingsLayouts.Body>
-          {isLoading && <SvgSimpleLoader />}
+          {isLoading && <IconLoader />}
 
           {error && (
             <Text as="p" secondaryBody text03>
@@ -633,7 +629,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 <MessageCard
                   variant="info"
                   title={t("edit.systemGroup.title")}
-                  description={t("edit.systemGroup.description")}
+                  description={t("edit.systemGroup.description", {
+                    appName: settings.appName,
+                  })}
                 />
               )}
 
@@ -649,7 +647,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 </Text>
                 <InputTypeIn
                   placeholder={t("form.name.placeholder")}
-                  value={groupName}
+                  value={
+                    isDefaultGroup ? displayGroupName(group, t) : groupName
+                  }
                   variant={canManage ? "primary" : "readOnly"}
                   onChange={(e) => setGroupName(e.target.value)}
                 />
@@ -704,13 +704,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 {isAddingMembers ? (
                   <Table
                     key="add-members"
-                    data={allRows as MemberRow[]}
+                    items={allRows as MemberRow[]}
                     columns={addModeColumns}
                     getRowId={(row) => row.id ?? row.email}
                     pageSize={PAGE_SIZE}
-                    searchTerm={searchTerm}
+                    query={searchTerm}
                     selectionBehavior="multi-select"
-                    initialRowSelection={currentRowSelection}
+                    values={selectedValues}
                     onSelectionChange={handleSelectionChange}
                     footer={{}}
                     emptyState={
@@ -723,11 +723,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   />
                 ) : (
                   <Table
-                    data={memberRows}
+                    items={memberRows}
                     columns={memberColumns}
                     getRowId={(row) => row.id ?? row.email}
                     pageSize={PAGE_SIZE}
-                    searchTerm={searchTerm}
+                    query={searchTerm}
                     footer={{}}
                     emptyState={
                       <IllustrationContent
@@ -777,7 +777,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                       description={t("edit.incognito.description")}
                       withLabel
                     >
-                      <Switch
+                      <InputSwitch
                         checked={incognitoEnabled}
                         onCheckedChange={setIncognitoEnabled}
                       />

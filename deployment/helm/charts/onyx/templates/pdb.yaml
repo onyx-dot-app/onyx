@@ -1,0 +1,62 @@
+{{- $components := list
+  (dict "key" "api" "name" "api-server")
+  (dict "key" "webserver" "name" "web-server")
+  (dict "key" "inferenceCapability" "name" "inference-model")
+  (dict "key" "indexCapability" "name" "indexing-model" "needsVectorDB" true)
+  (dict "key" "celery_worker_primary" "name" "celery-worker-primary" "needsVectorDB" true)
+  (dict "key" "celery_worker_light" "name" "celery-worker-light" "needsVectorDB" true)
+  (dict "key" "celery_worker_heavy" "name" "celery-worker-heavy" "needsVectorDB" true)
+  (dict "key" "celery_worker_monitoring" "name" "celery-worker-monitoring" "needsVectorDB" true)
+  (dict "key" "celery_worker_docfetching" "name" "celery-worker-docfetching" "needsVectorDB" true)
+  (dict "key" "celery_worker_docprocessing" "name" "celery-worker-docprocessing" "needsVectorDB" true)
+  (dict "key" "celery_worker_user_file_processing" "name" "celery-worker-user-file-processing" "needsVectorDB" true)
+  (dict "key" "celery_worker_scheduled_tasks" "name" "celery-worker-scheduled-tasks" "needsVectorDB" true)
+}}
+{{- range $c := $components }}
+{{- $v := index $.Values $c.key }}
+{{- $pdb := $v.podDisruptionBudget | default dict }}
+{{- $replicas := int $v.replicaCount }}
+{{- if and $v.autoscaling $v.autoscaling.enabled }}
+{{- $replicas = int ($v.autoscaling.minReplicas | default 1) }}
+{{- end }}
+{{- /* A PDB on a single replica either blocks node drains or permits nothing, so skip it. */}}
+{{- if and $pdb.enabled (gt $replicas 1) (or (not $c.needsVectorDB) $.Values.vectorDB.enabled) }}
+{{- $blocksEvictions := false }}
+{{- if hasKey $pdb "minAvailable" }}
+{{- $min := toString $pdb.minAvailable }}
+{{- /* Kubernetes rounds a percentage minAvailable up. */}}
+{{- $minPods := ternary (ceil (divf (mulf (float64 (trimSuffix "%" $min)) $replicas) 100)) (float64 $min) (hasSuffix "%" $min) }}
+{{- $blocksEvictions = ge (int $minPods) $replicas }}
+{{- else if hasKey $pdb "maxUnavailable" }}
+{{- $blocksEvictions = le (int (trimSuffix "%" (toString $pdb.maxUnavailable))) 0 }}
+{{- end }}
+{{- if $blocksEvictions }}
+{{- fail (printf "%s.podDisruptionBudget blocks every eviction with %d replicas; lower minAvailable or raise maxUnavailable." $c.key $replicas) }}
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "onyx.resourceName" (list $ $c.name) }}
+  labels:
+    {{- include "onyx.labels" $ | nindent 4 }}
+spec:
+  {{- if hasKey $pdb "minAvailable" }}
+  minAvailable: {{ $pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ hasKey $pdb "maxUnavailable" | ternary $pdb.maxUnavailable 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- if eq $c.key "inferenceCapability" }}
+      {{- range $v.labels }}
+      {{ .key }}: {{ .value }}
+      {{- end }}
+      {{- else }}
+      {{- include "onyx.selectorLabels" $ | nindent 6 }}
+      {{- with $v.deploymentLabels }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- end }}
+{{- end }}
+{{- end }}

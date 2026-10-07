@@ -6,7 +6,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches: [main]
     paths:
       - "backend/**"
       - "pyproject.toml"
@@ -31,8 +30,9 @@ env:
   S3_AWS_ACCESS_KEY_ID_FOR_TEST: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
   S3_AWS_SECRET_ACCESS_KEY_FOR_TEST: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
 
-  # MinIO
+  # Object store (dev overlay publishes it on 9004) and the legacy MinIO (9005)
   S3_ENDPOINT_URL: "http://localhost:9004"
+  S3_LEGACY_ENDPOINT_URL: "http://localhost:9005"
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
@@ -45,8 +45,8 @@ env:
   CONFLUENCE_ACCESS_TOKEN_SCOPED: ${{ secrets.CONFLUENCE_ACCESS_TOKEN_SCOPED }}
 
   # Jira
-  JIRA_ADMIN_USER_EMAIL: ${{ vars.JIRA_ADMIN_USER_EMAIL }}
-  JIRA_ADMIN_API_TOKEN: ${{ secrets.JIRA_ADMIN_API_TOKEN }}
+  JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
 
   # LLMs
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -80,7 +80,7 @@ jobs:
 
   external-dependency-unit-tests:
     needs: discover-test-dirs
-    # Use larger runner with more resources for Vespa
+    # Use larger runner with more resources for OpenSearch
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -151,6 +151,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
             up -d \
+            object-store \
             minio \
             relational_db \
             cache \

@@ -70,6 +70,10 @@ export interface Settings {
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;
 
+  // Workspace-wide switch for the LLM gateway (direct model API access via
+  // /api/gateway). When false, all gateway routes reject requests.
+  llm_gateway_enabled?: boolean;
+
   // Workspace-wide instructions injected into every Craft agent's system
   // prompt (AGENTS.md).
   craft_instructions?: string | null;
@@ -89,13 +93,13 @@ export interface Settings {
   seat_count?: number | null;
   used_seats?: number | null;
 
-  // OpenSearch migration
-  opensearch_indexing_enabled?: boolean;
-
   // Vector DB availability flag - false when DISABLE_VECTOR_DB is set.
   // When false, connectors, RAG search, document sets, and related features
   // are unavailable.
   vector_db_enabled?: boolean;
+
+  // HIDE_ONYX_BRANDING env var, honored only on the Enterprise tier.
+  hide_onyx_branding?: boolean;
 
   // True when hooks are available: single-tenant deployments only.
   hooks_enabled?: boolean;
@@ -150,9 +154,6 @@ export interface EnterpriseSettings {
   // Custom help link surfaced in the profile dropdown alongside "Help & FAQ".
   custom_help_link_url: string | null;
   custom_help_link_label: string | null;
-
-  // Hide the "Powered by Onyx" tagline under the sidebar logo.
-  hide_onyx_branding: boolean | null;
 }
 
 /**

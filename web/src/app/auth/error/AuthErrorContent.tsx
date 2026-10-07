@@ -6,9 +6,11 @@ import { richNodes } from "@opal/utils";
 import { useTranslations } from "next-intl";
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { loginPath } from "@/lib/auth/paths";
+import { isStaleSsoStateError } from "@/lib/auth/utils";
 
 // Raw IdP/OAuth error codes that map to a friendlier translated message.
-// Any other code is shown to the user as-is.
+// Stale-state codes get their own message. Any other code is shown as-is.
 const KNOWN_ERROR_CODES = [
   "OAUTH_USER_ALREADY_EXISTS",
   "LOGIN_BAD_CREDENTIALS",
@@ -54,7 +56,9 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
     server_error: t("error.code.serverError"),
     temporarily_unavailable: t("error.code.temporarilyUnavailable"),
   } satisfies Record<KnownErrorCode, string>;
-  const message = resolveMessage(rawMessage, errorCodeMessages);
+  const message = isStaleSsoStateError(rawMessage)
+    ? t("error.code.staleSignIn")
+    : resolveMessage(rawMessage, errorCodeMessages);
   return (
     <AuthFlowContainer>
       <div className="flex flex-col items-center gap-4">
@@ -88,7 +92,8 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
           )}
         </div>
 
-        <Button href="/auth/login" width="full">
+        {/* Held on the button: the IdP just failed, so no bounce back to it. */}
+        <Button href={loginPath({ autoRedirectToSso: false })} width="full">
           {t("error.returnToLoginButton.label")}
         </Button>
 

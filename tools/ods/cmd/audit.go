@@ -41,12 +41,16 @@ Run "` + auditBinary + ` --help" for the full reference.`,
 		DisableFlagParsing: true,
 		Args:               cobra.ArbitraryArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runAudit(cmd, args)
+			if code := runAudit(cmd, args); code != 0 {
+				os.Exit(code)
+			}
 		},
 	}
 }
 
-func runAudit(cmd *cobra.Command, args []string) {
+// runAudit returns the process exit code: the auditor's own, or 1 when it is
+// not installed.
+func runAudit(cmd *cobra.Command, args []string) int {
 	bin, err := resolveAuditBinary()
 	if err != nil {
 		if wantsHelp(args) {
@@ -54,7 +58,7 @@ func runAudit(cmd *cobra.Command, args []string) {
 		}
 		log.Errorf("%s is not installed.", auditBinary)
 		fmt.Fprintln(os.Stderr, installHint)
-		os.Exit(1)
+		return 1
 	}
 
 	// Flag parsing is off, so args still holds every root flag, such as --debug.
@@ -66,12 +70,13 @@ func runAudit(cmd *cobra.Command, args []string) {
 		if errors.As(err, &exitErr) {
 			// A signal kill has no exit code, and ExitCode() reports -1 for it.
 			if code := exitErr.ExitCode(); code >= 0 {
-				os.Exit(code)
+				return code
 			}
 			log.Fatalf("%s was terminated: %v", auditBinary, exitErr)
 		}
 		log.Fatalf("Failed to run %s: %v", bin, err)
 	}
+	return 0
 }
 
 // resolveAuditBinary finds the auditor next to this binary, then on PATH.

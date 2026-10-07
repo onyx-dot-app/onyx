@@ -87,10 +87,8 @@ export default function OpenApiPageContent() {
               authorization_url: values.authorizationUrl,
               token_url: values.tokenUrl,
               scopes: parsedScopes,
-              ...(trimmedClientId ? { client_id: trimmedClientId } : {}),
-              ...(trimmedClientSecret
-                ? { client_secret: trimmedClientSecret }
-                : {}),
+              client_id: trimmedClientId || undefined,
+              client_secret: trimmedClientSecret || undefined,
             });
           } else {
             const oauthConfig = await createOAuthConfig({

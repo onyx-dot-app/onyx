@@ -58,7 +58,7 @@ func groupObject(t *testing.T, ccPairIDs []int64, upToDate bool) string {
 		"manager_ids":        []string{"u-1"},
 		"cc_pairs":           pairs,
 		"document_sets":      []any{},
-		"personas":           []any{},
+		"personas":           []map[string]any{{"id": 12, "name": "support"}},
 		"is_up_to_date":      upToDate,
 		"is_up_for_deletion": false,
 		"is_default":         false,

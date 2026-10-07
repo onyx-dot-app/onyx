@@ -44,16 +44,16 @@ type documentSetResource struct {
 }
 
 type documentSetResourceModel struct {
-	ID                  types.String   `tfsdk:"id"`
-	Name                types.String   `tfsdk:"name"`
-	Description         types.String   `tfsdk:"description"`
 	CCPairIDs           types.Set      `tfsdk:"cc_pair_ids"`
-	IsPublic            types.Bool     `tfsdk:"is_public"`
 	Users               types.Set      `tfsdk:"users"`
 	Groups              types.Set      `tfsdk:"groups"`
 	FederatedConnectors types.Set      `tfsdk:"federated_connectors"`
-	IsUpToDate          types.Bool     `tfsdk:"is_up_to_date"`
+	ID                  types.String   `tfsdk:"id"`
+	Name                types.String   `tfsdk:"name"`
+	Description         types.String   `tfsdk:"description"`
 	Timeouts            timeouts.Value `tfsdk:"timeouts"`
+	IsPublic            types.Bool     `tfsdk:"is_public"`
+	IsUpToDate          types.Bool     `tfsdk:"is_up_to_date"`
 }
 
 // federatedConnectorAttrTypes mirrors the nested block, for building set values.

@@ -9,7 +9,7 @@ import HumanMessage from "@/app/app/message/HumanMessage";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Section } from "@/layouts/general-layouts";
@@ -17,12 +17,12 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
 import { Button } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import Text from "@/refresh-components/texts/Text";
 import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 export interface SharedChatDisplayProps {
   chatSession: BackendChatSession | null;
@@ -34,6 +34,7 @@ export default function SharedChatDisplay({
   persona,
 }: SharedChatDisplayProps) {
   const t = useTranslations("chat.sharedChat");
+  const locale = useLocale();
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
@@ -41,7 +42,7 @@ export default function SharedChatDisplay({
 
   // The shared viewer is authenticated, so the user-facing provider list is
   // available for resolving each model's provider icon, same as the live view.
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders } = useLanguageModels();
   const modelProviderLookup = useMemo(
     () => buildModelProviderLookup(llmProviders),
     [llmProviders]
@@ -107,7 +108,7 @@ export default function SharedChatDisplay({
             <div className="flex flex-col items-end">
               <Text as="p" text03 secondaryBody>
                 {t("header.sharedOn.text", {
-                  date: humanReadableFormat(chatSession.time_created),
+                  date: humanReadableFormat(chatSession.time_created, locale),
                 })}
               </Text>
               {chatSession.owner_name && (

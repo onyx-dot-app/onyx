@@ -1,5 +1,5 @@
 import { useTranslations } from "next-intl";
-import { createTableColumns } from "@opal/components";
+import type { TableColumn, TableValueColumn } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgUser, SvgUserManage, SvgGlobe } from "@opal/icons";
 import { SvgSlack } from "@opal/logos";
@@ -41,6 +41,7 @@ export function apiKeyToMemberRow(
     personal_name: key.api_key_name ?? labels.unnamedKey,
     created_at: null,
     updated_at: null,
+    last_active: null,
     groups: [],
     api_key_display: key.api_key_display,
   };
@@ -93,8 +94,6 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
 // Columns
 // ---------------------------------------------------------------------------
 
-export const tc = createTableColumns<MemberRow>();
-
 /** Translated copy for the member table. Columns are built outside React, so
  *  the calling component threads the strings in. */
 export interface MemberColumnLabels {
@@ -107,58 +106,63 @@ export interface MemberColumnLabels {
 function nameColumn(
   labels: MemberColumnLabels,
   isManager?: (row: MemberRow) => boolean
-) {
+): TableValueColumn<MemberRow> {
   // Search/sort by a name+email composite so service accounts — whose email is a
   // "Service Account" placeholder — are findable by their API-key name.
-  return tc.column(
-    (row) => [row.personal_name, row.email].filter(Boolean).join(" "),
-    {
-      id: "name",
-      header: labels.name,
-      weight: 25,
-      cell: (_searchValue, row) => (
-        <Content
-          sizePreset="main-ui"
-          variant="section"
-          title={row.personal_name ?? row.email}
-          description={row.personal_name ? row.email : undefined}
-          tag={
-            isManager?.(row)
-              ? { title: labels.manager, color: "blue" }
-              : undefined
-          }
-        />
-      ),
-    }
-  );
+  return {
+    kind: "data",
+    id: "name",
+    value: (row) => [row.personal_name, row.email].filter(Boolean).join(" "),
+    title: labels.name,
+    weight: 25,
+    cell: (_searchValue, row) => (
+      <Content
+        sizePreset="main-ui"
+        variant="section"
+        title={row.personal_name ?? row.email}
+        description={row.personal_name ? row.email : undefined}
+        tag={
+          isManager?.(row)
+            ? { title: labels.manager, color: "blue" }
+            : undefined
+        }
+      />
+    ),
+  };
 }
 
 export function makeBaseColumns(
   labels: MemberColumnLabels,
   isManager?: (row: MemberRow) => boolean
-) {
+): TableColumn<MemberRow>[] {
   return [
-    tc.qualifier(),
+    { kind: "qualifier" },
     nameColumn(labels, isManager),
-    tc.column("api_key_display", {
-      header: "",
+    {
+      kind: "data",
+      field: "api_key_display",
+      title: "",
       weight: 15,
-      enableSorting: false,
+      sortable: false,
       cell: (value) =>
         value ? (
           <Text as="span" secondaryBody text03>
             {value}
           </Text>
         ) : null,
-    }),
-    tc.column("account_type", {
-      header: labels.accountType,
+    },
+    {
+      kind: "data",
+      field: "account_type",
+      title: labels.accountType,
       weight: 15,
       cell: renderAccountTypeColumn,
-    }),
+    },
   ];
 }
 
-export function makeMemberTableColumns(labels: MemberColumnLabels) {
-  return [...makeBaseColumns(labels), tc.actions({ showSorting: false })];
+export function makeMemberTableColumns(
+  labels: MemberColumnLabels
+): TableColumn<MemberRow>[] {
+  return [...makeBaseColumns(labels), { kind: "actions", showSorting: false }];
 }

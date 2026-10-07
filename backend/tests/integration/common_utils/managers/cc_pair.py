@@ -3,8 +3,11 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+import httpx
+
+from ee.onyx.server.documents.manage_access import CCPairManageAccessRow
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, ConnectorManageRole
 from onyx.server.documents.models import (
     CCPairFullInfo,
     ConnectorCredentialPairIdentifier,
@@ -27,6 +30,7 @@ def _cc_pair_creator(
     name: str | None = None,
     access_type: AccessType = AccessType.PUBLIC,
     groups: list[int] | None = None,
+    data_access: list[int] | None = None,
 ) -> DATestCCPair:
     name = f"{name}-cc-pair" if name else f"test-cc-pair-{uuid4()}"
 
@@ -35,7 +39,11 @@ def _cc_pair_creator(
         json={
             "name": name,
             "access_type": access_type.value,
-            "groups": groups or [],
+            "manage_access": [
+                {"group_id": group_id, "role": ConnectorManageRole.EDITOR.value}
+                for group_id in groups or []
+            ],
+            "data_access": data_access,
         },
         headers=user_performing_action.headers,
     )
@@ -64,6 +72,7 @@ class CCPairManager:
         connector_specific_config: dict[str, Any] | None = None,
         credential_json: dict[str, Any] | None = None,
         refresh_freq: int | None = None,
+        data_access: list[int] | None = None,
     ) -> DATestCCPair:
         connector = ConnectorManager.create(
             user_performing_action=user_performing_action,
@@ -89,6 +98,7 @@ class CCPairManager:
             name=name,
             access_type=access_type,
             groups=groups,
+            data_access=data_access,
             user_performing_action=user_performing_action,
         )
         return cc_pair
@@ -111,6 +121,36 @@ class CCPairManager:
             user_performing_action=user_performing_action,
         )
         return cc_pair
+
+    @staticmethod
+    def get_manage_access(
+        cc_pair_id: int, user_performing_action: DATestUser
+    ) -> list[CCPairManageAccessRow]:
+        response = client.get(
+            f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}/manage-access",
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return [CCPairManageAccessRow(**row) for row in response.json()]
+
+    @staticmethod
+    def set_manage_access(
+        cc_pair_id: int,
+        manage_access: dict[int, ConnectorManageRole],
+        user_performing_action: DATestUser,
+    ) -> list[CCPairManageAccessRow]:
+        response = client.put(
+            f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}/manage-access",
+            json={
+                "manage_access": [
+                    {"group_id": group_id, "role": role.value}
+                    for group_id, role in manage_access.items()
+                ]
+            },
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return [CCPairManageAccessRow(**row) for row in response.json()]
 
     @staticmethod
     def pause_cc_pair(
@@ -164,6 +204,31 @@ class CCPairManager:
         response.raise_for_status()
         cc_pair_json = response.json()
         return CCPairFullInfo(**cc_pair_json)
+
+    @staticmethod
+    def get_data_access_group_ids(
+        cc_pair_id: int,
+        user_performing_action: DATestUser,
+    ) -> set[int]:
+        """The pair's data-access groups that the caller can see."""
+        response = client.get(
+            f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}/data-access",
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return {group["id"] for group in response.json()["groups"]}
+
+    @staticmethod
+    def set_data_access(
+        cc_pair_id: int,
+        group_ids: list[int],
+        user_performing_action: DATestUser,
+    ) -> httpx.Response:
+        return client.put(
+            f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}/data-access",
+            json={"group_ids": group_ids},
+            headers=user_performing_action.headers,
+        )
 
     @staticmethod
     def get_indexing_status_by_id(
@@ -546,8 +611,8 @@ class CCPairManager:
         number_of_updated_docs: int = 0,
         # Sometimes waiting for a group sync is not necessary
         should_wait_for_group_sync: bool = True,
-        # Sometimes waiting for a vespa sync is not necessary
-        should_wait_for_vespa_sync: bool = True,
+        # Sometimes waiting for a document index sync is not necessary
+        should_wait_for_index_sync: bool = True,
     ) -> None:
         """after: The task register time must be after this time."""
         doc_synced = False
@@ -592,11 +657,12 @@ class CCPairManager:
         # this shouldnt be necessary but something is off with the timing for the sync jobs
         time.sleep(5)
 
-        if not should_wait_for_vespa_sync:
+        if not should_wait_for_index_sync:
             return
 
-        print("waiting for vespa sync")
-        # wait for the vespa sync to complete once the permission sync is complete
+        print("waiting for document index sync")
+        # wait for the document index sync to complete once the permission sync is
+        # complete
         start = time.monotonic()
         while True:
             doc_sync_statuses = CCPairManager.get_doc_sync_statuses(
@@ -621,11 +687,11 @@ class CCPairManager:
             elapsed = time.monotonic() - start
             if elapsed > timeout:
                 raise TimeoutError(
-                    f"Vespa sync was not completed within {timeout} seconds"
+                    f"Document index sync was not completed within {timeout} seconds"
                 )
 
             print(
-                f"Waiting for vespa sync to complete. elapsed={elapsed:.2f} timeout={timeout}"
+                f"Waiting for document index sync to complete. elapsed={elapsed:.2f} timeout={timeout}"
             )
             time.sleep(5)
 

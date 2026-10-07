@@ -21,6 +21,24 @@ export function markdown(...lines: string[]): RichStr {
 }
 
 /**
+ * Title-cases an identifier in snake, kebab or camel case:
+ * `confluence_username` → "Confluence Username", `apiKey` → "Api Key".
+ */
+export function toTitleCase(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+export function escapeMarkdown(value: string): string {
+  return value
+    .replace(/[!-/:-@[-`{-~]/g, (character) => `&#${character.charCodeAt(0)};`)
+    .replace(/[\r\n]+/g, " ");
+}
+
+/**
  * Brands React nodes as deliberate `Text` children.
  *
  * Use for sentences that must embed inline components — the main case is
@@ -88,5 +106,19 @@ export function clickOnKeyDown(
     if (event.repeat) return;
     event.preventDefault();
     onClick();
+  };
+}
+
+/**
+ * Wraps a click handler so the event stops at this element — for controls
+ * nested inside a larger click surface (an input's action button, a card's
+ * inner control) that must not also trigger the surface.
+ */
+export function noProp(
+  f?: (event: React.MouseEvent) => void
+): React.MouseEventHandler {
+  return (event) => {
+    event.stopPropagation();
+    f?.(event);
   };
 }

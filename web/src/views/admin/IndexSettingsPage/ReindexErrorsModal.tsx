@@ -5,15 +5,15 @@ import {
   Button,
   Modal,
   Table,
+  type TableColumn,
   Tag,
   Text,
-  createTableColumns,
 } from "@opal/components";
 import { SvgAlertCircle, SvgPauseCircle, SvgPlayCircle } from "@opal/icons";
-import { useReindexErrors } from "@/lib/indexing/hooks";
-import { resumePausedPort } from "@/lib/indexing/svc";
+import { useReindexErrors } from "@/lib/searchSettings/hooks";
+import { resumePausedPort } from "@/lib/searchSettings/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { ReindexErrorRow } from "@/lib/indexing/types";
+import type { ReindexErrorRow } from "@/lib/searchSettings/types";
 
 function ResumeButton({ row }: { row: ReindexErrorRow }) {
   const t = useTranslations("admin.indexSettings");
@@ -66,8 +66,6 @@ function ResumeButton({ row }: { row: ReindexErrorRow }) {
   );
 }
 
-const tc = createTableColumns<ReindexErrorRow>();
-
 interface ReindexErrorsModalProps {
   onClose: () => void;
 }
@@ -79,9 +77,11 @@ export default function ReindexErrorsModal({
   const { data: rows, isLoading, error } = useReindexErrors(true);
 
   const columns = useMemo(
-    () => [
-      tc.column("scope", {
-        header: t("errorsModal.columns.type"),
+    (): TableColumn<ReindexErrorRow>[] => [
+      {
+        kind: "data",
+        field: "scope",
+        title: t("errorsModal.columns.type"),
         weight: 12,
         cell: (value) => (
           <Text font="secondary-body" color="text-04">
@@ -90,22 +90,29 @@ export default function ReindexErrorsModal({
               : t("errorsModal.scope.userFiles")}
           </Text>
         ),
-      }),
-      tc.column("name", {
-        header: t("errorsModal.columns.name"),
+      },
+      {
+        kind: "data",
+        field: "name",
+        title: t("errorsModal.columns.name"),
         weight: 22,
         cell: (value) => (
           <Text font="secondary-body" color="text-04">
             {value}
           </Text>
         ),
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "entity_id",
-        header: t("errorsModal.columns.id"),
+        title: t("errorsModal.columns.id"),
         width: { weight: 12 },
         cell: (row) => (
-          <Text font="secondary-body" color="text-03" nowrap>
+          <Text
+            font="secondary-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {row.cc_pair_id != null
               ? String(row.cc_pair_id)
               : row.user_id
@@ -113,10 +120,11 @@ export default function ReindexErrorsModal({
                 : "—"}
           </Text>
         ),
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "status",
-        header: t("errorsModal.columns.status"),
+        title: t("errorsModal.columns.status"),
         width: { weight: 12 },
         cell: (row) =>
           row.paused ? (
@@ -132,23 +140,26 @@ export default function ReindexErrorsModal({
               title={t("errorsModal.status.failed")}
             />
           ),
-      }),
-      tc.column("error_msg", {
-        header: t("errorsModal.columns.error"),
+      },
+      {
+        kind: "data",
+        field: "error_msg",
+        title: t("errorsModal.columns.error"),
         weight: 30,
-        enableSorting: false,
+        sortable: false,
         cell: (value) => (
           <Text font="secondary-body" color="text-03">
             {value ?? t("errorsModal.unknownError")}
           </Text>
         ),
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "actions",
-        header: "",
+        title: "",
         width: { weight: 12 },
         cell: (row) => (row.paused ? <ResumeButton row={row} /> : null),
-      }),
+      },
     ],
     [t]
   );
@@ -180,7 +191,7 @@ export default function ReindexErrorsModal({
               {/* Modal.Body aligns children to the start; w-full stops the
                   table shrinking to content and left-packing. */}
               <Table
-                data={rows}
+                items={rows}
                 columns={columns}
                 getRowId={(row) =>
                   `${row.scope}-${row.cc_pair_id ?? row.user_id}`

@@ -251,7 +251,7 @@ Key inputs include:
 - `vpc_id`, `subnet_ids`
 - `public_cluster_enabled` (default true), `private_cluster_enabled` (default true)
 - `cluster_endpoint_public_access_cidrs` (default `[]`). Empty denies all public API access. Set it when `public_cluster_enabled` is true and you need to reach the API server
-- `eks_managed_node_groups` (defaults include a main and a vespa-dedicated group with GP3 volumes)
+- `eks_managed_node_groups` (defaults include a main group and a dedicated document-index group, legacy key `vespa`, with GP3 volumes)
 - `s3_bucket_names` (optional list). If set, creates an IRSA role and Kubernetes service account for S3 access
 
 ### `postgres`

@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+USAGE_REPORT_MEDIA_TYPE = "application/zip"
+
 
 class FlowType(str, Enum):
     CHAT = "chat"

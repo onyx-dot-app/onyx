@@ -35,7 +35,7 @@ import {
   SvgUserManage,
   SvgUsers,
 } from "@opal/icons";
-import { copyText, markdown } from "@opal/utils";
+import { copyText, escapeMarkdown, markdown } from "@opal/utils";
 import { useModal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
@@ -43,7 +43,7 @@ import {
   StaticPermissionLabel,
   TransferTrailingButton,
 } from "@/sections/modals/ShareModalPermissionControls";
-import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
+import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
   useSharePermissionOptions,
   useShareScopeOptions,
@@ -137,7 +137,7 @@ export function ShareAgentModal({
   const shareAgentModal = useModal();
   const permissionOptions = useSharePermissionOptions();
   const scopeOptions = useShareScopeOptions();
-  const { agent } = useAgent(agentId ?? null);
+  const { agent, refresh: refreshAgent } = useAgent(agentId ?? null);
   const { data: shareableUsersData } = useShareableUsers({
     includeApiKeys: true,
   });
@@ -205,6 +205,7 @@ export function ShareAgentModal({
   const [isRemovingSelf, setIsRemovingSelf] = useState(false);
   const wasOpenRef = useRef(false);
   const hydratedFromAgentRef = useRef(false);
+  const [isRefreshingAgent, setIsRefreshingAgent] = useState(false);
 
   useEffect(() => {
     if (shareAgentModal.isOpen && !wasOpenRef.current) {
@@ -215,10 +216,19 @@ export function ShareAgentModal({
       setStagedPermission("VIEWER");
       hydratedFromAgentRef.current = false;
 
-      if (!agentId || agent) {
+      if (!agentId) {
         setDraftState(initialValues);
         setModalInitialState(initialValues);
         hydratedFromAgentRef.current = true;
+      } else {
+        // useAgent turns off SWR revalidation, so owner and share state changed
+        // elsewhere would be stale here. Refetch on open before hydrating. The
+        // rows stay behind the loading state until then, and a failed refetch
+        // falls back to the cached snapshot.
+        setIsRefreshingAgent(true);
+        void refreshAgent().finally(() => setIsRefreshingAgent(false));
+        wasOpenRef.current = true;
+        return;
       }
     }
 
@@ -226,6 +236,7 @@ export function ShareAgentModal({
       shareAgentModal.isOpen &&
       agentId &&
       agent &&
+      !isRefreshingAgent &&
       !hydratedFromAgentRef.current
     ) {
       setDraftState(initialValues);
@@ -238,7 +249,14 @@ export function ShareAgentModal({
     }
 
     wasOpenRef.current = shareAgentModal.isOpen;
-  }, [agent, agentId, initialValues, shareAgentModal.isOpen]);
+  }, [
+    agent,
+    agentId,
+    initialValues,
+    isRefreshingAgent,
+    refreshAgent,
+    shareAgentModal.isOpen,
+  ]);
 
   const effectiveState = useMemo(
     () =>
@@ -557,7 +575,6 @@ export function ShareAgentModal({
               ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
               // Stays visible so the current scope still reads; only changing it is gated.
               disabled={!canEditShares || !canPublish}
-              menuWidth="2xl"
               showTriggerIcon={false}
               onChange={(scope) => {
                 setDraftState((currentDraftState) => ({
@@ -749,8 +766,16 @@ export function ShareAgentModal({
           onClose={closeModal}
           title={
             view === "transfer"
-              ? markdown(t("shareAgent.transfer.title", { name: agentName }))
-              : markdown(t("shareAgent.share.title", { name: agentName }))
+              ? markdown(
+                  t("shareAgent.transfer.title", {
+                    name: escapeMarkdown(agentName),
+                  })
+                )
+              : markdown(
+                  t("shareAgent.share.title", {
+                    name: escapeMarkdown(agentName),
+                  })
+                )
           }
         />
 
@@ -765,7 +790,7 @@ export function ShareAgentModal({
               selectedTarget={transferTarget}
               users={transferableUsers}
             />
-          ) : agentId && !agent && hydratedFromAgentRef.current === false ? (
+          ) : agentId && !hydratedFromAgentRef.current ? (
             <div className="flex w-full items-center justify-center py-6">
               <Text color="text-03" font="secondary-body">
                 {t("shareAgent.loading.description")}

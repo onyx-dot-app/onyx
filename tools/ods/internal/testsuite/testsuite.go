@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -60,7 +61,11 @@ var suites = []Suite{
 // All returns every suite, in help order.
 func All() []Suite {
 	out := make([]Suite, len(suites))
-	copy(out, suites)
+	for i, s := range suites {
+		s.Aliases = slices.Clone(s.Aliases)
+		s.DefaultArgs = slices.Clone(s.DefaultArgs)
+		out[i] = s
+	}
 	return out
 }
 

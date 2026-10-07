@@ -24,7 +24,6 @@ on:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
   merge_group:
   pull_request:
-    branches: [main]
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test job runs.
   push:
@@ -39,7 +38,7 @@ env:
   # Pin S3_ENDPOINT_URL defensively. The runner env is usually clean, but we hit
   # a leak during local smoke (host shell exported localhost:9004, compose's
   # ${VAR:-default} picked it over --env-file).
-  S3_ENDPOINT_URL: "http://minio:9000"
+  S3_ENDPOINT_URL: "http://object-store:8333"
   SANDBOX_BACKEND: "docker"
   ENABLE_CRAFT: "true"
   POSTGRES_PASSWORD: "password"
@@ -199,6 +198,8 @@ jobs:
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
             ${{ matrix.extra_build_args }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-compose-${{ matrix.image }}-${{ github.run_id }}
+          # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+          labels: ci.run-id=${{ github.run_id }}
           push: true
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
@@ -297,7 +298,7 @@ jobs:
 
       # Raw docker compose (ods compose has no craft overlay yet). Only
       # api_server/background/sandbox-proxy are named; depends_on pulls in db /
-      # cache / opensearch / model servers / minio. web_server + nginx omitted.
+      # cache / opensearch / model servers / object store. web_server + nginx omitted.
       - name: Bring up the stack (yml + dev + craft)
         working-directory: deployment/docker_compose
         run: |

@@ -147,6 +147,8 @@ PRESERVED_SEARCH_FIELDS = [
     "normalize",
     "passage_prefix",
     "query_prefix",
+    # Part of the index mapping; a change needs a reindex into a new index.
+    "vector_quantization",
     # Immutable per settings id; server-controlled, never set via update.
     "use_port_flow",
 ]
@@ -211,6 +213,10 @@ async def async_return_default_schema(
 
 # Prefix used for all tenant ids
 TENANT_ID_PREFIX = "tenant_"
+# Schema the rollout job keeps at head and dumps into the snapshot that new tenants
+# are cloned from. Migrated and re-encrypted like a tenant, never scheduled work
+# or assigned a user.
+TENANT_TEMPLATE_SCHEMA = f"{TENANT_ID_PREFIX}template"
 
 DISALLOWED_SLACK_BOT_TENANT_IDS = os.environ.get("DISALLOWED_SLACK_BOT_TENANT_IDS")
 DISALLOWED_SLACK_BOT_TENANT_LIST = (

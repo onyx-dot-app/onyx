@@ -5,7 +5,7 @@ import type {
   VisibilityState,
 } from "@tanstack/react-table";
 import type { TableSize } from "@opal/components/table/TableSizeContext";
-import type { TableVariant } from "@opal/components/table/TableElement";
+import type { TableProminence } from "@opal/components/table/TableRow";
 import type { IconFunctionComponent } from "@opal/types";
 import type { SortDirection } from "@opal/components/table/TableHead";
 
@@ -30,12 +30,126 @@ export type ColumnWidth = DataColumnWidth | FixedColumnWidth;
 // Column kind discriminant
 // ---------------------------------------------------------------------------
 
-export type QualifierContentType = "simple" | "icon" | "image";
+export type QualifierContentType = "checkbox" | "icon" | "image";
 
 export type OnyxColumnKind = "qualifier" | "data" | "display" | "actions";
 
 // ---------------------------------------------------------------------------
-// Column definitions (discriminated union on `kind`)
+// Public columns: plain literals, discriminated on `kind`
+// ---------------------------------------------------------------------------
+
+/** The leading cell: a checkbox, icon or image per row. */
+export interface TableQualifierColumn<TData> {
+  kind: "qualifier";
+  /**
+   * What the cell shows: an icon, an image, or only the selection checkbox.
+   * A "checkbox" qualifier exists only in a multi-select table.
+   *
+   * @default "checkbox"
+   */
+  content?: QualifierContentType;
+  /** The row's icon, for `content: "icon"`. */
+  icon?: (row: TData) => IconFunctionComponent;
+  /** The row's image URL, for `content: "image"`. */
+  imageSrc?: (row: TData) => string;
+  /** The row's image alt text, for `content: "image"`. @default "" */
+  imageAlt?: (row: TData) => string;
+  /** A tinted tile behind the icon or image. @default false */
+  background?: boolean;
+  /**
+   * The icon is an avatar: drawn at 28px (2.75rem rows) or 24px (2.25rem
+   * rows) instead of the standard 16px.
+   *
+   * @default false
+   */
+  avatar?: boolean;
+}
+
+/** What every data column takes, whatever its value comes from. */
+interface TableDataColumnOptions<TData, TValue> {
+  kind: "data";
+  /** The header label. */
+  title: string;
+  /** Renders the cell. Left out, the value renders as text. */
+  cell?: (value: TValue, row: TData) => ReactNode;
+  /** @default true */
+  sortable?: boolean;
+  /** @default true */
+  resizable?: boolean;
+  /** Can be hidden from the column-visibility popover. @default true */
+  hideable?: boolean;
+  /** Replaces the header's sort icon. */
+  sortIcon?: (sorted: SortDirection) => IconFunctionComponent;
+  /** Share of the free width. @default 20 */
+  weight?: number;
+  alignment?: ColumnAlignment;
+}
+
+/**
+ * A data column over one field of the row. `cell` gets that field's type,
+ * and the field's value drives sorting and search.
+ */
+export type TableFieldColumn<TData> = {
+  [K in keyof TData & string]: TableDataColumnOptions<TData, TData[K]> & {
+    field: K;
+    /** Defaults to `field`. */
+    id?: string;
+    value?: never;
+  };
+}[keyof TData & string];
+
+/**
+ * A data column over a derived value, which drives sorting and search (e.g.
+ * a name and an email joined, so either matches).
+ */
+export interface TableValueColumn<TData> extends TableDataColumnOptions<
+  TData,
+  TableCellValue
+> {
+  id: string;
+  value: (row: TData) => TableCellValue;
+  field?: never;
+}
+
+/** What a value column's `value` may return: something sortable and searchable. */
+export type TableCellValue = string | number | boolean | null | undefined;
+
+/** A column with no value of its own: a cell rendered from the row. */
+export interface TableDisplayColumn<TData> {
+  kind: "display";
+  id: string;
+  /** The header label. */
+  title?: string;
+  cell: (row: TData) => ReactNode;
+  width: ColumnWidth;
+  /** @default true */
+  hideable?: boolean;
+  alignment?: ColumnAlignment;
+}
+
+/** The trailing column: per-row actions, and the header's popovers. */
+export interface TableActionsColumn<TData> {
+  kind: "actions";
+  /** The row's action buttons. */
+  cell?: (row: TData) => ReactNode;
+  /** The column-visibility popover in the header. @default true */
+  showColumnVisibility?: boolean;
+  /** The sorting popover in the header. @default true */
+  showSorting?: boolean;
+  /** Footer text for the sorting popover. */
+  sortingFooterText?: string;
+}
+
+/** One column of a `Table`, told apart by `kind`, like a Dropdown item. */
+export type TableColumn<TData> =
+  | TableQualifierColumn<TData>
+  | TableFieldColumn<TData>
+  | TableValueColumn<TData>
+  | TableDisplayColumn<TData>
+  | TableActionsColumn<TData>;
+
+// ---------------------------------------------------------------------------
+// Internal column definitions, resolved from `TableColumn`
 // ---------------------------------------------------------------------------
 
 export type ColumnAlignment = "left" | "center" | "right";
@@ -62,8 +176,8 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
   getImageAlt?: (row: TData) => string;
   /** Show a tinted background container behind the content. @default false */
   background?: boolean;
-  /** Icon size preset. Use `"lg"` for avatars, `"md"` for regular icons. @default "md" */
-  iconSize?: "lg" | "md";
+  /** The icon is an avatar, drawn larger. @default false */
+  avatar?: boolean;
 }
 
 /** Data column — accessor-based column with sorting/resizing. */
@@ -113,8 +227,8 @@ export interface ServerSideConfig {
   onSortingChange: (sorting: SortingState) => void;
   /** Fired when pagination changes (including page resets from sort/search). */
   onPaginationChange: (pageIndex: number, pageSize: number) => void;
-  /** Fired when searchTerm changes. */
-  onSearchTermChange: (searchTerm: string) => void;
+  /** Fired when `query` changes. */
+  onQueryChange: (query: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,38 +254,55 @@ export interface DataTableFooterConfig {
 }
 
 export interface DataTableProps<TData> {
-  /** Row data array. */
-  data: TData[];
-  /** Column definitions created via `createTableColumns()`. */
-  columns: OnyxColumnDef<TData>[];
+  /** The rows. */
+  items: TData[];
+  /** The columns, in order. */
+  columns: TableColumn<TData>[];
   /** Extract a unique string ID from each row. Used for stable row identity. */
   getRowId: (row: TData) => string;
-  /** Rows per page. Set `Infinity` to disable pagination. @default 10 */
-  pageSize?: number;
+  /** The table's accessible name. */
+  label?: string;
+  /**
+   * Rows per page, or `false` for every row on one page. Whenever the rows
+   * fill more than one page, the footer shows, so its page controls are
+   * always there.
+   *
+   * @default 10 with a footer, else every row
+   */
+  pageSize?: number | false;
   /** Initial sorting state. */
   initialSorting?: SortingState;
   /** Initial column visibility state. */
   initialColumnVisibility?: VisibilityState;
-  /** Initial row selection state. Keys are row IDs (from `getRowId`), values are `true`. */
-  initialRowSelection?: Record<string, boolean>;
-  /** When true AND `initialRowSelection` is non-empty, start in view-selected mode. @default false */
+  /**
+   * The selected row IDs (from `getRowId`). Given, the selection is
+   * controlled: change it from `onSelectionChange`. Left out, the table
+   * keeps its own.
+   */
+  values?: ReadonlySet<string>;
+  /** Called with the next selection. */
+  onSelectionChange?: (values: ReadonlySet<string>) => void;
+  /** When true AND `values` is non-empty at mount, start in view-selected mode. @default false */
   initialViewSelected?: boolean;
   /** Enable drag-and-drop row reordering. */
   draggable?: DataTableDraggableConfig;
-  /** Footer configuration. */
-  footer?: DataTableFooterConfig;
-  /** Table size variant. @default "lg" */
+  /** Show the footer: `true` for the default one, or its configuration. */
+  footer?: boolean | DataTableFooterConfig;
+  /** Each body row's height in rem: `2.25` (36px) or `2.75` (44px). @default 2.75 */
   size?: TableSize;
-  /** Visual row variant. @default "cards" */
-  variant?: TableVariant;
-  /** Called whenever the set of selected row IDs changes. Receives IDs produced by `getRowId`. */
-  onSelectionChange?: (selectedIds: string[]) => void;
+  /**
+   * The rows' surface: `"primary"` rests on `background-tint-00` (white),
+   * `"secondary"` on `background-tint-01` (grey). Every row is an
+   * `Interactive.Stateful` surface with hover and selected states.
+   *
+   * @default "primary"
+   */
+  prominence?: TableProminence;
   /** Called when a row is clicked (replaces the default selection toggle). */
   onRowClick?: (row: TData) => void;
   getRowLabel?: (row: TData) => string;
-  /** Search term for global text filtering. When provided, rows are filtered
-   *  to those containing the term in any accessor column value (case-insensitive). */
-  searchTerm?: string;
+  /** Filters the rows to those whose data-column values contain it (case-insensitive). */
+  query?: string;
   /**
    * Max height of the scrollable table area. When set, the table body scrolls
    * vertically while the header stays pinned at the top.
@@ -181,11 +312,19 @@ export interface DataTableProps<TData> {
   /**
    * Enable server-side mode. When provided:
    * - TanStack uses manualPagination/manualSorting/manualFiltering
-   * - `data` should contain only the current page's rows
+   * - `items` should contain only the current page's rows
    * - Dragging is automatically disabled
-   * - Fires separate callbacks for sorting, pagination, and search changes
+   * - Fires separate callbacks for sorting, pagination, and query changes
    */
   serverSide?: ServerSideConfig;
   /** Content to render inside the table body when there are no rows. */
   emptyState?: React.ReactNode;
+  /**
+   * Show the header row. Hiding it also hides what lives there: sorting by
+   * header click, column resizing, the select-all checkbox, and the actions
+   * column's popovers.
+   *
+   * @default true
+   */
+  header?: boolean;
 }

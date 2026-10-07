@@ -96,7 +96,7 @@ class SearchAnswerAnalyzer:
                 best_rank=config.max_search_results,
                 worst_rank=1,
                 average_rank=0.0,
-                top_k_accuracy={k: 0.0 for k in TOP_K_LIST},
+                top_k_accuracy=dict.fromkeys(TOP_K_LIST, 0.0),
                 response_relevancy=0.0,
                 faithfulness=0.0,
                 factual_correctness=0.0,

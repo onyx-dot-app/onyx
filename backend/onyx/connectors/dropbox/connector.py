@@ -5,7 +5,7 @@ from dropbox import Dropbox
 from dropbox.exceptions import ApiError, AuthError
 from dropbox.files import FileMetadata, FolderMetadata
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import DROPBOX_CONNECTOR_SIZE_THRESHOLD, INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -34,6 +34,7 @@ logger = setup_logger()
 class DropboxConnector(LoadConnector, PollConnector):
     def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
         self.batch_size = batch_size
+        self.size_threshold = DROPBOX_CONNECTOR_SIZE_THRESHOLD
         self.dropbox_client: Dropbox | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -92,6 +93,15 @@ class DropboxConnector(LoadConnector, PollConnector):
                     if start and time_as_seconds < start:
                         continue
                     if end and time_as_seconds > end:
+                        continue
+
+                    if entry.size is not None and entry.size > self.size_threshold:
+                        logger.warning(
+                            "Skipping %s: size %s exceeds threshold %s",
+                            entry.path_display,
+                            entry.size,
+                            self.size_threshold,
+                        )
                         continue
 
                     downloaded_file = self._download_file(entry.path_display)

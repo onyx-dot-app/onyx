@@ -1,4 +1,4 @@
-import { Credential } from "./connectors/credentials";
+import type { Credential } from "@/lib/credentials/types";
 
 export const setupGmailOAuth = async ({
   isAdmin,
@@ -25,8 +25,7 @@ export const setupGmailOAuth = async ({
       `Failed to create credential - ${credentialCreationResponse.status}`,
     ];
   }
-  const credential =
-    (await credentialCreationResponse.json()) as Credential<{}>;
+  const credential: Credential<{}> = await credentialCreationResponse.json();
 
   const authorizationUrlResponse = await fetch(
     `/api/manage/connector/gmail/authorize/${credential.id}`
@@ -37,9 +36,8 @@ export const setupGmailOAuth = async ({
       `Failed to create credential - ${authorizationUrlResponse.status}`,
     ];
   }
-  const authorizationUrlJson = (await authorizationUrlResponse.json()) as {
-    auth_url: string;
-  };
+  const authorizationUrlJson: { auth_url: string } =
+    await authorizationUrlResponse.json();
 
   return [authorizationUrlJson.auth_url, ""];
 };

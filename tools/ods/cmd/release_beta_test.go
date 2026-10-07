@@ -27,8 +27,18 @@ package cmd
 //	E8 dry run                               -> creates neither branch nor tag  TestReleaseBeta_newBranchDryRunCreatesNothing
 //	E9 --new-branch with --version           -> rejected before any git work    TestReleaseBeta_newBranchRejectsVersionOverride
 //	E10 branch push rejected by origin       -> no tag created, no tag pushed   TestReleaseBeta_newBranchPushFailureLeavesNoTag
+//	E11 tag push rejected after the branch   -> branch stays, local tag rolled
+//	                                            back, error says re-run         TestReleaseBeta_newBranchTagPushFailureKeepsBranch
+//
+// Across both modes:
+//
+//	E12 command run                          -> tag pushed, deployment run URL
+//	                                            printed from gh run list        TestReleaseBeta_commandAnnouncesDeploymentRun
+//	E14 command dry run                      -> tag printed, no gh lookup       TestReleaseBeta_commandDryRunSkipsDeploymentLookup
+//	E13 origin has no release branch         -> every computation fails         TestReleaseBeta_noReleaseBranchFails
 
 import (
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -244,5 +254,121 @@ func TestReleaseBeta_newBranchPushFailureLeavesNoTag(t *testing.T) {
 	}
 	if gittest.TagExists(repo.Work, "v4.6.0-beta.0") {
 		t.Error("the tag must not be created when the branch push fails")
+	}
+}
+
+func TestReleaseBeta_newBranchTagPushFailureKeepsBranch(t *testing.T) {
+	// Precondition: origin accepts branches but rejects tags.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gitrelHooks(t, repo.Origin, map[string]string{
+		"pre-receive": "#!/bin/sh\nwhile read old new ref; do case $ref in refs/tags/*) exit 1 ;; esac; done\n",
+	})
+
+	// Under test.
+	tag, err := releaseBeta(&ReleaseBetaOptions{NewBranch: true, Yes: true})
+
+	// Postcondition.
+	want := "failed to push tag v4.6.0-beta.0 (origin/release/v4.6 now exists; re-run without --new-branch): "
+	if err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("expected an error starting with %q, got %v", want, err)
+	}
+	if tag != "" {
+		t.Errorf("failed push must return no pushed tag, got %q", tag)
+	}
+	if sha := gittest.Git(t, repo.Origin, "rev-parse", "refs/heads/release/v4.6"); sha != repo.PostCutSHA {
+		t.Errorf("expected origin/release/v4.6 to stay at %s, got %s", repo.PostCutSHA, sha)
+	}
+	if gittest.TagExists(repo.Work, "v4.6.0-beta.0") {
+		t.Error("local tag must be rolled back after a failed push")
+	}
+}
+
+func TestReleaseBeta_commandAnnouncesDeploymentRun(t *testing.T) {
+	// Precondition.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	calls := gitrelFakeGH(t, `"run list "*) echo '[{"databaseId":42,"url":"https://github.com/onyx-dot-app/onyx/actions/runs/42"}]' ;;`)
+	cmd := NewReleaseBetaCommand()
+	cmd.SetArgs([]string{"--yes"})
+
+	// Under test.
+	var err error
+	out := composeCapture(t, &os.Stdout, func() { err = cmd.Execute() })
+
+	// Postcondition.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !gittest.TagExists(repo.Origin, "v4.5.0-beta.0") {
+		t.Error("expected v4.5.0-beta.0 on origin")
+	}
+	if out != "https://github.com/onyx-dot-app/onyx/actions/runs/42\n" {
+		t.Errorf("expected the run URL on stdout, got %q", out)
+	}
+	lists := gitrelCallsWithPrefix(calls(), "run", "list")
+	if len(lists) != 1 {
+		t.Fatalf("expected one gh run list call, got %q", lists)
+	}
+	gitrelAssertArgs(t, lists[0][len(lists[0])-4:], []string{"--event", "push", "--branch", "v4.5.0-beta.0"})
+}
+
+func TestReleaseBeta_commandDryRunSkipsDeploymentLookup(t *testing.T) {
+	// Precondition.
+	gittest.SetupReleaseBranchRepo(t)
+	calls := gitrelFakeGH(t, "")
+	cmd := NewReleaseBetaCommand()
+	cmd.SetArgs([]string{"--dry-run"})
+
+	// Under test.
+	var err error
+	out := composeCapture(t, &os.Stdout, func() { err = cmd.Execute() })
+
+	// Postcondition.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "v4.5.0-beta.0\n" {
+		t.Errorf("expected only the computed tag on stdout, got %q", out)
+	}
+	if got := calls(); len(got) != 0 {
+		t.Errorf("expected no gh calls, got %q", got)
+	}
+}
+
+func TestReleaseBeta_noReleaseBranchFails(t *testing.T) {
+	cases := []struct {
+		name string
+		run  func() error
+	}{
+		{"existing branch", func() error {
+			_, err := releaseBeta(&ReleaseBetaOptions{Yes: true})
+			return err
+		}},
+		{"new branch", func() error {
+			_, err := releaseBeta(&ReleaseBetaOptions{NewBranch: true, Yes: true})
+			return err
+		}},
+		{"recompute after the prompt", func() error {
+			return verifyBetaStateUnchanged("v4.5.0-beta.0", "abc", &ReleaseBetaOptions{})
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// Precondition: origin holds main only.
+			origin, work := gittest.InitOriginAndWork(t)
+			gittest.Commit(t, work, "a.txt")
+			gittest.PublishMain(t, work)
+			t.Chdir(work)
+
+			// Under test.
+			err := c.run()
+
+			// Postcondition.
+			if err == nil || !strings.Contains(err.Error(), "no release/vX.Y branches found on origin") {
+				t.Fatalf("expected a missing release branch error, got %v", err)
+			}
+			if out := gittest.Git(t, origin, "for-each-ref", "--format=%(refname)"); out != "refs/heads/main" {
+				t.Errorf("expected origin unchanged, got %q", out)
+			}
+		})
 	}
 }

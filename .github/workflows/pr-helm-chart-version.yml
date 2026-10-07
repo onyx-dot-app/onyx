@@ -14,9 +14,13 @@ concurrency:
 # counts too). Because of this it cannot be a *required* branch-protection check
 # -- a required check that is filtered out on unrelated PRs stays stuck "pending"
 # and blocks merges. It is enforced as a visible failing check on chart PRs.
+#
+# Runs on PRs into any branch except release/** (a stacked PR still needs a
+# version above main, because that is where the chart publishes from). Release
+# branches never publish the chart, so the check does not apply there.
 on:
   pull_request:
-    branches: [main]
+    branches-ignore: ["release/**"]
     paths:
       - "deployment/helm/charts/onyx/**"
       - "deployment/helm/charts/onyx-cnpg-crds/**"

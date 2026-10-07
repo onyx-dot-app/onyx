@@ -1,10 +1,13 @@
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import "server-only";
 
 import { buildUrl, UrlBuilder } from "@/lib/utilsSS";
 import { getDomain } from "@/lib/redirectSS";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
+import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 import { User } from "@/lib/types";
 import { hasAnyAdminPermission } from "@/lib/permissions";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
@@ -91,7 +94,7 @@ export async function authErrorRedirect(
 ): Promise<NextResponse> {
   const errorUrl = new URL("/auth/error", getDomain(request));
   try {
-    const body = await response.json();
+    const body: ErrorResponseBody = await response.json();
     const detail = body?.detail;
     if (typeof detail === "string" && detail) {
       errorUrl.searchParams.set("error", detail);
@@ -126,7 +129,12 @@ export async function requireAuth(): Promise<AuthCheckResult> {
   }
 
   if (!user) {
-    return { user, authTypeMetadata, redirect: "/auth/login" };
+    const originalPath = (await headers()).get(ORIGINAL_PATH_HEADER);
+    return {
+      user,
+      authTypeMetadata,
+      redirect: loginPath({ next: originalPath }),
+    };
   }
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {

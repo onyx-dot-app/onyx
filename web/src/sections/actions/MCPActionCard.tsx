@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, {
   useState,
   useMemo,
@@ -7,28 +8,19 @@ import React, {
   useRef,
   useCallback,
 } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
 import { useCreateModal } from "@opal/components";
-import {
-  ActionStatus,
-  ToolSnapshot,
-  MCPServerStatus,
-  MCPServer,
-} from "@/lib/tools/types";
-import useServerTools from "@/hooks/useServerTools";
+import { ActionStatus, ToolSnapshot } from "@/lib/tools/types";
+import { MCPServerStatus, MCPServer } from "@/lib/mcp/types";
+import { useServerTools } from "@/lib/mcp/hooks";
 import { can } from "@/lib/permissions/resource-actions";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
-import {
-  SvgRefreshCw,
-  SvgServer,
-  SvgTrash,
-  SvgSimpleLoader,
-} from "@opal/icons";
+import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@opal/time";
@@ -108,6 +100,7 @@ export default function MCPActionCard({
   className,
 }: MCPActionCardProps) {
   const t = useTranslations("actions");
+  const locale = useLocale();
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
@@ -261,13 +254,13 @@ export default function MCPActionCard({
 
   // Left action for ToolsList footer
   const leftAction = useMemo(() => {
-    const lastRefreshedText = timeAgo(server.last_refreshed_at);
+    const lastRefreshedText = timeAgo(server.last_refreshed_at, locale);
 
     return (
       <div className="flex items-center gap-2">
         {canManageStatus && (
           <Button
-            icon={isToolsRefreshing ? SvgSimpleLoader : SvgRefreshCw}
+            icon={isToolsRefreshing ? IconLoader : SvgRefreshCw}
             prominence="internal"
             onClick={handleRefreshTools}
             tooltip={t("mcpCard.refreshToolsButton.tooltip")}
@@ -284,6 +277,7 @@ export default function MCPActionCard({
   }, [
     canManageStatus,
     server.last_refreshed_at,
+    locale,
     serverId,
     mutate,
     onRefreshTools,

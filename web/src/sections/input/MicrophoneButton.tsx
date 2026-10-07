@@ -1,9 +1,10 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
-import { SvgMicrophone, SvgSimpleLoader } from "@opal/icons";
+import { SvgMicrophone } from "@opal/icons";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { toast } from "@opal/layouts";
@@ -114,6 +115,7 @@ function MicrophoneButton({
 
   const {
     isRecording,
+    isStarting,
     isProcessing,
     isMuted,
     error,
@@ -316,12 +318,12 @@ function MicrophoneButton({
     }
   }, [error]);
 
-  // Icon: show loader when processing, otherwise mic
-  const icon = isProcessing ? SvgSimpleLoader : SvgMicrophone;
+  const icon = isStarting || isProcessing ? IconLoader : SvgMicrophone;
 
   // Disable when processing or TTS is playing (don't want to pick up TTS audio)
   const isDisabled =
     disabled ||
+    isStarting ||
     isProcessing ||
     isTTSPlaying ||
     isTTSLoading ||
@@ -335,10 +337,13 @@ function MicrophoneButton({
       disabled={isDisabled}
       icon={icon}
       onClick={handleClick}
+      aria-busy={isStarting}
       aria-label={
-        isRecording
-          ? t("microphoneButton.stopRecording.ariaLabel")
-          : t("microphoneButton.startRecording.ariaLabel")
+        isStarting
+          ? t("microphoneButton.startingRecording.ariaLabel")
+          : isRecording
+            ? t("microphoneButton.stopRecording.ariaLabel")
+            : t("microphoneButton.startRecording.ariaLabel")
       }
       prominence={prominence}
     />

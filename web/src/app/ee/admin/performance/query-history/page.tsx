@@ -9,9 +9,9 @@ import {
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   DateRange,
-  DateRangePicker,
+  InputDateRangePicker,
   rangeForInclusiveDays,
-} from "@/refresh-components/DateRangePicker";
+} from "@opal/components";
 import { useCallback, useState } from "react";
 
 const route = ADMIN_ROUTES.QUERY_HISTORY;
@@ -53,12 +53,13 @@ export default function QueryHistoryPage() {
         icon={route.icon}
         title={adminRouteTitle(route)}
         divider
-        rightChildren={
-          <DateRangePicker
+        actions={[
+          <InputDateRangePicker
+            key="primary"
             value={dateRange}
             onValueChange={onTimeRangeChange}
-          />
-        }
+          />,
+        ]}
       />
 
       <SettingsLayouts.Body>

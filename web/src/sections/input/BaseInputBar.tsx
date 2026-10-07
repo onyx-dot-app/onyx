@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   forwardRef,
   memo,
@@ -18,7 +19,6 @@ import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button, Text } from "@opal/components";
 import { SvgArrowUp, SvgLoader, SvgStop } from "@opal/icons";
 import Keycap from "@/refresh-components/Keycap";
@@ -369,12 +369,9 @@ const BaseInputBar = memo(
                       : "w-0 opacity-0 pointer-events-none"
                   )}
                 >
-                  <IconButton
-                    main
-                    tertiary
-                    icon={isInterrupting ? SvgLoader : SvgStop}
-                    iconClassName={isInterrupting ? "animate-spin" : undefined}
-                    className="border-[1.5px] border-border-02"
+                  <Button
+                    prominence="tertiary"
+                    icon={isInterrupting ? IconLoader : SvgStop}
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}
                     tooltip={t("baseInputBar.stopButton.tooltip")}

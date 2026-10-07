@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { Fragment } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -21,12 +22,11 @@ import {
   SvgFiles,
   SvgCreateAgent,
   SvgManageAgent,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { Switch, Divider } from "@opal/components";
+import { InputSwitch, Divider } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { PermissionRegistryEntry } from "@/views/admin/GroupsPage/interfaces";
@@ -79,48 +79,45 @@ function GroupPermissionsSection({
   }
 
   return (
-    <SimpleCollapsible>
-      <SimpleCollapsible.Header
-        title={t("permissions.section.title")}
-        description={t("permissions.section.description")}
-      />
-      <SimpleCollapsible.Content>
-        {isLoading || !registry ? (
-          <SvgSimpleLoader />
-        ) : (
-          <Card>
-            {registry.map((entry, index) => {
-              const prevGroup =
-                index > 0 ? registry[index - 1]!.group : entry.group;
-              const icon = ICON_MAP[entry.id] ?? SvgShield;
-              return (
-                <Fragment key={entry.id}>
-                  {index > 0 && entry.group !== prevGroup && (
-                    <Divider paddingParallel={0} paddingPerpendicular={0} />
-                  )}
-                  <ContentAction
-                    icon={icon}
-                    title={entry.display_name}
-                    description={entry.description}
-                    sizePreset="main-ui"
-                    variant="section"
-                    padding={1}
-                    rightChildren={
-                      <Switch
-                        checked={isRowEnabled(entry)}
-                        onCheckedChange={(checked: boolean) =>
-                          handleToggle(entry, checked)
-                        }
-                      />
-                    }
-                  />
-                </Fragment>
-              );
-            })}
-          </Card>
-        )}
-      </SimpleCollapsible.Content>
-    </SimpleCollapsible>
+    <Collapsible
+      title={t("permissions.section.title")}
+      description={t("permissions.section.description")}
+    >
+      {isLoading || !registry ? (
+        <IconLoader />
+      ) : (
+        <Card>
+          {registry.map((entry, index) => {
+            const prevGroup =
+              index > 0 ? registry[index - 1]!.group : entry.group;
+            const icon = ICON_MAP[entry.id] ?? SvgShield;
+            return (
+              <Fragment key={entry.id}>
+                {index > 0 && entry.group !== prevGroup && (
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                )}
+                <ContentAction
+                  icon={icon}
+                  title={entry.display_name}
+                  description={entry.description}
+                  sizePreset="main-ui"
+                  variant="section"
+                  padding={1}
+                  rightChildren={
+                    <InputSwitch
+                      checked={isRowEnabled(entry)}
+                      onCheckedChange={(checked: boolean) =>
+                        handleToggle(entry, checked)
+                      }
+                    />
+                  }
+                />
+              </Fragment>
+            );
+          })}
+        </Card>
+      )}
+    </Collapsible>
   );
 }
 

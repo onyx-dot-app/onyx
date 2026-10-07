@@ -3,14 +3,12 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { FormField } from "@/refresh-components/form/FormField";
-import InputKeyValue, {
-  KeyValue,
-} from "@/refresh-components/inputs/InputKeyValue";
+import { InputKeyValue, type KeyValue } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Divider } from "@opal/components";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/MCPAuthenticationModal";
-import { MCPAuthenticationType } from "@/lib/tools/types";
+import { MCPAuthenticationType } from "@/lib/mcp/types";
 import { SvgUser } from "@opal/icons";
 
 // Rendered verbatim inside the help copy. Kept as ICU arguments so the braces
@@ -22,7 +20,7 @@ interface PerUserAuthConfigProps {
   values: MCPAuthFormValues;
   setFieldValue: (
     field: keyof MCPAuthFormValues | string,
-    value: unknown
+    value: MCPAuthFormValues[keyof MCPAuthFormValues] | string[]
   ) => void;
   mode?: "per-user" | "shared";
 }

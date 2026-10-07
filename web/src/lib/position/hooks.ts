@@ -55,12 +55,12 @@ function hrefFor(value: AppPositionType): Route {
         [SEARCH_PARAM_NAMES.PROJECT_ID]: value.id,
       });
     case "more-agents":
-      return "/app/agents" as Route;
+      return "/app/agents";
     case "user-settings":
-      return "/app/settings" as Route;
+      return "/app/settings";
     case "shared-chat":
     case "new-session":
-      return "/app" as Route;
+      return "/app";
   }
 }
 

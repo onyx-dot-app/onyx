@@ -49,7 +49,7 @@ export const SlackChannelConfigCreationForm = ({
     : false;
 
   const [searchEnabledAgents, nonSearchAgents] = useMemo(() => {
-    return personas.reduce(
+    return personas.reduce<[MinimalAgent[], MinimalAgent[]]>(
       (acc, persona) => {
         if (
           persona.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
@@ -60,7 +60,7 @@ export const SlackChannelConfigCreationForm = ({
         }
         return acc;
       },
-      [[], []] as [MinimalAgent[], MinimalAgent[]]
+      [[], []]
     );
   }, [personas]);
 

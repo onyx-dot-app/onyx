@@ -32,6 +32,7 @@ from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.voice.factory import get_voice_provider
+from onyx.voice.interface import VoiceProviderInterface, normalize_provider_type
 
 logger = setup_logger()
 
@@ -109,6 +110,26 @@ def _custom_config_to_view(
     return _sanitize_custom_config_dict(custom_config)
 
 
+def _validate_tts_activation_supported(
+    voice_provider: VoiceProviderInterface,
+) -> None:
+    if not voice_provider.get_available_tts_models():
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Voice provider does not support text-to-speech.",
+        )
+
+
+def _validate_target_uri_supported(
+    voice_provider: VoiceProviderInterface, api_base: str | None
+) -> None:
+    if api_base is not None and not voice_provider.supports_target_uri():
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "This voice provider does not support a target URI.",
+        )
+
+
 def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | None:
     """Validate and normalize provider api_base / target URI."""
     if api_base is None:
@@ -141,7 +162,9 @@ def _fetch_provider_for_stored_secret(
     if provider is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Voice provider not found.")
 
-    if provider.provider_type != provider_type:
+    if normalize_provider_type(provider.provider_type) != normalize_provider_type(
+        provider_type
+    ):
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "Stored API secret provider does not match the requested provider type.",
@@ -234,6 +257,9 @@ async def upsert_voice_provider_endpoint(
     # Validate credentials before committing - rollback on failure
     try:
         voice_provider = get_voice_provider(provider)
+        _validate_target_uri_supported(voice_provider, api_base)
+        if request.activate_tts or provider.is_default_tts:
+            _validate_tts_activation_supported(voice_provider)
         await voice_provider.validate_credentials()
     except OnyxError:
         db_session.rollback()
@@ -301,6 +327,21 @@ def activate_tts_provider_endpoint(
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Set a voice provider as the default TTS provider."""
+    # Lock the row so an upsert cannot switch it to an STT-only type between
+    # this check and set_default_tts_provider.
+    provider_db = fetch_voice_provider_by_id(db_session, provider_id, for_update=True)
+    if provider_db is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"No voice provider with id {provider_id} exists.",
+        )
+
+    try:
+        voice_provider = get_voice_provider(provider_db)
+        _validate_tts_activation_supported(voice_provider)
+    except ValueError as exc:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
+
     provider = set_default_tts_provider(
         db_session=db_session, provider_id=provider_id, tts_model=tts_model
     )
@@ -381,6 +422,7 @@ async def test_voice_provider(
         provider = get_voice_provider(temp_provider)
     except ValueError as exc:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
+    _validate_target_uri_supported(provider, api_base)
 
     # Validate credentials with a real API call
     try:

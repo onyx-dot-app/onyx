@@ -10,6 +10,7 @@ from the raw stored content (here) is equivalent to proving the resulting vector
 differs; the real-embedder path is exercised once the port task is wired.
 """
 
+from contextlib import nullcontext
 from typing import cast
 from unittest.mock import MagicMock
 
@@ -31,13 +32,14 @@ from onyx.db.models import SearchSettings
 from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_embedding,
 )
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.indexing.chunker import get_metadata_suffix_for_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 from onyx.indexing.port_reembed import (
+    CONTEXTUAL_RAG_REEMBED_TRACE_NAME,
     AugmentationReembedContext,
     ReembedStrategy,
     _bare_contents,
@@ -49,6 +51,7 @@ from onyx.indexing.port_reembed import (
     select_reembed_strategy,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.tracing.framework.traces import TraceContentMode
 from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.configs import (
     DOC_EMBEDDING_CONTEXT_SIZE,
@@ -431,6 +434,8 @@ def test_augmentation_enrich_on_generates_and_reembeds(
     monkeypatch.setattr(
         "onyx.indexing.indexing_pipeline.add_contextual_summaries", _fake_enrich
     )
+    ensure_trace = MagicMock(return_value=nullcontext())
+    monkeypatch.setattr("onyx.indexing.port_reembed.ensure_trace", ensure_trace)
 
     bare = "the body text"
     metadata_list = convert_metadata_dict_to_list_of_strings({"author": "Jane"})
@@ -466,6 +471,10 @@ def test_augmentation_enrich_on_generates_and_reembeds(
     assert result.chunk_context == " CONTEXT."
     assert (
         result.content == f"My Title{RETURN_SEPARATOR}SUMMARY. {bare} CONTEXT.{keyword}"
+    )
+    ensure_trace.assert_called_once_with(
+        CONTEXTUAL_RAG_REEMBED_TRACE_NAME,
+        content_mode=TraceContentMode.METADATA_ONLY,
     )
 
     # the embedded text carries the new summaries; vector differs from strip-only
@@ -523,6 +532,58 @@ def test_augmentation_mixed_docs_enrich_per_document(
     assert results[0].doc_summary == "[doc-a:a-first a-second] "
     assert results[1].doc_summary == "[doc-b:b-only] "
     assert results[2].doc_summary == "[doc-a:a-first a-second] "
+
+
+def test_model_only_strips_stored_context_when_asked() -> None:
+    """With the FUTURE off, a MODEL_ONLY re-embed drops the doc summary and
+    chunk context a forward-only disable left in the stored chunk, from the
+    vector and from the stored fields. Only the copies indexing appended go,
+    so a body sentence the context repeats stays where it was."""
+    chunk = _stored_chunk(
+        "Summary. Context. body text Context.",
+        title=None,
+        doc_summary="Summary. ",
+        chunk_context=" Context.",
+    )
+    embedder = cast(IndexingEmbedder, _ContentVecEmbedder())
+
+    kept = re_embed_chunks(
+        [chunk], ReembedStrategy.MODEL_ONLY, embedder, present_tokenizer=_TOKENIZER
+    )
+    stripped = re_embed_chunks(
+        [chunk],
+        ReembedStrategy.MODEL_ONLY,
+        embedder,
+        present_tokenizer=_TOKENIZER,
+        strip_stored_context=True,
+    )
+
+    assert kept[0].content_vector == _vec("Summary. Context. body text Context.")
+    assert kept[0].doc_summary == "Summary. "
+    assert stripped[0].content_vector == _vec("Context. body text")
+    assert stripped[0].content == "Context. body text"
+    assert stripped[0].doc_summary == ""
+    assert stripped[0].chunk_context == ""
+
+
+def test_model_only_strip_leaves_a_title_that_repeats_the_summary() -> None:
+    """The summary is removed after the title prefix even when the title
+    contains the same words."""
+    chunk = _stored_chunk(
+        f"Summary{RETURN_SEPARATOR}Summary body",
+        title="Summary",
+        doc_summary="Summary",
+    )
+
+    stripped = re_embed_chunks(
+        [chunk],
+        ReembedStrategy.MODEL_ONLY,
+        cast(IndexingEmbedder, _ContentVecEmbedder()),
+        present_tokenizer=_TOKENIZER,
+        strip_stored_context=True,
+    )
+
+    assert stripped[0].content == f"Summary{RETURN_SEPARATOR} body"
 
 
 def test_reembed_pairs_embeddings_by_identity_not_position() -> None:

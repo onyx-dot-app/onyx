@@ -1,73 +1,134 @@
 import copy
+import json
 import math
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Union, cast
 
+from pydantic import BaseModel
 from readerwriterlock import rwlock
 
-from onyx.configs.app_configs import (
-    MOCK_LLM_RESPONSE,
-    SEND_USER_METADATA_TO_LLM_PROVIDER,
-)
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import (
     LLM_FIRST_CHUNK_MAX_RETRIES,
+    LLM_INVOKE_TIMEOUT_S,
     LLM_SOCKET_READ_TIMEOUT,
 )
-from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
+from onyx.configs.model_configs import (
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+    GEN_AI_TEMPERATURE,
+    LITELLM_EXTRA_BODY,
+)
 from onyx.llm.api_surfaces import (
     OPENAI_COMPATIBLE_SURFACES,
     LlmApiSurface,
     resolve_api_surface,
 )
+from onyx.llm.cancellation import isolated_context
 from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR, LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
 )
-from onyx.llm.interfaces import (
-    LLM,
-    LanguageModelInput,
-    LLMConfig,
-    LLMUserIdentity,
-    ReasoningEffort,
-    ToolChoice,
-)
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.model_capabilities import (
+    OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
+    anthropic_identity_is_always_thinking,
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
+    gemini_lowest_thinking_level_is_low,
     is_true_openai_model,
     model_is_reasoning_model,
+    openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
+    openai_model_supports_reasoning_none,
     resolve_reasoning_param_style,
 )
 from onyx.llm.model_capabilities import (
     model_identity_names as resolve_model_identity_names,
 )
-from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
+from onyx.llm.model_request import (
+    ChatCompletionMessage,
+    RequestFunctionCall,
+    serialize_request,
+    serialize_tools,
+)
+from onyx.llm.model_request import ToolCall as ProviderToolCall
+from onyx.llm.model_response import (
+    MessageAccumulator,
+    ModelResponse,
+    ModelResponseStream,
+    to_assistant_message,
+)
 from onyx.llm.models import (
-    ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
-    ANTHROPIC_REASONING_EFFORT_BUDGET,
-    OPENAI_REASONING_EFFORT,
+    AssistantMessage,
+    GenerationErrorEvent,
+    GenerationEvent,
+    GenerationRequest,
+    GenerationRequestParams,
+    GenerationStartEvent,
     NamedToolChoice,
+    ReasoningEffort,
+    ToolChoice,
     ToolChoiceOptions,
+    Usage,
     resolve_reasoning_effort,
 )
-from onyx.llm.request_context import get_llm_mock_response, set_llm_request_params
-from onyx.llm.utils import build_litellm_passthrough_kwargs
+from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.tracing.llm_utils import record_llm_request_params
-from onyx.utils.encryption import mask_env_value_for_logging, mask_string
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import (
+    llm_generation_span,
+    record_llm_request_params,
+    record_llm_response,
+    record_llm_span_output,
+)
+from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.logger import setup_logger
+from onyx.utils.redaction import scrub_sensitive_values
+
+# OpenAI reasoning effort mapping
+# Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
+OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
+    ReasoningEffort.AUTO: "medium",  # Default to medium when auto is requested
+    ReasoningEffort.OFF: "none",
+    ReasoningEffort.LOW: "low",
+    ReasoningEffort.MEDIUM: "medium",
+    ReasoningEffort.HIGH: "high",
+    ReasoningEffort.XHIGH: "xhigh",
+}
+
+# Anthropic reasoning effort to budget tokens mapping
+# Loosely based on budgets from LiteLLM but this ensures it's not updated without our knowing from a version bump.
+ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
+    ReasoningEffort.AUTO: 2048,
+    ReasoningEffort.LOW: 1024,
+    ReasoningEffort.MEDIUM: 2048,
+    ReasoningEffort.HIGH: 4096,
+    ReasoningEffort.XHIGH: 4096,
+}
+
+# Newer Anthropic models (Claude Opus 4.7+) use adaptive thinking with
+# output_config.effort instead of thinking.type.enabled + budget_tokens.
+ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
+    ReasoningEffort.AUTO: "medium",
+    ReasoningEffort.LOW: "low",
+    ReasoningEffort.MEDIUM: "medium",
+    ReasoningEffort.HIGH: "high",
+    ReasoningEffort.XHIGH: "xhigh",
+}
 
 logger = setup_logger()
+
 
 # Write-preferring reader-writer lock guarding os.environ during litellm calls.
 # Calls that inject custom_config env vars hold the write lock; all other calls
@@ -93,10 +154,11 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-7",
     "claude-opus-4-8",
 )
+_ANTHROPIC_MIN_THINKING_BUDGET_TOKENS = 1024
 
 # Best-effort tuning kwargs, never worth failing a chat over. _completion
-# retries provider rejections without them: reasoning keys first, then all.
-# Semantics-changing keys (tools, tool_choice, messages) are never stripped.
+# retries provider rejections without them (reasoning keys first, then all),
+# keeping keys a provider requires. Never tools, tool_choice or messages.
 _REASONING_KWARG_KEYS = frozenset(
     {"thinking", "output_config", "reasoning", "reasoning_effort"}
 )
@@ -111,6 +173,11 @@ _KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
     "reasoning_effort": ("reasoning_effort", "effort"),
     "temperature": ("temperature",),
 }
+
+# Substring of the OpenAI-family 400 that names "none" as the only effort
+# accepted alongside function tools. Omitting the parameter gets the same 400.
+_REASONING_NONE_DEMAND = "set reasoning_effort to 'none'"
+_OPENAI_REASONING_NONE = OPENAI_REASONING_EFFORT[ReasoningEffort.OFF]
 
 
 def _merge_under(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -150,49 +217,117 @@ def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -
     )
 
 
-class LLMTimeoutError(Exception):
-    """
-    Exception raised when an LLM call times out.
-    """
+def _rejection_demands_reasoning_none(error: Exception) -> bool:
+    return _REASONING_NONE_DEMAND in str(error).lower()
 
 
-class LLMRateLimitError(Exception):
-    """
-    Exception raised when an LLM call is rate limited.
-    """
+def _litellm_bridges_tool_turn_to_responses(
+    model: str, custom_llm_provider: str | None
+) -> bool:
+    """True when LiteLLM sends this chat call to the responses API once it
+    carries tools and reasoning_effort. Mirrors `responses_api_bridge_check`."""
+    from litellm.llms.openai.chat.gpt_5_transformation import OpenAIGPT5Config
+
+    provider = custom_llm_provider or model.split("/")[0]
+    return (
+        provider in (LlmProviderNames.OPENAI, LlmProviderNames.AZURE)
+        and "responses/" not in model
+        and OpenAIGPT5Config.is_model_gpt_5_model(model)
+        and not OpenAIGPT5Config.is_model_gpt_5_search_model(model)
+        and OpenAIGPT5Config.is_model_gpt_5_4_plus_model(model)
+    )
 
 
-def _consume_stream_with_timeout(stream: Any, total_timeout: float | None) -> list[Any]:
-    """Drain a litellm stream, capping total wall-clock time when set.
+def _retry_attempts(
+    kwargs: dict[str, Any], required_keys: frozenset[str]
+) -> list[dict[str, Any]]:
+    """The ladder: the kwargs as given, then without reasoning keys, then
+    without every best-effort key, skipping steps that drop nothing."""
+    attempts = [kwargs]
+    for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
+        stripped = {
+            k: v for k, v in kwargs.items() if k not in strip_keys or k in required_keys
+        }
+        if len(stripped) < len(attempts[-1]):
+            attempts.append(stripped)
+    return attempts
+
+
+class ProviderOperation(BaseModel):
+    """Diagnostics for one provider call, including its retry attempts."""
+
+    request_params: GenerationRequestParams | None = None
+
+
+def _event_with_request_params(
+    event: GenerationEvent, operation: ProviderOperation
+) -> GenerationEvent:
+    return event.model_copy(
+        update={"request_params": copy.deepcopy(operation.request_params)}
+    )
+
+
+def _as_onyx_llm_error(error: Exception) -> Exception:
+    """Translate a litellm exception into the Onyx one callers catch.
+
+    litellm raises a failure during a stream as ``MidStreamFallbackError`` (a
+    ``ServiceUnavailableError``), including 429s. It keeps the real cause in
+    ``original_exception``, but leaves ``__cause__`` empty and puts only a
+    message in ``args``. Chat's error classifier follows ``__cause__``, so we
+    set it on the wrapper, whether or not the cause maps to an Onyx error.
+
+    A mapped error also has its ``__cause__`` set to the real cause, so raise
+    the result without ``from``.
+    """
+    from litellm.exceptions import MidStreamFallbackError, RateLimitError, Timeout
+
+    cause = error
+    if isinstance(error, MidStreamFallbackError) and error.original_exception:
+        cause = error.original_exception
+        error.__cause__ = cause
+    mapped: Exception
+    if isinstance(cause, Timeout):
+        mapped = LLMTimeoutError(cause)
+    elif isinstance(cause, RateLimitError):
+        mapped = LLMRateLimitError(cause)
+    else:
+        return error
+    mapped.__cause__ = cause
+    return mapped
+
+
+def _consume_stream_until_deadline(stream: Any, deadline: float) -> list[Any]:
+    """Drain a litellm stream, capping total wall-clock time at ``deadline``.
 
     The socket read timeout only bounds the gap between packets, so keepalive
     pings defeat it; this caps the whole call. On breach we raise — never close,
     since litellm 1.93.0 exposes only async ``aclose`` — which frees the thread;
     GC releases the connection.
-    """
-    if total_timeout is None:
-        return list(stream)
 
-    deadline = time.monotonic() + total_timeout
+    The deadline is only checked between chunks, so a call can overshoot it by
+    up to one socket read timeout.
+    """
     chunks: list[Any] = []
-    for chunk in stream:
-        chunks.append(chunk)
-        if time.monotonic() > deadline:
-            raise LLMTimeoutError(
-                f"LLM streaming call exceeded total timeout of {total_timeout}s"
-            )
+    try:
+        for chunk in stream:
+            chunks.append(chunk)
+            if time.monotonic() > deadline:
+                raise LLMTimeoutError("LLM streaming call exceeded its total timeout")
+    except LLMTimeoutError:
+        raise
+    except Exception as e:
+        # The request itself succeeded, so _completion's mapping never saw this.
+        raise _as_onyx_llm_error(e)
     return chunks
 
 
-def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
+def _prompt_to_dicts(prompt: list[ChatCompletionMessage]) -> list[dict[str, Any]]:
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
     LiteLLM expects messages to be dictionaries (with .get() method),
     not Pydantic models. This function serializes the messages.
     """
-    if isinstance(prompt, list):
-        return [msg.model_dump(exclude_none=True) for msg in prompt]
-    return [prompt.model_dump(exclude_none=True)]
+    return [msg.model_dump(exclude_none=True) for msg in prompt]
 
 
 def _normalize_content(raw: Any) -> str:
@@ -346,19 +481,19 @@ def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
-    """Check if the prompt contains any assistant messages with tool_calls.
+def _prompt_in_tool_loop(prompt: list[ChatCompletionMessage]) -> bool:
+    """True when the latest assistant message called tools.
 
-    When Anthropic's extended thinking is enabled, the API requires every
-    assistant message to start with a thinking block before any tool_use
-    blocks.  Since we don't preserve thinking_blocks (they carry
-    cryptographic signatures that can't be reconstructed), we must skip
-    the thinking param whenever history contains prior tool-calling turns.
+    With thinking on, Anthropic requires that message to start with its signed
+    thinking block, which we cannot always replay. Earlier turns' thinking
+    blocks are optional, so tool calls there do not matter.
     """
-    from onyx.llm.models import AssistantMessage
+    from onyx.llm.model_request import AssistantMessage as ProviderAssistantMessage
 
-    msgs = prompt if isinstance(prompt, list) else [prompt]
-    return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)
+    for msg in reversed(prompt):
+        if isinstance(msg, ProviderAssistantMessage):
+            return bool(msg.tool_calls)
+    return False
 
 
 @lru_cache(maxsize=None)
@@ -376,6 +511,22 @@ def _log_azure_responses_api_version_override(
         "chat-completions calls.",
         api_base,
         configured_api_version,
+    )
+
+
+@lru_cache(maxsize=None)
+def _log_chat_completions_tools_disable_reasoning(
+    model: str, api_base: str | None
+) -> None:
+    """Log once per model and api_base per process, for the same reason as
+    `_log_azure_responses_api_version_override`."""
+    logger.warning(
+        "%s at %s is reached over chat completions, where GPT-5.4+ cannot "
+        "combine function tools with reasoning. Tool-bearing requests send "
+        "reasoning_effort=none. To keep reasoning, switch the provider to the "
+        "responses API mode or use a model name the registry knows.",
+        model,
+        api_base,
     )
 
 
@@ -416,7 +567,6 @@ class LitellmLLM(LLM):
         model_provider: str,
         model_name: str,
         max_input_tokens: int,
-        timeout: int | None = None,
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
@@ -429,14 +579,10 @@ class LitellmLLM(LLM):
         reasoning_effort_default: ReasoningEffort | None = None,
         reasoning_effort_user_default: ReasoningEffort | None = None,
         reasoning_effort_max: ReasoningEffort | None = None,
+        supports_reasoning: bool = False,
     ):
-        # Timeout in seconds for each socket read operation (i.e., max time between
-        # receiving data chunks/tokens). This is NOT a total request timeout - a
-        # request can run indefinitely as long as data keeps arriving within this
-        # window. If the LLM pauses for longer than this timeout between chunks,
-        # a ReadTimeout is raised.
-        self._timeout = timeout if timeout is not None else LLM_SOCKET_READ_TIMEOUT
-
+        # No instance-level timeout: invoke() and stream() each take their own,
+        # so an instance default would be a second source of truth.
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
         self._model_provider = model_provider
@@ -451,6 +597,7 @@ class LitellmLLM(LLM):
         self._reasoning_effort_default = reasoning_effort_default
         self._reasoning_effort_user_default = reasoning_effort_user_default
         self._reasoning_effort_max = reasoning_effort_max
+        self._supports_reasoning = supports_reasoning
 
         self._api_surface = resolve_api_surface(model_provider, custom_config)
 
@@ -530,18 +677,6 @@ class LitellmLLM(LLM):
 
         self._model_kwargs = model_kwargs
 
-    def _safe_model_config(self) -> dict:
-        dump = self.config.model_dump()
-        dump["api_key"] = mask_string(dump.get("api_key") or "")
-        custom_config = dump.get("custom_config")
-        if isinstance(custom_config, dict):
-            # Mask sensitive values in custom_config
-            masked_config = {}
-            for k, v in custom_config.items():
-                masked_config[k] = mask_string(v) if v else v
-            dump["custom_config"] = masked_config
-        return dump
-
     def _track_llm_cost(self, usage: Usage) -> None:
         """
         Track LLM usage cost for Onyx-managed API keys.
@@ -589,22 +724,31 @@ class LitellmLLM(LLM):
 
     def _completion(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict] | None,
         tool_choice: ToolChoice | None,
         stream: bool,
         parallel_tool_calls: bool,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
+        read_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
+        operation: ProviderOperation | None = None,
+        env_injection_enabled: bool | None = None,
+        deadline: float | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
-        from litellm.exceptions import BadRequestError, RateLimitError, Timeout
+        from litellm.exceptions import BadRequestError
 
         from onyx.llm.litellm_singleton import litellm
+
+        # One snapshot of the setting for the whole call. A caller that made a
+        # decision on it (invoke's stream choice) passes its own value so the
+        # two cannot diverge if an admin flips the setting mid-call.
+        if env_injection_enabled is None:
+            env_injection_enabled = _env_injection_enabled()
 
         #########################
         # Flags that modify the final arguments
@@ -622,7 +766,8 @@ class LitellmLLM(LLM):
             anthropic_supports_thinking(name) for name in model_identity_names
         )
         is_reasoning = (
-            uses_adaptive_thinking
+            self.config.supports_reasoning
+            or uses_adaptive_thinking
             or model_supports_anthropic_thinking
             or any(
                 model_is_reasoning_model(name, self.config.model_provider)
@@ -651,6 +796,8 @@ class LitellmLLM(LLM):
         #########################
         # Optional kwargs - should only be passed to LiteLLM under certain conditions
         optional_kwargs: dict[str, Any] = {}
+        # Kwargs the provider requires, which the retry ladder must never strip.
+        required_kwarg_keys: frozenset[str] = frozenset()
 
         # Model name
         is_openai_compatible_proxy = self._api_surface in OPENAI_COMPATIBLE_SURFACES
@@ -736,33 +883,90 @@ class LitellmLLM(LLM):
             maximum=self.config.reasoning_effort_max,
         )
 
+        litellm_bridges_tool_turn = bool(
+            tools
+        ) and _litellm_bridges_tool_turn_to_responses(model, self._custom_llm_provider)
+
+        # Tool turns over chat completions for GPT-5.4+ trade reasoning for a
+        # working call. Responses routes, registry bridge included, are exempt.
+        if (
+            tools
+            and not is_openai_model
+            and not litellm_bridges_tool_turn
+            and (
+                self._api_surface is LlmApiSurface.OPENAI_CHAT_COMPLETIONS
+                or self._model_provider in OPENAI_API_PROVIDERS
+            )
+            and any(
+                openai_chat_tools_require_reasoning_none(name)
+                for name in model_identity_names
+            )
+        ):
+            reasoning_effort = ReasoningEffort.OFF
+            optional_kwargs["reasoning_effort"] = _OPENAI_REASONING_NONE
+            required_kwarg_keys = frozenset({"reasoning_effort"})
+            _log_chat_completions_tools_disable_reasoning(model, self._api_base)
+
+        reasoning_style = resolve_reasoning_param_style(
+            self.config.model_provider,
+            model_identity_names,
+            self._api_surface,
+        )
+
+        # Fable and Mythos never stop thinking, so off there means the least
+        # reasoning they take rather than the API's own default.
+        if (
+            reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+            and anthropic_identity_is_always_thinking(model_identity_names)
+        ):
+            reasoning_effort = ReasoningEffort.LOW
+
+        if (
+            reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.LITELLM_EFFORT
+            and any(
+                gemini_lowest_thinking_level_is_low(name)
+                for name in model_identity_names
+            )
+        ):
+            reasoning_effort = ReasoningEffort.LOW
+
+        # The tools block above already forced reasoning_effort "none".
+        sends_explicit_reasoning_none = (
+            reasoning_effort is ReasoningEffort.OFF
+            and "reasoning_effort" not in optional_kwargs
+            and any(
+                openai_model_supports_reasoning_none(name)
+                for name in model_identity_names
+            )
+        )
+
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
         # of the major providers. Not setting it sets it to OFF.
         if (
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
-            and reasoning_effort != ReasoningEffort.OFF
+            and (
+                reasoning_effort != ReasoningEffort.OFF or sends_explicit_reasoning_none
+            )
             and not any(
                 openai_model_rejects_reasoning_effort(name)
                 for name in model_identity_names
             )
         ):
-            openai_style_reasoning = {
+            openai_style_reasoning: dict[str, str] = {
                 "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                "summary": "auto",
             }
-            reasoning_style = resolve_reasoning_param_style(
-                self.config.model_provider,
-                model_identity_names,
-                self._api_surface,
-            )
+            if not sends_explicit_reasoning_none:
+                openai_style_reasoning["summary"] = "auto"
 
             if reasoning_style is ReasoningParamStyle.OPENAI:
                 if is_claude_model:
                     # Only a gateway routes Claude here, and it still translates
                     # to Anthropic, so the signed-thinking-block constraint
                     # described below applies to these requests too.
-                    send_reasoning = not _prompt_contains_tool_call_history(prompt)
+                    send_reasoning = not _prompt_in_tool_loop(prompt)
                 else:
                     # OpenAI API does not accept reasoning params for GPT 5 chat
                     # models (neither reasoning nor reasoning_effort are accepted)
@@ -773,31 +977,33 @@ class LitellmLLM(LLM):
                     )
                 if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
+                    if (
+                        sends_explicit_reasoning_none
+                        and self.config.model_provider == LlmProviderNames.OPENAI
+                    ):
+                        # A retry without "none" runs at the medium default.
+                        # Gateways may reject "none", so only OpenAI itself
+                        # pins it.
+                        required_kwarg_keys = required_kwarg_keys | {"reasoning"}
 
             elif reasoning_style in (
                 ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
                 ReasoningParamStyle.ANTHROPIC_BUDGET,
             ):
-                # Anthropic requires every assistant message with tool_use
-                # blocks to start with a thinking block that carries a
-                # cryptographic signature.  We don't preserve those blocks
-                # across turns, so skip thinking when the history already
-                # contains tool-calling assistant messages.  LiteLLM's
+                # Mid tool loop, Anthropic requires the signed thinking block
+                # we may not have, so skip thinking there. LiteLLM's
                 # modify_params workaround doesn't cover all providers
                 # (notably Bedrock).
-                has_tool_call_history = _prompt_contains_tool_call_history(prompt)
+                in_tool_loop = _prompt_in_tool_loop(prompt)
 
                 if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
-                    # Newer Anthropic models (Claude Opus 4.7+) reject
-                    # thinking.type.enabled — they require the adaptive
-                    # thinking config with output_config.effort.
-                    if not has_tool_call_history:
+                    # No signed blocks to lose, and without it Claude 5 picks
+                    # its own effort rather than ours.
+                    optional_kwargs["output_config"] = {
+                        "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[reasoning_effort],
+                    }
+                    if not in_tool_loop:
                         optional_kwargs["thinking"] = {"type": "adaptive"}
-                        optional_kwargs["output_config"] = {
-                            "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[
-                                reasoning_effort
-                            ],
-                        }
                 else:
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
@@ -807,20 +1013,25 @@ class LitellmLLM(LLM):
                     # use), so skip thinking for a NamedToolChoice.
                     if (
                         budget_tokens is not None
-                        and not has_tool_call_history
+                        and not in_tool_loop
                         and not isinstance(tool_choice, NamedToolChoice)
                     ):
                         if max_tokens is not None:
-                            # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
-                            # and the minimum budget tokens is 1024
-                            # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
-                            # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
-                            # call as compared to reducing the budget for reasoning.
-                            max_tokens = max(budget_tokens + 1, max_tokens)
-                        optional_kwargs["thinking"] = {
-                            "type": "enabled",
-                            "budget_tokens": budget_tokens,
-                        }
+                            response_reserve = max(1, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS)
+                            budget_tokens = min(
+                                budget_tokens, max_tokens - response_reserve
+                            )
+                        if budget_tokens >= _ANTHROPIC_MIN_THINKING_BUDGET_TOKENS:
+                            optional_kwargs["thinking"] = {
+                                "type": "enabled",
+                                "budget_tokens": budget_tokens,
+                            }
+                        else:
+                            logger.warning(
+                                "Skipping Anthropic thinking: max_tokens=%s cannot "
+                                "fit the minimum thinking budget and answer reserve",
+                                max_tokens,
+                            )
 
             else:
                 # Hope for the best from LiteLLM
@@ -836,8 +1047,29 @@ class LitellmLLM(LLM):
                     # picker greys the level out for these models, so reaching
                     # here means a stored override outliving a model switch.
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
+                elif reasoning_effort is ReasoningEffort.OFF:
+                    optional_kwargs["reasoning_effort"] = _OPENAI_REASONING_NONE
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
+
+        # The bridge keys on reasoning_effort, which also takes the summary.
+        # Without one the call stays on chat completions and fails.
+        if litellm_bridges_tool_turn:
+            if "reasoning_effort" not in optional_kwargs:
+                optional_kwargs["reasoning_effort"] = optional_kwargs.pop(
+                    "reasoning", _OPENAI_REASONING_NONE
+                )
+            required_kwarg_keys = required_kwarg_keys | {"reasoning_effort"}
+
+        # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
+        # No effort with it, which Opus 5 caps, and no signed-block guard like
+        # the sibling branch: that one binds only while thinking is on.
+        if (
+            is_reasoning
+            and reasoning_effort is ReasoningEffort.OFF
+            and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
+        ):
+            optional_kwargs["thinking"] = {"type": "disabled"}
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
@@ -857,6 +1089,10 @@ class LitellmLLM(LLM):
             # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
             # See also, https://github.com/ollama/ollama/issues/11171
             optional_kwargs["allowed_openai_params"] = ["tool_choice"]
+            # drop_params removes reasoning_effort for any model LiteLLM does
+            # not list as a reasoning model, e.g. Gemini behind a gateway.
+            if is_openai_compatible_proxy and "reasoning_effort" in optional_kwargs:
+                optional_kwargs["allowed_openai_params"].append("reasoning_effort")
 
         # Passthrough kwargs
         passthrough_kwargs = build_litellm_passthrough_kwargs(
@@ -963,24 +1199,35 @@ class LitellmLLM(LLM):
                 else:
                     optional_kwargs["tool_choice"] = tool_choice
 
-            if not _env_injection_enabled() and self._env_only_custom_config:
+            if not env_injection_enabled and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
                     self._model_provider,
                     tuple(sorted(self._env_only_custom_config)),
                 )
 
+            def _attempt_timeout() -> float:
+                # The retry ladder below can make several requests. With a
+                # deadline, each one gets only the time left, so retries cannot
+                # stretch invoke() past its total timeout.
+                if deadline is None:
+                    return read_timeout_s
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise LLMTimeoutError("LLM call exceeded its total timeout")
+                return min(read_timeout_s, remaining)
+
             def _call_litellm(opts: dict[str, Any]) -> Any:
+                timeout = _attempt_timeout()
                 # Injection disabled means no env writer exists anywhere in
                 # the process, so skip the rwlock entirely. Built per attempt
                 # because the context manager is single-use.
                 env_ctx: AbstractContextManager[None] = (
                     temporary_env_and_lock(self._env_only_custom_config)
-                    if _env_injection_enabled()
+                    if env_injection_enabled
                     else nullcontext()
                 )
                 with env_ctx:
                     return litellm.completion(
-                        mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                         model=model,
                         base_url=self._api_base or None,
                         api_version=api_version,
@@ -990,66 +1237,81 @@ class LitellmLLM(LLM):
                         # servers reject requests with an empty tools array.
                         tools=tools or None,
                         stream=stream,
-                        timeout=timeout_override or self._timeout,
+                        timeout=timeout,
                         max_tokens=max_tokens,
                         client=client,
                         **opts,
                         **passthrough_kwargs,
                     )
 
-            # Retry ladder for provider 400s: drop reasoning kwargs, then every
-            # best-effort kwarg. Unknown models or capability drift degrade to
-            # provider defaults with a warning instead of failing the message.
-            attempts = [optional_kwargs]
-            for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
-                stripped = {
-                    k: v for k, v in optional_kwargs.items() if k not in strip_keys
-                }
-                if len(stripped) < len(attempts[-1]):
-                    attempts.append(stripped)
+            # Provider 400s degrade to provider defaults with a warning instead
+            # of failing the message, or learn the "none" a provider demands.
+            attempts = _retry_attempts(optional_kwargs, required_kwarg_keys)
 
             for i, opts in enumerate(attempts):
                 # Last write wins: sent_kwargs holds what the returning (or
                 # final failing) attempt sent, reasoning_effort the effective
                 # intent. One dict, two sinks, so they cannot drift.
-                request_params = {
-                    "model_name": self.config.model_name,
-                    "model_provider": self.config.model_provider,
-                    "reasoning_effort": reasoning_effort.value,
-                    "max_tokens": max_tokens,
-                    "sent_kwargs": {
+                request_params = GenerationRequestParams(
+                    model_name=self.config.model_name,
+                    model_provider=self.config.model_provider,
+                    reasoning_effort=reasoning_effort,
+                    max_tokens=max_tokens,
+                    sent_kwargs={
                         k: _json_safe(opts[k])
                         for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
                     },
-                }
+                )
                 record_llm_request_params(request_params)
-                set_llm_request_params(request_params)
+                if operation is not None:
+                    operation.request_params = request_params
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
-                    if i == len(attempts) - 1:
+                    if (
+                        _rejection_demands_reasoning_none(e)
+                        and opts.get("reasoning_effort") != _OPENAI_REASONING_NONE
+                    ):
+                        # A name the version gate cannot place learns "none" from
+                        # the 400 itself, one round trip late. Rebuilt attempts all
+                        # carry it, so the loop picks up the tail and this fires once.
+                        reasoning_effort = ReasoningEffort.OFF
+                        forced = {
+                            k: v
+                            for k, v in opts.items()
+                            if k not in _REASONING_KWARG_KEYS
+                        } | {"reasoning_effort": _OPENAI_REASONING_NONE}
+                        attempts[i + 1 :] = _retry_attempts(
+                            forced, required_kwarg_keys | {"reasoning_effort"}
+                        )
+                        _log_chat_completions_tools_disable_reasoning(
+                            model, self._api_base
+                        )
+                    elif i == len(attempts) - 1:
                         raise
-                    # Only retry rejections a later attempt can strip away.
-                    remaining_strippable = set(opts) - set(attempts[-1])
-                    if not _rejection_names_strippable_kwargs(e, remaining_strippable):
+                    elif not _rejection_names_strippable_kwargs(
+                        e, set(opts) - set(attempts[-1])
+                    ):
                         raise
                     logger.warning(
-                        "Provider rejected request for model %s. Retrying "
-                        "without %s: %s",
+                        "Provider rejected request for model %s. Retrying with %s: %s",
                         model,
-                        sorted(set(opts) - set(attempts[i + 1])),
+                        sorted(_BEST_EFFORT_KWARG_KEYS & attempts[i + 1].keys()),
                         e,
                     )
             raise RuntimeError("unreachable: retry ladder always returns or raises")
         except Exception as e:
-            # for break pointing
-            if isinstance(e, Timeout):
-                raise LLMTimeoutError(e)
+            raise _as_onyx_llm_error(e)
 
-            elif isinstance(e, RateLimitError):
-                raise LLMRateLimitError(e)
-
-            raise e
+    def redact_error(self, text: str) -> str:
+        config = self.config
+        credentials = collect_credential_values(config.api_key, config.custom_config)
+        # custom_config can map a key to model_kwargs["api_key"] under a name
+        # that is_sensitive_custom_config_key does not match.
+        effective_key = self._model_kwargs.get("api_key")
+        if isinstance(effective_key, str):
+            credentials.append(effective_key)
+        return scrub_sensitive_values(text, credentials)
 
     @property
     def config(self) -> LLMConfig:
@@ -1066,6 +1328,7 @@ class LitellmLLM(LLM):
             reasoning_effort_default=self._reasoning_effort_default,
             reasoning_effort_user_default=self._reasoning_effort_user_default,
             reasoning_effort_max=self._reasoning_effort_max,
+            supports_reasoning=self._supports_reasoning,
         )
 
     def _uses_isolated_client(self) -> bool:
@@ -1082,18 +1345,28 @@ class LitellmLLM(LLM):
             LlmProviderNames.BEDROCK_CONVERSE,
         )
 
-    def invoke(
+    def invoke_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
-        total_timeout_override: float | None = None,
+        total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
+        operation: ProviderOperation | None = None,
     ) -> ModelResponse:
+        """One complete provider response within ``total_timeout_s``.
+
+        The caller owns the generation span. Use ``invoke`` for shared messages.
+
+        Sends one plain request, so the socket read timeout is the whole budget.
+        The only exception is env injection of custom_config (self-hosted
+        default): the process-wide env lock must cover connection setup only,
+        not a whole inference, so we stream and reassemble. The deadline then
+        applies between chunks.
+        """
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -1135,51 +1408,51 @@ class LitellmLLM(LLM):
         # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
         # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
         # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
-        # Cap the per-read timeout at the total budget. The deadline is only
-        # checked between chunks, so without this a single blocking read could
-        # overshoot a total shorter than the socket read timeout. No-op when the
-        # total exceeds it (our defaults do).
-        read_timeout = timeout_override or self._timeout
-        if total_timeout_override is not None:
-            read_timeout = min(read_timeout, max(1, int(total_timeout_override)))
+        deadline = time.monotonic() + total_timeout_s
+        env_injection_enabled = _env_injection_enabled()
+        use_stream = env_injection_enabled
+        read_timeout = max(1, math.ceil(total_timeout_s))
 
         client = None
         if self._uses_isolated_client():
             client = HTTPHandler(timeout=read_timeout)
 
         try:
-            # When env-only custom_config keys are injected (self-hosted
-            # deployments only), they are set under a global lock. Using
-            # stream=True here means the lock is only held during connection
-            # setup (not the full inference). The chunks are then collected
-            # outside the lock and reassembled into a single ModelResponse
-            # via stream_chunk_builder.
-            from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
-            from litellm import stream_chunk_builder
+            raw_response = self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=use_stream,
+                structured_response_format=structured_response_format,
+                read_timeout_s=read_timeout,
+                max_tokens=max_tokens,
+                parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
+                user_identity=user_identity,
+                client=client,
+                operation=operation,
+                env_injection_enabled=env_injection_enabled,
+                deadline=deadline,
+            )
+            if use_stream:
+                from litellm import (
+                    CustomStreamWrapper as LiteLLMCustomStreamWrapper,
+                )
+                from litellm import stream_chunk_builder
 
-            stream_response = cast(
-                LiteLLMCustomStreamWrapper,
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=True,
-                    structured_response_format=structured_response_format,
-                    timeout_override=read_timeout,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                ),
-            )
-            chunks = _consume_stream_with_timeout(
-                stream_response, total_timeout_override
-            )
-            response = cast(
-                LiteLLMModelResponse,
-                stream_chunk_builder(chunks),
-            )
+                chunks = _consume_stream_until_deadline(
+                    cast(LiteLLMCustomStreamWrapper, raw_response), deadline
+                )
+                # stream_chunk_builder returns None for an empty stream. Without
+                # this the cast would hide it until an AttributeError downstream.
+                built = stream_chunk_builder(chunks)
+                if built is None:
+                    raise ValueError(
+                        f"LLM {self.config.model_name} returned an empty stream"
+                    )
+                response = cast(LiteLLMModelResponse, built)
+            else:
+                response = cast(LiteLLMModelResponse, raw_response)
 
             model_response = from_litellm_model_response(response)
 
@@ -1192,17 +1465,25 @@ class LitellmLLM(LLM):
             if client is not None:
                 client.close()
 
-    def stream(
+    def stream_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
+        operation: ProviderOperation | None = None,
     ) -> Iterator[ModelResponseStream]:
+        """Yield provider chunks as they arrive; the caller owns the generation span.
+
+        ``stall_timeout_s`` bounds the gap between deltas, not the whole run. A
+        stream takes no total timeout: its consumer sees progress and owns the
+        end-to-end deadline, and some runs (deep research reports) take many
+        minutes.
+        """
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
         from litellm.exceptions import APIConnectionError as LiteLLMAPIConnectionError
@@ -1255,7 +1536,7 @@ class LitellmLLM(LLM):
         for attempt in range(max_attempts):
             client = None
             if self._uses_isolated_client():
-                client = HTTPHandler(timeout=timeout_override or self._timeout)
+                client = HTTPHandler(timeout=stall_timeout_s)
 
             try:
                 response = cast(
@@ -1266,12 +1547,13 @@ class LitellmLLM(LLM):
                         tool_choice=tool_choice,
                         stream=True,
                         structured_response_format=structured_response_format,
-                        timeout_override=timeout_override,
+                        read_timeout_s=stall_timeout_s,
                         max_tokens=max_tokens,
                         parallel_tool_calls=True,
                         reasoning_effort=reasoning_effort,
                         user_identity=user_identity,
                         client=client,
+                        operation=operation,
                     ),
                 )
 
@@ -1287,7 +1569,7 @@ class LitellmLLM(LLM):
                 return
             except retryable_exceptions as e:
                 if yielded_any or attempt >= max_attempts - 1:
-                    raise
+                    raise _as_onyx_llm_error(e)
                 logger.warning(
                     "Retrying pre-chunk stream for model %s after %s on attempt %d/%d",
                     self.config.model_name,
@@ -1298,6 +1580,167 @@ class LitellmLLM(LLM):
             finally:
                 if client is not None:
                     client.close()
+
+    def _prepare_request(
+        self, request: GenerationRequest
+    ) -> list[ChatCompletionMessage]:
+        config = self.config
+        messages, cacheable_prefix = serialize_request(request, config)
+        if cacheable_prefix:
+            messages, _ = process_with_prompt_cache(
+                llm_config=config,
+                cacheable_prefix=messages[:cacheable_prefix],
+                suffix=messages[cacheable_prefix:],
+                continuation=False,
+                with_metadata=False,
+            )
+        return messages
+
+    def invoke(
+        self, request: GenerationRequest, context: GenerationContext | None = None
+    ) -> AssistantMessage:
+        context = context or GenerationContext()
+        messages = self._prepare_request(request)
+        tools = serialize_tools(request.tools) or None
+        with llm_generation_span(
+            self,
+            context.flow or LLMFlow.UNTAGGED_INVOKE,
+            input_messages=messages,
+            tools=tools,
+            content_mode=context.content_mode,
+        ) as span:
+            try:
+                response = self.invoke_raw(
+                    messages,
+                    tools=tools,
+                    tool_choice=request.options.tool_choice,
+                    structured_response_format=request.options.structured_response_format,
+                    max_tokens=request.options.max_tokens,
+                    reasoning_effort=request.options.reasoning_effort,
+                    user_identity=context.user_identity,
+                    total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
+                )
+            except Exception as exc:
+                span.set_error(
+                    {
+                        "message": self.redact_error(f"{type(exc).__name__}: {exc}"),
+                        "data": None,
+                    }
+                )
+                raise
+            record_llm_response(span, response)
+        return to_assistant_message(response, request)
+
+    @isolated_context
+    def stream(
+        self, request: GenerationRequest, context: GenerationContext | None = None
+    ) -> Generator[GenerationEvent, None, None]:
+        context = context or GenerationContext()
+        operation = ProviderOperation()
+        accumulator = MessageAccumulator(request.tools)
+        messages = self._prepare_request(request)
+        tools = serialize_tools(request.tools) or None
+        with llm_generation_span(
+            self,
+            context.flow or LLMFlow.UNTAGGED_STREAM,
+            input_messages=messages,
+            tools=tools,
+            content_mode=context.content_mode,
+        ) as span:
+            started = time.monotonic()
+            first_action = False
+            request_params_sent = False
+            yield GenerationStartEvent()
+            events = accumulator.consume(
+                iter(
+                    self.stream_raw(
+                        messages,
+                        tools=tools,
+                        tool_choice=request.options.tool_choice,
+                        structured_response_format=request.options.structured_response_format,
+                        max_tokens=request.options.max_tokens,
+                        reasoning_effort=request.options.reasoning_effort,
+                        user_identity=context.user_identity,
+                        stall_timeout_s=context.stall_timeout_s
+                        or LLM_SOCKET_READ_TIMEOUT,
+                        operation=operation,
+                    )
+                ),
+                request,
+            )
+            try:
+                for event in events:
+                    if not first_action:
+                        span.span_data.time_to_first_action_seconds = (
+                            time.monotonic() - started
+                        )
+                        first_action = True
+                    if not request_params_sent and operation.request_params is not None:
+                        event = _event_with_request_params(event, operation)
+                        request_params_sent = True
+                    yield event
+                if not (
+                    accumulator.message.text
+                    or accumulator.message.thinking
+                    or accumulator.message.thinking_blocks
+                    or accumulator.message.tool_calls
+                ):
+                    logger.warning(
+                        "Empty generation: provider=%s model=%s stop_reason=%s chunks=%s",
+                        self.config.model_provider,
+                        self.config.model_name,
+                        accumulator.message.stop_reason,
+                        accumulator.chunk_count,
+                    )
+                for event in accumulator.end():
+                    yield (
+                        _event_with_request_params(event, operation)
+                        if event.type == "done"
+                        else event
+                    )
+            except Exception as exc:
+                span.set_error(
+                    {
+                        "message": self.redact_error(f"{type(exc).__name__}: {exc}"),
+                        "data": None,
+                    }
+                )
+                accumulator.message.stop_reason = "error"
+                accumulator.message.error_message = "Generation failed"
+                yield _event_with_request_params(
+                    GenerationErrorEvent(
+                        error_message=accumulator.message.error_message,
+                        usage=accumulator.message.usage.model_copy(deep=True)
+                        if accumulator.message.usage
+                        else None,
+                    ),
+                    operation,
+                )
+                raise
+            finally:
+                # Providers bill for tokens streamed before consumer abandonment.
+                # Record partial content and usage on errors and GeneratorExit,
+                # not just clean completion. GeneratorExit is a BaseException,
+                # so it does not pass through the Exception handler above.
+                events.close()
+                accumulator.finalize()
+                message = accumulator.message
+                record_llm_span_output(
+                    span,
+                    output=message.text or None,
+                    usage=message.usage,
+                    reasoning=message.thinking or None,
+                    tool_calls=[
+                        ProviderToolCall(
+                            id=call.id,
+                            function=RequestFunctionCall(
+                                name=call.name, arguments=json.dumps(call.arguments)
+                            ),
+                        )
+                        for call in message.tool_calls
+                    ]
+                    or None,
+                )
 
 
 @contextmanager

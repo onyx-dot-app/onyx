@@ -44,13 +44,13 @@ type FileViolation struct {
 
 // stringState tracks an open string literal across physical lines.
 type stringState struct {
-	open   bool
-	quote  byte
-	triple bool
-	// fstring marks an f-prefixed literal, whose replacement fields are code.
-	fstring bool
 	// braceDepth is the replacement-field brace nesting depth in an f-string.
 	braceDepth int
+	open       bool
+	quote      byte
+	triple     bool
+	// fstring marks an f-prefixed literal, whose replacement fields are code.
+	fstring bool
 	// fieldQuote is the quote byte of a nested one-line string literal inside a
 	// replacement field, or 0 when not inside one.
 	fieldQuote byte

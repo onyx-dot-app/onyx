@@ -2,11 +2,11 @@
 
 import React, { useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { PasswordInputTypeIn } from "@opal/components";
+import { InputPasswordTypeIn } from "@opal/components";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { InputSingleComboBox } from "@opal/components";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -50,7 +50,8 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
           <FormField.Label>{t("form.apiKey.label")}</FormField.Label>
           <FormField.Control>
             {apiKeyOptions.length > 0 ? (
-              <InputComboBox
+              <InputSingleComboBox
+                mode="open"
                 value={field.value}
                 onChange={(e) => {
                   helper.setValue(e.target.value);
@@ -71,7 +72,7 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
                 isError={apiStatus === "error"}
               />
             ) : (
-              <PasswordInputTypeIn
+              <InputPasswordTypeIn
                 {...field}
                 onChange={(e) => {
                   field.onChange(e);

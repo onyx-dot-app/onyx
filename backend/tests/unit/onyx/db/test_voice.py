@@ -141,18 +141,44 @@ class TestFetchVoiceProviderByType:
 
     def test_returns_provider_when_found(self, mock_db_session: MagicMock) -> None:
         provider = _make_voice_provider(id=1, provider_type="openai")
-        mock_db_session.scalar.return_value = provider
+        mock_db_session.scalars.return_value.all.return_value = [provider]
 
         result = fetch_voice_provider_by_type(mock_db_session, "openai")
 
         assert result is provider
 
     def test_returns_none_when_not_found(self, mock_db_session: MagicMock) -> None:
-        mock_db_session.scalar.return_value = None
+        mock_db_session.scalars.return_value.all.return_value = []
 
         result = fetch_voice_provider_by_type(mock_db_session, "nonexistent")
 
         assert result is None
+
+    @pytest.mark.parametrize("legacy_type", ["OpenAI", " openai ", "\tOpenAI\n"])
+    def test_matches_legacy_rows_with_request_normalization(
+        self, mock_db_session: MagicMock, legacy_type: str
+    ) -> None:
+        legacy = _make_voice_provider(id=1, provider_type=legacy_type)
+        mock_db_session.scalars.return_value.all.return_value = [
+            legacy,
+            _make_voice_provider(id=2, provider_type="azure"),
+        ]
+
+        result = fetch_voice_provider_by_type(mock_db_session, "OPENAI")
+
+        assert result is legacy
+
+    @pytest.mark.parametrize("legacy_type", ["OpenAI", " openai ", "openai"])
+    def test_rejects_ambiguous_matches(
+        self, mock_db_session: MagicMock, legacy_type: str
+    ) -> None:
+        mock_db_session.scalars.return_value.all.return_value = [
+            _make_voice_provider(id=1, provider_type=legacy_type),
+            _make_voice_provider(id=2, provider_type="openai"),
+        ]
+
+        with pytest.raises(OnyxError, match="Multiple voice providers match"):
+            fetch_voice_provider_by_type(mock_db_session, "openai")
 
 
 class TestUpsertVoiceProvider:

@@ -7,7 +7,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import { MessageCard } from "@opal/components";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { useCreateModal } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useTracingProviders } from "@/lib/tracing/hooks";
@@ -95,7 +95,7 @@ export default function TracingPage() {
                 key={providerType}
                 icon={detail.logo}
                 title={detail.label}
-                description={detail.description}
+                description={t(detail.descriptionKey)}
                 status={connected ? "selected" : "disconnected"}
                 selectedLabel={t("provider.connected.label")}
                 onConnect={() => {
