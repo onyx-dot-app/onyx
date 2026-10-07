@@ -375,8 +375,16 @@ def test_batch_handler_fails_only_the_document_that_raises() -> None:
     assert result.total_chunks == 4
     assert _failed_ids(result) == ["bad"]
     assert result.failures[0].failure_message == "cannot index bad"
-    # The batch once, then each document on its own.
-    assert index_doc_batch_mock.call_count == 4
+    # The batch once, then each document on its own with the change gates off,
+    # since the first prepare() already committed what the gates compare.
+    assert [
+        call.kwargs["force_update"] for call in index_doc_batch_mock.call_args_list
+    ] == [
+        False,
+        True,
+        True,
+        True,
+    ]
 
 
 def test_batch_handler_does_not_retry_a_failed_document_push() -> None:

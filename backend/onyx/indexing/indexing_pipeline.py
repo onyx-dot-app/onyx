@@ -469,7 +469,9 @@ def index_doc_batch_with_handler(
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
 ) -> IndexingPipelineResult:
-    def _index(documents: list[Document]) -> IndexingPipelineResult | Exception:
+    def _index(
+        documents: list[Document], force_update: bool
+    ) -> IndexingPipelineResult | Exception:
         """Returns the exception instead of raising so the caller can retry per
         document. A stop signal still propagates."""
         try:
@@ -488,6 +490,7 @@ def index_doc_batch_with_handler(
                 llm_enrichment_allowed=llm_enrichment_allowed,
                 image_summarization_llm=image_summarization_llm,
                 llm=llm,
+                force_update=force_update,
             )
         except ConnectorStopSignal as e:
             logger.warning(
@@ -495,9 +498,10 @@ def index_doc_batch_with_handler(
             )
             raise e
         except Exception as e:
-            # don't log the batch directly, it's too much text
-            logger.exception(
-                "Failed to index document batch: %s", [doc.id for doc in documents]
+            # Below error level so Sentry's logging integration ignores a batch
+            # that may yet succeed per document. _failure_result reports it.
+            logger.warning(
+                "Indexing raised for %s: %s", [doc.id for doc in documents], e
             )
             return e
 
@@ -506,6 +510,10 @@ def index_doc_batch_with_handler(
     ) -> IndexingPipelineResult:
         """The failure of every document in ``documents``. Only a failure that
         will not be retried reaches here, so this is where Sentry hears of it."""
+        # don't log the batch directly, it's too much text
+        logger.error(
+            "Failed to index documents: %s", [doc.id for doc in documents], exc_info=e
+        )
         with sentry_sdk.new_scope() as scope:
             scope.set_tag("stage", "indexing_pipeline")
             scope.set_tag("tenant_id", tenant_id)
@@ -532,18 +540,22 @@ def index_doc_batch_with_handler(
             ],
         )
 
-    batch_result: IndexingPipelineResult | Exception = _index(document_batch)
+    batch_result: IndexingPipelineResult | Exception = _index(
+        document_batch, force_update=False
+    )
     if not isinstance(batch_result, Exception):
         return batch_result
     if len(document_batch) == 1 or isinstance(batch_result, DocumentPushFailure):
         return _failure_result(document_batch, batch_result)
 
-    # One bad document raises for the whole batch, so retry each alone. Safe
-    # because prepare() leaves doc_updated_at alone and the content hash is
-    # stamped only after a successful vector write, so they stay updatable.
+    # One bad document raises for the whole batch, so retry each alone. The
+    # first prepare() already committed new readers, so the retry skips the
+    # change gates or a permission-only update would look like nothing to do.
     results: list[IndexingPipelineResult] = []
     for document in document_batch:
-        result: IndexingPipelineResult | Exception = _index([document])
+        result: IndexingPipelineResult | Exception = _index(
+            [document], force_update=True
+        )
         if isinstance(result, Exception):
             result = _failure_result([document], result)
         results.append(result)
@@ -600,9 +612,12 @@ def index_doc_batch_prepare(
     db_session: Session,
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
+    force_update: bool = False,
 ) -> DocumentBatchPrepareContext | None:
     """Sets up the documents in the relational DB (source of truth) for permissions, metadata, etc.
-    This preceeds indexing it into the actual document index."""
+    This preceeds indexing it into the actual document index. `force_update`
+    skips both change gates: a retry of a batch whose prepare already committed
+    new readers would otherwise see nothing to do."""
     documents = sanitize_documents_for_postgres(documents)
 
     # Create a trimmed list of docs that don't have a newer updated at
@@ -621,8 +636,8 @@ def index_doc_batch_prepare(
     updatable_docs, doc_id_to_content_hash = get_docs_to_update(
         documents=documents,
         db_docs=db_docs,
-        ignore_timestamp_gate=ignore_time_skip,
-        ignore_content_hash_gate=index_to_secondary,
+        ignore_timestamp_gate=ignore_time_skip or force_update,
+        ignore_content_hash_gate=index_to_secondary or force_update,
     )
     if len(updatable_docs) != len(documents):
         updatable_doc_ids = [doc.id for doc in updatable_docs]
@@ -1403,6 +1418,7 @@ def index_doc_batch(
     llm_enrichment_allowed: bool = True,
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
+    force_update: bool = False,
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
     from_beginning: bool = False,
@@ -1445,7 +1461,7 @@ def index_doc_batch(
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(
-            filtered_documents, ignore_time_skip, index_to_secondary
+            filtered_documents, ignore_time_skip, index_to_secondary, force_update
         )
     if not context:
         result = IndexingPipelineResult.empty(len(filtered_documents))
