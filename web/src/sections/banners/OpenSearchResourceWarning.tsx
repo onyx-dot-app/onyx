@@ -28,7 +28,11 @@ const ISSUE_MESSAGE_KEYS: Record<
   vector_memory: { title: "vectorMemoryTitle", description: "vectorMemory" },
 } as const;
 
-function ResourceDetails({ health }: { health: ResourceHealth }): ReactElement {
+interface ResourceDetailsProps {
+  health: ResourceHealth;
+}
+
+function ResourceDetails({ health }: ResourceDetailsProps): ReactElement {
   const t = useTranslations("opensearchHealth");
   return (
     <div className="flex flex-col gap-4">
@@ -158,13 +162,15 @@ export function OpenSearchResourcePopup(): ReactElement | null {
   );
 }
 
+interface ResourceDialogProps {
+  health: ResourceHealth;
+  onClose: () => void;
+}
+
 function ResourceDialog({
   health,
   onClose,
-}: {
-  health: ResourceHealth;
-  onClose: () => void;
-}): ReactElement {
+}: ResourceDialogProps): ReactElement {
   const t = useTranslations("opensearchHealth");
   return (
     <Modal open onOpenChange={onClose}>
