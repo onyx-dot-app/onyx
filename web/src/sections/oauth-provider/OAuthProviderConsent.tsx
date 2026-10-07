@@ -9,6 +9,7 @@ import { AuthLayouts, Section } from "@opal/layouts";
 import { loginPath } from "@/lib/auth/paths";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { submitOAuthProviderConsent } from "@/lib/oauth-provider/api";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   OAuthProviderConsentInfo,
   OAuthProviderDecision,
@@ -30,10 +31,7 @@ export default function OAuthProviderConsent({
     OAuthProviderConsentInfo,
     FetchError
   >(
-    [
-      `/api/oauth-provider/consent?request=${encodeURIComponent(requestId)}`,
-      userId,
-    ],
+    [SWR_KEYS.oauthProviderConsent(requestId), userId],
     ([url]: [string, string]) =>
       errorHandlingFetcher<OAuthProviderConsentInfo>(url),
     {
@@ -76,10 +74,14 @@ export default function OAuthProviderConsent({
     <AuthLayouts.Root>
       <AuthLayouts.Card icon={SvgPlug} title={t("consent.title")}>
         {isLoading ? (
-          <Text role="status">{t("consent.loading")}</Text>
+          <Text font="main-ui-body" color="text-04" role="status">
+            {t("consent.loading")}
+          </Text>
         ) : error || !data ? (
           <Section height="fit" alignItems="stretch">
-            <Text role="alert">{errorText}</Text>
+            <Text font="main-ui-body" color="text-04" role="alert">
+              {errorText}
+            </Text>
             {error?.status === 401 && (
               <Button href={signInUrl}>{t("consent.signIn")}</Button>
             )}
@@ -99,10 +101,18 @@ export default function OAuthProviderConsent({
               {t("consent.request", { clientName: data.client_name })}
             </Text>
             <Section height="fit" alignItems="start" gap={1}>
-              <Text wordWrap="wrap-anywhere">
+              <Text
+                font="main-ui-body"
+                color="text-04"
+                wordWrap="wrap-anywhere"
+              >
                 {t("consent.account", { email: data.account_email })}
               </Text>
-              <Text wordWrap="wrap-anywhere">
+              <Text
+                font="main-ui-body"
+                color="text-04"
+                wordWrap="wrap-anywhere"
+              >
                 {t("consent.workspace", { workspaceName: data.workspace_name })}
               </Text>
               <Text
@@ -113,9 +123,11 @@ export default function OAuthProviderConsent({
                 {t("consent.appAddress", { origin: data.redirect_origin })}
               </Text>
             </Section>
-            <Text>{t("consent.access")}</Text>
+            <Text font="main-ui-body" color="text-04">
+              {t("consent.access")}
+            </Text>
             {failed && (
-              <Text role="alert" color="status-error-05">
+              <Text font="main-ui-body" role="alert" color="status-error-05">
                 {t("consent.failed")}
               </Text>
             )}

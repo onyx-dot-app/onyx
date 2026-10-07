@@ -5,7 +5,7 @@ export async function submitOAuthProviderConsent(
   csrfToken: string,
   decision: OAuthProviderDecision
 ): Promise<string> {
-  const response = await fetch("/api/oauth-provider/consent", {
+  const response: Response = await fetch("/api/oauth-provider/consent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -26,8 +26,8 @@ export async function submitOAuthProviderConsent(
     throw new Error("Invalid OAuth provider consent response");
   }
 
-  const target = new URL(payload.redirect_url);
-  const localHttp =
+  const target: URL = new URL(payload.redirect_url);
+  const localHttp: boolean =
     target.protocol === "http:" &&
     ["localhost", "127.0.0.1", "[::1]"].includes(target.hostname);
   if (

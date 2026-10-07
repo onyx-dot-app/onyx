@@ -103,6 +103,9 @@ export const SWR_KEYS = {
   userProjects: "/api/user/projects",
   recentFiles: "/api/user/files/recent",
   userPats: "/api/user/pats",
+  oauthProviderGrants: "/api/oauth-provider/grants",
+  oauthProviderConsent: (requestId: string): string =>
+    `/api/oauth-provider/consent?request=${encodeURIComponent(requestId)}`,
   userPatScopes: "/api/user/pats/scopes",
   notifications: "/api/notifications",
   notificationsSummary: "/api/notifications/summary",

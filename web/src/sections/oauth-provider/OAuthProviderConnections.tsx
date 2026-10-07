@@ -14,6 +14,7 @@ import {
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { OAuthProviderGrant } from "@/lib/oauth-provider/types";
 
 export default function OAuthProviderConnections() {
@@ -28,7 +29,7 @@ export default function OAuthProviderConnections() {
     OAuthProviderGrant[],
     FetchError
   >(
-    enabled && user ? ["/api/oauth-provider/grants", user.id] : null,
+    enabled && user ? [SWR_KEYS.oauthProviderGrants, user.id] : null,
     ([url]: [string, string]) =>
       errorHandlingFetcher<OAuthProviderGrant[]>(url),
     { shouldRetryOnError: false }
@@ -66,11 +67,17 @@ export default function OAuthProviderConnections() {
       <Card border="solid" rounding={4}>
         <Section height="fit" alignItems="stretch">
           {error ? (
-            <Text role="alert">{t("connections.loadFailed")}</Text>
+            <Text font="main-ui-body" color="text-04" role="alert">
+              {t("connections.loadFailed")}
+            </Text>
           ) : isLoading ? (
-            <Text role="status">{t("connections.loading")}</Text>
+            <Text font="main-ui-body" color="text-04" role="status">
+              {t("connections.loading")}
+            </Text>
           ) : !data?.length ? (
-            <Text color="text-03">{t("connections.empty")}</Text>
+            <Text font="main-ui-body" color="text-03">
+              {t("connections.empty")}
+            </Text>
           ) : (
             data.map((grant) => (
               <Section
@@ -143,7 +150,9 @@ export default function OAuthProviderConnections() {
             </>
           }
         >
-          <Text>{t("connections.confirmDescription")}</Text>
+          <Text font="main-ui-body" color="text-04">
+            {t("connections.confirmDescription")}
+          </Text>
         </ConfirmationModalLayout>
       )}
     </Section>
