@@ -82,6 +82,14 @@ class ChannelRef(BaseModel):
     membership_type: str | None = None
 
 
+class ChannelCursor(BaseModel):
+    """A channel the walk is inside, and the page it reads next. No page url
+    means the channel's first page."""
+
+    channel: ChannelRef
+    next_messages_url: str | None = None
+
+
 class ChannelLibrary(BaseModel):
     drive_id: str
     list_id: str
