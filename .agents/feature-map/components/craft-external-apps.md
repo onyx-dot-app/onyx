@@ -85,6 +85,9 @@ time.
 | Variable | Where | Effect |
 |---|---|---|
 | `SANDBOX_PROXY_LISTEN_PORT`, `SANDBOX_PROXY_HEALTHZ_PORT` | `server/features/build/configs.py` | Proxy listen and health ports. |
+| `SANDBOX_PROXY_LISTEN_HOST` | `configs.py` | Proxy and health listener; defaults to `0.0.0.0`. Use `::` for IPv6-only clients. |
+| `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS` | `configs.py` | Defaults to `false`. Enable for global IPv6 sandbox addresses only with restricted proxy ingress. Known sandbox identity remains required. |
+| `SANDBOX_PROXY_INTERNAL_CIDRS` | `configs.py` | Comma-separated internal VPC, pod, Service, node, and connected-network ranges, including global IPv6 ranges. The proxy blocks destinations in these ranges. |
 | `SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA` | `configs.py` | mitmproxy upstream cert verification mode. |
 | `SANDBOX_BACKEND` (`SandboxBackend.KUBERNETES`/`DOCKER`) | `configs.py` | Selects `K8sSecretCAStore`/`K8sInformerLookup` vs. `FileCAStore`/`DockerEventsLookup` (`sandbox_proxy/backend.py:build_ca_store`, `build_ip_lookup`). |
 | `SANDBOX_PROXY_CA_SECRET`, `SANDBOX_PROXY_CA_CONFIGMAP`, `SANDBOX_PROXY_NAMESPACE` | `configs.py` | K8s CA persistence and cross-namespace projection targets (`ca_k8s.py`). |
@@ -94,6 +97,15 @@ time.
 | `MCP_SESSION_TAG_HEADER` | `configs.py` | Header opencode's in-process MCP client uses to carry the session tag (`gate.py:_extract_session_tag`). |
 | `PARSER_MAX_BODY_BYTES` | `sandbox_proxy/addons/gate.py` (constant, not env) | 32 MiB request-body cap; see §9. |
 | `AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` | `backend/onyx/configs/app_configs.py` (default `false`) | Seeds Onyx-managed built-ins (disabled) on tenant creation. |
+
+The proxy requires `SANDBOX_PROXY_INTERNAL_CIDRS` at startup when the listener
+uses IPv6 or global clients are enabled. Invalid CIDRs also prevent startup.
+Internal destinations remain blocked for HTTP and CONNECT. The exact
+`ONYX_SERVER_URL` host and port remain the only internal destination exception.
+Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
+Use listeners and Services in that address family: IPv4 remains the default;
+IPv6 listeners support IPv6-only deployments. Switching an IPv4-primary
+dual-stack deployment to secondary IPv6 pod addresses is not supported.
 
 ---
 
