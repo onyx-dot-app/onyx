@@ -4,6 +4,7 @@ The gateway is autospecced, so these tests drive the real checkpoint state
 machine and document assembly against the gateway's plain models.
 """
 
+import json
 import threading
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
@@ -42,10 +43,13 @@ from onyx.connectors.outlook.connector import (
     CONVERSATION_FETCH_LIMIT,
     EVENT_DOCUMENT_ID_PREFIX,
     FILTERED_DELTA_CAP,
+    MAILBOX_WORKERS,
     MAX_ATTACHMENT_READS_PER_CONVERSATION,
     MAX_ATTACHMENT_TEXT_PER_CONVERSATION,
     MAX_ATTACHMENTS_PER_MESSAGE,
     MAX_MESSAGES_PER_CONVERSATION,
+    MAX_TRACKED_CONVERSATIONS_PER_MAILBOX,
+    MAX_TRACKED_SERIES_PER_MAILBOX,
     SLIM_BATCH_SIZE,
     OutlookCheckpoint,
     OutlookConnector,
@@ -402,7 +406,7 @@ def test_excluded_subtrees_are_descended_so_their_folder_ids_are_known() -> None
     _, checkpoint = _step(connector, checkpoint)
     _, checkpoint = _step(connector, checkpoint)
 
-    assert set(checkpoint.excluded_folder_ids) == {
+    assert set(checkpoint.active[0].excluded_folder_ids) == {
         JUNK_ID,
         DELETED_ID,
         DELETED_CHILD_ID,
@@ -674,6 +678,165 @@ def test_pruning_drops_mail_older_than_the_history_cutoff() -> None:
     )
 
 
+def _many_mailbox_gateway(count: int) -> MagicMock:
+    gateway = _happy_gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox(id=f"user-{n}") for n in range(count)]
+    )
+    return gateway
+
+
+def test_mailboxes_are_walked_side_by_side_up_to_the_worker_limit() -> None:
+    gateway = _many_mailbox_gateway(MAILBOX_WORKERS + 1)
+    connector = _connector(gateway)
+    _, checkpoint = _step(connector, connector.build_dummy_checkpoint())
+
+    _, checkpoint = _step(connector, checkpoint)
+
+    assert [cursor.mailbox.id for cursor in checkpoint.active] == [
+        f"user-{n}" for n in range(MAILBOX_WORKERS)
+    ]
+    assert all(cursor.opened for cursor in checkpoint.active)
+    assert checkpoint.mailboxes == [mailbox(id=f"user-{MAILBOX_WORKERS}")]
+
+
+def test_every_mailbox_past_the_worker_limit_is_still_walked() -> None:
+    gateway = _many_mailbox_gateway(MAILBOX_WORKERS + 2)
+
+    items = _run(_connector(gateway))
+
+    documents = [item.id for item in items if isinstance(item, Document)]
+    assert sorted(documents) == sorted(
+        conversation_document_id(mailbox(id=f"user-{n}"), CONVERSATION_ID)
+        for n in range(MAILBOX_WORKERS + 2)
+    )
+
+
+def test_failure_in_one_mailbox_leaves_the_whole_step_to_be_retried() -> None:
+    gateway = _many_mailbox_gateway(2)
+
+    def probe(*, mailbox_id: str) -> OutlookFolder:
+        if mailbox_id == "user-1":
+            raise graph_error(503, "ServiceUnavailable")
+        return folder()
+
+    gateway.probe_mailbox.side_effect = probe
+    connector = _connector(gateway)
+    _, checkpoint = _step(connector, connector.build_dummy_checkpoint())
+
+    with pytest.raises(OutlookGraphError):
+        _step(connector, checkpoint)
+
+    assert checkpoint.active == []
+    assert checkpoint.mailboxes is not None and len(checkpoint.mailboxes) == 2
+
+
+def test_failure_in_an_opened_mailbox_keeps_its_siblings_progress_out_of_the_checkpoint() -> (
+    None
+):
+    gateway = _many_mailbox_gateway(2)
+    connector = _connector(gateway)
+    _, checkpoint = _step(connector, connector.build_dummy_checkpoint())
+    _, checkpoint = _step(connector, checkpoint)
+    assert [cursor.opened for cursor in checkpoint.active] == [True, True]
+    before = checkpoint.model_copy(deep=True)
+
+    def delta(*, mailbox_id: str, **_: object) -> OutlookDeltaPage:
+        if mailbox_id == "user-1":
+            raise graph_error(503, "ServiceUnavailable")
+        return OutlookDeltaPage(changes=[change()])
+
+    gateway.fetch_folder_delta_page.side_effect = delta
+    escaped: list[object] = []
+    generator = connector.load_from_checkpoint(START, END, checkpoint)
+    with pytest.raises(OutlookGraphError):
+        while True:
+            escaped.append(next(generator))
+
+    assert escaped == []
+    assert checkpoint == before
+
+
+def test_finished_mailbox_leaves_the_step_while_its_siblings_stay_active() -> None:
+    gateway = _many_mailbox_gateway(2)
+
+    def probe(*, mailbox_id: str) -> OutlookFolder:
+        if mailbox_id == "user-1":
+            raise graph_error(404, "MailboxNotEnabledForRESTAPI")
+        return folder()
+
+    gateway.probe_mailbox.side_effect = probe
+    connector = _connector(gateway)
+    _, checkpoint = _step(connector, connector.build_dummy_checkpoint())
+
+    _, checkpoint = _step(connector, checkpoint)
+
+    assert [cursor.mailbox.id for cursor in checkpoint.active] == ["user-0"]
+
+
+def test_checkpoint_saved_before_any_mailbox_opened_loads_unchanged() -> None:
+    saved = {
+        "has_more": True,
+        "mailboxes": [mailbox().model_dump()],
+        "current_mailbox": None,
+        "folders": None,
+        "current_folder": None,
+    }
+
+    checkpoint = OutlookCheckpoint.model_validate_json(json.dumps(saved))
+
+    assert checkpoint.mailboxes == [mailbox()]
+    assert checkpoint.active == []
+
+
+def test_checkpoint_saved_with_one_current_mailbox_resumes_where_it_stopped() -> None:
+    saved = {
+        "has_more": True,
+        "mailboxes": [mailbox(id="user-2").model_dump()],
+        "current_mailbox": mailbox().model_dump(),
+        "folders": [folder(id=ARCHIVE_ID).model_dump()],
+        "excluded_folder_ids": [JUNK_ID],
+        "current_folder": folder().model_dump(),
+        "delta_next_link": "https://graph/delta?more",
+        "folder_change_count": 7,
+        "seen_conversation_ids": {CONVERSATION_ID: None},
+        "calendar_done": True,
+    }
+
+    checkpoint = OutlookCheckpoint.model_validate_json(json.dumps(saved))
+
+    assert checkpoint.mailboxes == [mailbox(id="user-2")]
+    assert len(checkpoint.active) == 1
+    cursor = checkpoint.active[0]
+    assert cursor.mailbox == mailbox()
+    assert cursor.opened
+    assert cursor.folders == [folder(id=ARCHIVE_ID)]
+    assert cursor.excluded_folder_ids == [JUNK_ID]
+    assert cursor.current_folder == folder()
+    assert cursor.delta_next_link == "https://graph/delta?more"
+    assert cursor.folder_change_count == 7
+    assert cursor.seen_conversation_ids == {CONVERSATION_ID: None}
+    assert cursor.calendar_done
+
+
+def test_oversized_single_mailbox_checkpoint_keeps_the_newest_within_the_caps() -> None:
+    conversations: list[str] = [
+        f"c-{i}" for i in range(MAX_TRACKED_CONVERSATIONS_PER_MAILBOX + 3)
+    ]
+    series: list[str] = [f"s-{i}" for i in range(MAX_TRACKED_SERIES_PER_MAILBOX + 2)]
+    saved = {
+        "has_more": True,
+        "current_mailbox": mailbox().model_dump(),
+        "seen_conversation_ids": dict.fromkeys(conversations),
+        "seen_series_ids": series,
+    }
+
+    cursor = OutlookCheckpoint.model_validate_json(json.dumps(saved)).active[0]
+
+    assert list(cursor.seen_conversation_ids) == conversations[3:]
+    assert cursor.seen_series_ids == set(series[2:])
+
+
 def test_denied_mailbox_is_a_failure_when_named_and_a_skip_otherwise() -> None:
     gateway = _happy_gateway()
     gateway.probe_mailbox.side_effect = graph_error(403)
@@ -719,7 +882,7 @@ def test_unexpected_probe_error_fails_the_run_and_keeps_the_mailbox_queued() -> 
 
     # The retry resumes from this checkpoint, so the mailbox must still be there.
     assert checkpoint.mailboxes == [mailbox()]
-    assert checkpoint.current_mailbox is None
+    assert checkpoint.active == []
 
 
 def test_addresses_naming_the_same_mailbox_are_walked_once() -> None:
@@ -791,7 +954,7 @@ def test_conversation_tracking_is_capped_per_mailbox(
     ]
     # Each thread of the page is rebuilt once, in no fixed order.
     assert sorted(rebuilt) == sorted([CONVERSATION_ID, "conv-b"])
-    assert checkpoint.seen_conversation_ids == {"conv-b": None}
+    assert checkpoint.active[0].seen_conversation_ids == {"conv-b": None}
 
 
 def test_conversations_of_a_page_are_yielded_in_page_order() -> None:
@@ -841,9 +1004,9 @@ def test_failure_part_way_through_a_page_leaves_the_page_uncounted() -> None:
     with pytest.raises(OutlookAuthError):
         _step(connector, checkpoint)
 
-    assert checkpoint.folder_change_count == 4997
-    assert checkpoint.delta_next_link is None
-    assert checkpoint.seen_conversation_ids == {}
+    assert checkpoint.active[0].folder_change_count == 4997
+    assert checkpoint.active[0].delta_next_link is None
+    assert checkpoint.active[0].seen_conversation_ids == {}
 
 
 def test_expired_delta_state_restarts_the_folder_round() -> None:
@@ -857,9 +1020,9 @@ def test_expired_delta_state_restarts_the_folder_round() -> None:
     items, checkpoint = _step(connector, checkpoint)
 
     assert items == []
-    assert checkpoint.current_folder == folder()
-    assert checkpoint.delta_next_link is None
-    assert checkpoint.folder_change_count == 0
+    assert checkpoint.active[0].current_folder == folder()
+    assert checkpoint.active[0].delta_next_link is None
+    assert checkpoint.active[0].folder_change_count == 0
 
 
 def test_vanished_folder_is_skipped() -> None:
@@ -870,8 +1033,8 @@ def test_vanished_folder_is_skipped() -> None:
     items, checkpoint = _step(connector, _folder_checkpoint())
 
     assert items == []
-    assert checkpoint.current_folder is None
-    assert checkpoint.current_mailbox == mailbox()
+    assert checkpoint.active[0].current_folder is None
+    assert checkpoint.active[0].mailbox == mailbox()
 
 
 def test_folder_that_fills_the_filtered_cap_is_reread_without_the_filter() -> None:
@@ -894,12 +1057,12 @@ def test_folder_that_fills_the_filtered_cap_is_reread_without_the_filter() -> No
 
     items, checkpoint = _step(connector, _folder_checkpoint())
     assert items == []
-    assert checkpoint.current_folder == folder()
-    assert checkpoint.folder_unfiltered is True
+    assert checkpoint.active[0].current_folder == folder()
+    assert checkpoint.active[0].folder_unfiltered is True
 
     items, checkpoint = _step(connector, checkpoint)
     assert [type(item) for item in items] == [Document]
-    assert checkpoint.current_folder is None
+    assert checkpoint.active[0].current_folder is None
     assert windows == [datetime.fromtimestamp(START, tz=timezone.utc), None]
 
 
@@ -935,8 +1098,8 @@ def test_transient_conversation_fetch_failure_keeps_the_checkpoint(
     with pytest.raises(OutlookGraphError):
         _step(connector, checkpoint)
 
-    assert checkpoint.seen_conversation_ids == {}
-    assert checkpoint.delta_next_link is None
+    assert checkpoint.active[0].seen_conversation_ids == {}
+    assert checkpoint.active[0].delta_next_link is None
 
 
 def test_indexable_messages_drop_drafts_and_excluded_folders() -> None:
@@ -1144,7 +1307,7 @@ def test_throttled_attachment_read_keeps_the_checkpoint() -> None:
     with pytest.raises(OutlookGraphError):
         _step(connector, checkpoint)
 
-    assert checkpoint.seen_conversation_ids == {}
+    assert checkpoint.active[0].seen_conversation_ids == {}
 
 
 def test_refused_attachment_listing_keeps_the_message_text() -> None:
@@ -1584,9 +1747,9 @@ def test_calendar_round_restarts_when_graph_drops_its_state() -> None:
     items, checkpoint = _step(connector, checkpoint)
 
     assert items == []
-    assert checkpoint.calendar_next_link is None
-    assert checkpoint.calendar_done is False
-    assert checkpoint.current_mailbox == mailbox()
+    assert checkpoint.active[0].calendar_next_link is None
+    assert checkpoint.active[0].calendar_done is False
+    assert checkpoint.active[0].mailbox == mailbox()
 
 
 def test_denied_calendar_is_a_failure_when_named_and_a_skip_otherwise() -> None:
@@ -1616,7 +1779,7 @@ def test_throttled_calendar_read_keeps_the_checkpoint() -> None:
     with pytest.raises(OutlookGraphError):
         _step(connector, checkpoint)
 
-    assert checkpoint.calendar_done is False
+    assert checkpoint.active[0].calendar_done is False
 
 
 def test_unreadable_series_master_skips_the_series_once() -> None:
@@ -1653,8 +1816,8 @@ def test_rejected_token_on_a_series_master_keeps_the_checkpoint() -> None:
     with pytest.raises(OutlookGraphError):
         _step(connector, checkpoint)
 
-    assert checkpoint.calendar_done is False
-    assert checkpoint.seen_series_ids == set()
+    assert checkpoint.active[0].calendar_done is False
+    assert checkpoint.active[0].seen_series_ids == set()
 
 
 def test_event_document_carries_the_meeting_facts() -> None:
