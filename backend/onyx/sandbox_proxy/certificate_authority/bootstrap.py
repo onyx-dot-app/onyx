@@ -2,7 +2,6 @@
 
 import datetime as dt
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -10,6 +9,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from pydantic import BaseModel, ConfigDict
 
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.utils.logger import setup_logger
@@ -41,8 +41,9 @@ class CAStore(Protocol):
     def persist(self, cert_pem: bytes, key_pem: bytes) -> None: ...
 
 
-@dataclass(frozen=True)
-class MaterializedCA:
+class MaterializedCA(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     cert_pem: bytes
     key_pem: bytes
     pem_path: Path

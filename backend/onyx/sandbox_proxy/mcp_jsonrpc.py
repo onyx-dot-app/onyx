@@ -11,10 +11,9 @@ so an unrecognized request must never forward with credentials.
 from __future__ import annotations
 
 import json
-from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from onyx.sandbox_proxy.models import McpRpcClassification, McpRpcKind
 
 _TOOL_CALL_METHOD = "tools/call"
 
@@ -38,20 +37,6 @@ _PLUMBING_METHODS = frozenset(
     }
 )
 _NOTIFICATION_PREFIX = "notifications/"
-
-
-class McpRpcKind(str, Enum):
-    PLUMBING = "PLUMBING"  # forward ungated (creds injected)
-    TOOL_CALL = "TOOL_CALL"  # gate per tool name
-    UNCLASSIFIABLE = "UNCLASSIFIABLE"  # fail closed — deny
-
-
-class McpRpcClassification(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: McpRpcKind
-    # Tool names of every `tools/call` in the (possibly batched) body, in order.
-    tool_names: tuple[str, ...] = ()
 
 
 _PLUMBING = McpRpcClassification(kind=McpRpcKind.PLUMBING)

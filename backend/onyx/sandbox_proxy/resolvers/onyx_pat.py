@@ -21,9 +21,9 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.sandbox_proxy.credential_injection import (
     CredentialResolver,
     CredentialUnavailableError,
-    InjectionContext,
 )
 from onyx.sandbox_proxy.logging_utils import full_log_id, short_log_id
+from onyx.sandbox_proxy.models import InjectionContext
 from onyx.server.features.build.configs import ONYX_SERVER_URL
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.utils.logger import setup_logger

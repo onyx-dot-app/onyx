@@ -37,7 +37,7 @@ from onyx.sandbox_proxy.destination_policy import (
     parse_destination_policy,
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from onyx.sandbox_proxy.sandbox_identity.resolution import ResolvedSandbox
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 
 # Inter-chunk delay on the upstream. The whole stream takes
 # `(_CHUNK_COUNT - 1) * _CHUNK_DELAY_S`, during which a streamed client must

@@ -35,10 +35,7 @@ from onyx.sandbox_proxy.addons.gate import GateAddon, _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import parse_destination_policy
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from onyx.sandbox_proxy.sandbox_identity.resolution import (
-    ResolvedSandbox,
-    SessionContext,
-)
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.common.craft.payloads import action_entry
 from tests.external_dependency_unit.conftest import create_test_user

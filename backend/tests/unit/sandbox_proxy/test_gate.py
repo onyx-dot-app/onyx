@@ -46,18 +46,12 @@ from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
     CredentialResolver,
     CredentialUnavailableError,
-    InjectionOutcome,
 )
-from onyx.sandbox_proxy.destination_policy import (
-    parse_destination_policy,
-)
+from onyx.sandbox_proxy.destination_policy import parse_destination_policy
 from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.models import DestinationPolicyConfig
+from onyx.sandbox_proxy.models import DestinationPolicyConfig, InjectionOutcome
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from onyx.sandbox_proxy.sandbox_identity.resolution import (
-    ResolvedSandbox,
-    SessionContext,
-)
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
 from tests.unit.sandbox_proxy.conftest import (
     RecordingCredentialResolver,
     StubResolver,

@@ -13,7 +13,6 @@ There is deliberately no most-recent-active fallback: a gated request with no
 verifiable session tag fails closed rather than routing to a guessed session.
 """
 
-from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
@@ -21,63 +20,11 @@ from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import BuildSession, Sandbox
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-@dataclass(frozen=True)
-class SandboxIdentity:
-    sandbox_id: UUID
-    tenant_id: str
-    sandbox_name: str
-    sandbox_ip: str
-
-
-@dataclass(frozen=True)
-class ResolvedSandbox:
-    """Sandbox identity + owning user. Authorizes egress."""
-
-    sandbox_id: UUID
-    user_id: UUID
-    tenant_id: str
-    sandbox_name: str
-    sandbox_ip: str
-
-    def with_session(self, session_id: UUID) -> "SessionContext":
-        return SessionContext(
-            session_id=session_id,
-            user_id=self.user_id,
-            sandbox_id=self.sandbox_id,
-            tenant_id=self.tenant_id,
-            sandbox_name=self.sandbox_name,
-            sandbox_ip=self.sandbox_ip,
-        )
-
-
-@dataclass(frozen=True)
-class SessionContext:
-    """Sandbox identity + the verified session to route the card to."""
-
-    session_id: UUID
-    user_id: UUID
-    sandbox_id: UUID
-    tenant_id: str
-    sandbox_name: str
-    sandbox_ip: str
-
-    def without_session(self) -> ResolvedSandbox:
-        """
-        Inverse of `ResolvedSandbox.with_session(...)` — drops the session id.
-        """
-        return ResolvedSandbox(
-            sandbox_id=self.sandbox_id,
-            user_id=self.user_id,
-            tenant_id=self.tenant_id,
-            sandbox_name=self.sandbox_name,
-            sandbox_ip=self.sandbox_ip,
-        )
 
 
 class SandboxIPLookup(Protocol):

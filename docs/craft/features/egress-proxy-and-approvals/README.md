@@ -20,6 +20,8 @@ The short version:
 
 Proxy runtime:
 
+- `backend/onyx/sandbox_proxy/models.py` defines shared destination, credential
+  injection, and MCP classification models.
 - `backend/onyx/sandbox_proxy/server.py` starts mitmproxy, health checks, CA
   bootstrap, identity lookup, request evaluator, credential resolvers, and the
   gate addon.
@@ -27,7 +29,7 @@ Proxy runtime:
   approval parking, grant resolution, credential injection dispatch, internal
   destination blocking, and SIGTERM drain cleanup.
 - `backend/onyx/sandbox_proxy/sandbox_identity/` modules resolve source IPs to sandbox,
-  tenant, and user identity.
+  tenant, and user identity. Its `models.py` defines the identity and session models.
 - `backend/onyx/sandbox_proxy/request_evaluator.py` turns mitmproxy requests
   into external-app action matches.
 - `backend/onyx/sandbox_proxy/credential_injection.py` and
