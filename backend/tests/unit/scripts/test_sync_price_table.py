@@ -1,6 +1,12 @@
+import json
+from pathlib import Path
 from typing import Any
 
-from scripts.sync_price_table import merge_litellm, merge_openrouter
+from scripts.sync_price_table import (
+    _preserve_unbounded_flags,
+    merge_litellm,
+    merge_openrouter,
+)
 
 
 def _providers() -> dict[str, Any]:
@@ -92,8 +98,8 @@ def _openrouter_section() -> dict[str, Any]:
 
 
 def test_merge_openrouter_flags_endpointless_routers() -> None:
-    providers = _openrouter_section()
-    models = providers["openrouter"]["models"]
+    providers: dict[str, Any] = _openrouter_section()
+    models: dict[str, Any] = providers["openrouter"]["models"]
     models["vendor/free-router"] = {"mode": "chat"}  # already vendored
     models["vendor/real-model"] = {"mode": "chat", "unbounded": True}
     merge_openrouter(
@@ -117,3 +123,20 @@ def test_merge_openrouter_flags_endpointless_routers() -> None:
     assert models["vendor/new-router"]["unbounded"] is True
     assert "unbounded" not in models["vendor/real-model"]
     assert "unbounded" not in models["vendor/boring-model"]
+
+
+def test_preserve_unbounded_flags_survives_feed_outage(tmp_path: Path) -> None:
+    """A failed OpenRouter fetch must not drop router flags the merge can no
+    longer re-derive — they carry over from the vendored file."""
+    providers: dict[str, Any] = _openrouter_section()
+    models: dict[str, Any] = providers["openrouter"]["models"]
+    models["openrouter/auto"] = {"mode": "chat"}
+    models["vendor/real-model"] = {"mode": "chat"}
+    (tmp_path / "openrouter.json").write_text(
+        json.dumps({"models": {"openrouter/auto": {"unbounded": True}}})
+    )
+
+    _preserve_unbounded_flags(providers, tmp_path)
+
+    assert models["openrouter/auto"]["unbounded"] is True
+    assert "unbounded" not in models["vendor/real-model"]

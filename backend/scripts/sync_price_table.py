@@ -610,6 +610,31 @@ def merge_openrouter(
     print(f"openrouter merge: filled {filled} missing rates, added {added} models")
 
 
+def _preserve_unbounded_flags(providers: dict[str, Any], output_dir: Path) -> None:
+    """Carry `unbounded` router flags over from the vendored openrouter.json
+    when the OpenRouter feed is unreachable and the merge cannot re-derive
+    them — a transient outage must not silently restore bogus output limits."""
+    section = providers.get("openrouter")
+    if section is None:
+        return
+    try:
+        vendored = json.loads((output_dir / "openrouter.json").read_text())
+    except Exception:
+        return
+    vendored_models = vendored.get("models") or {}
+    restored = 0
+    for model_id, entry in section["models"].items():
+        if (vendored_models.get(model_id) or {}).get("unbounded"):
+            entry["unbounded"] = True
+            restored += 1
+    if restored:
+        print(
+            f"OpenRouter feed unavailable: preserved unbounded flags on "
+            f"{restored} vendored entries",
+            file=sys.stderr,
+        )
+
+
 def _check_litellm_schema(litellm_map: dict[str, Any]) -> None:
     """litellm entries must carry litellm_provider/mode and token-cost fields —
     a schema change would silently degrade the merge."""
@@ -736,6 +761,8 @@ def main() -> int:
     if openrouter_models:
         _check_openrouter_schema(openrouter_models)
         merge_openrouter(providers, openrouter_models)
+    else:
+        _preserve_unbounded_flags(providers, args.output_dir)
 
     table = {
         "schema_version": 2,

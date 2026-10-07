@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import patch
 
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
@@ -139,7 +140,7 @@ def test_unbounded_entry_drops_max_output_tokens() -> None:
     """Router meta-models flagged `unbounded` (e.g. openrouter/auto) route to
     endpoints smaller than their advertised limits, so the model map must not
     emit an output limit callers would send as max_tokens."""
-    mock_catalog = {
+    mock_catalog: dict[str, Any] = {
         "openrouter": {
             "models": {
                 "openrouter/auto": {

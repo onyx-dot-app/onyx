@@ -244,7 +244,7 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
     # pool endpoint smaller than their advertised pool-max limits. Emitting
     # no output limit keeps callers from sending a max_tokens the routed
     # endpoint then rejects.
-    unbounded = bool(entry.get("unbounded"))
+    unbounded: bool = bool(entry.get("unbounded"))
 
     return {
         "litellm_provider": provider,
