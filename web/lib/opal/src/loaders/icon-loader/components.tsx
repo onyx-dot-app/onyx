@@ -1,6 +1,7 @@
 "use client";
 
-import { SvgLoader } from "@opal/icons";
+// Not the @opal/icons index: SvgProgressRing imports this file.
+import SvgLoader from "@opal/icons/loader";
 import { useOpalStrings } from "@opal/strings";
 import type { IconProps } from "@opal/types";
 import { cn } from "@opal/utils";
