@@ -120,8 +120,10 @@ TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 #####
 # Outlook
 #####
+# Polls keep readers current as mail changes, so the sync only repairs what
+# a poll missed and catches deletions.
 OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY = int(
-    os.environ.get("OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+    os.environ.get("OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY") or 24 * 60 * 60
 )
 
 #####
