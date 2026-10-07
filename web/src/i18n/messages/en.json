@@ -1385,6 +1385,34 @@
           "text": "You will be billed on <value>{date}</value> After your 1-month free trial ends."
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "Failed to downgrade"
+        },
+        "link": {
+          "label": "Downgrade to Community"
+        },
+        "modal": {
+          "confirmButton": {
+            "label": "Downgrade",
+            "loading": "Downgrading..."
+          },
+          "connectors": {
+            "text": "Every connector becomes public. Documents that synced permissions or groups kept private become visible to all users. Search results follow once the index is rewritten, which can take a while on a large index."
+          },
+          "description": "This removes your license and every paid feature. It cannot be undone.",
+          "features": {
+            "text": "Service account API keys, token rate limits and hooks are deleted. Standard answers and SCIM tokens are turned off. Custom branding and chat retention are reset."
+          },
+          "groups": {
+            "text": "User groups are removed. Agents, document sets, LLM providers, MCP servers and skills shared with a group become public."
+          },
+          "license": {
+            "text": "The license is removed from this deployment."
+          },
+          "title": "Downgrade to Community Edition"
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "Activate License Key"
@@ -11515,6 +11543,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "If you are the administrator, please visit the <billingLink>Admin Billing</billingLink> page to {hadLicense, select, true {renew} other {activate}} your license, sign up through Stripe or reach out to <supportLink>support@onyx.app</supportLink> for billing assistance."
+        },
+        "downgradeButton": {
+          "label": "Downgrade to Community"
         },
         "heading": {
           "title": "Access Restricted"

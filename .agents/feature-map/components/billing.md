@@ -235,7 +235,16 @@ POST /license/downgrade                       ee/onyx/server/license/api.py:down
 
 The route is under `/license`, which is in `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES`
 (`ee/onyx/configs/license_enforcement_config.py`). An admin can call it while an
-expired license gates the other routes. No frontend code calls it.
+expired license gates the other routes.
+
+Two entry points open `web/src/sections/modals/DowngradeToCommunityModal.tsx`,
+a consent screen that lists what becomes public and what is removed. Confirming
+calls `web/src/lib/billing/svc.ts:downgradeToCommunity` and reloads the page.
+- `web/src/app/admin/billing/DowngradeToCommunityLink.tsx`, in the billing page
+  footer, renders only when self-hosted and `application_status` is
+  `gated_access`.
+- `web/src/components/errorPages/AccessRestrictedPage.tsx` shows a button to a
+  user with `FULL_ADMIN_PANEL_ACCESS` in its self-hosted branch.
 
 - `make_all_cc_pairs_public__no_commit` sets every cc-pair that is not `PUBLIC`
   to `PUBLIC`. It clears `auto_sync_options`, `last_time_perm_sync` and

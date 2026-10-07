@@ -1385,6 +1385,34 @@
           "text": "1 か月の無料トライアルの終了後、<value>{date}</value> に請求されます。"
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "ダウングレードに失敗しました"
+        },
+        "link": {
+          "label": "Community にダウングレード"
+        },
+        "modal": {
+          "confirmButton": {
+            "label": "ダウングレード",
+            "loading": "ダウングレード中..."
+          },
+          "connectors": {
+            "text": "すべてのコネクタが公開されます。同期された権限やグループによって非公開だったドキュメントは、すべてのユーザーに表示されます。検索結果はインデックスの書き換え後に反映され、大きなインデックスでは時間がかかる場合があります。"
+          },
+          "description": "ライセンスとすべての有料機能が削除されます。この操作は元に戻せません。",
+          "features": {
+            "text": "サービスアカウントの API キー、Token レート制限、フックは削除されます。標準回答と SCIM トークンは無効になります。カスタムブランディングとチャット保持期間はリセットされます。"
+          },
+          "groups": {
+            "text": "ユーザーグループは削除されます。グループと共有されていたエージェント、ドキュメントセット、LLM プロバイダー、MCP サーバー、スキルは公開されます。"
+          },
+          "license": {
+            "text": "このデプロイメントからライセンスが削除されます。"
+          },
+          "title": "Community Edition にダウングレード"
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "ライセンスキーを有効化"
@@ -11515,6 +11543,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "管理者の場合は、<billingLink>管理者請求</billingLink>ページでライセンスを{hadLicense, select, true {更新} other {有効化}}するか、Stripe経由で登録するか、請求に関するサポートは<supportLink>support@onyx.app</supportLink>までお問い合わせください。"
+        },
+        "downgradeButton": {
+          "label": "Community にダウングレード"
         },
         "heading": {
           "title": "アクセスが制限されています"

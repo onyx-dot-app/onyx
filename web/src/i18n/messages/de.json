@@ -1385,6 +1385,34 @@
           "text": "Ihnen wird am <value>{date}</value> in Rechnung gestellt, nachdem Ihre einmonatige kostenlose Testphase endet."
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "Herabstufung fehlgeschlagen"
+        },
+        "link": {
+          "label": "Auf Community herabstufen"
+        },
+        "modal": {
+          "confirmButton": {
+            "label": "Herabstufen",
+            "loading": "Wird herabgestuft..."
+          },
+          "connectors": {
+            "text": "Alle Konnektoren werden öffentlich. Dokumente, die durch synchronisierte Berechtigungen oder Gruppen privat waren, werden für alle Benutzer sichtbar. Die Suchergebnisse folgen, sobald der Index neu geschrieben ist, was bei einem großen Index eine Weile dauern kann."
+          },
+          "description": "Dadurch werden Ihre Lizenz und alle kostenpflichtigen Funktionen entfernt. Dies kann nicht rückgängig gemacht werden.",
+          "features": {
+            "text": "API-Schlüssel von Dienstkonten, Token-Ratenlimits und Hooks werden gelöscht. Standardantworten und SCIM-Token werden deaktiviert. Benutzerdefiniertes Branding und die Chat-Aufbewahrung werden zurückgesetzt."
+          },
+          "groups": {
+            "text": "Benutzergruppen werden entfernt. Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Gruppe geteilt wurden, werden öffentlich."
+          },
+          "license": {
+            "text": "Die Lizenz wird aus dieser Bereitstellung entfernt."
+          },
+          "title": "Auf die Community Edition herabstufen"
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "Lizenzschlüssel aktivieren"
@@ -11515,6 +11543,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "Wenn du der Administrator bist, besuche bitte die Seite <billingLink>Admin-Abrechnung</billingLink>, um deine Lizenz zu {hadLicense, select, true {verlängern} other {aktivieren}}, registriere dich über Stripe oder wende dich an <supportLink>support@onyx.app</supportLink> für Unterstützung bei der Abrechnung."
+        },
+        "downgradeButton": {
+          "label": "Auf Community herabstufen"
         },
         "heading": {
           "title": "Zugriff eingeschränkt"
