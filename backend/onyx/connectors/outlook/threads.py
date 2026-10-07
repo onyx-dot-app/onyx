@@ -182,8 +182,11 @@ class ThreadTable:
     file store."""
 
     def __init__(self, run_id: str) -> None:
+        self.run_id = run_id
         self._prefix = f"{_FILE_PREFIX}/{run_id}/"
         self._chunk_counts: list[int] | None = None
+        # One store, so its S3 client is built once rather than per file.
+        self._store = get_default_file_store()
 
     def _page_id(self, page: int) -> str:
         return f"{self._prefix}listing-{page}.jsonl"
@@ -195,7 +198,7 @@ class ThreadTable:
         return f"{self._prefix}mailbox-{mailbox_id}.json"
 
     def _save(self, file_id: str, content: bytes, file_type: str) -> None:
-        get_default_file_store().save_file(
+        self._store.save_file(
             content=BytesIO(content),
             display_name=file_id,
             file_origin=FileOrigin.INDEXING_CHECKPOINT,
@@ -207,7 +210,7 @@ class ThreadTable:
         self._save(file_id, json.dumps(payload).encode(), "application/json")
 
     def _read(self, file_id: str) -> bytes:
-        return get_default_file_store().read_file(file_id, mode="b").read()
+        return self._store.read_file(file_id, mode="b").read()
 
     def _write_lines(self, file_id: str, lines: Sequence[bytes]) -> None:
         self._save(file_id, b"\n".join(lines), "application/x-ndjson")
@@ -306,7 +309,7 @@ class ThreadTable:
             record.file_id[len(mailbox_prefix) : -len(".json")]: _STRINGS.validate_json(
                 self._read(record.file_id)
             )
-            for record in get_default_file_store().list_files_by_prefix(mailbox_prefix)
+            for record in self._store.list_files_by_prefix(mailbox_prefix)
         }
 
     def read_bucket(self, bucket: int) -> list[ThreadListing]:
@@ -334,13 +337,12 @@ class ThreadTable:
         this a long attempt would look abandoned to delete_abandoned_tables."""
         file_id = f"{self._prefix}{_TOUCH}"
         # The upsert keeps created_at, so the marker is recreated.
-        get_default_file_store().delete_file(file_id, error_on_missing=False)
+        self._store.delete_file(file_id, error_on_missing=False)
         self._write(file_id, [])
 
     def delete_all(self) -> None:
-        file_store = get_default_file_store()
-        for record in file_store.list_files_by_prefix(self._prefix):
-            file_store.delete_file(record.file_id, error_on_missing=False)
+        for record in self._store.list_files_by_prefix(self._prefix):
+            self._store.delete_file(record.file_id, error_on_missing=False)
 
 
 def delete_abandoned_tables(days_to_keep: int = NUM_DAYS_TO_KEEP_CHECKPOINTS) -> None:

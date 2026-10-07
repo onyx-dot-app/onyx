@@ -741,6 +741,8 @@ class OutlookConnector(
         self._ops: OutlookSourceOperations | None = None
         # A read-through cache of the bucket being built, never state.
         self._grouped_bucket: tuple[tuple[str, int], list[ThreadGroup]] | None = None
+        # The run's table, kept across steps so its store and client are built once.
+        self._table: ThreadTable | None = None
 
     @property
     def ops(self) -> OutlookSourceOperations:
@@ -848,7 +850,7 @@ class OutlookConnector(
             delete_abandoned_tables()
             yield from self._enumerate_mailboxes(checkpoint)
             return checkpoint
-        table = ThreadTable(checkpoint.run_id)
+        table = self._thread_table(checkpoint.run_id)
         if checkpoint.mailboxes or checkpoint.active:
             yield from self._listing_step(
                 checkpoint, table, start, end, include_permissions
@@ -971,6 +973,11 @@ class OutlookConnector(
         if checkpoint.next_thread >= len(groups):
             checkpoint.next_bucket += 1
             checkpoint.next_thread = 0
+
+    def _thread_table(self, run_id: str) -> ThreadTable:
+        if self._table is None or self._table.run_id != run_id:
+            self._table = ThreadTable(run_id)
+        return self._table
 
     def _bucket_groups(
         self, table: ThreadTable, run_id: str, bucket: int
