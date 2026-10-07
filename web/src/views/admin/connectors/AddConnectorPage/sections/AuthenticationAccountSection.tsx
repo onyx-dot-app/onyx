@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
+import { Disabled } from "@opal/core";
 import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
@@ -75,6 +76,10 @@ interface AuthenticationAccountSectionProps {
   onCredentialChange: (credential: Credential<any>) => void;
   /** The credential the capability checks run with; `null` hides them. */
   checkedCredential: Credential<any> | null;
+  /** Locks the Start Checks prompt, as the configuration below is locked. */
+  checksLocked: boolean;
+  /** Why the prompt is locked, for its tooltip. */
+  checksLockedReason?: string;
 }
 
 /**
@@ -88,6 +93,8 @@ export default function AuthenticationAccountSection({
   currentCredential,
   onCredentialChange,
   checkedCredential,
+  checksLocked,
+  checksLockedReason,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
   const settings = useSettings();
@@ -376,10 +383,12 @@ export default function AuthenticationAccountSection({
               onRerun={checkRun.rerun}
             />
           ) : (
-            <ConnectorsCheckPromptCard
-              disabled={!checkedCredential}
-              onStart={checkRun.begin}
-            />
+            <Disabled disabled={checksLocked} tooltip={checksLockedReason}>
+              <ConnectorsCheckPromptCard
+                disabled={checksLocked}
+                onStart={checkRun.begin}
+              />
+            </Disabled>
           )}
         </Section>
       )}

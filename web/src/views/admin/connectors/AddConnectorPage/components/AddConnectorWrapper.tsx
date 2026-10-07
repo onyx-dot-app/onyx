@@ -639,6 +639,8 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                         currentCredential={currentCredential}
                         onCredentialChange={setCurrentCredential}
                         checkedCredential={canCreate ? formCredential : null}
+                        checksLocked={!configUnlocked}
+                        checksLockedReason={gateMessage ?? undefined}
                       />
                     )}
 

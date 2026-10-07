@@ -7,7 +7,7 @@ import { SvgPlay } from "@opal/icons";
 import { useSettings } from "@/lib/settings/hooks";
 
 interface ConnectorsCheckPromptCardProps {
-  /** Disabled until a credential is chosen. */
+  /** Disabled until the credential section is valid. */
   disabled: boolean;
   onStart: () => void;
 }
