@@ -1,6 +1,7 @@
 import contextvars
 import threading
 import time
+from concurrent.futures import Future
 
 import pytest
 
@@ -212,20 +213,21 @@ def test_start_thread_with_context_passes_args() -> None:
 
 
 def test_executor_isolates_concurrent_submission_contexts() -> None:
-    barrier = threading.Barrier(2)
+    barrier: threading.Barrier = threading.Barrier(2)
 
     def read_then_change() -> str:
         barrier.wait(timeout=2)
-        inherited = test_var.get()
+        inherited: str = test_var.get()
         test_var.set("worker")
         return inherited
 
-    token = test_var.set("first")
+    token: contextvars.Token[str] = test_var.set("first")
     try:
+        executor: ContextThreadPoolExecutor
         with ContextThreadPoolExecutor(max_workers=2) as executor:
-            first = executor.submit(read_then_change)
+            first: Future[str] = executor.submit(read_then_change)
             test_var.set("second")
-            second = executor.submit(read_then_change)
+            second: Future[str] = executor.submit(read_then_change)
             assert first.result(timeout=3) == "first"
             assert second.result(timeout=3) == "second"
             assert executor.submit(test_var.get).result(timeout=3) == "second"
@@ -235,10 +237,10 @@ def test_executor_isolates_concurrent_submission_contexts() -> None:
 
 
 def test_thread_uses_explicit_empty_context() -> None:
-    token = test_var.set("caller")
+    token: contextvars.Token[str] = test_var.set("caller")
     observed: list[str] = []
     try:
-        worker = start_thread_with_context(
+        worker: threading.Thread = start_thread_with_context(
             lambda: observed.append(test_var.get()), context=contextvars.Context()
         )
         worker.join(timeout=2)
@@ -250,21 +252,22 @@ def test_thread_uses_explicit_empty_context() -> None:
 
 
 def test_thread_future_preserves_context_and_result() -> None:
-    token = test_var.set("future")
+    token: contextvars.Token[str] = test_var.set("future")
     try:
-        future = start_thread_future(test_var.get, name="test-result")
+        future: Future[str] = start_thread_future(test_var.get, name="test-result")
         assert future.result(timeout=2) == "future"
     finally:
         test_var.reset(token)
 
 
 def test_thread_future_preserves_base_exception() -> None:
-    error = BaseException("worker failed")
+    error: BaseException = BaseException("worker failed")
 
     def fail() -> None:
         raise error
 
-    future = start_thread_future(fail, name="test-error")
+    future: Future[None] = start_thread_future(fail, name="test-error")
+    caught: pytest.ExceptionInfo[BaseException]
     with pytest.raises(BaseException) as caught:
         future.result(timeout=2)
     assert caught.value is error

@@ -41,7 +41,7 @@ class ContextThreadPoolExecutor(ThreadPoolExecutor):
     ) -> Future[T]:
         # A single Context cannot be entered concurrently by multiple threads.
         # Copy per submission to preserve tenant and trace state without races.
-        context = contextvars.copy_context()
+        context: contextvars.Context = contextvars.copy_context()
         return super().submit(lambda: context.run(fn, *args, **kwargs))
 
 
@@ -480,7 +480,9 @@ def start_thread_with_context(
 
     Preserve tenant ID, request ID, and trace context across threads.
     """
-    ctx = context if context is not None else contextvars.copy_context()
+    ctx: contextvars.Context = (
+        context if context is not None else contextvars.copy_context()
+    )
     thread = threading.Thread(
         target=lambda: ctx.run(target, *args, **(kwargs or {})),
         name=name,
@@ -497,7 +499,7 @@ def start_thread_future[T](operation: Callable[[], T], *, name: str) -> Future[T
 
     def run() -> None:
         try:
-            value = operation()
+            value: T = operation()
         except BaseException as error:
             result.set_exception(error)
         else:
