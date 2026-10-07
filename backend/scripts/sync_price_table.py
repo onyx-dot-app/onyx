@@ -614,15 +614,17 @@ def _preserve_unbounded_flags(providers: dict[str, Any], output_dir: Path) -> No
     """Carry `unbounded` router flags over from the vendored openrouter.json
     when the OpenRouter feed is unreachable and the merge cannot re-derive
     them — a transient outage must not silently restore bogus output limits."""
-    section = providers.get("openrouter")
+    section: dict[str, Any] | None = providers.get("openrouter")
     if section is None:
         return
     try:
-        vendored = json.loads((output_dir / "openrouter.json").read_text())
+        vendored: dict[str, Any] = json.loads(
+            (output_dir / "openrouter.json").read_text()
+        )
     except Exception:
         return
-    vendored_models = vendored.get("models") or {}
-    restored = 0
+    vendored_models: dict[str, Any] = vendored.get("models") or {}
+    restored: int = 0
     for model_id, entry in section["models"].items():
         if (vendored_models.get(model_id) or {}).get("unbounded"):
             entry["unbounded"] = True
