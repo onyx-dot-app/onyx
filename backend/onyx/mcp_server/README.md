@@ -19,7 +19,7 @@ sources and document sets that a search may be filtered by. Add
 `read:chat` or `write:chat` only if the client needs the chat surfaces. An unscoped token carries
 the user's full access, so prefer a scoped one.
 
-OAuth-capable MCP clients can connect through the public web URL when `OAUTH_PROVIDER_ENABLED=true`. PAT and API-key authentication remain available.
+OAuth-capable MCP clients can connect through the public web URL when `WEB_DOMAIN` is HTTPS (or HTTP on a loopback host). PAT and API-key authentication remain available.
 
 ### OAuth
 
@@ -39,7 +39,7 @@ Access tokens expire after 15 minutes. Refresh grants expire after 30 days, even
 
 Use **Connected apps** in user settings to disconnect an app. Disconnect revokes all tokens for that grant. Signing out of Onyx does not disconnect apps.
 
-The MCP resource URL is always `WEB_DOMAIN/mcp/`. Set the same `WEB_DOMAIN` and `OAUTH_PROVIDER_ENABLED` on the API server and MCP server.
+The MCP resource URL is always `WEB_DOMAIN/mcp/`. Set the same `WEB_DOMAIN` on the API server and MCP server.
 
 The reverse proxy must expose these discovery URLs without requiring a session:
 
@@ -206,7 +206,6 @@ Expected response:
 - `MCP_SERVER_ENABLED`: Enable MCP server (set to "true" to enable, default: disabled)
 - `MCP_SERVER_PORT`: Port for MCP server (default: 8090)
 - `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
-- `OAUTH_PROVIDER_ENABLED`: Let MCP clients connect with OAuth (set to "true" to enable, default: disabled). Requires an HTTPS `WEB_DOMAIN`, except on loopback hosts. Set identically on API and MCP servers.
 
 **API Server Connection:**
 - `API_SERVER_PROTOCOL`: Protocol for API server connection (default: "http")

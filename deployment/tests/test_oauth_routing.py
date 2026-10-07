@@ -36,12 +36,8 @@ def test_mcp_oauth_discovery_routes_use_generic_oauth_provider() -> None:
     ) in next_config
 
 
-def test_deployment_restarts_nginx_and_documents_the_provider_flag() -> None:
+def test_deployment_restarts_nginx() -> None:
     values = _read("deployment/helm/charts/onyx/values.yaml")
-    docker_env = _read("deployment/docker_compose/env.template")
-    cli_docker_env = _read(
-        "cli/internal/deploy/deployfiles/embedded/docker_compose/env.template"
-    )
 
     chart_version = re.search(
         r"^version: (\d+)\.(\d+)\.(\d+)$",
@@ -53,8 +49,6 @@ def test_deployment_restarts_nginx_and_documents_the_provider_flag() -> None:
     restart_version = re.search(r'onyx.app/nginx-config-version: "(\d+)"', values)
     assert restart_version is not None
     assert int(restart_version.group(1)) >= 8
-    assert "# OAUTH_PROVIDER_ENABLED=false" in docker_env
-    assert "# OAUTH_PROVIDER_ENABLED=false" in cli_docker_env
 
 
 def test_ingress_discovery_patterns_match_only_literal_well_known_paths() -> None:
