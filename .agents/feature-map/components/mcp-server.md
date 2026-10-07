@@ -204,7 +204,7 @@ expired, and the scope is exactly `read:search`. A 401 returns `None`; a 402
 and an outage stay distinct (`SUBSCRIPTION_INACTIVE`, `SERVICE_UNAVAILABLE`,
 turned into responses by `MCPAuthErrorMiddleware`); a 403 becomes an
 `insufficient_scope` challenge that points at the protected-resource metadata.
-When `OAUTH_PROVIDER_ENABLED` is set, `build_mcp_server_auth` wraps the verifier
+When `oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS` is set, `build_mcp_server_auth` wraps the verifier
 in fastmcp's `RemoteAuthProvider`, which serves that metadata and names the
 Onyx issuer. The tokens come from the OAuth provider in [[auth-and-identity]] §4.9.
 

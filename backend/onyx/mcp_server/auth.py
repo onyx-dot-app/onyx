@@ -14,11 +14,10 @@ from onyx.auth.constants import (
     OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX,
     OAUTH_PROVIDER_SCOPE,
 )
-from onyx.configs import app_configs
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
 from onyx.mcp_server.utils import get_http_client
-from onyx.oauth_provider.config import get_oauth_provider_settings
+from onyx.oauth_provider import config as oauth_provider_config
 from onyx.oauth_provider.models import OAuthProviderIntrospection
 from onyx.server.metrics.mcp_server import MCPAuthResult, record_mcp_auth_result
 from onyx.utils.logger import setup_logger
@@ -88,7 +87,8 @@ class OnyxTokenVerifier(TokenVerifier):
         )
 
     async def verify_oauth_token(self, token: str) -> AccessToken | None:
-        if not app_configs.OAUTH_PROVIDER_ENABLED:
+        settings = oauth_provider_config.OAUTH_PROVIDER_SETTINGS
+        if settings is None:
             return None
         try:
             response = await get_http_client().get(
@@ -110,7 +110,7 @@ class OnyxTokenVerifier(TokenVerifier):
         if response.status_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS.status_code:
             record_mcp_auth_result(MCPAuthResult.REJECTED)
             metadata_url = build_resource_metadata_url(
-                AnyHttpUrl(get_oauth_provider_settings().mcp_resource_url)
+                AnyHttpUrl(settings.mcp_resource_url)
             )
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -131,7 +131,7 @@ class OnyxTokenVerifier(TokenVerifier):
             record_mcp_auth_result(MCPAuthResult.ERROR)
             raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE) from error
         if (
-            info.resource != get_oauth_provider_settings().mcp_resource_url
+            info.resource != settings.mcp_resource_url
             or info.expires_at <= time.time()
             or set(info.scopes) != {OAUTH_PROVIDER_SCOPE}
             or not info.client_id
@@ -151,9 +151,9 @@ class OnyxTokenVerifier(TokenVerifier):
 
 def build_mcp_server_auth() -> TokenVerifier | RemoteAuthProvider:
     verifier = OnyxTokenVerifier()
-    if not app_configs.OAUTH_PROVIDER_ENABLED:
+    settings = oauth_provider_config.OAUTH_PROVIDER_SETTINGS
+    if settings is None:
         return verifier
-    settings = get_oauth_provider_settings()
     return RemoteAuthProvider(
         token_verifier=verifier,
         authorization_servers=[AnyHttpUrl(settings.issuer_url)],

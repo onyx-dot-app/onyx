@@ -20,6 +20,7 @@ from onyx.db.engine import async_sql_engine, sql_engine
 from onyx.db.enums import AccountType, Permission
 from onyx.db.models import Base, PublicBase, User, UserTenantMapping
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
+from onyx.oauth_provider import config as oauth_config
 from onyx.server.oauth_provider.api import router
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
@@ -91,6 +92,11 @@ async def test_cloud_token_tenant_wins_over_cookie_without_membership_bypass(
     monkeypatch.setattr(tenant_tracking, "MULTI_TENANT", True)
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
+    monkeypatch.setattr(
+        oauth_config,
+        "OAUTH_PROVIDER_SETTINGS",
+        oauth_config.load_oauth_provider_settings(),
+    )
     users: list[User] = []
     access_tokens: list[str] = []
     context = CURRENT_TENANT_ID_CONTEXTVAR.set("public")

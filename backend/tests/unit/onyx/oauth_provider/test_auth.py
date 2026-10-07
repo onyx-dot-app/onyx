@@ -17,6 +17,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.mcp_server import api as mcp_api
 from onyx.mcp_server import auth as mcp_auth
+from onyx.oauth_provider import config as oauth_config
 from onyx.oauth_provider.auth import extract_oauth_provider_bearer
 from onyx.oauth_provider.models import OAuthProviderIntrospection
 from onyx.server.oauth_provider.api import _session_hash
@@ -31,6 +32,11 @@ _OAUTH_ACCESS_TOKEN_BYTES = _OAUTH_ACCESS_TOKEN.encode("ascii")
 def introspection_backend(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "https://onyx.example")
+    monkeypatch.setattr(
+        oauth_config,
+        "OAUTH_PROVIDER_SETTINGS",
+        oauth_config.load_oauth_provider_settings(),
+    )
     monkeypatch.setattr(mcp_auth.time, "time", lambda: 1000)
     backend = AsyncMock()
     monkeypatch.setattr(mcp_auth, "get_http_client", lambda: backend)
@@ -198,6 +204,11 @@ async def test_introspection_preserves_billing_and_outage_status(
 ) -> None:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
+    monkeypatch.setattr(
+        oauth_config,
+        "OAUTH_PROVIDER_SETTINGS",
+        oauth_config.load_oauth_provider_settings(),
+    )
     backend = AsyncMock()
     backend.get.return_value = httpx.Response(status_code)
     monkeypatch.setattr(mcp_auth, "get_http_client", lambda: backend)
@@ -221,6 +232,11 @@ async def test_insufficient_scope_has_discovery_challenge(
 ) -> None:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
+    monkeypatch.setattr(
+        oauth_config,
+        "OAUTH_PROVIDER_SETTINGS",
+        oauth_config.load_oauth_provider_settings(),
+    )
     monkeypatch.setattr(mcp_api, "MCP_SERVER_CORS_ORIGINS", ["https://client.example"])
     backend = AsyncMock()
     backend.get.return_value = httpx.Response(403)
@@ -262,6 +278,11 @@ async def test_discovery_aliases_and_challenge_point_to_same_resource(
 ) -> None:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
+    monkeypatch.setattr(
+        oauth_config,
+        "OAUTH_PROVIDER_SETTINGS",
+        oauth_config.load_oauth_provider_settings(),
+    )
     server = FastMCP("discovery-test", auth=mcp_auth.build_mcp_server_auth())
     monkeypatch.setattr(mcp_api, "mcp_server", server)
     app = mcp_api.create_mcp_fastapi_app()
@@ -290,6 +311,7 @@ async def test_disabled_feature_advertises_no_oauth_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", False)
+    monkeypatch.setattr(oauth_config, "OAUTH_PROVIDER_SETTINGS", None)
     server = FastMCP("disabled-test", auth=mcp_auth.build_mcp_server_auth())
     monkeypatch.setattr(mcp_api, "mcp_server", server)
     async with httpx.AsyncClient(

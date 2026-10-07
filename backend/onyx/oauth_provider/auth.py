@@ -9,7 +9,6 @@ from onyx.auth.constants import (
 )
 from onyx.auth.oauth_provider import OAuthProviderTokenKind, parse_oauth_provider_token
 from onyx.auth.permissions import has_global_permission
-from onyx.configs import app_configs
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.oauth_provider import (
@@ -21,7 +20,7 @@ from onyx.db.oauth_provider import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.oauth_provider.config import get_oauth_provider_settings
+from onyx.oauth_provider import config as oauth_provider_config
 from onyx.oauth_provider.models import OAuthProviderTokenInfo
 from onyx.server.middleware.api_prefix import strip_api_prefix
 from shared_configs.contextvars import UsageCredentialIdentity, get_current_tenant_id
@@ -74,7 +73,7 @@ async def oauth_provider_tenant_from_request(request: Request) -> str | None:
         return None
     parsed = parse_oauth_provider_token(raw_token)
     if (
-        not app_configs.OAUTH_PROVIDER_ENABLED
+        oauth_provider_config.OAUTH_PROVIDER_SETTINGS is None
         or parsed is None
         or parsed.kind != OAuthProviderTokenKind.ACCESS
     ):
@@ -100,13 +99,14 @@ def get_oauth_provider_token_info(request: Request) -> OAuthProviderTokenInfo | 
 async def authenticate_oauth_provider_request(
     request: Request, session: AsyncSession, raw_token: str
 ) -> User:
-    if not app_configs.OAUTH_PROVIDER_ENABLED:
+    settings = oauth_provider_config.OAUTH_PROVIDER_SETTINGS
+    if settings is None:
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
     if not _is_mcp_oauth_access_route(request):
         raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
     try:
         result = await resolve_oauth_provider_access_token(
-            session, raw_token, resource=get_oauth_provider_settings().mcp_resource_url
+            session, raw_token, resource=settings.mcp_resource_url
         )
         if result is None:
             raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
