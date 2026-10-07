@@ -129,8 +129,31 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     apiLink: "https://www.voyageai.com/dashboard",
     costslink: "https://www.voyageai.com/pricing",
-    deprecated: true,
     embeddingModels: [
+      {
+        modelName: "voyage-4-large",
+        modelDim: 1024,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        descriptionKey: "modelDescriptions.voyage4Large",
+      },
+      {
+        modelName: "voyage-4",
+        modelDim: 1024,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        descriptionKey: "modelDescriptions.voyage4",
+      },
+      {
+        modelName: "voyage-4-lite",
+        modelDim: 1024,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        descriptionKey: "modelDescriptions.voyage4Lite",
+      },
       {
         modelName: "voyage-large-2-instruct",
         modelDim: 1024,
@@ -138,6 +161,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "",
         passagePrefix: "",
         descriptionKey: "modelDescriptions.voyageLarge2Instruct",
+        deprecated: true,
       },
       {
         modelName: "voyage-light-2-instruct",
@@ -146,6 +170,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "",
         passagePrefix: "",
         descriptionKey: "modelDescriptions.voyageLight2Instruct",
+        deprecated: true,
       },
     ],
   },

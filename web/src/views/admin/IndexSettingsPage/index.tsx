@@ -308,7 +308,7 @@ function ProviderGroup({
 
   const handleModelSelect = useCallback(
     (model: EmbeddingModel) => {
-      if (provider.deprecated) return;
+      if (provider.deprecated || model.deprecated) return;
       const state = getModelState(model);
 
       if (state === "selected" || state === "current") {
@@ -528,6 +528,7 @@ function EmbeddingModelCard({
 }: EmbeddingModelCardProps) {
   const t = useTranslations("admin.indexSettings");
   const { appName } = useSettings();
+  const isDeprecated = provider.deprecated || model.deprecated;
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":
@@ -536,9 +537,9 @@ function EmbeddingModelCard({
             prominence="tertiary"
             rightIcon={SvgArrowExchange}
             onClick={onSelect}
-            disabled={provider.deprecated}
+            disabled={isDeprecated}
             tooltip={
-              provider.deprecated
+              isDeprecated
                 ? t("modelCard.deprecated.connectTooltip")
                 : undefined
             }
@@ -551,11 +552,9 @@ function EmbeddingModelCard({
           <Button
             prominence="tertiary"
             onClick={onSelect}
-            disabled={provider.deprecated}
+            disabled={isDeprecated}
             tooltip={
-              provider.deprecated
-                ? t("modelCard.deprecated.selectTooltip")
-                : undefined
+              isDeprecated ? t("modelCard.deprecated.selectTooltip") : undefined
             }
           >
             {t("modelCard.selectButton.label")}
@@ -587,7 +586,7 @@ function EmbeddingModelCard({
   })();
 
   const isClickable =
-    !provider.deprecated &&
+    !isDeprecated &&
     (modelState === "unconnected" ||
       modelState === "connected" ||
       modelState === "current" ||
