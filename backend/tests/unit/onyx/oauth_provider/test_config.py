@@ -15,7 +15,6 @@ def _patch_oauth_config(
     web_domain: str = "https://onyx.example",
 ) -> None:
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", web_domain)
-    monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
 
 
 def test_load_oauth_provider_settings_derives_defaults(
@@ -60,15 +59,6 @@ def test_load_oauth_provider_settings_uses_any_url_canonical_form(
     assert settings.mcp_resource_url == "https://onyx.example/App/mcp/"
     assert settings.web_url == "https://onyx.example/App"
     assert settings.web_origin == "https://onyx.example"
-
-
-def test_load_oauth_provider_settings_is_off_without_the_flag(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_oauth_config(monkeypatch)
-    monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", False)
-
-    assert load_oauth_provider_settings() is None
 
 
 @pytest.mark.parametrize(

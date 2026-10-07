@@ -76,7 +76,6 @@ async def protocol_client(
     redis_client: Redis,
     protocol_session_strategy: TenantAwareRedisStrategy | SingleTenantJWTStrategy,
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
-    monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", _ORIGIN)
     monkeypatch.setattr(
         oauth_config,

@@ -54,10 +54,8 @@ def validate_oauth_url(value: str, *, allow_query: bool) -> str:
 
 
 def load_oauth_provider_settings() -> OAuthProviderSettings | None:
-    """Settings for the OAuth provider, or None when it cannot run: the flag is off,
-    or `WEB_DOMAIN` is not HTTPS (plain HTTP only on a loopback host)."""
-    if not app_configs.OAUTH_PROVIDER_ENABLED:
-        return None
+    """Settings for the OAuth provider, or None when `WEB_DOMAIN` cannot host it:
+    it must be HTTPS (plain HTTP only on a loopback host)."""
     try:
         web_url = validate_oauth_url(app_configs.WEB_DOMAIN, allow_query=False).rstrip(
             "/"
