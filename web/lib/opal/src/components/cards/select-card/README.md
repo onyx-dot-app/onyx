@@ -70,7 +70,7 @@ Everything above, **plus**:
 
 - **Only the header is interactive.** `Interactive.Stateful` wraps the header alone, so `onClick`, hover and the state colours stay there. A form inside `expandedContent` keeps its own clicks instead of toggling the card.
 - **Always controlled.** `expanded` is a one-way visual prop. There is no `defaultExpanded` and no `onExpandChange` — the caller owns the state and the trigger, exactly as with [`Card`](../card/README.md).
-- **Rounding adapts.** Expanded, the header rounds only at the top and the fold only at the bottom, so they read as one card. The corners square at once when the fold opens, and round over 100ms after it closes.
+- **Rounding adapts.** Expanded, the header rounds only at the top and the fold only at the bottom, so they read as one card. The corners square as the fold expands and round as it collapses, over the same 150ms.
 - **`state` is the caller's, open or closed.** The card paints whatever state it is given and never rewrites it. A card that should stop looking selected once it opens does that at the call site, with `state={open ? "filled" : "selected"}` — which is also what decides whether a `Content` inside it, set to `color="interactive"`, picks up the selection colour.
 - **The separator keeps its resting colour.** The header's bottom border stays `border-01` while expanded, even on a selected card, so it reads as a divider rather than an edge. The fold's own border does follow the selection.
 - **`padding` applies to the header only.** The fold has no intrinsic padding; pad whatever you pass to `expandedContent`.

@@ -71,6 +71,9 @@ function CardFold({
   contentHeight = 80,
   children,
 }: CardFoldProps) {
+  const frameStyle: React.CSSProperties & Record<"--opal-card-radius", string> =
+    { "--opal-card-radius": radius };
+
   return (
     // The bordered body is the fold's frame: it grows with the height and
     // stays visible, and only the content inside it fades.
@@ -79,15 +82,16 @@ function CardFold({
       frame={(content) => (
         <div
           className="opal-card-fold-body"
-          style={{
-            borderBottomLeftRadius: radius,
-            borderBottomRightRadius: radius,
-          }}
+          style={frameStyle}
           data-border={border}
           data-opal-status-border={borderColor}
-          data-content-height={contentHeight}
         >
-          {content}
+          <div
+            className="opal-card-fold-scroll"
+            data-content-height={contentHeight}
+          >
+            {content}
+          </div>
         </div>
       )}
     >
