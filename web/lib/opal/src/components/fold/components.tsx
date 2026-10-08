@@ -9,6 +9,13 @@ const FOLD_DURATION_MS = 200;
 type FoldProps = {
   /** Whether the fold is open. */
   open: boolean;
+  /**
+   * Keep the children while closed, e.g. so form fields inside keep their
+   * state. Off, a closed fold drops them once it finishes closing.
+   */
+  keepMounted?: boolean;
+  /** The fold's id, for a control that points at it with `aria-controls`. */
+  id?: string;
   children?: React.ReactNode;
 };
 
@@ -18,15 +25,16 @@ type FoldProps = {
  * no measured height, no state machine. It paints nothing of its own, so the
  * content stays part of whatever surrounds it.
  *
- * A closed fold takes no space and holds nothing: children stay through the
- * closing animation, so it has something to collapse, then drop. While closed
- * or closing it is inert and hidden from assistive tech.
+ * A closed fold takes no space. Its children stay through the closing
+ * animation, so it has something to collapse, then drop, unless
+ * `keepMounted`. While closed or closing it is inert and hidden from
+ * assistive tech.
  */
-function Fold({ open, children }: FoldProps) {
+function Fold({ open, keepMounted = false, id, children }: FoldProps) {
   // True from the moment the fold opens until its closing animation ends,
   // the window where the children must stay mounted though `open` is false.
   const [closing, setClosing] = useState(false);
-  const mounted = open || closing;
+  const mounted = keepMounted || open || closing;
 
   useEffect(() => {
     if (open) {
@@ -39,6 +47,7 @@ function Fold({ open, children }: FoldProps) {
 
   return (
     <div
+      id={id}
       className="opal-fold"
       data-open={open ? "true" : "false"}
       aria-hidden={!open || undefined}
