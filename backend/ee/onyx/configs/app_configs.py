@@ -149,6 +149,20 @@ ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S = int(
     os.environ.get("ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
 )
 
+#####
+# Zoom
+#####
+# In seconds, default is 5 minutes
+ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+# In seconds, default is 6 hours: a sync lists every host's whole recording
+# history, about 170 calls per host, and reads the share settings of every
+# recording, one call each.
+ZOOM_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("ZOOM_PERMISSION_DOC_SYNC_FREQUENCY") or 6 * 60 * 60
+)
+
 
 ####
 # Celery Job Frequency

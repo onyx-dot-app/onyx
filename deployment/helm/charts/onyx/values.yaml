@@ -412,7 +412,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "7"
+      onyx.app/nginx-config-version: "9"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1780,6 +1780,8 @@ configMap:
   BOX_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
   ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS: ""
+  ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  ZOOM_PERMISSION_DOC_SYNC_FREQUENCY: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
   # HTTP endpoint (failures never fail indexing). Intended for non-EE
@@ -1864,6 +1866,8 @@ craft:
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.
 sandboxPod:
+  # Shared OpenCode, sidecar, and preview listener. Set to "::" for IPv6-only pods.
+  listenHost: "0.0.0.0"
   nodeSelector:
     onyx.app/workload: sandbox
   tolerations:
@@ -1898,11 +1902,17 @@ sandboxImagePrepull:
 
 # -- Sandbox egress proxy.
 sandboxProxy:
-  # Allow IPv6 (::/0 minus link-local/IMDS) egress from the proxy. OFF by default: the AWS
-  # VPC CNI network-policy agent intermittently fails to program IPv6 ipBlocks into the
-  # egress eBPF map (EINVAL), leaving it empty and fail-closed (proxy pods crash-loop), and
-  # single-stack IPv4 clusters have no IPv6 egress to gate. Enable ONLY on dual-stack
-  # clusters, where an Egress policy without an IPv6 allow silently drops all IPv6 egress.
+  # Explicit IPv6-only mode. Existing installations retain IPv4 listeners.
+  listenHost: "0.0.0.0"
+  # Requires restricted pod ingress; the proxy still checks sandbox identity.
+  allowGlobalClients: false
+  # Deny sandbox requests to these VPC, pod, Service, and node networks.
+  # Required for IPv6 or global clients, including globally routable internal ranges.
+  internalCIDRs: []
+  # Allow public IPv6 egress from the proxy; requires internalCIDRs.
+  # Enable for IPv6-only clusters. This does not select the sandbox address family.
+  # Listeners and Services must use the primary pod IP family; secondary IPv6
+  # sandbox addresses on IPv4-primary dual-stack clusters are not supported.
   egressAllowIPv6: false
   replicaCount: 2
   terminationGracePeriodSeconds: 200

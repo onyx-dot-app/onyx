@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Onyx に接続",
+      "request": "{clientName} に Onyx の検索を許可しますか？",
+      "account": "ログイン中: {email}",
+      "workspace": "ワークスペース: {workspaceName}",
+      "appAddress": "アプリのアドレス: {origin}",
+      "access": "アクセス可能なドキュメントの検索結果を読み取ります。ウェブ検索を使用し、ウェブページを開きます。",
+      "allow": "アクセスを許可",
+      "deny": "拒否",
+      "pending": "選択を保存中...",
+      "loading": "認可リクエストを読み込み中...",
+      "unavailable": "このリクエストは期限切れ、または変更されています。アプリからやり直してください。",
+      "failed": "認可を完了できませんでした。アプリからやり直してください。",
+      "signInRequired": "このアプリを認可するにはログインしてください。",
+      "signIn": "ログイン",
+      "forbidden": "このアプリを認可できません。ワークスペース管理者にお問い合わせください。",
+      "loadFailed": "Onyx はこのリクエストを読み込めませんでした。もう一度お試しください。",
+      "retry": "再試行"
+    },
+    "connections": {
+      "cancel": "キャンセル",
+      "title": "接続済みアプリ",
+      "description": "Onyx の検索を許可したアプリです。",
+      "empty": "接続済みアプリはありません。",
+      "loading": "接続済みアプリを読み込み中...",
+      "expires": "有効期限: {date}",
+      "disconnect": "接続を解除",
+      "disconnectAriaLabel": "{clientName} の接続を解除",
+      "pending": "接続を解除中...",
+      "failed": "アプリの接続を解除できませんでした。もう一度お試しください。",
+      "loadFailed": "接続済みアプリを読み込めませんでした。",
+      "confirmTitle": "{clientName} の接続を解除しますか？",
+      "confirmDescription": "このアプリは Onyx にアクセスできなくなります。後で再接続できます。"
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "アカウント"
@@ -1393,24 +1429,33 @@
           "label": "Community にダウングレード"
         },
         "modal": {
+          "changes": {
+            "text": "ダウングレードすると:"
+          },
           "confirmButton": {
             "label": "ダウングレード",
             "loading": "ダウングレード中..."
           },
-          "connectors": {
-            "text": "すべてのコネクタが公開されます。同期された権限やグループによって非公開だったドキュメントは、すべてのユーザーに表示されます。検索結果はインデックスの書き換え後に反映され、大きなインデックスでは時間がかかる場合があります。"
+          "deleted": {
+            "text": "**削除:** ユーザーグループ、サービスアカウントの API キー、トークンレート制限、フック"
           },
-          "description": "ライセンスとすべての有料機能が削除されます。この操作は元に戻せません。",
-          "features": {
-            "text": "サービスアカウントの API キー、Token レート制限、フックは削除されます。標準回答と SCIM トークンは無効になります。カスタムブランディングとチャット保持期間はリセットされます。"
+          "description": "ライセンスとすべての有料機能を削除します。",
+          "disabled": {
+            "text": "**無効化:** 標準回答と SCIM トークン"
           },
-          "groups": {
-            "text": "ユーザーグループは削除されます。グループと共有されていたエージェント、ドキュメントセット、LLM プロバイダー、MCP サーバー、スキルは公開されます。"
+          "intro": {
+            "text": "このデプロイメントからアクセス制御が削除されます。**再インデックスが開始され**、検索結果に変更が反映されます。大きなインデックスでは時間がかかることがあります。"
           },
-          "license": {
-            "text": "このデプロイメントからライセンスが削除されます。"
+          "madePublic": {
+            "text": "**公開:** すべてのコネクタと、ユーザーグループに共有されているエージェント、ドキュメントセット、LLM プロバイダー、MCP サーバー、スキル"
           },
-          "title": "Community Edition にダウングレード"
+          "reset": {
+            "text": "**デフォルトにリセット:** カスタムブランディングとチャット保持ポリシー"
+          },
+          "title": "Community Edition にダウングレード",
+          "warning": {
+            "text": "同期された権限やユーザーグループで制限されていたドキュメントが**すべてのユーザーに表示**されます。この操作は元に戻せません。"
+          }
         }
       },
       "footer": {
@@ -2808,7 +2853,7 @@
           "label": "キャンセル"
         },
         "connectButton": {
-          "label": "接続"
+          "label": "コネクタを作成"
         },
         "description": "{source} に接続し、{appName} 用のコネクタを設定します。{hasDocs, select, true {[ドキュメント]({url})を見る} other {}}"
       },
@@ -8882,6 +8927,68 @@
         "settingsUpdated": "設定を更新しました",
         "settingsUpdateFailed": "設定の更新に失敗しました"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "続行するには、上のコネクタのチェックを実行し、失敗を解消してください。",
+      "prompt": {
+        "title": "接続をテスト",
+        "description": "{appName} は続行する前に、必要なスコープを確認するチェックを実行します。",
+        "startButton": {
+          "label": "チェックを開始"
+        }
+      },
+      "title": "コネクターチェック",
+      "groups": {
+        "failed": "失敗 {count} 件",
+        "indeterminate": "未検証 {count} 件",
+        "passed": "完了 {count} 件",
+        "skipped": "スキップ {count} 件",
+        "running": "実行中 {count} 件",
+        "expected": "予定 {count} 件"
+      },
+      "status": {
+        "passed": "合格",
+        "failed": "失敗",
+        "indeterminate": "検証できませんでした",
+        "skipped": "スキップ",
+        "running": "テスト中…",
+        "pending": "待機中",
+        "waiting": "設定を待っています"
+      },
+      "required": {
+        "label": "必須"
+      },
+      "running": {
+        "label": "チェックを実行中…"
+      },
+      "empty": {
+        "label": "まだチェックは実行されていません。"
+      },
+      "docsLink": {
+        "label": "ドキュメント"
+      },
+      "rerunButton": {
+        "label": "チェックを再実行"
+      },
+      "foldButton": {
+        "fold": "折りたたむ",
+        "expand": "展開"
+      },
+      "titleCount": "（{complete}/{total}）",
+      "summary": {
+        "failed": "失敗 {count} 件",
+        "unverified": "未検証 {count} 件",
+        "inProgress": "実行中 {count} 件",
+        "expected": "予定 {count} 件",
+        "skipped": "スキップ {count} 件",
+        "successful": "成功 {count} 件"
+      },
+      "failedToRun": "チェックを実行できませんでした。もう一度お試しください。",
+      "requiredFailed": "{count, plural, one {必須チェック # 件が失敗} other {必須チェック # 件が失敗}}",
+      "state": {
+        "completed": "チェックが完了しました",
+        "inProgress": "チェックを実行中…"
+      }
     }
   },
   "agents": {
@@ -12961,9 +13068,6 @@
         "calls": {
           "tag": "{count, plural, one {# 件の呼び出し} other {# 件の呼び出し}}"
         },
-        "failed": {
-          "tag": "{count} 件失敗"
-        },
         "working": {
           "label": "作業中"
         }
@@ -13399,6 +13503,9 @@
       "oneMonth": "1ヶ月",
       "sevenDays": "7日",
       "threeMonths": "3ヶ月"
+    },
+    "iconTooltip": {
+      "label": "詳細情報"
     },
     "input": {
       "day": "日",

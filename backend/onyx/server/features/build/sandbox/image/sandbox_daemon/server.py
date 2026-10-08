@@ -422,4 +422,8 @@ async def opencode_history_mark_restored(
 if __name__ == "__main__":
     # TODO(security): bind to 127.0.0.1 and front with an in-pod proxy, or
     # restrict the listener to the sandbox network namespace.
-    uvicorn.run(app, host="0.0.0.0", port=PUSH_DAEMON_PORT)  # noqa: S104
+    uvicorn.run(
+        app,
+        host=os.environ.get("SANDBOX_LISTEN_HOST", "0.0.0.0"),  # noqa: S104
+        port=PUSH_DAEMON_PORT,
+    )

@@ -10,9 +10,10 @@ the same for every recording in a run, so the caller memoises both, and the
 catalogue is only asked for when a recording names a rule.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import NamedTuple
 
+import requests
 from pydantic import ValidationError
 
 from onyx.access.models import ExternalAccess
@@ -23,18 +24,19 @@ from onyx.connectors.zoom.models import (
     APPROVED_REGISTRANT_STATUS,
     ZoomRecordingAuthenticationRule,
     ZoomRecordingEntry,
+    ZoomRecordingRegistrant,
     ZoomRecordingSettings,
     ZoomShareRecording,
 )
-from onyx.connectors.zoom.recordings.access import (
-    ZoomAccessListUnavailable,
-    approved_registrant_emails,
-    usable_emails,
+from onyx.connectors.zoom.recordings.models import (
+    definitely_absent,
+    user_does_not_exist,
 )
-from onyx.connectors.zoom.recordings.models import user_does_not_exist
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+AccessResolver = Callable[[ZoomRecordingEntry], ExternalAccess]
 
 # Zoom's `authentication_option` for "Only people with access". It never appears
 # in the rule catalogue, and it arrives with `share_recording` still "publicly",
@@ -58,12 +60,16 @@ _OWNER_ONLY = RuleGrant(public=False, domains=frozenset())
 _EVERYONE = RuleGrant(public=True, domains=frozenset())
 
 
-def load_rule_grants(client: ZoomClient) -> dict[str, RuleGrant]:
-    """The catalogue is account-wide, so it is asked for through a user the
-    account still lists rather than a recording's owner, who may have left.
-    An account with no users has no recordings to ask about either."""
-    page = client.list_users()
-    user_id = next((u.id for u in page.users if u.id), None)
+def load_rule_grants(
+    client: ZoomClient, user_id: str | None = None
+) -> dict[str, RuleGrant]:
+    """The catalogue is account-wide, so it is asked for through any user the
+    account still lists rather than a recording's owner, who may have left; a
+    caller that has listed the account passes one it saw. An account with no
+    users has no recordings to ask about either."""
+    if user_id is None:
+        page = client.list_users()
+        user_id = next((u.id for u in page.users if u.id), None)
     if user_id is None:
         return {}
     catalogue = client.get_recording_authentication_rules(user_id)
@@ -93,6 +99,43 @@ def _grant_of(rule: ZoomRecordingAuthenticationRule) -> RuleGrant:
     return _OWNER_ONLY
 
 
+class ZoomAccessListUnavailable(Exception):
+    """Nobody could be named to read a recording. It must stay something
+    `fails_the_whole_run` does not recognise, or one such recording would end
+    the whole attempt."""
+
+
+class ZoomRecordingGone(Exception):
+    """The recording's own settings answered not found, so it was deleted after
+    it was listed. A not-found from any other call says nothing about the
+    recording, so it is not turned into this."""
+
+
+def approved_registrant_emails(
+    registrants: Sequence[ZoomRecordingRegistrant],
+) -> list[str]:
+    """The caller already asks Zoom for approved registrants only. This checks
+    again so access never depends on Zoom honouring a query parameter."""
+    return [
+        registrant.email
+        for registrant in registrants
+        if registrant.status == APPROVED_REGISTRANT_STATUS
+    ]
+
+
+def usable_emails(description: str, emails: list[str]) -> set[str]:
+    usable = [email.strip() for email in emails if email.strip()]
+    dropped = len(emails) - len(usable)
+    if dropped:
+        logger.info(
+            "Dropped %s of %s people from %s: Zoom returned no email for them",
+            dropped,
+            len(emails),
+            description,
+        )
+    return {email.lower() for email in usable}
+
+
 def look_up_owner_email(client: ZoomClient, user_id: str) -> str | None:
     """None when Zoom has no such user any more. A blank address, which Zoom
     keeps until an invitation is accepted, counts the same."""
@@ -112,11 +155,18 @@ def resolve_recording_access(
     treat_link_access_as_public: bool,
     rule_grant: Callable[[str], RuleGrant | None],
     owner_email: str | None,
+    add_prefix: bool,
 ) -> ExternalAccess:
     """Raises ZoomAccessListUnavailable rather than answering with an empty
-    list, which would read as nobody having access."""
+    list, which would read as nobody having access.
+
+    add_prefix is True on the indexing path, whose group ids reach the index as
+    written, and False on the doc-sync path, where upsert_document_external_perms
+    adds the source prefix itself. Prefixed twice, an id matches no group the
+    group sync filled.
+    """
     try:
-        settings = client.get_recording_settings(recording.uuid)
+        settings = _recording_settings(client, recording.uuid)
         grant = _link_access(
             settings, recording.uuid, treat_link_access_as_public, rule_grant
         )
@@ -144,12 +194,9 @@ def resolve_recording_access(
             f"the registered viewers of {recording.uuid}",
             approved_registrant_emails(registrants),
         )
-    # Prefixed with the source here because this is the indexing path; the
-    # group sync's membership rows get the same prefix on the way in.
-    groups = {
-        build_ext_group_name_for_onyx(build_domain_group_id(d), DocumentSource.ZOOM)
-        for d in grant.domains
-    }
+    groups = {build_domain_group_id(d) for d in grant.domains}
+    if add_prefix:
+        groups = {build_ext_group_name_for_onyx(g, DocumentSource.ZOOM) for g in groups}
 
     if not emails and not groups and not grant.public:
         raise ZoomAccessListUnavailable(
@@ -172,6 +219,17 @@ def resolve_recording_access(
             ExternalAccess.MAX_NUM_ENTRIES,
         )
     return access
+
+
+def _recording_settings(client: ZoomClient, uuid: str) -> ZoomRecordingSettings:
+    try:
+        return client.get_recording_settings(uuid)
+    except requests.HTTPError as e:
+        if definitely_absent(e):
+            raise ZoomRecordingGone(
+                f"Zoom recording {uuid} is gone since it was listed"
+            ) from e
+        raise
 
 
 def _link_access(

@@ -51,6 +51,12 @@ over; the entire agentic loop runs inside the sandbox's `opencode serve`
 process, and the backend's job is to start it, stream its events, persist
 them, and know when to stop.
 
+The composer moves from the welcome position to the conversation footer with
+a shared layout animation. Reduced-motion users get an immediate transition.
+
+A session with stale skills shows a blue information notice after its active turn
+ends. Its Reload action refreshes that session’s skills.
+
 The user can interrupt a running turn at any time. Partial output stays
 visible and stays saved; sending a new message does not erase what was
 already produced. When the agent is about to do something that needs
@@ -546,6 +552,17 @@ auto-named by a different one.
 
 ---
 
+### Output links in assistant messages
+
+`TextChunk.tsx` recognizes relative output links in live and saved messages.
+Validated links open the selected file and its output panel on click. The message
+supplies the session ID; a link cannot select another session. Links use the existing
+owner-checked artifact routes. Rendering the message does not open or fetch artifacts.
+`pathSanitizer.ts:parseOutputLink` rejects traversal, hidden segments, encoded
+separators, control characters, and query or fragment syntax. Invalid output links
+render as text. Other links retain the existing Markdown behavior.
+These frontend files live under `web/src/app/craft/`.
+
 ## 5. Contracts and invariants
 
 1. **A turn must be serialized per session.** `prompt_slot` plus the
@@ -678,6 +695,10 @@ DNS/VPN into the cluster, and the vscode debugger attached to
 instead only when the change is in the docker sandbox backend or
 `sandbox-proxy` specifically (`SANDBOX_BACKEND=docker`); it is slower for
 general Craft work.
+`deployment/helm/dev/k8s-up.sh` removes Kindnet's CPU limit and waits for its
+rollout on both new and existing clusters. CPU requests and memory settings stay
+unchanged. This prevents the container's CPU quota from throttling network-policy
+processing and blocking sandbox egress during OpenCode startup.
 
 ### Manual reproduction
 

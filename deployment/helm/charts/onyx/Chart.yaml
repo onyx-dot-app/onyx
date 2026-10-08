@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.4
+version: 0.9.9
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,19 +20,15 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: removed
-      description: The legacyVespaCheck upgrade guard and the unused
-        ENABLE_OPENSEARCH_INDEXING_FOR_ONYX / ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
-        env vars. Onyx no longer uses Vespa.
     - kind: added
-      description: objectStore, an in-cluster SeaweedFS S3 store that replaces bundled
-        MinIO, with a Job that copies MinIO's files while both stores serve.
+      description: Configure Craft proxy, OpenCode, daemon, and generated web app
+        listeners for IPv6-only clusters while keeping IPv4 defaults.
     - kind: security
-      description: Default Onyx workloads to the RuntimeDefault seccomp profile and
-        allowPrivilegeEscalation false.
-    - kind: security
-      description: Warn after install when the default PostgreSQL or Redis passwords
-        are in use.
+      description: Apply one destination policy to HTTP requests and CONNECT tunnels.
+        Require internal network ranges for IPv6 proxy deployments and a known sandbox identity.
+    - kind: fixed
+      description: Permit IPv6 neighbor discovery during sandbox firewall lockdown and
+        normalize IPv4-mapped proxy client addresses.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

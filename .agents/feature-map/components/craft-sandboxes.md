@@ -80,6 +80,7 @@ visible seams:
 | `SANDBOX_NEXTJS_PORT_START` / `_END` | 3010 / 3100 | Per-session Next.js dev-server port range, shared by the Service, the NetworkPolicy, and the PodTemplate's container ports. |
 | `ONYX_SANDBOX_PUSH_PRIVATE_KEY` | required | Ed25519 seed signing every sidecar request (`kubernetes/sidecar_client.py:get_push_key_pair`). |
 | `SANDBOX_PROXY_HOST` / `SANDBOX_PROXY_NAMESPACE` | required (K8s) / `onyx` | The egress-proxy endpoint pinned via `hostAliases` (see §5, §9). |
+| `SANDBOX_LISTEN_HOST` | `0.0.0.0` | Shared listener for OpenCode, the sidecar, and generated previews. Helm `sandboxPod.listenHost` sets it; use `::` for IPv6-only pods. |
 
 Celery task: `CLEANUP_IDLE_SANDBOXES` (`backend/onyx/background/celery/tasks/build/tasks.py`),
 scheduled every `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS` on self-hosted beats
@@ -150,7 +151,13 @@ a failed init retries on the next call (`factory.py:20-57`):
   dedicated bridge network, snapshots streamed through `docker exec` instead of
   a sidecar HTTP API. There is **no sidecar container** on Docker; filesystem
   and snapshot operations exec directly into the sandbox container
-  (`docker_sandbox_manager.py`, module docstring, "Snapshots").
+  (`docker_sandbox_manager.py`, module docstring, "Snapshots"). The manager
+  reads the bridge's `EnableIPv4` flag. IPv6-only bridges inject
+  `SANDBOX_LISTEN_HOST=::`; IPv4 and dual-stack bridges retain `0.0.0.0`.
+  Proxy listener configuration is separate: use `SANDBOX_PROXY_LISTEN_HOST=::`
+  for an IPv6-only bridge, with complete internal CIDRs. The API can remain
+  on the original Compose network because the proxy forwards sandbox API
+  traffic. Existing IPv4 bridge behavior remains the default.
 
 Where they diverge, by design (`docker_sandbox_manager.py` module docstring,
 "Threat model: Docker vs Kubernetes parity gap"):
@@ -481,7 +488,11 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    backstop that only takes effect where the cluster's CNI enforces
    NetworkPolicy, and allows only the proxy and DNS. See §9 and `[[craft-admin]]`
    §5.4 for why this is a different mechanism from the egress-proxy action
-   gate.
+   gate. Both IPv4 and IPv6 OUTPUT chains use a DROP policy. They allow
+   loopback and established connections. Only the resolved proxy address
+   family permits new TCP connections to the proxy port. IPv6 permits
+   neighbor solicitations and advertisements with hop limit 255. The unused
+   address family stays blocked, including IPv4 compatibility egress on EKS.
 5. **The sidecar and main container must agree on the workspace path.**
    `SESSIONS_ROOT` is defined twice (`session_workspace.py:19` on the
    api-server side, `image/sandbox_daemon/snapshot.py:18` inside the image)

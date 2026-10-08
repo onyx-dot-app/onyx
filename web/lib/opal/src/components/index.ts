@@ -124,6 +124,31 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Fold */
+export { Fold, type FoldProps } from "@opal/components/fold/components";
+
+/* IconTooltip */
+export {
+  IconTooltip,
+  type IconTooltipProps,
+  type IconTooltipStatus,
+} from "@opal/components/icon-tooltip/components";
+
+/* OverflowText */
+export {
+  OverflowText,
+  type OverflowTextProps,
+} from "@opal/components/overflow-text/components";
+
+/* Log */
+export {
+  Log,
+  type LogProps,
+  type LogStatus,
+  type LogVariant,
+  type LogWeight,
+} from "@opal/components/log/components";
+
 /* Divider */
 export {
   Divider,

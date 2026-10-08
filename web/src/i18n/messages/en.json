@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Connect to Onyx",
+      "request": "Allow {clientName} to search Onyx?",
+      "account": "Signed in as {email}",
+      "workspace": "Workspace: {workspaceName}",
+      "appAddress": "App address: {origin}",
+      "access": "Read search results from documents you can access. Use web search and open web pages.",
+      "allow": "Allow access",
+      "deny": "Deny",
+      "pending": "Saving your choice...",
+      "loading": "Loading authorization request...",
+      "unavailable": "This request expired or changed. Start again from your app.",
+      "failed": "Authorization could not finish. Start again from your app.",
+      "signInRequired": "Sign in to authorize this app.",
+      "signIn": "Sign in",
+      "forbidden": "You cannot authorize this app. Contact your workspace administrator.",
+      "loadFailed": "Onyx could not load this request. Try again.",
+      "retry": "Try again"
+    },
+    "connections": {
+      "cancel": "Cancel",
+      "title": "Connected apps",
+      "description": "Apps you have allowed to search Onyx.",
+      "empty": "No connected apps.",
+      "loading": "Loading connected apps...",
+      "expires": "Expires {date}",
+      "disconnect": "Disconnect",
+      "disconnectAriaLabel": "Disconnect {clientName}",
+      "pending": "Disconnecting...",
+      "failed": "Could not disconnect the app. Try again.",
+      "loadFailed": "Could not load connected apps.",
+      "confirmTitle": "Disconnect {clientName}?",
+      "confirmDescription": "This app will lose access to Onyx. You can connect it again later."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "Account"
@@ -1393,24 +1429,33 @@
           "label": "Downgrade to Community"
         },
         "modal": {
+          "changes": {
+            "text": "When you downgrade:"
+          },
           "confirmButton": {
             "label": "Downgrade",
             "loading": "Downgrading..."
           },
-          "connectors": {
-            "text": "Every connector becomes public. Documents that synced permissions or groups kept private become visible to all users. Search results follow once the index is rewritten, which can take a while on a large index."
+          "deleted": {
+            "text": "**Deleted:** User groups, service account API keys, token rate limits, and hooks;"
           },
-          "description": "This removes your license and every paid feature. It cannot be undone.",
-          "features": {
-            "text": "Service account API keys, token rate limits and hooks are deleted. Standard answers and SCIM tokens are turned off. Custom branding and chat retention are reset."
+          "description": "Removes your license and every paid feature.",
+          "disabled": {
+            "text": "**Disabled:** Standard answers and SCIM tokens;"
           },
-          "groups": {
-            "text": "User groups are removed. Agents, document sets, LLM providers, MCP servers and skills shared with a group become public."
+          "intro": {
+            "text": "Access controls are removed from this deployment. **This starts a re-index** so search results reflect the change, which can take a while on a large index."
           },
-          "license": {
-            "text": "The license is removed from this deployment."
+          "madePublic": {
+            "text": "**Made public:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
           },
-          "title": "Downgrade to Community Edition"
+          "reset": {
+            "text": "**Reset to defaults:** Custom branding and chat retention policy."
+          },
+          "title": "Downgrade to Community Edition",
+          "warning": {
+            "text": "Documents restricted by synced permissions or user groups become **visible to all users**. This cannot be undone."
+          }
         }
       },
       "footer": {
@@ -2808,7 +2853,7 @@
           "label": "Cancel"
         },
         "connectButton": {
-          "label": "Connect"
+          "label": "Create Connector"
         },
         "description": "Connect to {source} and set up the connector for {appName}.{hasDocs, select, true { View [docs]({url})} other {}}"
       },
@@ -8882,6 +8927,68 @@
         "settingsUpdated": "Settings updated",
         "settingsUpdateFailed": "Failed to update settings"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "Run the connector checks above, and resolve any failures, to continue.",
+      "prompt": {
+        "title": "Test Connection",
+        "description": "{appName} will run checks to validate required scopes before proceeding.",
+        "startButton": {
+          "label": "Start Checks"
+        }
+      },
+      "title": "Connector Checks",
+      "groups": {
+        "failed": "{count} Failed",
+        "indeterminate": "{count} Unverified",
+        "passed": "{count} Completed",
+        "skipped": "{count} Skipped",
+        "running": "{count} Running",
+        "expected": "{count} Expected"
+      },
+      "status": {
+        "passed": "Passed",
+        "failed": "Failed",
+        "indeterminate": "Could not be verified",
+        "skipped": "Skipped",
+        "running": "Testing…",
+        "pending": "Queued",
+        "waiting": "Waiting for settings"
+      },
+      "required": {
+        "label": "Required"
+      },
+      "running": {
+        "label": "Running checks…"
+      },
+      "empty": {
+        "label": "No checks have run yet."
+      },
+      "docsLink": {
+        "label": "Documentation"
+      },
+      "rerunButton": {
+        "label": "Rerun Checks"
+      },
+      "foldButton": {
+        "fold": "Fold",
+        "expand": "Expand"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} failed",
+        "unverified": "{count} unverified",
+        "inProgress": "{count} in progress",
+        "expected": "{count} more expected",
+        "skipped": "{count} skipped",
+        "successful": "{count} successful"
+      },
+      "failedToRun": "Checks failed to run. Try again.",
+      "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
+      "state": {
+        "completed": "Checks completed",
+        "inProgress": "Checks in progress…"
+      }
     }
   },
   "agents": {
@@ -12961,9 +13068,6 @@
         "calls": {
           "tag": "{count, plural, one {# call} other {# calls}}"
         },
-        "failed": {
-          "tag": "{count} failed"
-        },
         "working": {
           "label": "Working"
         }
@@ -13399,6 +13503,9 @@
       "oneMonth": "1M",
       "sevenDays": "7D",
       "threeMonths": "3M"
+    },
+    "iconTooltip": {
+      "label": "More information"
     },
     "input": {
       "day": "Day",

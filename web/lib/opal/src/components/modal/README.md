@@ -41,6 +41,7 @@ Radix Dialog compound, the Figma Modal. `Modal` is the Radix root (`open`, `onOp
 | Prop                             | Type                    | Description                                                          |
 | -------------------------------- | ----------------------- | -------------------------------------------------------------------- |
 | `icon`, `moreIcon1`, `moreIcon2` | `IconFunctionComponent` | Heading icons. Omitting `icon` gives the minimal (icon-less) variant |
+| `color`                          | `ColorTypes`            | Colour mode of the icon and title, as on `Content` (a status colours the icon only) |
 | `title`                          | `string \| RichStr`     | Required                                                             |
 | `description`                    | `string \| RichStr`     | Optional, also wired to `aria-describedby`                           |
 | `onClose`                        | `() => void`            | Renders the close button                                             |

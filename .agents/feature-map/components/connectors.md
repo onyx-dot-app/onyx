@@ -88,6 +88,7 @@ frontend changes a new connector requires.
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
 | POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). |
 | POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`). |
+| POST | `/admin/connector-checks/plan` | The checks a draft run would hold for an unsaved form, each in its state before anything runs (pending, waiting, not applicable). Needs no credential and starts no run. |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
 Every connector run on a cc-pair (index, prune, hierarchy fetch, targeted reindex,
@@ -312,36 +313,53 @@ not a source object but a thread shared across mailboxes, so its run has a
 shape the table above does not cover:
 
 - **Thread key.** Every message copy carries a `conversationIndex`; its 22-byte
-  root is the same in every mailbox that holds the thread (`threads.py:thread_key`).
-  Copies are matched message by message on the Internet Message-ID
+  root is the same in every mailbox that holds the thread (`threads.py:thread_key`),
+  and the first message's index is the root alone (`is_thread_root`). Copies
+  are matched message by message on the Internet Message-ID
   (`OutlookMessageIdentity.match_id`).
-- **Listing, then bucketing, then building.** Each mailbox's folders are read
-  through delta pages of metadata only. The rows go to a per-run `ThreadTable`
-  in the file store (`listing-N.jsonl`), are re-read and hashed by thread key
-  into buckets of 50k rows (`bucket-B-C.jsonl`, resumable through
-  a manifest file), and each bucket is grouped so every copy of a thread is in
-  hand without holding the tenant in memory. The checkpoint
-  (`OutlookCheckpoint`) holds cursors and counters only, 202 KB at 3,000
-  mailboxes in the synthetic scale run.
-- **Builder and readers.** Candidates are the copies holding the thread's newest
-  message. The builder is the largest candidate (`threads.py:choose_builder`),
-  its newest 100 indexable messages (found among the newest 500) make the
-  document `outlook-thread:<key>`, and the
-  readers are the candidates holding every one of them (`readers_of`). A copy
-  that lacks a message (a private reply it never received) gets
-  `outlook-thread:<key>:<mailbox id>`, readable by its owner only
-  (`partial_copies`).
-- **Polls.** Only mailboxes with new mail are listed. Every holder of the
-  newest message is among them, so builder and readers are complete, but a
-  holder that received none of the new mail is not. `_unlisted_copies` finds
-  those from the builder's sender and recipients within the run's mailbox
-  roster (a file in the table), looks each up by Message-ID
-  (`find_message_by_internet_message_id`) and writes its own document, or
-  counts it as a reader when it holds every message of the thread's.
-- **Prune and permission sync.** `_slim_docs` runs the same listing, bucketing
-  and grouping read-only and yields ids and readers, so the slim diff (§4.5)
-  and the doc sync see the same documents indexing built, eight mailboxes side
-  by side like the listing.
+- **Decided per mailbox, from headers.** Each mailbox is walked on its own,
+  eight side by side. Its folders are read through delta pages of metadata
+  with the sender and recipients (`CHANGE_SELECT`), one page per checkpoint
+  step, and the rows are held in the connector process (`_MailboxListing`)
+  until the last folder is done. The checkpoint (`OutlookCheckpoint`) holds
+  cursors only; a process that resumes an attempt has no listing for the
+  mailboxes in flight and walks them again from the start (`_resumable`).
+  Nothing is written outside the process: no file store, no database.
+- **Builder, readers, copies.** `threads.py:plan_documents` turns one
+  mailbox's copy of a thread into documents. The first message names the
+  builder (`designated_builder`: its sender when the run walks that mailbox,
+  else the lowest named mailbox id, passing over any mailbox the run cannot
+  open, probed once per process by `_mailbox_available`). The builder's
+  newest 100 indexable messages make `outlook-thread:<key>`, readable by the
+  mailboxes named on every one of them: named, not holding, so a recipient
+  who deleted a message or never received it still reads the thread. A mailbox the first message names but a later message
+  left out gets `outlook-thread:<key>:<mailbox id>` from the builder, holding
+  the messages that name it. Whatever the builder cannot see, a copy without
+  the first message, a thread whose first message names no walked mailbox, a
+  holder it does not name, or a reply that left the builder out, is written
+  by its own mailbox as `outlook-thread:<key>:<mailbox id>:own`.
+- **Known limits.** The builder's copy is the thread. A reply the builder
+  deleted or filed in an excluded folder is indexed nowhere, since the other
+  holders assume a message naming the builder is the builder's to write. A
+  thread whose builder mailbox no longer holds its first message is not
+  built at all; the other holders keep only their own documents of the
+  replies that left the builder out. The
+  builder's first message sits in its Sent Items, so excluding that folder
+  has the same effect on every thread the mailbox started. The listing in
+  memory is bounded by one mailbox per worker, eight at once, and by
+  `MAX_LISTING_ROWS_PER_MAILBOX` (250k): a larger mailbox is a recorded
+  failure for indexing and aborts a slim walk. A checkpoint from the earlier
+  table-based walk starts the attempt over.
+- **Polls.** Only messages in the window are listed, so each conversation
+  with new mail is read whole through its outline (`_conversation_outline`),
+  the oldest message fetched separately when the outline stops short of it,
+  and decided by the same function. Readers come from the newest 100
+  messages, so the daily permission sync can widen a document's readers
+  before the next poll rebuilds its text.
+- **Prune and permission sync.** `_slim_docs` lists each mailbox the same way,
+  in memory one mailbox per worker, and yields the ids and readers
+  `plan_documents` gives, so the slim diff (§4.5) and the doc sync see the
+  documents indexing built.
 
 ### 4.7 The `SourceOperations` gateway pattern
 
@@ -390,7 +408,9 @@ within the blocking budget blocks the pairing. Indexing and perm-sync attempts k
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
 on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
 retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
-reuse their result at creation when the form is unchanged.
+reuse their result at creation when the form is unchanged. The plan endpoint
+(`/admin/connector-checks/plan`) lists the same checks without a credential or a
+run, so the form can tell which checks exist and which are required first.
 
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`

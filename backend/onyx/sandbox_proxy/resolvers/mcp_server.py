@@ -32,10 +32,10 @@ from onyx.db.users import fetch_user_by_id
 from onyx.sandbox_proxy.credential_injection import (
     CredentialResolver,
     CredentialUnavailableError,
-    InjectionContext,
 )
 from onyx.sandbox_proxy.logging_utils import short_log_id
-from onyx.sandbox_proxy.mcp_jsonrpc import McpRpcKind, classify_mcp_request
+from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
+from onyx.sandbox_proxy.models import InjectionContext, McpRpcKind
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     AmbiguousMCPTargetError,
     CraftMCPTarget,

@@ -26,6 +26,7 @@ from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import (
     PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MIME_TYPES,
     WORD_PROCESSING_MIME_TYPE,
     OnyxFileExtensions,
     OnyxMimeTypes,
@@ -893,11 +894,20 @@ def extract_text_and_images(
     res = _extract_text_and_images(
         file, file_name, pdf_pass, content_type, image_callback
     )
-    # Clean up any temporary objects and force garbage collection
-    unreachable = gc.collect()
-    logger.info("Unreachable objects: %s", unreachable)
+    # openpyxl leaves reference cycles behind a workbook, so a collection
+    # follows a spreadsheet. On any other file it only costs time, about a
+    # tenth of a second per file in a loaded process.
+    if _is_spreadsheet(file_name, content_type):
+        logger.info("Unreachable objects: %s", gc.collect())
 
     return res
+
+
+def _is_spreadsheet(file_name: str, content_type: str | None) -> bool:
+    return (
+        get_file_ext(file_name) in OnyxFileExtensions.SPREADSHEET_EXTENSIONS
+        or content_type in SPREADSHEET_MIME_TYPES
+    )
 
 
 def _extract_text_and_images(

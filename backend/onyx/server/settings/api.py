@@ -32,6 +32,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.oauth_provider.config import OAUTH_PROVIDER_SETTINGS
 from onyx.server.features.build.utils import (
     is_craft_available_for_deployment,
     is_craft_enabled_for_user,
@@ -243,6 +244,7 @@ def fetch_settings(
 
     return UserSettings(
         **general_settings.model_dump(),
+        oauth_provider_enabled=OAUTH_PROVIDER_SETTINGS is not None,
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,

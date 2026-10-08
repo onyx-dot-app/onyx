@@ -64,6 +64,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
+from onyx.oauth_provider.config import OAUTH_PROVIDER_SETTINGS
 from onyx.redis.redis_pool import log_redis_server_diagnostics
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth.captcha_api import CaptchaCookieMiddleware, LoginCaptchaMiddleware
@@ -643,6 +644,19 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)
+
+    if OAUTH_PROVIDER_SETTINGS is not None:
+        from onyx.server.oauth_provider.api import router as oauth_provider_user_router
+        from onyx.server.oauth_provider.protocol import (
+            router as oauth_provider_protocol_router,
+        )
+
+        include_router_with_global_prefix_prepended(
+            application, oauth_provider_protocol_router
+        )
+        include_router_with_global_prefix_prepended(
+            application, oauth_provider_user_router
+        )
 
     # Password login is served in every deployment mode.
     include_auth_router_with_prefix(

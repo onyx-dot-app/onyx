@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Mit Onyx verbinden",
+      "request": "Darf {clientName} Onyx durchsuchen?",
+      "account": "Angemeldet als {email}",
+      "workspace": "Arbeitsbereich: {workspaceName}",
+      "appAddress": "App-Adresse: {origin}",
+      "access": "Suchergebnisse aus Dokumenten lesen, auf die du Zugriff hast. Die Websuche nutzen und Webseiten öffnen.",
+      "allow": "Zugriff erlauben",
+      "deny": "Ablehnen",
+      "pending": "Auswahl wird gespeichert...",
+      "loading": "Autorisierungsanfrage wird geladen...",
+      "unavailable": "Diese Anfrage ist abgelaufen oder wurde geändert. Starte erneut in deiner App.",
+      "failed": "Die Autorisierung konnte nicht abgeschlossen werden. Starte erneut in deiner App.",
+      "signInRequired": "Melde dich an, um diese App zu autorisieren.",
+      "signIn": "Anmelden",
+      "forbidden": "Du kannst diese App nicht autorisieren. Wende dich an die Administration deines Arbeitsbereichs.",
+      "loadFailed": "Onyx konnte diese Anfrage nicht laden. Versuche es erneut.",
+      "retry": "Erneut versuchen"
+    },
+    "connections": {
+      "cancel": "Abbrechen",
+      "title": "Verbundene Apps",
+      "description": "Apps, denen du erlaubt hast, Onyx zu durchsuchen.",
+      "empty": "Keine verbundenen Apps.",
+      "loading": "Verbundene Apps werden geladen...",
+      "expires": "Läuft am {date} ab",
+      "disconnect": "Trennen",
+      "disconnectAriaLabel": "Verbindung zu {clientName} trennen",
+      "pending": "Verbindung wird getrennt...",
+      "failed": "Die App konnte nicht getrennt werden. Versuche es erneut.",
+      "loadFailed": "Verbundene Apps konnten nicht geladen werden.",
+      "confirmTitle": "Verbindung mit {clientName} trennen?",
+      "confirmDescription": "Diese App verliert den Zugriff auf Onyx. Du kannst sie später erneut verbinden."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "Konto"
@@ -1393,24 +1429,33 @@
           "label": "Auf Community herabstufen"
         },
         "modal": {
+          "changes": {
+            "text": "Beim Downgrade:"
+          },
           "confirmButton": {
             "label": "Herabstufen",
             "loading": "Wird herabgestuft..."
           },
-          "connectors": {
-            "text": "Alle Konnektoren werden öffentlich. Dokumente, die durch synchronisierte Berechtigungen oder Gruppen privat waren, werden für alle Benutzer sichtbar. Die Suchergebnisse folgen, sobald der Index neu geschrieben ist, was bei einem großen Index eine Weile dauern kann."
+          "deleted": {
+            "text": "**Gelöscht:** Benutzergruppen, API-Schlüssel von Dienstkonten, Token-Ratenlimits und Hooks;"
           },
-          "description": "Dadurch werden Ihre Lizenz und alle kostenpflichtigen Funktionen entfernt. Dies kann nicht rückgängig gemacht werden.",
-          "features": {
-            "text": "API-Schlüssel von Dienstkonten, Token-Ratenlimits und Hooks werden gelöscht. Standardantworten und SCIM-Token werden deaktiviert. Benutzerdefiniertes Branding und die Chat-Aufbewahrung werden zurückgesetzt."
+          "description": "Entfernt Ihre Lizenz und alle kostenpflichtigen Funktionen.",
+          "disabled": {
+            "text": "**Deaktiviert:** Standardantworten und SCIM-Token;"
           },
-          "groups": {
-            "text": "Benutzergruppen werden entfernt. Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Gruppe geteilt wurden, werden öffentlich."
+          "intro": {
+            "text": "Zugriffskontrollen werden aus dieser Bereitstellung entfernt. **Dies startet eine Neuindizierung**, damit die Suchergebnisse die Änderung widerspiegeln, was bei einem großen Index eine Weile dauern kann."
           },
-          "license": {
-            "text": "Die Lizenz wird aus dieser Bereitstellung entfernt."
+          "madePublic": {
+            "text": "**Öffentlich gemacht:** Alle Konnektoren sowie alle Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Benutzergruppe geteilt wurden;"
           },
-          "title": "Auf die Community Edition herabstufen"
+          "reset": {
+            "text": "**Auf Standard zurückgesetzt:** Benutzerdefiniertes Branding und Chat-Aufbewahrungsrichtlinie."
+          },
+          "title": "Auf Community Edition herabstufen",
+          "warning": {
+            "text": "Dokumente, die durch synchronisierte Berechtigungen oder Benutzergruppen eingeschränkt waren, werden **für alle Benutzer sichtbar**. Dies kann nicht rückgängig gemacht werden."
+          }
         }
       },
       "footer": {
@@ -2808,7 +2853,7 @@
           "label": "Abbrechen"
         },
         "connectButton": {
-          "label": "Verbinden"
+          "label": "Connector erstellen"
         },
         "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein.{hasDocs, select, true { [Doku]({url}) ansehen} other {}}"
       },
@@ -8882,6 +8927,68 @@
         "settingsUpdated": "Einstellungen aktualisiert",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "Führen Sie oben die Connector-Prüfungen aus und beheben Sie alle Fehler, um fortzufahren.",
+      "prompt": {
+        "title": "Verbindung testen",
+        "description": "{appName} führt Prüfungen durch, um die erforderlichen Berechtigungen zu bestätigen, bevor es weitergeht.",
+        "startButton": {
+          "label": "Prüfungen starten"
+        }
+      },
+      "title": "Connector-Prüfungen",
+      "groups": {
+        "failed": "{count} Fehlgeschlagen",
+        "indeterminate": "{count} Nicht verifiziert",
+        "passed": "{count} Abgeschlossen",
+        "skipped": "{count} Übersprungen",
+        "running": "{count} laufen",
+        "expected": "{count} erwartet"
+      },
+      "status": {
+        "passed": "Bestanden",
+        "failed": "Fehlgeschlagen",
+        "indeterminate": "Konnte nicht verifiziert werden",
+        "skipped": "Übersprungen",
+        "running": "Wird getestet…",
+        "pending": "In der Warteschlange",
+        "waiting": "Wartet auf Einstellungen"
+      },
+      "required": {
+        "label": "Erforderlich"
+      },
+      "running": {
+        "label": "Prüfungen laufen…"
+      },
+      "empty": {
+        "label": "Es wurden noch keine Prüfungen ausgeführt."
+      },
+      "docsLink": {
+        "label": "Dokumentation"
+      },
+      "rerunButton": {
+        "label": "Prüfungen erneut ausführen"
+      },
+      "foldButton": {
+        "fold": "Einklappen",
+        "expand": "Ausklappen"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} fehlgeschlagen",
+        "unverified": "{count} nicht verifiziert",
+        "inProgress": "{count} in Bearbeitung",
+        "expected": "{count} weitere erwartet",
+        "skipped": "{count} übersprungen",
+        "successful": "{count} erfolgreich"
+      },
+      "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
+      "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
+      "state": {
+        "completed": "Prüfungen abgeschlossen",
+        "inProgress": "Prüfungen laufen…"
+      }
     }
   },
   "agents": {
@@ -12961,9 +13068,6 @@
         "calls": {
           "tag": "{count, plural, one {# Aufruf} other {# Aufrufe}}"
         },
-        "failed": {
-          "tag": "{count} fehlgeschlagen"
-        },
         "working": {
           "label": "In Arbeit"
         }
@@ -13399,6 +13503,9 @@
       "oneMonth": "1M",
       "sevenDays": "7T",
       "threeMonths": "3M"
+    },
+    "iconTooltip": {
+      "label": "Weitere Informationen"
     },
     "input": {
       "day": "Tag",

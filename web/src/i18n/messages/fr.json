@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Se connecter à Onyx",
+      "request": "Autoriser {clientName} à rechercher dans Onyx ?",
+      "account": "Connecté en tant que {email}",
+      "workspace": "Espace de travail : {workspaceName}",
+      "appAddress": "Adresse de l'application : {origin}",
+      "access": "Lire les résultats des documents auxquels vous avez accès. Utiliser la recherche web et ouvrir des pages web.",
+      "allow": "Autoriser l'accès",
+      "deny": "Refuser",
+      "pending": "Enregistrement de votre choix...",
+      "loading": "Chargement de la demande d'autorisation...",
+      "unavailable": "Cette demande a expiré ou a changé. Recommencez depuis votre application.",
+      "failed": "L'autorisation n'a pas pu aboutir. Recommencez depuis votre application.",
+      "signInRequired": "Connectez-vous pour autoriser cette application.",
+      "signIn": "Se connecter",
+      "forbidden": "Vous ne pouvez pas autoriser cette application. Contactez l'administrateur de votre espace de travail.",
+      "loadFailed": "Onyx n'a pas pu charger cette demande. Réessayez.",
+      "retry": "Réessayer"
+    },
+    "connections": {
+      "cancel": "Annuler",
+      "title": "Applications connectées",
+      "description": "Applications que vous avez autorisées à rechercher dans Onyx.",
+      "empty": "Aucune application connectée.",
+      "loading": "Chargement des applications connectées...",
+      "expires": "Expire le {date}",
+      "disconnect": "Déconnecter",
+      "disconnectAriaLabel": "Déconnecter {clientName}",
+      "pending": "Déconnexion en cours...",
+      "failed": "Impossible de déconnecter l'application. Réessayez.",
+      "loadFailed": "Impossible de charger les applications connectées.",
+      "confirmTitle": "Déconnecter {clientName} ?",
+      "confirmDescription": "Cette application perdra l'accès à Onyx. Vous pourrez la reconnecter plus tard."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "Compte"
@@ -1393,24 +1429,33 @@
           "label": "Passer à Community"
         },
         "modal": {
+          "changes": {
+            "text": "Lors de la rétrogradation :"
+          },
           "confirmButton": {
-            "label": "Passer à Community",
-            "loading": "Changement en cours..."
+            "label": "Rétrograder",
+            "loading": "Rétrogradation..."
           },
-          "connectors": {
-            "text": "Tous les connecteurs deviennent publics. Les documents que les permissions synchronisées ou les groupes gardaient privés deviennent visibles par tous les utilisateurs. Les résultats de recherche suivent une fois l'index réécrit, ce qui peut prendre du temps sur un grand index."
+          "deleted": {
+            "text": "**Supprimés :** groupes d'utilisateurs, clés API des comptes de service, limites de débit de jetons et hooks ;"
           },
-          "description": "Cette action supprime votre licence et toutes les fonctionnalités payantes. Elle est irréversible.",
-          "features": {
-            "text": "Les clés d'API des comptes de service, les limites de débit de jetons et les hooks sont supprimés. Les réponses standard et les jetons SCIM sont désactivés. La personnalisation de la marque et la rétention des conversations sont réinitialisées."
+          "description": "Supprime votre licence et toutes les fonctionnalités payantes.",
+          "disabled": {
+            "text": "**Désactivés :** réponses standard et jetons SCIM ;"
           },
-          "groups": {
-            "text": "Les groupes d'utilisateurs sont supprimés. Les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et skills partagés avec un groupe deviennent publics."
+          "intro": {
+            "text": "Les contrôles d'accès sont supprimés de ce déploiement. **Cela lance une réindexation** pour que les résultats de recherche reflètent le changement, ce qui peut prendre du temps sur un grand index."
           },
-          "license": {
-            "text": "La licence est supprimée de ce déploiement."
+          "madePublic": {
+            "text": "**Rendus publics :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
           },
-          "title": "Passer à Community Edition"
+          "reset": {
+            "text": "**Réinitialisés :** personnalisation de la marque et politique de conservation des conversations."
+          },
+          "title": "Rétrograder vers l'édition Community",
+          "warning": {
+            "text": "Les documents restreints par des permissions synchronisées ou des groupes d'utilisateurs deviennent **visibles par tous les utilisateurs**. Cette action est irréversible."
+          }
         }
       },
       "footer": {
@@ -2808,7 +2853,7 @@
           "label": "Annuler"
         },
         "connectButton": {
-          "label": "Connecter"
+          "label": "Créer le connecteur"
         },
         "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}.{hasDocs, select, true { Voir la [documentation]({url})} other {}}"
       },
@@ -8882,6 +8927,68 @@
         "settingsUpdated": "Paramètres mis à jour",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "Lancez les vérifications du connecteur ci-dessus et corrigez les échecs pour continuer.",
+      "prompt": {
+        "title": "Tester la connexion",
+        "description": "{appName} effectuera des vérifications pour valider les autorisations requises avant de continuer.",
+        "startButton": {
+          "label": "Lancer les vérifications"
+        }
+      },
+      "title": "Vérifications du connecteur",
+      "groups": {
+        "failed": "{count} échouées",
+        "indeterminate": "{count} non vérifiées",
+        "passed": "{count} terminées",
+        "skipped": "{count} ignorées",
+        "running": "{count} en cours",
+        "expected": "{count} attendues"
+      },
+      "status": {
+        "passed": "Réussie",
+        "failed": "Échouée",
+        "indeterminate": "Impossible à vérifier",
+        "skipped": "Ignorée",
+        "running": "Test en cours…",
+        "pending": "En file d’attente",
+        "waiting": "En attente des paramètres"
+      },
+      "required": {
+        "label": "Obligatoire"
+      },
+      "running": {
+        "label": "Vérifications en cours…"
+      },
+      "empty": {
+        "label": "Aucune vérification n'a encore été exécutée."
+      },
+      "docsLink": {
+        "label": "Documentation"
+      },
+      "rerunButton": {
+        "label": "Relancer les vérifications"
+      },
+      "foldButton": {
+        "fold": "Réduire",
+        "expand": "Développer"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} échouées",
+        "unverified": "{count} non vérifiées",
+        "inProgress": "{count} en cours",
+        "expected": "{count} autres attendues",
+        "skipped": "{count} ignorées",
+        "successful": "{count} réussies"
+      },
+      "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
+      "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
+      "state": {
+        "completed": "Vérifications terminées",
+        "inProgress": "Vérifications en cours…"
+      }
     }
   },
   "agents": {
@@ -12961,9 +13068,6 @@
         "calls": {
           "tag": "{count, plural, one {# appel} other {# appels}}"
         },
-        "failed": {
-          "tag": "{count} en échec"
-        },
         "working": {
           "label": "En cours"
         }
@@ -13399,6 +13503,9 @@
       "oneMonth": "1M",
       "sevenDays": "7J",
       "threeMonths": "3M"
+    },
+    "iconTooltip": {
+      "label": "Plus d’informations"
     },
     "input": {
       "day": "Jour",

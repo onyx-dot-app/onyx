@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Onyx에 연결",
+      "request": "{clientName}에게 Onyx 검색을 허용할까요?",
+      "account": "로그인 계정: {email}",
+      "workspace": "워크스페이스: {workspaceName}",
+      "appAddress": "앱 주소: {origin}",
+      "access": "접근 권한이 있는 문서의 검색 결과를 읽습니다. 웹 검색을 사용하고 웹 페이지를 엽니다.",
+      "allow": "접근 허용",
+      "deny": "거부",
+      "pending": "선택을 저장하는 중...",
+      "loading": "인증 요청을 불러오는 중...",
+      "unavailable": "이 요청이 만료되었거나 변경되었습니다. 앱에서 다시 시작하세요.",
+      "failed": "인증을 완료하지 못했습니다. 앱에서 다시 시작하세요.",
+      "signInRequired": "이 앱을 승인하려면 로그인하세요.",
+      "signIn": "로그인",
+      "forbidden": "이 앱을 승인할 수 없습니다. 워크스페이스 관리자에게 문의하세요.",
+      "loadFailed": "Onyx에서 이 요청을 불러오지 못했습니다. 다시 시도하세요.",
+      "retry": "다시 시도"
+    },
+    "connections": {
+      "cancel": "취소",
+      "title": "연결된 앱",
+      "description": "Onyx 검색을 허용한 앱입니다.",
+      "empty": "연결된 앱이 없습니다.",
+      "loading": "연결된 앱을 불러오는 중...",
+      "expires": "만료일: {date}",
+      "disconnect": "연결 해제",
+      "disconnectAriaLabel": "{clientName} 연결 해제",
+      "pending": "연결 해제 중...",
+      "failed": "앱 연결을 해제하지 못했습니다. 다시 시도하세요.",
+      "loadFailed": "연결된 앱을 불러오지 못했습니다.",
+      "confirmTitle": "{clientName}의 연결을 해제할까요?",
+      "confirmDescription": "이 앱은 Onyx에 접근할 수 없게 됩니다. 나중에 다시 연결할 수 있습니다."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "계정"
@@ -1393,24 +1429,33 @@
           "label": "Community로 다운그레이드"
         },
         "modal": {
+          "changes": {
+            "text": "다운그레이드하면:"
+          },
           "confirmButton": {
             "label": "다운그레이드",
             "loading": "다운그레이드 중..."
           },
-          "connectors": {
-            "text": "모든 커넥터가 공개됩니다. 동기화된 권한이나 그룹으로 비공개였던 문서가 모든 사용자에게 표시됩니다. 검색 결과는 인덱스가 다시 작성된 후 반영되며, 인덱스가 크면 시간이 걸릴 수 있습니다."
+          "deleted": {
+            "text": "**삭제:** 사용자 그룹, 서비스 계정 API 키, 토큰 속도 제한, 훅"
           },
-          "description": "라이선스와 모든 유료 기능이 제거됩니다. 이 작업은 되돌릴 수 없습니다.",
-          "features": {
-            "text": "서비스 계정 API 키, Token 사용량 제한, 훅이 삭제됩니다. 표준 답변과 SCIM 토큰이 비활성화됩니다. 사용자 지정 브랜딩과 채팅 보존 기간이 초기화됩니다."
+          "description": "라이선스와 모든 유료 기능을 제거합니다.",
+          "disabled": {
+            "text": "**비활성화:** 표준 답변과 SCIM 토큰"
           },
-          "groups": {
-            "text": "사용자 그룹이 제거됩니다. 그룹과 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬은 공개됩니다."
+          "intro": {
+            "text": "이 배포에서 액세스 제어가 제거됩니다. **재인덱싱이 시작되어** 검색 결과에 변경 사항이 반영되며, 인덱스가 크면 시간이 걸릴 수 있습니다."
           },
-          "license": {
-            "text": "이 배포에서 라이선스가 제거됩니다."
+          "madePublic": {
+            "text": "**공개:** 모든 커넥터와 사용자 그룹에 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬"
           },
-          "title": "Community Edition으로 다운그레이드"
+          "reset": {
+            "text": "**기본값으로 재설정:** 사용자 지정 브랜딩과 채팅 보존 정책"
+          },
+          "title": "Community Edition으로 다운그레이드",
+          "warning": {
+            "text": "동기화된 권한이나 사용자 그룹으로 제한되었던 문서가 **모든 사용자에게 표시**됩니다. 이 작업은 되돌릴 수 없습니다."
+          }
         }
       },
       "footer": {
@@ -2808,7 +2853,7 @@
           "label": "취소"
         },
         "connectButton": {
-          "label": "연결"
+          "label": "커넥터 만들기"
         },
         "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다.{hasDocs, select, true { [문서]({url}) 보기} other {}}"
       },
@@ -8882,6 +8927,68 @@
         "settingsUpdated": "설정을 업데이트했습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "계속하려면 위의 커넥터 검사를 실행하고 실패한 항목을 해결하세요.",
+      "prompt": {
+        "title": "연결 테스트",
+        "description": "{appName}이(가) 계속하기 전에 필요한 범위를 확인하는 검사를 실행합니다.",
+        "startButton": {
+          "label": "검사 시작"
+        }
+      },
+      "title": "커넥터 검사",
+      "groups": {
+        "failed": "실패 {count}개",
+        "indeterminate": "미확인 {count}개",
+        "passed": "완료 {count}개",
+        "skipped": "건너뜀 {count}개",
+        "running": "실행 중 {count}개",
+        "expected": "예정 {count}개"
+      },
+      "status": {
+        "passed": "통과",
+        "failed": "실패",
+        "indeterminate": "확인할 수 없음",
+        "skipped": "건너뜀",
+        "running": "테스트 중…",
+        "pending": "대기 중",
+        "waiting": "설정을 기다리는 중"
+      },
+      "required": {
+        "label": "필수"
+      },
+      "running": {
+        "label": "검사 실행 중…"
+      },
+      "empty": {
+        "label": "아직 실행된 검사가 없습니다."
+      },
+      "docsLink": {
+        "label": "문서"
+      },
+      "rerunButton": {
+        "label": "검사 다시 실행"
+      },
+      "foldButton": {
+        "fold": "접기",
+        "expand": "펼치기"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "실패 {count}개",
+        "unverified": "미확인 {count}개",
+        "inProgress": "진행 중 {count}개",
+        "expected": "예정 {count}개",
+        "skipped": "건너뜀 {count}개",
+        "successful": "성공 {count}개"
+      },
+      "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
+      "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
+      "state": {
+        "completed": "검사가 완료되었습니다",
+        "inProgress": "검사 진행 중…"
+      }
     }
   },
   "agents": {
@@ -12961,9 +13068,6 @@
         "calls": {
           "tag": "{count, plural, one {호출 #건} other {호출 #건}}"
         },
-        "failed": {
-          "tag": "{count}개 실패"
-        },
         "working": {
           "label": "작업 중"
         }
@@ -13399,6 +13503,9 @@
       "oneMonth": "1개월",
       "sevenDays": "7일",
       "threeMonths": "3개월"
+    },
+    "iconTooltip": {
+      "label": "자세한 정보"
     },
     "input": {
       "day": "일",

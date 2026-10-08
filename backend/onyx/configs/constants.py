@@ -677,6 +677,9 @@ class OnyxCeleryTask:
     CHECK_FOR_INDEX_ATTEMPT_CLEANUP = "check_for_index_attempt_cleanup"
     CLEANUP_INDEX_ATTEMPT = "cleanup_index_attempt"
 
+    CLEANUP_OAUTH_PROVIDER_GRANTS = "cleanup_oauth_provider_grants"
+    CLEANUP_OAUTH_PROVIDER_CLIENTS = "cleanup_oauth_provider_clients"
+
     # Old-index reclamation (post-reindex deletion of the now-PAST index)
     CHECK_FOR_OLD_INDEX_RECLAIM = "check_for_old_index_reclaim"
     RUN_OLD_INDEX_RECLAIM = "run_old_index_reclaim"

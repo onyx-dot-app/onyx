@@ -192,7 +192,7 @@ type SelectCardShellProps = SelectCardBaseProps & {
   expandable?: boolean;
   /** The fold's content; `undefined` renders no fold at all. */
   fold?: React.ReactNode;
-  /** Whether the fold is open, which flattens the header's bottom corners. */
+  /** Whether the fold is open. */
   foldOpen?: boolean;
   foldHeight?: CardFoldHeight;
 };
@@ -214,11 +214,13 @@ function SelectCardShell({
 }: SelectCardShellProps) {
   const paddingStyle = { padding: spacingToRem(paddingProp) };
   const radius = roundingToRem(roundingProp);
-  // Expanded, the header rounds only at the top and the fold only at the
-  // bottom, so the two halves read as one card rather than two.
-  const headerRadius = foldOpen
-    ? { borderTopLeftRadius: radius, borderTopRightRadius: radius }
-    : { borderRadius: radius };
+  // Expandable, the stylesheet rounds the header, and squares its bottom
+  // corners while the fold has any height, so the two halves stay joined as
+  // it closes.
+  const headerStyle: React.CSSProperties &
+    Partial<Record<"--opal-card-radius", string>> = expandable
+    ? { ...paddingStyle, "--opal-card-radius": radius }
+    : { ...paddingStyle, borderRadius: radius };
 
   // A caller with its own tab index (e.g. a roving radio group) keeps it.
   const isControl = !!onClick && !disabled;
@@ -248,7 +250,7 @@ function SelectCardShell({
       <div
         ref={expandable ? undefined : ref}
         className="opal-select-card"
-        style={{ ...paddingStyle, ...headerRadius }}
+        style={headerStyle}
         data-border={border}
         data-opal-status-border="default"
       >

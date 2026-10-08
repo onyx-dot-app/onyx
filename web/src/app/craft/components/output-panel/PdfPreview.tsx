@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { getArtifactUrl } from "@/lib/build/client";
+import { buildArtifactUrl } from "@/app/craft/services/apiServices";
 
 interface PdfPreviewProps {
   sessionId: string;
   filePath: string;
+  revision?: string;
   refreshKey?: number;
 }
 
@@ -23,57 +26,48 @@ interface PdfPreviewProps {
 export default function PdfPreview({
   sessionId,
   filePath,
+  revision,
   refreshKey,
 }: PdfPreviewProps) {
   const t = useTranslations("craft.pdfPreview");
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const blobUrlRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    // Revoke the previous blob URL before starting a new fetch
-    if (blobUrlRef.current) {
-      URL.revokeObjectURL(blobUrlRef.current);
-      blobUrlRef.current = null;
-    }
-    setBlobUrl(null);
-    setLoading(true);
-    setError(false);
-
-    const encodedPath = filePath
-      .split("/")
-      .map((segment) => encodeURIComponent(segment))
-      .join("/");
-    const artifactUrl = getArtifactUrl(sessionId, encodedPath);
-
-    fetch(artifactUrl, { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Failed to fetch PDF: ${res.status}`);
-        return res.blob();
-      })
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        blobUrlRef.current = url;
-        setBlobUrl(url);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(true);
-        setLoading(false);
+  const {
+    data: blob,
+    error,
+    isLoading,
+  } = useSWR(
+    [
+      SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
+      "pdf",
+      revision,
+      refreshKey ?? 0,
+    ],
+    async () => {
+      const response = await fetch(buildArtifactUrl(sessionId, filePath), {
+        cache: "no-store",
       });
+      if (!response.ok)
+        throw new Error(`Failed to fetch PDF: ${response.status}`);
+      return response.blob();
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: revision === undefined,
+    }
+  );
+  const [objectUrl, setObjectUrl] = useState<{
+    blob: Blob;
+    url: string;
+  } | null>(null);
 
-    return () => {
-      controller.abort();
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
-      }
-    };
-  }, [sessionId, filePath, refreshKey]);
+  // Cache bytes in SWR; object URLs belong only to the mounted viewer.
+  useEffect(() => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    setObjectUrl({ blob, url });
+    return () => URL.revokeObjectURL(url);
+  }, [blob]);
+  const blobUrl = objectUrl?.blob === blob ? objectUrl?.url : undefined;
 
   if (error) {
     return (
@@ -96,7 +90,7 @@ export default function PdfPreview({
     );
   }
 
-  if (loading || !blobUrl) {
+  if (isLoading || !blobUrl) {
     return (
       <Section
         height="full"

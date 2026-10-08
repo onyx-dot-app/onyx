@@ -43,7 +43,7 @@ A logged-out viewer is redirected to `/auth/login`.
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | GET | `/build/sessions/{session_id}/webapp` and `/build/sessions/{session_id}/webapp/{path:path}` | `get_webapp` | Proxies to the session's Next.js dev server. Public endpoint spec (exempt from the global auth middleware); auth is enforced inside the handler. |
-| WS | `/build/sessions/{session_id}/webapp/_next/webpack-hmr` | `websocket_webapp_hmr` | Proxies the Next.js Hot Module Replacement websocket. |
+| WS | `/build/sessions/{session_id}/webapp/_next/{hmr_endpoint}` | `websocket_webapp_hmr` | Proxies `hmr` and `webpack-hmr` through the same authenticated handler. |
 
 `backend/onyx/server/features/build/session/api.py:get_webapp_info` (GET
 `/build/sessions/{session_id}/webapp-info`) is a separate, authenticated
@@ -164,7 +164,7 @@ deployments it resolves the tenant from the session token in Redis and sets
 the tenant context before it loads the user. It also requires
 `Permission.BASIC_ACCESS`. The handler then runs the same access check, then
 `_proxy_webapp_hmr_websocket` opens a second websocket to the sandbox's
-`/_next/webpack-hmr` endpoint and pumps messages both directions
+`/_next/hmr` or `/_next/webpack-hmr` endpoint requested by the client and pumps messages both directions
 (`_pump_webapp_to_upstream`, `_pump_upstream_to_webapp`) until either side
 closes.
 
@@ -199,6 +199,19 @@ Port allocation is per-user and per-session: `reserve_nextjs_port__no_commit`
 provisioning entirely, since nothing will view them live.
 
 ---
+
+### Artifact preview refresh
+
+PowerPoint and PDF previews key cached data by file path, optional file revision,
+and explicit reload counter. When a revision is supplied, unchanged previews reuse
+cached data across tab switches. Without a revision, previews revalidate on mount.
+Each successful response assigns a fresh slide image token, because local refresh
+counters can repeat after page reloads. A refreshed deck can have fewer slides; selection stays within
+its new bounds. Next-slide input is ignored while conversion has no slides.
+PDF previews cache bytes in SWR and release viewer object URLs on unmount.
+Cache misses and explicit reloads bypass the browser cache when fetching the artifact.
+These behaviors live in `PptxPreview.tsx` and `PdfPreview.tsx` under
+`web/src/app/craft/components/output-panel/`.
 
 ## 5. Contracts and invariants
 
@@ -280,7 +293,7 @@ Use manual reproduction for the cache and hot-reload behaviour below.
    component (ask the agent to change some visible text) hot-reloads
    without a manual refresh. If it renders once but never updates after an
    edit, the HMR websocket is not reaching the sandbox; check
-   `_next/webpack-hmr` in the browser's network panel for a failed
+   `_next/hmr` (or `_next/webpack-hmr`) in the browser's network panel for a failed
    upgrade.
 4. Open the same session URL as a second, unrelated user account (or in an
    incognito window with no session). Confirm the second user gets a 404
@@ -305,7 +318,7 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
 
 - **Websocket upgrade is required for hydration, and failing to provide it
   does not look like an error.** Next.js 16 with Turbopack and React 19
-  needs the `/_next/webpack-hmr` websocket connected for the page to
+  needs its HMR websocket connected for the page to
   hydrate correctly in dev. If a deployment's proxy or ingress fails to
   upgrade that connection, the page still renders (the initial HTML and
   JS load fine over plain HTTP), but no event handlers attach: dropdowns
@@ -313,6 +326,7 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
   the generated app, not a proxy problem. `websocket_webapp_hmr`
   (`webapp_proxy.py`) is confirmed to implement the upgrade and pump both
   directions; a regression here would reproduce exactly this symptom.
+- **Next.js HMR paths vary by version.** Newer sandbox apps use `/_next/hmr`; older apps use `/_next/webpack-hmr`. Both the frontend development rewrite and backend WebSocket route must preserve the requested endpoint. Missing the new path leaves server-rendered headers visible while client components never initialize.
 - **Only `_next/static/media/*` is safe to cache immutably.** `_proxy_request`
   checks `rel_path.startswith("_next/static/media/")` before setting
   `cache-control: public, max-age=31536000, immutable`; every other path,
@@ -325,3 +339,4 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
   one.** `get_webapp_url` on Kubernetes returns a
   `*.svc.cluster.local` URL. This proxy is the only path a browser can use
   to reach it; there is no direct-to-pod fallback for a viewer.
+- **PowerPoint replacements can preserve modification time.** The converter reuses cached slides only when they are newer than the source modification and change times. This detects same-size replacements without hashing file contents.

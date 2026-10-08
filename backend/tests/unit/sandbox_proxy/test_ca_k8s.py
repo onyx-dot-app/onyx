@@ -5,8 +5,8 @@ import pytest
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
-from onyx.sandbox_proxy.ca import CAStoreConflictError
-from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
+from onyx.sandbox_proxy.certificate_authority.bootstrap import CAStoreConflictError
+from onyx.sandbox_proxy.certificate_authority.kubernetes import K8sSecretCAStore
 
 
 def _api_exception(status: int) -> ApiException:
@@ -139,7 +139,9 @@ def test_ensure_configmap_replaces_on_409(monkeypatch: pytest.MonkeyPatch) -> No
     core_api = MagicMock(spec=client.CoreV1Api)
     core_api.create_namespaced_config_map.side_effect = _api_exception(409)
     core_api.replace_namespaced_config_map.return_value = None
-    monkeypatch.setattr("onyx.sandbox_proxy.ca_k8s.time.sleep", lambda _: None)
+    monkeypatch.setattr(
+        "onyx.sandbox_proxy.certificate_authority.kubernetes.time.sleep", lambda _: None
+    )
 
     _make_store(core_api)._ensure_configmap(
         b"-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
@@ -166,7 +168,9 @@ def test_ensure_configmap_retries_on_repeated_409(
         _api_exception(409),
         None,
     ]
-    monkeypatch.setattr("onyx.sandbox_proxy.ca_k8s.time.sleep", lambda _: None)
+    monkeypatch.setattr(
+        "onyx.sandbox_proxy.certificate_authority.kubernetes.time.sleep", lambda _: None
+    )
 
     _make_store(core_api)._ensure_configmap(
         b"-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
