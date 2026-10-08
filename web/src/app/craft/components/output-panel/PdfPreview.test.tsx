@@ -1,4 +1,5 @@
 import { act, render, screen } from "@tests/setup/test-utils";
+import { skipRetryOnAuthError } from "@/lib/fetcher";
 import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
 
 const originalCreateObjectURL = URL.createObjectURL;
@@ -79,3 +80,34 @@ it("fetches edited PDFs and honors explicit reloads", async () => {
   await screen.findByTitle("report.pdf");
   expect(fetch).toHaveBeenCalledTimes(3);
 });
+
+it.each([401, 402, 403])(
+  "does not retry a PDF HTTP %s response",
+  async (status) => {
+    jest.useFakeTimers();
+    const fetch: jest.SpyInstance = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("Forbidden", { status }));
+    try {
+      render(
+        <PdfPreview
+          sessionId="forbidden-pdf"
+          filePath="outputs/report.pdf"
+          revision="v1"
+        />,
+        {
+          swrConfig: {
+            shouldRetryOnError: true,
+            onErrorRetry: skipRetryOnAuthError,
+          },
+        }
+      );
+      await act(async () => {});
+      expect(screen.getByText("Cannot preview PDF")).toBeInTheDocument();
+      await act(async () => jest.advanceTimersByTime(30000));
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  }
+);

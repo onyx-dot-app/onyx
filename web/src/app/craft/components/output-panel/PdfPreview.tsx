@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useFilePreview } from "@/lib/build/hooks";
+import { FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
@@ -41,7 +42,11 @@ export default function PdfPreview({
         cache: "no-store",
       });
       if (!response.ok)
-        throw new Error(`Failed to fetch PDF: ${response.status}`);
+        throw new FetchError(
+          `Failed to fetch PDF: ${response.status}`,
+          response.status,
+          null
+        );
       return response.blob();
     },
     revision,

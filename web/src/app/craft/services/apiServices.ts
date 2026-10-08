@@ -1,3 +1,4 @@
+import { FetchError } from "@/lib/fetcher";
 import {
   ApiSessionResponse,
   ApiDetailedSessionResponse,
@@ -664,7 +665,11 @@ export async function fetchFileContent(
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch file content: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch file content: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   const mimeType = res.headers.get("Content-Type") || "text/plain";
@@ -828,8 +833,10 @@ export async function fetchPptxPreview(
 
   if (!res.ok) {
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errorData.detail || `Failed to generate PPTX preview: ${res.status}`
+    throw new FetchError(
+      errorData.detail || `Failed to generate PPTX preview: ${res.status}`,
+      res.status,
+      errorData
     );
   }
 
