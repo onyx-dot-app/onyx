@@ -90,8 +90,9 @@ class TeamsCheckpoint(ConnectorCheckpoint):
     # A step walks one page of each active channel, side by side, so a resumed
     # attempt loses at most a page per channel instead of a whole team.
     active: list[ChannelCursor] = []
-    # Written by older versions, which walked one channel at a time. Such a
-    # checkpoint joins ``active`` when it is loaded.
+    # Written by v4.9, which walked one channel at a time. Such a checkpoint
+    # joins ``active`` when it is loaded.
+    # TODO(nmgarza5): drop both once v4.9 checkpoints have aged out.
     current_channel: ChannelRef | None = None
     next_messages_url: str | None = None
     # The meeting organizers follow the channels. None until their first page is
@@ -354,6 +355,9 @@ class TeamsConnector(
             checkpoint.active.append(
                 ChannelCursor(channel=checkpoint.todo_channels.pop())
             )
+        # One transient failure discards the other channels' finished pages,
+        # up to max_workers - 1 pages of replies calls: cheaper than a partial
+        # write-back the retry would have to reconcile.
         advances: list[ChannelAdvance] = cast(
             list[ChannelAdvance],
             run_functions_tuples_in_parallel(
@@ -384,7 +388,8 @@ class TeamsConnector(
         self, cursor: ChannelCursor, start: SecondsSinceUnixEpoch
     ) -> ChannelAdvance:
         """One page of the cursor's channel: its threads with their replies and
-        images. Leaves the channel when the page was its last or is refused."""
+        images. Done when the page was its last or is refused; the step leaves
+        the channel."""
         channel = cursor.channel
         items: list[Document | ConnectorFailure] = []
 
@@ -443,7 +448,7 @@ class TeamsConnector(
         on Graph or a refused site on SharePoint REST (the SDK's own exception)
         is one recorded failure for the channel, anything else fails the attempt."""
         if self._files is None:
-            return
+            raise RuntimeError("Channel files are read only when attachments are on")
         try:
             yield from self._files.index(channel, start)
         except (requests.HTTPError, ClientRequestException) as e:

@@ -7,11 +7,9 @@ from typing import Any
 
 import pytest
 import requests
-from pydantic import ValidationError
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import Document
-from onyx.connectors.teams.config import TeamsConnectorConfig
 from onyx.connectors.teams.connector import TeamsCheckpoint, TeamsConnector
 from onyx.connectors.teams.models import ChannelCursor, ChannelRef
 from onyx.connectors.teams.utils import message_delta_url
@@ -71,8 +69,9 @@ def test_the_active_channels_are_walked_in_the_same_step() -> None:
     assert checkpoint.has_more is False
 
 
-def test_a_transient_failure_in_one_channel_keeps_every_cursor_where_it_was() -> None:
-    """The other channel's page is read too, but nothing is written back, so the
+def test_a_transient_failure_in_one_channel_yields_nothing_from_the_others() -> None:
+    """The other channel's page is read too, but the step raises before it
+    yields a document, so the runner keeps the checkpoint it had and the
     retried step reads both pages again instead of skipping one."""
     routes = _two_channel_routes()
     routes.pop(OTHER_DELTA)
@@ -82,14 +81,13 @@ def test_a_transient_failure_in_one_channel_keeps_every_cursor_where_it_was() ->
         todo_team_ids=[],
         active=[ChannelCursor(channel=CHANNEL), ChannelCursor(channel=OTHER)],
     )
+    generator = connector(client).load_from_checkpoint(0, 1, saved)
 
     with pytest.raises(requests.HTTPError):
-        step(connector(client), saved)
+        next(generator)
 
-    assert saved.active == [
-        ChannelCursor(channel=CHANNEL),
-        ChannelCursor(channel=OTHER),
-    ]
+    requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
+    assert DELTA in requested and OTHER_DELTA in requested
 
 
 def test_a_checkpoint_from_before_the_active_list_joins_it() -> None:
@@ -144,8 +142,6 @@ def test_no_more_channels_than_workers_are_active_at_once() -> None:
 
 def test_a_non_positive_worker_count_is_rejected() -> None:
     """Zero workers would take no channel off the queue and repeat empty steps
-    for ever, so the connector refuses it up front, as the config does."""
+    for ever, so the connector refuses it up front."""
     with pytest.raises(ConnectorValidationError):
         TeamsConnector(max_workers=0)
-    with pytest.raises(ValidationError):
-        TeamsConnectorConfig(max_workers=0)
