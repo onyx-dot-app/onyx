@@ -64,8 +64,11 @@ class ExportSource:
 
     def team(
         self, team_id: str, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> TeamExport:
-        """Every thread of the team that changed in the window. A thread whose
+    ) -> Iterator[Document | ConnectorFailure | TeamExport]:
+        """Every thread of the team that changed in the window, each document
+        yielded as it is built so a worker holds the grouped stream and one
+        document at a time, then the TeamExport that says what the team's
+        channels need next. A thread whose
         root was created inside the window is complete in the stream; an older
         thread that changed anywhere gets its replies from Graph, and its root
         too when the stream lacks it. The stream runs to the time of the
@@ -93,7 +96,8 @@ class ExportSource:
                         team_id,
                         EXPORT_MESSAGES_CAP,
                     )
-                    return TeamExport(items=[], channels=channels, fell_back=True)
+                    yield TeamExport(channels=channels, fell_back=True)
+                    return
                 root_id: str = message.replyToId or message.id
                 threads[root_id].append(message)
                 if message.replyToId is None:
@@ -108,15 +112,16 @@ class ExportSource:
                 team_id,
                 status(e),
             )
-            return TeamExport(
-                items=[],
+            yield TeamExport(
                 channels=channels,
                 fell_back=True,
                 refused_to_app=is_metered_refusal(e),
             )
+            return
 
+        streamed: set[str] = _streamed(threads)
         quiet: list[str] = [
-            channel.id for channel in channels if channel.id not in _streamed(threads)
+            channel.id for channel in channels if channel.id not in streamed
         ]
         if quiet:
             logger.debug(
@@ -126,21 +131,18 @@ class ExportSource:
                 len(channels),
                 quiet,
             )
-        items: list[Document | ConnectorFailure] = []
         for root_id, messages in threads.items():
             channel: ChannelRef | None = _channel_of(messages, by_id)
             if channel is None:
-                items.append(
-                    ConnectorFailure(
-                        failed_entity=EntityFailure(entity_id=root_id),
-                        failure_message=f"Thread {root_id} of team {team_id} names no channel the team lists",
-                    )
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(entity_id=root_id),
+                    failure_message=f"Thread {root_id} of team {team_id} names no channel the team lists",
                 )
                 continue
-            items.extend(
-                self._thread(channel, root_id, roots.get(root_id), messages, start)
+            yield from self._thread(
+                channel, root_id, roots.get(root_id), messages, start
             )
-        return TeamExport(items=items, channels=channels)
+        yield TeamExport(channels=channels)
 
     def _thread(
         self,

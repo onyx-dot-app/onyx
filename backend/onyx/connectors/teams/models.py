@@ -117,9 +117,9 @@ class ChannelAdvance(BaseModel):
 
 
 class TeamExport(BaseModel):
-    """What one worker brings back from a team's export stream."""
+    """What a team's export stream leaves for the step once its documents are
+    out: the team's channels, and whether they go to the channel walk."""
 
-    items: list[Document | ConnectorFailure]
     channels: list[ChannelRef]
     # The stream was refused or too large to hold, so the channels go to the
     # channel walk.

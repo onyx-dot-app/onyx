@@ -382,12 +382,15 @@ class TeamsConnector(
         if checkpoint.todo_team_ids is None:
             raise RuntimeError("The teams are listed before any export step")
         team_ids: list[str] = checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
-
-        def one_team(team_id: str) -> Iterator[TeamExport]:
-            yield self._export.team(team_id, start, end)
-
-        for export in drain(team_ids, one_team, EXPORT_TEAM_WORKERS):
-            yield from export.items
+        for item in drain(
+            team_ids,
+            lambda team_id: self._export.team(team_id, start, end),
+            EXPORT_TEAM_WORKERS,
+        ):
+            if not isinstance(item, TeamExport):
+                yield item
+                continue
+            export: TeamExport = item
             if export.refused_to_app:
                 # A 402 applies to the whole tenant, so the teams left walk
                 # their channels without another stream each.
