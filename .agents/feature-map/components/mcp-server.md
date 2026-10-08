@@ -382,10 +382,12 @@ stack with the API, MCP server, PostgreSQL, Redis, and shipped nginx routing.
 It checks loopback discovery aliases, both endpoint URL forms, the advertised
 resource, MCP auth challenges, and provider routing without creating users or grants.
 It does not use a running deployment or test the Next.js consent UI. Scheduled and
-manual failures use `SLACK_WEBHOOK` through the shared
-Slack action. The required-client mode fails if either CLI is missing.
+manual failures post to `#alerts` (`C07K8KBMGKF`) through `slack-post-message`
+with `CVE_REVIEWS_BOT_TOKEN`, matching the channel-addressable bot workflows.
+Messages tag Roshan through the shared `rohoswagger` user mapping.
+The required-client mode fails if either CLI is missing.
 Manual runs with `test_alert=true` send a labeled delivery-test message even
-when compatibility checks pass. The webhook selects the destination channel.
+when compatibility checks pass.
 
 ### Tests
 

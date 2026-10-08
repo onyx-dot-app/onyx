@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       test_alert:
-        description: Send a labeled test alert to the regressions channel
+        description: Send a labeled test alert to the alerts channel
         type: boolean
         default: false
   schedule:
@@ -170,14 +170,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Alert regressions channel
-        uses: ./.github/actions/slack-notify
+      - name: Alert alerts channel
+        uses: ./.github/actions/slack-post-message
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          bot-token: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
+          channel: C07K8KBMGKF
+          mention: rohoswagger
           fail-on-error: "true"
-          title: ${{ inputs.test_alert && 'MCP compatibility alert-delivery test' || 'MCP compatibility checks failed' }}
-          ref-name: ${{ github.ref_name }}
-          details: >-
+          text: >-
+            ${{ inputs.test_alert && 'MCP compatibility alert-delivery test.' || 'MCP compatibility checks failed.' }} {mention}
             Routing: ${{ needs.routing.result }};
             Claude Code/Codex: ${{ needs.native-clients.result }};
             local Compose discovery: ${{ needs.compose-smoke.result }}.

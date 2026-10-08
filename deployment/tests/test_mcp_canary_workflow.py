@@ -43,3 +43,13 @@ def test_scheduled_canary_uses_an_isolated_compose_stack() -> None:
     assert cleanup["if"] == "always()"
     assert cleanup["run"] == "docker compose down --volumes --remove-orphans"
     assert "compose-smoke" in workflow["jobs"]["notify"]["needs"]
+
+    alert: dict[str, Any] = next(
+        step
+        for step in workflow["jobs"]["notify"]["steps"]
+        if step.get("uses") == "./.github/actions/slack-post-message"
+    )
+    assert alert["with"]["channel"] == "C07K8KBMGKF"
+    assert alert["with"]["mention"] == "rohoswagger"
+    assert alert["with"]["bot-token"] == "${{ secrets.CVE_REVIEWS_BOT_TOKEN }}"
+    assert "{mention}" in alert["with"]["text"]
