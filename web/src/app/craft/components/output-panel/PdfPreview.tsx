@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import useSWR from "swr";
+import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
@@ -34,13 +34,8 @@ export default function PdfPreview({
     data: blob,
     error,
     isLoading,
-  } = useSWR(
-    [
-      SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
-      "pdf",
-      revision,
-      refreshKey ?? 0,
-    ],
+  } = useFilePreview(
+    SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     async () => {
       const response = await fetch(buildArtifactUrl(sessionId, filePath), {
         cache: "no-store",
@@ -49,20 +44,20 @@ export default function PdfPreview({
         throw new Error(`Failed to fetch PDF: ${response.status}`);
       return response.blob();
     },
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      revalidateIfStale: revision === undefined,
-    }
+    revision,
+    refreshKey
   );
   const [objectUrl, setObjectUrl] = useState<{
     blob: Blob;
     url: string;
   } | null>(null);
 
-  // Cache bytes in SWR; object URLs belong only to the mounted viewer.
+  // Object URLs belong only to the mounted viewer.
   useEffect(() => {
-    if (!blob) return;
+    if (!blob) {
+      setObjectUrl(null);
+      return;
+    }
     const url = URL.createObjectURL(blob);
     setObjectUrl({ blob, url });
     return () => URL.revokeObjectURL(url);

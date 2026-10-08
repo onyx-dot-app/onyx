@@ -659,7 +659,9 @@ export async function fetchFileContent(
   sessionId: string,
   path: string
 ): Promise<FileContentResponse> {
-  const res = await fetch(buildArtifactUrl(sessionId, path));
+  const res = await fetch(buildArtifactUrl(sessionId, path), {
+    cache: "no-store",
+  });
 
   if (!res.ok) {
     throw new Error(`Failed to fetch file content: ${res.status}`);
@@ -820,7 +822,8 @@ export async function fetchPptxPreview(
     .join("/");
 
   const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`
+    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`,
+    { cache: "no-store" }
   );
 
   if (!res.ok) {
