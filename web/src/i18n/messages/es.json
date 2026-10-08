@@ -12635,6 +12635,16 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "previous": "Página anterior",
+        "next": "Página siguiente",
+        "zoomOut": "Alejar",
+        "zoomIn": "Acercar",
+        "fitWidth": "Ajustar al ancho"
+      },
+      "page": {
+        "counter": "Página {current} de {total}"
+      },
       "error": {
         "description": "No se pudo cargar el archivo PDF.",
         "title": "No se puede previsualizar el PDF"

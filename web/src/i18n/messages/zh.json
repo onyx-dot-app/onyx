@@ -12635,6 +12635,16 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "previous": "上一页",
+        "next": "下一页",
+        "zoomOut": "缩小",
+        "zoomIn": "放大",
+        "fitWidth": "适合宽度"
+      },
+      "page": {
+        "counter": "第 {current} 页，共 {total} 页"
+      },
       "error": {
         "description": "无法加载该 PDF 文件。",
         "title": "无法预览 PDF"

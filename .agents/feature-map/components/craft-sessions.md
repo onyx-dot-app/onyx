@@ -61,8 +61,13 @@ permission (per the app policy in `[[craft-admin]]` and `[[craft-external-apps]]
 the turn pauses and the user sees an approval card; the user can approve or
 reject just that request, or approve it for the rest of the session. Files
 the agent produces appear as artifacts the user can browse, download, or
-(for Markdown) export as a `.docx`. The user's own uploaded library files
+(for Markdown) export as a `.docx`. The user's uploaded library files
 (PDFs, spreadsheets) are available inside every session's sandbox.
+
+PDF previews use PDF.js with selectable text, links, page navigation, zoom, and
+fit-to-width. The frontend serves matching workers, fonts, and decoders locally.
+Cached PDF bytes survive tab switches; each viewer releases its worker on unmount.
+Revisions and explicit refreshes fetch new bytes.
 
 ---
 

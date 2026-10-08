@@ -12635,6 +12635,16 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "previous": "이전 페이지",
+        "next": "다음 페이지",
+        "zoomOut": "축소",
+        "zoomIn": "확대",
+        "fitWidth": "너비에 맞추기"
+      },
+      "page": {
+        "counter": "{total}페이지 중 {current}페이지"
+      },
       "error": {
         "description": "PDF 파일을 불러올 수 없습니다.",
         "title": "PDF를 미리 볼 수 없습니다"

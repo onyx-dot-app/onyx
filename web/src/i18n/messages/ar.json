@@ -12635,6 +12635,16 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "previous": "الصفحة السابقة",
+        "next": "الصفحة التالية",
+        "zoomOut": "تصغير",
+        "zoomIn": "تكبير",
+        "fitWidth": "ملاءمة العرض"
+      },
+      "page": {
+        "counter": "الصفحة {current} من {total}"
+      },
       "error": {
         "description": "تعذّر تحميل ملف PDF.",
         "title": "تعذّرت معاينة ملف PDF"

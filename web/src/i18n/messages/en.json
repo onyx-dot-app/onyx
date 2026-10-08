@@ -12635,6 +12635,16 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "previous": "Previous page",
+        "next": "Next page",
+        "zoomOut": "Zoom out",
+        "zoomIn": "Zoom in",
+        "fitWidth": "Fit width"
+      },
+      "page": {
+        "counter": "Page {current} of {total}"
+      },
       "error": {
         "description": "The PDF file could not be loaded.",
         "title": "Cannot preview PDF"

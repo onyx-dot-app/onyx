@@ -12635,6 +12635,16 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "previous": "Página anterior",
+        "next": "Próxima página",
+        "zoomOut": "Diminuir zoom",
+        "zoomIn": "Aumentar zoom",
+        "fitWidth": "Ajustar à largura"
+      },
+      "page": {
+        "counter": "Página {current} de {total}"
+      },
       "error": {
         "description": "Não foi possível carregar o arquivo PDF.",
         "title": "Não é possível visualizar o PDF"
