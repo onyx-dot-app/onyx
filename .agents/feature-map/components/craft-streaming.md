@@ -68,6 +68,7 @@ subscriber queue off the same `PodEventBus` (§4.2); neither is authoritative.
 | `SSE_KEEPALIVE_INTERVAL` | 15s | Cadence of `SSEKeepalive` markers on every stream in this component. |
 | `OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS` | derived from `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | Renewed by turn activity. It aborts a silent prompt step after this long. The runner re-prompts up to `MAX_TIMEOUT_CONTINUATIONS` (2) times before it fails the turn (`interactive_turns/executor.py`). |
 | `OPENCODE_SERVE_CONNECT_TIMEOUT` / `_REQUEST_TIMEOUT` / `_EVENT_READ_TIMEOUT` | 5s / 30s / 60s | HTTP timeouts from the API server to the in-pod `opencode serve` process. |
+| `OPENCODE_SERVE_SESSION_INIT_TIMEOUT` | 90s | HTTP read/write timeout for `ensure_session` lookup and creation, which can initialize a cold directory. Ordinary requests use 30s. |
 | `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | 180s | How long a turn waits on an unanswered approval before it times out. |
 | `RUNNER_STALE_AFTER_SECONDS` (`timeouts.py`) | `6 * SSE_KEEPALIVE_INTERVAL` | A `RUNNING` turn with no heartbeat this long is reclaimable by a new runner. |
 | `INTERACTIVE_TURN_HARD_CAP_SECONDS` (`timeouts.py`) | 30 min | Hard wall-clock budget for one turn (`run_claimed_interactive_build_turn`). |

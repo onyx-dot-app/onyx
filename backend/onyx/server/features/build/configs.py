@@ -213,9 +213,12 @@ OPENCODE_SERVER_USERNAME = "opencode"
 OPENCODE_SERVE_CONNECT_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_CONNECT_TIMEOUT", "5.0")
 )
+# Ordinary requests default to 30 seconds. Session initialization gets 90 seconds
+# because session lookup and creation can initialize a cold directory.
 OPENCODE_SERVE_REQUEST_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "30.0")
 )
+OPENCODE_SERVE_SESSION_INIT_TIMEOUT = 90.0
 # Idle timeout for the raw /event SSE connection to opencode-serve. The
 # reader reconnects (with backoff) if no bytes arrive for this long. Its
 # floor is opencode-serve's own emission cadence on /event — NOT our
