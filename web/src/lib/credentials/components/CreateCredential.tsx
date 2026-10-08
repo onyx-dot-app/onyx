@@ -64,7 +64,7 @@ interface DraftSealerProps {
 /**
  * Seals the form's values as a draft whenever they are valid, after typing
  * pauses, and hands the draft up; hands up `null` when they stop being valid
- * and when the form closes. Renders nothing.
+ * and when the form unmounts. Renders nothing.
  */
 function DraftSealer({ source, onDraft }: DraftSealerProps) {
   const t = useTranslations("admin");
@@ -135,7 +135,7 @@ function DraftSealer({ source, onDraft }: DraftSealerProps) {
     // The keys stand for the values; the objects change every render.
   }, [isValid, valuesKey, sharingKey, source]);
 
-  // A closed form's values are gone, so its draft goes too.
+  // A form that leaves the page takes its draft with it.
   useEffect(() => () => onDraftRef.current(null), []);
 
   return null;
@@ -165,7 +165,7 @@ export default function CreateCredential({
   onSwitch?: (selectedCredential: Credential<any>) => Promise<void>;
   // Given, nothing is saved and there is no Create button: once the form is
   // valid, its values are sealed as a draft and handed here, and creating the
-  // connector saves it. `null` when the form stops being valid or closes.
+  // connector saves it. `null` when the form stops being valid or unmounts.
   // Sources with a file field (which cannot be sealed yet) still save.
   onDraft?: (draft: DraftCredential | null) => void;
   // Switch currently selected credential + link with connector
