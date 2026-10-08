@@ -51,7 +51,7 @@ class SlimWalk:
         and a progress report per batch and again every
         PROGRESS_EVERY_DOCUMENTS yielded, since the runner's lock lives on
         those reports. Each listing honors a stop before every page of its own."""
-        yielded = 0
+        yielded: int = 0
         for items_batch in batch_generator(items, batch or workers):
             self.raise_if_stopped()
             if self.callback:

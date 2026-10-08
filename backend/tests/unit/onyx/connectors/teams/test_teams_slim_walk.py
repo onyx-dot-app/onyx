@@ -338,7 +338,7 @@ def test_a_slow_item_holds_back_only_its_own_worker() -> None:
     of the batch waiting for its slowest member."""
     from onyx.connectors.teams.sources import drain
 
-    third_started = threading.Event()
+    third_started: threading.Event = threading.Event()
 
     def listing(item: str) -> Any:
         if item == "first":
@@ -360,9 +360,9 @@ def test_a_long_batch_keeps_reporting_progress(monkeypatch: pytest.MonkeyPatch) 
     from onyx.connectors.teams import sources
 
     monkeypatch.setattr(sources, "PROGRESS_EVERY_DOCUMENTS", 2)
-    callback = MagicMock()
+    callback: MagicMock = MagicMock()
     callback.should_stop.return_value = False
-    walk = SlimWalk(start=0, callback=callback, with_readers=False)
+    walk: SlimWalk = SlimWalk(start=0, callback=callback, with_readers=False)
 
     def listing(item: int) -> Any:
         for n in range(3):
