@@ -2725,7 +2725,8 @@
             "ariaLabel": "إخفاء تفاصيل الحساب"
           },
           "deleteButton": {
-            "label": "حذف الحساب"
+            "label": "حذف الحساب",
+            "inUseTooltip": "تستخدم موصلات هذا الحساب، لذا لا يمكن حذفه."
           },
           "usedBy": {
             "label": "مستخدم في {count, plural, zero {# موصلات} one {موصل واحد} two {موصلين} few {# موصلات} many {# موصلًا} other {# موصل}}"

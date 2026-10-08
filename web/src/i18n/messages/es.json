@@ -2725,7 +2725,8 @@
             "ariaLabel": "Ocultar detalles de la cuenta"
           },
           "deleteButton": {
-            "label": "Eliminar cuenta"
+            "label": "Eliminar cuenta",
+            "inUseTooltip": "Hay conectores que usan esta cuenta, por lo que no se puede eliminar."
           },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"

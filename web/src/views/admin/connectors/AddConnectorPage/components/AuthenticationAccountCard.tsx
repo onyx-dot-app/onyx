@@ -145,6 +145,7 @@ export default function AuthenticationAccountCard({
     credential.user_id === null
       ? null
       : (credential.user_personal_name ?? credential.user_email);
+  const inUse: boolean = credential.usages.length > 0;
   const isOwnAccount: boolean = user !== null && credential.user_id === user.id;
 
   return (
@@ -219,6 +220,12 @@ export default function AuthenticationAccountCard({
                         prominence="tertiary"
                         icon={SvgTrash}
                         aria-label={t("deleteButton.label")}
+                        // The server refuses to delete an account that
+                        // connectors still use.
+                        disabled={inUse}
+                        tooltip={
+                          inUse ? t("deleteButton.inUseTooltip") : undefined
+                        }
                         onClick={() => setConfirmingDelete(true)}
                       />
                       <Button
