@@ -448,7 +448,7 @@ def stream_response_to_buffer_with_cap(
 
 
 def _read_under_cap(resp: requests.Response, cap: int, description: str) -> bytes:
-    cl_header = resp.headers.get("Content-Length")
+    cl_header: str | None = resp.headers.get("Content-Length")
     if cl_header and cl_header.isdigit() and int(cl_header) > cap:
         logger.warning(
             "Content-Length %s exceeds cap %s for %s; skipping download.",
@@ -458,7 +458,7 @@ def _read_under_cap(resp: requests.Response, cap: int, description: str) -> byte
         )
         raise SizeCapExceeded("pre_download")
 
-    buf = io.BytesIO()
+    buf: io.BytesIO = io.BytesIO()
     for chunk in resp.iter_content(STREAM_CHUNK_SIZE):
         if not chunk:
             continue

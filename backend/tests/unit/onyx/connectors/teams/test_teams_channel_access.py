@@ -3,8 +3,8 @@ the group sync names the people in it."""
 
 import threading
 import time
-from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -231,14 +231,14 @@ def test_an_id_graph_does_not_name_is_not_asked_for_again() -> None:
 def test_the_directory_lookup_runs_with_the_lock_released() -> None:
     """Workers share the directory, so a page of names must not stall the
     others: only the cache is guarded, the lookup itself is not."""
-    client = graph_client(
+    client: MagicMock = graph_client(
         {
             MEMBERS_URL: {"value": [member("Ada", None, "u1")]},
             USER_LOOKUP_URL: {"u1": "ada@example.com"},
         }
     )
-    directory = UserDirectory(client)
-    original = directory._lookup
+    directory: UserDirectory = UserDirectory(client)
+    original: Callable[[list[str]], dict[str, str | None]] = directory._lookup
     locked_during_lookup: list[bool] = []
 
     def observed(batch: list[str]) -> dict[str, str | None]:
@@ -257,15 +257,15 @@ def test_a_name_graph_gave_survives_a_racing_lookup_that_omits_it(
     """Two workers may look up the same new id at once. The answer that names
     the user wins in either order, so an omission on the other lookup does
     not take access away."""
-    directory = UserDirectory(graph_client({}))
+    directory: UserDirectory = UserDirectory(graph_client({}))
     named: dict[str, str | None] = {"u1": "ada@example.com"}
     omitted: dict[str, str | None] = {"u1": None}
     answers: Iterator[dict[str, str | None]] = iter(
         [named, omitted] if name_first else [omitted, named]
     )
-    both_asking = threading.Barrier(2, timeout=5)
-    answers_lock = threading.Lock()
-    first_written = threading.Event()
+    both_asking: threading.Barrier = threading.Barrier(2, timeout=5)
+    answers_lock: threading.Lock = threading.Lock()
+    first_written: threading.Event = threading.Event()
     asked: list[int] = []
 
     def lookup(_batch: list[str]) -> dict[str, str | None]:
@@ -283,8 +283,10 @@ def test_a_name_graph_gave_survives_a_racing_lookup_that_omits_it(
         patch.object(directory, "_lookup", side_effect=lookup),
         ThreadPoolExecutor(max_workers=2) as pool,
     ):
-        workers = [pool.submit(directory.principal_names, ["u1"]) for _ in range(2)]
-        deadline = time.monotonic() + 5
+        workers: list[Future[dict[str, str]]] = [
+            pool.submit(directory.principal_names, ["u1"]) for _ in range(2)
+        ]
+        deadline: float = time.monotonic() + 5
         while "u1" not in directory._principal_names:
             assert time.monotonic() < deadline
             time.sleep(0.01)
