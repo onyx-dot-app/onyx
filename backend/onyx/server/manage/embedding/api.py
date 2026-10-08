@@ -65,7 +65,7 @@ def test_embedding_configuration(
             auth = build_embedding_auth(
                 test_llm_request.provider_type, api_key, test_llm_request.vertex_config
             )
-    dimension = probe_embedding_dimension(
+    dimension: int = probe_embedding_dimension(
         provider_type=test_llm_request.provider_type,
         api_key=api_key,
         api_url=test_llm_request.api_url,

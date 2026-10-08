@@ -130,7 +130,7 @@ def _try_initialize_tokenizer(
     if model_provider is not None:
         # Try using TiktokenTokenizer first if model_provider exists. Bifrost
         # IDs like "openai/text-embedding-3-small" also try the bare model name.
-        candidates = [model_name]
+        candidates: list[str] = [model_name]
         if model_provider == EmbeddingProvider.BIFROST:
             candidates.append(model_name.split("/")[-1])
         for candidate in dict.fromkeys(candidates):

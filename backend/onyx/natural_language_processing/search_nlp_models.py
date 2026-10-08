@@ -25,6 +25,7 @@ from tenacity import (
     wait_fixed,
     wait_random,
 )
+from tenacity.wait import wait_base
 
 from onyx.configs.app_configs import (
     INDEXING_EMBEDDING_MODEL_NUM_THREADS,
@@ -52,6 +53,7 @@ from onyx.natural_language_processing.embedding_auth import (
 )
 from onyx.natural_language_processing.exceptions import (
     CohereBillingLimitError,
+    EmbeddingRequestFailedError,
     EmbeddingRequestRejectedError,
     ModelServerRateLimitError,
 )
@@ -247,16 +249,19 @@ def is_authentication_error(error: Exception) -> bool:
 _GEMINI_EMBEDDING_2_MODEL_PREFIX = "gemini-embedding-2"
 
 # Bifrost model IDs are `<provider>/<model>`; these routes accept `task_type`.
-_BIFROST_GOOGLE_MODEL_PREFIXES = ("gemini/", "vertex/")
-_BIFROST_OPENAI_MODEL_PREFIXES = ("openai/", "azure/")
+_BIFROST_GOOGLE_MODEL_PREFIXES: tuple[str, ...] = ("gemini/", "vertex/")
+_BIFROST_OPENAI_MODEL_PREFIXES: tuple[str, ...] = ("openai/", "azure/")
 # Bifrost forwards a batch upstream unsplit; Cohere's cap is a safe default.
-_BIFROST_DEFAULT_MAX_INPUT_LEN = _COHERE_MAX_INPUT_LEN
-_BIFROST_MAX_CONCURRENT_REQUESTS = 8
-_BIFROST_REQUEST_TRIES = 3
-_BIFROST_RETRY_WAIT = wait_exponential(multiplier=1, max=20) + wait_random(0, 1)
-_BIFROST_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+_BIFROST_DEFAULT_MAX_INPUT_LEN: int = _COHERE_MAX_INPUT_LEN
+_BIFROST_MAX_CONCURRENT_REQUESTS: int = 8
+# Bifrost requests retry here, not in the outer @retry, with the same budget.
+_BIFROST_REQUEST_TRIES: int = _RETRY_TRIES
+_BIFROST_RETRY_WAIT: wait_base = wait_exponential(
+    multiplier=_RETRY_DELAY, max=60
+) + wait_random(0, 2)
+_BIFROST_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 # Client errors that are not a verdict on the request itself.
-_BIFROST_NON_FINAL_STATUSES = frozenset({401, 408, 429})
+_BIFROST_NON_FINAL_STATUSES: frozenset[int] = frozenset({401, 408, 429})
 
 
 def _bifrost_batch_size(model_name: str) -> int:
@@ -279,11 +284,15 @@ def _is_retryable_bifrost_error(error: BaseException) -> bool:
 def _bifrost_error_message(response: httpx.Response) -> str:
     """The gateway's error text, e.g. "The model `gpt-5-mini` does not support embeddings."."""
     try:
-        error = response.json().get("error")
+        body: object = response.json()
     except ValueError:
-        error = None
-    if isinstance(error, dict) and isinstance(error.get("message"), str):
-        return error["message"]
+        body = None
+    if isinstance(body, dict):
+        error: object = body.get("error")
+        if isinstance(error, dict):
+            message: object = error.get("message")
+            if isinstance(message, str):
+                return message
     return response.text[:500] or f"HTTP {response.status_code}"
 
 
@@ -645,24 +654,24 @@ class CloudEmbedding:
         if not self.api_url:
             raise ValueError("API URL is required for Bifrost embedding.")
 
-        api_base = self.api_url.strip().rstrip("/").removesuffix("/embeddings")
-        url = (
+        api_base: str = self.api_url.strip().rstrip("/").removesuffix("/embeddings")
+        url: str = (
             f"{api_base}/embeddings"
             if api_base.endswith("/v1")
             else f"{api_base}/v1/embeddings"
         )
-        headers = (
+        headers: dict[str, str] = (
             {}
             if not (api_key := self._resolve_api_key())
             else {"Authorization": f"Bearer {api_key}"}
         )
 
         model: str = model_name
-        is_google_model = model.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES)
-        is_gemini_embedding_2 = _is_gemini_embedding_2_model(model)
+        is_google_model: bool = model.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES)
+        is_gemini_embedding_2: bool = _is_gemini_embedding_2_model(model)
 
-        # Retry one request here so a transient failure does not resend the
-        # whole call through the outer @retry.
+        # Retry one request here. A request that still fails escapes the outer
+        # @retry, so inputs that already succeeded are not embedded again.
         @retry(
             retry=retry_if_exception(_is_retryable_bifrost_error),
             stop=stop_after_attempt(_BIFROST_REQUEST_TRIES),
@@ -670,7 +679,9 @@ class CloudEmbedding:
             reraise=True,
         )
         async def post(payload: dict[str, Any]) -> httpx.Response:
-            response = await self.http_client.post(url, json=payload, headers=headers)
+            response: httpx.Response = await self.http_client.post(
+                url, json=payload, headers=headers
+            )
             if (
                 response.is_client_error
                 and response.status_code not in _BIFROST_NON_FINAL_STATUSES
@@ -698,21 +709,34 @@ class CloudEmbedding:
             if reduced_dimension:
                 payload["dimensions"] = reduced_dimension
 
-            response = await post(payload)
-            data = sorted(response.json()["data"], key=lambda item: item["index"])
+            try:
+                response: httpx.Response = await post(payload)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 401:
+                    raise
+                raise EmbeddingRequestFailedError(
+                    f"HTTP {e.response.status_code}: {_bifrost_error_message(e.response)}"
+                ) from e
+            except httpx.HTTPError as e:
+                raise EmbeddingRequestFailedError(f"{type(e).__name__}: {e}") from e
+            data: list[dict[str, Any]] = sorted(
+                response.json()["data"], key=lambda item: item["index"]
+            )
             if len(data) != len(text_batch):
-                raise RuntimeError(
+                raise EmbeddingRequestFailedError(
                     f"Bifrost returned {len(data)} embeddings for {len(text_batch)} inputs."
                 )
             return [item["embedding"] for item in data]
 
-        semaphore = asyncio.Semaphore(_BIFROST_MAX_CONCURRENT_REQUESTS)
+        semaphore: asyncio.Semaphore = asyncio.Semaphore(
+            _BIFROST_MAX_CONCURRENT_REQUESTS
+        )
 
         async def embed_batch_bounded(text_batch: list[str]) -> list[Embedding]:
             async with semaphore:
                 return await embed_batch(text_batch)
 
-        results = await asyncio.gather(
+        results: list[list[Embedding] | BaseException] = await asyncio.gather(
             *(
                 embed_batch_bounded(text_batch)
                 for text_batch in batch_list(texts, _bifrost_batch_size(model))
@@ -768,8 +792,9 @@ class CloudEmbedding:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:
             raise AuthenticationError(provider="OpenAI")
-        except EmbeddingRequestRejectedError:
-            # A refusal of the request itself; retrying cannot change it.
+        except EmbeddingRequestFailedError:
+            # The provider client already retried, or the provider refused the
+            # request itself; retrying the whole call would resend good inputs.
             raise
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:

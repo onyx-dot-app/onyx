@@ -295,12 +295,12 @@ def _validate_gateway_embedding_model(
 
     Rejects a chat model or a wrong dimension before indexing starts.
     """
-    api_key = (
+    api_key: str | None = (
         cloud_provider.api_key.get_value(apply_mask=False)
         if cloud_provider.api_key is not None
         else None
     )
-    dimension = probe_embedding_dimension(
+    dimension: int = probe_embedding_dimension(
         provider_type=cloud_provider.provider_type,
         api_key=api_key,
         api_url=cloud_provider.api_url,

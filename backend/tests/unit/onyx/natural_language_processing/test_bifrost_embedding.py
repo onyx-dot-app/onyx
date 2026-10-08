@@ -13,8 +13,14 @@ from onyx.natural_language_processing.embedding_auth import (
     ApiKeyEmbeddingAuth,
     build_embedding_auth,
 )
-from onyx.natural_language_processing.exceptions import EmbeddingRequestRejectedError
-from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
+from onyx.natural_language_processing.exceptions import (
+    EmbeddingRequestFailedError,
+    EmbeddingRequestRejectedError,
+)
+from onyx.natural_language_processing.search_nlp_models import (
+    AuthenticationError,
+    CloudEmbedding,
+)
 from onyx.natural_language_processing.utils import (
     TiktokenTokenizer,
     _try_initialize_tokenizer,
@@ -268,38 +274,67 @@ async def test_rate_limit_retries_only_the_failed_request() -> None:
 
 
 @pytest.mark.asyncio
-async def test_server_errors_exhaust_both_retry_layers() -> None:
-    gateway = _FakeGateway(respond=lambda _: httpx.Response(503, text="unavailable"))
+async def test_an_exhausted_request_is_not_replayed_by_the_outer_retry() -> None:
+    attempts: dict[str, int] = {}
+
+    def always_fail_b(payload: dict[str, Any]) -> httpx.Response | None:
+        text = payload["input"][0]
+        attempts[text] = attempts.get(text, 0) + 1
+        if text == "b":
+            return httpx.Response(503, json={"error": {"message": "unavailable"}})
+        return None
+
+    gateway = _FakeGateway(respond=always_fail_b)
     with (
         patch(f"{_MODULE}._BIFROST_REQUEST_TRIES", 3),
         patch.object(
-            cast(Any, CloudEmbedding.embed).retry, "stop", stop_after_attempt(2)
+            cast(Any, CloudEmbedding.embed).retry, "stop", stop_after_attempt(5)
         ),
     ):
         async with _bifrost(gateway, "https://bifrost.example") as embedding:
-            with pytest.raises(RuntimeError, match="Status 503"):
+            with pytest.raises(
+                EmbeddingRequestFailedError, match="HTTP 503: unavailable"
+            ):
                 await embedding.embed(
-                    texts=["a"],
-                    text_type=EmbedTextType.QUERY,
-                    model_name="openai/text-embedding-3-small",
+                    texts=["a", "b", "c"],
+                    text_type=EmbedTextType.PASSAGE,
+                    model_name="gemini/gemini-embedding-001",
                 )
 
-    assert len(gateway.requests) == 3 * 2
+    # Only the failing input is retried, and the inputs that succeeded are not resent.
+    assert attempts == {"a": 1, "b": 3, "c": 1}
+
+
+@pytest.mark.asyncio
+async def test_an_unauthorized_key_is_an_authentication_error() -> None:
+    gateway = _FakeGateway(
+        respond=lambda _: httpx.Response(401, json={"error": {"message": "bad key"}})
+    )
+    async with _bifrost(gateway, "https://bifrost.example", "sk-bf-wrong") as embedding:
+        with pytest.raises(AuthenticationError):
+            await embedding.embed(
+                texts=["a"],
+                text_type=EmbedTextType.QUERY,
+                model_name="openai/text-embedding-3-small",
+            )
+
+    assert len(gateway.requests) == 1
 
 
 @pytest.mark.asyncio
 async def test_a_missing_embedding_in_the_response_is_an_error() -> None:
     gateway = _FakeGateway(drop_last=True)
-    with patch.object(
-        cast(Any, CloudEmbedding.embed).retry, "stop", stop_after_attempt(1)
-    ):
-        async with _bifrost(gateway, "https://bifrost.example") as embedding:
-            with pytest.raises(RuntimeError, match="1 embeddings for 2 inputs"):
-                await embedding.embed(
-                    texts=["a", "b"],
-                    text_type=EmbedTextType.QUERY,
-                    model_name="openai/text-embedding-3-small",
-                )
+    async with _bifrost(gateway, "https://bifrost.example") as embedding:
+        with pytest.raises(
+            EmbeddingRequestFailedError, match="1 embeddings for 2 inputs"
+        ):
+            await embedding.embed(
+                texts=["a", "b"],
+                text_type=EmbedTextType.QUERY,
+                model_name="openai/text-embedding-3-small",
+            )
+
+    assert len(gateway.requests) == 1
 
 
 def test_bifrost_auth_allows_a_missing_key() -> None:
