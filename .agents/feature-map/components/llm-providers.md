@@ -178,10 +178,11 @@ providers.
 ### 4.2 Building the `LLM`: `llm_from_provider` and `get_llm`
 
 `factory.py:llm_from_provider` resolves `max_input_tokens` (configured value,
-else `get_max_input_tokens_from_llm_provider`, which reads the vendored model catalog in
-`llm/price_table/` through `llm/model_catalog.py` — on a miss it lazily fetches
-the provider's `price_table/<provider>.json` from GitHub main, TTL + negative
-cached, skipped when `ONYX_AIRGAPPED` or for local providers — then falls back to
+else `get_max_input_tokens_from_llm_provider`, which resolves the model catalog in
+`llm/price_table/` through `llm/model_catalog.py` — remote-first: the provider's
+`price_table/<provider>.json` from GitHub main wins when reachable (TTL +
+negative cached, skipped when `ONYX_AIRGAPPED` or for local providers), with the
+vendored copy as the offline floor — then falls back to
 `GEN_AI_MODEL_FALLBACK_MAX_TOKENS`) and temperature, in this
 precedence: session override, then `ModelConfiguration.temperature_default`,
 then `user.temperature_default` (via `UserChatDefaults`), then

@@ -200,13 +200,15 @@ _LOCAL_PROVIDERS = frozenset({"ollama_chat", "lm_studio"})
 
 
 # ---------------------------------------------------------------------------
-# Remote catalog fallback
+# Remote catalog (preferred)
 #
-# A deployment's vendored table is frozen at release time; models added to the
-# catalog afterwards would otherwise miss until the next sync backport. On a
-# miss, lazily fetch the provider's price_table file from main and resolve
-# against it. Strictly additive — vendored entries never hit the network, and
-# a failed fetch (offline/air-gapped) degrades to the same miss as before.
+# Lookups prefer the provider's price_table file on main over the vendored
+# copy — a deployment's vendored table is frozen at release time and main's
+# sync keeps pace with new models and corrected specs. The vendored file is
+# the offline floor: unreachable/failed fetches (and ONYX_AIRGAPPED, which
+# never fetches) resolve against it, and entries remote lacks still resolve
+# vendored. Provider-scoped only — remote never bare-scans, so a file is
+# fetched at most once per provider per TTL window.
 # ---------------------------------------------------------------------------
 
 _REMOTE_CATALOG_URL = (
@@ -303,9 +305,12 @@ def _strip_colon_tag(model_name: str) -> str:
 def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
     """Resolve a catalog entry for (provider, model_name).
 
-    Tries provider-scoped direct hits and aliases first, with the same name
-    normalization find_model_obj used (extra provider prefix strip, Ollama
-    ``:tag`` strip), then a bare-name scan across providers.
+    The provider's remote section wins when fetchable (fresher than the
+    release-frozen vendored file), then vendored provider-scoped hits and
+    aliases — with the same name normalization find_model_obj used (extra
+    provider prefix strip, Ollama ``:tag`` strip) — then a bare-name scan
+    across vendored providers. Remote is provider-scoped only; a remote
+    bare-scan would fetch a file per provider per miss.
     """
     candidates = [model_name]
     if "/" in model_name:
@@ -314,7 +319,12 @@ def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
         _strip_colon_tag(c) for c in list(candidates) if ":" in c.split("/")[-1]
     )
 
+    remote = _remote_section(provider)
     for candidate in candidates:
+        if remote is not None:
+            entry = _lookup_section(remote, candidate)
+            if entry is not None:
+                return entry
         entry = _lookup_provider(provider, candidate)
         if entry is not None:
             return entry
@@ -326,11 +336,7 @@ def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
             entry = _lookup_provider(other, candidate)
             if entry is not None:
                 return entry
-
-    # Remote fallback: the model may be vendored upstream but newer than this
-    # release. Restricted to the requested provider — a remote bare-scan would
-    # fetch a file per provider per miss.
-    return find_remote_model_entry(provider, candidates)
+    return None
 
 
 def find_model_cost(provider: str, model_name: str) -> dict[str, Any] | None:

@@ -332,6 +332,62 @@ def test_remote_catalog_resolves_missing_models() -> None:
             model_catalog.reset_remote_cache()
 
 
+def test_remote_catalog_overrides_vendored() -> None:
+    """Remote wins for entries it defines; vendored-only entries still
+    resolve (the vendored file is the floor, not the primary)."""
+    vendored: dict[str, Any] = {
+        "wandb": {
+            "models": {
+                "vendor/m": {
+                    "mode": "chat",
+                    "limit": {"context": 100, "output": 50},
+                    "cost": {"input": 1.0, "output": 1.0},
+                },
+                "vendor/old": {
+                    "mode": "chat",
+                    "limit": {"context": 10, "output": 5},
+                    "cost": {"input": 0.5, "output": 0.5},
+                },
+            },
+            "aliases": {},
+        }
+    }
+    remote_section: dict[str, Any] = {
+        "models": {
+            "vendor/m": {
+                "mode": "chat",
+                "limit": {"context": 200, "output": 80},
+                "cost": {"input": 5.0, "output": 5.0},
+            },
+        },
+        "aliases": {},
+    }
+
+    def fake_get(_url: str, **_: Any) -> Any:
+        return _remote_response(remote_section)
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value=vendored),
+        patch.object(model_catalog.httpx, "get", side_effect=fake_get),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "wandb", "vendor/m")
+            assert obj is not None
+            assert obj["max_tokens"] == 200
+            assert model_catalog.find_model_cost("wandb", "vendor/m") == {
+                "input": 5.0,
+                "output": 5.0,
+            }
+
+            # Absent from remote but vendored — still resolves.
+            assert find_model_obj(model_map, "wandb", "vendor/old") is not None
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
 def test_remote_catalog_fails_closed() -> None:
     """Fetch failures degrade to the normal miss and are negative-cached."""
     calls: list[str] = []
