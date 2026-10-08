@@ -104,6 +104,22 @@ def find_model_obj(
     # Filter out None values and deduplicate model names
     filtered_model_names = [name for name in model_names if name]
 
+    # Remote first: the provider's catalog file on main is fresher than the
+    # release-frozen vendored copy. On a hit, stamp it into the map — additive
+    # only, so a later remote failure falls back to vendored, never to a
+    # stale remote copy.
+    from onyx.llm.model_catalog import find_remote_model_obj
+
+    remote: dict[str, Any] | None = find_remote_model_obj(
+        provider, filtered_model_names
+    )
+    if remote is not None and not (chat_only and not _is_chat_entry(remote)):
+        for name in filtered_model_names:
+            model_map.setdefault(f"{provider}/{name}", remote)
+            model_map.setdefault(name, remote)
+        return remote
+
+    # Vendored floor: offline/air-gapped or the model isn't in remote's file.
     # First try all model names with provider prefix
     for model_name in filtered_model_names:
         model_obj = model_map.get(f"{provider}/{model_name}")
