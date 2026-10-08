@@ -510,7 +510,7 @@ def test_stream_failure_recovers_no_call_from_an_unfinished_payload() -> None:
 
 def test_incremental_events_preserve_partial_content_and_snapshot_isolation() -> None:
     accumulator = MessageAccumulator()
-    accepted = AssistantMessage()
+    accepted = AssistantMessage(id="run:0")
     saved = None
     chunks = [
         Delta(content="first"),
@@ -560,6 +560,7 @@ def test_incremental_events_preserve_partial_content_and_snapshot_isolation() ->
         apply_generation_event(accepted, event)
         if isinstance(event, GenerationToolCallEvent):
             event.tool_call.arguments.clear()
+    assert accepted.id == "run:0"
     assert accepted.content == accumulator.message.content
     assert accepted.tool_calls[0].arguments_complete
 

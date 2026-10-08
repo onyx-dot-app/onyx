@@ -1,0 +1,266 @@
+"""
+Tests for the USER_REMINDER message type handling in message preparation and provider serialization.
+
+These tests verify that:
+1. USER_REMINDER messages are wrapped with <system-reminder> tags
+2. The wrapped messages are converted to UserMessage type for the LLM
+3. The tags are properly applied around the message content
+4. CODE_BLOCK_MARKDOWN is prepended to system messages for models that need it
+"""
+
+import pytest
+
+from onyx.chat.prompt_formatting import PromptMetadata, prepare_model_messages
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_request import (
+    CODE_BLOCK_MARKDOWN,
+    SystemMessage,
+    UserMessage,
+    serialize_request,
+)
+from onyx.llm.models import AssistantMessage as CanonicalAssistantMessage
+from onyx.llm.models import GenerationRequest, TextContent
+from onyx.llm.models import SystemMessage as CanonicalSystemMessage
+from onyx.llm.models import UserMessage as CanonicalUserMessage
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
+
+
+@pytest.fixture
+def mock_llm_config() -> LLMConfig:
+    """Create a minimal LLMConfig for testing."""
+    return LLMConfig(
+        model_provider="openai",
+        model_name="gpt-4o-mini",
+        temperature=0.7,
+        api_key="test-key",
+        api_base=None,
+        api_version=None,
+        max_input_tokens=128000,
+    )
+
+
+class TestUserReminderMessageType:
+    """Tests for USER_REMINDER message handling in message preparation and provider serialization."""
+
+    def test_user_reminder_tag_format(self, mock_llm_config: LLMConfig) -> None:
+        """Test the exact format of the system-reminder tag wrapping."""
+        reminder_text = "This is a test reminder."
+        history = [
+            CanonicalUserMessage(
+                content=reminder_text,
+                metadata=PromptMetadata(token_count=10, is_reminder=True),
+            )
+        ]
+
+        result, _ = serialize_request(
+            GenerationRequest(
+                messages=prepare_model_messages(history, mock_llm_config)
+            ),
+            mock_llm_config,
+        )
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, UserMessage)
+        expected_content = (
+            f"{SYSTEM_REMINDER_TAG_OPEN}\n{reminder_text}\n{SYSTEM_REMINDER_TAG_CLOSE}"
+        )
+        assert msg.content == expected_content
+        assert msg.role == "user"
+
+    def test_user_reminder_in_mixed_history(self, mock_llm_config: LLMConfig) -> None:
+        """Test USER_REMINDER handling when mixed with other message types."""
+        history = [
+            CanonicalSystemMessage(
+                content="You are a helpful assistant.",
+                metadata=PromptMetadata(token_count=10),
+            ),
+            CanonicalUserMessage(
+                content="Hello!", metadata=PromptMetadata(token_count=5)
+            ),
+            CanonicalAssistantMessage(
+                content=[TextContent(text="Hi there! How can I help?")],
+                metadata=PromptMetadata(token_count=10),
+            ),
+            CanonicalUserMessage(
+                content="Remember to be concise.",
+                metadata=PromptMetadata(token_count=8, is_reminder=True),
+            ),
+        ]
+
+        result, _ = serialize_request(
+            GenerationRequest(
+                messages=prepare_model_messages(history, mock_llm_config)
+            ),
+            mock_llm_config,
+        )
+
+        assert len(result) == 4
+        # Check the reminder message (last one)
+        reminder_msg = result[3]
+        assert isinstance(reminder_msg, UserMessage)
+        assert isinstance(reminder_msg.content, str)
+        assert reminder_msg.content.startswith(SYSTEM_REMINDER_TAG_OPEN)
+        assert reminder_msg.content.endswith(SYSTEM_REMINDER_TAG_CLOSE)
+        assert "Remember to be concise." in reminder_msg.content
+
+        # Check that regular USER message is NOT wrapped
+        user_msg = result[1]
+        assert isinstance(user_msg, UserMessage)
+        assert user_msg.content == "Hello!"  # No tags
+
+
+def _create_llm_config(model_name: str) -> LLMConfig:
+    """Create a LLMConfig with the specified model name."""
+    return LLMConfig(
+        model_provider="openai",
+        model_name=model_name,
+        temperature=0.7,
+        api_key="test-key",
+        api_base=None,
+        api_version=None,
+        max_input_tokens=128000,
+    )
+
+
+class TestCodeBlockMarkdownFormatting:
+    """Tests for CODE_BLOCK_MARKDOWN prefix handling in message preparation and provider serialization.
+
+    OpenAI reasoning models (o1, o3, gpt-5) need a "Formatting re-enabled. " prefix
+    in their system messages for correct markdown generation.
+    """
+
+    def test_o1_model_prepends_markdown_to_string(self) -> None:
+        """Test that o1 model prepends CODE_BLOCK_MARKDOWN to string system message."""
+        llm_config = _create_llm_config("o1")
+        history = [
+            CanonicalSystemMessage(
+                content="You are a helpful assistant.",
+                metadata=PromptMetadata(token_count=10),
+            )
+        ]
+
+        result, _ = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, SystemMessage)
+        assert isinstance(msg.content, str)
+        assert msg.content == CODE_BLOCK_MARKDOWN + "You are a helpful assistant."
+
+    def test_o3_model_prepends_markdown(self) -> None:
+        """Test that o3 model prepends CODE_BLOCK_MARKDOWN to system message."""
+        llm_config = _create_llm_config("o3-mini")
+        history = [
+            CanonicalSystemMessage(
+                content="System prompt here.", metadata=PromptMetadata(token_count=10)
+            )
+        ]
+
+        result, _ = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, SystemMessage)
+        assert isinstance(msg.content, str)
+        assert msg.content.startswith(CODE_BLOCK_MARKDOWN)
+
+    def test_gpt5_model_prepends_markdown(self) -> None:
+        """Test that gpt-5 model prepends CODE_BLOCK_MARKDOWN to system message."""
+        llm_config = _create_llm_config("gpt-5")
+        history = [
+            CanonicalSystemMessage(
+                content="System prompt here.", metadata=PromptMetadata(token_count=10)
+            )
+        ]
+
+        result, _ = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, SystemMessage)
+        assert isinstance(msg.content, str)
+        assert msg.content.startswith(CODE_BLOCK_MARKDOWN)
+
+    def test_gpt4o_does_not_prepend(self) -> None:
+        """Test that gpt-4o model does NOT prepend CODE_BLOCK_MARKDOWN."""
+        llm_config = _create_llm_config("gpt-4o")
+        history = [
+            CanonicalSystemMessage(
+                content="You are a helpful assistant.",
+                metadata=PromptMetadata(token_count=10),
+            )
+        ]
+
+        result, _ = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, SystemMessage)
+        assert isinstance(msg.content, str)
+        # Should NOT have the prefix
+        assert msg.content == "You are a helpful assistant."
+        assert not msg.content.startswith(CODE_BLOCK_MARKDOWN)
+
+    def test_no_system_message_no_crash(self) -> None:
+        """Test that history without system message doesn't crash."""
+        llm_config = _create_llm_config("o1")
+        history = [
+            CanonicalUserMessage(
+                content="Hello!", metadata=PromptMetadata(token_count=5)
+            )
+        ]
+
+        result, _ = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, UserMessage)
+        assert msg.content == "Hello!"
+
+    def test_only_first_system_message_modified(self) -> None:
+        """Test that only the first system message gets the prefix."""
+        llm_config = _create_llm_config("o1")
+        history = [
+            CanonicalSystemMessage(
+                content="First system prompt.", metadata=PromptMetadata(token_count=10)
+            ),
+            CanonicalUserMessage(
+                content="Hello!", metadata=PromptMetadata(token_count=5)
+            ),
+            CanonicalSystemMessage(
+                content="Second system prompt.", metadata=PromptMetadata(token_count=10)
+            ),
+        ]
+
+        result, _ = serialize_request(
+            GenerationRequest(messages=prepare_model_messages(history, llm_config)),
+            llm_config,
+        )
+
+        assert len(result) == 3
+        # First system message should have prefix
+        first_sys = result[0]
+        assert isinstance(first_sys, SystemMessage)
+        assert isinstance(first_sys.content, str)
+        assert first_sys.content.startswith(CODE_BLOCK_MARKDOWN)
+        # Second system message should NOT have prefix (only first one is modified)
+        second_sys = result[2]
+        assert isinstance(second_sys, SystemMessage)
+        assert isinstance(second_sys.content, str)
+        assert not second_sys.content.startswith(CODE_BLOCK_MARKDOWN)

@@ -14,7 +14,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import build_python_chat_files_from_search_docs
+from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.file_store import get_default_file_store

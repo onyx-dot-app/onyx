@@ -1,25 +1,37 @@
-from pydantic import BaseModel
+from enum import Enum
+from typing import Literal
 
-from onyx.chat.citation_processor import CitationMapping
-from onyx.tools.models import ToolCallKickoff
+from pydantic import BaseModel, Field
+
+from onyx.context.search.models import SearchDoc
+from onyx.llm.models import ReasoningEffort
 
 
-class SpecialToolCalls(BaseModel):
-    think_tool_call: ToolCallKickoff | None = None
-    generate_report_tool_call: ToolCallKickoff | None = None
+class ResearchConfiguration(BaseModel):
+    """Settings needed to rebuild a research agent for another run."""
+
+    language_section: str
+    reasoning_effort: ReasoningEffort
 
 
 class ResearchAgentCallResult(BaseModel):
+    type: Literal["research_result"] = "research_result"
     intermediate_report: str
-    citation_mapping: CitationMapping
+    citation_mapping: dict[int, SearchDoc]
 
 
-class ResearchAgentCallFailure(BaseModel):
-    # LLM-facing explanation sent back as the failed call's tool response
-    message: str
+class ResearchPhase(str, Enum):
+    CLARIFICATION = "clarification"
+    PLANNING = "planning"
+    RESEARCH = "research"
+    REPORT = "report"
 
 
-class CombinedResearchAgentCallResult(BaseModel):
-    # One entry per research agent call, in call order
-    intermediate_reports: list[str | ResearchAgentCallFailure]
-    citation_mapping: CitationMapping
+class ResearchMessageMetadata(BaseModel):
+    """Research phase and source references attached to a generated message."""
+
+    phase: ResearchPhase
+    is_intermediate: bool = False
+    is_reasoning_model: bool
+    sources: dict[int, SearchDoc] = Field(default_factory=dict)
+    elapsed_seconds: float = 0

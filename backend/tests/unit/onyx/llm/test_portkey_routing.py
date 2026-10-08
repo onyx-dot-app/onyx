@@ -100,8 +100,8 @@ def test_messages_mode_strips_trailing_slash_but_keeps_bare_host() -> None:
 
 def test_api_mode_is_never_injected_into_environment() -> None:
     # The mode is UI-only form state: it must be readable for routing but must
-    # never reach os.environ via temporary_env_and_lock at call time.
+    # never become provider arguments.
     llm = _make_portkey_llm("messages", "https://api.portkey.ai")
     assert llm._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
     assert PORTKEY_API_MODE_CONFIG_KEY in UI_ONLY_CONFIG_KEYS
-    assert PORTKEY_API_MODE_CONFIG_KEY not in llm._env_only_custom_config
+    assert PORTKEY_API_MODE_CONFIG_KEY not in llm._model_kwargs

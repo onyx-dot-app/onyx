@@ -425,10 +425,14 @@ every five minutes.
   fails with a 4xx `OnyxError` sends no event. This includes a chat that a
   query-processing hook rejects (`QUERY_REJECTED`): the chat stream sends the
   error as a `StreamingError` packet, and `QueryObservation.error_packet` reads
-  only its code. Chat queries also report `llm_cycles`: `chat/llm_loop.py:run_llm_loop`
-  calls `Emitter.llm_step_started` before each LLM call, and `Emitter.emit` records
-  each model's count when it queues its first answer text. Deep research reports
-  the `deep_research` mode and no cycle count.
+  only its code.
+  `chat/stream_buffer.py:ChatDelivery` observes output and finishes the query
+  after server execution, including after a reader disconnects.
+  `tools/interface.py:Tool.run` records executed tool categories through
+  `utils/fleet_query_telemetry.py:CURRENT_QUERY_OBSERVATION`, copied into workers.
+  Unknown or canceled calls that never run do not count.
+  Chat reports LLM cycles through the SDK response event stream. Deep research
+  reports the deep_research mode without a cycle count.
 - Indexing counters: the fetch, embed, and write steps call `emit_stage_counter`
   ([[indexing-pipeline]] §4.10). The sender thread sums the deltas for one
   attempt and stage over at most 30 seconds.

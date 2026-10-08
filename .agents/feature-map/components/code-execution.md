@@ -72,7 +72,7 @@ frontend, not `:8080` directly.
 There is no env var for bash-specific timeouts or output caps; `BashTool` reuses
 `CODE_INTERPRETER_DEFAULT_TIMEOUT_MS` and `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`
 (`bash_tool.py`), including bash calls the coding agent makes.
-`fake_tools/coding_agent.py` adds three hardcoded limits:
+`backend/onyx/coding_agent/agent.py` adds three hardcoded limits:
 `CODING_AGENT_SETUP_TIMEOUT_MS` (60 s) for the repo setup commands,
 `CODING_AGENT_SESSION_TTL_SECONDS` (1 hour) for the session, and
 `CODING_AGENT_FORCE_ANSWER_SECONDS` (25 minutes). After 25 minutes the loop
@@ -91,7 +91,7 @@ stops and forces a final answer. The loop checks this limit once per cycle.
 - No table stores code-interpreter sessions or executions. Session lifetime is entirely
   server-side state on the Code Interpreter service, referenced only by a `session_id: str`
   string that Onyx holds in memory for the duration of one coding-agent call
-  (`fake_tools/coding_agent.py:_setup_session`).
+  (`backend/onyx/coding_agent/agent.py:_setup_session`).
 - Generated files from `run_python` are persisted through the ordinary file store as
   `FileOrigin.CHAT_IMAGE_GEN` records (`python_tool.py:run`, `file_store/utils.py`). See §5 and
   §9; the access rule for that origin is documented in `[[file-store-and-user-files]]` and is
@@ -130,7 +130,7 @@ sandboxes execution; Onyx trusts the URL configured in `CODE_INTERPRETER_BASE_UR
 
 ```
 LLM emits run_python(code=...)
-  └─ run_tool_calls                    tools/tool_runner.py      ([[tools-framework]])
+  └─ ToolBatch.execute                 agents/tool_execution.py      ([[tools-framework]])
       └─ PythonTool.run                python_tool.py
           ├─ _select_files_for_staging  python_tool.py   (choose which chat files to send)
           ├─ _upload_and_stage          python_tool.py   → CodeInterpreterClient.upload_file
@@ -165,11 +165,11 @@ route only exists on Code Interpreter servers reporting version `>= 0.4.0`
 `BashTool` is constructed with a `session_id` already in hand
 (`bash_tool.py:__init__(self, tool_id, session_id, emitter)`); it does not create or destroy
 sessions itself. Session lifecycle belongs entirely to its one caller,
-`fake_tools/coding_agent.py:_setup_session`:
+`backend/onyx/coding_agent/agent.py:_setup_session`:
 
 ```
-run_coding_agent_call                    fake_tools/coding_agent.py
-  └─ _setup_session (context manager)    fake_tools/coding_agent.py
+CodingAgent                             coding_agent/agent.py
+  └─ _setup_session (context manager)    coding_agent/agent.py
       ├─ download_github_archive         utils/github.py   (tarball of the target repo)
       ├─ CodeInterpreterClient.upload_file(repo.tar.gz)
       ├─ CodeInterpreterClient.create_session(ttl_seconds=3600, files=[tarball])
@@ -180,7 +180,7 @@ run_coding_agent_call                    fake_tools/coding_agent.py
       └─ CodeInterpreterClient.delete_session (on exit, best-effort; TTL is the backstop)
 ```
 
-`BASH_TOOL_SENTINEL_ID = 0` (`fake_tools/coding_agent.py`) is used because this `BashTool`
+`BASH_TOOL_SENTINEL_ID = 0` (`backend/onyx/coding_agent/agent.py`) is used because this `BashTool`
 instance is never looked up by DB tool id; it is built directly, once, for the duration of one
 coding-agent call. `[[tools-framework]]` covers why this makes `bash` calls invisible to the
 normal `Tool`/`Persona__Tool` machinery; this document only adds that the *session* the bash
@@ -228,7 +228,7 @@ optimization scoped to one `PythonTool` object (one turn's worth of `run_python`
 runs `execute_bash_in_session` against that same `session_id`, so the filesystem (including
 the extracted repo) persists across bash calls. The coding agent's own comment says this is
 intentional: bash calls are dispatched sequentially, not in parallel, because "they share the
-session filesystem and ordering matters" (`fake_tools/coding_agent.py:run_coding_agent_call`).
+session filesystem and ordering matters" (`backend/onyx/coding_agent/agent.py:CodingAgent`).
 The session is torn down when `_setup_session`'s context manager exits; if that
 best-effort `delete_session` call itself fails, the pod's own TTL is the backstop.
 
@@ -272,7 +272,7 @@ relied on to reap them, `python_tool.py:run`).
    before stamping began) is readable by any user. Do not add a save path that omits the stamp.
 5. **`BashTool` is never constructed through `tool_constructor.py`.** It cannot be reached by
    `allowed_tool_ids`, persona attachment, or `Tool.enabled`. Its only entry point is
-   `fake_tools/coding_agent.py`. See `[[tools-framework]]` for the full consequence.
+   `backend/onyx/coding_agent/agent.py`. See `[[tools-framework]]` for the full consequence.
 6. **`is_available` must not raise and must stay cheap**, per `[[tools-framework]]` contract 2.
    `PythonTool`/`BashTool`'s implementations call `health(use_cache=True)`, so a slow or down
    Code Interpreter is masked by the 30s cache rather than blocking every turn's tool
@@ -293,8 +293,8 @@ relied on to reap them, `python_tool.py:run`).
 - `[[file-store-and-user-files]]`: where `run_python` generated files are saved
   (`FileOrigin.CHAT_IMAGE_GEN`) and how that origin is scoped to its chat session.
 - `[[core-chat-loop]]`: runs the LLM cycle that calls `run_python`; the coding agent runs its
-  own inner loop (`fake_tools/coding_agent.py`) that reuses `llm_step.py:run_llm_step_pkt_generator`
-  directly rather than going through `run_llm_loop`.
+  own SDK agent (`backend/onyx/coding_agent/agent.py:CodingAgent`) using the shared
+  runtime in `backend/onyx/agents/runtime.py`.
 - `[[access-control]]`: gates `/admin/code-interpreter` on `Permission.FULL_ADMIN_PANEL_ACCESS`;
   does not gate reads of generated files, which follow the chat-session rule (see §4.5).
 
@@ -384,7 +384,7 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   assume a missing tool call means the model chose not to use it.
 - **The bash/python asymmetry is easy to miss.** `run_python` is a normal persona-attachable
   `Tool` with a DB row and `ToolCall` persistence. `bash` is constructed directly by
-  `fake_tools/coding_agent.py` with a sentinel id, is never in `BUILT_IN_TOOL_MAP`'s
+  `backend/onyx/coding_agent/agent.py` with a sentinel id, is never in `BUILT_IN_TOOL_MAP`'s
   persona-attach path, and its calls are not written as `ToolCall` rows. Code that assumes
   every built-in tool behaves like `run_python` will mishandle `bash`.
 - **Generated files are scoped by a session stamp.** `run_python` saves outputs as

@@ -5,6 +5,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Generator, Iterator
+from contextvars import ContextVar
 from enum import Enum
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar, cast
@@ -313,3 +314,9 @@ def telemetry_query(*, mode: QueryMode) -> Callable[[F], F]:
         return cast(F, run)
 
     return decorate
+
+
+# Copied into agent and tool workers; never serialized into saved run state.
+CURRENT_QUERY_OBSERVATION: ContextVar[QueryObservation | None] = ContextVar(
+    "current_query_observation", default=None
+)
