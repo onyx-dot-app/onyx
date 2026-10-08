@@ -55,6 +55,7 @@ from onyx.configs.chat_configs import (
     HARD_DELETE_CHATS,
 )
 from onyx.configs.constants import (
+    DISCORD_SERVICE_API_KEY_NAME,
     PUBLIC_API_TAGS,
     MessageType,
     MilestoneRecordType,
@@ -157,7 +158,8 @@ from onyx.utils.headers import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import UsageCredentialIdentity, get_current_tenant_id
+from shared_configs.enums import UsageCredentialType
 
 logger = setup_logger()
 
@@ -775,6 +777,25 @@ def end_incognito_session(
             logger.exception("Incognito teardown could not %s for %s", what, session_id)
 
 
+def _caller_origin(request: Request, claimed: MessageOrigin) -> MessageOrigin:
+    """Key and token callers cannot choose an origin, so analytics stay accurate.
+
+    The Discord bot's service key reports Discord. Only admins can name a key.
+    """
+    if not (
+        get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request)
+    ):
+        return claimed
+    credential: object = request.scope.get("state", {}).get("usage_credential")
+    if (
+        isinstance(credential, UsageCredentialIdentity)
+        and credential.credential_type == UsageCredentialType.API_KEY
+        and credential.credential_name == DISCORD_SERVICE_API_KEY_NAME
+    ):
+        return MessageOrigin.DISCORDBOT
+    return MessageOrigin.API
+
+
 # NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced
 # team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 @router.post(
@@ -838,10 +859,7 @@ def handle_send_chat_message(
         event=MilestoneRecordType.RAN_QUERY,
     )
 
-    # Override origin to API when authenticated via API key or PAT
-    # to prevent clients from polluting telemetry data
-    if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
-        chat_message_req.origin = MessageOrigin.API
+    chat_message_req.origin = _caller_origin(request, chat_message_req.origin)
 
     # Multi-model streaming path: 2-3 LLMs in parallel (streaming only)
     is_multi_model = (

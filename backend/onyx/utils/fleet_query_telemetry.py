@@ -2,17 +2,14 @@
 
 import inspect
 import time
-import uuid
 from collections.abc import Callable, Generator, Iterator
 from functools import wraps
 from typing import Any, TypeVar, cast
 
-from onyx.utils.fleet_telemetry import emit_telemetry, error_category
+from onyx.utils.fleet_telemetry import emit_query, error_category
 from shared_configs.contextvars import get_current_user_id
 
 F = TypeVar("F", bound=Callable[..., Any])
-_QUERY_PREFIX: int = uuid.uuid4().int & (((1 << 64) - 1) << 64)
-
 
 _ORIGIN_CHANNELS: dict[str, str] = {
     "api": "api",
@@ -37,10 +34,6 @@ class QueryObservation:
         self.channel: str = channel
         self.mode: str = mode
         self.user_id: str | None = user_id
-        # An in-process monotonic ID avoids UUID entropy reads on request threads.
-        self.query_id: str = str(
-            uuid.UUID(int=_QUERY_PREFIX | (time.monotonic_ns() & ((1 << 64) - 1)))
-        )
         self.first_answer_ms: float | None = None
         self.time_to_results_ms: float | None = None
         self.outcome: str = "success"
@@ -59,11 +52,9 @@ class QueryObservation:
         self.error_code = error_category(error) if error is not None else "unknown"
 
     def finish(self) -> None:
-        # emit_telemetry never raises, so a stream always finishes normally.
-        emit_telemetry(
-            "query",
+        # emit_query never raises, so a stream always finishes normally.
+        emit_query(
             {
-                "query_id": self.query_id,
                 "channel": self.channel,
                 "mode": self.mode,
                 "outcome": self.outcome,

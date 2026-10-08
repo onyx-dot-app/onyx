@@ -383,6 +383,8 @@ _ERROR_COUNTERS: tuple[str, ...] = (
     "write_rejected",
 )
 
+_LOW_64_BITS: int = (1 << 64) - 1
+
 
 def _keyed_hash(key: bytes, value: str) -> str:
     return hmac.new(key, value.encode(), hashlib.sha256).hexdigest()
@@ -603,6 +605,9 @@ class BoundedTelemetry:
         # Short-lived processes deliver hook events only; their parent reports the process.
         self.report_process: bool = report_process
         self.pid: int = os.getpid()
+        # Random high bits keep query IDs unique across processes. The sender
+        # starts with the process, so request threads never read entropy.
+        self._query_prefix: int = uuid.uuid4().int & (_LOW_64_BITS << 64)
         # deque append/popleft are thread-safe, so emitters take no lock.
         self._queue: deque[
             tuple[
@@ -712,6 +717,11 @@ class BoundedTelemetry:
 
     def fingerprint(self, value: str) -> str:
         return _keyed_hash(self.config.privacy_key, value)
+
+    def query_id(self) -> str:
+        return str(
+            uuid.UUID(int=self._query_prefix | (time.monotonic_ns() & _LOW_64_BITS))
+        )
 
     def _take_batch(self, limit: int | None = None) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
@@ -1198,6 +1208,21 @@ def emit_telemetry(
             data,
             user_id=user_id,
             tenant_id=tenant_id or get_current_tenant_id(),
+        )
+    except Exception:
+        return False
+
+
+def emit_query(data: dict[str, Any], *, user_id: str | None = None) -> bool:
+    try:
+        client: BoundedTelemetry | None = _client
+        if client is None:
+            return False
+        return client.emit(
+            "query",
+            {**data, "query_id": client.query_id()},
+            user_id=user_id,
+            tenant_id=get_current_tenant_id(),
         )
     except Exception:
         return False

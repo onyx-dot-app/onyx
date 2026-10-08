@@ -143,11 +143,14 @@ OnyxDiscordClient.on_message                                    client.py
    Contrast [[slack-bot]], where each Slack sender is provisioned as their own
    Onyx user (`onyx/db/users.py:add_slack_user_if_not_exists`), so rate limits
    and document ACLs apply per person. See [[rate-and-usage-limits]].
-3. **`origin=MessageOrigin.DISCORDBOT` never survives API-key auth.**
-   `chat_backend.py:handle_send_chat_message` overrides `origin` to
-   `MessageOrigin.API` whenever the request carries a hashed API key or PAT
-   (`chat_backend.py:handle_send_chat_message`), which every Discord bot request does. The
-   `DISCORDBOT` enum value is set client-side but is unobservable server-side.
+3. **The credential, not the request body, sets `origin` for key and token
+   callers.** `chat_backend.py:_caller_origin` gives the tenant's Discord
+   service key (`configs/constants.py:DISCORD_SERVICE_API_KEY_NAME`)
+   `MessageOrigin.DISCORDBOT`, and every other API key or PAT
+   `MessageOrigin.API`. Only admins can name an API key
+   (`server/api_key/api.py:create_api_key`), so other callers cannot claim
+   the Discord origin. The origin feeds analytics only: the fleet query
+   channel (`utils/fleet_query_telemetry.py:_channel`) and Cloud PostHog.
 4. **A registration key is single-use and tenant-bound.** `register_guild`
    requires the guild's `guild_id` to still be `NULL`
    (`handle_commands.py:_register_guild`); a second `!register` with the same

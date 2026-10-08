@@ -199,7 +199,9 @@ seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
 - `SyncRecord` (`onyx/db/models.py`, via `onyx/db/sync_record.py`): one row per
   sync attempt against an entity (`entity_id` + `SyncType`, e.g. `PRUNING`).
   `insert_sync_record` cancels any prior `IN_PROGRESS` record for the same
-  entity/type before creating the new one (`db/sync_record.py:insert_sync_record`).
+  entity/type, and sets its end time, before creating the new one
+  (`db/sync_record.py:insert_sync_record`). The fleet collector finds the
+  cancellation by that end time (`db/fleet_telemetry.py:job_page`).
 - `BackgroundError` (`onyx/db/models.py:BackgroundError`, via
   `onyx/db/background_error.py:create_background_error`): a message plus an
   optional `cc_pair_id`. Written through

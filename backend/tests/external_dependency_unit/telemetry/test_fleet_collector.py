@@ -14,8 +14,10 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import InternalError
+from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
+from onyx.db.enums import SyncType
 from onyx.db.fleet_telemetry import (
     active_job_page,
     collector_engine,
@@ -23,6 +25,7 @@ from onyx.db.fleet_telemetry import (
     email_domain_page,
     job_page,
 )
+from onyx.db.sync_record import insert_sync_record
 from onyx.utils.fleet_telemetry_collector import FleetCollector
 from tests.utils.fleet_telemetry import make_sender
 
@@ -211,6 +214,41 @@ def test_source_engine_cannot_write_and_schema_injection_is_rejected(
         assert active[0]["started_at"] < datetime.now(timezone.utc) - timedelta(days=89)
     finally:
         engine.dispose()
+
+
+def test_sync_canceled_by_a_new_run_is_read_at_the_live_edge(
+    source_schema: tuple[str, str],
+) -> None:
+    source_url, schema = source_schema
+    writer = create_engine(
+        source_url, execution_options={"schema_translate_map": {None: schema}}
+    )
+    # A run that a stopped worker left in progress, older than the repair sweep.
+    with writer.begin() as connection:
+        stale_id: int = connection.execute(
+            text(f"""INSERT INTO "{schema}".sync_record
+          (entity_id,sync_type,sync_status,num_docs_synced,sync_start_time)
+          VALUES (7,'DOCUMENT_SET','IN_PROGRESS',0,now()-interval '3 days')
+          RETURNING id""")
+        ).scalar_one()
+    with Session(writer) as db_session:
+        insert_sync_record(db_session, 7, SyncType.DOCUMENT_SET)
+    reader = collector_engine(source_url)
+    try:
+        rows = job_page(
+            reader, schema, datetime.now(timezone.utc) - timedelta(minutes=10)
+        )
+        by_id = {row["id"]: row for row in rows}
+        canceled = by_id.pop(f"sync:{stale_id}")
+        assert canceled["state"] == "canceled"
+        assert canceled["ended_at"] is not None
+        # The new run is read too.
+        assert [
+            row["state"] for row in by_id.values() if row["job_type"] == "document_set"
+        ] == ["in_progress"]
+    finally:
+        reader.dispose()
+        writer.dispose()
 
 
 def test_domain_view_exposes_only_domains_and_signup_times(

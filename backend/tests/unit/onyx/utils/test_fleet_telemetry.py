@@ -3,6 +3,7 @@
 import json
 import statistics
 import time
+import uuid
 from collections.abc import Generator, Iterator
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -395,7 +396,7 @@ def test_first_real_answer_ignores_reasoning_tool_and_empty_delta(
     )
 
     sink = Mock()
-    monkeypatch.setattr(query, "emit_telemetry", sink)
+    monkeypatch.setattr(query, "emit_query", sink)
     ticks = iter([10.0, 10.2, 11.0])
     monkeypatch.setattr(query.time, "monotonic", lambda: next(ticks))
     placement = Placement(turn_index=0)
@@ -406,7 +407,7 @@ def test_first_real_answer_ignores_reasoning_tool_and_empty_delta(
         Packet(placement=placement, obj=AgentResponseDelta(content="private answer")),
     ]
     assert list(query.observe_chat_packets(iter(packets), channel="slack")) == packets
-    event = sink.call_args.args[1]
+    event = sink.call_args.args[0]
     assert event["first_answer_ms"] == pytest.approx(200)
     assert event["total_ms"] == pytest.approx(1000)
     assert event["request_count"] == 1
@@ -417,7 +418,7 @@ def test_query_failure_and_disconnect_do_not_replace_application_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sink = Mock()
-    monkeypatch.setattr(query, "emit_telemetry", sink)
+    monkeypatch.setattr(query, "emit_query", sink)
     error = TimeoutError("token=private")
 
     def fail() -> Iterator[Any]:
@@ -427,13 +428,13 @@ def test_query_failure_and_disconnect_do_not_replace_application_errors(
     with pytest.raises(TimeoutError) as raised:
         list(query.observe_chat_packets(fail(), channel="discord"))
     assert raised.value is error
-    assert sink.call_args.args[1]["error_code"] == "timeout"
-    assert "private" not in json.dumps(sink.call_args.args[1])
+    assert sink.call_args.args[0]["error_code"] == "timeout"
+    assert "private" not in json.dumps(sink.call_args.args[0])
     stream = query.observe_chat_packets(iter(["setup", "answer"]), channel="web")
     next(stream)
     assert isinstance(stream, Generator)
     stream.close()
-    assert sink.call_args.args[1]["outcome"] == "disconnected"
+    assert sink.call_args.args[0]["outcome"] == "disconnected"
 
 
 def test_stop_button_and_api_origin_map_to_reported_outcome_and_channel(
@@ -444,13 +445,13 @@ def test_stop_button_and_api_origin_map_to_reported_outcome_and_channel(
     from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 
     sink = Mock()
-    monkeypatch.setattr(query, "emit_telemetry", sink)
+    monkeypatch.setattr(query, "emit_query", sink)
     stopped = Packet(
         placement=Placement(turn_index=0),
         obj=OverallStop(type="stop", stop_reason="user_cancelled"),
     )
     assert list(query.observe_chat_packets(iter([stopped]), channel="web")) == [stopped]
-    assert sink.call_args.args[1]["outcome"] == "canceled"
+    assert sink.call_args.args[0]["outcome"] == "canceled"
     for origin, channel in (
         (MessageOrigin.API, "api"),
         (MessageOrigin.SLACKBOT, "slack"),
@@ -685,6 +686,23 @@ def test_metadata_repair_revision_and_build_sha_are_bounded() -> None:
     assert not sender.emit("version", {"version": "dev", "commit_sha": "private/repo"})
     assert not sender.emit("heartbeat", {}, revision=-1)
     assert not sender.emit("heartbeat", {}, revision=True)
+
+
+def test_query_ids_come_from_the_running_sender(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fleet, "_client", None)
+    assert not fleet.emit_query({"channel": "web"})
+    sender = make_sender()
+    monkeypatch.setattr(fleet, "_client", sender)
+    assert fleet.emit_query({"channel": "web"})
+    assert fleet.emit_query({"channel": "web"})
+    ids = [uuid.UUID(event["data"]["query_id"]) for event in sender._take_batch()]
+    assert len(set(ids)) == 2
+    # Other processes have their own random high bits.
+    other = make_sender()
+    assert uuid.UUID(other.query_id()).int >> 64 != ids[0].int >> 64
+    assert {query_id.int >> 64 for query_id in ids} == {sender._query_prefix >> 64}
 
 
 @pytest.mark.parametrize(

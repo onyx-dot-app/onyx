@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import replace
 from typing import Any
 from unittest.mock import Mock
@@ -57,3 +58,4 @@ def test_listener_starts_sender_before_handlers_and_closes_on_exit(
     assert transport.events[0]["service"] == "slack"
     assert transport.events[0]["data"]["channel"] == "slack"
     assert transport.events[0]["data"]["request_count"] == 1
+    assert uuid.UUID(transport.events[0]["data"]["query_id"])
