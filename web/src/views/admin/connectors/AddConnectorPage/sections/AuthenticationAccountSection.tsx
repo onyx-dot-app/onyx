@@ -205,9 +205,10 @@ export default function AuthenticationAccountSection({
       the types honest. */}
       {!credentials ? null : (
         <Section gap={6} alignItems="stretch" width="full">
-          <div className="flex w-full flex-col">
+          <Section gap={0} alignItems="stretch" width="full" height="fit">
             {/* Hidden accounts animate away, then leave the page. The fold
-            holds the cards' gap, so a closed one leaves no space behind. */}
+            holds the cards' gap, so a closed one leaves no space behind. A
+            div, as Section's own padding would override the bottom one. */}
             <Fold open={showSavedAccounts && credentials.length > 0}>
               <div className="flex flex-col gap-2 pb-2">
                 {credentials.map((credential) => (
@@ -312,7 +313,7 @@ export default function AuthenticationAccountSection({
                 </Section>
               </SelectCard>
             </Section>
-          </div>
+          </Section>
 
           <CredentialChecksCard
             source={connector}

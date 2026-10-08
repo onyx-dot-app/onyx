@@ -276,6 +276,7 @@ export default function AuthenticationAccountCard({
               sizePreset="main-ui"
               variant="section"
             />
+            {/* One-sided padding, which Section's own padding overrides. */}
             <div className="flex flex-row gap-4 ps-5.5 pt-2">
               <Content
                 icon={SvgLinkedDots}
