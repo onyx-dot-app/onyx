@@ -722,3 +722,11 @@ stage summaries keep their collector schedule and 30-day central retention. Appl
 still only sanitize allowlisted fields and try a nonblocking bounded enqueue. Unchanged license
 and signup-domain metadata is reconciled every six hours, after delivery loss, or when changed.
 See `backend/tests/unit/onyx/utils/test_fleet_telemetry.py` for sum, failure, retry, and hot-path checks.
+
+### Automatic fleet enrollment
+
+Application startup schedules background identity initialization. It never waits for storage or network access.
+`backend/onyx/db/fleet_enrollment.py` persists one installation seed in the existing encrypted key-value table.
+The sender derives separate enrollment and privacy keys, then enrolls at `https://telemetry.onyx.app/v1/enroll`.
+Docker Compose and Helm enable the separate snapshot collector by default. `DISABLE_TELEMETRY=true` disables both paths.
+Optional explicit credentials retain their previous identity mapping. See `deployment/fleet-telemetry.md` for release order.

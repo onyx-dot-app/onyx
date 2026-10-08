@@ -539,3 +539,11 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 Related: [[llm-providers]], [[multi-tenancy]], [[editions-and-gating]],
 [[background-jobs]], [[chat-persistence]], [[rate-and-usage-limits]],
 [[core-chat-loop]], [[indexing-pipeline]].
+
+### Automatic fleet enrollment
+
+Application startup schedules background identity initialization. It never waits for storage or network access.
+`backend/onyx/db/fleet_enrollment.py` persists one installation seed in the existing encrypted key-value table.
+The sender derives separate enrollment and privacy keys, then enrolls at `https://telemetry.onyx.app/v1/enroll`.
+Docker Compose and Helm enable the separate snapshot collector by default. `DISABLE_TELEMETRY=true` disables both paths.
+Optional explicit credentials retain their previous identity mapping. See `deployment/fleet-telemetry.md` for release order.

@@ -2,6 +2,7 @@
 {{- if and .Values.fleetTelemetry.enabled (ne (lower (toString .Values.configMap.DISABLE_TELEMETRY)) "true") }}
 - name: ONYX_TELEMETRY_ENDPOINT
   value: {{ .Values.fleetTelemetry.endpoint | quote }}
+{{- if .Values.fleetTelemetry.existingSecret }}
 - name: ONYX_TELEMETRY_CUSTOMER_UUID
   value: {{ required "fleetTelemetry.customerUuid is required" .Values.fleetTelemetry.customerUuid | quote }}
 - name: ONYX_TELEMETRY_DEPLOYMENT_ID
@@ -16,6 +17,10 @@
     secretKeyRef:
       name: {{ .Values.fleetTelemetry.existingSecret }}
       key: ONYX_TELEMETRY_PRIVACY_KEY
+{{- end }}
+{{- else }}
+- name: DISABLE_TELEMETRY
+  value: "true"
 {{- end }}
 {{- end }}
 {{- if and .Values.fleetTelemetry.enabled .Values.fleetTelemetry.collector.enabled (ne (lower (toString .Values.configMap.DISABLE_TELEMETRY)) "true") }}
@@ -102,14 +107,15 @@ spec:
               drop: ["ALL"]
           resources:
             {{- toYaml .Values.fleetTelemetry.collector.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
-            - name: DISABLE_TELEMETRY
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ .Values.config.envConfigMapName }}
-                  key: DISABLE_TELEMETRY
-                  optional: true
-            {{- include "onyx.fleetTelemetryEnv" . | nindent 12 }}
+            {{- include "onyx.envSecrets" . | nindent 12 }}
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
             - name: LOG_LEVEL
@@ -125,6 +131,7 @@ spec:
                   name: {{ .Values.fleetTelemetry.existingSecret }}
                   key: ONYX_TELEMETRY_AWS_RESOURCES_JSON
             {{- end }}
+            {{- if .Values.fleetTelemetry.existingSecret }}
             - name: ONYX_TELEMETRY_DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -136,6 +143,7 @@ spec:
                   name: {{ .Values.fleetTelemetry.existingSecret }}
                   key: ONYX_TELEMETRY_REDIS_URL
                   optional: true
+            {{- end }}
             {{- if .Values.fleetTelemetry.collector.schemas }}
             - name: ONYX_TELEMETRY_SCHEMAS
               value: {{ .Values.fleetTelemetry.collector.schemas | quote }}

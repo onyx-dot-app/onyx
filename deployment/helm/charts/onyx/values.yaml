@@ -1463,18 +1463,18 @@ externalSecret:
 extraEnvFromSecret: ""
 
 # Fleet instrumentation performs no I/O on application emission paths.
-# Create a separate random >=32-byte privacy key for each installation.
-# The collector database URL must use a read-only source role.
+# Installation identity is created automatically in the Onyx database.
+# existingSecret optionally selects operator-provisioned credentials and a read-only DB role.
 fleetTelemetry:
-  enabled: false
-  endpoint: "https://telemetry.onyxcorp.dev"
+  enabled: true
+  endpoint: "https://telemetry.onyx.app"
   customerUuid: ""
   deploymentId: ""
   existingSecret: ""
   collector:
     enabled: true
     kubernetes: true
-    schemas: "public"
+    schemas: ""
     # Optional standalone collector image; defaults to the API image.
     image: ""
     schemaShardIndex: 0
@@ -1489,7 +1489,7 @@ fleetTelemetry:
         memory: 64Mi
       limits:
         cpu: 200m
-        memory: 128Mi
+        memory: 256Mi
 
 # -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:

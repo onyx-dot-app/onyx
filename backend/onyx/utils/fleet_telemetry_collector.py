@@ -20,6 +20,7 @@ from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from onyx.db.fleet_enrollment import source_database_url
 from onyx.db.fleet_telemetry import (
     SAFE_BOOLEAN_SETTINGS,
     SAFE_NUMBER_SETTINGS,
@@ -582,8 +583,27 @@ class FleetCollector:
         )
 
         url = os.environ.get("ONYX_TELEMETRY_REDIS_URL")
-        if not url:
+        if not url and (not self.client.config.auto_enroll or self.shard_index != 0):
             return
+        if not url:
+            from urllib.parse import quote
+
+            from onyx.configs.app_configs import (
+                REDIS_DB_NUMBER_CELERY,
+                REDIS_HOST,
+                REDIS_PASSWORD,
+                REDIS_PORT,
+                REDIS_SSL,
+                USE_REDIS_IAM_AUTH,
+            )
+
+            if USE_REDIS_IAM_AUTH:
+                return
+            scheme = "rediss" if REDIS_SSL else "redis"
+            password = (
+                ":" + quote(REDIS_PASSWORD, safe="") + "@" if REDIS_PASSWORD else ""
+            )
+            url = f"{scheme}://{password}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY}"
         # Connection failures follow the same bounded poll cadence as success.
         self._last_queues = time.monotonic()
         redis = Redis.from_url(
@@ -742,14 +762,17 @@ def main() -> None:
             stopped.wait()
         return
     client = start_telemetry("collector")
+    while client is None and not stopped.wait(2):
+        client = start_telemetry("collector")
     if client is None:
-        raise SystemExit("Telemetry configuration is missing or invalid")
-    database_url = os.environ.get("ONYX_TELEMETRY_DATABASE_URL")
-    if not database_url:
-        raise SystemExit("ONYX_TELEMETRY_DATABASE_URL is required")
+        stop_telemetry()
+        return
+    database_url = source_database_url()
     schemas = [
         value
-        for value in os.environ.get("ONYX_TELEMETRY_SCHEMAS", "public").split(",")
+        for value in os.environ.get(
+            "ONYX_TELEMETRY_SCHEMAS", "" if MULTI_TENANT else "public"
+        ).split(",")
         if value
     ]
     collector = FleetCollector(client, database_url, schemas)

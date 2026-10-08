@@ -512,28 +512,41 @@ class TelemetryConfig:
     batch_size: int = 100
     flush_seconds: float = 2.0
     instance_domain_hash: str | None = None
+    auto_enroll: bool = False
 
     @classmethod
-    def from_env(cls, service: str) -> "TelemetryConfig | None":
+    def from_env(
+        cls, service: str, identity: dict[str, str] | None = None
+    ) -> "TelemetryConfig | None":
         try:
             if telemetry_disabled():
                 return None
-            endpoint = os.environ["ONYX_TELEMETRY_ENDPOINT"].rstrip("/")
+            values = {**os.environ, **(identity or {})}
+            endpoint = (
+                values.get("ONYX_TELEMETRY_ENDPOINT") or "https://telemetry.onyx.app"
+            ).rstrip("/")
             parsed = urlsplit(endpoint)
             if parsed.scheme != "https" and not (
                 parsed.scheme == "http"
                 and parsed.hostname in {"localhost", "127.0.0.1", "telemetry"}
             ):
                 return None
-            if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            if (
+                not parsed.hostname
+                or parsed.username
+                or parsed.password
+                or parsed.query
+                or parsed.fragment
+            ):
                 return None
-            token = os.environ["ONYX_TELEMETRY_TOKEN"]
-            customer = str(uuid.UUID(os.environ["ONYX_TELEMETRY_CUSTOMER_UUID"]))
-            deployment = os.environ["ONYX_TELEMETRY_DEPLOYMENT_ID"]
-            privacy_key = os.environ["ONYX_TELEMETRY_PRIVACY_KEY"].encode()
+            token = values["ONYX_TELEMETRY_TOKEN"]
+            customer = str(uuid.UUID(values["ONYX_TELEMETRY_CUSTOMER_UUID"]))
+            deployment = values["ONYX_TELEMETRY_DEPLOYMENT_ID"]
+            privacy_key = values["ONYX_TELEMETRY_PRIVACY_KEY"].encode()
             if (
                 not _OPAQUE.fullmatch(deployment)
                 or len(privacy_key) < 32
+                or not token
                 or len(token) > 4096
             ):
                 return None
@@ -571,6 +584,7 @@ class TelemetryConfig:
                 privacy_key,
                 service,
                 instance_domain_hash=domain_hash,
+                auto_enroll=identity is not None,
             )
         except (KeyError, ValueError):
             return None
@@ -602,6 +616,7 @@ class BoundedTelemetry:
         self._blocked_until = 0.0
         self._pending: list[dict[str, Any]] = []
         self._session: requests.Session | None = None
+        self._enrolled = not config.auto_enroll
         self._stage_pending: OrderedDict[tuple[str, ...], dict[str, Any]] = (
             OrderedDict()
         )
@@ -715,6 +730,13 @@ class BoundedTelemetry:
                 if MULTI_TENANT and tenant
                 else self.config.customer_uuid
             )
+            scope = (
+                customer
+                if MULTI_TENANT and tenant and self.config.auto_enroll
+                else None
+            )
+            if scope:
+                customer = str(uuid.uuid5(uuid.UUID(self.config.customer_uuid), scope))
             events.append(
                 {
                     "schema_version": 2,
@@ -726,6 +748,7 @@ class BoundedTelemetry:
                     ).isoformat(),
                     "customer_uuid": customer,
                     "deployment_id": self.config.deployment_id,
+                    **({"installation_scope": scope} if scope else {}),
                     "service": service,
                     "user_id": user_id,
                     "is_cloud": MULTI_TENANT,
@@ -760,6 +783,7 @@ class BoundedTelemetry:
                 if self._session is None:
                     self._session = requests.Session()
                 transport = self._session.post
+            self._enroll(transport)
             response = transport(
                 self.config.endpoint + "/v1/events",
                 headers={
@@ -786,6 +810,9 @@ class BoundedTelemetry:
                 }:
                     raise ValueError("Unsupported telemetry response encoding")
                 if not response.ok:
+                    self._enrolled = self._enrolled and not (
+                        response.status_code == 401 and self.config.auto_enroll
+                    )
                     if response.status_code in {400, 413, 422}:
                         self.rejected += len(self._pending)
                         self.dropped += len(self._pending)
@@ -830,6 +857,36 @@ class BoundedTelemetry:
             self.failures = min(self.failures + 1, 8)
             self._blocked_until = time.monotonic() + min(300, 2**self.failures)
             return False
+
+    def _enroll(self, transport: Any) -> None:
+        if self._enrolled:
+            return
+        response = transport(
+            self.config.endpoint + "/v1/enroll",
+            headers={
+                "Authorization": "Bearer " + self.config.token,
+                "Accept-Encoding": "identity",
+            },
+            json={"is_cloud": MULTI_TENANT},
+            timeout=(1, 2),
+            allow_redirects=False,
+            stream=True,
+        )
+        with response:
+            if response.status_code != 200 or response.headers.get(
+                "Content-Encoding", "identity"
+            ) not in {"", "identity"}:
+                raise ValueError("Fleet enrollment unavailable")
+            raw = response.raw.read(4097)
+            if len(raw) > 4096:
+                raise ValueError("Fleet enrollment receipt too large")
+            result = json.loads(raw)
+            if result != {
+                "customer_uuid": self.config.customer_uuid,
+                "deployment_id": self.config.deployment_id,
+            }:
+                raise ValueError("Fleet enrollment identity mismatch")
+        self._enrolled = True
 
     def _coalesce_stages(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Combine batch counters in the sender thread; errors bypass the short window."""
@@ -973,10 +1030,54 @@ def poll_due(previous: float | None, now: float, interval: float) -> bool:
 
 
 _client: BoundedTelemetry | None = None
+_bootstrap_lock = threading.Lock()
+_bootstrap_thread: threading.Thread | None = None
+_bootstrap_stop = threading.Event()
+_bootstrap_pid = 0
+
+
+def automatic_config(service: str, seed: bytes) -> TelemetryConfig | None:
+    token = hmac.new(seed, b"fleet-enrollment-v1", hashlib.sha256).hexdigest()
+    namespace = uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        "https://telemetry.onyx.app/installations/"
+        + hashlib.sha256(token.encode()).hexdigest(),
+    )
+    return TelemetryConfig.from_env(
+        service,
+        {
+            "ONYX_TELEMETRY_TOKEN": token,
+            "ONYX_TELEMETRY_CUSTOMER_UUID": str(namespace),
+            "ONYX_TELEMETRY_DEPLOYMENT_ID": "auto-" + namespace.hex,
+            "ONYX_TELEMETRY_PRIVACY_KEY": hmac.new(
+                seed, b"fleet-privacy-v1", hashlib.sha256
+            ).hexdigest(),
+        },
+    )
+
+
+def _bootstrap(service: str, stopped: threading.Event) -> None:
+    global _client
+    delay = 2.0
+    while not stopped.is_set() and not telemetry_disabled():
+        try:
+            from onyx.db.fleet_enrollment import installation_seed
+
+            config = automatic_config(service, installation_seed())
+            if config is None or stopped.is_set() or telemetry_disabled():
+                return
+            client = BoundedTelemetry(config)
+            _client = client
+            client.start()
+            return
+        except Exception:
+            # No source/network error reaches application startup. No raw logs.
+            stopped.wait(delay)
+            delay = min(300, delay * 2)
 
 
 def start_telemetry(service: str = "api") -> BoundedTelemetry | None:
-    global _client
+    global _client, _bootstrap_thread, _bootstrap_stop, _bootstrap_pid
     if telemetry_disabled():
         return None
     try:
@@ -988,6 +1089,31 @@ def start_telemetry(service: str = "api") -> BoundedTelemetry | None:
             return _client
         config = TelemetryConfig.from_env(service)
         if config is None:
+            # Partial explicit credentials fail closed instead of creating a new identity.
+            if any(
+                os.environ.get("ONYX_TELEMETRY_" + key)
+                for key in ("TOKEN", "CUSTOMER_UUID", "DEPLOYMENT_ID", "PRIVACY_KEY")
+            ):
+                return None
+            if not _bootstrap_lock.acquire(blocking=False):
+                return None
+            try:
+                if (
+                    _bootstrap_pid != os.getpid()
+                    or _bootstrap_thread is None
+                    or not _bootstrap_thread.is_alive()
+                ):
+                    _bootstrap_stop = threading.Event()
+                    _bootstrap_pid = os.getpid()
+                    _bootstrap_thread = threading.Thread(
+                        target=_bootstrap,
+                        args=(service, _bootstrap_stop),
+                        name="fleet-telemetry-enrollment",
+                        daemon=True,
+                    )
+                    _bootstrap_thread.start()
+            finally:
+                _bootstrap_lock.release()
             return None
         _client = BoundedTelemetry(config)
         _client.start()
@@ -997,6 +1123,7 @@ def start_telemetry(service: str = "api") -> BoundedTelemetry | None:
 
 
 def stop_telemetry() -> None:
+    _bootstrap_stop.set()
     if _client is not None:
         _client.close()
 

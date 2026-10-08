@@ -1,5 +1,6 @@
 """Read-only, bounded reconciliation queries for the isolated telemetry collector."""
 
+import os
 import re
 from datetime import datetime
 from typing import Any
@@ -83,6 +84,13 @@ def collector_engine(database_url: str) -> Engine:
             "application_name": "onyx_fleet_collector",
         },
     )
+
+    if not os.environ.get("ONYX_TELEMETRY_DATABASE_URL"):
+        from onyx.configs.app_configs import USE_IAM_AUTH
+        from onyx.db.engine.iam_auth import provide_iam_token
+
+        if USE_IAM_AUTH:
+            event.listen(engine, "do_connect", provide_iam_token)
 
     @event.listens_for(engine, "begin")
     def _read_limits(connection: Connection) -> None:

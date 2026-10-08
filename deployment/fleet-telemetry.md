@@ -20,11 +20,56 @@ Connector metadata contains reviewed booleans, numbers, and selection counts.
 It excludes connector names, folder names, paths, URLs, credentials, and document content.
 The configuration fingerprint describes structural settings. It cannot distinguish folders with equal counts.
 Error samples are read locally with a size limit. Only fixed error categories and keyed fingerprints leave the collector.
-Installation fingerprints require a separate random privacy key. Do not reuse the central authentication token.
+Installation fingerprints use a separate privacy key. The enrollment credential cannot derive this key.
+
+## Automatic collection
+
+New installations start reporting to `https://telemetry.onyx.app` without operator provisioning.
+API and worker startup schedules background enrollment and returns immediately.
+Until the local identity is ready, hooks drop observations; startup never waits for telemetry.
+A background connection creates one random seed in the existing encrypted key-value store.
+Concurrent processes use an atomic insert and read the same stored seed.
+Storage uses Onyx's existing secret encryption configuration; community installations have its existing encryption limitations.
+The credential and privacy key use distinct HMAC derivations. The privacy key never leaves Onyx.
+The database survives process, container, and pod restarts, so deployment identity stays stable.
+A database clone shares this identity. For an independent clone, remove only the
+`fleet_telemetry_installation_seed_v1` entry from its encrypted key-value store before startup.
+A fresh database gets a fresh identity. No new migration is needed for identity storage.
+
+The sender registers its credential at `/v1/enroll` before its first batch.
+The service derives the deployment namespace from the credential and stores only its hash.
+The response contains identity fields only. It cannot change source settings or instruct the deployment.
+Unavailable storage or collection endpoints trigger bounded background retries with backoff.
+Neither API readiness nor indexing depends on successful enrollment or delivery.
+
+Docker Compose starts a separate collector with a 0.2 CPU and 256MiB memory cap.
+Helm enables the collector by default. Its existing resource limits remain configurable.
+The collector uses standard Onyx PostgreSQL, Redis, and OpenSearch settings by default.
+All collection transactions are read-only, with short statement and lock limits.
+The startup identity write uses a separate connection that is closed before collection begins.
+For stricter database permissions, supply a dedicated read-only collector URL as described below.
+Custom deployment manifests must start `python -m onyx.utils.fleet_telemetry_collector`
+for periodic snapshots; application hooks enroll automatically whenever the instrumented services start.
+
+Multi-tenant automatic collection namespaces each logical deployment under its installation identity.
+An automatically enrolled credential cannot write into another installation's namespace or grant
+trusted Cloud policy inheritance. Existing operator-issued Cloud credentials keep their current identity mapping.
+Automatic Cloud enrollment requires the standard schema's encrypted key-value table and database access.
+Cloud shard collectors still need topology-specific placement. Queue auto-discovery runs on collector shard zero.
+Redis IAM and Sentinel topologies need an explicit supported collector connection; they are not inferred.
+
+**Release order:** deploy the fleet service with `/v1/enroll` before releasing this Onyx version.
+Merging source code alone does not update existing running containers or the collection service.
 
 ## Configuration
 
-Set these variables on API pods, workers, and the collector:
+No fleet identity variables are required for automatic collection.
+Set `DISABLE_TELEMETRY=true` to opt out. Helm also supports `fleetTelemetry.enabled=false`.
+An endpoint override is optional; TLS is required outside approved local test hosts.
+To retain operator-provisioned identity, supply all four identity/authentication variables together.
+A partial override fails closed and does not create another installation.
+
+Optional variables on API pods, workers, and the collector:
 
 - `ONYX_TELEMETRY_ENDPOINT`: HTTPS base URL. Local tests also accept localhost or the `telemetry` Compose service.
 - `ONYX_TELEMETRY_TOKEN`: scoped customer or Cloud deployment token.
@@ -44,8 +89,8 @@ Set these variables on API pods, workers, and the collector:
 Rotate `ONYX_TELEMETRY_DEPLOYMENT_ID` whenever a source database is reset or replaced.
 This prevents reused numeric connector/attempt IDs from merging with the prior installation.
 
-The collector also needs `ONYX_TELEMETRY_DATABASE_URL`, with a read-only PostgreSQL role.
-Use `ONYX_TELEMETRY_REDIS_URL` for queue depth and `ONYX_TELEMETRY_SCHEMAS` for explicit schemas.
+The optional `ONYX_TELEMETRY_DATABASE_URL` selects a dedicated read-only PostgreSQL role.
+Use `ONYX_TELEMETRY_REDIS_URL` to override queue access and `ONYX_TELEMETRY_SCHEMAS` for explicit schemas.
 Run `python -m onyx.utils.fleet_telemetry_collector` in a separate container.
 One source connection has a two-second connect timeout, 1.5-second statement limit, and 100ms lock limit.
 Reads use pages of 200 rows. Unavailable sources back off independently.
@@ -60,7 +105,7 @@ Split a large database with `ONYX_TELEMETRY_SCHEMA_SHARD_COUNT` and `ONYX_TELEME
 Stable hash partitions avoid duplicate source collectors. Ten collectors cover 1,000 tenants conservatively.
 Each collector discovers new tenant schemas every minute when explicit schemas are absent.
 Only one designated collector should report shared queues and AWS infrastructure.
-Omit their Redis URL and AWS resource configuration from other replicas.
+Omit Redis URLs and AWS resource configuration from other replicas. Automatic queue discovery runs only on shard zero.
 In Helm, set `fleetTelemetry.collector.image` to the standalone image and set
 `schemaShardIndex`/`schemaShardCount` for each collector. Empty `collector.schemas`
 enables discovery for Cloud instead of restricting collection to `public`.
@@ -86,8 +131,8 @@ The following advanced variables belong to the isolated collector rather than ap
 
 | Variable | Default / purpose |
 | --- | --- |
-| `ONYX_TELEMETRY_DATABASE_URL` | Required read-only PostgreSQL DSN; provide through a secret. |
-| `ONYX_TELEMETRY_REDIS_URL` | Optional Redis DSN; omit on collectors that should not report shared queues. |
+| `ONYX_TELEMETRY_DATABASE_URL` | Optional read-only PostgreSQL DSN; otherwise use standard Onyx settings. |
+| `ONYX_TELEMETRY_REDIS_URL` | Optional Redis DSN override. Automatic shard zero uses standard Redis broker settings. |
 | `ONYX_TELEMETRY_SCHEMAS` | Comma-separated explicit schemas; default `public`. Omit in Cloud to enable discovery. |
 | `ONYX_TELEMETRY_SCHEMA_SHARD_COUNT` | `1`; number of stable source-schema partitions, capped at 1,000. |
 | `ONYX_TELEMETRY_SCHEMA_SHARD_INDEX` | `0`; this collector's partition within the configured count. |
@@ -103,7 +148,7 @@ The following advanced variables belong to the isolated collector rather than ap
 `ONYX_TELEMETRY_DISK_MOUNT` optionally selects the mount used for process disk metrics;
 the default is `/`. This affects background resource reads only.
 Collector-specific variables are tracked in the repository environment baseline;
-the opt-in application identity/auth settings are documented in Compose env templates.
+the optional application identity/auth overrides are documented in Compose env templates.
 
 Optional managed-service reads use `ONYX_TELEMETRY_AWS_RESOURCES_JSON` and `AWS_REGION`.
 The isolated collector reads at most 32 resource targets in one bounded CloudWatch request.
