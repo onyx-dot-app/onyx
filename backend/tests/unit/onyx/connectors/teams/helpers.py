@@ -28,6 +28,10 @@ CHANNEL = ChannelRef(
 )
 
 
+def requested_urls(client: MagicMock) -> list[str]:
+    return [call.args[0] for call in client.execute_request_direct.call_args_list]
+
+
 def replies_url(root_id: str, channel_id: str = CHANNEL_ID) -> str:
     return f"teams/{TEAM_ID}/channels/{channel_id}/messages/{root_id}/replies"
 

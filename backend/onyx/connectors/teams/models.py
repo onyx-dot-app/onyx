@@ -46,7 +46,8 @@ class ChannelMember(BaseModel):
 
 
 class ChannelIdentity(BaseModel):
-    """Where a message lives, carried by the rows of a team-wide export."""
+    """Which channel a message is in. Only the team-wide export needs it, whose
+    rows mix channels."""
 
     team_id: str | None = None
     channel_id: str | None = None

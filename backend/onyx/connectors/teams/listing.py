@@ -357,6 +357,15 @@ def collect_all_channels_from_team(
     return [channel for channel in channel_collection if channel.id]
 
 
+def team_channels(graph_client: GraphClient, team_id: str) -> list[ChannelRef]:
+    """Every channel of the team, listed afresh."""
+    team = get_team_by_id(graph_client=graph_client, team_id=team_id)
+    return [
+        channel_ref(team_id, channel)
+        for channel in collect_all_channels_from_team(team=team)
+    ]
+
+
 def channel_ref(team_id: str, channel: Channel) -> ChannelRef:
     return ChannelRef(
         team_id=team_id,

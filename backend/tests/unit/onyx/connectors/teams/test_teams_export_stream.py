@@ -3,6 +3,7 @@ the stream, the channel walk as the fallback when the app lacks the approval
 or a team is too large to hold."""
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -10,7 +11,11 @@ from onyx.connectors.models import ConnectorFailure, Document
 from onyx.connectors.teams import export as export_module
 from onyx.connectors.teams.connector import TeamsCheckpoint
 from onyx.connectors.teams.models import ChannelRef
-from onyx.connectors.teams.utils import team_export_probe_url, team_export_url
+from onyx.connectors.teams.utils import (
+    GraphRetriesExhausted,
+    team_export_probe_url,
+    team_export_url,
+)
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL,
     TEAM_ID,
@@ -18,6 +23,7 @@ from tests.unit.onyx.connectors.teams.helpers import (
     graph_client,
     message,
     replies_url,
+    requested_urls,
     step,
 )
 
@@ -35,24 +41,23 @@ def _in_channel(row: dict[str, Any], channel: ChannelRef) -> dict[str, Any]:
     return {**row, "channelIdentity": {"teamId": TEAM_ID, "channelId": channel.id}}
 
 
+def _sdk_channel(channel: ChannelRef) -> MagicMock:
+    sdk = MagicMock()
+    sdk.id = channel.id
+    sdk.properties = {
+        "displayName": channel.display_name,
+        "membershipType": channel.membership_type,
+    }
+    return sdk
+
+
 def _team_with_channels(monkeypatch: pytest.MonkeyPatch) -> None:
-    def sdk_channel(channel: ChannelRef) -> Any:
-        from unittest.mock import MagicMock
-
-        sdk = MagicMock()
-        sdk.id = channel.id
-        sdk.properties = {
-            "displayName": channel.display_name,
-            "membershipType": channel.membership_type,
-        }
-        return sdk
-
     monkeypatch.setattr(
         "onyx.connectors.teams.listing.get_team_by_id", lambda **_: object()
     )
     monkeypatch.setattr(
         "onyx.connectors.teams.listing.collect_all_channels_from_team",
-        lambda **_: [sdk_channel(CHANNEL), sdk_channel(OTHER)],
+        lambda **_: [_sdk_channel(CHANNEL), _sdk_channel(OTHER)],
     )
 
 
@@ -91,8 +96,7 @@ def test_a_team_streams_whole_threads_without_a_replies_call(
     assert checkpoint.export is True
     assert checkpoint.todo_team_ids == []
     assert checkpoint.has_more is False
-    requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
-    assert replies_url("m1") not in requested
+    assert replies_url("m1") not in requested_urls(client)
 
 
 def test_an_older_thread_that_only_gained_a_reply_is_read_whole(
@@ -171,8 +175,7 @@ def test_the_export_decision_is_kept_for_the_attempt(
 
     _, checkpoint = step(connector(client), saved)
 
-    requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
-    assert PROBE not in requested
+    assert PROBE not in requested_urls(client)
     assert checkpoint.export is False
 
 
@@ -201,6 +204,42 @@ def test_a_team_too_large_to_hold_goes_to_the_channel_walk(
         OTHER.id,
     ]
     assert checkpoint.has_more is True
+
+
+def test_a_team_whose_stream_is_refused_goes_to_the_channel_walk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One team's refusal must not fail the attempt: the channel walk records
+    what each of its channels refuses, as it does for an app without the
+    approval."""
+    _team_with_channels(monkeypatch)
+    client = graph_client(
+        {PROBE: {"value": []}}, refused={team_export_url(TEAM_ID, 0, 1): 403}
+    )
+
+    items, checkpoint = step(connector(client), _team_checkpoint())
+
+    assert items == []
+    assert checkpoint.export is True
+    assert [channel.id for channel in checkpoint.todo_channels] == [
+        CHANNEL.id,
+        OTHER.id,
+    ]
+    assert checkpoint.has_more is True
+
+
+def test_a_team_whose_stream_is_down_fails_the_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.connectors.teams.utils.time.sleep", lambda _: None)
+    _team_with_channels(monkeypatch)
+    client = graph_client(
+        {PROBE: {"value": []}}, refused={team_export_url(TEAM_ID, 0, 1): 503}
+    )
+
+    # An outage says nothing about the team, so the step fails and is retried.
+    with pytest.raises(GraphRetriesExhausted):
+        step(connector(client), _team_checkpoint())
 
 
 def test_a_thread_in_a_channel_the_team_does_not_list_is_one_failure(

@@ -365,20 +365,18 @@ def fetch_channel_member_emails(
 MESSAGE_PAGE_SIZE = 50
 
 
+def graph_timestamp(when: SecondsSinceUnixEpoch) -> str:
+    return datetime.fromtimestamp(when, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def message_delta_url(
     team_id: str, channel_id: str, start: SecondsSinceUnixEpoch
 ) -> str:
-    startfmt = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
     return (
         f"teams/{team_id}/channels/{channel_id}/messages/delta"
-        f"?$filter=lastModifiedDateTime gt {startfmt}&$top={MESSAGE_PAGE_SIZE}"
+        f"?$filter=lastModifiedDateTime gt {graph_timestamp(start)}"
+        f"&$top={MESSAGE_PAGE_SIZE}"
     )
-
-
-def _graph_time(when: SecondsSinceUnixEpoch) -> str:
-    return datetime.fromtimestamp(when, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def team_export_url(
@@ -388,9 +386,20 @@ def team_export_url(
     replies included, in one stream. The export API wants both bounds."""
     return (
         f"teams/{team_id}/channels/getAllMessages"
-        f"?$filter=lastModifiedDateTime gt {_graph_time(start)}"
-        f" and lastModifiedDateTime lt {_graph_time(end)}&$top={MESSAGE_PAGE_SIZE}"
+        f"?$filter=lastModifiedDateTime gt {graph_timestamp(start)}"
+        f" and lastModifiedDateTime lt {graph_timestamp(end)}"
+        f"&$top={MESSAGE_PAGE_SIZE}"
     )
+
+
+def fetch_team_export(
+    graph_client: GraphClient,
+    team_id: str,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> Generator[Message]:
+    for value in iter_values(graph_client, team_export_url(team_id, start, end)):
+        yield Message(**_sanitize_message_user_display_name(value))
 
 
 def team_export_probe_url(team_id: str) -> str:

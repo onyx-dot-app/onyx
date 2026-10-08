@@ -317,13 +317,7 @@ class TeamsConnector(
                 yield from self._export_step(checkpoint, start, end)
             else:
                 team_id = checkpoint.todo_team_ids.pop()
-                team = listing.get_team_by_id(
-                    graph_client=graph_client, team_id=team_id
-                )
-                checkpoint.todo_channels = [
-                    listing.channel_ref(team_id, channel)
-                    for channel in listing.collect_all_channels_from_team(team=team)
-                ]
+                checkpoint.todo_channels = listing.team_channels(graph_client, team_id)
                 logger.info(
                     "Listed %s channel(s) of team %s; %s team(s) left",
                     len(checkpoint.todo_channels),
@@ -378,16 +372,15 @@ class TeamsConnector(
             if export.fell_back:
                 checkpoint.todo_channels.extend(export.channels)
                 continue
-            if self._files is None:
-                continue
             for channel in export.channels:
                 yield from self._opened_channel_files(channel, start)
 
     def _opened_channel_files(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
-        """A channel's files, library opened and left here. No library means
-        the files grant the admin turned on is missing, one channel failure."""
+        """A channel's files, library opened and left here. A channel Graph
+        describes without a library, or refuses, is one recorded failure;
+        anything else fails the attempt."""
         if self._files is None:
             return
         try:

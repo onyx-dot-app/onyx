@@ -355,17 +355,19 @@ of meeting chats.
   streams four teams at a time (`export.py:ExportSource`): every message of
   every channel changed in the window, replies included, grouped into threads;
   a thread whose root was created inside the window is complete in the stream,
-  an older one that only gained or changed a reply is read whole from Graph.
-  An app the export API refuses, or a team streaming past 250k messages, goes
-  to the channel walk: the team's channels into `todo_channels`, then a channel
+  an older one that changed anywhere gets its replies from Graph, and its root
+  too when the stream lacks it. A team whose stream Graph refuses, or that
+  streams past 250k messages, goes to the channel walk.
+  An app the export API refuses walks every team the same way: the team's
+  channels into `todo_channels`, then a channel
   step walks one delta page of up to `max_workers` channels at once
   (`TeamsCheckpoint.active`, `_channel_step`, `_advance_channel`), the roots
   of the page, one replies call per root and the images pasted into them.
   Cursors are advanced on copies and written back only when every channel
   finished its page, so a raise in one leaves the step to be retried. A
   checkpoint saved by the one-channel walk joins `active` when it is loaded.
-- **Files.** After a channel's last page its library is read on the consuming
-  thread (`FileSource.index`): the folder children, each file's text, and its
+- **Files.** After a channel's last page, or its team's export stream, its
+  library is read on the consuming thread (`FileSource.index`): the folder children, each file's text, and its
   readers through SharePoint REST, whose client is kept per site.
 - **Organizers.** The meeting side follows the channels: a page of licensed
   users per step, then 32 organizers per step drained by eight workers from a
