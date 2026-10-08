@@ -125,11 +125,11 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
     from onyx.cache.interface import CacheBackendType
     from onyx.configs.app_configs import (
         AUTO_LLM_CONFIG_URL,
-        AUTO_LLM_UPDATE_INTERVAL_SECONDS,
         CACHE_BACKEND,
         SCHEDULED_EVAL_DATASET_NAMES,
     )
     from onyx.utils.variable_functionality import global_version
+    from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 
     tasks: list[_PeriodicTaskDef] = []
     if CACHE_BACKEND == CacheBackendType.POSTGRES:
