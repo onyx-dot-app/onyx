@@ -16,6 +16,13 @@ type FoldProps = {
   keepMounted?: boolean;
   /** The fold's id, for a control that points at it with `aria-controls`. */
   id?: string;
+  /**
+   * Wraps the fold in a frame, such as a bordered box. The frame's height
+   * follows the animation, so its edges move with it, and it stays visible;
+   * only the content inside fades. A fully closed fold's frame has no height,
+   * and should show no edge then (see `data-mounted` on the root).
+   */
+  frame?: (content: React.ReactNode) => React.ReactNode;
   children?: React.ReactNode;
 };
 
@@ -30,7 +37,7 @@ type FoldProps = {
  * `keepMounted`. While closed or closing it is inert and hidden from
  * assistive tech.
  */
-function Fold({ open, keepMounted = false, id, children }: FoldProps) {
+function Fold({ open, keepMounted = false, id, frame, children }: FoldProps) {
   // True from the moment the fold opens until its closing animation ends,
   // the window where the children must stay mounted though `open` is false.
   const [closing, setClosing] = useState(false);
@@ -45,15 +52,56 @@ function Fold({ open, keepMounted = false, id, children }: FoldProps) {
     return () => clearTimeout(timeout);
   }, [open]);
 
+  // Whether the content shows. A transition runs only on an element that
+  // already exists, so opening mounts the content hidden and shows it a frame
+  // later, which lets it fade in after the height. Open from the start, it
+  // shows at once, with no fade on page load.
+  const [shown, setShown] = useState(open);
+  useEffect(() => {
+    if (!open) {
+      setShown(false);
+      return;
+    }
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => setShown(true));
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [open]);
+
+  // The fade is on the content alone, so a frame around it stays visible.
+  const content = (
+    <div
+      className="opal-fold-content"
+      data-open={open && shown ? "true" : "false"}
+    >
+      {children}
+    </div>
+  );
+
+  // The grid animates the height. A frame wraps the grid rather than sitting
+  // inside its clip, so the frame's own height follows the animation and its
+  // bottom edge, border and all, rides the moving edge.
+  const grid = (
+    <div className="opal-fold-grid" data-open={open ? "true" : "false"}>
+      <div className="opal-fold-inner">{mounted ? content : null}</div>
+    </div>
+  );
+
   return (
     <div
       id={id}
       className="opal-fold"
       data-open={open ? "true" : "false"}
+      // Fully closed: nothing inside, and a frame shows no edge.
+      data-mounted={mounted ? "true" : "false"}
       aria-hidden={!open || undefined}
       inert={!open || undefined}
     >
-      <div className="opal-fold-inner">{mounted ? children : null}</div>
+      {frame ? frame(grid) : grid}
     </div>
   );
 }

@@ -3,8 +3,11 @@
 /* ============================================================================
    Fold — content that opens and closes by animating its height.
 
-     .opal-fold          grid 0fr ↔ 1fr, opacity fade
-       .opal-fold-inner  min-height: 0, clips the grid child
+     .opal-fold            root: open state, inert while closed
+       (frame)             optional, e.g. a border; its height follows
+         .opal-fold-grid   grid 0fr ↔ 1fr
+           .opal-fold-inner  min-height: 0, clips the grid child
+             .opal-fold-content  the fade
 
    Pure CSS. Paints nothing, so the content stays part of its surroundings.
 ============================================================================ */
@@ -14,23 +17,29 @@
    the state it moves to, so each rule times the move into its own state.
    Keep the total close time in sync with FOLD_CLOSE_MS in components.tsx. */
 
-/* Closing: fade out first, then collapse. */
-.opal-fold {
+/* Closing: the content fades out first, then the height collapses. */
+.opal-fold-grid {
   display: grid;
   grid-template-rows: 0fr;
-  opacity: 0;
-  transition:
-    opacity 100ms ease-in,
-    grid-template-rows 150ms ease-out 100ms;
+  transition: grid-template-rows 150ms ease-out 100ms;
 }
 
-/* Opening: expand fully first, then fade in. */
-.opal-fold[data-open="true"] {
+.opal-fold-content {
+  opacity: 0;
+  transition: opacity 100ms ease-in;
+}
+
+/* Opening: the height expands fully first, then the content fades in. A
+   frame around the content (see `frame`) is not faded, so it is seen
+   growing with the height. */
+.opal-fold-grid[data-open="true"] {
   grid-template-rows: 1fr;
+  transition: grid-template-rows 150ms ease-out;
+}
+
+.opal-fold-content[data-open="true"] {
   opacity: 1;
-  transition:
-    grid-template-rows 150ms ease-out,
-    opacity 100ms ease-out 150ms;
+  transition: opacity 100ms ease-out 150ms;
 }
 
 /* Clips the grid child so it collapses to zero cleanly. */
@@ -40,8 +49,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .opal-fold,
-  .opal-fold[data-open="true"] {
+  .opal-fold-grid,
+  .opal-fold-grid[data-open="true"],
+  .opal-fold-content,
+  .opal-fold-content[data-open="true"] {
     transition: none;
   }
 }

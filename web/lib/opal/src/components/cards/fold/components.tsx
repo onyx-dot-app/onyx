@@ -72,19 +72,26 @@ function CardFold({
   children,
 }: CardFoldProps) {
   return (
-    <Fold open={expanded}>
-      <div
-        className="opal-card-fold-body"
-        style={{
-          borderBottomLeftRadius: radius,
-          borderBottomRightRadius: radius,
-        }}
-        data-border={border}
-        data-opal-status-border={borderColor}
-        data-content-height={contentHeight}
-      >
-        {children}
-      </div>
+    // The bordered body is the fold's frame: it grows with the height and
+    // stays visible, and only the content inside it fades.
+    <Fold
+      open={expanded}
+      frame={(content) => (
+        <div
+          className="opal-card-fold-body"
+          style={{
+            borderBottomLeftRadius: radius,
+            borderBottomRightRadius: radius,
+          }}
+          data-border={border}
+          data-opal-status-border={borderColor}
+          data-content-height={contentHeight}
+        >
+          {content}
+        </div>
+      )}
+    >
+      {children}
     </Fold>
   );
 }

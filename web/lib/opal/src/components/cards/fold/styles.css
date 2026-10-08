@@ -5,8 +5,8 @@
 
    Structure:
      .opal-fold                 (the animation; see components/fold/)
-       .opal-fold-inner
-         .opal-card-fold-body   (border minus its top edge, bottom rounding)
+       .opal-card-fold-body     (the frame: border minus its top edge, bottom rounding)
+         .opal-fold-grid
 
    Shared by Card and SelectCard.
 ============================================================================ */
@@ -34,4 +34,18 @@
 
 .opal-card-fold-body[data-border="solid"] {
   @apply border border-t-0;
+}
+
+/* The frame moves up over the header's bottom border, so at zero height its
+   bottom edge covers that border instead of drawing a second one under it.
+   `relative` paints it above the header. */
+.opal-card-fold-body:not([data-border="none"]) {
+  @apply relative;
+  margin-top: -1px;
+}
+
+/* A fully closed fold's frame shows no edge. `!important` wins over the
+   status and selected border colours. */
+.opal-fold[data-mounted="false"] > .opal-card-fold-body {
+  border-color: transparent !important;
 }

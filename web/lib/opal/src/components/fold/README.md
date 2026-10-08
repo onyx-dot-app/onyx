@@ -8,12 +8,13 @@ part of whatever surrounds it: rows folding inside a card stay in the card.
 
 ## Props
 
-| Prop          | Type        | Default | Description                                                |
-| ------------- | ----------- | ------- | ---------------------------------------------------------- |
-| `open`        | `boolean`   | —       | Whether the fold is open                                   |
-| `keepMounted` | `boolean`   | `false` | Keep the children while closed (e.g. to keep form state)   |
-| `id`          | `string`    | —       | For a control that points at the fold with `aria-controls` |
-| `children`    | `ReactNode` | —       | The folded content                                         |
+| Prop          | Type                     | Default | Description                                                                                                             |
+| ------------- | ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `open`        | `boolean`                | —       | Whether the fold is open                                                                                                |
+| `keepMounted` | `boolean`                | `false` | Keep the children while closed (e.g. to keep form state)                                                                |
+| `id`          | `string`                 | —       | For a control that points at the fold with `aria-controls`                                                              |
+| `frame`       | `(content) => ReactNode` | —       | Wraps the content in a frame (e.g. a bordered box) that grows with the height and stays visible; only the content fades |
+| `children`    | `ReactNode`              | —       | The folded content                                                                                                      |
 
 ## Behaviour
 
@@ -25,6 +26,7 @@ part of whatever surrounds it: rows folding inside a card stay in the card.
 - Children stay mounted through the closing animation, then drop, so a closed
   fold holds nothing, unless `keepMounted`.
 - While closed or closing, the fold is `inert` and `aria-hidden`.
+- `CardFold` (`Card` and `SelectCard`) passes its bordered body as the `frame`.
 - `Card`, `SelectCard`, `Collapsible`, `Divider` (foldable) and `MessageCard`
   (its bottom section) all fold with it.
 
