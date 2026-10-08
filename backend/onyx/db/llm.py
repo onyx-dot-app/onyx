@@ -1245,6 +1245,20 @@ def mark_model_configuration_visible(
     return True
 
 
+def require_router_model_configuration(
+    db_session: Session, model_configuration_id: int
+) -> ModelConfiguration:
+    model_configuration = fetch_model_configuration_by_id(
+        db_session, model_configuration_id
+    )
+    if model_configuration is None or not model_configuration.is_router:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Model routing requires a router model configuration.",
+        )
+    return model_configuration
+
+
 def fetch_llm_provider_view(
     db_session: Session, provider_name: str
 ) -> LLMProviderView | None:

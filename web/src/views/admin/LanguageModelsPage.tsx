@@ -31,7 +31,10 @@ import {
   refreshLlmProviderCaches,
   setDefaultLlmModelAndRefresh,
 } from "@/lib/languageModels/cache";
-import { deleteLlmProvider } from "@/lib/languageModels/svc";
+import {
+  deleteLlmProvider,
+  updateModelRouting,
+} from "@/lib/languageModels/svc";
 import { buildLlmOptions, groupLlmOptions } from "@/lib/languageModels/options";
 import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
@@ -525,7 +528,7 @@ export default function LanguageModelsPage() {
     if (pendingRoutingEnabled !== null) return;
     setPendingRoutingEnabled(checked);
     try {
-      await updateAdminSettings({ model_routing_enabled: checked });
+      await updateModelRouting({ model_routing_enabled: checked });
       await mutate(SWR_KEYS.settings);
       toast.success(t("toasts.settingsUpdated"));
     } catch (e) {
@@ -541,7 +544,7 @@ export default function LanguageModelsPage() {
     if (pendingRoutingTarget !== null) return;
     setPendingRoutingTarget(modelConfigurationId);
     try {
-      await updateAdminSettings({
+      await updateModelRouting({
         model_routing_model_configuration_id: modelConfigurationId,
       });
       // The backend may have flipped the router's visibility.

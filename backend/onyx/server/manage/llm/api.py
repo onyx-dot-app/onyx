@@ -31,7 +31,9 @@ from onyx.db.llm import (
     fetch_model_configurations_page,
     fetch_persona_with_groups,
     fetch_user_group_ids,
+    mark_model_configuration_visible,
     remove_llm_provider,
+    require_router_model_configuration,
     sync_model_configurations,
     update_default_chat_naming_provider,
     update_default_craft_provider,
@@ -103,6 +105,7 @@ from onyx.server.manage.llm.models import (
     LMStudioModelsRequest,
     ModelConfigurationPage,
     ModelConfigurationUpsertRequest,
+    ModelRoutingUpdateRequest,
     NebiusTokenfactoryFinalModelResponse,
     NebiusTokenfactoryModelsRequest,
     OllamaFinalModelResponse,
@@ -135,6 +138,12 @@ from onyx.server.manage.llm.utils import (
     is_valid_bedrock_model,
     lm_studio_capability_enabled,
     strip_openrouter_vendor_prefix,
+)
+from onyx.server.settings.models import Settings
+from onyx.server.settings.store import (
+    load_settings,
+    settings_write_lock,
+    store_settings,
 )
 from onyx.utils.audit import (
     AuditAction,
@@ -645,6 +654,32 @@ def list_router_model_providers(
     for view in views:
         _mask_provider_credentials(view)
     return views
+
+
+@admin_router.patch("/model-routing")
+def update_model_routing(
+    update: ModelRoutingUpdateRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> Settings:
+    """Same write path as PATCH /admin/settings for the routing fields, but
+    scoped to MANAGE_LLMS so delegated model managers can save them."""
+    with settings_write_lock():
+        settings = load_settings(raise_on_error=True)
+        if update.model_routing_enabled is not None:
+            settings.model_routing_enabled = update.model_routing_enabled
+        if "model_routing_model_configuration_id" in update.model_fields_set:
+            routing_id = update.model_routing_model_configuration_id
+            settings.model_routing_model_configuration_id = routing_id
+            if routing_id is not None:
+                routing_model = require_router_model_configuration(
+                    db_session, routing_id
+                )
+                # Hidden routers don't reach the picker's provider payload.
+                if mark_model_configuration_visible(db_session, routing_model):
+                    invalidate_provider_listing_cache()
+        store_settings(settings)
+    return settings
 
 
 @admin_router.put("/provider")

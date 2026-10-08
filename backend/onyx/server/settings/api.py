@@ -19,8 +19,8 @@ from onyx.configs.constants import KV_REINDEX_KEY, NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import (
-    fetch_model_configuration_by_id,
     mark_model_configuration_visible,
+    require_router_model_configuration,
 )
 from onyx.db.models import User
 from onyx.db.notification import (
@@ -146,12 +146,7 @@ def admin_patch_settings(
             "model_routing_model_configuration_id" in settings.model_fields_set
             and routing_id is not None
         ):
-            routing_model = fetch_model_configuration_by_id(db_session, routing_id)
-            if routing_model is None or not routing_model.is_router:
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    "Model routing requires a router model configuration.",
-                )
+            routing_model = require_router_model_configuration(db_session, routing_id)
             # Hidden routers don't reach the picker's provider payload.
             if mark_model_configuration_visible(db_session, routing_model):
                 invalidate_provider_listing_cache()

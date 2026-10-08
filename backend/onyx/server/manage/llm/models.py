@@ -913,3 +913,8 @@ class PortkeyFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+
+
+class ModelRoutingUpdateRequest(BaseModel):
+    model_routing_enabled: bool | None = None
+    model_routing_model_configuration_id: int | None = None
