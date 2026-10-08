@@ -73,10 +73,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr",
+        source:
+          "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)",
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"
-        }/build/sessions/:sessionId/webapp/_next/webpack-hmr`,
+        }/build/sessions/:sessionId/webapp/_next/:hmrEndpoint`,
       },
       {
         source: "/ph_ingest/static/:path*",
