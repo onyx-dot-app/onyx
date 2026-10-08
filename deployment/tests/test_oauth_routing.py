@@ -110,24 +110,17 @@ def test_mcp_oauth_discovery_routes_use_generic_oauth_provider() -> None:
     next_config = _read("web/next.config.js")
     ingress = _read("deployment/helm/charts/onyx/templates/ingress-api.yaml")
 
-    for content in (nginx, helm_nginx, next_config, ingress):
+    for content in (nginx, helm_nginx, ingress):
         assert "/oauth-provider/metadata" in content
         assert "/mcp-oauth/metadata" not in content
 
-    assert (
-        r"^/\.well-known/oauth-authorization-server(/.*)?/api/oauth-provider/?$"
-        in nginx
-    )
-    assert 'source: "/.well-known/oauth-authorization-server/:path*"' in next_config
+    assert r"^/\.well-known/oauth-authorization-server(/.*)?$" in nginx
+    assert 'source: "/.well-known/oauth-authorization-server/:path*"' not in next_config
     assert r"path: /\.well-known/oauth-authorization-server(/|$)(.*)" in ingress
     assert ingress.count("pathType: ImplementationSpecific") == 3
     assert ingress.count('nginx.ingress.kubernetes.io/use-regex: "true"') == 2
     assert "proxy_pass http://mcp_server;" in nginx
-    assert (
-        "destination: `${\n"
-        '          process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090"\n'
-        "        }/.well-known/oauth-protected-resource/:path*`"
-    ) in next_config
+    assert 'source: "/.well-known/oauth-protected-resource/:path*"' not in next_config
 
 
 def test_deployment_restarts_nginx() -> None:
@@ -156,5 +149,6 @@ def test_ingress_discovery_patterns_match_only_literal_well_known_paths() -> Non
         literal = path.removesuffix("(/|$)(.*)").replace(r"\.", ".")
         assert pattern.fullmatch(literal)
         assert pattern.fullmatch(literal + "/api/oauth-provider")
+        assert pattern.fullmatch(literal + "/mcp")
         assert not pattern.match(literal.replace("/.well-known", "/xwell-known"))
         assert not pattern.match(literal + "-unrelated")

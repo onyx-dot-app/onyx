@@ -98,6 +98,8 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/db/users.py`, `db/auth.py`, `db/api_key.py`, `db/pat.py`, `db/saml.py`, `db/sso_provider.py`, `server/api_key/`, `server/pat/`, `server/manage/users.py` | auth-and-identity |
 | `backend/onyx/oauth/`, `backend/onyx/db/oauth_config.py`, `server/features/oauth_config/`, `server/features/user_oauth_token/` | auth-and-identity |
 | `backend/onyx/oauth_provider/`, `backend/onyx/db/oauth_provider.py`, `server/oauth_provider/` | auth-and-identity |
+| `deployment/tests/test_oauth_proxy.py` | mcp-server |
+| `.github/workflows/mcp-compatibility.yml`, `.github/scripts/check-mcp-compatibility.py`, `deployment/tests/test_mcp_compatibility_probe.py` | mcp-server |
 | `backend/onyx/db/tenant_shard.py`, `db/engine/`, `backend/onyx/server/middleware/` | multi-tenancy |
 | `backend/onyx/server/middleware/rate_limiting.py` | rate-and-usage-limits |
 | `backend/onyx/server/middleware/latency_logging.py` | observability |

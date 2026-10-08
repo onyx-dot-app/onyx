@@ -226,6 +226,95 @@ async def _exchange(
     )
 
 
+async def test_legacy_client_omits_resource_through_authorization_and_refresh(
+    protocol_client: httpx.AsyncClient,
+) -> None:
+    client_id = await _register(protocol_client)
+    verifier, challenge = generate_pkce_pair()
+    response = await protocol_client.get(
+        "/oauth-provider/authorize",
+        params={
+            "client_id": client_id,
+            "redirect_uri": _REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "legacy-client-state",
+        },
+    )
+    assert response.status_code == 302, response.text
+    redirect = urlsplit(response.headers["location"])
+    assert redirect.path == "/oauth-provider/authorize", response.headers["location"]
+    handle = parse_qs(redirect.query)["request"][0]
+    details = await protocol_client.get(
+        "/oauth-provider/consent", params={"request": handle}
+    )
+    assert details.status_code == 200, details.text
+    approval = await protocol_client.post(
+        "/oauth-provider/consent",
+        headers={"Origin": _ORIGIN},
+        json={
+            "request_id": handle,
+            "csrf_token": details.json()["csrf_token"],
+            "decision": "allow",
+        },
+    )
+    assert approval.status_code == 200, approval.text
+    callback = parse_qs(urlsplit(approval.json()["redirect_url"]).query)
+    assert callback["state"] == ["legacy-client-state"]
+    tokens = await protocol_client.post(
+        "/oauth-provider/token",
+        data={
+            "client_id": client_id,
+            "grant_type": "authorization_code",
+            "code": callback["code"][0],
+            "code_verifier": verifier,
+            "redirect_uri": _REDIRECT,
+        },
+    )
+    assert tokens.status_code == 200, tokens.text
+    refreshed = await protocol_client.post(
+        "/oauth-provider/token",
+        data={
+            "client_id": client_id,
+            "grant_type": "refresh_token",
+            "refresh_token": tokens.json()["refresh_token"],
+        },
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    introspected = await protocol_client.get(
+        "/oauth-provider/introspect",
+        headers={"Authorization": f"Bearer {refreshed.json()['access_token']}"},
+    )
+    assert introspected.status_code == 200, introspected.text
+    assert introspected.json()["resource"] == _RESOURCE
+
+
+@pytest.mark.parametrize(
+    "resource", ["", "https://foreign.example/mcp/", _RESOURCE + "other"]
+)
+async def test_authorize_rejects_explicit_invalid_resource(
+    protocol_client: httpx.AsyncClient,
+    resource: str,
+) -> None:
+    client_id = await _register(protocol_client)
+    _, challenge = generate_pkce_pair()
+    response = await protocol_client.get(
+        "/oauth-provider/authorize",
+        params={
+            "client_id": client_id,
+            "redirect_uri": _REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "resource": resource,
+        },
+    )
+    assert response.status_code == 302, response.text
+    callback = parse_qs(urlsplit(response.headers["location"]).query)
+    assert callback["error"] == ["invalid_request"]
+
+
 async def test_complete_consent_exchange_refresh_and_revoke(
     protocol_client: httpx.AsyncClient,
 ) -> None:
