@@ -124,6 +124,13 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* IconTooltip */
+export {
+  IconTooltip,
+  type IconTooltipProps,
+  type IconTooltipStatus,
+} from "@opal/components/icon-tooltip/components";
+
 /* OverflowText */
 export {
   OverflowText,

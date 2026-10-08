@@ -8,12 +8,12 @@ import {
   Button,
   Card,
   Divider,
+  IconTooltip,
   Log,
   type LogVariant,
   OverflowText,
   Tag,
   Text,
-  Tooltip,
 } from "@opal/components";
 import {
   SvgAlertCircle,
@@ -22,13 +22,13 @@ import {
   SvgExpand,
   SvgFold,
   SvgHourglass,
-  SvgInfo,
   SvgMinusCircle,
   SvgPlay,
   SvgRefreshCw,
   SvgXCircle,
 } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
@@ -147,9 +147,19 @@ function CheckLog({ check }: CheckLogProps) {
   const { variant, icon, detail, font, color } = CHECK_LOGS[check.state];
   // A failed required check blocks the form or Create, so its line is heavy.
   const blocking = check.state === "failed" && check.required;
-  const showGuidance =
+  // How to fix a failed or unverified check, with a link to the docs.
+  const guidance: RichStr | undefined =
     (check.state === "failed" || check.state === "indeterminate") &&
-    (check.remediation !== null || check.docs_link !== null);
+    (check.remediation !== null || check.docs_link !== null)
+      ? markdown(
+          ...(check.remediation !== null
+            ? [escapeMarkdown(check.remediation)]
+            : []),
+          ...(check.docs_link !== null
+            ? [`[${escapeMarkdown(t("docsLink.label"))}](${check.docs_link})`]
+            : [])
+        )
+      : undefined;
 
   const logVariant: LogVariant = blocking ? "error-heavy" : variant;
 
@@ -170,41 +180,11 @@ function CheckLog({ check }: CheckLogProps) {
       }
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={1}>
-          {showGuidance && (
-            <Tooltip
-              side="top"
-              tooltip={
-                <Section
-                  justifyContent="start"
-                  alignItems="start"
-                  width="fit"
-                  height="fit"
-                  gap={1}
-                >
-                  {check.remediation !== null && (
-                    <Text font="secondary-body" color="inherit">
-                      {check.remediation}
-                    </Text>
-                  )}
-                  {check.docs_link !== null && (
-                    <a
-                      href={check.docs_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      <Text font="secondary-body" color="inherit">
-                        {t("docsLink.label")}
-                      </Text>
-                    </a>
-                  )}
-                </Section>
-              }
-            >
-              <Section width="fit" height="fit">
-                <SvgInfo size={16} className="stroke-status-warning-05" />
-              </Section>
-            </Tooltip>
+          {guidance !== undefined && (
+            <IconTooltip
+              status={check.state === "failed" ? "error" : "warning"}
+              tooltip={guidance}
+            />
           )}
           {check.required && <Tag title={t("required.label")} color="gray" />}
         </Section>

@@ -13411,6 +13411,9 @@
       "sevenDays": "7天",
       "threeMonths": "3个月"
     },
+    "iconTooltip": {
+      "label": "更多信息"
+    },
     "input": {
       "day": "日",
       "hidePassword": "隐藏密码",

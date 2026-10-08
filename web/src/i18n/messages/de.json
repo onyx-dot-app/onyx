@@ -13411,6 +13411,9 @@
       "sevenDays": "7T",
       "threeMonths": "3M"
     },
+    "iconTooltip": {
+      "label": "Weitere Informationen"
+    },
     "input": {
       "day": "Tag",
       "hidePassword": "Passwort verbergen",

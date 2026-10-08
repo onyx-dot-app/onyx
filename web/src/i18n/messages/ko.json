@@ -13411,6 +13411,9 @@
       "sevenDays": "7일",
       "threeMonths": "3개월"
     },
+    "iconTooltip": {
+      "label": "자세한 정보"
+    },
     "input": {
       "day": "일",
       "hidePassword": "비밀번호 숨기기",

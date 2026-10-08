@@ -13411,6 +13411,9 @@
       "sevenDays": "7 أيام",
       "threeMonths": "3 أشهر"
     },
+    "iconTooltip": {
+      "label": "مزيد من المعلومات"
+    },
     "input": {
       "day": "اليوم",
       "hidePassword": "إخفاء كلمة المرور",
