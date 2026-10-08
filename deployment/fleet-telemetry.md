@@ -106,8 +106,9 @@ Stable hash partitions avoid duplicate source collectors. Ten collectors cover 1
 Each collector discovers new tenant schemas every minute when explicit schemas are absent.
 Only one designated collector should report shared queues and AWS infrastructure.
 Omit Redis URLs and AWS resource configuration from other replicas. Automatic queue discovery runs only on shard zero.
-In Helm, set `fleetTelemetry.collector.image` to the standalone image and set
-`schemaShardIndex`/`schemaShardCount` for each collector. Empty `collector.schemas`
+The collector uses the same backend image as the application, avoiding a separate dependency set.
+In Helm, set `schemaShardIndex`/`schemaShardCount` for each collector.
+Use `fleetTelemetry.collector.image` only for a compatible backend-image override. Empty `collector.schemas`
 enables discovery for Cloud instead of restricting collection to `public`.
 
 Collection schedules are source-owned. The collector never fetches fleet-service settings.
