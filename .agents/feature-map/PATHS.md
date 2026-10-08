@@ -166,6 +166,7 @@ so verify the callers rather than a single component.
 | `web/src/app/app/` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
+| `web/tools/prepare-pdfjs.mts` | craft-sessions |
 | `web/src/app/admin/connector*/`, `admin/indexing-status/`, `admin/index-settings/`, `admin/document-processing/` | connectors, cc-pairs-and-credentials, indexing-pipeline |
 | `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/` | access-control, auth-and-identity |
 | `web/src/app/admin/agents/` | agents-personas |

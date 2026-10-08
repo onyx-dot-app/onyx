@@ -12645,6 +12645,14 @@
       "page": {
         "counter": "{total} ページ中 {current} ページ"
       },
+      "password": {
+        "title": "パスワードが必要です",
+        "description": "このPDFを開くにはパスワードを入力してください。",
+        "incorrect": "パスワードが正しくありません。もう一度お試しください。",
+        "label": "PDFのパスワード",
+        "cancel": "キャンセル",
+        "submit": "PDFを開く"
+      },
       "error": {
         "description": "PDF ファイルを読み込めませんでした。",
         "title": "PDF をプレビューできません"

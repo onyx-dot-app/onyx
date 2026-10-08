@@ -7,12 +7,13 @@
     "lib/shared"
   ],
   "scripts": {
-    "dev": "next dev",
-    "dev:profile": "NEXT_PUBLIC_ENABLE_STATS=true next dev",
-    "dev:clean": "bun run clean && next dev",
+    "prepare:pdfjs": "node tools/prepare-pdfjs.mts",
+    "dev": "bun run prepare:pdfjs && next dev",
+    "dev:profile": "bun run prepare:pdfjs && NEXT_PUBLIC_ENABLE_STATS=true next dev",
+    "dev:clean": "bun run clean && bun run dev",
     "clean": "rm -rf .next node_modules/.cache *.tsbuildinfo",
-    "build": "next build",
-    "build:fast": "SKIP_TYPE_CHECK=1 next build",
+    "build": "bun run prepare:pdfjs && next build",
+    "build:fast": "SKIP_TYPE_CHECK=1 bun run build",
     "start": "next start",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",

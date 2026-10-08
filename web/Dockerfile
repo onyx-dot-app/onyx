@@ -99,7 +99,7 @@ RUN --mount=type=secret,id=sentry_auth_token \
     if [ -f /run/secrets/sentry_auth_token ]; then \
         export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
     fi && \
-    NODE_OPTIONS="${NODE_OPTIONS}" npx next build
+    NODE_OPTIONS="${NODE_OPTIONS}" bun run build
 
 # Runtime stage. Runs as the non-root `node` user (uid 1000), which both the default slim
 # image and the DHI runtime variant ship. The DHI variant is near-distroless: no shell or

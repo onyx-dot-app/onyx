@@ -12645,6 +12645,14 @@
       "page": {
         "counter": "第 {current} 页，共 {total} 页"
       },
+      "password": {
+        "title": "需要密码",
+        "description": "请输入密码以打开此 PDF。",
+        "incorrect": "密码错误，请重试。",
+        "label": "PDF 密码",
+        "cancel": "取消",
+        "submit": "打开 PDF"
+      },
       "error": {
         "description": "无法加载该 PDF 文件。",
         "title": "无法预览 PDF"

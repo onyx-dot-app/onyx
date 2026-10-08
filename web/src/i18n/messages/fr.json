@@ -12645,6 +12645,14 @@
       "page": {
         "counter": "Page {current} sur {total}"
       },
+      "password": {
+        "title": "Mot de passe requis",
+        "description": "Saisissez le mot de passe pour ouvrir ce PDF.",
+        "incorrect": "Mot de passe incorrect. Réessayez.",
+        "label": "Mot de passe du PDF",
+        "cancel": "Annuler",
+        "submit": "Ouvrir le PDF"
+      },
       "error": {
         "description": "Le fichier PDF n'a pas pu être chargé.",
         "title": "Impossible de prévisualiser le PDF"

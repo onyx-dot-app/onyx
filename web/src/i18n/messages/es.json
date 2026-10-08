@@ -12645,6 +12645,14 @@
       "page": {
         "counter": "Página {current} de {total}"
       },
+      "password": {
+        "title": "Se necesita una contraseña",
+        "description": "Introduce la contraseña para abrir este PDF.",
+        "incorrect": "Contraseña incorrecta. Inténtalo de nuevo.",
+        "label": "Contraseña del PDF",
+        "cancel": "Cancelar",
+        "submit": "Abrir PDF"
+      },
       "error": {
         "description": "No se pudo cargar el archivo PDF.",
         "title": "No se puede previsualizar el PDF"

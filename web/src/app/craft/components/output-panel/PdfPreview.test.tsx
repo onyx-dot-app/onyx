@@ -8,7 +8,17 @@ import {
 import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
 
 const mockDestroy = jest.fn().mockResolvedValue(undefined);
-const mockGetDocument = jest.fn();
+interface MockPdfDocument {
+  numPages: number;
+}
+
+interface MockPdfLoadingTask {
+  promise: Promise<MockPdfDocument>;
+  destroy: () => Promise<void>;
+  onPassword?: (submit: (password: string) => void, reason: number) => void;
+}
+
+const mockGetDocument = jest.fn<MockPdfLoadingTask, [unknown]>();
 const mockSetDocument = jest.fn();
 const mockIncreaseScale = jest.fn();
 const mockDecreaseScale = jest.fn();
@@ -25,7 +35,8 @@ jest.mock("pdfjs-dist", () => ({
   version: "6.4.299",
   GlobalWorkerOptions: {},
   AnnotationMode: { ENABLE: 1 },
-  getDocument: (...args: unknown[]) => mockGetDocument(...args),
+  PasswordResponses: { NEED_PASSWORD: 1, INCORRECT_PASSWORD: 2 },
+  getDocument: (options: unknown) => mockGetDocument(options),
 }));
 jest.mock("pdfjs-dist/web/pdf_viewer.mjs", () => ({
   EventBus: jest.fn().mockImplementation(() => ({
@@ -142,6 +153,95 @@ it("destroys a pending document when the viewer unmounts", async () => {
     <PdfPreview sessionId="pending" filePath="report.pdf" />
   );
   await waitFor(() => expect(mockGetDocument).toHaveBeenCalledTimes(1));
+  unmount();
+  expect(mockDestroy).toHaveBeenCalledTimes(1);
+});
+
+it("releases the worker and observers immediately after a page render fails", async () => {
+  const disconnect = jest.spyOn(ResizeObserver.prototype, "disconnect");
+  const { unmount } = render(
+    <PdfPreview sessionId="render-failure" filePath="report.pdf" />
+  );
+  await screen.findByText("Page 1 of 2");
+  act(() =>
+    mockEvents.get("pagerendered")?.({ error: new Error("Render failed") })
+  );
+  expect(screen.getByText("Cannot preview PDF")).toBeInTheDocument();
+  expect(mockDestroy).toHaveBeenCalledTimes(1);
+  expect(disconnect).toHaveBeenCalledTimes(1);
+  expect(mockSetDocument).toHaveBeenCalledWith(null);
+  unmount();
+  expect(mockDestroy).toHaveBeenCalledTimes(1);
+});
+
+it("opens a protected PDF after an incorrect password and a successful retry", async () => {
+  const user = setupUser();
+  let resolveDocument: ((document: MockPdfDocument) => void) | undefined;
+  const task: MockPdfLoadingTask = {
+    promise: new Promise<MockPdfDocument>((resolve) => {
+      resolveDocument = resolve;
+    }),
+    destroy: mockDestroy,
+  };
+  const submit = jest.fn((password: string) => {
+    if (password === "correct") resolveDocument?.({ numPages: 2 });
+    else task.onPassword?.(submit, 2);
+  });
+  mockGetDocument.mockReturnValue(task);
+  render(<PdfPreview sessionId="protected" filePath="report.pdf" />);
+  await waitFor(() => expect(task.onPassword).toBeDefined());
+  act(() => task.onPassword?.(submit, 1));
+  expect(screen.getByText("Password required")).toBeInTheDocument();
+  await user.type(screen.getByLabelText("PDF password"), "wrong");
+  await user.click(screen.getByRole("button", { name: "Open PDF" }));
+  expect(submit).toHaveBeenCalledWith("wrong");
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Incorrect password. Try again."
+  );
+  expect(screen.getByLabelText("PDF password")).toHaveValue("");
+  await user.type(screen.getByLabelText("PDF password"), "correct");
+  await user.click(screen.getByRole("button", { name: "Open PDF" }));
+  await screen.findByText("Page 1 of 2");
+  expect(submit).toHaveBeenCalledWith("correct");
+  expect(screen.queryByLabelText("PDF password")).not.toBeInTheDocument();
+  expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+});
+
+it("releases a protected PDF when the password prompt is cancelled", async () => {
+  const user = setupUser();
+  const task: MockPdfLoadingTask = {
+    promise: new Promise<MockPdfDocument>(() => {}),
+    destroy: mockDestroy,
+  };
+  const submit = jest.fn();
+  mockGetDocument.mockReturnValue(task);
+  const { unmount } = render(
+    <PdfPreview sessionId="cancel-password" filePath="report.pdf" />
+  );
+  await waitFor(() => expect(task.onPassword).toBeDefined());
+  act(() => task.onPassword?.(submit, 1));
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByText("Cannot preview PDF")).toBeInTheDocument();
+  expect(mockDestroy).toHaveBeenCalledTimes(1);
+  expect(submit).not.toHaveBeenCalled();
+  act(() => task.onPassword?.(submit, 2));
+  expect(screen.queryByLabelText("PDF password")).not.toBeInTheDocument();
+  unmount();
+  expect(mockDestroy).toHaveBeenCalledTimes(1);
+});
+
+it("destroys a document when closing an open password prompt", async () => {
+  const task: MockPdfLoadingTask = {
+    promise: new Promise<MockPdfDocument>(() => {}),
+    destroy: mockDestroy,
+  };
+  mockGetDocument.mockReturnValue(task);
+  const { unmount } = render(
+    <PdfPreview sessionId="close-password" filePath="report.pdf" />
+  );
+  await waitFor(() => expect(task.onPassword).toBeDefined());
+  act(() => task.onPassword?.(jest.fn(), 1));
+  expect(screen.getByLabelText("PDF password")).toBeInTheDocument();
   unmount();
   expect(mockDestroy).toHaveBeenCalledTimes(1);
 });

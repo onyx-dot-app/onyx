@@ -1,12 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { PDFViewer } from "pdfjs-dist/web/pdf_viewer.mjs";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
+import type {
+  EventBus,
+  PDFLinkService,
+  PDFViewer,
+} from "pdfjs-dist/web/pdf_viewer.mjs";
 import "pdfjs-dist/web/pdf_viewer.css";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useTranslations } from "next-intl";
-import { Button, Text } from "@opal/components";
+import { Button, InputPasswordTypeIn, Text } from "@opal/components";
 import {
   SvgFileText,
   SvgChevronLeft,
@@ -35,7 +40,7 @@ export default function PdfPreview({
     data: blob,
     error,
     isLoading,
-  } = useSWR(
+  } = useSWR<Blob, Error>(
     [
       SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
       "pdf",
@@ -43,9 +48,12 @@ export default function PdfPreview({
       refreshKey ?? 0,
     ],
     async () => {
-      const response = await fetch(buildArtifactUrl(sessionId, filePath), {
-        cache: "no-store",
-      });
+      const response: Response = await fetch(
+        buildArtifactUrl(sessionId, filePath),
+        {
+          cache: "no-store",
+        }
+      );
       if (!response.ok)
         throw new Error(`Failed to fetch PDF: ${response.status}`);
       return response.blob();
@@ -69,42 +77,73 @@ export default function PdfPreview({
   );
 }
 
-function PdfDocument({ blob, filePath }: { blob: Blob; filePath: string }) {
+interface PdfDocumentProps {
+  blob: Blob;
+  filePath: string;
+}
+
+interface PdfPasswordRequest {
+  submit: (password: string) => void;
+  cancel: () => void;
+  incorrect: boolean;
+}
+
+function PdfDocument({ blob, filePath }: PdfDocumentProps) {
   const t = useTranslations("craft.pdfPreview");
   const containerRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PDFViewer | null>(null);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState(false);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [ready, setReady] = useState<boolean>(false);
+  const [error, setError] = useState<boolean>(false);
+  const [page, setPage] = useState<number>(1);
+  const [total, setTotal] = useState<number>(0);
+
+  const [passwordRequest, setPasswordRequest] =
+    useState<PdfPasswordRequest | null>(null);
 
   useEffect(() => {
-    const container = containerRef.current;
-    const pages = pagesRef.current;
+    const container: HTMLDivElement | null = containerRef.current;
+    const pages: HTMLDivElement | null = pagesRef.current;
     if (!container || !pages) return;
-    const controller = new AbortController();
+    const controller: AbortController = new AbortController();
     let dispose: (() => void) | undefined;
     setReady(false);
     setError(false);
+    setPasswordRequest(null);
 
-    async function load() {
-      if (!container || !pages) return;
-      const pdfjs = await import("pdfjs-dist");
-      const { PDFViewer, EventBus, PDFLinkService, LinkTarget } =
-        await import("pdfjs-dist/web/pdf_viewer.mjs");
-      const bytes = await blob.arrayBuffer();
+    function disposeDocument(): void {
+      controller.abort();
+      const cleanup: (() => void) | undefined = dispose;
+      dispose = undefined;
+      cleanup?.();
+    }
+
+    function fail(): void {
       if (controller.signal.aborted) return;
-      const assets = `/pdfjs/${pdfjs.version}`;
+      disposeDocument();
+      setPasswordRequest(null);
+      setError(true);
+    }
+
+    async function load(): Promise<void> {
+      if (!container || !pages) return;
+      const pdfjs: typeof import("pdfjs-dist") = await import("pdfjs-dist");
+      const viewerModule: typeof import("pdfjs-dist/web/pdf_viewer.mjs") =
+        await import("pdfjs-dist/web/pdf_viewer.mjs");
+      const bytes: ArrayBuffer = await blob.arrayBuffer();
+      if (controller.signal.aborted) return;
+      const assets: string = `/pdfjs/${pdfjs.version}`;
       pdfjs.GlobalWorkerOptions.workerSrc = `${assets}/pdf.worker.min.mjs`;
-      const eventBus = new EventBus();
-      const linkService = new PDFLinkService({
+      const eventBus: EventBus = new viewerModule.EventBus();
+      const linkService: PDFLinkService = new viewerModule.PDFLinkService({
         eventBus,
-        externalLinkTarget: LinkTarget.BLANK,
+        externalLinkTarget: viewerModule.LinkTarget.BLANK,
         externalLinkRel: "noopener noreferrer",
       });
       // PDF.js accepts abortSignal, but its published options type omits it.
-      const viewerOptions = {
+      const viewerOptions: ConstructorParameters<typeof PDFViewer>[0] & {
+        abortSignal: AbortSignal;
+      } = {
         container,
         viewer: pages,
         eventBus,
@@ -113,7 +152,7 @@ function PdfDocument({ blob, filePath }: { blob: Blob; filePath: string }) {
         annotationMode: pdfjs.AnnotationMode.ENABLE,
         imageResourcesPath: `${assets}/web/images/`,
       };
-      const viewer = new PDFViewer(viewerOptions);
+      const viewer: PDFViewer = new viewerModule.PDFViewer(viewerOptions);
       viewerRef.current = viewer;
       linkService.setViewer(viewer);
       eventBus.on("pagesinit", () => {
@@ -127,10 +166,10 @@ function PdfDocument({ blob, filePath }: { blob: Blob; filePath: string }) {
       eventBus.on(
         "pagerendered",
         ({ error: renderError }: { error?: Error }) => {
-          if (renderError) setError(true);
+          if (renderError) fail();
         }
       );
-      const task = pdfjs.getDocument({
+      const task: PDFDocumentLoadingTask = pdfjs.getDocument({
         // PDF.js transfers this buffer to its worker. SWR retains the original Blob.
         data: bytes,
         cMapUrl: `${assets}/cmaps/`,
@@ -139,9 +178,20 @@ function PdfDocument({ blob, filePath }: { blob: Blob; filePath: string }) {
         wasmUrl: `${assets}/wasm/`,
         iccUrl: `${assets}/iccs/`,
       });
-      let previousWidth = container.clientWidth;
-      const resizeObserver = new ResizeObserver(() => {
-        const width = container.clientWidth;
+      task.onPassword = (
+        submit: (password: string) => void,
+        reason: number
+      ): void => {
+        if (controller.signal.aborted) return;
+        setPasswordRequest({
+          submit,
+          cancel: fail,
+          incorrect: reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD,
+        });
+      };
+      let previousWidth: number = container.clientWidth;
+      const resizeObserver: ResizeObserver = new ResizeObserver(() => {
+        const width: number = container.clientWidth;
         if (
           width !== previousWidth &&
           viewer.currentScaleValue === "page-width"
@@ -158,24 +208,14 @@ function PdfDocument({ blob, filePath }: { blob: Blob; filePath: string }) {
         viewerRef.current = null;
         void task.destroy();
       };
-      const document = await task.promise;
+      const document: PDFDocumentProxy = await task.promise;
       if (controller.signal.aborted) return;
       setTotal(document.numPages);
       linkService.setDocument(document);
       viewer.setDocument(document);
     }
-    void load().catch(() => {
-      if (!controller.signal.aborted) {
-        controller.abort();
-        dispose?.();
-        dispose = undefined;
-        setError(true);
-      }
-    });
-    return () => {
-      controller.abort();
-      dispose?.();
-    };
+    void load().catch(fail);
+    return disposeDocument;
   }, [blob]);
 
   if (error) return <PdfError />;
@@ -245,9 +285,86 @@ function PdfDocument({ blob, filePath }: { blob: Blob; filePath: string }) {
         >
           <div ref={pagesRef} className="pdfViewer" />
         </div>
-        {!ready && <PdfLoading />}
+        {passwordRequest ? (
+          <div className="absolute inset-0 z-10 background-neutral-01">
+            <PdfPasswordPrompt
+              incorrect={passwordRequest.incorrect}
+              onSubmit={(password: string) => {
+                setPasswordRequest(null);
+                passwordRequest.submit(password);
+              }}
+              onCancel={passwordRequest.cancel}
+            />
+          </div>
+        ) : (
+          !ready && <PdfLoading />
+        )}
       </div>
     </div>
+  );
+}
+
+interface PdfPasswordPromptProps {
+  incorrect: boolean;
+  onSubmit: (password: string) => void;
+  onCancel: () => void;
+}
+
+function PdfPasswordPrompt({
+  incorrect,
+  onSubmit,
+  onCancel,
+}: PdfPasswordPromptProps) {
+  const t = useTranslations("craft.pdfPreview");
+  const [password, setPassword] = useState<string>("");
+
+  return (
+    <Section
+      height="full"
+      alignItems="center"
+      justifyContent="center"
+      padding={8}
+    >
+      <form
+        className="flex flex-col gap-3 w-full max-w-sm"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (password) {
+            onSubmit(password);
+            setPassword("");
+          }
+        }}
+      >
+        <Text font="heading-h3" color="text-03">
+          {t("password.title")}
+        </Text>
+        <Text font="secondary-body" color="text-02">
+          {t("password.description")}
+        </Text>
+        {incorrect && (
+          <div role="alert">
+            <Text font="secondary-body" color="text-02">
+              {t("password.incorrect")}
+            </Text>
+          </div>
+        )}
+        <InputPasswordTypeIn
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          aria-label={t("password.label")}
+          error={incorrect}
+          mask="native"
+        />
+        <div className="flex justify-end gap-2">
+          <Button prominence="secondary" onClick={onCancel}>
+            {t("password.cancel")}
+          </Button>
+          <Button type="submit" disabled={!password}>
+            {t("password.submit")}
+          </Button>
+        </div>
+      </form>
+    </Section>
   );
 }
 

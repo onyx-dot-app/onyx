@@ -12645,6 +12645,14 @@
       "page": {
         "counter": "Page {current} of {total}"
       },
+      "password": {
+        "title": "Password required",
+        "description": "Enter the password to open this PDF.",
+        "incorrect": "Incorrect password. Try again.",
+        "label": "PDF password",
+        "cancel": "Cancel",
+        "submit": "Open PDF"
+      },
       "error": {
         "description": "The PDF file could not be loaded.",
         "title": "Cannot preview PDF"

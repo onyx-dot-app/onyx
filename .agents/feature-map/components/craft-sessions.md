@@ -65,8 +65,10 @@ the agent produces appear as artifacts the user can browse, download, or
 (PDFs, spreadsheets) are available inside every session's sandbox.
 
 PDF previews use PDF.js with selectable text, links, page navigation, zoom, and
-fit-to-width. The frontend serves matching workers, fonts, and decoders locally.
-Cached PDF bytes survive tab switches; each viewer releases its worker on unmount.
+fit-to-width. Password-protected PDFs prompt for a password and allow retries or cancellation.
+The frontend serves matching workers, fonts, and decoders locally.
+`web/tools/prepare-pdfjs.mts` prepares these assets before development and production builds.
+Cached PDF bytes survive tab switches; each viewer releases its worker on unmount or render failure.
 Revisions and explicit refreshes fetch new bytes.
 
 ---

@@ -12645,6 +12645,14 @@
       "page": {
         "counter": "{total}페이지 중 {current}페이지"
       },
+      "password": {
+        "title": "비밀번호 필요",
+        "description": "이 PDF를 열려면 비밀번호를 입력하세요.",
+        "incorrect": "비밀번호가 올바르지 않습니다. 다시 시도하세요.",
+        "label": "PDF 비밀번호",
+        "cancel": "취소",
+        "submit": "PDF 열기"
+      },
       "error": {
         "description": "PDF 파일을 불러올 수 없습니다.",
         "title": "PDF를 미리 볼 수 없습니다"

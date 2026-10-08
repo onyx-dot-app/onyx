@@ -12645,6 +12645,14 @@
       "page": {
         "counter": "الصفحة {current} من {total}"
       },
+      "password": {
+        "title": "كلمة المرور مطلوبة",
+        "description": "أدخل كلمة المرور لفتح ملف PDF هذا.",
+        "incorrect": "كلمة المرور غير صحيحة. حاول مرة أخرى.",
+        "label": "كلمة مرور PDF",
+        "cancel": "إلغاء",
+        "submit": "فتح PDF"
+      },
       "error": {
         "description": "تعذّر تحميل ملف PDF.",
         "title": "تعذّرت معاينة ملف PDF"

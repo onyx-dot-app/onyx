@@ -12645,6 +12645,14 @@
       "page": {
         "counter": "Página {current} de {total}"
       },
+      "password": {
+        "title": "Senha necessária",
+        "description": "Digite a senha para abrir este PDF.",
+        "incorrect": "Senha incorreta. Tente novamente.",
+        "label": "Senha do PDF",
+        "cancel": "Cancelar",
+        "submit": "Abrir PDF"
+      },
       "error": {
         "description": "Não foi possível carregar o arquivo PDF.",
         "title": "Não é possível visualizar o PDF"

@@ -2,30 +2,6 @@
 const { withSentryConfig } = require("@sentry/nextjs");
 const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 const createNextIntlPlugin = require("next-intl/plugin");
-const { cpSync, mkdirSync } = require("node:fs");
-const path = require("node:path");
-const pdfjsPackage = require("pdfjs-dist/package.json");
-
-// Ship worker, fonts, and decoders from the same version as the client library.
-const pdfjsRoot = path.dirname(require.resolve("pdfjs-dist/package.json"));
-const pdfjsPublic = path.join(__dirname, "public/pdfjs", pdfjsPackage.version);
-mkdirSync(pdfjsPublic, { recursive: true });
-for (const directory of [
-  "cmaps",
-  "standard_fonts",
-  "wasm",
-  "iccs",
-  "web/images",
-]) {
-  cpSync(path.join(pdfjsRoot, directory), path.join(pdfjsPublic, directory), {
-    recursive: true,
-  });
-}
-cpSync(
-  path.join(pdfjsRoot, "build/pdf.worker.min.mjs"),
-  path.join(pdfjsPublic, "pdf.worker.min.mjs")
-);
-
 // Points next-intl at the request-scoped locale/message resolution.
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
