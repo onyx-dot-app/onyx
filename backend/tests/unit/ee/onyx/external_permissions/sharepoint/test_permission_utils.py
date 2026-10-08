@@ -1,8 +1,13 @@
+import json
 from typing import Any
 from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
+import requests
+from office365.runtime.auth.token_response import TokenResponse
 from office365.runtime.client_request import ClientRequestException
+from office365.sharepoint.client_context import ClientContext
 
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import EntraGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
@@ -11,6 +16,7 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     DocumentGroupsResult,
     GroupsResult,
     _get_azuread_groups,
+    _get_folder_unique_id,
     _get_sharepoint_list_item_id,
     _has_only_limited_access,
     _is_public_item,
@@ -304,9 +310,11 @@ def test_default_skips_ad_enumeration(
         (HierarchyNodeType.FOLDER, None, "/sites/eng/Shared Documents/API"),
     ],
 )
+@patch(f"{MODULE}._get_folder_unique_id", return_value="folder-guid")
 @patch(f"{MODULE}._get_external_access_from_securable_object")
 def test_hierarchy_node_access_uses_securable_object(
     mock_get_access: MagicMock,
+    mock_get_folder_id: MagicMock,
     node_type: HierarchyNodeType,
     drive_name: str | None,
     folder_server_relative_path: str | None,
@@ -331,10 +339,38 @@ def test_hierarchy_node_access_uses_securable_object(
     elif node_type == HierarchyNodeType.DRIVE:
         ctx.web.lists.get_by_title.assert_called_once_with("Documents")
     else:
-        ctx.web.get_folder_by_server_relative_path.assert_called_once_with(
-            "/sites/eng/Shared Documents/API"
+        mock_get_folder_id.assert_called_once_with(
+            ctx, "/sites/eng/Shared Documents/API"
         )
+        ctx.web.get_folder_by_id.assert_called_once_with("folder-guid")
+        ctx.web.get_folder_by_server_relative_path.assert_not_called()
     assert mock_get_access.call_args.kwargs == {"add_prefix": True}
+
+
+def test_folder_id_lookup_sends_path_as_query_alias() -> None:
+    """A long path inline in the URL path makes SharePoint answer 401."""
+    folder_path = "/sites/eng/Shared Documents/" + "/".join(["R&D #1's"] * 40)
+    ctx = ClientContext("https://contoso.sharepoint.com/sites/eng").with_access_token(
+        lambda: TokenResponse(access_token="token", token_type="Bearer")
+    )
+    response = requests.Response()
+    response.status_code = 200
+    response.headers["Content-Type"] = "application/json"
+    response._content = json.dumps({"UniqueId": "folder-guid"}).encode()
+
+    with patch(
+        "office365.runtime.client_request.requests.get", return_value=response
+    ) as mock_get:
+        folder_id = _get_folder_unique_id(ctx, folder_path)
+
+    assert folder_id == "folder-guid"
+    url = urlparse(mock_get.call_args.kwargs["url"])
+    assert url.path == (
+        "/sites/eng/_api/Web/getFolderByServerRelativePath(DecodedUrl=@a)"
+    )
+    query = parse_qs(url.query)
+    assert query["@a"] == ["'" + folder_path.replace("'", "''") + "'"]
+    assert query["$select"] == ["UniqueId"]
 
 
 @patch(f"{MODULE}._get_groups_and_members_recursively")
