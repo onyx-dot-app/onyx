@@ -377,13 +377,10 @@ def stream_response_to_buffer_with_cap(
     description: str,
     max_retries: int = STREAM_DOWNLOAD_MAX_RETRIES,
 ) -> bytes:
-    """Stream a GET response into memory with a byte cap, retrying on transient
-    transport-level failures.
-
-    Graph occasionally drops the TCP connection mid-body (surfaces as
-    `ChunkedEncodingError: IncompleteRead`). Each retry calls
-    ``request_factory`` again to obtain a fresh ``Response`` -- this also
-    avoids reusing a stale socket from urllib3's connection pool.
+    """Stream a GET into memory under a byte cap, retrying transport drops
+    (Graph closes a connection mid-body now and then) and Graph's retryable
+    statuses with Retry-After. Each attempt calls ``request_factory`` for a
+    fresh ``Response``, so a stale pooled socket is never reused.
 
     Args:
         request_factory: Zero-arg callable that issues a streaming GET and
@@ -394,59 +391,32 @@ def stream_response_to_buffer_with_cap(
 
     Raises:
         SizeCapExceeded: when ``cap`` is exceeded (never retried).
-        requests.RequestException: when retries are exhausted. HTTPError from
-            ``raise_for_status`` is not retried here.
+        requests.RequestException: once retries are exhausted, including the
+            HTTPError of a final throttled or 5xx answer.
     """
     for attempt in range(max_retries + 1):
         try:
             with request_factory() as resp:
-                # A throttled or gateway-failed download is retried like any
-                # other Graph call, honoring Retry-After, instead of failing
-                # the attempt.
                 if (
-                    resp.status_code in GRAPH_API_RETRYABLE_STATUSES
-                    and attempt < max_retries
+                    resp.status_code not in GRAPH_API_RETRYABLE_STATUSES
+                    or attempt >= max_retries
                 ):
-                    sleep_time = backoff_seconds(
-                        attempt, resp.headers.get("Retry-After")
-                    )
-                    logger.warning(
-                        "Download for %s answered %s on attempt %s/%s. "
-                        "Sleeping %.1fs before retry.",
-                        description,
-                        resp.status_code,
-                        attempt + 1,
-                        max_retries + 1,
-                        sleep_time,
-                    )
-                    time.sleep(sleep_time)
-                    continue
-                log_and_raise_for_status(resp)
-
-                cl_header = resp.headers.get("Content-Length")
-                if cl_header and cl_header.isdigit() and int(cl_header) > cap:
-                    logger.warning(
-                        "Content-Length %s exceeds cap %s for %s; skipping download.",
-                        cl_header,
-                        cap,
-                        description,
-                    )
-                    raise SizeCapExceeded("pre_download")
-
-                buf = io.BytesIO()
-                for chunk in resp.iter_content(STREAM_CHUNK_SIZE):
-                    if not chunk:
-                        continue
-                    buf.write(chunk)
-                    if buf.tell() > cap:
-                        logger.warning(
-                            "Streaming download for %s exceeded cap %s bytes; "
-                            "aborting early.",
-                            description,
-                            cap,
-                        )
-                        raise SizeCapExceeded("during_download")
-                return buf.getvalue()
+                    log_and_raise_for_status(resp)
+                    return _read_under_cap(resp, cap, description)
+                sleep_time: float = backoff_seconds(
+                    attempt, resp.headers.get("Retry-After")
+                )
+                logger.warning(
+                    "Download for %s answered %s on attempt %s/%s. "
+                    "Sleeping %.1fs before retry.",
+                    description,
+                    resp.status_code,
+                    attempt + 1,
+                    max_retries + 1,
+                    sleep_time,
+                )
+            # The response is closed by now, so the wait holds no socket.
+            time.sleep(sleep_time)
         except TRANSIENT_TRANSPORT_EXCEPTIONS as e:
             if attempt >= max_retries:
                 logger.warning(
@@ -477,13 +447,40 @@ def stream_response_to_buffer_with_cap(
     )
 
 
+def _read_under_cap(resp: requests.Response, cap: int, description: str) -> bytes:
+    cl_header = resp.headers.get("Content-Length")
+    if cl_header and cl_header.isdigit() and int(cl_header) > cap:
+        logger.warning(
+            "Content-Length %s exceeds cap %s for %s; skipping download.",
+            cl_header,
+            cap,
+            description,
+        )
+        raise SizeCapExceeded("pre_download")
+
+    buf = io.BytesIO()
+    for chunk in resp.iter_content(STREAM_CHUNK_SIZE):
+        if not chunk:
+            continue
+        buf.write(chunk)
+        if buf.tell() > cap:
+            logger.warning(
+                "Streaming download for %s exceeded cap %s bytes; aborting early.",
+                description,
+                cap,
+            )
+            raise SizeCapExceeded("during_download")
+    return buf.getvalue()
+
+
 def download_with_cap(url: str, timeout: int, cap: int) -> bytes:
     """Stream download content with an upper bound on bytes read.
 
     Behavior:
     - Checks `Content-Length` first and aborts early if it exceeds `cap`.
     - Otherwise streams the body in chunks and stops once `cap` is surpassed.
-    - Retries on transient transport errors (e.g. mid-stream connection drops).
+    - Retries transport errors (e.g. mid-stream connection drops) and Graph's
+      retryable statuses with Retry-After.
     - Raises `SizeCapExceeded` when the cap would be exceeded.
     - Returns the full bytes if the content fits within `cap`.
     """
@@ -501,8 +498,8 @@ def download_graph_url_with_cap(
 ) -> bytes:
     """Stream the bytes a Graph URL serves, with a byte cap.
 
-    Retries on transient transport errors. Raises SizeCapExceeded if the cap is
-    exceeded.
+    Retries transport errors and Graph's retryable statuses with Retry-After.
+    Raises SizeCapExceeded if the cap is exceeded.
     """
     headers = {"Authorization": f"Bearer {access_token}"}
 

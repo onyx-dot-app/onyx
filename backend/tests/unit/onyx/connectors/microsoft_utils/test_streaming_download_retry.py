@@ -177,7 +177,7 @@ def test_size_cap_exceeded_is_not_retried_during_download(
 def test_http_error_from_raise_for_status_is_not_retried(
     mock_get: MagicMock, mock_time: MagicMock
 ) -> None:
-    """HTTPError (4xx/5xx) is intentionally outside the transport-retry scope."""
+    """A 4xx is final: only Graph's retryable statuses are retried."""
     mock_get.return_value = _make_response(status=404)
 
     with pytest.raises(requests.HTTPError):
@@ -336,3 +336,41 @@ def test_download_with_cap_does_not_log_tempauth_token(
     blob = " ".join(str(a) for a in all_log_args)
     assert _FAKE_TEMPAUTH not in blob
     assert "tempauth" not in blob
+
+
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_throttled_download_waits_retry_after_and_succeeds(
+    mock_get: MagicMock, mock_time: MagicMock
+) -> None:
+    """A throttled or gateway-failed download retries with Retry-After, so one
+    429 on a file or an image does not fail the indexing attempt."""
+    throttled: MagicMock = _make_response(status=429, headers={"Retry-After": "7"})
+    mock_get.side_effect = [throttled, _make_response(chunks=[b"file bytes"])]
+
+    def sleep_after_the_socket_closed(_seconds: float) -> None:
+        assert throttled.__exit__.called
+
+    mock_time.sleep.side_effect = sleep_after_the_socket_closed
+
+    assert download_with_cap("https://example/download", timeout=60, cap=CAP) == (
+        b"file bytes"
+    )
+    assert mock_time.sleep.call_count == 1
+    assert mock_time.sleep.call_args.args == (7,)
+
+
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_download_throttled_past_the_retries_raises(
+    mock_get: MagicMock, mock_time: MagicMock
+) -> None:
+    mock_get.side_effect = [
+        _make_response(status=429, headers={"Retry-After": "1"}) for _ in range(4)
+    ]
+
+    with pytest.raises(requests.HTTPError):
+        download_with_cap("https://example/download", timeout=60, cap=CAP)
+
+    assert mock_get.call_count == 4
+    assert mock_time.sleep.call_count == 3

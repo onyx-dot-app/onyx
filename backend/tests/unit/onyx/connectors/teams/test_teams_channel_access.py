@@ -1,6 +1,9 @@
 """Channel readership: a thread names the group of its channel's members, and
 the group sync names the people in it."""
 
+import threading
+import time
+from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -244,6 +247,44 @@ def test_the_directory_lookup_runs_with_the_lock_released() -> None:
     with patch.object(directory, "_lookup", side_effect=observed):
         assert _emails(client, directory) == ["ada@example.com"]
     assert locked_during_lookup == [False]
+
+
+def test_a_name_graph_gave_once_survives_a_lookup_that_omits_it() -> None:
+    """Two workers may look up the same new id at once. The answer that names
+    the user wins, so an omission on the other does not take access away."""
+    directory = UserDirectory(graph_client({}))
+    both_asking = threading.Barrier(2, timeout=5)
+    answers: Iterator[dict[str, str | None]] = iter(
+        [{"u1": "ada@example.com"}, {"u1": None}]
+    )
+    answers_lock = threading.Lock()
+    named = threading.Event()
+
+    def lookup(_batch: list[str]) -> dict[str, str | None]:
+        both_asking.wait()
+        with answers_lock:
+            answer = next(answers)
+        if answer["u1"] is None:
+            # Written after the name, so the omission would overwrite it.
+            assert named.wait(timeout=5)
+        return answer
+
+    workers = [
+        threading.Thread(target=lambda: directory.principal_names(["u1"]))
+        for _ in range(2)
+    ]
+    with patch.object(directory, "_lookup", side_effect=lookup):
+        for worker in workers:
+            worker.start()
+        deadline = time.monotonic() + 5
+        while directory._principal_names.get("u1") is None:
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        named.set()
+        for worker in workers:
+            worker.join(timeout=5)
+
+    assert directory.principal_names(["u1"]) == {"u1": "ada@example.com"}
 
 
 def test_a_channel_whose_members_all_carry_an_email_asks_for_no_names() -> None:
