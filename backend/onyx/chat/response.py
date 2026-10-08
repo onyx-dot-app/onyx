@@ -1,66 +1,22 @@
-"""Project message content and detach SDK state for response persistence."""
+"""Convert between live SDK snapshots and detached chat response records."""
 
 from collections.abc import Sequence
 
-from pydantic import JsonValue, TypeAdapter, ValidationError
-
-from onyx.agents.models import AgentInfo, RunState, StepRecord, ToolExecutionRecord
-from onyx.chat.response_models import ResponseRecord
-from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.models import ResearchConfiguration
-from onyx.llm.models import (
-    AssistantMessage,
-    Message,
-    ThinkingContent,
-    ToolCall,
-    ToolResultMessage,
+from onyx.agents.models import (
+    AgentInfo,
+    RunState,
+    StepRecord,
+    ToolExecutionRecord,
 )
-from onyx.utils.logger import setup_logger
-from onyx.utils.streaming_json import parse_partial_object
-
-_STRING = TypeAdapter(str)
-logger = setup_logger()
-
-
-def tool_arguments_for_display(call: ToolCall) -> dict[str, JsonValue]:
-    """Decode interrupted arguments for display without making the call executable."""
-    if call.arguments_complete or call.argument_error or not call.raw_arguments:
-        return call.arguments
-    try:
-        return parse_partial_object(call.raw_arguments)
-    except ValueError:
-        logger.debug("Interrupted tool arguments cannot be displayed", exc_info=True)
-        return call.arguments
-
-
-def thinking_tool_text(call: ToolCall) -> str:
-    try:
-        return _STRING.validate_python(
-            tool_arguments_for_display(call).get("reasoning", "")
-        )
-    except ValidationError:
-        logger.debug("Thinking tool arguments are not text", exc_info=True)
-        return ""
-
-
-def message_thinking(message: AssistantMessage, think_tool: str | None = None) -> str:
-    """Collect model and configured-tool thinking in accepted content order."""
-    return "".join(
-        block.text if isinstance(block, ThinkingContent) else thinking_tool_text(block)
-        for block in message.content
-        if isinstance(block, ThinkingContent)
-        or (isinstance(block, ToolCall) and block.name == think_tool)
-    )
+from onyx.chat.models import ResponseRecord
+from onyx.deep_research.models import ResearchConfiguration
+from onyx.llm.models import Message, ToolResultMessage
 
 
 def response_record(
     snapshot: RunState, registrations: Sequence[AgentInfo] = ()
 ) -> ResponseRecord:
-    """Detach accepted content before optional artifact and display processing.
-
-    This aggregate retains concrete result objects in memory. Storage owns their
-    typed encoding; the aggregate is not a standalone JSON persistence schema.
-    """
+    """Detach accepted content before optional artifact and display processing."""
     metadata = {info.id: info for info in registrations}
 
     def capture(node: RunState, *, is_root: bool = False) -> ResponseRecord:
@@ -122,24 +78,12 @@ def response_snapshot(record: ResponseRecord) -> RunState:
 
 
 def _saved_message[T: Message](message: T) -> T:
-    if isinstance(message, ToolResultMessage) and isinstance(
-        message.details, SearchDocsResponse
-    ):
-        details = message.details
-        # Documents use their existing relation; staged files stay in execution state.
-        saved_details = SearchDocsResponse(
-            queries=details.queries,
-            sources=details.sources,
-            time_filter_start=details.time_filter_start,
-            time_filter_end=details.time_filter_end,
-            search_docs=[],
-            citation_mapping=details.citation_mapping,
-            displayed_docs=[] if details.displayed_docs == [] else None,
-        )
-        return message.model_copy(
-            update={"metadata": None, "details": saved_details}
-        ).model_copy(deep=True)
-    return message.model_copy(update={"metadata": None}).model_copy(deep=True)
+    # Drop application payloads before copying potentially large tool results.
+    return message.model_copy(
+        update={"metadata": None, "details": None}
+        if isinstance(message, ToolResultMessage)
+        else {"metadata": None}
+    ).model_copy(deep=True)
 
 
 def _saved_step(step: StepRecord) -> StepRecord:

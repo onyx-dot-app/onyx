@@ -1,13 +1,12 @@
 """The normalized model adapter works without Onyx chat types."""
 
-import threading
 from collections.abc import Generator, Iterator
-from typing import override
 
 import pytest
 
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import PreparedStep, RunStatus
+from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import PreparedStep
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -27,42 +26,15 @@ from onyx.llm.models import (
     GenerationEvent,
     GenerationOptions,
     GenerationRequest,
+    GenerationToolCallEvent,
     TextDeltaEvent,
-    ToolCallDeltaEvent,
-    ToolCallStartEvent,
     ToolChoiceOptions,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
 )
-from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, ScriptedLLM
-
-
-def test_agent_rejects_context_without_operation_tag() -> None:
-    llm = FakeModelClient(lambda *_: AssistantMessage())
-    with pytest.raises(ValueError, match="LLMFlow"):
-        Agent(llm, generation_context=GenerationContext())
-
-
-def test_agent_passes_operation_tag_to_model() -> None:
-    flows: list[LLMFlow | None] = []
-
-    class TaggedModel(FakeModelClient):
-        def stream(
-            self, request: GenerationRequest, context: GenerationContext | None = None
-        ) -> Generator[GenerationEvent, None, None]:
-            assert context is not None
-            flows.append(context.flow)
-            yield from super().stream(request, context)
-
-    run = Agent(
-        TaggedModel(lambda *_: AssistantMessage()),
-        generation_context=GenerationContext(flow=LLMFlow.MODEL_VALIDATION),
-    ).start(max_steps=1, background=False)
-    assert run.result().stop_reason == RunStatus.COMPLETE
-    assert flows == [LLMFlow.MODEL_VALIDATION]
 
 
 def tool() -> AgentTool:
@@ -95,7 +67,6 @@ def test_model_and_agent_share_transcript_and_stream_events() -> None:
     )
     agent = Agent(
         llm,
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool()],
     )
     events: list[AgentEvent] = []
@@ -126,23 +97,20 @@ def test_partial_message_closes_before_run_completion(cancelled: bool) -> None:
             self, request: GenerationRequest, context: GenerationContext | None = None
         ) -> Generator[GenerationEvent, None, None]:
             assert not request.messages
-            assert context is not None and context.cancellation is not None
-            assert context.cancellation is not signal
+            assert context is not None and context.cancellation is signal
             yield TextDeltaEvent(content_index=0, text="Partial output")
             if cancelled:
                 signal.cancel()
-                context.cancellation.check()
+                signal.check()
             raise ValueError("Provider disconnected")
 
     events: list[AgentEvent] = []
-    run = Agent(
-        InterruptedModel(lambda _request, _signal: AssistantMessage()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    ).start(max_steps=1, cancellation=signal, on_event=events.append)
+    run = Agent(InterruptedModel(lambda _request, _signal: AssistantMessage())).start(
+        max_steps=1, cancellation=signal, on_event=events.append
+    )
     with pytest.raises(AgentCancelled if cancelled else RunFailed):
         run.result()
     assert run.wait_for_idle(2)
-    assert signal.cancelled == cancelled
     ends = [event for event in events if event.type == "message_end"]
     assert len(ends) == 1
     terminal = ends[0]
@@ -156,120 +124,6 @@ def test_partial_message_closes_before_run_completion(cancelled: bool) -> None:
     )
 
 
-def test_model_event_rechecks_cancellation_before_recording(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    pause_next_check = threading.Event()
-    check_passed = threading.Event()
-    continue_check = threading.Event()
-
-    class PausingSignal(CancellationSignal):
-        @override
-        def check(self) -> None:
-            super().check()
-            if pause_next_check.is_set():
-                pause_next_check.clear()
-                check_passed.set()
-                assert continue_check.wait(5)
-
-    class StreamingModel(FakeModelClient):
-        @override
-        def stream(
-            self, request: GenerationRequest, context: GenerationContext | None = None
-        ) -> Generator[GenerationEvent, None, None]:
-            yield TextDeltaEvent(content_index=0, text="Accepted")
-            pause_next_check.set()
-            yield TextDeltaEvent(content_index=0, text=" late output")
-
-    events: list[AgentEvent] = []
-    signal = CancellationSignal()
-    monkeypatch.setattr("onyx.agents.runtime.CancellationSignal", PausingSignal)
-    run = Agent(
-        StreamingModel(lambda *_: AssistantMessage()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    ).start(max_steps=1, cancellation=signal, on_event=events.append)
-    try:
-        assert check_passed.wait(2)
-        with run.execution_lock:
-            signal.cancel()
-            continue_check.set()
-        with pytest.raises(AgentCancelled):
-            run.result(2)
-        assert run.wait_for_idle(2)
-        assert run.snapshot().messages[0].text == "Accepted"
-        text_updates = [
-            event.generation_event.text
-            for event in events
-            if event.type == "message_update"
-            and isinstance(event.generation_event, TextDeltaEvent)
-        ]
-        assert text_updates == ["Accepted"]
-    finally:
-        continue_check.set()
-        run.cancel()
-        assert run.wait_for_idle(2)
-
-
-def test_cancelled_argument_stream_retains_partial_snapshot_without_executing() -> None:
-    reached_partial = threading.Event()
-    resume = threading.Event()
-    continued = threading.Event()
-    stop_read = threading.Event()
-    executed: list[str] = []
-
-    class InterruptedModel(FakeModelClient):
-        @override
-        def stream(
-            self, request: GenerationRequest, context: GenerationContext | None = None
-        ) -> Generator[GenerationEvent, None, None]:
-            assert context is not None and context.cancellation is not None
-            yield ToolCallStartEvent(
-                content_index=0, tool_call_id="call", tool_name="echo"
-            )
-            yield ToolCallDeltaEvent(content_index=0, arguments_delta='{"value":"par')
-            reached_partial.set()
-            assert resume.wait(5)
-            yield ToolCallDeltaEvent(content_index=0, arguments_delta='tial"}')
-            continued.set()
-            assert stop_read.wait(5)
-            context.cancellation.check()
-
-    echo = AgentTool(
-        definition=ToolDefinition(name="echo", description="Echo", parameters={}),
-        execute=lambda invocation: (
-            executed.append(invocation.call_id) or ToolResult(content="executed")
-        ),
-    )
-    run = Agent(
-        InterruptedModel(lambda _request, _signal: AssistantMessage()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[echo],
-    ).start(max_steps=2)
-    try:
-        assert reached_partial.wait(5)
-        saved = run.snapshot()
-        assert saved.steps[0].message.tool_calls[0].raw_arguments == '{"value":"par'
-        resume.set()
-        assert continued.wait(5)
-        run.cancel()
-        stop_read.set()
-        with pytest.raises(AgentCancelled):
-            run.result()
-        assert run.wait_for_idle(5)
-        interrupted = run.snapshot().steps[0].message.tool_calls[0]
-        assert interrupted.id == "call"
-        assert interrupted.raw_arguments == '{"value":"partial"}'
-        assert interrupted.arguments == {}
-        assert not interrupted.arguments_complete
-        assert saved.steps[0].message.tool_calls[0].raw_arguments == '{"value":"par'
-        assert not executed
-    finally:
-        resume.set()
-        stop_read.set()
-        run.cancel()
-        assert run.wait_for_idle(5)
-
-
 def test_tool_recovery_happens_before_events() -> None:
     llm = ScriptedLLM(
         [
@@ -279,7 +133,6 @@ def test_tool_recovery_happens_before_events() -> None:
     )
     agent = Agent(
         llm,
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool()],
         options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
     )
@@ -297,10 +150,10 @@ def test_tool_recovery_happens_before_events() -> None:
         event.generation_event
         for event in events
         if event.type == "message_update"
-        and isinstance(event.generation_event, ToolCallStartEvent)
+        and isinstance(event.generation_event, GenerationToolCallEvent)
     )
-    assert isinstance(tool_event, ToolCallStartEvent)
-    assert tool_event.tool_call_id == response.tool_call_id
+    assert isinstance(tool_event, GenerationToolCallEvent)
+    assert tool_event.tool_call.id == response.tool_call_id
 
 
 def test_native_calls_keep_precedence_and_missing_id_is_stable() -> None:
@@ -330,9 +183,13 @@ def test_native_calls_keep_precedence_and_missing_id_is_stable() -> None:
             chunks(), PreparedStep(tools=[tool()]).generation_request([])
         )
     )
-    starts = [event for event in events if isinstance(event, ToolCallStartEvent)]
-    assert len(starts) == 1 and starts[0].tool_call_id
-    assert accumulator.message.tool_calls[0].id == starts[0].tool_call_id
+    calls = [
+        event.tool_call
+        for event in events
+        if isinstance(event, GenerationToolCallEvent)
+    ]
+    assert calls and calls[0].id
+    assert {call.id for call in calls} == {calls[0].id}
     accumulator.finalize()
     assert accumulator.message.tool_calls[0].arguments == {"value": 3}
 
@@ -343,9 +200,7 @@ def test_model_honors_cancelled_signal() -> None:
     llm = ScriptedLLM([])
 
     with pytest.raises(AgentCancelled):
-        Agent(
-            llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
-        ).start(background=False, max_steps=1, cancellation=signal).result()
+        Agent(llm).start(background=False, max_steps=1, cancellation=signal).result()
     assert not llm.requests
 
 

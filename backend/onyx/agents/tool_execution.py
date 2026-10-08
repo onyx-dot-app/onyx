@@ -6,14 +6,21 @@ from typing import TYPE_CHECKING
 
 from pydantic import JsonValue
 
-from onyx.agents.events import ToolUpdateEvent
+from onyx.agents.compaction import working_messages
+from onyx.agents.events import (
+    InputRequiredEvent,
+    ToolEndEvent,
+    ToolStartEvent,
+    ToolUpdateEvent,
+)
+from onyx.agents.execution_records import ExecutionStatus
 from onyx.agents.models import (
     AgentStep,
-    PreparedStep,
-    RunProgress,
+    ExecutionRequest,
     RunState,
-    StepRecord,
     ToolCallContext,
+    ToolExecutionRecord,
+    messages_from_steps,
 )
 from onyx.agents.tools import (
     ChildRunWait,
@@ -25,8 +32,8 @@ from onyx.agents.tools import (
     ToolOutcome,
     ToolProgress,
 )
+from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import (
-    Message,
     ToolCall,
     ToolChoiceOptions,
     ToolResult,
@@ -43,29 +50,31 @@ MAX_TOOL_CALLS_PER_STEP = 64
 
 
 class ToolBatch:
-    """Schedule tools using borrowed step data; Run owns all recorded changes."""
+    """Execute one step's tools and commit their results to the run."""
 
-    def __init__(
-        self,
-        run: "Run",
-        *,
-        prepared: PreparedStep,
-        progress: RunProgress,
-        record: StepRecord,
-        history: list[Message],
-    ) -> None:
+    def __init__(self, run: "Run") -> None:
+        prepared = run._prepared_step
+        if prepared is None:
+            raise RuntimeError("Tool execution requires a prepared step")
+        progress = run._progress
         if progress.options is None:
             raise ValueError("Saved step is missing generation options")
         self.run = run
-        self.progress = progress
-        self.record = record
         self.step = AgentStep(index=progress.step_index, limit=progress.step_limit)
-        self.message = record.message
+        self.record = run._state.steps[progress.step_index]
+        self.message = self.record.message
         if self.message.id is None:
             raise ValueError("Tool execution requires a message ID")
         self.message_id = self.message.id
         self.options = progress.options
-        self.context_messages = history
+        self.context_messages = working_messages(
+            [
+                *run._history.messages,
+                *run._state.input_messages,
+                *messages_from_steps(run._state.steps[: progress.step_index]),
+            ],
+            run._state.checkpoint,
+        )
         self.calls = self.message.tool_calls
         if len(self.calls) > MAX_TOOL_CALLS_PER_STEP or len(
             {call.id for call in self.calls}
@@ -92,8 +101,12 @@ class ToolBatch:
             messages=[item.model_copy(deep=True) for item in self.context_messages],
         )
 
+    def _wake(self, _future: Future[ToolOutcome] | None = None) -> None:
+        with self.run._execution_condition:
+            self.run._execution_condition.notify_all()
+
     def _raw_results(self) -> dict[str, ToolResultMessage]:
-        with self.run.execution_lock:
+        with self.run._lock:
             return {
                 call_id: execution.result
                 for call_id, execution in self.record.tools.items()
@@ -119,13 +132,16 @@ class ToolBatch:
             if len(calls) > 1 and not isinstance(outcome, ToolResult):
                 raise ValueError("Batched tools must return a completed result")
             if isinstance(outcome, ToolResult):
-                self.run.record_tool_results(outcome, calls)
+                # Checkpoint capture must not split a completed batch.
+                with self.run._lock:
+                    for member in calls:
+                        self._record_tool_result(outcome, member)
             return outcome
 
-        future = self.run.work.start(operation)
+        future = self.run._work.start(operation)
         for member in calls:
             self.futures[member.id] = future
-        future.add_done_callback(lambda _future: self.run.notify_tool_activity())
+        future.add_done_callback(self._wake)
 
     def _collect_results(self) -> None:
         for call_id, future in tuple(self.futures.items()):
@@ -136,12 +152,12 @@ class ToolBatch:
             index = self.call_indices[call_id]
             call = self.calls[index]
             if not isinstance(result, ToolResult):
-                self.run.record_pending_tool(call, result)
+                self._record_pending_tool(call, result)
 
     def _finalize_ready(self) -> None:
         results = self._raw_results()
-        while self.progress.finalized_tools < len(self.calls):
-            call = self.calls[self.progress.finalized_tools]
+        while self.run._progress.finalized_tools < len(self.calls):
+            call = self.calls[self.run._progress.finalized_tools]
             result_message = results.get(call.id)
             if result_message is None:
                 break
@@ -153,33 +169,36 @@ class ToolBatch:
                 is_error=result_message.is_error,
                 terminate=result_message.terminate,
             )
-            self.run.finish_tool(
-                result,
-                call,
-                self._context(call) if self.run.after_tool_call is not None else None,
-            )
+            self._finish_tool(result, call)
 
     def execute(self) -> bool:
         try:
-            with self.run.cancellation_signal.on_cancel(self.run.notify_tool_activity):
+            with self.run._cancellation_signal.on_cancel(self._wake):
                 while True:
-                    self.run.cancellation_signal.check()
-                    self.run.begin_work_cycle()
+                    self.run._cancellation_signal.check()
+                    self.run._begin_work_cycle()
                     self._collect_results()
                     self._finalize_ready()
                     results = self._raw_results()
-                    if self.progress.finalized_tools == len(self.calls):
+                    if self.run._progress.finalized_tools == len(self.calls):
                         return True
                     for index, call in enumerate(self.calls):
                         if call.id in results or call.id in self.futures:
                             continue
-                        if self.sequential and index != self.progress.finalized_tools:
+                        if (
+                            self.sequential
+                            and index != self.run._progress.finalized_tools
+                        ):
                             break
-                        with self.run.execution_lock:
-                            pending = self.progress.pending_tool_calls.get(call.id)
-                            suspend = self.run.suspension_requested
+                        with self.run._lock:
+                            pending = self.run._progress.pending_tool_calls.get(call.id)
+                            suspend = (
+                                self.run._execution_request == ExecutionRequest.SUSPEND
+                            )
                             answer = (
-                                self.progress.human_tool_answers.get(pending.request_id)
+                                self.run._progress.human_tool_answers.get(
+                                    pending.request_id
+                                )
                                 if isinstance(pending, PendingToolInput)
                                 else None
                             )
@@ -188,27 +207,27 @@ class ToolBatch:
                         if isinstance(pending, PendingToolInput):
                             if answer is None:
                                 continue
-                            self.run.resolve_tool_wait(call)
+                            self._resolve_tool_wait(call)
                             if answer.decision == InputDecision.APPROVE:
                                 self._start([call], approved=True)
                             else:
                                 output = answer.result or ToolResult(
                                     content="Tool execution was denied.", is_error=True
                                 )
-                                self.run.record_tool_results(output, [call])
+                                self._record_tool_result(output, call)
                             continue
                         if isinstance(pending, ChildRunWait):
-                            if self.run.coordination is None:
+                            if self.run._coordination is None:
                                 raise ValueError(
                                     "Child dependency requires an execution coordinator"
                                 )
-                            children = self.run.coordination.completed_child_states(
+                            children = self.run._coordination.child_states(
                                 pending.run_ids
                             )
-                            if children is None:
-                                self.run.watch_children(pending.run_ids)
+                            if any(not child.status.is_terminal for child in children):
+                                self.run._watch_children(pending.run_ids)
                                 continue
-                            self.run.resolve_tool_wait(call)
+                            self._resolve_tool_wait(call)
                             self._start([call], children=children)
                             continue
                         self._start_compatible_calls(call, index, results)
@@ -216,12 +235,12 @@ class ToolBatch:
                         if len(self._raw_results()) > len(results):
                             continue
                         return False
-                    self.run.wait_for_tool_activity(
+                    self.run._wait_for_tool_activity(
                         lambda: any(future.done() for future in self.futures.values())
                     )
         except BaseException:
-            self.run.cancellation_signal.cancel()
-            self.run.notify_tool_activity()
+            self.run._cancellation_signal.cancel()
+            self._wake()
             raise
 
     def _start_compatible_calls(
@@ -231,7 +250,7 @@ class ToolBatch:
         if (
             tool is None
             or tool.merge_arguments is None
-            or self.run.before_tool_call is not None
+            or self.run._before_tool_call is not None
             or not call.arguments_complete
             or call.argument_error
             or self.message.stop_reason == "length"
@@ -245,7 +264,7 @@ class ToolBatch:
                 candidate.name == call.name
                 and candidate.id not in results
                 and candidate.id not in self.futures
-                and candidate.id not in self.progress.pending_tool_calls
+                and candidate.id not in self.run._progress.pending_tool_calls
                 and candidate.arguments_complete
                 and not candidate.argument_error
             )
@@ -276,11 +295,26 @@ class ToolBatch:
         merged_arguments: dict[str, JsonValue] | None = None,
     ) -> ToolOutcome:
         call = calls[0]
-        cancellation_signal = self.run.cancellation_signal
+        cancellation_signal = self.run._cancellation_signal
         step = self.step
         options = self.options
         tool = self.tools.get(call.name)
-        self.run.start_tool_calls(calls)
+        with self.run._lock:
+            cancellation_signal.check()
+            for member in calls:
+                if member.id not in self.record.tools:
+                    self.record.tools[member.id] = ToolExecutionRecord(
+                        status=ExecutionStatus.RUNNING,
+                    )
+                    if self.run._delivery:
+                        self.run._delivery.publish(
+                            ToolStartEvent(
+                                **self.run._ancestry,
+                                message_id=self.message_id,
+                                step_index=step.index,
+                                tool_call=member,
+                            )
+                        )
         cancellation_signal.check()
         if tool is None or options.tool_choice == ToolChoiceOptions.NONE:
             return ToolResult(
@@ -297,7 +331,7 @@ class ToolBatch:
                 is_error=True,
             )
         context: ToolCallContext | None = None
-        before_tool_call = self.run.before_tool_call
+        before_tool_call = self.run._before_tool_call
         if before_tool_call and not approved and children is None:
             context = self._context(call)
             result = before_tool_call(context)
@@ -308,21 +342,22 @@ class ToolBatch:
         active.set()
 
         def update(progress: ToolProgress) -> None:
-            with self.run.execution_lock:
-                if not active.is_set() or not self.run.is_accepting:
+            with self.run._lock:
+                if not active.is_set() or not self.run._accepting:
                     logger.debug("Ignoring late tool progress: %s", call.id)
                     return
                 cancellation_signal.check()
-                for member in calls:
-                    self.run.publish_event(
-                        ToolUpdateEvent(
-                            **self.run.event_context,
-                            message_id=self.message_id,
-                            step_index=step.index,
-                            tool_call=member,
-                            progress=progress,
+                if self.run._delivery:
+                    for member in calls:
+                        self.run._delivery.publish(
+                            ToolUpdateEvent(
+                                **self.run._ancestry,
+                                message_id=self.message_id,
+                                step_index=step.index,
+                                tool_call=member,
+                                progress=progress,
+                            )
                         )
-                    )
 
         invocation = ToolInvocation(
             call_id=call.id,
@@ -336,8 +371,8 @@ class ToolBatch:
                 message.model_copy(deep=True)
                 for message in (context.messages if context else self.context_messages)
             ],
-            agents=self.run.coordination.for_tool(call.id, self.message_id, active)
-            if self.run.coordination
+            agents=self.run._coordination.for_tool(call.id, self.message_id, active)
+            if self.run._coordination
             else None,
         )
         try:
@@ -353,8 +388,8 @@ class ToolBatch:
                     result = ToolResult(
                         content=f"Tool failed with error: {error}", is_error=True
                     )
-                if self.run.coordination is not None:
-                    self.run.coordination.observe_children(
+                if self.run._coordination is not None:
+                    self.run._coordination.observe_children(
                         [child.run_id for child in children]
                     )
                 return result
@@ -372,5 +407,120 @@ class ToolBatch:
                 raise ValueError("Execution approval belongs in before_tool_call")
             return outcome
         finally:
-            with self.run.execution_lock:
+            with self.run._lock:
                 active.clear()
+
+    def _record_tool_result(
+        self,
+        result: ToolResult,
+        call: ToolCall,
+    ) -> None:
+        event = ToolUpdateEvent(
+            **self.run._ancestry,
+            message_id=self.message_id,
+            step_index=self.step.index,
+            tool_call=call,
+            progress=ToolProgress(content=result.text, details=result.details),
+        )
+        with self.run._lock:
+            if not self.run._accepting:
+                logger.warning("Tool completed after its run closed: %s", call.id)
+                raise AgentCancelled()
+            execution = self.record.tools[call.id]
+            execution.result = _tool_result_message(result, call, self.message_id)
+            execution.status = (
+                ExecutionStatus.ERROR if result.is_error else ExecutionStatus.COMPLETE
+            )
+            if self.run._delivery:
+                self.run._delivery.publish(event)
+
+    def _resolve_tool_wait(self, call: ToolCall) -> None:
+        with self.run._lock:
+            del self.run._progress.pending_tool_calls[call.id]
+            self.run._state.revision += 1
+
+    def _record_pending_tool(
+        self, call: ToolCall, pending: PendingToolInput | ChildRunWait
+    ) -> None:
+        event = (
+            InputRequiredEvent(
+                **self.run._ancestry, tool_call_id=call.id, request=pending
+            )
+            if isinstance(pending, PendingToolInput)
+            else None
+        )
+        with self.run._lock:
+            if isinstance(pending, PendingToolInput) and (
+                pending.request_id in self.run._progress.human_tool_answers
+                or any(
+                    isinstance(existing, PendingToolInput)
+                    and existing.request_id == pending.request_id
+                    for existing in self.run._progress.pending_tool_calls.values()
+                )
+            ):
+                raise ValueError("Input request IDs must be unique within a run")
+            self.run._progress.pending_tool_calls[call.id] = pending.model_copy(
+                deep=True
+            )
+            self.run._state.revision += 1
+            if event is not None and self.run._accepting and self.run._delivery:
+                self.run._delivery.publish(event)
+
+    def _finish_tool(self, result: ToolResult, call: ToolCall) -> None:
+        try:
+            after = self.run._after_tool_call
+            if after:
+                context = self._context(call)
+                self.run._cancellation_signal.check()
+                result = after(context, result.model_copy(deep=True))
+                self.run._cancellation_signal.check()
+        finally:
+            self._finalize_tool_result(result, call)
+        with self.run._lock:
+            self.run._progress.finalized_tools += 1
+            self.run._state.revision += 1
+
+    def _finalize_tool_result(
+        self,
+        result: ToolResult,
+        call: ToolCall,
+    ) -> None:
+        event = ToolEndEvent(
+            **self.run._ancestry,
+            message_id=self.message_id,
+            step_index=self.step.index,
+            tool_call=call,
+            result=result,
+        )
+        with self.run._lock:
+            if not self.run._accepting or self.run._cancellation_signal.cancelled:
+                logger.debug("Ignoring late tool finalization: %s", call.id)
+                return
+            execution = self.record.tools[call.id]
+            if execution.result is None:
+                raise RuntimeError("Completed tool result is missing from history")
+            if self.run._after_tool_call is not None:
+                execution.result = _tool_result_message(result, call, self.message_id)
+                execution.status = (
+                    ExecutionStatus.ERROR
+                    if result.is_error
+                    else ExecutionStatus.COMPLETE
+                )
+            if self.run._delivery:
+                self.run._delivery.publish(event)
+
+
+def _tool_result_message(
+    result: ToolResult, call: ToolCall, message_id: str
+) -> ToolResultMessage:
+    return ToolResultMessage(
+        id=f"{message_id}:result:{call.id}",
+        content=result.content,
+        metadata=result.metadata,
+        cacheable=result.cacheable,
+        details=result.details,
+        is_error=result.is_error,
+        terminate=result.terminate,
+        tool_call_id=call.id,
+        tool_name=call.name,
+    ).model_copy(deep=True)

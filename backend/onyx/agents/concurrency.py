@@ -1,16 +1,15 @@
-"""Thread ownership and event delivery for an execution tree."""
+"""Thread ownership and finite event delivery for an execution tree."""
 
 import threading
 import time
-from collections import Counter, deque
+from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future
 from contextvars import copy_context
 
-from onyx.agents.events import (
-    AgentEvent,
-    is_shareable_delta,
-)
+from pydantic_core import to_json
+
+from onyx.agents.events import AgentEvent
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import (
@@ -20,6 +19,9 @@ from onyx.utils.threadpool_concurrency import (
 
 logger = setup_logger()
 OPERATION_TIMEOUT_SECONDS = 1800.0
+CLEANUP_SECONDS = 2.0
+EVENT_QUEUE_CAPACITY = 1024
+AGENT_EVENT_BUFFER_MAX_BYTES = 4 * 1024 * 1024
 EVENT_FLUSH_INTERVAL_SECONDS = 0.05
 
 
@@ -33,9 +35,9 @@ class WorkTracker:
         with self._lock:
             self._count += 1
 
-    def finished(self, count: int = 1) -> None:
+    def finished(self) -> None:
         with self._lock:
-            self._count -= count
+            self._count -= 1
             listeners = tuple(self._listeners) if self._count == 0 else ()
             if listeners:
                 self._listeners.clear()
@@ -119,7 +121,6 @@ class EventDispatcher:
 
     The optional flush callback batches listener output on that same worker. It
     receives True after close drains all accepted events, for final output cleanup.
-    Events remain pending until their listener output has been flushed.
     """
 
     def __init__(
@@ -130,8 +131,8 @@ class EventDispatcher:
         self._flush = flush
         self._context = copy_context()
         self._condition = threading.Condition()
-        self._queue: deque[tuple[tuple[EventDelivery, ...], AgentEvent]] = deque()
-        self._pending_event_count = 0
+        self._queue: deque[tuple[tuple[EventDelivery, ...], AgentEvent, int]] = deque()
+        self._bytes = 0
         self._closed = False
         self._release_when_idle = False
         self._worker: threading.Thread | None = None
@@ -144,8 +145,6 @@ class EventDispatcher:
                 current: EventDelivery | None = delivery
                 while current is not None:
                     with current._lock:
-                        if current is delivery and current._closing:
-                            return
                         if not current._closing and not current.failed.is_set():
                             current.tracker.started()
                             channels.append(current)
@@ -153,14 +152,20 @@ class EventDispatcher:
                         current = current._parent
                 if not has_listeners:
                     return
+                size = len(
+                    to_json(event.model_dump(mode="python"), bytes_mode="base64")
+                )
                 if self._closed:
                     raise RuntimeError("Agent event dispatcher is closed")
-                owned_event = (
-                    event if is_shareable_delta(event) else event.model_copy(deep=True)
-                )
+                if (
+                    len(self._queue) >= EVENT_QUEUE_CAPACITY
+                    or self._bytes + size > AGENT_EVENT_BUFFER_MAX_BYTES
+                ):
+                    raise RuntimeError("Agent observer backlog exceeded its bound")
+                owned_event = event.model_copy(deep=True)
                 self.start()
-                self._pending_event_count += 1
-                self._queue.append((tuple(channels), owned_event))
+                self._bytes += size
+                self._queue.append((tuple(channels), owned_event, size))
                 self._condition.notify()
                 channels = []
         except Exception:
@@ -180,8 +185,6 @@ class EventDispatcher:
 
     def _deliver(self) -> None:
         last_flush = time.monotonic()
-        delivered_event_count = 0
-        channel_event_counts: Counter[EventDelivery] = Counter()
         while True:
             with self._condition:
                 self._condition.wait_for(
@@ -196,7 +199,7 @@ class EventDispatcher:
                 )
                 final_flush = exiting and self._closed
             if item is not None:
-                channels, event = item
+                channels, event, size = item
                 try:
                     for index, channel in enumerate(channels):
                         channel._context.run(
@@ -205,29 +208,18 @@ class EventDispatcher:
                             owns_event=index == len(channels) - 1,
                         )
                 finally:
-                    delivered_event_count += 1
-                    channel_event_counts.update(channels)
-            flush_due = self._flush is not None and (
+                    with self._condition:
+                        self._bytes -= size
+                    for channel in channels:
+                        channel._context.run(channel.tracker.finished)
+            if self._flush is not None and (
                 exiting or time.monotonic() - last_flush >= EVENT_FLUSH_INTERVAL_SECONDS
-            )
-            if flush_due and self._flush is not None:
+            ):
                 try:
                     self._context.run(self._flush, final_flush)
-                except (AgentCancelled, Exception) as error:
-                    for channel in channel_event_counts:
-                        channel.failed.set()
-                    if isinstance(error, AgentCancelled):
-                        logger.debug("Agent event sink flush cancelled")
-                    else:
-                        logger.exception("Agent event sink flush failed")
+                except Exception:
+                    logger.exception("Agent event sink flush failed")
                 last_flush = time.monotonic()
-            if self._flush is None or flush_due:
-                with self._condition:
-                    self._pending_event_count -= delivered_event_count
-                delivered_event_count = 0
-                for channel, count in channel_event_counts.items():
-                    channel._context.run(channel.tracker.finished, count)
-                channel_event_counts.clear()
             if exiting:
                 with self._condition:
                     if self._queue or (
@@ -236,12 +228,6 @@ class EventDispatcher:
                         continue
                     self._worker = None
                     return
-
-    @property
-    def has_pending_events(self) -> bool:
-        """Whether accepted events await delivery or a buffered-output flush."""
-        with self._condition:
-            return self._pending_event_count > 0
 
     @property
     def is_dispatch_thread(self) -> bool:
@@ -261,14 +247,17 @@ class EventDispatcher:
             self._release_when_idle = False
 
     def close(self) -> None:
-        """Reject new events and let the worker exit after accepted work drains."""
+        """Reject new events and drain accepted events within the cleanup bound."""
         with self._condition:
-            try:
-                if self._flush is not None:
-                    self.start()
-            finally:
-                self._closed = True
-                self._condition.notify_all()
+            if self._flush is not None:
+                self.start()
+            self._closed = True
+            self._condition.notify_all()
+            worker = self._worker
+        if worker is not None and worker.ident != threading.get_ident():
+            worker.join(timeout=CLEANUP_SECONDS)
+            if worker.is_alive():
+                logger.warning("Agent event dispatcher exceeded its cleanup bound")
 
 
 class EventDelivery:
@@ -314,7 +303,6 @@ class EventDelivery:
         return self.dispatcher.is_dispatch_thread
 
     def _send(self, event: AgentEvent, *, owns_event: bool) -> None:
-        shareable = is_shareable_delta(event)
         with self._lock:
             listeners = tuple(self._listeners)
         for index, listener in enumerate(listeners):
@@ -322,10 +310,10 @@ class EventDelivery:
                 if listener not in self._listeners:
                     continue
             try:
-                # Mutable snapshots belong exclusively to the final listener.
+                # Only the final channel's last listener can consume the queued event.
                 listener(
                     event
-                    if shareable or owns_event and index == len(listeners) - 1
+                    if owns_event and index == len(listeners) - 1
                     else event.model_copy(deep=True)
                 )
             except AgentCancelled:
@@ -345,13 +333,12 @@ class EventDelivery:
             self.dispatcher.pause()
 
     def close(self) -> None:
-        """Stop accepting events and release listeners after accepted work drains."""
         with self._lock:
             self._closing = True
-        self.tracker.on_idle(self._clear_listeners)
-        if self._owns_dispatcher:
-            self.dispatcher.close()
-
-    def _clear_listeners(self) -> None:
+        if not self.tracker.wait_idle(CLEANUP_SECONDS):
+            self.failed.set()
+            logger.warning("Agent event delivery exceeded its cleanup bound")
         with self._lock:
             self._listeners.clear()
+        if self._owns_dispatcher:
+            self.dispatcher.close()

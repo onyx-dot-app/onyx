@@ -6,44 +6,26 @@ from contextvars import ContextVar
 from unittest.mock import patch
 
 import pytest
-from pydantic import BaseModel
 
 from onyx.agents import concurrency, runtime
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.concurrency import ExecutionWork
-from onyx.agents.events import (
-    AgentEvent,
-    AgentStartEvent,
-    MessageUpdateEvent,
-    ToolUpdateEvent,
-)
-from onyx.agents.models import RunStatus, ToolCallContext
+from onyx.agents.events import AgentEvent, AgentStartEvent, ToolUpdateEvent
+from onyx.agents.models import ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
+from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
+from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
-    GenerationContentEvent,
-    GenerationRequestParams,
-    ReasoningEffort,
     TextContent,
-    TextDeltaEvent,
-    ThinkingBlock,
-    ThinkingDeltaEvent,
     ToolCall,
-    ToolCallDeltaEvent,
-    ToolCallEndEvent,
     ToolDefinition,
     ToolResult,
 )
-from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.unit.onyx.agents.fakes import FakeModelClient
-
-
-class MutableDetails(BaseModel):
-    queries: list[str]
 
 
 def test_distinct_jobs_start_independently_and_preserve_context() -> None:
@@ -125,10 +107,7 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
     def delegate(invocation: ToolInvocation) -> ToolResult:
         token = tenant.set(invocation.call_id)
         try:
-            child = Agent(
-                FakeModelClient(leaf_reply),
-                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            )
+            child = Agent(FakeModelClient(leaf_reply))
             spawned = invocation.agents.spawn_agent(
                 child, name=invocation.call_id, description="", messages=[], max_steps=1
             )
@@ -150,7 +129,6 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
                     ]
                 )
             ),
-            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             tools=[
                 AgentTool(
                     definition=ToolDefinition(
@@ -174,7 +152,6 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
                 ]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="parent", description="", parameters={}),
@@ -211,8 +188,7 @@ def test_child_thread_start_failure_rolls_back_registration(
     child = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="child")])
-        ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
     )
     coordinator = AgentCoordinator()
     original = runtime.start_thread_with_context
@@ -242,7 +218,6 @@ def test_child_thread_start_failure_rolls_back_registration(
                 content=[ToolCall(id="call", name="delegate", arguments={})]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -258,8 +233,14 @@ def test_child_thread_start_failure_rolls_back_registration(
     assert runtime.start_thread_with_context is original
 
 
-def test_terminal_snapshot_rejects_late_tool_result() -> None:
-    tool_entered, release_tool = threading.Event(), threading.Event()
+def test_terminal_snapshot_rejects_late_tool_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_entered, release_tool, recorded = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
 
     def late(_invocation: ToolInvocation) -> ToolResult:
         tool_entered.set()
@@ -280,7 +261,6 @@ def test_terminal_snapshot_rejects_late_tool_result() -> None:
                 ]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="late", description="", parameters={}),
@@ -293,13 +273,26 @@ def test_terminal_snapshot_rejects_late_tool_result() -> None:
         ],
     )
     agent.before_tool_call = before_call
+    original_record = ToolBatch._record_tool_result
+
+    def record_result(
+        execution: ToolBatch,
+        result: ToolResult,
+        call: ToolCall,
+    ) -> None:
+        try:
+            original_record(execution, result, call)
+        finally:
+            recorded.set()
+
+    monkeypatch.setattr(ToolBatch, "_record_tool_result", record_result)
     run = agent.start(max_steps=1)
     try:
         with pytest.raises(RunFailed):
             run.result(3)
         terminal = run.snapshot()
         release_tool.set()
-        assert run.wait_for_idle(3)
+        assert recorded.wait(3)
         assert run.snapshot() == terminal
     finally:
         release_tool.set()
@@ -312,6 +305,7 @@ def test_terminal_snapshot_rejects_late_tool_result() -> None:
 def test_discovery_reads_run_status_without_holding_coordinator_lock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from onyx.agents.execution_records import RunStatus
     from onyx.agents.models import AgentInfo
     from onyx.agents.runtime import Run
 
@@ -322,10 +316,7 @@ def test_discovery_reads_run_status_without_holding_coordinator_lock(
         assert release_model.wait(5)
         return AssistantMessage(content=[TextContent(text="done")])
 
-    agent = Agent(
-        FakeModelClient(reply),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
+    agent = Agent(FakeModelClient(reply))
     coordinator = AgentCoordinator()
     coordinator.register(
         AgentInfo(
@@ -405,8 +396,7 @@ def test_parent_listener_failure_keeps_child_result_and_idle() -> None:
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
-        ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
     )
     parent = concurrency.EventDelivery()
     parent.subscribe(fail)
@@ -444,7 +434,6 @@ def test_paused_delivery_drains_late_child_events_without_retaining_worker() -> 
     finally:
         release.set()
         delivery.close()
-    assert delivery.tracker.wait_idle(2)
     assert received == ["parent", "child", "resumed"]
 
 
@@ -483,7 +472,6 @@ def test_shared_dispatcher_keeps_channel_context_and_independent_completion() ->
         second.publish(AgentStartEvent(run_id="last"))
         release.set()
         second.close()
-        assert second.tracker.wait_idle(2)
         assert [(run, context) for run, context, _ in received] == [
             ("first", "first"),
             ("blocked", "second"),
@@ -498,42 +486,10 @@ def test_shared_dispatcher_keeps_channel_context_and_independent_completion() ->
         dispatcher.close()
 
 
-def test_closed_child_drains_accepted_events_without_forwarding_new_events() -> None:
-    dispatcher = concurrency.EventDispatcher()
-    parent = concurrency.EventDelivery(dispatcher)
-    child = concurrency.EventDelivery(parent=parent)
-    entered = threading.Event()
-    release = threading.Event()
-    local: list[str] = []
-    ancestors: list[str] = []
-
-    def receive(event: AgentEvent) -> None:
-        entered.set()
-        assert release.wait(5)
-        local.append(event.run_id)
-
-    child.subscribe(receive)
-    parent.subscribe(lambda event: ancestors.append(event.run_id))
-    try:
-        child.publish(AgentStartEvent(run_id="first"))
-        assert entered.wait(2)
-        child.publish(AgentStartEvent(run_id="second"))
-        child.close()
-        child.publish(AgentStartEvent(run_id="after-close"))
-        assert dispatcher.has_pending_events
-        assert not child.failed.is_set()
-        release.set()
-        assert child.tracker.wait_idle(2)
-        assert parent.tracker.wait_idle(2)
-        assert local == ancestors == ["first", "second"]
-    finally:
-        release.set()
-        child.close()
-        parent.close()
-        dispatcher.close()
-
-
-def test_shared_dispatcher_drains_combined_burst_in_order() -> None:
+def test_shared_dispatcher_bounds_combined_backlog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(concurrency, "EVENT_QUEUE_CAPACITY", 1)
     dispatcher = concurrency.EventDispatcher()
     first = concurrency.EventDelivery(dispatcher)
     second = concurrency.EventDelivery(dispatcher)
@@ -552,22 +508,14 @@ def test_shared_dispatcher_drains_combined_burst_in_order() -> None:
     try:
         first.publish(AgentStartEvent(run_id="blocked"))
         assert entered.wait(2)
-        expected = [str(index) for index in range(4096)]
-        for index, run_id in enumerate(expected):
-            channel = first if index % 2 == 0 else second
-            channel.publish(AgentStartEvent(run_id=run_id))
-        assert dispatcher.has_pending_events
-        assert not first.failed.is_set()
+        second.publish(AgentStartEvent(run_id="accepted"))
+        first.publish(AgentStartEvent(run_id="overflow"))
+        assert first.failed.is_set()
         assert not second.failed.is_set()
         release.set()
         first.close()
         second.close()
-        assert first.tracker.wait_idle(2)
-        assert second.tracker.wait_idle(2)
-        assert received == ["blocked", *expected]
-        assert not first.failed.is_set()
-        assert not second.failed.is_set()
-        assert not dispatcher.has_pending_events
+        assert received == ["blocked", "accepted"]
         assert first.tracker.wait_idle(timeout=0)
         assert second.tracker.wait_idle(timeout=0)
     finally:
@@ -625,13 +573,13 @@ def test_progress_delivery_isolates_producer_and_listeners() -> None:
             assert release.wait(3)
         if isinstance(event, ToolUpdateEvent):
             details = event.progress.details
-            assert isinstance(details, MutableDetails)
+            assert isinstance(details, SearchDocsResponse)
             details.queries.append("listener mutation")
 
     def observe(event: AgentEvent) -> None:
         if isinstance(event, ToolUpdateEvent):
             details = event.progress.details
-            assert isinstance(details, MutableDetails)
+            assert isinstance(details, SearchDocsResponse)
             received.append(list(details.queries))
 
     delivery.subscribe(mutate)
@@ -639,7 +587,9 @@ def test_progress_delivery_isolates_producer_and_listeners() -> None:
     try:
         delivery.publish(AgentStartEvent(run_id="run"))
         assert entered.wait(2)
-        details = MutableDetails(queries=["first"])
+        details = SearchDocsResponse(
+            search_docs=[], citation_mapping={}, queries=["first"]
+        )
         delivery.publish(
             ToolUpdateEvent(
                 run_id="run",
@@ -652,7 +602,6 @@ def test_progress_delivery_isolates_producer_and_listeners() -> None:
         details.queries.append("producer mutation")
         release.set()
         delivery.close()
-        assert delivery.tracker.wait_idle(2)
         assert received == [["first"]]
         assert details.queries == ["first", "producer mutation"]
     finally:
@@ -687,375 +636,3 @@ def test_child_delivery_copies_only_for_actual_listeners() -> None:
         child.close()
         parent.close()
         dispatcher.close()
-
-
-@pytest.mark.parametrize(
-    "update",
-    [
-        TextDeltaEvent(content_index=0, text="Answer"),
-        TextDeltaEvent(content_index=0, text=""),
-        ThinkingDeltaEvent(content_index=0, text="Reasoning"),
-        ToolCallDeltaEvent(content_index=0, arguments_delta='{"query":'),
-    ],
-)
-def test_deltas_are_shared_across_listeners_and_ancestors(
-    update: GenerationContentEvent,
-) -> None:
-    event = MessageUpdateEvent(
-        run_id="child", message_id="message", step_index=0, generation_event=update
-    )
-    dispatcher = concurrency.EventDispatcher()
-    parent = concurrency.EventDelivery(dispatcher)
-    child = concurrency.EventDelivery(parent=parent)
-    received: list[AgentEvent] = []
-    child.subscribe(received.append)
-    child.subscribe(received.append)
-    parent.subscribe(received.append)
-    try:
-        with (
-            patch.object(
-                BaseModel, "model_dump", side_effect=AssertionError("Unexpected dump")
-            ) as dump,
-            patch.object(
-                BaseModel, "model_copy", side_effect=AssertionError("Unexpected copy")
-            ) as copy,
-        ):
-            child.publish(event)
-            assert child.tracker.wait_idle(2)
-            assert parent.tracker.wait_idle(2)
-            assert not child.failed.is_set()
-            assert not parent.failed.is_set()
-            assert len(received) == 3
-            assert all(item is event for item in received)
-            dump.assert_not_called()
-            copy.assert_not_called()
-    finally:
-        child.close()
-        parent.close()
-        dispatcher.close()
-
-
-@pytest.mark.parametrize(
-    "update",
-    [
-        TextDeltaEvent(
-            content_index=0,
-            text="Answer",
-            request_params=GenerationRequestParams(
-                model_name="test",
-                model_provider="test",
-                reasoning_effort=ReasoningEffort.AUTO,
-                max_tokens=None,
-                sent_kwargs={"temperature": 0},
-            ),
-        ),
-        ThinkingDeltaEvent(content_index=0, text="Reasoning", blocks=[]),
-        ThinkingDeltaEvent(
-            content_index=0,
-            blocks=[ThinkingBlock(thinking="Reasoning", signature="signature")],
-        ),
-        ToolCallEndEvent(
-            content_index=0, tool_call=ToolCall(id="call", name="search", arguments={})
-        ),
-    ],
-)
-def test_mutable_generation_payloads_are_isolated(
-    update: GenerationContentEvent,
-) -> None:
-    event = MessageUpdateEvent(
-        run_id="child", message_id="message", step_index=0, generation_event=update
-    )
-    expected = event.model_copy(deep=True)
-    dispatcher = concurrency.EventDispatcher()
-    parent = concurrency.EventDelivery(dispatcher)
-    child = concurrency.EventDelivery(parent=parent)
-    entered = threading.Event()
-    release = threading.Event()
-    received: list[MessageUpdateEvent] = []
-
-    def mutate_payload(event: MessageUpdateEvent, value: str) -> None:
-        payload = event.generation_event
-        if isinstance(payload, TextDeltaEvent):
-            assert payload.request_params is not None
-            payload.request_params.sent_kwargs["mutation"] = value
-        elif isinstance(payload, ThinkingDeltaEvent):
-            assert payload.blocks is not None
-            payload.blocks.append(ThinkingBlock(thinking=value))
-        else:
-            assert isinstance(payload, ToolCallEndEvent)
-            payload.tool_call.arguments["mutation"] = value
-
-    def mutate(event: AgentEvent) -> None:
-        if isinstance(event, AgentStartEvent):
-            entered.set()
-            assert release.wait(3)
-        elif isinstance(event, MessageUpdateEvent):
-            mutate_payload(event, "listener")
-
-    def observe(event: AgentEvent) -> None:
-        if isinstance(event, MessageUpdateEvent):
-            received.append(event)
-
-    child.subscribe(mutate)
-    child.subscribe(observe)
-    parent.subscribe(observe)
-    try:
-        child.publish(AgentStartEvent(run_id="blocked"))
-        assert entered.wait(2)
-        child.publish(event)
-        mutate_payload(event, "producer")
-        release.set()
-        assert child.tracker.wait_idle(2)
-        assert parent.tracker.wait_idle(2)
-        assert not child.failed.is_set()
-        assert not parent.failed.is_set()
-        assert received == [expected, expected]
-        assert received[0] is not received[1]
-    finally:
-        release.set()
-        child.close()
-        parent.close()
-        dispatcher.close()
-
-
-@pytest.mark.parametrize("extend_envelope", [False, True])
-def test_extended_events_keep_snapshot_isolation(extend_envelope: bool) -> None:
-    class AnnotatedDelta(TextDeltaEvent):
-        notes: list[str]
-
-    class AnnotatedUpdate(MessageUpdateEvent):
-        notes: list[str]
-
-    event: MessageUpdateEvent
-    if extend_envelope:
-        extended = AnnotatedUpdate(
-            run_id="run",
-            message_id="message",
-            step_index=0,
-            generation_event=TextDeltaEvent(content_index=0, text="Answer"),
-            notes=[],
-        )
-        event = extended
-        notes = extended.notes
-    else:
-        update = AnnotatedDelta(content_index=0, text="Answer", notes=[])
-        event = MessageUpdateEvent(
-            run_id="run", message_id="message", step_index=0, generation_event=update
-        )
-        notes = update.notes
-    expected = event.model_copy(deep=True)
-    delivery = concurrency.EventDelivery()
-    entered = threading.Event()
-    release = threading.Event()
-    received: list[AgentEvent] = []
-
-    def observe(event: AgentEvent) -> None:
-        if isinstance(event, AgentStartEvent):
-            entered.set()
-            assert release.wait(3)
-        else:
-            received.append(event)
-
-    delivery.subscribe(observe)
-    try:
-        delivery.publish(AgentStartEvent(run_id="blocked"))
-        assert entered.wait(2)
-        delivery.publish(event)
-        notes.append("producer mutation")
-        release.set()
-        assert delivery.tracker.wait_idle(2)
-        assert not delivery.failed.is_set()
-        assert received == [expected]
-        assert received[0] is not event
-    finally:
-        release.set()
-        delivery.close()
-
-
-def test_empty_event_remains_pending_until_ancestor_delivery_finishes() -> None:
-    dispatcher = concurrency.EventDispatcher()
-    parent = concurrency.EventDelivery(dispatcher)
-    child = concurrency.EventDelivery(parent=parent)
-    entered = threading.Event()
-    release = threading.Event()
-
-    def observe(_event: AgentEvent) -> None:
-        entered.set()
-        assert release.wait(3)
-
-    parent.subscribe(observe)
-    try:
-        child.publish(AgentStartEvent(run_id="child"))
-        assert entered.wait(2)
-        assert dispatcher.has_pending_events
-        assert not child.tracker.wait_idle(0)
-        assert not parent.tracker.wait_idle(0)
-        release.set()
-        assert parent.tracker.wait_idle(2)
-        assert child.tracker.wait_idle(2)
-        assert not dispatcher.has_pending_events
-    finally:
-        release.set()
-        child.close()
-        parent.close()
-        dispatcher.close()
-
-
-def test_large_event_is_delivered_without_serialization() -> None:
-    dispatcher = concurrency.EventDispatcher()
-    delivery = concurrency.EventDelivery(dispatcher)
-    received: list[AgentEvent] = []
-    delivery.subscribe(received.append)
-    event = MessageUpdateEvent(
-        run_id="run",
-        message_id="message",
-        step_index=0,
-        generation_event=ToolCallEndEvent(
-            content_index=0,
-            tool_call=ToolCall(
-                id="call", name="search", arguments={"query": "a" * (5 * 1024 * 1024)}
-            ),
-        ),
-    )
-    try:
-        with patch.object(
-            BaseModel, "model_dump", side_effect=AssertionError("Unexpected dump")
-        ):
-            delivery.publish(event)
-        assert delivery.tracker.wait_idle(2)
-        assert not delivery.failed.is_set()
-        assert received == [event]
-        assert not dispatcher.has_pending_events
-    finally:
-        delivery.close()
-        dispatcher.close()
-
-
-@pytest.mark.parametrize("trigger", ["timer", "pause", "close"])
-@pytest.mark.parametrize("failure", [None, RuntimeError, AgentCancelled])
-def test_event_work_remains_pending_until_flush_finishes(
-    monkeypatch: pytest.MonkeyPatch,
-    trigger: str,
-    failure: type[RuntimeError] | type[AgentCancelled] | None,
-) -> None:
-    monkeypatch.setattr(
-        concurrency, "EVENT_FLUSH_INTERVAL_SECONDS", 0.01 if trigger == "timer" else 60
-    )
-    received = threading.Event()
-    flushing = threading.Event()
-    release = threading.Event()
-    finalized = threading.Event()
-    flushes: list[bool] = []
-    received_ids: list[str] = []
-
-    def receive(event: AgentEvent) -> None:
-        received_ids.append(event.run_id)
-        received.set()
-
-    def flush(final: bool) -> None:
-        flushes.append(final)
-        flushing.set()
-        assert release.wait(3)
-        if final:
-            finalized.set()
-        if failure is not None:
-            raise failure("Sink write failed")
-
-    dispatcher = concurrency.EventDispatcher(flush=flush)
-    parent = concurrency.EventDelivery(dispatcher)
-    child = concurrency.EventDelivery(parent=parent)
-    parent.subscribe(receive)
-    try:
-        expected = [str(index) for index in range(256 if trigger == "close" else 1)]
-        for run_id in expected:
-            child.publish(AgentStartEvent(run_id=run_id))
-        assert received.wait(2)
-        if trigger == "pause":
-            dispatcher.pause()
-        elif trigger == "close":
-            dispatcher.close()
-        assert flushing.wait(2)
-        assert received_ids == expected
-        assert dispatcher.has_pending_events
-        assert not child.tracker.wait_idle(0)
-        assert not parent.tracker.wait_idle(0)
-        release.set()
-        assert child.tracker.wait_idle(2)
-        assert parent.tracker.wait_idle(2)
-        assert not dispatcher.has_pending_events
-        assert child.failed.is_set() == (failure is not None)
-        assert parent.failed.is_set() == (failure is not None)
-        assert flushes[0] == (trigger == "close")
-    finally:
-        release.set()
-        child.close()
-        parent.close()
-        dispatcher.close()
-        assert finalized.wait(2)
-
-
-@pytest.mark.parametrize("fails", [False, True])
-def test_run_idle_waits_for_buffered_event_output(fails: bool) -> None:
-    flushing = threading.Event()
-    release = threading.Event()
-    finalized = threading.Event()
-    buffered: list[str] = []
-    saved: list[str] = []
-
-    def flush(final: bool) -> None:
-        flushing.set()
-        assert release.wait(3)
-        if final:
-            finalized.set()
-        if fails:
-            raise RuntimeError("Sink write failed")
-        saved.extend(buffered)
-        buffered.clear()
-
-    dispatcher = concurrency.EventDispatcher(flush=flush)
-    agent = Agent(
-        FakeModelClient(
-            lambda *_: AssistantMessage(content=[TextContent(text="answer")])
-        ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
-    run = agent.start(
-        max_steps=1,
-        event_dispatcher=dispatcher,
-        on_event=lambda event: buffered.append(event.type),
-    )
-    try:
-        assert run.result(2).output.text == "answer"
-        assert flushing.wait(2)
-        assert not run.wait_for_idle(0)
-        assert dispatcher.has_pending_events
-        release.set()
-        assert run.wait_for_idle(2)
-        assert bool(saved) != fails
-        assert bool(buffered) == fails
-        assert run.delivery_failed == fails
-        assert not dispatcher.has_pending_events
-    finally:
-        release.set()
-        run.cancel()
-        assert run.wait_for_idle(2)
-        dispatcher.close()
-        assert finalized.wait(2)
-
-
-def test_failed_close_rejects_late_events_without_starting_another_worker() -> None:
-    dispatcher = concurrency.EventDispatcher(flush=lambda _final: None)
-    delivery = concurrency.EventDelivery(dispatcher)
-    received: list[AgentEvent] = []
-    delivery.subscribe(received.append)
-    with patch(
-        "onyx.agents.concurrency.start_thread_with_context",
-        side_effect=RuntimeError("cannot start new thread"),
-    ) as start:
-        with pytest.raises(RuntimeError, match="cannot start new thread"):
-            dispatcher.close()
-        delivery.publish(AgentStartEvent(run_id="late"))
-        start.assert_called_once()
-    assert not received
-    assert delivery.failed.is_set()
-    assert delivery.tracker.wait_idle(timeout=1)

@@ -194,6 +194,8 @@ export interface SendMessageParams {
   additionalContext?: string;
 }
 
+export class ChatSendRejectedError extends Error {}
+
 export async function* sendMessage({
   message,
   fileDescriptors,
@@ -282,7 +284,11 @@ export async function* sendMessage({
       void revalidateCurrentUser();
     }
 
-    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
+    const message = data.detail ?? `HTTP error! status: ${response.status}`;
+    if (response.status < 500 && response.status !== 408) {
+      throw new ChatSendRejectedError(message);
+    }
+    throw new Error(message);
   }
 
   yield* withoutHeartbeats(handleSSEStream<PacketType>(response, signal));

@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable, Sequence
 
 from onyx.agents.compaction import IMAGE_TOKEN_ESTIMATE
-from onyx.chat.models import PromptMetadata
+from onyx.agents.models import CompactionMetadata
 from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP, PROMPT_CACHE_CHAT_HISTORY
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.interfaces import LLMConfig
@@ -35,6 +35,16 @@ _AZURE_DEFAULT_IMAGE_CAP = 50
 
 # Match main when no tokenizer is available for a non-vision marker.
 _NON_VISION_MARKER_TOKEN_FALLBACK = 40
+
+
+class PromptMetadata(CompactionMetadata):
+    token_count: int | None = None
+    image_files: list[ChatLoadedFile] | None = None
+    image_token_count: int = 0
+    should_cache: bool = False
+    file_id: str | None = None
+    is_reminder: bool = False
+    omit_tool_result_content: bool = False
 
 
 def prompt_metadata(message: Message) -> PromptMetadata:
@@ -129,7 +139,7 @@ def _format_user_message(
     image_tokens = 0
     for part_index, part in enumerate(_user_content_parts(message)):
         if isinstance(part, TextContentPart):
-            content.append(part.model_copy(deep=True))
+            content.append(part)
             continue
         if keep_images is not None and (message_index, part_index) not in keep_images:
             continue
@@ -149,11 +159,9 @@ def _format_user_message(
                 else _NON_VISION_MARKER_TOKEN_FALLBACK
             )
         elif isinstance(part, ImageContentPart):
-            content.append(part.model_copy(deep=True))
+            content.append(part)
             image_tokens += IMAGE_TOKEN_ESTIMATE
         else:
-            # Materialization updates the descriptor; only the loader cache is shared.
-            part = part.model_copy()
             try:
                 image_type = get_image_type_from_bytes(part.content)
                 image_url = f"data:{image_type};base64,{part.to_base64()}"
@@ -192,7 +200,7 @@ def prepare_model_messages(  # noqa: C901
     *,
     token_counter: Callable[[str], int] | None = None,
 ) -> list[Message]:
-    """Resolve attachments and reminders into detached model messages."""
+    """Resolve application attachments and reminders into shared model messages."""
     messages: list[Message] = []
     # Replay images as text markers when the selected model does not accept images.
     supports_image_input = True

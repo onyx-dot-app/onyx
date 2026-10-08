@@ -2,25 +2,24 @@
 
 from uuid import UUID
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from sqlalchemy import Text, case, cast, func, literal, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.selectable import CTE
 
-from onyx.agents.execution_records import run_input_message_id
-from onyx.agents.models import AgentInfo, RunStatus, messages_from_steps
-from onyx.chat.response_models import (
-    ChatBranch,
+from onyx.agents.execution_records import RunStatus, run_input_message_id
+from onyx.agents.models import AgentInfo, messages_from_steps
+from onyx.chat.models import (
+    MAX_DISCOVERED_AGENTS,
     MessageRendering,
-    ResponseLink,
     ResponseRecord,
     SavedAgentContext,
-    SessionAncestor,
 )
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     MAX_AGENT_DEPTH,
     MAX_AGENT_HISTORY_RUNS,
+    SessionAncestor,
     agent_path_from_ancestors,
     agent_session_path,
     checkpoint_from_summary,
@@ -35,13 +34,15 @@ from onyx.db.chat_response import (
     read_response_steps,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, ToolCall
+from onyx.db.models import ChatMessage, ChatResponseMessage, ChatSession, ToolCall
 from onyx.llm.models import Message, UserMessage
 
 MAX_AGENT_HISTORY_BYTES = 16 * 1024 * 1024
 
 
-MAX_DISCOVERED_AGENTS = 128
+class ChatBranch(BaseModel):
+    chat_session_id: UUID
+    message_ids: list[int]
 
 
 def load_chat_branch(message_id: int) -> ChatBranch:
@@ -85,6 +86,14 @@ def _visible_agent(
     if agent is None:
         raise ValueError("Agent is unavailable on the selected branch")
     return agent
+
+
+class _ResponseLink(BaseModel):
+    id: int
+    chat_session_id: UUID
+    previous_response_id: int | None
+    root_id: int
+    status: RunStatus
 
 
 def _selected_responses(branch: ChatBranch) -> CTE:
@@ -135,16 +144,10 @@ def _selected_responses(branch: ChatBranch) -> CTE:
 
 def _selected_response_links(
     db_session: Session, branch: ChatBranch, agent_ids: list[UUID]
-) -> dict[UUID, list[ResponseLink]]:
+) -> dict[UUID, list[_ResponseLink]]:
     """Read branch-visible response links once, then order each conversation."""
     if not agent_ids:
         return {}
-    response_limits = {
-        agent_id: len(branch.message_ids)
-        if agent_id == branch.chat_session_id
-        else MAX_AGENT_HISTORY_RUNS
-        for agent_id in agent_ids
-    }
     responses = _selected_responses(branch)
     rows = (
         db_session.execute(
@@ -159,18 +162,18 @@ def _selected_response_links(
                     value=responses.c.root_id,
                 ),
             )
-            .limit(sum(response_limits.values()) + 1)
+            .limit(MAX_AGENT_HISTORY_RUNS * len(agent_ids) + 1)
         )
         .mappings()
         .all()
     )
-    links_by_agent: dict[UUID, list[ResponseLink]] = {
+    links_by_agent: dict[UUID, list[_ResponseLink]] = {
         agent_id: [] for agent_id in agent_ids
     }
-    for link in TypeAdapter(list[ResponseLink]).validate_python(rows):
+    for link in TypeAdapter(list[_ResponseLink]).validate_python(rows):
         links = links_by_agent[link.chat_session_id]
         links.append(link)
-        if len(links) > response_limits[link.chat_session_id]:
+        if len(links) > MAX_AGENT_HISTORY_RUNS:
             raise ValueError("Selected agent history exceeds its response limit")
     return {
         agent_id: links
@@ -180,7 +183,7 @@ def _selected_response_links(
     }
 
 
-def _order_response_links(links: list[ResponseLink]) -> list[ResponseLink]:
+def _order_response_links(links: list[_ResponseLink]) -> list[_ResponseLink]:
     """Follow predecessors from the unique selected tip, newest response first."""
     if not links:
         return []
@@ -189,7 +192,7 @@ def _order_response_links(links: list[ResponseLink]) -> list[ResponseLink]:
     if len(tips) != 1:
         raise ValueError("Child history has ambiguous response selection")
     by_id = {link.id: link for link in links}
-    selected: list[ResponseLink] = []
+    selected: list[_ResponseLink] = []
     visited: set[int] = set()
     current = tips[0]
     while True:
@@ -214,16 +217,16 @@ def _check_history_size(db_session: Session, response_ids: list[int]) -> None:
             func.coalesce(
                 func.sum(
                     func.coalesce(
-                        func.octet_length(cast(ChatResponseItem.message, Text)), 0
+                        func.octet_length(cast(ChatResponseMessage.content, Text)), 0
                     )
                     + func.coalesce(
-                        func.octet_length(cast(ChatResponseItem.rendering, Text)), 0
+                        func.octet_length(cast(ChatResponseMessage.rendering, Text)), 0
                     )
                 ),
                 0,
             )
         )
-        .where(ChatResponseItem.chat_message_id.in_(response_ids))
+        .where(ChatResponseMessage.chat_message_id.in_(response_ids))
         .scalar_subquery()
     )
     tool_bytes = (
@@ -270,7 +273,7 @@ def _load_history(
             .where(ChatMessage.id.in_(response_ids))
             .options(
                 joinedload(ChatMessage.parent_message),
-                selectinload(ChatMessage.response_items),
+                selectinload(ChatMessage.response_messages),
                 selectinload(ChatMessage.tool_calls),
             )
         )
@@ -279,20 +282,13 @@ def _load_history(
     messages: list[Message] = []
     for response in reversed(responses):
         question = response.parent_message
-        if (
-            question is None
-            or question.message_type != MessageType.USER
-            or question.chat_session_id != response.chat_session_id
-        ):
-            raise ValueError("Response has no question in its conversation")
+        if question is None or question.message_type != MessageType.USER:
+            raise ValueError("Child response has no user instruction")
+        if response.run_id is None:
+            raise ValueError("Child response has no run identity")
         messages.append(
             UserMessage(
-                id=(
-                    run_input_message_id(str(response.id), 0)
-                    if question.invoking_tool_call_id is not None
-                    else f"chat:{question.id}"
-                ),
-                content=question.message,
+                id=run_input_message_id(response.run_id, 0), content=question.message
             )
         )
         messages.extend(messages_from_steps(read_response_steps(response)))
@@ -323,16 +319,11 @@ def _load_history(
         documents = roots.get(root_id)
         if documents is None:
             raise ValueError("Root response is unavailable")
-        for item in response.response_items:
+        for item in response.response_messages:
             if item.rendering:
                 rendering = MessageRendering.model_validate(item.rendering)
                 for number, document_id in rendering.citation_documents.items():
-                    document = documents.get(document_id)
-                    if document is None:
-                        raise ValueError(
-                            "Cited source is unavailable on the root response"
-                        )
-                    restored.sources[number] = document
+                    restored.sources[number] = documents[document_id]
     return restored
 
 
@@ -344,15 +335,17 @@ def load_agent_history(message_id: int, agent_id: str) -> SavedAgentContext:
         )
 
 
-def load_saved_response(
-    message_id: int, response_id: int, parent_agent_id: str
+def load_saved_run(
+    message_id: int, run_id: str, parent_agent_id: str
 ) -> ResponseRecord | None:
     """Read a completed child response after authorizing its parent branch."""
     branch = load_chat_branch(message_id)
+    if not run_id.isdecimal():
+        return None
     with get_session_with_current_tenant() as db_session:
         session_id = db_session.scalar(
             select(ChatMessage.chat_session_id).where(
-                ChatMessage.id == response_id, ChatMessage.response_status.is_not(None)
+                ChatMessage.id == int(run_id), ChatMessage.response_status.is_not(None)
             )
         )
         if session_id is None:
@@ -361,14 +354,14 @@ def load_saved_response(
         if parent_session_id(db_session, agent) != UUID(parent_agent_id):
             return None
         links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
-        if not any(link.id == response_id for link in links):
+        if not any(link.id == int(run_id) for link in links):
             return None
-        _check_history_size(db_session, [response_id])
+        _check_history_size(db_session, [int(run_id)])
         response = db_session.scalar(
             select(ChatMessage)
-            .where(ChatMessage.id == response_id)
+            .where(ChatMessage.id == int(run_id))
             .options(
-                selectinload(ChatMessage.response_items),
+                selectinload(ChatMessage.response_messages),
                 selectinload(ChatMessage.tool_calls),
                 joinedload(ChatMessage.parent_message).joinedload(
                     ChatMessage.parent_message
@@ -388,9 +381,9 @@ def load_saved_response(
 def _agent_metadata(
     agent: ChatSession,
     ancestors: dict[UUID, SessionAncestor],
-    latest_response_id: int | None,
-    status: RunStatus | None,
+    links: list[_ResponseLink],
 ) -> AgentInfo:
+    latest = links[0] if links else None
     parent_id = ancestors[agent.id].parent_id
     return AgentInfo(
         id=str(agent.id),
@@ -398,10 +391,8 @@ def _agent_metadata(
         parent_id=str(parent_id) if parent_id else None,
         description=agent.description or "" if parent_id else "",
         restoration_config=agent.restoration_config,
-        latest_run_id=str(latest_response_id)
-        if latest_response_id is not None
-        else None,
-        status=status,
+        latest_run_id=str(latest.id) if latest else None,
+        status=latest.status if latest else None,
     )
 
 
@@ -442,42 +433,8 @@ def load_session_agent_metadata(
                 for agent in agents
             }
         )
-        links = _selected_response_links(
-            db_session,
-            branch,
-            [agent_id for agent_id in agent_ids if agent_id != branch.chat_session_id],
-        )
-        metadata: list[AgentInfo] = []
-        for agent in agents:
-            if agent.id == branch.chat_session_id:
-                # Root discovery needs only the latest response, not its full history.
-                latest_root = db_session.execute(
-                    select(ChatMessage.id, ChatMessage.response_status)
-                    .where(
-                        ChatMessage.chat_session_id == branch.chat_session_id,
-                        ChatMessage.id.in_(branch.message_ids),
-                        ChatMessage.response_status.is_not(None),
-                    )
-                    .order_by(
-                        case(
-                            {
-                                message_id: index
-                                for index, message_id in enumerate(branch.message_ids)
-                            },
-                            value=ChatMessage.id,
-                        )
-                    )
-                    .limit(1)
-                ).one_or_none()
-                latest_id, status = (
-                    latest_root if latest_root is not None else (None, None)
-                )
-            else:
-                latest = links[agent.id][0] if links[agent.id] else None
-                latest_id = latest.id if latest else None
-                status = latest.status if latest else None
-            metadata.append(_agent_metadata(agent, ancestors, latest_id, status))
-        return metadata
+        links = _selected_response_links(db_session, branch, agent_ids)
+        return [_agent_metadata(agent, ancestors, links[agent.id]) for agent in agents]
 
 
 def lookup_session_agent(
@@ -498,11 +455,8 @@ def lookup_session_agent(
         )
         if agent is None:
             return None
-        links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
-        latest = links[0] if links else None
         return _agent_metadata(
             agent,
             session_ancestors(db_session, [agent.id]),
-            latest.id if latest else None,
-            latest.status if latest else None,
+            _selected_response_links(db_session, branch, [agent.id])[agent.id],
         )

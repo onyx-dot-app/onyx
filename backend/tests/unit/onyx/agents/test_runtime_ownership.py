@@ -1,7 +1,6 @@
 """Execution cleanup, restoration, and concurrent result acceptance remain independent."""
 
 import threading
-from contextlib import nullcontext
 from threading import Event
 from unittest.mock import patch
 
@@ -11,20 +10,18 @@ from onyx.agents.agent_coordination import (
     AgentCoordinator,
 )
 from onyx.agents.events import AgentEvent
+from onyx.agents.execution_records import ExecutionStatus, RunFailureKind, RunStatus
 from onyx.agents.models import (
     AgentInfo,
-    ExecutionStatus,
     PreparedStep,
-    RunFailureKind,
     RunState,
-    RunStatus,
     StepInput,
     StepRecord,
     StepResult,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
-from onyx.agents.tools import AgentTool, ChildRunCancelled, ToolInvocation, ToolProgress
-from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
+from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
@@ -35,16 +32,13 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
-from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.unit.onyx.agents.fakes import FakeAgentDirectory, FakeModelClient, run_agent
 from tests.unit.onyx.agents.test_child_coordination import parent_agent
 
 
-@pytest.mark.parametrize("source", ["configured", "explicit", "scope"])
-def test_first_step_failure_is_recorded_and_agent_can_retry(source: str) -> None:
+def test_first_step_failure_is_recorded_and_agent_can_retry() -> None:
     attempts = 0
-    external = CancellationSignal()
 
     def decide(_state: StepInput) -> PreparedStep:
         nonlocal attempts
@@ -57,23 +51,11 @@ def test_first_step_failure_is_recorded_and_agent_can_retry(source: str) -> None
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="Recovered")])
         ),
-        generation_context=GenerationContext(
-            flow=LLMFlow.CHAT_RESPONSE,
-            cancellation=external if source == "configured" else None,
-        ),
         prepare_step=decide,
     )
     handles: list[Run] = []
-    with cancellation_scope(external) if source == "scope" else nullcontext():
-        with pytest.raises(RunFailed):
-            run_agent(
-                agent,
-                max_steps=1,
-                runs=handles,
-                cancellation=external if source == "explicit" else None,
-            )
-    assert not external.cancelled
-    assert handles[0].cancellation_signal.cancelled
+    with pytest.raises(RunFailed):
+        run_agent(agent, max_steps=1, runs=handles)
     assert handles[0].snapshot().status == RunStatus.ERROR
     assert (
         agent.start(background=False, max_steps=1).result().output.text == "Recovered"
@@ -103,7 +85,6 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="New")])
             ),
-            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=agent_id,
             previous_run_id=archived.run_id,
         )
@@ -169,7 +150,6 @@ def test_cancelled_tool_reserves_agent_until_owned_work_drains() -> None:
                 else [ToolCall(id="blocked", name="blocked", arguments={})]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -222,9 +202,7 @@ def test_generation_deadline_rejects_output_when_blocked_read_returns() -> None:
 
     agent = Agent(
         FakeModelClient(generate),
-        generation_context=GenerationContext(
-            flow=LLMFlow.CHAT_RESPONSE, total_timeout_s=0.1
-        ),
+        generation_context=GenerationContext(total_timeout_s=0.1),
     )
     run = agent.start(max_steps=1)
     try:
@@ -292,8 +270,7 @@ def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
             Agent(
                 FakeModelClient(
                     lambda *_: AssistantMessage(content=[TextContent(text="Done")])
-                ),
-                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+                )
             ),
             name="duplicate label",
             description="Task",
@@ -350,7 +327,6 @@ def test_parallel_result_survives_another_tool_failure(cancelled: bool) -> None:
                 ]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -399,10 +375,7 @@ def test_timed_out_wait_does_not_observe_a_later_child_failure(
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
         submission = invocation.agents.spawn_agent(
-            Agent(
-                FakeModelClient(fail),
-                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            ),
+            Agent(FakeModelClient(fail)),
             name="child",
             description="Task",
             messages=[],
@@ -469,10 +442,7 @@ def test_child_cancel_does_not_need_a_free_blocking_worker() -> None:
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
         submitted = invocation.agents.spawn_agent(
-            Agent(
-                FakeModelClient(blocked),
-                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            ),
+            Agent(FakeModelClient(blocked)),
             name="blocked",
             description="Task",
             messages=[],
@@ -482,7 +452,7 @@ def test_child_cancel_does_not_need_a_free_blocking_worker() -> None:
             assert entered.wait(2)
             assert invocation.agents.wait_run(submitted.run_id, timeout=0) is None
             invocation.agents.cancel_run(submitted.run_id)
-            with pytest.raises(ChildRunCancelled):
+            with pytest.raises(AgentCancelled):
                 invocation.agents.wait_run(submitted.run_id, timeout=1)
         finally:
             release.set()
@@ -518,7 +488,6 @@ def test_child_restart_waits_for_cancelled_archive_read() -> None:
                 content=[ToolCall(id="inspect", name="inspect", arguments={})]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -535,7 +504,7 @@ def test_child_restart_waits_for_cancelled_archive_read() -> None:
         )
         assert entered.wait(2)
         invocation.agents.cancel_run(submitted.run_id)
-        with pytest.raises(ChildRunCancelled):
+        with pytest.raises(AgentCancelled):
             invocation.agents.wait_run(submitted.run_id, timeout=2)
         restarting = start_thread_future(
             name="test-restart",
@@ -581,7 +550,6 @@ def test_completed_step_decides_completion_before_budget_limit(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="Answer")])
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=prepare,
         after_step=after_step,
     )
@@ -603,7 +571,6 @@ def test_final_validation_failure_preserves_completed_output() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="Partial answer")])
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         after_step=validate,
     ).start(max_steps=1)
     with pytest.raises(RunFailed):
@@ -635,9 +602,7 @@ def test_agent_remains_reserved_until_model_read_returns(
     coordinator = AgentCoordinator() if coordinated else None
     agent = Agent(
         FakeModelClient(generate),
-        generation_context=GenerationContext(
-            flow=LLMFlow.CHAT_RESPONSE, total_timeout_s=0.1 if timeout else None
-        ),
+        generation_context=GenerationContext(total_timeout_s=0.1 if timeout else None),
     )
     old = agent.start(max_steps=1, coordinator=coordinator)
     try:

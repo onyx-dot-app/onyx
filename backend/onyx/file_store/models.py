@@ -99,6 +99,12 @@ class UserFileMetadata(BaseModel):
     token_count: int | None
 
 
+class ChatFileInput(BaseModel):
+    descriptor: FileDescriptor
+    token_count: int
+    content_pending: bool
+
+
 class InMemoryChatFile(BaseModel):
     file_id: str
     content: bytes
@@ -172,9 +178,6 @@ class ChatLoadedFile(InMemoryChatFile):
     # canonical plaintext (e.g. including image captions) doesn't exist yet.
     content_pending: bool = False
 
-    # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
-    # can require ``content_text`` / ``token_count`` without violating LSP on
-    # the override (ty correctly flag the broader subclass signature).
     @classmethod
     def lazy_loaded(
         cls,
@@ -187,10 +190,7 @@ class ChatLoadedFile(InMemoryChatFile):
         loader: Callable[[], bytes],
         content_pending: bool = False,
     ) -> "ChatLoadedFile":
-        """Construct a ``ChatLoadedFile`` whose ``content`` bytes are loaded
-        only on first access. ``content_text`` and ``token_count`` are passed
-        eagerly because they're cheap (DB lookup + cached plaintext store hit).
-        """
+        """Keep supplied text and token counts; load bytes on first content access."""
         inst = cls(
             file_id=file_id,
             content=b"",
@@ -223,11 +223,10 @@ class FileToolMetadata(BaseModel):
     file_id: str
     filename: str
     approx_char_count: int
-    # Whether this file's bytes reached ``chat_files_for_tools``, and so are
-    # available to tools that receive the files themselves (PythonTool).
-    # Messages dropped by summary truncation are filtered out of
-    # ``chat_history`` before ``load_all_chat_files`` runs, so their files are
-    # listed for the LLM but never staged. Only ``read_file`` can fetch those.
+
+    # Whether the bytes are available to tools that receive files (PythonTool).
+    # Summary-truncated attachments are listed for the LLM but never staged;
+    # listing them must not promise Python access to bytes it does not have.
     staged_for_tools: bool = True
 
 
@@ -238,8 +237,8 @@ class ExtractedContextFiles(BaseModel):
     image_files: list[ChatLoadedFile]
     use_as_search_filter: bool
     total_token_count: int
-    # Lightweight metadata for files exposed via FileReaderTool
-    # (populated when files don't fit in context and vector DB is disabled).
+    # Full text and titles used to construct citations for injected files.
     file_metadata: list[ContextFileMetadata]
     uncapped_token_count: int | None
+    # File listings supplied to the model for retrieval through FileReaderTool.
     file_metadata_for_tool: list[FileToolMetadata] = []

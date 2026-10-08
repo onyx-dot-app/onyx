@@ -1,15 +1,18 @@
 """Provider request messages in the OpenAI Chat Completions shape."""
 
+from __future__ import annotations
+
 import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, JsonValue
 
+from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.llm import models as app
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import model_needs_formatting_reenabled
-from onyx.llm.models import AnyThinkingBlock, ContentPart
+from onyx.llm.models import AnyThinkingBlock, ContentPart, MessageRole
 from onyx.tools.tool_name import sanitize_tool_name
 
 if TYPE_CHECKING:
@@ -21,6 +24,8 @@ CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
 # Tool call structures
 class RequestFunctionCall(BaseModel):
+    """Complete function call sent in conversation history."""
+
     name: str
     arguments: str
 
@@ -37,28 +42,28 @@ class ToolCall(BaseModel):
 # Base class for all cacheable messages
 class CacheableMessage(BaseModel):
     # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
-    cache_control: dict | None = None
+    cache_control: dict[str, JsonValue] | None = None
 
 
 class SystemMessage(CacheableMessage):
-    role: Literal["system"] = "system"
+    role: Literal[MessageRole.SYSTEM] = MessageRole.SYSTEM
     content: str
 
 
 class UserMessage(CacheableMessage):
-    role: Literal["user"] = "user"
+    role: Literal[MessageRole.USER] = MessageRole.USER
     content: str | list[ContentPart]
 
 
 class AssistantMessage(CacheableMessage):
-    role: Literal["assistant"] = "assistant"
+    role: Literal[MessageRole.ASSISTANT] = MessageRole.ASSISTANT
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
     thinking_blocks: list[AnyThinkingBlock] | None = None
 
 
 class ToolMessage(CacheableMessage):
-    role: Literal["tool"] = "tool"
+    role: Literal[MessageRole.TOOL] = MessageRole.TOOL
     content: str
     tool_call_id: str
 
@@ -68,7 +73,7 @@ ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMes
 
 
 def serialize_request(
-    request: app.GenerationRequest, config: "LLMConfig"
+    request: app.GenerationRequest, config: LLMConfig
 ) -> tuple[list[ChatCompletionMessage], int]:
     """Serialize provider messages and return the cacheable prefix length."""
     history = (
@@ -77,6 +82,11 @@ def serialize_request(
         else []
     ) + request.messages
     messages: list[ChatCompletionMessage] = []
+    # The last message for which cacheable is true
+    # AND is true for all previous messages
+    # (counting from the start of the history)
+    # represents the end of the cacheable prefix
+    # used for prompt caching
     cacheable_prefix = 0
     ollama = config.model_provider == LlmProviderNames.OLLAMA_CHAT
     for index, message in enumerate(history):
@@ -145,6 +155,8 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
             or None,
         )
     if isinstance(message, app.ToolResultMessage):
+        if not message.tool_call_id:
+            raise ValueError("Provider tool messages require tool_call_id")
         return ToolMessage(content=message.content, tool_call_id=message.tool_call_id)
     raise TypeError(f"Unsupported message type: {type(message).__name__}")
 
@@ -161,3 +173,37 @@ def serialize_tools(tools: Sequence[app.ToolDefinition]) -> list[dict[str, JsonV
         }
         for tool in tools
     ]
+
+
+def cache_split_stats(
+    request: app.GenerationRequest, prefix_length: int
+) -> dict[str, str]:
+    """Describe the serialized prefix using already resolved image/token estimates."""
+    stats = {
+        "prompt_cache_chat_history": "on" if PROMPT_CACHE_CHAT_HISTORY else "off",
+        "cacheable_prefix_msgs": str(prefix_length),
+        # Counts prepared messages, including notices added during image selection.
+        "history_msgs": str(len(request.messages) + bool(request.system_prompt)),
+    }
+    prefix_tokens = 0
+    remaining = prefix_length
+    if request.system_prompt and remaining:
+        prefix_tokens += (len(request.system_prompt) + 3) // 4
+        remaining -= 1
+    for message in request.messages[:remaining]:
+        if message.estimated_tokens is None and (
+            isinstance(message, app.UserMessage)
+            and not isinstance(message.content, str)
+            and any(isinstance(part, app.ImageContentPart) for part in message.content)
+            or isinstance(message, app.AssistantMessage)
+            and any(not isinstance(part, app.TextContent) for part in message.content)
+        ):
+            # A text-only estimate would hide image, reasoning, or tool-call costs.
+            return stats
+        prefix_tokens += (
+            message.estimated_tokens
+            if message.estimated_tokens is not None
+            else (len(message.text) + 3) // 4
+        )
+    stats["cacheable_prefix_tokens"] = str(prefix_tokens)
+    return stats

@@ -119,6 +119,7 @@ def get_page_of_chat_sessions(
             contains_eager(ChatSession.messages).joinedload(
                 ChatMessage.chat_message_feedbacks
             ),
+            contains_eager(ChatSession.messages).selectinload(ChatMessage.search_docs),
         )
         .order_by(
             desc(ChatSession.time_created),
@@ -168,6 +169,7 @@ def fetch_chat_sessions_eagerly_by_time(
     # token counts and no message content, and every mode meters usage.
     filters: list[ColumnElement | BinaryExpression] = [
         ChatSession.time_created.between(start, end),
+        ChatSession.spawned_by_message_id.is_(None),
     ]
 
     if initial_time:
@@ -195,6 +197,7 @@ def fetch_chat_sessions_eagerly_by_time(
             contains_eager(ChatSession.messages).joinedload(
                 ChatMessage.chat_message_feedbacks
             ),
+            contains_eager(ChatSession.messages).selectinload(ChatMessage.search_docs),
         )
         .order_by(asc_time_order, message_order)
     )

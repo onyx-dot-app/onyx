@@ -14,40 +14,49 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.models import AgentInfo, ExecutionStatus, RunState, RunStatus
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import AgentInfo, RunState
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_result
 from onyx.chat.emitter import Emitter
+from onyx.chat.models import (
+    ChatMessageMetadata,
+    ChatResponseSnapshot,
+    CitationMode,
+    MessageRendering,
+    PresentationMode,
+    ToolHistorySnapshot,
+)
 from onyx.chat.renderer import (
     HIDDEN_TOOLS,
     MessageRenderer,
     ResponseLayout,
     ToolRenderer,
 )
-from onyx.chat.response import response_record, tool_arguments_for_display
-from onyx.chat.response_models import (
-    ChatMessageMetadata,
-    ChatResponseSnapshot,
-    CitationMode,
-    MessageRendering,
-    PresentationMode,
-    ResponseRecord,
-    ToolHistorySnapshot,
-    ToolReplayData,
+from onyx.chat.response import response_record
+from onyx.coding_agent.tool_definitions import (
+    CODING_AGENT_TOOL_NAME,
 )
-from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
-from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
+from onyx.deep_research.models import (
+    ResearchAgentCallResult,
+    ResearchMessageMetadata,
+    ResearchPhase,
+)
+from onyx.deep_research.tool_definitions import (
+    THINK_TOOL_NAME,
+)
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
-from onyx.tools.records import RecordedToolCallInfo
-from onyx.tools.results import (
+from onyx.server.query_and_chat.streaming_models import (
+    OverallStop,
+    Packet,
+)
+from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     LlmPythonExecutionResult,
-    ResearchAgentCallResult,
+    ToolCallInfo,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.utils.logger import setup_logger
@@ -55,10 +64,20 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _message_identity(message: AssistantMessage) -> str:
-    if not message.id:
-        raise ValueError("Accepted response message has no identity")
-    return message.id
+def _saved_tool_metadata(result: ToolResultMessage) -> BaseModel | None:
+    data = result.details
+    if isinstance(data, SearchDocsResponse):
+        # Documents are stored through the tool call's search-document relation.
+        return SearchDocsResponse(
+            queries=data.queries,
+            sources=data.sources,
+            time_filter_start=data.time_filter_start,
+            time_filter_end=data.time_filter_end,
+            search_docs=[],
+            citation_mapping=data.citation_mapping,
+            displayed_docs=[] if data.displayed_docs == [] else None,
+        )
+    return data
 
 
 def _collect_tool_history(
@@ -67,17 +86,12 @@ def _collect_tool_history(
     initial_citations: CitationMapping | None = None,
 ) -> ToolHistorySnapshot:
     """Project completed and interrupted operations from one execution tree."""
-    records: list[RecordedToolCallInfo] = []
+    records: list[ToolCallInfo] = []
     documents: dict[str, SearchDoc] = {}
     citations = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
     citations.update_citation_mapping(initial_citations or {})
     for step_index, step in enumerate(snapshot.steps):
         message = step.message
-        documents.update(message_documents(message.metadata))
-        if isinstance(message.metadata, (ChatMessageMetadata, ResearchMessageMetadata)):
-            citations.update_citation_mapping(
-                message.metadata.sources, update_duplicate_keys=True
-            )
         for index, call in enumerate(message.tool_calls):
             tool_id = tool_ids.get(call.name)
             if tool_id is None:
@@ -101,6 +115,7 @@ def _collect_tool_history(
                 for document in result.details.search_docs:
                     documents.setdefault(document.document_id, document)
             if isinstance(result.details, ResearchAgentCallResult):
+                citations.update_citation_mapping(result.details.citation_mapping)
                 for document in result.details.citation_mapping.values():
                     documents.setdefault(document.document_id, document)
             update_citation_processor_from_tool_result(result, citations)
@@ -123,7 +138,7 @@ def _tool_record(
     snapshot: RunState,
     turn: int,
     index: int,
-) -> RecordedToolCallInfo:
+) -> ToolCallInfo:
     data = tool_response.details if tool_response else None
     search_docs = data.search_docs if isinstance(data, SearchDocsResponse) else None
     displayed_docs = (
@@ -144,8 +159,10 @@ def _tool_record(
     ):
         generated_file_ids = data.tool_result.file_ids or None
 
-    return RecordedToolCallInfo(
-        message_id=_message_identity(output),
+    saved_metadata = _saved_tool_metadata(tool_response) if tool_response else None
+
+    return ToolCallInfo(
+        message_id=output.id or f"{snapshot.run_id}:{turn}",
         parent_message_id=snapshot.parent_message_id,
         parent_tool_call_id=snapshot.parent_tool_call_id,
         turn_index=turn,
@@ -154,8 +171,9 @@ def _tool_record(
         tool_call_id=tool_call.id,
         tool_id=tool_id,
         reasoning_tokens=output.thinking,  # Calls from one assistant message share its thinking.
-        tool_call_arguments=tool_arguments_for_display(tool_call),
+        tool_call_arguments=tool_call.arguments,
         tool_call_response=tool_response.text if tool_response else "",
+        result_metadata=saved_metadata,
         search_docs=displayed_docs if displayed_docs is not None else search_docs,
         generated_images=generated_images,
         generated_files=generated_files,
@@ -294,7 +312,7 @@ def _project_response_display(
         call_names: dict[tuple[str, str], str] = {}
         for step_index, step in enumerate(node.steps):
             message = step.message
-            message_id = _message_identity(message)
+            message_id = message.id or f"{node.run_id}:{step_index}"
             call_names.update(
                 {(message_id, call.id): call.name for call in message.tool_calls}
             )
@@ -318,7 +336,7 @@ def _project_response_display(
                 update={
                     "answer": renderer.answer,
                     "reasoning": renderer.reasoning,
-                    "citation_info": renderer.citations,
+                    "citation_info": response.citation_info + renderer.citations,
                     "top_documents": renderer.documents or response.top_documents,
                     "pre_answer_processing_time": setting.pre_answer_seconds
                     if renderer.answer_started
@@ -353,20 +371,14 @@ class ResponsePresenter:
         self.emitter = emitter
         self.layout = ResponseLayout()
         self.renderers: dict[str, MessageRenderer] = {}
-        self.tools: dict[tuple[str, str, str], ToolRenderer] = {}
+        self.tools: dict[tuple[str, str], ToolRenderer] = {}
 
     def consume(self, event: AgentEvent) -> None:
         output: list[Packet] = []
         parent = self.tools.get(
-            (
-                event.parent_run_id or "",
-                event.parent_message_id or "",
-                event.parent_tool_call_id or "",
-            )
+            (event.parent_message_id or "", event.parent_tool_call_id or "")
         )
         if isinstance(event, MessageStartEvent):
-            if event.parent_run_id is None:
-                self.emitter.llm_step_started()
             if parent is not None:
                 parent.has_child_output = True
             self.renderers[event.run_id] = MessageRenderer(
@@ -389,13 +401,14 @@ class ResponsePresenter:
                 if call.name != renderer.settings.think_tool
                 and call.name not in HIDDEN_TOOLS
             ]
-            for call in calls:
-                tool_placement = renderer.tool_placement(call.id)
-                self.tools[(event.run_id, event.message_id, call.id)] = ToolRenderer(
-                    call, tool_placement, self.tool_ids.get(call.name)
-                )
+            if calls:
+                for call in calls:
+                    tool_placement = renderer.tool_placement(call.id)
+                    self.tools[(event.message_id, call.id)] = ToolRenderer(
+                        call, tool_placement, self.tool_ids.get(call.name)
+                    )
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
-            tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
+            tool = self.tools.get((event.message_id, event.tool_call.id))
             if tool is None:
                 return
             if isinstance(event, ToolStartEvent):
@@ -405,10 +418,6 @@ class ResponsePresenter:
             else:
                 output = tool.complete(event.result)
         elif isinstance(event, AgentEndEvent):
-            # The response owner reports classified failures separately.
-            for key in tuple(self.tools):
-                if key[0] == event.run_id:
-                    output.extend(self.tools.pop(key).complete(None))
             if renderer := self.renderers.pop(event.run_id, None):
                 output.extend(renderer.finish())
             if event.parent_run_id is None:
@@ -424,89 +433,3 @@ class ResponsePresenter:
                 )
         for packet in output:
             self.emitter.emit(packet)
-
-
-def replay_response(
-    response: ResponseRecord,
-    records: Mapping[tuple[str, str], ToolReplayData],
-    settings: dict[str, MessageRendering],
-    documents: Mapping[str, SearchDoc],
-    layout: ResponseLayout | None = None,
-    parent: Placement | None = None,
-    default_mode: PresentationMode = PresentationMode.ANSWER,
-) -> list[Packet]:
-    """Render saved accepted steps using detached tool records and source documents.
-
-    The session response carries the saved message error separately. Stop packets
-    close rendering; they do not classify execution success or failure.
-    """
-    layout = layout or ResponseLayout()
-    packets: list[Packet] = []
-    for step in response.steps:
-        message = step.message
-        message_id = _message_identity(message)
-        setting = settings.get(message_id, MessageRendering(mode=default_mode))
-        renderer = MessageRenderer(setting, documents, layout, parent)
-        packets.extend(renderer.complete(message))
-        calls = [
-            call
-            for call in message.tool_calls
-            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
-        ]
-        if not calls:
-            continue
-        for call in calls:
-            tool_placement = renderer.tool_placement(call.id)
-            record = records.get((message_id, call.id))
-            execution = step.tools.get(call.id)
-            result = execution.result if execution is not None else None
-            if (
-                result is not None
-                and isinstance(result.details, SearchDocsResponse)
-                and record is not None
-            ):
-                # Saved document IDs support citation and source-card links.
-                search = result.details.model_copy(
-                    update={"search_docs": record.search_docs or []}
-                )
-                result = result.model_copy(update={"details": search})
-            tool_renderer = ToolRenderer(
-                call, tool_placement, record.tool_id if record is not None else None
-            )
-            packets.extend(tool_renderer.start())
-            for child in response.child_runs:
-                if (
-                    child.parent_message_id != message_id
-                    or child.parent_tool_call_id != call.id
-                ):
-                    continue
-                tool_renderer.has_child_output = True
-                child_mode = (
-                    PresentationMode.CODING_THINKING
-                    if call.name == CODING_AGENT_TOOL_NAME
-                    else PresentationMode.ANSWER
-                )
-                packets.extend(
-                    replay_response(
-                        child,
-                        records,
-                        settings,
-                        documents,
-                        layout,
-                        tool_placement,
-                        child_mode,
-                    )
-                )
-            packets.extend(tool_renderer.complete(result))
-    if response.parent_run_id is None:
-        packets.append(
-            Packet(
-                placement=Placement(turn_index=0),
-                obj=OverallStop(
-                    stop_reason="user_cancelled"
-                    if response.status == RunStatus.CANCELLED
-                    else "finished"
-                ),
-            )
-        )
-    return packets
