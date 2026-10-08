@@ -18,9 +18,22 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.download import download_file
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
-from onyx.connectors.models import Document, HierarchyNode, ImageSection, TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import (
+    Document,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TextSection,
+)
 from onyx.file_processing.extract_file_text import extract_file_text, get_file_ext
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -92,7 +105,7 @@ def parse_airtable_url(
     return match.group(1), match.group(2), match.group(3)
 
 
-class AirtableConnector(LoadConnector):
+class AirtableConnector(LoadConnector, SlimConnector):
     def __init__(
         self,
         base_id: str = "",
@@ -614,7 +627,32 @@ class AirtableConnector(LoadConnector):
                 table_name_or_id=self.table_name_or_id,
             )
 
-    def _load_all(self) -> GenerateDocumentsOutput:
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        """Use strict enumeration for pruning, with the same document selection as indexing."""
+        batches = (
+            self._load_all(fail_on_error=True)
+            if self.index_all
+            else self.load_from_state()
+        )
+        for batch in batches:
+            yield [
+                SlimDocument(
+                    id=item.id,
+                    external_access=item.external_access,
+                    parent_hierarchy_raw_node_id=item.parent_hierarchy_raw_node_id,
+                    doc_created_at=item.doc_created_at,
+                )
+                if isinstance(item, Document)
+                else item
+                for item in batch
+            ]
+
+    def _load_all(self, *, fail_on_error: bool = False) -> GenerateDocumentsOutput:
         """Discover all bases and tables, then index everything."""
         bases = self.airtable_client.bases()
         logger.info("Discovered %s Airtable base(s).", len(bases))
@@ -628,6 +666,8 @@ class AirtableConnector(LoadConnector):
                 base = self.airtable_client.base(base_id)
                 tables = base.tables()
             except Exception:
+                if fail_on_error:
+                    raise
                 logger.exception(
                     "Failed to list tables for base '%s' (%s), skipping.",
                     base_name,
@@ -645,6 +685,8 @@ class AirtableConnector(LoadConnector):
                         base_name=base_name,
                     )
                 except Exception:
+                    if fail_on_error:
+                        raise
                     logger.exception(
                         "Failed to index table '%s' (%s) in base '%s' (%s), skipping.",
                         table.name,
