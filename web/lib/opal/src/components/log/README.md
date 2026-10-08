@@ -12,7 +12,7 @@ a column of `Log`s. A line is not interactive.
 | --------------- | ----------------------- | ----------- | ------------------------------------------------------------------------- |
 | `variant`       | `LogVariant`            | `"default"` | Status and weight: colours the icon; heavy also colours details and tints |
 | `icon`          | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                       |
-| `title`         | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, at most 10rem wide             |
+| `title`         | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, in a 10rem column              |
 | `details`       | `string \| RichStr`     | —           | `main-ui-body`, start-aligned, one line, fills the row                    |
 | `rightChildren` | `ReactNode`             | —           | Trailing content, such as a tag or an action; not padded                  |
 
@@ -37,7 +37,8 @@ that fits the state (for example a spinner, a clock or an hourglass).
 ## Layout
 
 - A row `Section`, 2.25rem tall with 0.5rem padding and a 0.25rem gap, so tall
-  trailing content cannot stretch the line.
+  trailing content cannot stretch the line. The title column is exactly 10rem,
+  and 1rem separates it from the details.
 - A title or details too long for its line is cut with an ellipsis and shows
   in full in a tooltip.
 

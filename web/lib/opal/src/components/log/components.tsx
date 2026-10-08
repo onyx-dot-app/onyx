@@ -37,7 +37,7 @@ interface LogProps {
   variant?: LogVariant;
   /** Shown at 1rem, in the status colour. */
   icon: IconFunctionComponent;
-  /** What the line is about. One line, at most 10rem wide. */
+  /** What the line is about. One line, in a 10rem column. */
   title: string | RichStr;
   /** What happened. One line, filling the rest of the row. */
   details?: string | RichStr;
@@ -124,46 +124,58 @@ function Log({
         <Icon size={16} className="opal-log-icon" />
       </Section>
 
-      <Tooltip tooltip={titleClamped ? title : undefined} side="top">
-        <Section
-          ref={titleRef}
-          width="fit"
-          height="fit"
-          className="min-w-0 max-w-[10rem]"
-        >
-          <Text
-            font="secondary-action"
-            color="text-03"
-            maxLines={1}
-            data-opal-log-text=""
+      {/* The title and the details sit 1rem apart, wider than the line's
+          gap, so the title column reads as a label. */}
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        height="fit"
+        gap={4}
+        className="min-w-0 flex-1"
+      >
+        <Tooltip tooltip={titleClamped ? title : undefined} side="top">
+          <Section
+            ref={titleRef}
+            flexDirection="row"
+            justifyContent="start"
+            width={10}
+            height="fit"
+            className="shrink-0"
           >
-            {title}
-          </Text>
-        </Section>
-      </Tooltip>
-
-      <Tooltip tooltip={detailsClamped ? details : undefined} side="top">
-        <Section
-          ref={detailsRef}
-          justifyContent="start"
-          alignItems="stretch"
-          height="fit"
-          className="min-w-0 flex-1"
-        >
-          {details !== undefined && (
             <Text
-              as="p"
-              font="main-ui-body"
-              color={detailsColor}
-              textPosition="text-start"
+              font="secondary-action"
+              color="text-03"
               maxLines={1}
               data-opal-log-text=""
             >
-              {details}
+              {title}
             </Text>
-          )}
-        </Section>
-      </Tooltip>
+          </Section>
+        </Tooltip>
+
+        <Tooltip tooltip={detailsClamped ? details : undefined} side="top">
+          <Section
+            ref={detailsRef}
+            justifyContent="start"
+            alignItems="stretch"
+            height="fit"
+            className="min-w-0 flex-1"
+          >
+            {details !== undefined && (
+              <Text
+                as="p"
+                font="main-ui-body"
+                color={detailsColor}
+                textPosition="text-start"
+                maxLines={1}
+                data-opal-log-text=""
+              >
+                {details}
+              </Text>
+            )}
+          </Section>
+        </Tooltip>
+      </Section>
 
       {rightChildren}
     </Section>
