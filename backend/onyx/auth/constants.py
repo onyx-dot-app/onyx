@@ -28,6 +28,7 @@ AUTHORIZATION_REQUEST_TTL_SECONDS = 10 * 60
 AUTHORIZATION_CODE_TTL_SECONDS = 60
 OAUTH_PROVIDER_ACCESS_LIFETIME = timedelta(minutes=15)
 OAUTH_PROVIDER_GRANT_LIFETIME = timedelta(days=30)
+OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME = timedelta(days=90)
 NO_STORE_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 
 # SCIM constants. Defined here rather than in `ee` so that tenant extraction in

@@ -292,6 +292,37 @@ def test_rotate_refresh_preserves_grant_expiry(
     assert rotated.refresh_token != refresh_token
 
 
+def test_rotate_refresh_prunes_only_expired_access_tokens(
+    db_session: Session, oauth_provider_rows: _OAuthProviderRows
+) -> None:
+    _, access_token, refresh_token, client_id = oauth_provider_rows.create_grant()
+    assert refresh_token is not None
+    grant = _grant_for_access_token(db_session, access_token)
+    expired_access = db_session.get(OAuthProviderToken, hash_pat(access_token))
+    assert expired_access is not None
+    expired_access.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    rotated = rotate_oauth_provider_refresh__no_commit(
+        db_session, refresh_token, client_id=client_id, resource=_RESOURCE
+    )
+    db_session.commit()
+    assert rotated is not None and rotated.refresh_token is not None
+    rotated_again = rotate_oauth_provider_refresh__no_commit(
+        db_session, rotated.refresh_token, client_id=client_id, resource=_RESOURCE
+    )
+    db_session.commit()
+    assert rotated_again is not None and rotated_again.refresh_token is not None
+
+    assert {token.token_hash for token in _tokens_for_grant(db_session, grant.id)} == {
+        hash_pat(rotated.access_token),
+        hash_pat(rotated_again.access_token),
+        hash_pat(refresh_token),
+        hash_pat(rotated.refresh_token),
+        hash_pat(rotated_again.refresh_token),
+    }
+
+
 def test_consumed_refresh_load_revokes_committed_family(
     db_session: Session, oauth_provider_rows: _OAuthProviderRows
 ) -> None:

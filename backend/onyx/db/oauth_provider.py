@@ -4,7 +4,7 @@ from typing import Any, cast
 from uuid import UUID
 
 from mcp.shared.auth import OAuthClientInformationFull
-from sqlalchemy import or_, select, tuple_, update
+from sqlalchemy import delete, or_, select, tuple_, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.constants import (
     OAUTH_PROVIDER_ACCESS_LIFETIME,
+    OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME,
     OAUTH_PROVIDER_GRANT_LIFETIME,
     OAUTH_PROVIDER_SCOPE,
 )
@@ -259,6 +260,13 @@ def rotate_oauth_provider_refresh__no_commit(
         return None
     now = datetime.now(timezone.utc)
     token.consumed_at = now
+    session.execute(
+        delete(OAuthProviderToken).where(
+            OAuthProviderToken.grant_id == grant.id,
+            OAuthProviderToken.kind == "access",
+            OAuthProviderToken.expires_at <= now,
+        )
+    )
     return _issue_tokens(session, grant, issue_refresh=True, now=now)
 
 
@@ -464,3 +472,25 @@ def get_oauth_provider_token_owner(
     if user is None:
         return None
     return oauth_provider_owner_snapshot(user)
+
+
+def delete_expired_oauth_provider_grants__no_commit(
+    session: Session, *, now: datetime
+) -> int:
+    # Token rows cascade with their grant.
+    result = session.execute(
+        delete(OAuthProviderGrant).where(OAuthProviderGrant.expires_at <= now)
+    )
+    return cast(CursorResult[Any], result).rowcount or 0
+
+
+def delete_idle_oauth_provider_clients__no_commit(
+    session: Session, *, now: datetime
+) -> int:
+    result = session.execute(
+        delete(OAuthProviderClient).where(
+            OAuthProviderClient.last_used_at
+            <= now - OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME
+        )
+    )
+    return cast(CursorResult[Any], result).rowcount or 0
