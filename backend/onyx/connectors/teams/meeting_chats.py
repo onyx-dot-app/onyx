@@ -160,9 +160,9 @@ def fetch_touched_days(
     from one export stream. Days older than the lookback are left out. None
     past the cap: the stream is held in memory, so a user streaming more goes
     back to a question per chat."""
-    oldest = _lookback_oldest_day()
+    oldest: datetime = _lookback_oldest_day()
     touched: dict[str, set[date]] = {}
-    stream = iter_values(
+    stream: Iterator[dict[str, Any]] = iter_values(
         graph_client, export_url(user_chats_collection(user_id), start, end)
     )
     for seen, row in enumerate(stream, start=1):
@@ -173,7 +173,7 @@ def fetch_touched_days(
                 EXPORT_MESSAGES_CAP,
             )
             return None
-        message = ChatMessage(**_sanitize_message_user_display_name(row))
+        message: ChatMessage = ChatMessage(**_sanitize_message_user_display_name(row))
         if message.chat_id is None or message.created_date_time < oldest:
             continue
         touched.setdefault(message.chat_id, set()).add(message.created_date_time.date())
