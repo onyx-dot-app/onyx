@@ -377,10 +377,11 @@ PRs use pinned CLI versions; the nightly run uses their latest releases.
 The same job checks the OAuth protocol with omitted resource parameters, which
 legacy Claude Code clients use. Tokens remain bound to the configured MCP URL.
 
-An hourly canary checks craft-dev discovery aliases, both endpoint URL forms,
-the advertised slash-free resource, the unauthenticated MCP
-challenge, and provider endpoint routing without creating users or grants.
-`MCP_COMPATIBILITY_BASE_URL` can select another deployed origin. Scheduled and
+An hourly canary builds the backend under test and starts an isolated Compose
+stack with the API, MCP server, PostgreSQL, Redis, and shipped nginx routing.
+It checks loopback discovery aliases, both endpoint URL forms, the advertised
+resource, MCP auth challenges, and provider routing without creating users or grants.
+It does not use a running deployment or test the Next.js consent UI. Scheduled and
 manual failures use `SLACK_WEBHOOK` through the shared
 Slack action. The required-client mode fails if either CLI is missing.
 Manual runs with `test_alert=true` send a labeled delivery-test message even

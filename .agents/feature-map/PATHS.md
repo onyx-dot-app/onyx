@@ -101,6 +101,7 @@ here. Read the component that documents the setting in its env table.
 | `deployment/tests/test_oauth_proxy.py`, `deployment/tests/test_next_oauth_discovery.py` | mcp-server |
 | `backend/tests/unit/onyx/oauth_provider/test_native_client_cleanup.py`, `backend/tests/unit/onyx/oauth_provider/test_codex_response_reader.py` | mcp-server |
 | `.github/workflows/mcp-compatibility.yml`, `.github/scripts/check-mcp-compatibility.py`, `deployment/tests/test_mcp_compatibility_probe.py` | mcp-server |
+| `deployment/docker_compose/docker-compose.mcp-ci.yml`, `deployment/docker_compose/mcp-ci-web.conf`, `deployment/tests/test_mcp_compose.py`, `deployment/tests/test_mcp_canary_workflow.py` | mcp-server |
 | `backend/onyx/db/tenant_shard.py`, `db/engine/`, `backend/onyx/server/middleware/` | multi-tenancy |
 | `backend/onyx/server/middleware/rate_limiting.py` | rate-and-usage-limits |
 | `backend/onyx/server/middleware/latency_logging.py` | observability |

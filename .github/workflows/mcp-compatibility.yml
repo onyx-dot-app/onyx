@@ -103,18 +103,44 @@ jobs:
           backend/tests/external_dependency_unit/oauth_provider/test_native_clients.py
           backend/tests/external_dependency_unit/oauth_provider/test_protocol.py
 
-  deployed-smoke:
+  compose-smoke:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
+    env:
+      COMPOSE_FILE: deployment/docker_compose/docker-compose.mcp-ci.yml
+      COMPOSE_PROJECT_NAME: onyx-mcp-ci-${{ github.run_id }}
+      ONYX_BACKEND_IMAGE: onyx-mcp-ci-backend:ci
+      MCP_CANARY_PORT: "18080"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Check deployed discovery and MCP challenge
-        env:
-          MCP_BASE_URL: ${{ vars.MCP_COMPATIBILITY_BASE_URL || 'https://craft-dev.onyx.app' }}
-        run: python3 .github/scripts/check-mcp-compatibility.py --base-url "$MCP_BASE_URL"
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - name: Build the backend under test
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: backend
+          file: backend/Dockerfile
+          target: runtime
+          load: true
+          tags: ${{ env.ONYX_BACKEND_IMAGE }}
+          cache-from: type=gha,scope=mcp-compose-canary
+          cache-to: type=gha,scope=mcp-compose-canary,mode=max
+      - name: Start the isolated MCP stack
+        run: docker compose up -d --no-build --wait --wait-timeout 300
+      - name: Check local discovery and MCP challenge
+        run: >-
+          python3 .github/scripts/check-mcp-compatibility.py
+          --base-url "http://localhost:${MCP_CANARY_PORT}"
+      - name: Dump stack diagnostics
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color
+      - name: Stop the isolated stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
 
   required:
     name: MCP compatibility
@@ -134,7 +160,7 @@ jobs:
       always() &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
       (contains(needs.*.result, 'failure') || inputs.test_alert)
-    needs: [routing, native-clients, deployed-smoke]
+    needs: [routing, native-clients, compose-smoke]
     runs-on: ubuntu-slim
     environment: ci-protected
     timeout-minutes: 5
@@ -152,5 +178,5 @@ jobs:
           details: >-
             Routing: ${{ needs.routing.result }};
             Claude Code/Codex: ${{ needs.native-clients.result }};
-            deployed discovery: ${{ needs.deployed-smoke.result }}.
+            local Compose discovery: ${{ needs.compose-smoke.result }}.
             https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

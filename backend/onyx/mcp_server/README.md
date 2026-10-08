@@ -188,6 +188,20 @@ Once connected, you can:
 - View request/response payloads
 - Debug authentication issues
 
+### Local Compose compatibility canary
+
+The scheduled and manual workflow builds an isolated API/MCP stack with PostgreSQL, Redis, and shipped nginx routing. It probes only loopback URLs, not a shared deployment.
+
+Run the same stack locally:
+
+```bash
+docker compose -p onyx-mcp-ci -f deployment/docker_compose/docker-compose.mcp-ci.yml up --build -d --wait --wait-timeout 300
+python3 .github/scripts/check-mcp-compatibility.py --base-url http://localhost:18080
+docker compose -p onyx-mcp-ci -f deployment/docker_compose/docker-compose.mcp-ci.yml down --volumes --remove-orphans
+```
+
+`MCP_CANARY_PORT` changes the loopback port. This canary checks discovery and auth challenges. It does not exercise the Next.js consent UI; its web placeholder returns 503.
+
 ### Health Check
 
 Verify the server is running:
