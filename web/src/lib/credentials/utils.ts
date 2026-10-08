@@ -425,11 +425,11 @@ export function getCredentialDetails(
   }
 
   const method = spec.methods
-    ? findCredentialMethod(
+    ? (findCredentialMethod(
         credentialJson,
         spec.methods,
         getStoredAuthMethod(credentialJson, sourceType)
-      ) ?? null
+      ) ?? null)
     : null;
   const entries = method
     ? methodFields(spec, method)
