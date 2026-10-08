@@ -124,6 +124,9 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Fold */
+export { Fold, type FoldProps } from "@opal/components/fold/components";
+
 /* IconTooltip */
 export {
   IconTooltip,

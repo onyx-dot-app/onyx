@@ -4,33 +4,12 @@
    Card fold — the animating body of an expandable card.
 
    Structure:
-     .opal-card-fold            (grid 0fr↔1fr, opacity fade, overflow clip)
-       .opal-card-fold-inner    (min-height:0, clips the grid child)
+     .opal-fold                 (the animation; see components/fold/)
+       .opal-fold-inner
          .opal-card-fold-body   (border minus its top edge, bottom rounding)
 
-   Shared by Card and SelectCard. Pure CSS: no JS state machine, no Radix.
+   Shared by Card and SelectCard.
 ============================================================================ */
-
-.opal-card-fold {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  overflow: hidden;
-  transition:
-    grid-template-rows 200ms ease-out,
-    opacity 200ms ease-out;
-}
-
-.opal-card-fold[data-expanded="true"] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-}
-
-/* Clips the grid child so it collapses to zero cleanly. */
-.opal-card-fold-inner {
-  @apply overflow-hidden;
-  min-height: 0;
-}
 
 /* The background stays transparent so the page shows through the fold and
    keeps it distinct from the header. */
