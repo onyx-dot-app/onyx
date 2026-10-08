@@ -8,10 +8,7 @@ the field under test as an override.
 from typing import Any
 
 from onyx.connectors.zoom.models import (
-    ZoomInvitee,
     ZoomMeetingDetails,
-    ZoomPanelist,
-    ZoomParticipant,
     ZoomPastMeetingDetails,
     ZoomRecordingAuthenticationRule,
     ZoomRecordingAuthenticationSettings,
@@ -19,7 +16,6 @@ from onyx.connectors.zoom.models import (
     ZoomRecordingFile,
     ZoomRecordingRegistrant,
     ZoomRecordingSettings,
-    ZoomRegistrant,
     ZoomSessionOccurrence,
     ZoomUser,
     ZoomWebinarDetails,
@@ -136,44 +132,6 @@ def user(**overrides: Any) -> ZoomUser:
     return ZoomUser(**(fields | overrides))
 
 
-def participant(**overrides: Any) -> ZoomParticipant:
-    fields: dict[str, Any] = {
-        "id": "30R7kT7bTIKSNUFEuH_Qlg",
-        "name": "Jill Chill",
-        "user_id": "27423744",
-        "user_email": "jchill@example.com",
-        "join_time": "2022-03-23T06:58:09Z",
-        "leave_time": "2022-03-23T07:02:28Z",
-        "duration": 259,
-        "failover": False,
-        "status": "in_meeting",
-    }
-    return ZoomParticipant(**(fields | overrides))
-
-
-def registrant(**overrides: Any) -> ZoomRegistrant:
-    fields: dict[str, Any] = {
-        "email": "jchill@example.com",
-        "first_name": "Jill",
-    }
-    return ZoomRegistrant(**(fields | overrides))
-
-
-def invitee(**overrides: Any) -> ZoomInvitee:
-    fields: dict[str, Any] = {"email": "jchill@example.com"}
-    return ZoomInvitee(**(fields | overrides))
-
-
-def panelist(**overrides: Any) -> ZoomPanelist:
-    fields: dict[str, Any] = {
-        "id": "Tg2b6GhcQKKbV7nSCbDKug",
-        "email": "jchill@example.com",
-        "name": "Jill Chill",
-        "join_url": "https://example.com/j/11111",
-    }
-    return ZoomPanelist(**(fields | overrides))
-
-
 # The built-in "Signed-in users in my account" rule of the test account.
 ACCOUNT_RULE_ID = "internally_GB7nutLVSz-Aoi3nrsxZrw"
 
@@ -201,6 +159,18 @@ def recording_authentication_rule(**overrides: Any) -> ZoomRecordingAuthenticati
         "id": ACCOUNT_RULE_ID,
         "type": "internally",
         "name": "Signed-in users in my account",
+    }
+    return ZoomRecordingAuthenticationRule(**(fields | overrides))
+
+
+def domain_rule(
+    domains: str = "example.com", **overrides: Any
+) -> ZoomRecordingAuthenticationRule:
+    fields: dict[str, Any] = {
+        "id": "KtK6lLjFQp24UqYxdYQQuA",
+        "type": "enforce_login_with_domains",
+        "name": "testing access with specified domains",
+        "domains": domains,
     }
     return ZoomRecordingAuthenticationRule(**(fields | overrides))
 
