@@ -140,6 +140,7 @@ const COLOR_CONFIG: Record<TextColor, string | null> = {
   "status-success-01": "text-status-success-01",
   "status-success-02": "text-status-success-02",
   "status-success-05": "text-status-success-05",
+  "theme-amber-05": "text-theme-amber-05",
 };
 
 // ---------------------------------------------------------------------------
