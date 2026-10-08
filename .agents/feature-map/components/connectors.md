@@ -362,12 +362,15 @@ of meeting chats.
   thread (`FileSource.index`): the folder children, each file's text, and its
   readers through SharePoint REST, whose client is kept per site.
 - **Organizers.** The meeting side follows the channels: a page of licensed
-  users per step, then eight organizers at a time, each reading its
-  transcripts and the days of its meeting chats that changed.
+  users per step, then 32 organizers per step drained by eight workers from a
+  queue (`sources.drain`), each organizer read for its transcripts and the
+  days of its meeting chats that changed. A slow organizer holds back only its
+  own worker.
 - **Prune and permission sync.** `_slim_docs` relists the channels through the
-  delta, ids only and no replies, `max_workers` channels at a time with or
-  without readers (file readers come through a SharePoint REST context kept
-  per site and per thread), then the organizers eight at a time.
+  delta, ids only and no replies, in batches of four channels per worker that
+  `max_workers` workers drain, with or without readers (file readers come
+  through a SharePoint REST context kept per site and per thread), then the
+  organizers the same way.
 
 ### 4.7 The `SourceOperations` gateway pattern
 
