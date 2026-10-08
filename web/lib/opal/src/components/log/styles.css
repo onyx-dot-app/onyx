@@ -1,23 +1,26 @@
+@reference "#reference.css";
+
 /* ── Log ─────────────────────────────────────────────────────────────────────
    A Log sits on `Interactive.Stateless` (default, internal). Its variant
-   sets the icon's stroke colour and replaces the internal grey hover with a status tint.
+   sets the icon's stroke colour (icons stroke with `currentColor`, so a
+   `text-*` colour sets it) and replaces the internal grey hover with a status tint.
    Each rule names one more attribute than the internal rules it overrides, so
    it wins without !important. */
 
 .interactive[data-opal-log-variant] .opal-log-icon {
-  @apply shrink-0 stroke-text-03;
+  @apply shrink-0 text-text-03;
 }
 .interactive[data-opal-log-variant="info"] .opal-log-icon {
-  @apply stroke-status-info-05;
+  @apply text-status-info-05;
 }
 .interactive[data-opal-log-variant="success"] .opal-log-icon {
-  @apply stroke-status-success-05;
+  @apply text-status-success-05;
 }
 .interactive[data-opal-log-variant="warning"] .opal-log-icon {
-  @apply stroke-theme-amber-05;
+  @apply text-theme-amber-05;
 }
 .interactive[data-opal-log-variant="error"] .opal-log-icon {
-  @apply stroke-status-error-05;
+  @apply text-status-error-05;
 }
 
 .interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-opal-log-variant="info"]:is(
