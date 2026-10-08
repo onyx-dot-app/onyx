@@ -1,6 +1,5 @@
 """Namespace-scoped, bounded Kubernetes health reads in the isolated collector."""
 
-import json
 import math
 import os
 import re
@@ -16,9 +15,10 @@ from onyx.utils.fleet_telemetry import (
     BoundedTelemetry,
     is_valid_version,
     poll_due,
+    read_json_body,
 )
 
-_SERVICE_ROLES = {
+_SERVICE_ROLES: dict[str, str] = {
     "api-server": "api",
     "onyx-api": "api",
     "api": "api",
@@ -85,20 +85,19 @@ def quantity(value: Any, *, cpu: bool = False) -> float | None:
 
 class KubernetesCollector:
     def __init__(self, client: BoundedTelemetry) -> None:
-        self.client = client
-        self.namespace = os.environ.get(
+        self.client: BoundedTelemetry = client
+        self.namespace: str = os.environ.get(
             "ONYX_TELEMETRY_KUBERNETES_NAMESPACE", "default"
         )
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", self.namespace):
             raise ValueError("Invalid namespace")
-        host = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+        host: str = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
         if ":" in host and not host.startswith("["):
             # IPv6 clusters inject a bare address; URLs need it in brackets.
             host = f"[{host}]"
-        port = os.environ.get("KUBERNETES_SERVICE_PORT_HTTPS", "443")
-        self.base = f"https://{host}:{port}"
-        self.base = os.environ.get(
-            "ONYX_TELEMETRY_KUBERNETES_API_URL", self.base
+        port: str = os.environ.get("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+        self.base: str = os.environ.get(
+            "ONYX_TELEMETRY_KUBERNETES_API_URL", f"https://{host}:{port}"
         ).rstrip("/")
         parsed = urlsplit(self.base)
         if (
@@ -109,20 +108,20 @@ class KubernetesCollector:
             or parsed.fragment
         ):
             raise ValueError("Invalid Kubernetes API endpoint")
-        self.token_path = Path(
+        self.token_path: Path = Path(
             os.environ.get(
                 "ONYX_TELEMETRY_KUBERNETES_TOKEN_FILE",
                 "/var/run/secrets/kubernetes.io/serviceaccount/token",
             )
         )
-        self.ca_path = os.environ.get(
+        self.ca_path: str = os.environ.get(
             "ONYX_TELEMETRY_KUBERNETES_CA_FILE",
             "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
         )
         self._continuation: str | None = None
         self._last_poll: float | None = None
         self._last_metrics: float | None = None
-        self.errors = 0
+        self.errors: int = 0
         self._state: dict[str, tuple[int, bool, float, str]] = {}
         self._limits: dict[
             tuple[str, str], tuple[str, float | None, float | None, str]
@@ -190,16 +189,10 @@ class KubernetesCollector:
                 if response.status_code == 410 and params and "continue" in params:
                     # Expired pod pages must restart the scan at the next poll.
                     self._continuation = None
-                if not response.ok or response.headers.get(
-                    "Content-Encoding", "identity"
-                ) not in {"", "identity"}:
+                if not response.ok:
                     self._failed()
                     return None
-                body = response.raw.read(1_048_577)
-                if len(body) > 1_048_576:
-                    self._failed()
-                    return None
-                result = json.loads(body)
+                result: Any = read_json_body(response, 1_048_576)
                 return result if isinstance(result, dict) else None
         except Exception:
             self._failed()

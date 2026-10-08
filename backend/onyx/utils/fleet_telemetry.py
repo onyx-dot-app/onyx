@@ -68,7 +68,8 @@ _ERRORS: frozenset[str] = frozenset(
     }
 )
 _SOURCES: frozenset[str] = frozenset(source.value for source in DocumentSource)
-_QUEUES: frozenset[str] = frozenset(
+# Read from OnyxCeleryQueues, so a renamed queue needs no telemetry change.
+CELERY_QUEUES: tuple[str, ...] = tuple(
     value
     for key, value in vars(OnyxCeleryQueues).items()
     if not key.startswith("_") and isinstance(value, str)
@@ -104,61 +105,74 @@ _SERVICES: frozenset[str] = frozenset(
         "unknown",
     }
 )
+# Connector configuration keys exported only as reviewed booleans and numbers.
+SAFE_BOOLEAN_SETTINGS: tuple[str, ...] = (
+    "include_shared_drives",
+    "include_my_drives",
+    "include_files_shared_with_me",
+    "exclude_domain_link_only",
+    "include_shared",
+    "follow_shortcuts",
+    "only_org_public",
+    "continue_on_failure",
+    "include_attachments",
+    "include_calendar",
+    "include_bot_messages",
+    "channel_regex_enabled",
+    "exclude_channel_regex_enabled",
+    "index_recursively",
+    "recursive_index_enabled",
+    "include_mrs",
+    "include_issues",
+    "include_code_files",
+    "include_web_links",
+    "index_page_content",
+    "retrieve_task_comments",
+    "allow_images",
+    "include_inline_images",
+    "include_meeting_transcripts",
+    "include_meeting_chats",
+    "include_article",
+    "include_blog",
+    "include_wiki",
+    "include_forum",
+    "hide_user_info",
+    "european_residency",
+)
+SAFE_NUMBER_SETTINGS: tuple[str, ...] = (
+    "batch_size",
+    "num_threads",
+    "max_workers",
+    "recurse_depth",
+    "max_pages",
+    "cases_page_size",
+    "skip_doc_absolute_chars",
+    "calendar_past_days",
+    "calendar_future_days",
+    "experiment_row_lookback_days",
+)
+# Counts and flags the collector derives from connector configuration in SQL.
+CONNECTOR_CONFIG_COUNTS: tuple[str, ...] = (
+    "selection_count",
+    "include_rule_count",
+    "exclude_rule_count",
+    "include_pattern_count",
+    "exclude_pattern_count",
+    "file_type_count",
+    "has_time_filter",
+)
+# Scheduling and sync settings the collector reads from connector columns.
+CONNECTOR_ROW_SETTINGS: tuple[str, ...] = (
+    "refresh_seconds",
+    "prune_seconds",
+    "auto_sync_enabled",
+    "permission_sync_enabled",
+)
 _METADATA: frozenset[str] = frozenset(
-    {
-        "refresh_seconds",
-        "prune_seconds",
-        "auto_sync_enabled",
-        "permission_sync_enabled",
-        "selection_count",
-        "include_rule_count",
-        "exclude_rule_count",
-        "include_pattern_count",
-        "exclude_pattern_count",
-        "has_time_filter",
-        "file_type_count",
-        "batch_size",
-        "num_threads",
-        "max_workers",
-        "recurse_depth",
-        "max_pages",
-        "cases_page_size",
-        "skip_doc_absolute_chars",
-        "calendar_past_days",
-        "calendar_future_days",
-        "experiment_row_lookback_days",
-        "include_shared_drives",
-        "include_my_drives",
-        "include_files_shared_with_me",
-        "exclude_domain_link_only",
-        "include_shared",
-        "follow_shortcuts",
-        "only_org_public",
-        "continue_on_failure",
-        "include_attachments",
-        "include_calendar",
-        "include_bot_messages",
-        "channel_regex_enabled",
-        "exclude_channel_regex_enabled",
-        "index_recursively",
-        "recursive_index_enabled",
-        "include_mrs",
-        "include_issues",
-        "include_code_files",
-        "include_web_links",
-        "index_page_content",
-        "retrieve_task_comments",
-        "allow_images",
-        "include_inline_images",
-        "include_meeting_transcripts",
-        "include_meeting_chats",
-        "include_article",
-        "include_blog",
-        "include_wiki",
-        "include_forum",
-        "hide_user_info",
-        "european_residency",
-    }
+    SAFE_BOOLEAN_SETTINGS
+    + SAFE_NUMBER_SETTINGS
+    + CONNECTOR_CONFIG_COUNTS
+    + CONNECTOR_ROW_SETTINGS
 )
 _COUNTERS: frozenset[str] = frozenset(
     {
@@ -335,7 +349,7 @@ _ENUM_FIELDS: dict[str, frozenset[str]] = {
     "outcome": frozenset({"success", "failure", "canceled", "disconnected"}),
     "stage_name": frozenset(stage.value for stage in IndexAttemptStage),
     "opensearch_status": frozenset({"green", "yellow", "red", "unavailable"}),
-    "queue": _QUEUES,
+    "queue": frozenset(CELERY_QUEUES),
     "job_type": _JOB_TYPES,
     "counter_mode": frozenset({"snapshot", "delta"}),
     "stage": frozenset({"fetch", "prepare", "embed", "write"}),
@@ -379,6 +393,18 @@ _ERROR_COUNTERS: tuple[str, ...] = (
 def is_valid_version(value: str) -> bool:
     """Accept only bounded release tags, build hashes, and fixed version labels."""
     return _VERSION.fullmatch(value) is not None
+
+
+def read_json_body(response: requests.Response, limit: int) -> Any:
+    """Parse an uncompressed JSON body of at most `limit` bytes. Raise otherwise.
+
+    Like json.loads, the result is unvalidated; callers check its structure."""
+    if response.headers.get("Content-Encoding", "identity") not in {"", "identity"}:
+        raise ValueError("Unsupported response encoding")
+    raw: bytes = response.raw.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError("Response exceeds limit")
+    return json.loads(raw)
 
 
 def normalize_email_domain(domain: str) -> str | None:
@@ -806,11 +832,6 @@ class BoundedTelemetry:
                 stream=True,
             )
             with response:
-                if response.headers.get("Content-Encoding", "identity") not in {
-                    "",
-                    "identity",
-                }:
-                    raise ValueError("Unsupported telemetry response encoding")
                 if not response.ok:
                     self._enrolled = self._enrolled and not (
                         response.status_code == 401 and self.config.auto_enroll
@@ -821,10 +842,7 @@ class BoundedTelemetry:
                         self._pending = []
                         self._attempts = {}
                     raise RuntimeError("telemetry delivery failed")
-                raw: bytes = response.raw.read(65537)
-                if len(raw) > 65536:
-                    raise ValueError("Telemetry response exceeds limit")
-                result: Any = json.loads(raw)
+                result: Any = read_json_body(response, 65536)
         except Exception:
             # Outages keep the batch and back off; nothing counts against its events.
             self.failures = min(self.failures + 1, 8)
@@ -885,14 +903,9 @@ class BoundedTelemetry:
             stream=True,
         )
         with response:
-            if response.status_code != 200 or response.headers.get(
-                "Content-Encoding", "identity"
-            ) not in {"", "identity"}:
+            if response.status_code != 200:
                 raise ValueError("Fleet enrollment unavailable")
-            raw: bytes = response.raw.read(4097)
-            if len(raw) > 4096:
-                raise ValueError("Fleet enrollment receipt too large")
-            result: object = json.loads(raw)
+            result: object = read_json_body(response, 4096)
             if (
                 not isinstance(result, dict)
                 or result.get("customer_uuid") != self.config.customer_uuid

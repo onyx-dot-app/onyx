@@ -2,13 +2,14 @@
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Connection, Engine, create_engine, event, text
 
 from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
+from onyx.utils.fleet_telemetry import SAFE_BOOLEAN_SETTINGS, SAFE_NUMBER_SETTINGS
 
 # Separate read-only collector credentials. Without them, the collector uses the
 # application's PostgreSQL settings, TLS, and IAM authentication.
@@ -18,53 +19,12 @@ TELEMETRY_DATABASE_URL: str | None = (
 SOURCE_DATABASE_URL: str = TELEMETRY_DATABASE_URL or build_connection_string(
     db_api=SYNC_DB_API
 )
+# Rows per read. A shorter page means the scan reached the current end.
+PAGE_SIZE: int = 200
+# Stage summaries stay inside the service's 30-day diagnostics horizon.
+STAGE_HORIZON: timedelta = timedelta(days=29)
 
-SAFE_BOOLEAN_SETTINGS = (
-    "include_shared_drives",
-    "include_my_drives",
-    "include_files_shared_with_me",
-    "exclude_domain_link_only",
-    "include_shared",
-    "follow_shortcuts",
-    "only_org_public",
-    "continue_on_failure",
-    "include_attachments",
-    "include_calendar",
-    "include_bot_messages",
-    "channel_regex_enabled",
-    "exclude_channel_regex_enabled",
-    "index_recursively",
-    "recursive_index_enabled",
-    "include_mrs",
-    "include_issues",
-    "include_code_files",
-    "include_web_links",
-    "index_page_content",
-    "retrieve_task_comments",
-    "allow_images",
-    "include_inline_images",
-    "include_meeting_transcripts",
-    "include_meeting_chats",
-    "include_article",
-    "include_blog",
-    "include_wiki",
-    "include_forum",
-    "hide_user_info",
-    "european_residency",
-)
-SAFE_NUMBER_SETTINGS = (
-    "batch_size",
-    "num_threads",
-    "max_workers",
-    "recurse_depth",
-    "max_pages",
-    "cases_page_size",
-    "skip_doc_absolute_chars",
-    "calendar_past_days",
-    "calendar_future_days",
-    "experiment_row_lookback_days",
-)
-_SCOPE_ARRAYS = (
+_SCOPE_ARRAYS: tuple[str, ...] = (
     "folder_ids",
     "folder_paths",
     "channels",
@@ -159,7 +119,7 @@ _SAFE_CONFIGURATION: str = _safe_configuration_expression()
 
 
 def connector_page(
-    engine: Engine, schema: str, after_id: int = 0, limit: int = 200
+    engine: Engine, schema: str, after_id: int = 0, limit: int = PAGE_SIZE
 ) -> list[dict[str, Any]]:
     scoped = _schema(schema)
     statement = f"""
@@ -179,13 +139,17 @@ def connector_page(
             dict(row)
             for row in connection.execute(
                 text(statement),
-                {"after_id": after_id, "limit": min(500, max(1, limit))},
+                {"after_id": after_id, "limit": min(PAGE_SIZE, max(1, limit))},
             ).mappings()
         ]
 
 
 def attempt_page(
-    engine: Engine, schema: str, since: datetime, after_id: int = 0, limit: int = 200
+    engine: Engine,
+    schema: str,
+    since: datetime,
+    after_id: int = 0,
+    limit: int = PAGE_SIZE,
 ) -> list[dict[str, Any]]:
     scoped = _schema(schema)
     statement = f"""
@@ -220,7 +184,7 @@ def attempt_page(
                 {
                     "since": since,
                     "after_id": after_id,
-                    "limit": min(500, max(1, limit)),
+                    "limit": min(PAGE_SIZE, max(1, limit)),
                 },
             ).mappings()
         ]
@@ -231,7 +195,7 @@ def job_page(
     schema: str,
     since: datetime,
     after_id: str = "",
-    limit: int = 200,
+    limit: int = PAGE_SIZE,
     *,
     active_only: bool = False,
 ) -> list[dict[str, Any]]:
@@ -284,14 +248,14 @@ def job_page(
                 {
                     "since": since,
                     "after_id": str(after_id) if after_id else "",
-                    "limit": min(500, max(1, limit)),
+                    "limit": min(PAGE_SIZE, max(1, limit)),
                 },
             ).mappings()
         ]
 
 
 def email_domain_page(
-    engine: Engine, schema: str, after_domain: str = "", limit: int = 200
+    engine: Engine, schema: str, after_domain: str = "", limit: int = PAGE_SIZE
 ) -> list[dict[str, Any]]:
     scoped = _schema(schema)
     statement = f"""SELECT domain,first_signup_at FROM {scoped}.fleet_signup_email_domains
@@ -301,7 +265,7 @@ def email_domain_page(
             dict(row)
             for row in connection.execute(
                 text(statement),
-                {"after_domain": after_domain, "limit": min(200, max(1, limit))},
+                {"after_domain": after_domain, "limit": min(PAGE_SIZE, max(1, limit))},
             ).mappings()
         ]
 
@@ -325,7 +289,11 @@ def tenant_schemas(engine: Engine) -> list[str]:
 
 
 def stage_metric_page(
-    engine: Engine, schema: str, since: datetime, after_id: int = 0, limit: int = 200
+    engine: Engine,
+    schema: str,
+    since: datetime,
+    after_id: int = 0,
+    limit: int = PAGE_SIZE,
 ) -> list[dict[str, Any]]:
     """Read changed numeric stage summaries using the timestamp/id index."""
     scoped = _schema(schema)
@@ -341,7 +309,7 @@ def stage_metric_page(
         JOIN {scoped}.connector_credential_pair p ON p.id=a.connector_credential_pair_id
         JOIN {scoped}.connector c ON c.id=p.connector_id
         WHERE (m.time_last_event,m.id) > (:since,:after_id)
-          AND m.time_last_event > now()-interval '29 days' AND NOT a.is_synthetic_seed
+          AND m.time_last_event > now() - :horizon AND NOT a.is_synthetic_seed
         ORDER BY m.time_last_event,m.id LIMIT :limit
     """  # noqa: S608 - Validated schema; all cursor values are bound.
     with engine.connect() as connection:
@@ -352,7 +320,8 @@ def stage_metric_page(
                 {
                     "since": since,
                     "after_id": after_id,
-                    "limit": min(200, max(1, limit)),
+                    "horizon": STAGE_HORIZON,
+                    "limit": min(PAGE_SIZE, max(1, limit)),
                 },
             ).mappings()
         ]

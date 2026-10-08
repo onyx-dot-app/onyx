@@ -11,7 +11,7 @@ from onyx.utils.fleet_telemetry import emit_telemetry, error_category
 from shared_configs.contextvars import get_current_user_id
 
 F = TypeVar("F", bound=Callable[..., Any])
-_QUERY_PREFIX = uuid.uuid4().int & (((1 << 64) - 1) << 64)
+_QUERY_PREFIX: int = uuid.uuid4().int & (((1 << 64) - 1) << 64)
 
 
 _ORIGIN_CHANNELS: dict[str, str] = {
@@ -35,17 +35,17 @@ def _channel(kwargs: dict[str, Any]) -> str:
 
 class QueryObservation:
     def __init__(self, *, channel: str, mode: str, user_id: str | None = None) -> None:
-        self.started = time.monotonic()
-        self.channel = channel
-        self.mode = mode
-        self.user_id = user_id
+        self.started: float = time.monotonic()
+        self.channel: str = channel
+        self.mode: str = mode
+        self.user_id: str | None = user_id
         # An in-process monotonic ID avoids UUID entropy reads on request threads.
-        self.query_id = str(
+        self.query_id: str = str(
             uuid.UUID(int=_QUERY_PREFIX | (time.monotonic_ns() & ((1 << 64) - 1)))
         )
         self.first_answer_ms: float | None = None
         self.time_to_results_ms: float | None = None
-        self.outcome = "success"
+        self.outcome: str = "success"
         self.error_code: str | None = None
 
     def answer(self) -> None:

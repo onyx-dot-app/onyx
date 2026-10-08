@@ -23,9 +23,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB
 from onyx.db.fleet_telemetry import (
-    SAFE_BOOLEAN_SETTINGS,
-    SAFE_NUMBER_SETTINGS,
+    PAGE_SIZE,
     SOURCE_DATABASE_URL,
+    STAGE_HORIZON,
     attempt_page,
     collector_engine,
     connector_page,
@@ -36,10 +36,15 @@ from onyx.db.fleet_telemetry import (
     tenant_schemas,
 )
 from onyx.utils.fleet_telemetry import (
+    CELERY_QUEUES,
+    CONNECTOR_CONFIG_COUNTS,
     CONNECTOR_INTERVAL_SECONDS,
+    CONNECTOR_ROW_SETTINGS,
     EXIT_FLUSH_SECONDS,
     QUEUE_INTERVAL_SECONDS,
     RESOURCE_INTERVAL_SECONDS,
+    SAFE_BOOLEAN_SETTINGS,
+    SAFE_NUMBER_SETTINGS,
     BoundedTelemetry,
     normalize_email_domain,
     poll_due,
@@ -52,8 +57,6 @@ from shared_configs.configs import MULTI_TENANT
 SOURCE_EVENT_REVISION: int = 1
 # Attempt and job history stays inside the service's 190-day horizon.
 _HISTORY_HORIZON: timedelta = timedelta(days=184)
-# Stage summaries stay inside the service's 30-day diagnostics horizon.
-_STAGE_HORIZON: timedelta = timedelta(days=29)
 # At the live edge, the next read re-covers a short overlap for rows that commit late.
 _REPAIR_OVERLAP: timedelta = timedelta(minutes=10)
 # A wider sweep resends recent rows every six hours and after deferred events expire.
@@ -130,19 +133,18 @@ def safe_attempt_error_data(
     return data
 
 
+def _canonical_json(value: dict[str, Any]) -> str:
+    """Key-order-independent text, so equal payloads hash and compare equal."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
 def safe_connector_data(
     row: dict[str, Any], client: BoundedTelemetry
 ) -> dict[str, Any]:
     raw: Any = row.get("metadata", {})
-    allowed: set[str] = set(SAFE_BOOLEAN_SETTINGS + SAFE_NUMBER_SETTINGS) | {
-        "selection_count",
-        "include_rule_count",
-        "exclude_rule_count",
-        "include_pattern_count",
-        "exclude_pattern_count",
-        "file_type_count",
-        "has_time_filter",
-    }
+    allowed: set[str] = set(
+        SAFE_BOOLEAN_SETTINGS + SAFE_NUMBER_SETTINGS + CONNECTOR_CONFIG_COUNTS
+    )
     metadata: dict[str, bool | int | float] = (
         {
             key: value
@@ -154,12 +156,7 @@ def safe_connector_data(
         if isinstance(raw, dict)
         else {}
     )
-    for key in {
-        "refresh_seconds",
-        "prune_seconds",
-        "auto_sync_enabled",
-        "permission_sync_enabled",
-    }:
+    for key in CONNECTOR_ROW_SETTINGS:
         value: object = row.get(key)
         if isinstance(value, (bool, int, float)) and 0 <= value <= 1e18:
             metadata[key] = value
@@ -170,9 +167,7 @@ def safe_connector_data(
         "state": row["state"],
         "doc_count": row.get("doc_count") or 0,
         "last_success_at": _iso(row.get("last_success_at")),
-        "config_hash": client.fingerprint(
-            json.dumps(metadata, sort_keys=True, separators=(",", ":"))
-        ),
+        "config_hash": client.fingerprint(_canonical_json(metadata)),
         "metadata": metadata,
     }
 
@@ -255,9 +250,7 @@ class FleetCollector:
         if durable_id and observed_at is not None:
             # Active source rows may update counters without a revision timestamp.
             # Only already-sanitized structural state participates in identity.
-            identity += ":" + self.client.fingerprint(
-                json.dumps(data, sort_keys=True, separators=(",", ":"))
-            )
+            identity += ":" + self.client.fingerprint(_canonical_json(data))
         event_id: str | None = (
             str(
                 uuid.uuid5(
@@ -275,7 +268,7 @@ class FleetCollector:
         if event_type == "tenant_domain" or (
             event_type == "license" and data.get("action") == "snapshot"
         ):
-            signature = json.dumps(data, sort_keys=True, separators=(",", ":"))
+            signature = _canonical_json(data)
             previous: tuple[str, float, int] | None = self._metadata.get(metadata_key)
             if (
                 previous
@@ -358,7 +351,7 @@ class FleetCollector:
                     break
             self._domain_cursor[schema] = row["domain"]
         else:
-            if len(rows) < 200:
+            if len(rows) < PAGE_SIZE:
                 self._domain_cursor[schema] = ""
                 self._last_domains[schema] = now
         return True
@@ -400,7 +393,7 @@ class FleetCollector:
         ):
             return
         scan_started: datetime = datetime.now(timezone.utc)
-        oldest: datetime = scan_started - _STAGE_HORIZON
+        oldest: datetime = scan_started - STAGE_HORIZON
         since, after_id = self._stage_cursor.get(schema, (oldest, 0))
         try:
             rows: list[dict[str, Any]] = stage_metric_page(
@@ -438,7 +431,7 @@ class FleetCollector:
                 ):
                     return
                 self._stage_cursor[schema] = (updated, row["id"])
-            if len(rows) < 200:
+            if len(rows) < PAGE_SIZE:
                 # Reconcile small timestamp overlaps, including a source commit arriving late.
                 self._stage_cursor[schema] = (scan_started - timedelta(minutes=5), 0)
                 self._last_stages[schema] = now
@@ -478,7 +471,7 @@ class FleetCollector:
                     break
                 self._connector_cursor[schema] = row["cc_pair_id"]
             else:
-                if len(rows) < 200:
+                if len(rows) < PAGE_SIZE:
                     self._connector_cursor[schema] = 0
                     self._last_connectors[schema] = now
         oldest: datetime = datetime.now(timezone.utc) - _HISTORY_HORIZON
@@ -534,7 +527,7 @@ class FleetCollector:
                 break
             self._attempt_cursor[schema] = (updated, row["attempt_id"])
         else:
-            if rows is not None and len(rows) < 200:
+            if rows is not None and len(rows) < PAGE_SIZE:
                 self._attempt_cursor[schema] = (
                     self._edge_start(schema, "attempt", since, now),
                     0,
@@ -607,13 +600,13 @@ class FleetCollector:
             else:
                 self._job_cursor[schema] = (row["revision_at"], row["id"])
         else:
-            if historical is not None and len(historical) < 200:
+            if historical is not None and len(historical) < PAGE_SIZE:
                 self._job_cursor[schema] = (
                     self._edge_start(schema, "job", job_since, now),
                     "",
                 )
                 self._last_jobs[schema] = now
-            if active is not None and len(active) < 200:
+            if active is not None and len(active) < PAGE_SIZE:
                 self._active_job_cursor[schema] = ""
                 self._last_active_jobs[schema] = now
         return collected
@@ -628,11 +621,7 @@ class FleetCollector:
             return
         from redis import Redis
 
-        from onyx.configs.constants import (
-            CELERY_SEPARATOR,
-            OnyxCeleryPriority,
-            OnyxCeleryQueues,
-        )
+        from onyx.configs.constants import CELERY_SEPARATOR, OnyxCeleryPriority
 
         url: str | None = _REDIS_URL
         tls_options: dict[str, Any] = {}
@@ -680,14 +669,9 @@ class FleetCollector:
             **tls_options,
         )
         try:
-            queues: list[str] = [
-                queue
-                for key, queue in vars(OnyxCeleryQueues).items()
-                if not key.startswith("_") and isinstance(queue, str)
-            ]
             priorities: int = len(OnyxCeleryPriority)
             with redis.pipeline(transaction=False) as pipeline:
-                for queue in queues:
+                for queue in CELERY_QUEUES:
                     for priority in range(priorities):
                         pipeline.llen(
                             queue
@@ -695,7 +679,7 @@ class FleetCollector:
                             else queue + CELERY_SEPARATOR + str(priority)
                         )
                 lengths: list[int] = pipeline.execute()
-            for position, queue in enumerate(queues):
+            for position, queue in enumerate(CELERY_QUEUES):
                 self.client.emit(
                     "queue",
                     {
