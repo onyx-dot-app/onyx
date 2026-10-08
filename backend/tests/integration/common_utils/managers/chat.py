@@ -281,7 +281,7 @@ class ChatSessionManager:
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=ToolName.IMAGE_GENERATION,
                     )
-                elif packet_type_str == StreamingType.IMAGE_GENERATION_HEARTBEAT.value:
+                elif packet_type_str == StreamingType.CHAT_HEARTBEAT.value:
                     # Track heartbeat packets for debugging/testing
                     heartbeat_packets.append(data)
                 elif packet_type_str == StreamingType.IMAGE_GENERATION_FINAL.value:

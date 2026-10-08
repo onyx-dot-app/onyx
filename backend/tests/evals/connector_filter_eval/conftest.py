@@ -23,6 +23,7 @@ from onyx.server.manage.llm.models import (
 # matrix doesn't discover it) but runs against the same live dependencies,
 # so it reuses that tree's fixtures via explicit imports.
 from tests.external_dependency_unit.answer.conftest import (  # noqa: F401  # noqa: F401  # noqa: F401
+    mock_document_index,
     mock_external_deps,
     mock_file_store,  # noqa: F401
     mock_gpu_status,  # noqa: F401

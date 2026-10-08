@@ -11719,7 +11719,9 @@
           "speakingPlaceholder": "{appName} يتحدث..."
         },
         "sendButton": {
-          "processingFilesTooltip": "في انتظار انتهاء معالجة الملفات المرفقة"
+          "processingFilesTooltip": "في انتظار انتهاء معالجة الملفات المرفقة",
+          "stoppingLabel": "جارٍ الإيقاف…",
+          "reloadLabel": "تحقق مجددًا"
         },
         "tabReadingButton": {
           "readLabel": "قراءة هذا التبويب",
@@ -13018,6 +13020,10 @@
       "incognito": {
         "title": "أنت في وضع التخفي"
       }
+    },
+    "readiness": {
+      "stopFailed": "تعذر إيقاف الرد. حاول مرة أخرى.",
+      "checkFailed": "تعذر التأكد من انتهاء الرد. تحقق مجددًا قبل إرسال رسالة أخرى."
     }
   },
   "common": {

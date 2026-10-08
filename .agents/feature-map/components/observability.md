@@ -420,6 +420,11 @@ every five minutes.
   query-processing hook rejects (`QUERY_REJECTED`): the chat stream sends the
   error as a `StreamingError` packet, and `QueryObservation.error_packet` reads
   only its code.
+  `chat/stream_buffer.py:ChatDelivery` observes output and finishes the query
+  after server execution, including after a reader disconnects.
+  `tools/interface.py:Tool.run` records executed tool categories through
+  `utils/fleet_query_telemetry.py:CURRENT_QUERY_OBSERVATION`, copied into workers.
+  Unknown or canceled calls that never run do not count.
 - Indexing counters: the fetch, embed, and write steps call `emit_stage_counter`
   ([[indexing-pipeline]] §4.10). The sender thread sums the deltas for one
   attempt and stage over at most 30 seconds.

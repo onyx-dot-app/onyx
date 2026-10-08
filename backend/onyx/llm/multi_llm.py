@@ -3,12 +3,12 @@ import json
 import math
 import os
 import time
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Union, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue, TypeAdapter
 from readerwriterlock import rwlock
 
 from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
@@ -48,7 +48,12 @@ from onyx.llm.exceptions import (
     LLMTimeoutError,
     litellm_exception_to_safe_error,
 )
-from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
+from onyx.llm.interfaces import (
+    LLM,
+    GenerationContext,
+    LLMConfig,
+    LLMUserIdentity,
+)
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
     ReasoningParamStyle,
@@ -74,6 +79,7 @@ from onyx.llm.model_capabilities import (
 from onyx.llm.model_request import (
     ChatCompletionMessage,
     RequestFunctionCall,
+    cache_split_stats,
     serialize_request,
     serialize_tools,
 )
@@ -144,8 +150,10 @@ ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
     ReasoningEffort.XHIGH: "xhigh",
 }
 
+
 logger = setup_logger()
 
+_PROVIDER_TOOL_CALLS = TypeAdapter(list[ProviderToolCall])
 
 # Write-preferring reader-writer lock guarding os.environ during litellm calls.
 # Calls that inject custom_config env vars hold the write lock; all other calls
@@ -155,9 +163,9 @@ _env_rwlock = rwlock.RWLockWrite()
 
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper, HTTPHandler
+    from litellm import ModelResponse as LiteLLMModelResponse
 
 
-_LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 
@@ -197,10 +205,14 @@ _REASONING_NONE_DEMAND = "set reasoning_effort to 'none'"
 _OPENAI_REASONING_NONE = OPENAI_REASONING_EFFORT[ReasoningEffort.OFF]
 
 
-def _merge_under(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+def _merge_under(
+    base: Mapping[str, JsonValue], override: JsonValue
+) -> dict[str, JsonValue]:
     """Fill *base* in beneath *override*, recursing so an override key that
     holds a dict keeps the siblings *base* declared under it. Leaves in
     *override* always win."""
+    if not isinstance(override, dict):
+        raise ValueError("Provider headers and extra_body must be JSON objects")
     merged = dict(base)
     for key, value in override.items():
         existing = merged.get(key)
@@ -211,7 +223,7 @@ def _merge_under(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
     return merged
 
 
-def _json_safe(value: Any) -> Any:
+def _json_safe(value: JsonValue) -> JsonValue:
     """Drop NaN and Infinity. Postgres rejects them in JSONB, and these params
     ride to the message row, so one would fail the commit that saves the answer."""
     if isinstance(value, float) and not math.isfinite(value):
@@ -256,8 +268,8 @@ def _litellm_bridges_tool_turn_to_responses(
 
 
 def _retry_attempts(
-    kwargs: dict[str, Any], required_keys: frozenset[str]
-) -> list[dict[str, Any]]:
+    kwargs: dict[str, JsonValue], required_keys: frozenset[str]
+) -> list[dict[str, JsonValue]]:
     """The ladder: the kwargs as given, then without reasoning keys, then
     without every best-effort key, skipping steps that drop nothing."""
     attempts = [kwargs]
@@ -284,7 +296,7 @@ def _event_with_request_params(
     )
 
 
-class _DeadlineCancellationSignal(CancellationSignal):
+class _GenerationSignal(CancellationSignal):
     def __init__(self, parent: CancellationSignal, timeout: float) -> None:
         super().__init__()
         self.parent = parent
@@ -305,7 +317,7 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
             parent.check()
             yield parent
         return
-    signal = _DeadlineCancellationSignal(parent, context.total_timeout_s)
+    signal = _GenerationSignal(parent, context.total_timeout_s)
     with (
         parent.on_cancel(signal.cancel),
         cancellation_scope(signal),
@@ -397,16 +409,16 @@ def _consume_stream_until_deadline[T](stream: Iterable[T], deadline: float) -> l
     return chunks
 
 
-def _prompt_to_dicts(prompt: list[ChatCompletionMessage]) -> list[dict[str, Any]]:
+def _prompt_to_dicts(prompt: list[ChatCompletionMessage]) -> list[dict[str, JsonValue]]:
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
     LiteLLM expects messages to be dictionaries (with .get() method),
     not Pydantic models. This function serializes the messages.
     """
-    return [msg.model_dump(exclude_none=True) for msg in prompt]
+    return [msg.model_dump(mode="json", exclude_none=True) for msg in prompt]
 
 
-def _normalize_content(raw: Any) -> str:
+def _normalize_content(raw: JsonValue) -> str:
     """Normalize a message content field to a plain string.
 
     Content can be a string, None, or a list of content-block dicts
@@ -435,8 +447,8 @@ _THINKING_BLOCK_PROVIDERS = {
 
 
 def _strip_thinking_blocks_from_messages(
-    messages: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+    messages: list[dict[str, JsonValue]],
+) -> list[dict[str, JsonValue]]:
     return [
         {key: value for key, value in msg.items() if key != "thinking_blocks"}
         for msg in messages
@@ -444,8 +456,8 @@ def _strip_thinking_blocks_from_messages(
 
 
 def _strip_tool_content_from_messages(
-    messages: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+    messages: list[dict[str, JsonValue]],
+) -> list[dict[str, JsonValue]]:
     """Convert tool-related messages to plain text.
 
     Bedrock's Converse API requires toolConfig when messages contain
@@ -455,7 +467,7 @@ def _strip_tool_content_from_messages(
 
     This is the same approach used by _OllamaHistoryMessageFormatter.
     """
-    result: list[dict[str, Any]] = []
+    result: list[dict[str, JsonValue]] = []
     for msg in messages:
         role = msg.get("role")
         tool_calls = msg.get("tool_calls")
@@ -463,11 +475,11 @@ def _strip_tool_content_from_messages(
         if role == "assistant" and tool_calls:
             # Convert structured tool calls to text representation
             tool_call_lines = []
-            for tc in tool_calls:
-                func = tc.get("function", {})
-                name = func.get("name", "unknown")
-                args = func.get("arguments", "{}")
-                tc_id = tc.get("id", "")
+            calls = _PROVIDER_TOOL_CALLS.validate_python(tool_calls)
+            for call in calls:
+                name = call.function.name
+                args = call.function.arguments
+                tc_id = call.id
                 tool_call_lines.append(
                     f"[Tool Call] name={name} id={tc_id} args={args}"
                 )
@@ -478,7 +490,7 @@ def _strip_tool_content_from_messages(
                 if existing_content
                 else tool_call_lines
             )
-            new_msg = {
+            new_msg: dict[str, JsonValue] = {
                 "role": "assistant",
                 "content": "\n".join(parts),
             }
@@ -492,12 +504,15 @@ def _strip_tool_content_from_messages(
             # Merge into previous user message if it is also a converted
             # tool result to avoid consecutive user messages (Bedrock requires
             # strict user/assistant alternation).
+            previous_content = (
+                _normalize_content(result[-1].get("content")) if result else ""
+            )
             if (
                 result
                 and result[-1]["role"] == "user"
-                and "[Tool Result]" in result[-1].get("content", "")
+                and "[Tool Result]" in previous_content
             ):
-                result[-1]["content"] += "\n\n" + tool_result_text
+                result[-1]["content"] = previous_content + "\n\n" + tool_result_text
             else:
                 result.append({"role": "user", "content": tool_result_text})
 
@@ -508,8 +523,8 @@ def _strip_tool_content_from_messages(
 
 
 def _fix_tool_user_message_ordering(
-    messages: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+    messages: list[dict[str, JsonValue]],
+) -> list[dict[str, JsonValue]]:
     """Insert a synthetic assistant message between tool and user messages.
 
     Some models (e.g. Mistral on Azure) require strict message ordering where
@@ -519,7 +534,7 @@ def _fix_tool_user_message_ordering(
     if len(messages) < 2:
         return messages
 
-    result: list[dict[str, Any]] = [messages[0]]
+    result: list[dict[str, JsonValue]] = [messages[0]]
     for msg in messages[1:]:
         prev_role = result[-1].get("role")
         curr_role = msg.get("role")
@@ -547,7 +562,7 @@ def _is_mistral_family_name(identity_names: list[str]) -> bool:
     )
 
 
-def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
+def _messages_contain_tool_content(messages: list[dict[str, JsonValue]]) -> bool:
     """Check if any messages contain tool-related content blocks."""
     for msg in messages:
         if msg.get("role") == "tool":
@@ -634,8 +649,7 @@ def _warn_dropped_env_only_keys(
 
 
 class LitellmLLM(LLM):
-    """Uses Litellm library to allow easy configuration to use a multitude of LLMs
-    See https://python.langchain.com/docs/integrations/chat/litellm"""
+    """Generate assistant messages and expose provider responses for gateways."""
 
     def __init__(
         self,
@@ -650,15 +664,15 @@ class LitellmLLM(LLM):
         temperature: float | None = None,
         custom_config: dict[str, str] | None = None,
         extra_headers: dict[str, str] | None = None,
-        extra_body: dict | None = LITELLM_EXTRA_BODY,
-        model_kwargs: dict[str, Any] | None = None,
+        extra_body: dict[str, JsonValue] | None = LITELLM_EXTRA_BODY,
+        model_kwargs: dict[str, JsonValue] | None = None,
         reasoning_effort_default: ReasoningEffort | None = None,
         reasoning_effort_user_default: ReasoningEffort | None = None,
         reasoning_effort_max: ReasoningEffort | None = None,
         supports_reasoning: bool = False,
         supports_images: bool | None = None,
         is_router: bool = False,
-    ):
+    ) -> None:
         # No instance-level timeout: invoke() and stream() each take their own,
         # so an instance default would be a second source of truth.
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
@@ -836,20 +850,20 @@ class LitellmLLM(LLM):
     def _completion(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None,
+        tools: list[dict[str, JsonValue]] | None,
         tool_choice: ToolChoice | None,
         stream: bool,
         parallel_tool_calls: bool,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
-        structured_response_format: dict | None = None,
-        read_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
+        structured_response_format: dict[str, JsonValue] | None = None,
+        read_timeout_s: float = LLM_SOCKET_READ_TIMEOUT,
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
         operation: ProviderOperation | None = None,
         env_injection_enabled: bool | None = None,
         deadline: float | None = None,
-    ) -> Union["ModelResponse", "CustomStreamWrapper"]:
+    ) -> "LiteLLMModelResponse | CustomStreamWrapper":
         # Lazy loading to avoid memory bloat for non-inference flows
         from litellm.exceptions import BadRequestError
 
@@ -902,11 +916,7 @@ class LitellmLLM(LLM):
             for name in model_identity_names
         )
 
-        #########################
-        # Build arguments
-        #########################
-        # Optional kwargs - should only be passed to LiteLLM under certain conditions
-        optional_kwargs: dict[str, Any] = {}
+        optional_kwargs: dict[str, JsonValue] = {}
         # Kwargs the provider requires, which the retry ladder must never strip.
         required_kwarg_keys: frozenset[str] = frozenset()
 
@@ -950,8 +960,8 @@ class LitellmLLM(LLM):
         # Downgrade tool_choice=required to AUTO for models that mishandle it:
         # Claude skips reasoning when it's set, Qwen thinking models reject it
         # with a 400, and Z.AI rejects any GLM tool_choice other than auto
-        # ("Tool choice must be auto"). The chat loop's fallback tool-call
-        # extraction still enforces the forced tool. Matched by model name
+        # ("Tool choice must be auto"). Shared response decoding attempts
+        # to recover tool calls from text. Matched by model name
         # rather than `is_reasoning` because the litellm/local registry lags
         # behind new Qwen/GLM releases (e.g. qwen3.7-plus, glm-5.3).
         # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
@@ -1324,19 +1334,18 @@ class LitellmLLM(LLM):
                     tuple(sorted(self._env_only_custom_config)),
                 )
 
-            def _attempt_timeout() -> float:
+            def _call_litellm(
+                opts: dict[str, JsonValue],
+            ) -> "LiteLLMModelResponse | CustomStreamWrapper":
                 # The retry ladder below can make several requests. With a
                 # deadline, each one gets only the time left, so retries cannot
                 # stretch invoke() past its total timeout.
-                if deadline is None:
-                    return read_timeout_s
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise LLMTimeoutError("LLM call exceeded its total timeout")
-                return min(read_timeout_s, remaining)
-
-            def _call_litellm(opts: dict[str, Any]) -> Any:
-                timeout = _attempt_timeout()
+                timeout = read_timeout_s
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise LLMTimeoutError("LLM call exceeded its total timeout")
+                    timeout = min(timeout, remaining)
                 # Injection disabled means no env writer exists anywhere in
                 # the process, so skip the rwlock entirely. Built per attempt
                 # because the context manager is single-use.
@@ -1347,21 +1356,25 @@ class LitellmLLM(LLM):
                 )
                 with env_ctx:
                     check_cancelled()
-                    return litellm.completion(
-                        model=model,
-                        base_url=self._api_base or None,
-                        api_version=api_version,
-                        custom_llm_provider=self._custom_llm_provider or None,
-                        messages=messages,
-                        # None (omitted) rather than [] — some OpenAI-compatible
-                        # servers reject requests with an empty tools array.
-                        tools=tools or None,
-                        stream=stream,
-                        timeout=timeout,
-                        max_tokens=max_tokens,
-                        client=client,
-                        **opts,
-                        **passthrough_kwargs,
+                    # LiteLLM's overloads do not express the stream flag's return type.
+                    return cast(
+                        "LiteLLMModelResponse | CustomStreamWrapper",
+                        litellm.completion(
+                            model=model,
+                            base_url=self._api_base or None,
+                            api_version=api_version,
+                            custom_llm_provider=self._custom_llm_provider or None,
+                            messages=messages,
+                            # None (omitted) rather than [] — some OpenAI-compatible
+                            # servers reject requests with an empty tools array.
+                            tools=tools or None,
+                            stream=stream,
+                            timeout=timeout,
+                            max_tokens=max_tokens,
+                            client=client,
+                            **opts,
+                            **passthrough_kwargs,
+                        ),
                     )
 
             # Provider 400s degrade to provider defaults with a warning instead
@@ -1421,7 +1434,7 @@ class LitellmLLM(LLM):
                         sorted(_BEST_EFFORT_KWARG_KEYS & attempts[i + 1].keys()),
                         e,
                     )
-            raise RuntimeError("unreachable: retry ladder always returns or raises")
+            raise RuntimeError("Provider retry attempts exhausted")
         except Exception as e:
             check_cancelled()
             raise _as_onyx_llm_error(e)
@@ -1472,9 +1485,9 @@ class LitellmLLM(LLM):
     def invoke_raw(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None = None,
+        tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
-        structured_response_format: dict | None = None,
+        structured_response_format: dict[str, JsonValue] | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
@@ -1562,9 +1575,7 @@ class LitellmLLM(LLM):
                 deadline=deadline,
             )
             if use_stream:
-                from litellm import (
-                    CustomStreamWrapper as LiteLLMCustomStreamWrapper,
-                )
+                from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
                 from litellm import stream_chunk_builder
 
                 chunks = _consume_stream_until_deadline(
@@ -1612,9 +1623,9 @@ class LitellmLLM(LLM):
     def stream_raw(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None = None,
+        tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
-        structured_response_format: dict | None = None,
+        structured_response_format: dict[str, JsonValue] | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
@@ -1743,7 +1754,7 @@ class LitellmLLM(LLM):
 
     def _prepare_request(
         self, request: GenerationRequest
-    ) -> list[ChatCompletionMessage]:
+    ) -> tuple[list[ChatCompletionMessage], dict[str, str]]:
         config = self.config
         messages, cacheable_prefix = serialize_request(request, config)
         if cacheable_prefix:
@@ -1754,13 +1765,13 @@ class LitellmLLM(LLM):
                 continuation=False,
                 with_metadata=False,
             )
-        return messages
+        return messages, cache_split_stats(request, cacheable_prefix)
 
     def invoke(
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
         context = context or GenerationContext()
-        messages = self._prepare_request(request)
+        messages, cache_stats = self._prepare_request(request)
         tools = serialize_tools(request.tools) or None
         with (
             _provider_scope(context, self) as signal,
@@ -1772,8 +1783,12 @@ class LitellmLLM(LLM):
                 content_mode=context.content_mode,
             ) as span,
         ):
+            span.span_data.model_config = {
+                **(span.span_data.model_config or {}),
+                **cache_stats,
+            }
+            signal.check()
             try:
-                signal.check()
                 response = self.invoke_raw(
                     messages,
                     tools=tools,
@@ -1784,12 +1799,7 @@ class LitellmLLM(LLM):
                     reasoning_effort=request.options.reasoning_effort,
                     user_identity=context.user_identity,
                 )
-                record_llm_response(span, response)
-                # A completed response survives its deadline, but explicit Stop wins.
-                if signal.cancelled:
-                    raise AgentCancelled()
-                return to_assistant_message(response, request)
-            except (Exception, AgentCancelled) as error:
+            except Exception as error:
                 span.set_error(
                     {
                         "message": self.redact_error(
@@ -1799,6 +1809,12 @@ class LitellmLLM(LLM):
                     }
                 )
                 raise
+            # A completed response survives its deadline, but explicit Stop wins.
+            if signal.cancelled:
+                raise AgentCancelled()
+            message = to_assistant_message(response, request)
+            record_llm_response(span, response)
+            return message
 
     @isolated_context
     def stream(
@@ -1807,7 +1823,7 @@ class LitellmLLM(LLM):
         context = context or GenerationContext()
         operation = ProviderOperation()
         accumulator = MessageAccumulator(request.tools)
-        messages = self._prepare_request(request)
+        messages, cache_stats = self._prepare_request(request)
         tools = serialize_tools(request.tools) or None
         with (
             _provider_scope(context, self) as signal,
@@ -1819,30 +1835,33 @@ class LitellmLLM(LLM):
                 content_mode=context.content_mode,
             ) as span,
         ):
+            span.span_data.model_config = {
+                **(span.span_data.model_config or {}),
+                **cache_stats,
+            }
             started = time.monotonic()
             first_action = False
             request_params_sent = False
-            events = None
+            signal.check()
+            yield GenerationStartEvent()
+            events = accumulator.consume(
+                iter(
+                    self.stream_raw(
+                        messages,
+                        tools=tools,
+                        tool_choice=request.options.tool_choice,
+                        max_tokens=request.options.max_tokens,
+                        reasoning_effort=request.options.reasoning_effort,
+                        user_identity=context.user_identity,
+                        operation=operation,
+                        stall_timeout_s=context.stall_timeout_s
+                        or LLM_SOCKET_READ_TIMEOUT,
+                        structured_response_format=request.options.structured_response_format,
+                    )
+                ),
+                request,
+            )
             try:
-                signal.check()
-                yield GenerationStartEvent()
-                events = accumulator.consume(
-                    iter(
-                        self.stream_raw(
-                            messages,
-                            tools=tools,
-                            tool_choice=request.options.tool_choice,
-                            max_tokens=request.options.max_tokens,
-                            reasoning_effort=request.options.reasoning_effort,
-                            user_identity=context.user_identity,
-                            operation=operation,
-                            stall_timeout_s=context.stall_timeout_s
-                            or LLM_SOCKET_READ_TIMEOUT,
-                            structured_response_format=request.options.structured_response_format,
-                        )
-                    ),
-                    request,
-                )
                 for event in events:
                     signal.check()
                     if not first_action:
@@ -1909,8 +1928,7 @@ class LitellmLLM(LLM):
                 # Record partial content and usage on errors and GeneratorExit,
                 # not just clean completion. GeneratorExit is a BaseException,
                 # so it does not pass through the Exception handler above.
-                if events is not None:
-                    events.close()
+                events.close()
                 accumulator.finalize()
                 message = accumulator.message
                 record_llm_span_output(

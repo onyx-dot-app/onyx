@@ -11719,7 +11719,9 @@
           "speakingPlaceholder": "{appName} spricht..."
         },
         "sendButton": {
-          "processingFilesTooltip": "Warten, bis die angehängten Dateien verarbeitet sind"
+          "processingFilesTooltip": "Warten, bis die angehängten Dateien verarbeitet sind",
+          "stoppingLabel": "Wird gestoppt…",
+          "reloadLabel": "Erneut prüfen"
         },
         "tabReadingButton": {
           "readLabel": "Diesen Tab lesen",
@@ -13018,6 +13020,10 @@
       "incognito": {
         "title": "Sie sind inkognito"
       }
+    },
+    "readiness": {
+      "stopFailed": "Die Antwort konnte nicht gestoppt werden. Versuche es erneut.",
+      "checkFailed": "Das Ende der Antwort konnte nicht bestätigt werden. Prüfe erneut, bevor du eine weitere Nachricht sendest."
     }
   },
   "common": {

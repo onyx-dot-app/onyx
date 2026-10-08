@@ -272,7 +272,7 @@ turns `persona.tools` into a live tool dict, keyed by `Tool.id`:
 
 ### 4.4 Prompt reach
 
-`chat/chat_utils.py:get_custom_agent_prompt(persona, chat_session)` resolves
+`chat/prepare.py:get_custom_agent_prompt(persona, chat_session)` resolves
 instructions once per turn. Custom agents retain project instructions, with
 agent instructions taking precedence on conflicts. Replacement agents keep
 their system prompt and receive project instructions separately.

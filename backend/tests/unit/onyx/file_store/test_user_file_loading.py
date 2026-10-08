@@ -94,7 +94,6 @@ def test_file_reader_closes_metadata_session_before_store_reads() -> None:
     ):
         tool = FileReaderTool(
             tool_id=99,
-            emitter=MagicMock(),
             user_file_ids=[file.id],
             chat_file_ids=[],
         )

@@ -52,7 +52,6 @@ one JSON object per line this way.
 | `CHAT_STREAM_BUFFER_TTL_S` | 3600 | TTL of each buffered chunk and the run's meta key while the run is in progress. |
 | `CHAT_STREAM_BUFFER_DONE_TTL_S` | 600 | TTL applied to the same keys once the run finishes. |
 | `CHAT_STREAM_BUFFER_MAX_BYTES` | 16 MiB | Cap on compressed bytes per run; past this the buffer is marked `truncated` and resume stops being possible. |
-| `INTEGRATION_TESTS_MODE` | | Enables `ToolCallDebug` packets (`llm_loop.py`, guarded by `if INTEGRATION_TESTS_MODE and tool_calls`). |
 
 `_RESUME_MAX_CHUNKS_PER_READ = 32` (`chat_backend.py`) caps how many buffer chunks
 `resume_chat_stream` decompresses per loop iteration, bounding peak memory on a
@@ -127,11 +126,11 @@ string values.
 
 - `turn_index`: the frontend's rendering block index, not a backend turn. One
   LLM inference producing reasoning plus a tool call is one backend step but
-  advances `turn_index` more than once (`llm_step.py:_increment_turns` pattern,
-  driven from `llm_loop.py`).
+  advances `turn_index` more than once through
+  `backend/onyx/chat/renderer.py:ResponseLayout.next_section`.
 - `tab_index`: disambiguates parallel tool calls that share a `turn_index`, so
-  each gets its own tab in the UI (`llm_step.py`, built during fallback tool
-  extraction with `enumerate(matched_tool_calls)`).
+  each gets its own tab in the UI
+  (`backend/onyx/chat/renderer.py:MessageRenderer.tool_placement`).
 - `sub_turn_index`: nesting level for a tool that calls other tools; `None` at
   the top level.
 - `model_index`: which model produced the packet in a multi-model turn (`0`,
@@ -258,9 +257,8 @@ emitting `ChatHeartbeat` packets on `CHAT_HEARTBEAT_INTERVAL_S` while waiting.
 ## 6. Relationships
 
 **Depends on**
-- [[core-chat-loop]]: `llm_loop.py` and `llm_step.py` are the packet producers;
-  `process_message.py` owns the `Emitter` and `StreamBufferWriter` lifecycle per
-  run.
+- [[core-chat-loop]]: `backend/onyx/chat/renderer.py` produces packets;
+  `backend/onyx/chat/execution.py` owns stream publication for the turn.
 - [[citations]]: `CitationInfo` packets originate from the citation processor
   running inside the loop.
 - [[tools-framework]]: each tool family's packets are defined by that tool's
@@ -286,7 +284,7 @@ emitting `ChatHeartbeat` packets on `CHAT_HEARTBEAT_INTERVAL_S` while waiting.
 |---|---|
 | adds a packet type | `StreamingType` and the `PacketObj` union; `web/src/app/app/services/streamingModels.ts:PacketType` and its interface; `mobile/src/chat/streamingModels.ts`; a `findRenderer` case (and mobile's `findRenderer.ts`) or the packet silently renders nothing |
 | renames a packet type | every hand-mirrored enum above; any Playwright mock stream in `web/tests/e2e/utils/chatMock.ts` that hardcodes the old string; a saved stream buffer chunk mid-flight uses the old name until it drains |
-| changes `Placement` (adds/removes/redefines a field) | every call site that constructs `Placement(...)` in `llm_loop.py` and `llm_step.py`; `Emitter.emit`'s `model_copy(update=...)`; the frontend `Placement` interface in `streamingModels.ts`; the grouping logic that keys off `turn_index`/`tab_index` in [[chat-frontend]] |
+| changes `Placement` (adds/removes/redefines a field) | every call site that constructs `Placement(...)` in `backend/onyx/chat/renderer.py`; `Emitter.emit`'s `model_copy(update=...)`; the frontend `Placement` interface in `streamingModels.ts`; the grouping logic that keys off `turn_index`/`tab_index` in [[chat-frontend]] |
 | changes a tool's packet sequence (adds/reorders/removes a stage) | that tool's renderer under `web/src/app/app/message/messageComponents/renderMessageComponent.tsx` and its mobile equivalent; [[tools-framework]] for the tool's producer-side contract |
 | changes the transport framing (NDJSON, line delimiter, SSE headers) | `handleSSEStream` and `withoutHeartbeats` on web; `NdjsonBuffer` on mobile; `resume_chat_stream`'s replay, since buffered chunks are raw NDJSON bytes written by the old framing |
 | changes stream buffer TTLs or chunk size | resumability window for slow clients; `_RESUME_MAX_CHUNKS_PER_READ` memory bound in `chat_backend.py` |
@@ -307,9 +305,8 @@ and `web/tests/e2e/utils/chatMock.ts` (`buildMockStream`, `mockChatEndpoint`) bu
 and parse mock NDJSON bodies matching this exact format; use them when a test
 needs to assert on packet ordering or a new packet type without a real LLM call.
 
-`INTEGRATION_TESTS_MODE=true` is required for tests that need `ToolCallDebug`
-packets to assert which tool ran and with what arguments
-(`llm_loop.py`, gated by `if INTEGRATION_TESTS_MODE and tool_calls`).
+`backend/onyx/chat/renderer.py:ToolRenderer.start` emits `ToolCallDebug` packets.
+Tests can use them to assert tool names and arguments without an environment flag.
 
 ### Manual reproduction
 

@@ -120,7 +120,7 @@ ChatSession (chat_session)                 UserFile (user_file)  -- see [[file-s
   exactly one project or to none; it is never itself a member of many.
 - `UserProject.instructions` is a plain `String` column (`db/models.py:UserProject.instructions`),
   read by `db/projects.py:get_project_instructions` and
-  `chat_utils.py:get_custom_agent_prompt` (§4.5).
+  `prepare.py:get_custom_agent_prompt` (§4.5).
 - No new table belongs to this component beyond the join; a proposal to add
   one is a signal to re-check whether the existing `Project__UserFile` /
   `ChatSession.project_id` shape can express it (root `CLAUDE.md` on avoiding
@@ -147,8 +147,8 @@ counting, is [[file-store-and-user-files]] §4.1-4.5.
 ### 4.2 Where the inline-vs-retrieval decision is made, and the threshold
 
 The decision is made once per turn, in
-`process_message.py:extract_context_files`, for whichever files
-`process_message.py:resolve_context_user_files` resolved for this turn (§4.5
+`files.py:extract_context_files`, for whichever files
+`files.py:resolve_context_user_files` resolved for this turn (§4.5
 covers precedence). It compares the aggregate token count of those files
 against:
 
@@ -168,7 +168,7 @@ across a multi-model turn, `process_message.py:build_chat_turn`).
 
 ### 4.3 Path A: inlined
 
-Below the ceiling, `chat/llm_loop.py:_build_project_message` renders the
+Below the ceiling, `backend/onyx/chat/prompt_utils.py:_create_context_files_message` renders the
 project's files into the same `document`-keyed JSON block
 [[context-assembly]] §4.4 describes, and inserts it as a `MessageType.USER`
 message. Per `context-assembly.md` §4.3 and `backend/onyx/chat/README.md`'s
@@ -181,7 +181,7 @@ not a needle-in-a-haystack fact worth risking a silent drop to save space.
 ### 4.4 Path B: retrieved
 
 At or above the ceiling, the combined files are flagged `use_as_search_filter=True`
-(`process_message.py:extract_context_files`). `determine_search_params` sets
+(`files.py:extract_context_files`). `determine_search_params` sets
 `project_id_filter` for the project and `persona_id_filter` for a custom agent.
 The index combines these scopes with OR, alongside the agent's configured
 knowledge, and retains access checks. A default agent in a project enables
@@ -207,14 +207,14 @@ own the file at enrichment time (`user_file_id_to_project_ids`, fetched via
 
 ### 4.5 Project instructions and persona precedence
 
-`chat_utils.py:get_custom_agent_prompt(persona, chat_session)` includes project
+`prepare.py:get_custom_agent_prompt(persona, chat_session)` includes project
 instructions alongside custom-agent instructions. Agent instructions take
 precedence when they conflict. If the agent replaces the base system prompt,
 its instructions stay in the system message and project instructions remain
 in a separate context message. Empty agent instructions do not discard project
 instructions.
 
-`process_message.py:resolve_context_user_files` combines project files and
+`files.py:resolve_context_user_files` combines project files and
 custom-agent files, removing duplicates by `UserFile.id`. This selection feeds
 prompt context, `read_file`, and Python file staging. Historical chat
 attachments remain available separately. The combined token count decides

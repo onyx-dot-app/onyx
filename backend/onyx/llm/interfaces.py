@@ -1,8 +1,9 @@
+"""LLM interface, public settings, and provider configuration."""
+
 import abc
 from collections.abc import Generator
-from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
@@ -26,7 +27,6 @@ class GenerationContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     cancellation: CancellationSignal | None = None
-
     # Streaming idle reads only; invoke uses its total deadline.
     stall_timeout_s: int | None = Field(default=None, gt=0)
     # Invoke defaults to LLM_INVOKE_TIMEOUT_S; streams have no default deadline.
@@ -41,10 +41,12 @@ class LlmRequestPolicy(BaseModel):
     suppression). Merged after every other source so nothing overrides it."""
 
     headers: dict[str, str] = {}
-    model_kwargs: dict[str, Any] = {}
+    model_kwargs: dict[str, JsonValue] = {}
 
 
 class LLMConfig(BaseModel):
+    """Provider settings and resolved capabilities, including credentials."""
+
     model_provider: str
     model_name: str
     temperature: float
@@ -62,7 +64,7 @@ class LLMConfig(BaseModel):
     # Admin-configured flag, for models the catalog does not know.
     supports_reasoning: bool = False
     # This disables the "model_" protected namespace for pydantic
-    model_config = {"protected_namespaces": ()}
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class LLM(abc.ABC):
@@ -98,7 +100,7 @@ class LLM(abc.ABC):
         Apply events to a caller-owned message; lifecycle events contain no
         content.
         ``context.stall_timeout_s`` bounds the gap between provider chunks and
-        defaults to ``LLM_SOCKET_READ_TIMEOUT``. A stream has no total deadline:
+        defaults to ``LLM_SOCKET_READ_TIMEOUT``. A stream has no total deadline by default:
         its consumer sees progress and owns the end-to-end deadline, and some
         runs (deep research reports) take many minutes. Close the generator
         when stopping early to release provider resources. The call records its

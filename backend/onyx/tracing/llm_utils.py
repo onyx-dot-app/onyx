@@ -101,9 +101,7 @@ def traced_llm_call(
 
 
 def record_llm_request_params(params: GenerationRequestParams) -> None:
-    """Attach request-shaping params (reasoning effort, provider kwargs) to the
-    active generation span. Call once per send attempt with the provider-mapped
-    kwargs: last write wins. No-op when the current span is not a generation span."""
+    """Record effective settings on the active generation span, respecting content privacy."""
     span = get_current_span()
     if span is None or not isinstance(span.span_data, GenerationSpanData):
         return

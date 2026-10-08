@@ -22,12 +22,12 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/chat/llm_loop.py`, `backend/onyx/chat/llm_step.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_state.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
-| `backend/onyx/chat/emitter.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
+| `backend/onyx/chat/agent.py`, `backend/onyx/chat/execution.py`, `backend/onyx/agents/runtime.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/models.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
+| `backend/onyx/chat/emitter.py`, `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
 | `backend/onyx/chat/prompt_utils.py`, `compression.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly, agents-personas |
 | `backend/onyx/chat/citation_processor.py`, `citation_utils.py` | citations |
-| `backend/onyx/chat/save_chat.py`, `backend/onyx/db/chat.py`, `db/chat_search.py`, `db/feedback.py` | chat-persistence |
+| `backend/onyx/chat/persistence.py`, `backend/onyx/chat/history_store.py`, `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat.py`, `db/chat_search.py`, `db/feedback.py` | chat-persistence |
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `models.py`, `session_loading.py`, `chat_utils.py` | core-chat-loop, chat-persistence |
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `placement.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
@@ -36,7 +36,7 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `tool_runner.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
+| `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `backend/onyx/agents/tool_execution.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
 | `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search, tools-framework |
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/knowledge_graph/` | **incomplete feature.** The knowledge graph tool cannot run yet. See INDEX.md, Incomplete features. |
@@ -46,7 +46,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
 | `backend/onyx/tools/tool_implementations/coding_agent/`, `backend/onyx/coding_agent/` | craft-sessions, tools-framework |
-| `backend/onyx/tools/fake_tools/`, `backend/onyx/deep_research/` | tools-framework |
+| `backend/onyx/deep_research/` | tools-framework |
 
 ## Backend: search and index
 

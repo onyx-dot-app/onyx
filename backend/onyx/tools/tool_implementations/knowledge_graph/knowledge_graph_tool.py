@@ -1,13 +1,9 @@
-from typing import Any
-
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation
 from onyx.db.kg_config import get_kg_config_settings
-from onyx.llm.models import ToolDefinition
-from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.interface import Tool
-from onyx.tools.models import ToolResponse
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import Tool, ToolContext
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -15,13 +11,12 @@ logger = setup_logger()
 QUERY_FIELD = "query"
 
 
-class KnowledgeGraphTool(Tool[None]):
+class KnowledgeGraphTool(Tool):
     _NAME = "run_kg_search"
     _DESCRIPTION = "Search the knowledge graph for information. Never call this tool."
     _DISPLAY_NAME = "Knowledge Graph Search"
 
-    def __init__(self, tool_id: int, emitter: Emitter) -> None:
-        super().__init__(emitter=emitter)
+    def __init__(self, tool_id: int) -> None:
 
         self._id = tool_id
 
@@ -67,13 +62,5 @@ class KnowledgeGraphTool(Tool[None]):
             },
         )
 
-    def emit_start(self, placement: Placement) -> None:
-        raise NotImplementedError("KnowledgeGraphTool.emit_start is not implemented.")
-
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: None = None,
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         raise NotImplementedError("KnowledgeGraphTool.run is not implemented.")

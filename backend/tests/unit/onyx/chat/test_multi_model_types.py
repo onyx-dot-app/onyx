@@ -1,7 +1,6 @@
 """Unit tests for multi-model answer generation types.
 
 Tests cover:
-- Placement.model_index serialization
 - MultiModelMessageResponseIDInfo round-trip
 - SendMessageRequest.llm_overrides backward compatibility
 - ChatMessageDetail new fields
@@ -17,27 +16,6 @@ from onyx.server.query_and_chat.models import (
     MultiModelMessageResponseIDInfo,
     SendMessageRequest,
 )
-from onyx.server.query_and_chat.placement import Placement
-
-
-class TestPlacementModelIndex:
-    def test_default_none(self) -> None:
-        p = Placement(turn_index=0)
-        assert p.model_index is None
-
-    def test_set_value(self) -> None:
-        p = Placement(turn_index=0, model_index=2)
-        assert p.model_index == 2
-
-    def test_serializes(self) -> None:
-        p = Placement(turn_index=0, tab_index=1, model_index=1)
-        d = p.model_dump()
-        assert d["model_index"] == 1
-
-    def test_none_excluded_when_default(self) -> None:
-        p = Placement(turn_index=0)
-        d = p.model_dump()
-        assert d["model_index"] is None
 
 
 class TestMultiModelMessageResponseIDInfo:

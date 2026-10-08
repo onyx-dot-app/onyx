@@ -136,6 +136,7 @@ def _provider(
 
 class _ConfigOnlyLLM(LitellmLLM):
     def __init__(self, config: LLMConfig) -> None:
+        self._config = config
         super().__init__(
             model_provider=config.model_provider,
             model_name=config.model_name,
@@ -143,7 +144,6 @@ class _ConfigOnlyLLM(LitellmLLM):
             max_input_tokens=config.max_input_tokens,
             custom_config=config.custom_config,
         )
-        self._config = config
 
     @property
     def config(self) -> LLMConfig:
@@ -251,7 +251,7 @@ class _StreamingLLM(_ConfigOnlyLLM):
             self._closed.set()
 
 
-class _RaisingCloseStream:
+class _RaisingCloseStream(stream_bridge._ClosableStream):
     def __init__(self) -> None:
         self._remaining = 1
 
@@ -1928,7 +1928,9 @@ async def test_handle_responses_request_streaming_returns_event_stream() -> None
 
     with (
         patch.object(
-            gateway_api, "llm_from_provider", return_value=_ChunkStreamLLM(_TEXT_CHUNKS)
+            gateway_api,
+            "llm_from_provider",
+            return_value=_ChunkStreamLLM(_TEXT_CHUNKS),
         ),
         patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()),
     ):

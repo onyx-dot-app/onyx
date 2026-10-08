@@ -86,7 +86,7 @@ def test_responses_mode_prefixes_model_and_keeps_v1_base() -> None:
 
 def test_api_mode_is_never_injected_into_environment() -> None:
     # The mode is UI-only form state: it must be readable for routing but must
-    # never reach os.environ via temporary_env_and_lock at call time.
+    # never become provider arguments.
     llm = _make_bifrost_llm("responses")
     assert BIFROST_API_MODE_CONFIG_KEY in UI_ONLY_CONFIG_KEYS
-    assert BIFROST_API_MODE_CONFIG_KEY not in llm._env_only_custom_config
+    assert BIFROST_API_MODE_CONFIG_KEY not in llm._model_kwargs

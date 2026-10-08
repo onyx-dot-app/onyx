@@ -1,65 +1,9 @@
-"""
-Unit tests for chat_files handling in tool_runner.py.
-
-These tests verify that chat files are properly passed to PythonTool
-through the PythonToolOverrideKwargs mechanism.
-"""
+"""Chat file conversion preserves the metadata supplied to tools."""
 
 from unittest.mock import patch
 
-import pytest
-
-from onyx.db.models import UserFile
-from onyx.tools.models import ChatFile, PythonToolOverrideKwargs
-
-
-class TestChatFilesPassingToPythonTool:
-    """Tests for passing chat_files to PythonTool."""
-
-    @pytest.fixture
-    def sample_chat_files(self) -> list[ChatFile]:
-        """Create sample chat files for testing."""
-        return [
-            ChatFile(filename="test.xlsx", content=b"excel content"),
-            ChatFile(filename="data.csv", content=b"col1,col2\n1,2\n3,4"),
-        ]
-
-    def test_chat_files_passed_to_python_tool_override_kwargs(
-        self,
-        sample_chat_files: list[ChatFile],
-    ) -> None:
-        """Test that PythonToolOverrideKwargs correctly stores chat_files."""
-        # Verify the override_kwargs structure stores chat_files correctly
-        override_kwargs = PythonToolOverrideKwargs(chat_files=sample_chat_files)
-
-        assert override_kwargs.chat_files == sample_chat_files
-        assert len(override_kwargs.chat_files) == 2
-        assert override_kwargs.chat_files[0].filename == "test.xlsx"
-        assert override_kwargs.chat_files[0].content == b"excel content"
-        assert override_kwargs.chat_files[1].filename == "data.csv"
-
-    def test_empty_chat_files_defaults_to_empty_list(self) -> None:
-        """Test that empty chat_files defaults to empty list."""
-        override_kwargs = PythonToolOverrideKwargs()
-        assert override_kwargs.chat_files == []
-
-    def test_none_chat_files_handled_in_tool_runner(self) -> None:
-        """Test that None chat_files are handled gracefully in the tool_runner code path.
-
-        The tool_runner.py uses `chat_files or []` pattern when creating
-        PythonToolOverrideKwargs, so we verify this pattern works correctly.
-        """
-        # Simulate the pattern used in tool_runner.py:
-        # override_kwargs = PythonToolOverrideKwargs(chat_files=chat_files or [])
-        chat_files_param: list[ChatFile] | None = None
-
-        # This is the exact pattern used in tool_runner.py
-        override_kwargs = PythonToolOverrideKwargs(
-            chat_files=chat_files_param or [],
-        )
-
-        assert override_kwargs.chat_files == []
-        assert isinstance(override_kwargs.chat_files, list)
+from onyx.file_store.models import UserFileMetadata
+from onyx.tools.models import ChatFile
 
 
 class TestChatFileConversion:
@@ -67,8 +11,8 @@ class TestChatFileConversion:
 
     def test_convert_loaded_files_to_chat_files(self) -> None:
         """Test conversion of ChatLoadedFile to ChatFile."""
-        from onyx.chat.models import ChatLoadedFile
-        from onyx.chat.process_message import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import _convert_loaded_files_to_chat_files
+        from onyx.chat.prompt_formatting import ChatLoadedFile
         from onyx.file_store.models import ChatFileType
 
         # Create sample ChatLoadedFile objects
@@ -109,8 +53,8 @@ class TestChatFileConversion:
         empty body fine (sha256 of b"" + empty upload; the LLM sees the empty
         result and reacts), so passing zero-byte files through is intentional.
         """
-        from onyx.chat.models import ChatLoadedFile
-        from onyx.chat.process_message import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import _convert_loaded_files_to_chat_files
+        from onyx.chat.prompt_formatting import ChatLoadedFile
         from onyx.file_store.models import ChatFileType
 
         loaded_files = [
@@ -143,8 +87,8 @@ class TestChatFileConversion:
 
     def test_convert_files_with_missing_filename_uses_fallback(self) -> None:
         """Test that files without filename use file_id as fallback."""
-        from onyx.chat.models import ChatLoadedFile
-        from onyx.chat.process_message import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import _convert_loaded_files_to_chat_files
+        from onyx.chat.prompt_formatting import ChatLoadedFile
         from onyx.file_store.models import ChatFileType
 
         loaded_files = [
@@ -165,7 +109,7 @@ class TestChatFileConversion:
 
     def test_convert_empty_list_returns_empty(self) -> None:
         """Test that empty input returns empty output."""
-        from onyx.chat.process_message import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import _convert_loaded_files_to_chat_files
 
         chat_files = _convert_loaded_files_to_chat_files([])
         assert chat_files == []
@@ -173,12 +117,11 @@ class TestChatFileConversion:
     def test_context_tabular_user_files_loaded_for_tools(self) -> None:
         from uuid import uuid4
 
-        from onyx.chat.process_message import _load_context_user_files_for_tools
+        from onyx.chat.files import _load_context_user_files_for_tools
 
         user_file_id = uuid4()
-        user_file = UserFile(
+        user_file = UserFileMetadata(
             id=user_file_id,
-            user_id=uuid4(),
             file_id="stored-xlsx-file",
             name="review_results.xlsx",
             file_type=(
@@ -186,9 +129,7 @@ class TestChatFileConversion:
             ),
             token_count=1000,
         )
-        with patch(
-            "onyx.chat.process_message.get_default_file_store"
-        ) as mock_file_store_factory:
+        with patch("onyx.chat.files.get_default_file_store") as mock_file_store_factory:
             mock_file_store = mock_file_store_factory.return_value
             mock_file_store.read_file.return_value.read.return_value = b"raw xlsx bytes"
 
@@ -217,20 +158,17 @@ class TestChatFileConversion:
         try/except + continue."""
         from uuid import uuid4
 
-        from onyx.chat.process_message import _load_context_user_files_for_tools
+        from onyx.chat.files import _load_context_user_files_for_tools
 
-        user_file = UserFile(
+        user_file = UserFileMetadata(
             id=uuid4(),
-            user_id=uuid4(),
             file_id="missing-file",
             name="ghost.csv",
             file_type="text/csv",
             token_count=10,
         )
 
-        with patch(
-            "onyx.chat.process_message.get_default_file_store"
-        ) as mock_file_store_factory:
+        with patch("onyx.chat.files.get_default_file_store") as mock_file_store_factory:
             mock_file_store = mock_file_store_factory.return_value
             mock_file_store.read_file.side_effect = FileNotFoundError("gone")
 
@@ -245,20 +183,17 @@ class TestChatFileConversion:
     def test_context_non_tabular_user_files_not_loaded_for_tools(self) -> None:
         from uuid import uuid4
 
-        from onyx.chat.process_message import _load_context_user_files_for_tools
+        from onyx.chat.files import _load_context_user_files_for_tools
 
-        user_file = UserFile(
+        user_file = UserFileMetadata(
             id=uuid4(),
-            user_id=uuid4(),
             file_id="stored-pdf-file",
             name="framework.pdf",
             file_type="application/pdf",
             token_count=1000,
         )
 
-        with patch(
-            "onyx.chat.process_message.get_default_file_store"
-        ) as mock_file_store_factory:
+        with patch("onyx.chat.files.get_default_file_store") as mock_file_store_factory:
             chat_files = _load_context_user_files_for_tools(
                 [user_file],
                 existing_filenames=set(),
@@ -271,20 +206,17 @@ class TestChatFileConversion:
         # Avoid overwriting an existing staged chat attachment with the same name.
         from uuid import uuid4
 
-        from onyx.chat.process_message import _load_context_user_files_for_tools
+        from onyx.chat.files import _load_context_user_files_for_tools
 
         user_file_id = uuid4()
-        user_file = UserFile(
+        user_file = UserFileMetadata(
             id=user_file_id,
-            user_id=uuid4(),
             file_id="stored-csv-file",
             name="data.csv",
             file_type="text/csv",
             token_count=100,
         )
-        with patch(
-            "onyx.chat.process_message.get_default_file_store"
-        ) as mock_file_store_factory:
+        with patch("onyx.chat.files.get_default_file_store") as mock_file_store_factory:
             mock_file_store = mock_file_store_factory.return_value
             mock_file_store.read_file.return_value.read.return_value = b"a,b\n1,2"
 

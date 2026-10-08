@@ -10,8 +10,12 @@ import litellm
 import pytest
 from litellm.types.utils import ChatCompletionDeltaToolCall, Delta, StreamingChoices
 from litellm.types.utils import Function as LiteLLMFunction
+from pydantic import JsonValue
 
 import onyx.llm.model_request
+import onyx.llm.model_response
+import onyx.llm.models
+from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
@@ -24,7 +28,12 @@ from onyx.llm.model_request import (
     UserMessage,
 )
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
-from onyx.llm.models import NamedToolChoice, ReasoningEffort, ToolChoiceOptions, Usage
+from onyx.llm.models import (
+    NamedToolChoice,
+    ReasoningEffort,
+    ToolChoiceOptions,
+    Usage,
+)
 from onyx.llm.multi_llm import (
     LitellmLLM,
     LLMRateLimitError,
@@ -70,7 +79,6 @@ def _model_response_to_assistant_message(response: ModelResponse) -> AssistantMe
             for tc in message.tool_calls
         ]
     return AssistantMessage(
-        role="assistant",
         content=message.content,
         tool_calls=tool_calls,
     )
@@ -131,7 +139,6 @@ def _accumulate_stream_to_assistant_message(
         ]
 
     return AssistantMessage(
-        role="assistant",
         content=accumulated_content or None,
         tool_calls=tool_calls,
     )
@@ -166,7 +173,6 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
                 choices=[
                     litellm.Choices(
                         delta=_create_delta(
-                            role="assistant",
                             tool_calls=[
                                 ChatCompletionDeltaToolCall(
                                     id="call_1",
@@ -203,7 +209,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
         ]
 
         # Define available tools
-        tools = [
+        tools: list[dict[str, JsonValue]] = [
             {
                 "type": "function",
                 "function": {
@@ -290,7 +296,6 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
                 choices=[
                     litellm.Choices(
                         delta=_create_delta(
-                            role="assistant",
                             tool_calls=[
                                 ChatCompletionDeltaToolCall(
                                     id="call_1",
@@ -358,7 +363,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             UserMessage(content="What's the weather and time in New York?")
         ]
 
-        tools = [
+        tools: list[dict[str, JsonValue]] = [
             {
                 "type": "function",
                 "function": {
@@ -743,7 +748,9 @@ def test_reasoning_off_for_gemini_uses_lowest_accepted_level(
         assert "reasoning" not in kwargs
 
 
-def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
+def test_keeps_temperature_for_other_models(
+    default_multi_llm: LitellmLLM,
+) -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
@@ -2505,15 +2512,22 @@ def test_strip_tool_content_converts_assistant_tool_calls_to_text() -> None:
     # Assistant with tool calls → plain text
     assert result[1]["role"] == "assistant"
     assert "tool_calls" not in result[1]
+    assert isinstance(result[1]["content"], str)
     assert "Let me search." in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "[Tool Call]" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "search" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "tc_1" in result[1]["content"]
 
     # Tool response → user message
     assert result[2]["role"] == "user"
+    assert isinstance(result[2]["content"], str)
     assert "[Tool Result]" in result[2]["content"]
+    assert isinstance(result[2]["content"], str)
     assert "tc_1" in result[2]["content"]
+    assert isinstance(result[2]["content"], str)
     assert "Found 3 results about cats." in result[2]["content"]
 
     # Final assistant message unchanged
@@ -2539,6 +2553,7 @@ def test_strip_tool_content_handles_assistant_with_no_text_content() -> None:
 
     result = _strip_tool_content_from_messages(messages)
     assert result[0]["role"] == "assistant"
+    assert isinstance(result[0]["content"], str)
     assert "[Tool Call]" in result[0]["content"]
     assert "tool_calls" not in result[0]
 
@@ -2585,13 +2600,17 @@ def test_strip_tool_content_handles_list_content_blocks() -> None:
 
     # Assistant: list content flattened + tool call appended
     assert result[0]["role"] == "assistant"
+    assert isinstance(result[0]["content"], str)
     assert "Searching now." in result[0]["content"]
+    assert isinstance(result[0]["content"], str)
     assert "[Tool Call]" in result[0]["content"]
     assert isinstance(result[0]["content"], str)
 
     # Tool: list content flattened into user message
     assert result[1]["role"] == "user"
+    assert isinstance(result[1]["content"], str)
     assert "result A" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "result B" in result[1]["content"]
     assert isinstance(result[1]["content"], str)
 
@@ -2633,6 +2652,7 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
 
     # Both tool results merged into one user message
     merged = result[2]["content"]
+    assert isinstance(merged, str)
     assert "tc_1" in merged
     assert "sunny 72F" in merged
     assert "tc_2" in merged
@@ -2672,7 +2692,7 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         )
 
 
-_TOOL_CHOICE_DOWNGRADE_TOOLS = [
+_TOOL_CHOICE_DOWNGRADE_TOOLS: list[dict[str, JsonValue]] = [
     {
         "type": "function",
         "function": {
@@ -2956,7 +2976,7 @@ def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
         ),
     ]
 
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -3001,7 +3021,7 @@ def test_bedrock_claude_keeps_thinking_when_no_tool_history() -> None:
         UserMessage(content="What's the weather?"),
     ]
 
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -3045,7 +3065,7 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
     messages: list[ChatCompletionMessage] = [
         UserMessage(content="Use a tool if needed")
     ]
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -3442,7 +3462,6 @@ def _tool_cycle_prompt() -> list[ChatCompletionMessage]:
     return [
         UserMessage(content="What's the weather in Paris?"),
         AssistantMessage(
-            role="assistant",
             content=None,
             tool_calls=[
                 ToolCall(
@@ -3685,6 +3704,7 @@ def test_policy_extra_body_keeps_deployment_siblings_under_the_same_key() -> Non
         extra_body={"provider": {"order": ["Azure"], "allow_fallbacks": False}},
     )
 
+    assert isinstance(llm._model_kwargs["extra_body"], dict)
     assert llm._model_kwargs["extra_body"]["provider"] == {
         "order": ["Azure"],
         "allow_fallbacks": False,
@@ -3832,3 +3852,31 @@ def test_invoke_raw_stream_reassembly_keeps_served_model() -> None:
 
     assert result.model == "deepseek/deepseek-v4-flash"
     assert span.span_data.routed_model == "deepseek/deepseek-v4-flash"
+
+
+def test_cancellable_provider_setup_restores_environment_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(_ENV_LOCK_TEST_KEY, "deployment-value")
+    transport = LitellmLLM(
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-5-mini",
+        max_input_tokens=10000,
+        api_key="test-key",
+        custom_config={_ENV_LOCK_TEST_KEY: "request-value"},
+    )
+
+    def fail_provider_setup(**_kwargs: JsonValue) -> None:
+        assert os.environ[_ENV_LOCK_TEST_KEY] == "request-value"
+        raise ValueError("Provider setup failed")
+
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=True),
+        patch("litellm.completion", side_effect=fail_provider_setup) as completion,
+        cancellation_scope(CancellationSignal()),
+        pytest.raises(ValueError, match="Provider setup failed"),
+    ):
+        transport.invoke_raw([UserMessage(content="Hi")])
+
+    completion.assert_called_once()
+    assert os.environ[_ENV_LOCK_TEST_KEY] == "deployment-value"
