@@ -211,17 +211,10 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load
 
-  // The picked saved account, and whether the user turned to the account
-  // typed into the form, which Create saves. The typed account takes over
-  // only while its values are valid; until then the saved pick stays.
+  // The picked saved account. A valid account typed into the form masks it
+  // (see `accountFor`); it applies again when the typed one is not valid.
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
-  const [newAccountChosen, setNewAccountChosen] = useState<boolean>(false);
-  const chooseSavedAccount = (credential: Credential<any> | null) => {
-    setCurrentCredential(credential);
-    setNewAccountChosen(false);
-  };
-  const chooseNewAccount = () => setNewAccountChosen(true);
 
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -285,16 +278,14 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     : null;
 
   /**
-   * The chosen account for these form values: the typed one while the user
-   * turned to it and its values are valid, else the saved pick (or Google's
+   * The chosen account for these form values: the typed one when its values
+   * are valid, which masks any saved pick; else the saved pick (or Google's
    * live account).
    */
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
-    (newAccountChosen
-      ? typedDraft(connector, accountSchema, getIn(values, NEW_ACCOUNT_FIELD))
-      : null) ||
+    typedDraft(connector, accountSchema, getIn(values, NEW_ACCOUNT_FIELD)) ||
     currentCredential ||
     liveGDriveCredential ||
     liveGmailCredential ||
@@ -372,9 +363,11 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
           stringPairDuplicateKey: keyValueT("duplicateKey"),
         }
       ).shape({
-        // The typed account counts only while it is the chosen one.
+        // With a saved pick, the typed account is optional: one that is not
+        // valid falls back to the pick, so it must not block Create. With no
+        // pick it is the only account, and its errors show.
         [NEW_ACCOUNT_FIELD]:
-          newAccountChosen && accountSchema ? accountSchema : Yup.mixed(),
+          accountSchema && !currentCredential ? accountSchema : Yup.mixed(),
       })}
       onSubmit={async (values) => {
         const {
@@ -766,11 +759,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                               connector={connector}
                               accessType={formikProps.values.access_type}
                               currentCredential={currentCredential}
-                              onCredentialChange={chooseSavedAccount}
-                              newAccountInUse={
-                                newAccountChosen && newAccountReady
-                              }
-                              onChooseNewAccount={chooseNewAccount}
+                              onCredentialChange={setCurrentCredential}
                               newAccountReady={newAccountReady}
                               checkedCredential={checkedCredential}
                               checksLocked={!configUnlocked}

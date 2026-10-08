@@ -51,14 +51,9 @@ interface AuthenticationAccountSectionProps {
   /** Called when the user picks a saved account, or drops it. */
   onCredentialChange: (credential: Credential<any> | null) => void;
   /**
-   * Whether the account typed into the new-account form is the chosen one:
-   * the user turned to it and its values are valid. Create saves it; until
-   * then it is only the form's values.
+   * Whether the account typed into the new-account form has valid values. It
+   * is then the chosen account, masking any saved pick; Create saves it.
    */
-  newAccountInUse: boolean;
-  /** Turns to the typed account; it takes over once its values are valid. */
-  onChooseNewAccount: () => void;
-  /** Whether the typed account's values are valid. */
   newAccountReady: boolean;
   /** The account the capability checks run with; `null` locks them. */
   checkedCredential: Credential<any> | DraftCredential | null;
@@ -77,8 +72,6 @@ export default function AuthenticationAccountSection({
   accessType,
   currentCredential,
   onCredentialChange,
-  newAccountInUse,
-  onChooseNewAccount,
   newAccountReady,
   checkedCredential,
   checksLocked,
@@ -109,8 +102,8 @@ export default function AuthenticationAccountSection({
   const newAccountLabel = t("add.newAccountButton.label", {
     source: displayName,
   });
-  // A saved pick shows as chosen unless the typed account took over.
-  const selectedSavedId: number | null = newAccountInUse
+  // A saved pick shows as chosen unless a valid typed account masks it.
+  const selectedSavedId: number | null = newAccountReady
     ? null
     : (currentCredential?.id ?? null);
   // The source's fields when a new account is typed into this form; `null`
@@ -155,32 +148,30 @@ export default function AuthenticationAccountSection({
       );
     }
     if (typedSpec) {
-      // Part of the connector form: Formik validates the account with the
-      // rest, and nothing is saved until Create. Typing in it chooses it.
+      // Part of the connector form, and saved only by Create. Once its
+      // values are valid it is the chosen account.
       return (
-        <div onFocusCapture={onChooseNewAccount}>
-          <Section alignItems="stretch" gap={4}>
-            <CredentialFieldsRenderer
-              source={connector}
-              spec={typedSpec}
-              namePrefix={NEW_ACCOUNT_FIELD}
-              authMethod={
-                typeof newAccountValues?.authentication_method === "string"
-                  ? newAccountValues.authentication_method
-                  : undefined
-              }
-            />
-            {businessTier && (
-              <>
-                <Divider paddingParallel={0} paddingPerpendicular={0} />
-                <ShareAccountField
-                  namePrefix={NEW_ACCOUNT_FIELD}
-                  disabled={!newAccountReady}
-                />
-              </>
-            )}
-          </Section>
-        </div>
+        <Section alignItems="stretch" gap={4}>
+          <CredentialFieldsRenderer
+            source={connector}
+            spec={typedSpec}
+            namePrefix={NEW_ACCOUNT_FIELD}
+            authMethod={
+              typeof newAccountValues?.authentication_method === "string"
+                ? newAccountValues.authentication_method
+                : undefined
+            }
+          />
+          {businessTier && (
+            <>
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              <ShareAccountField
+                namePrefix={NEW_ACCOUNT_FIELD}
+                disabled={!newAccountReady}
+              />
+            </>
+          )}
+        </Section>
       );
     }
     return (
@@ -315,14 +306,13 @@ export default function AuthenticationAccountSection({
                 expandable
                 expanded={isCreating}
                 expandableContentHeight="full"
-                // The form keeps what was typed while folded, and the typed
-                // account stays the chosen one.
+                // The form keeps what was typed while folded, and a valid
+                // typed account stays the chosen one.
                 expandableKeepMounted
                 border="solid"
-                // Selected only while the typed account is in use: chosen,
-                // with valid values.
+                // Selected while its valid values make it the chosen account.
                 state={
-                  newAccountInUse ? "selected" : isCreating ? "filled" : "empty"
+                  newAccountReady ? "selected" : isCreating ? "filled" : "empty"
                 }
                 rounding={4}
                 padding={2}
@@ -369,19 +359,9 @@ export default function AuthenticationAccountSection({
                     )}
                   </div>
                 }
-                // Open and not chosen, the header chooses the typed account;
-                // otherwise it opens or folds the form. Opening chooses it;
-                // folding keeps it chosen.
-                onClick={() => {
-                  if (isCreating && typedSpec && !newAccountInUse) {
-                    onChooseNewAccount();
-                  } else if (isCreating) {
-                    close();
-                  } else {
-                    selectMethod(defaultMethod);
-                    if (typedSpec) onChooseNewAccount();
-                  }
-                }}
+                onClick={() =>
+                  isCreating ? close() : selectMethod(defaultMethod)
+                }
               >
                 <Section padding={2} width="full">
                   <Content
