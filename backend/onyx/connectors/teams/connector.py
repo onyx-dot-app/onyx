@@ -63,7 +63,7 @@ from onyx.connectors.teams.refusals import (
     status,
 )
 from onyx.connectors.teams.session import TeamsSession
-from onyx.connectors.teams.sources import SlimWalk, drain
+from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.threads import ThreadSource
 from onyx.connectors.teams.transcripts import (
     TranscriptSource,
@@ -398,17 +398,18 @@ class TeamsConnector(
             if export.fell_back:
                 checkpoint.todo_channels.extend(export.channels)
                 continue
-            if self._files is None:
-                continue
             yield from self._channel_files_side_by_side(export.channels, start)
         del checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
 
     def _channel_files_side_by_side(
         self, channels: Sequence[ChannelRef], start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
-        """The files of these channels, a worker per channel, each file
-        yielded as it is read so no worker holds a library. The SharePoint
-        REST context behind the readers is per thread."""
+        """The files of these channels, max_workers workers draining them a
+        channel at a time. A worker yields each file as it is read, so it
+        buffers no library. The SharePoint REST context behind the readers is
+        per thread."""
+        if self._files is None:
+            return
         yield from drain(
             channels,
             lambda channel: self._opened_channel_files(channel, start),
@@ -422,21 +423,30 @@ class TeamsConnector(
         channel Graph describes without a library, or refuses, is one recorded
         failure. Anything else fails the attempt."""
         if self._files is None:
-            return
+            raise RuntimeError("Channel files are read only when attachments are on")
         try:
-            try:
-                self._files.open(channel)
-            except ChannelFilesUnavailable as e:
-                yield channel_failure(channel, "files", e)
-                return
-            except requests.HTTPError as e:
-                if not is_permanent(e):
-                    raise
-                yield channel_failure(channel, "files", e)
+            refusal = self._open_library(channel)
+            if refusal is not None:
+                yield refusal
                 return
             yield from self._channel_files(channel, start)
         finally:
             self._files.leave(channel)
+
+    def _open_library(self, channel: ChannelRef) -> ConnectorFailure | None:
+        """Opens the channel's library, or returns the one failure a channel
+        without a usable library costs. An outage raises."""
+        if self._files is None:
+            raise RuntimeError("Channel files are read only when attachments are on")
+        try:
+            self._files.open(channel)
+        except ChannelFilesUnavailable as e:
+            return channel_failure(channel, "files", e)
+        except requests.HTTPError as e:
+            if not is_permanent(e):
+                raise
+            return channel_failure(channel, "files", e)
+        return None
 
     def _channel_step(
         self, checkpoint: TeamsCheckpoint, start: SecondsSinceUnixEpoch
@@ -475,8 +485,7 @@ class TeamsConnector(
             elif self._files is not None:
                 self._files.leave(advance.cursor.channel)
         checkpoint.active = active
-        if self._files is not None:
-            yield from self._channel_files_side_by_side(files_due, start)
+        yield from self._channel_files_side_by_side(files_due, start)
 
     def _advance_channel(
         self, cursor: ChannelCursor, start: SecondsSinceUnixEpoch
