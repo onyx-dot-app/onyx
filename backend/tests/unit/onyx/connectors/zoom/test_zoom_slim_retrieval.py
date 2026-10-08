@@ -289,14 +289,24 @@ class TestSlimFailuresNeverDeleteAnything:
         assert asked.count("gone@example.com") == 1
         assert "gone@example.com" not in _walked(client)
 
-    def test_a_credential_that_recognises_nobody_stops_the_prune(self) -> None:
+    @pytest.mark.parametrize(
+        ("walk", "consequence"),
+        [
+            (_documents, "pruning stopped rather than delete"),
+            (_synced, "permission sync stopped rather than make"),
+        ],
+        ids=["pruning", "doc-sync"],
+    )
+    def test_a_credential_that_recognises_nobody_stops_the_walk(
+        self, walk: Callable[[ZoomConnector], object], consequence: str
+    ) -> None:
         # Zoom answers the same 1001 for a deleted user and for one in another
         # account, so a credential pointed elsewhere would delete everything.
         connector, client = _connector(host_emails=["jill@example.com"])
         client.list_user_recordings.side_effect = _listing_by_host({})
 
-        with pytest.raises(ConnectorValidationError, match="recognised none"):
-            list(connector.retrieve_all_slim_docs())
+        with pytest.raises(ConnectorValidationError, match=consequence):
+            walk(connector)
 
     @pytest.mark.parametrize(
         "error",

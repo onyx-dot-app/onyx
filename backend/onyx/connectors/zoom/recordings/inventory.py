@@ -89,6 +89,12 @@ def _slim_batches(
         yield proven
 
     hosts = _merged(scopes)
+    # The same walk serves pruning and the permission sync.
+    job, consequence = (
+        ("pruning", "delete every document it has indexed")
+        if resolve_access is None
+        else ("permission sync", "make every document it has indexed private")
+    )
     if unrecognised and not hosts and not anchors:
         # Zoom answers the same not-found for a user or session that was deleted
         # and for one in another account, so a credential pointed at the wrong
@@ -96,15 +102,16 @@ def _slim_batches(
         # One recording Zoom did answer for proves the account is right.
         raise ConnectorValidationError(
             "Zoom recognised none of the hosts or sessions this connector names, "
-            "so pruning stopped rather than delete every document it has "
-            "indexed. Either they were all deleted in Zoom, or the credentials "
-            "now point at a different account. To prune them anyway, replace "
-            "the entries Zoom no longer has or delete the connector"
+            f"so {job} stopped rather than {consequence}. Either they were all "
+            "deleted in Zoom, or the credentials now point at a different "
+            "account. To go ahead anyway, replace the entries Zoom no longer has "
+            "or delete the connector"
         )
     today = datetime.now(timezone.utc).date()
     windows = listing_windows(EARLIEST_RECORDING_DATE, today)
     logger.info(
-        "Zoom pruning is listing %s host(s) over %s windows, about %s calls",
+        "Zoom %s is listing %s host(s) over %s windows, about %s calls",
+        job,
         len(hosts),
         len(windows),
         len(hosts) * (len(windows) + 1),
