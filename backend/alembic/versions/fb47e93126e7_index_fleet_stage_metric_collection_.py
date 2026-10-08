@@ -2,6 +2,9 @@
 
 A concurrent build avoids blocking source writes and recovers invalid indexes
 left by an interrupted build. Uses the repository async migration pattern.
+
+Revision ID: fb47e93126e7
+Revises: 93b903235ac2
 """
 
 from alembic import op
@@ -10,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "fb47e93126e7"
-down_revision = "c8286553e7a9"
+down_revision = "93b903235ac2"
 branch_labels = None
 depends_on = None
 

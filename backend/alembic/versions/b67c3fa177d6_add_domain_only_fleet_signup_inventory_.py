@@ -1,13 +1,13 @@
 """Add a domain-only fleet signup inventory view.
 
 Revision ID: b67c3fa177d6
-Revises: b3e7c1d9a4f2
+Revises: 1b26b1dfdc54
 """
 
 from alembic import op
 
 revision = "b67c3fa177d6"
-down_revision = "b3e7c1d9a4f2"
+down_revision = "1b26b1dfdc54"
 branch_labels = None
 depends_on = None
 
