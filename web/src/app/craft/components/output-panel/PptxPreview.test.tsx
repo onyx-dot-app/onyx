@@ -80,8 +80,12 @@ it("keeps the selected slide valid when an updated deck has fewer slides", async
     />
   );
   await screen.findByRole("img");
-  fireEvent.keyDown(window, { key: "ArrowRight" });
-  fireEvent.keyDown(window, { key: "ArrowRight" });
+  fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+    key: "ArrowRight",
+  });
+  fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+    key: "ArrowRight",
+  });
   expect(screen.getByRole("img")).toHaveAttribute(
     "src",
     expect.stringContaining("slide-3.jpg")
@@ -128,7 +132,9 @@ it("ignores next-slide keys while the deck is converting", async () => {
     "src",
     expect.stringContaining("slide-1.jpg")
   );
-  fireEvent.keyDown(window, { key: "ArrowRight" });
+  fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+    key: "ArrowRight",
+  });
   expect(screen.getByRole("img")).toHaveAttribute(
     "src",
     expect.stringContaining("slide-2.jpg")
@@ -246,7 +252,9 @@ it("navigates from thumbnails and ignores keyboard events while its tab is hidde
     block: "nearest",
     inline: "nearest",
   });
-  fireEvent.keyDown(window, { key: "ArrowUp" });
+  fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+    key: "ArrowUp",
+  });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
   rerender(
     <PptxPreview
@@ -255,10 +263,14 @@ it("navigates from thumbnails and ignores keyboard events while its tab is hidde
       isActive={false}
     />
   );
-  fireEvent.keyDown(window, { key: "ArrowRight" });
+  fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+    key: "ArrowRight",
+  });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
   rerender(<PptxPreview sessionId="thumbnails" filePath="outputs/deck.pptx" />);
-  fireEvent.keyDown(window, { key: "ArrowRight" });
+  fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+    key: "ArrowRight",
+  });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
 });
 
@@ -307,15 +319,41 @@ it("reverses horizontal arrows in RTL and keeps vertical arrows unchanged", asyn
     render(<PptxPreview sessionId="rtl-slides" filePath="outputs/deck.pptx" />);
     await screen.findByRole("img");
     fireEvent.click(screen.getByRole("button", { name: "Slide 2 of 3" }));
-    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+      key: "ArrowLeft",
+    });
     expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
-    fireEvent.keyDown(window, { key: "ArrowRight" });
+    fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+      key: "ArrowRight",
+    });
     expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
-    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+      key: "ArrowUp",
+    });
     expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 1 of 3");
-    fireEvent.keyDown(window, { key: "ArrowDown" });
+    fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+      key: "ArrowDown",
+    });
     expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
   } finally {
     document.documentElement.dir = originalDirection;
   }
+});
+
+it("leaves arrow keys outside the viewer available for scrolling", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 2,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg"],
+    cached: false,
+  });
+  render(<PptxPreview sessionId="scoped-keys" filePath="outputs/deck.pptx" />);
+  await screen.findByRole("img");
+  for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]) {
+    expect(fireEvent.keyDown(document.body, { key })).toBe(true);
+    expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 1 of 2");
+  }
+  fireEvent.keyDown(screen.getByRole("button", { name: "Slide 1 of 2" }), {
+    key: "ArrowDown",
+  });
+  expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 2");
 });

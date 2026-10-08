@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type KeyboardEvent,
+} from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -95,35 +101,24 @@ export default function PptxPreview({
     }
   }, [activeSlide, data?.imageRevision, isActive]);
 
-  // Keyboard navigation
-  useEffect(() => {
-    if (!isActive) return;
-    function handleKeyDown(e: KeyboardEvent) {
-      if (
-        e.defaultPrevented ||
-        (e.target instanceof HTMLElement &&
-          e.target.closest("input, textarea, select, [contenteditable='true']"))
-      )
-        return;
-      // Horizontal arrows follow the reading direction, so RTL swaps them.
-      const isRtl = document.documentElement.dir === "rtl";
-      if (
-        e.key === "ArrowUp" ||
-        e.key === (isRtl ? "ArrowRight" : "ArrowLeft")
-      ) {
-        e.preventDefault();
-        goToPrev();
-      } else if (
-        e.key === "ArrowDown" ||
-        e.key === (isRtl ? "ArrowLeft" : "ArrowRight")
-      ) {
-        e.preventDefault();
-        goToNext();
-      }
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!isActive || event.defaultPrevented) return;
+    // Horizontal arrows follow the reading direction.
+    const isRtl = document.documentElement.dir === "rtl";
+    if (
+      event.key === "ArrowUp" ||
+      event.key === (isRtl ? "ArrowRight" : "ArrowLeft")
+    ) {
+      event.preventDefault();
+      goToPrev();
+    } else if (
+      event.key === "ArrowDown" ||
+      event.key === (isRtl ? "ArrowLeft" : "ArrowRight")
+    ) {
+      event.preventDefault();
+      goToNext();
     }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isActive, goToPrev, goToNext]);
+  }
 
   if (isLoading) {
     return (
@@ -183,8 +178,12 @@ export default function PptxPreview({
 
   return (
     <div className="h-full min-h-0 flex overflow-hidden">
-      <nav
+      <div
+        role="toolbar"
         aria-label={t("slides.label")}
+        aria-orientation="vertical"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
         className="w-28 shrink-0 overflow-y-auto overscroll-contain border-e border-border-02 p-2"
       >
         <div className="flex flex-col gap-2">
@@ -219,7 +218,7 @@ export default function PptxPreview({
             </SelectCard>
           ))}
         </div>
-      </nav>
+      </div>
       <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
         <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden">
           {imageLoading && (

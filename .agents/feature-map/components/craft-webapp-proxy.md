@@ -216,7 +216,9 @@ These behaviors live in `PptxPreview.tsx` and `PdfPreview.tsx` under
 PowerPoint previews use LibreOffice and PDF rasterization to produce slide images.
 A vertical thumbnail column supports click and keyboard navigation, marks the
 selected slide, and scrolls it into view. Thumbnail images load lazily.
-Inactive presentations ignore keyboard navigation.
+Keyboard navigation only handles events within the slide toolbar.
+Inactive presentations ignore keyboard navigation. Closed output panels are inert,
+so their controls cannot receive focus or keyboard input.
 
 ## 5. Contracts and invariants
 
