@@ -11041,6 +11041,11 @@
       "adminLimitedSetting": {
         "tooltip": "管理员将此模型限制为较低的推理级别。"
       },
+      "autoMode": {
+        "tooltip": {
+          "text": "网关为每条消息选择一个模型。"
+        }
+      },
       "contextWindow": {
         "row": {
           "caption": "每个会话的 token 上限",

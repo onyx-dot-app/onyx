@@ -11041,6 +11041,11 @@
       "adminLimitedSetting": {
         "tooltip": "Seu administrador limita este modelo a um nível de raciocínio mais baixo."
       },
+      "autoMode": {
+        "tooltip": {
+          "text": "O gateway escolhe um modelo para cada mensagem."
+        }
+      },
       "contextWindow": {
         "row": {
           "caption": "Limite de tokens para cada sessão",

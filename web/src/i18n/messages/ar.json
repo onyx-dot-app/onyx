@@ -11041,6 +11041,11 @@
       "adminLimitedSetting": {
         "tooltip": "يقصر المسؤول هذا النموذج على مستوى استدلال أدنى."
       },
+      "autoMode": {
+        "tooltip": {
+          "text": "تختار البوابة نموذجًا لكل رسالة."
+        }
+      },
       "contextWindow": {
         "row": {
           "caption": "حد الرموز لكل جلسة",

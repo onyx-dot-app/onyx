@@ -11041,6 +11041,11 @@
       "adminLimitedSetting": {
         "tooltip": "Your admin limits this model to a lower reasoning level."
       },
+      "autoMode": {
+        "tooltip": {
+          "text": "The gateway picks a model for each message."
+        }
+      },
       "contextWindow": {
         "row": {
           "caption": "Tokens limit for each session",

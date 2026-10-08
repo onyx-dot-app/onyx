@@ -19,6 +19,7 @@ import {
   SvgChevronLeft,
   SvgChevronRight,
   SvgCode,
+  SvgInfoSmall,
   SvgSliders,
   SvgThermometer,
 } from "@opal/icons";
@@ -705,7 +706,11 @@ export default function ModelSelectorContent({
             <Tabs.Trigger value="models">
               {t("modeToggle.models.label")}
             </Tabs.Trigger>
-            <Tabs.Trigger value="routers">
+            <Tabs.Trigger
+              value="routers"
+              icon={SvgInfoSmall}
+              tooltip={t("autoMode.tooltip.text")}
+            >
               {t("modeToggle.routers.label")}
             </Tabs.Trigger>
           </Tabs.List>

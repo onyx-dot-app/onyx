@@ -11041,6 +11041,11 @@
       "adminLimitedSetting": {
         "tooltip": "Ihr Administrator beschränkt dieses Modell auf eine niedrigere Reasoning-Stufe."
       },
+      "autoMode": {
+        "tooltip": {
+          "text": "Das Gateway wählt für jede Nachricht ein Modell."
+        }
+      },
       "contextWindow": {
         "row": {
           "caption": "Token-Limit für jede Sitzung",
