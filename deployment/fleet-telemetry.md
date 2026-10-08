@@ -54,6 +54,9 @@ Neither API readiness nor indexing depends on successful enrollment or delivery.
 
 Docker Compose starts a separate collector with a 0.2 CPU and 256MiB memory cap.
 Helm enables the collector by default. Its existing resource limits remain configurable.
+On a backend image older than the collector, the Compose and Helm collector waits idle and
+does not restart. Thus a chart or Compose file that is newer than its image does not cause a
+crash loop or a failed `--wait`.
 The collector uses standard Onyx PostgreSQL, Redis, and OpenSearch settings by default.
 All collection transactions are read-only, with short statement and lock limits.
 The startup identity write uses a separate connection that is closed before collection begins.

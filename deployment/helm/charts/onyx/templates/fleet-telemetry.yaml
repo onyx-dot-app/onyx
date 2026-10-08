@@ -99,7 +99,20 @@ spec:
           image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Values.global.version }}"
           {{- end }}
           imagePullPolicy: {{ .Values.global.pullPolicy }}
-          command: ["python", "-m", "onyx.utils.fleet_telemetry_collector"]
+          # Backend images from before the collector wait idle instead of
+          # restarting, so a chart upgrade cannot get ahead of its image.
+          command:
+            - python
+            - -c
+            - |
+              import importlib.util, runpy, signal, sys
+              module = "onyx.utils.fleet_telemetry_collector"
+              if importlib.util.find_spec(module) is None:
+                  for stop in (signal.SIGINT, signal.SIGTERM):
+                      signal.signal(stop, lambda *_: sys.exit(0))
+                  while True:
+                      signal.pause()
+              runpy.run_module(module, run_name="__main__", alter_sys=True)
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

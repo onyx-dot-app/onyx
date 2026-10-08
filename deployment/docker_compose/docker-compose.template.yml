@@ -52,7 +52,20 @@ name: onyx
 services:
   telemetry_collector:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
-    command: ["python", "-m", "onyx.utils.fleet_telemetry_collector"]
+    # Backend images from before the collector wait idle instead of
+    # restarting, so `up --wait` succeeds when this file is newer than the image.
+    command:
+      - python
+      - -c
+      - |
+        import importlib.util, runpy, signal, sys
+        module = "onyx.utils.fleet_telemetry_collector"
+        if importlib.util.find_spec(module) is None:
+            for stop in (signal.SIGINT, signal.SIGTERM):
+                signal.signal(stop, lambda *_: sys.exit(0))
+            while True:
+                signal.pause()
+        runpy.run_module(module, run_name="__main__", alter_sys=True)
     env_file:
       - path: .env
         required: false
