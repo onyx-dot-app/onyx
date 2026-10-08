@@ -111,8 +111,6 @@ jobs:
             "ghcr.io/cloudnative-pg/cloudnative-pg:1.27.0"
             "quay.io/opstree/redis:v7.0.15"
             "docker.io/onyxdotapp/onyx-web-server:latest"
-            # The fleet telemetry collector is the only backend pod in ct install.
-            "docker.io/onyxdotapp/onyx-backend:latest"
           )
 
           for image in "${IMAGES[@]}"; do
@@ -193,9 +191,8 @@ jobs:
           # step should be ok in the short term.
           echo "=== Starting ct install ==="
           set +e
-          # fleetTelemetry.endpoint points at a closed local port. ct installs and
-          # runs the collector, its ServiceAccount and its RBAC, but CI sends no
-          # telemetry to the production endpoint.
+          # DISABLE_TELEMETRY=true also leaves out the telemetry collector. Its
+          # backend image does not fit on the runner disk next to OpenSearch.
           ct install --all \
             --helm-extra-set-args="\
               --set=nginx.enabled=false \
@@ -222,7 +219,7 @@ jobs:
               --set=celery_worker_scheduled_tasks.replicaCount=0 \
               --set=celery_worker_user_file_processing.replicaCount=0 \
               --set=celery_worker_user_files_indexing.replicaCount=0 \
-              --set=fleetTelemetry.endpoint=https://127.0.0.1:9" \
+              --set=configMap.DISABLE_TELEMETRY=true" \
             --helm-extra-args="--timeout 900s --debug" \
             --debug --config ct.yaml
           CT_EXIT=$?
