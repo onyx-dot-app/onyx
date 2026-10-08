@@ -53,7 +53,6 @@ import {
 } from "@opal/icons";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { InputSingleSelect } from "@opal/components";
-import { InputSingleSelectField } from "@opal/form";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -118,12 +117,6 @@ import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
 import { parseErrorDetail } from "@/lib/fetcher";
-
-// Vector quantization is hidden until the rescore oversample factor is tuned
-// per model and corpus size. The saved value still round-trips unchanged.
-const VECTOR_QUANTIZATION_ENABLED = false;
-const SHOW_VECTOR_QUANTIZATION =
-  VECTOR_QUANTIZATION_ENABLED && !NEXT_PUBLIC_CLOUD_ENABLED;
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
@@ -1340,9 +1333,6 @@ export default function IndexSettingsPage() {
                 changes.contextualModelChanged
                   ? "warning"
                   : undefined;
-              const quantizationCardBorder = changes.quantizationChanged
-                ? "warning"
-                : undefined;
               const imageCardBorder = captioningModelMissing
                 ? "warning"
                 : changes.imageChanged
@@ -2050,55 +2040,6 @@ export default function IndexSettingsPage() {
                               </Card>
                             </Tabs>
                           )
-                        )}
-
-                        {SHOW_VECTOR_QUANTIZATION && (
-                          <Card
-                            border="solid"
-                            borderColor={quantizationCardBorder}
-                            rounding={4}
-                          >
-                            <InputHorizontal
-                              title={t("vectorQuantization.title")}
-                              description={t("vectorQuantization.description")}
-                              withLabel
-                            >
-                              <InputSingleSelectField
-                                name="vector_quantization"
-                                defaultOption={VectorQuantization.NONE}
-                                placeholder={tInputSelect(
-                                  "placeholder.fallback"
-                                )}
-                                options={[
-                                  {
-                                    value: VectorQuantization.NONE,
-                                    title: t("vectorQuantization.none.label"),
-                                    description: t(
-                                      "vectorQuantization.none.description"
-                                    ),
-                                  },
-                                  {
-                                    value: VectorQuantization.SCALAR_7_BIT,
-                                    title: t(
-                                      "vectorQuantization.scalar7Bit.label"
-                                    ),
-                                    description: t(
-                                      "vectorQuantization.scalar7Bit.description"
-                                    ),
-                                  },
-                                  {
-                                    value: VectorQuantization.SCALAR_1_BIT,
-                                    title: t(
-                                      "vectorQuantization.scalar1Bit.label"
-                                    ),
-                                    description: t(
-                                      "vectorQuantization.scalar1Bit.description"
-                                    ),
-                                  },
-                                ]}
-                              />
-                            </InputHorizontal>
-                          </Card>
                         )}
                       </GeneralLayouts.Section>
 

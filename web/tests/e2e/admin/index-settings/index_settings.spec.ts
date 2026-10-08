@@ -986,7 +986,45 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
   test("the vector quantization control is hidden", async ({ page }) => {
     const indexSettings = new IndexSettingsPage(page);
     await indexSettings.goto();
-    await expect(page.getByText("Vector Quantization")).toHaveCount(0);
+    await indexSettings.expectVectorQuantizationHidden();
+  });
+
+  test("a re-index keeps the saved quantization level", async ({ page }) => {
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const servedSettings: TestSearchSettings = {
+      ...current,
+      vector_quantization: "scalar_1_bit",
+    };
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+      void page.route(SET_NEW_SETTINGS_API, async (route) => {
+        resolve(
+          JSON.parse(route.request().postData() ?? "{}") as Record<
+            string,
+            unknown
+          >
+        );
+        await route.fulfill({ status: 200, body: JSON.stringify({ id: 1 }) });
+      });
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await stageNonCurrentSelfHostedModel(page);
+    await indexSettings.applyReindex();
+
+    const body = await bodyPromise;
+    expect(body.vector_quantization).toBe("scalar_1_bit");
   });
 });
 
