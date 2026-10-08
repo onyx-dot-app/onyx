@@ -259,7 +259,7 @@ class FileSource:
         SharePoint documents, so the pair's access type decides on those builds."""
         access = get_sharepoint_external_access(
             ctx=self.rest_context(library.site_url),
-            graph_client=self._session.graph(),
+            graph_client=self._session.graph_for_thread(),
             permission_cache=self._permission_cache,
             drive_item=item.to_sdk_driveitem(self._session.graph()),
             list_id=library.list_id,

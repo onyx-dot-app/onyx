@@ -482,6 +482,25 @@ def test_the_rest_context_is_reused_per_site_until_its_token_ages(
     assert _rest_context_calls() == [(SITE_URL,), (SITE_URL,)]
 
 
+def test_each_thread_gets_its_own_graph_client_for_queries() -> None:
+    """SDK queries queue on their client, so file readers read side by side
+    must not share one; direct requests keep the shared client."""
+    teams_connector = connector(graph_client({}), include_attachments=True)
+    teams_connector._acquire_token = lambda: {"access_token": "token"}
+    first = teams_connector.graph_for_thread()
+    seen: list[Any] = []
+
+    worker = threading.Thread(
+        target=lambda: seen.append(teams_connector.graph_for_thread())
+    )
+    worker.start()
+    worker.join()
+
+    assert teams_connector.graph_for_thread() is first
+    assert seen[0] is not first
+    assert first is not teams_connector.graph()
+
+
 @pytest.mark.usefixtures("library")
 def test_each_thread_gets_its_own_rest_context_for_a_site() -> None:
     """The SDK's context queues requests on the instance, so the walk that

@@ -33,6 +33,9 @@ class TeamsSession:
         self.allow_images = False
         self._user_directory: UserDirectory | None = None
         self._directory_lock = threading.Lock()
+        # SDK queries queue on their client, so a worker that runs them
+        # gets a client of its own.
+        self._thread_clients = threading.local()
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self._azure_environment = resolved_env.environment
@@ -77,6 +80,7 @@ class TeamsSession:
         self.graph_client = GraphClient(
             _acquire_token_func, environment=self._azure_environment
         )
+        self._thread_clients = threading.local()
         # File downloads stream outside the SDK and carry the token themselves.
         self._acquire_token = _acquire_token_func
 
@@ -100,6 +104,21 @@ class TeamsSession:
         if self.graph_client is None:
             raise ConnectorMissingCredentialError("Teams")
         return self.graph_client
+
+    def graph_for_thread(self) -> GraphClient:
+        """A client for SDK queries from a worker thread. The shared client is
+        fine for direct requests, which build their own options, but a query
+        queues on the client it was built from and another thread's
+        execute_query would run it."""
+        if self._acquire_token is None:
+            raise ConnectorMissingCredentialError("Teams")
+        client: GraphClient | None = self._thread_clients.__dict__.get("client")
+        if client is None:
+            client = GraphClient(
+                self._acquire_token, environment=self._azure_environment
+            )
+            self._thread_clients.client = client
+        return client
 
     def access_token(self) -> str:
         if self._acquire_token is None:
