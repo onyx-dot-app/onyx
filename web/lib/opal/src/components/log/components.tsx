@@ -45,13 +45,13 @@ interface LogProps {
   rightChildren?: React.ReactNode;
 }
 
-// A heavy line's details take its status colour; a light line's stay neutral,
-// so only the icon carries the status.
+// The title is always text-03. A heavy line's details take its status colour;
+// every other line's stay text-04, so only the icon carries the status.
 const VARIANTS: Record<
   LogVariant,
   { status: LogStatus; weight: LogWeight; details: TextColor }
 > = {
-  default: { status: "default", weight: "light", details: "text-03" },
+  default: { status: "default", weight: "light", details: "text-04" },
   "success-heavy": {
     status: "success",
     weight: "heavy",

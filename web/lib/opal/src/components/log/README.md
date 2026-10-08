@@ -30,7 +30,7 @@ statuses are a subset of `StatusVariants`:
 | `error`   | `status-error-05`   | `status-error-05`   | `status-error-01`   |
 
 A `light` line has no background, and its details stay `text-04`: only the
-icon carries the status. `default` details are `text-03`. Use `heavy` for the lines that need action,
+icon carries the status. `default` details are `text-04` too. Use `heavy` for the lines that need action,
 such as a failure that blocks. The variant sets colours only; pass the icon
 that fits the state (for example a spinner, a clock or an hourglass).
 
