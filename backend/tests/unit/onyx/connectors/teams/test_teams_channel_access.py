@@ -249,24 +249,33 @@ def test_the_directory_lookup_runs_with_the_lock_released() -> None:
     assert locked_during_lookup == [False]
 
 
-def test_a_name_graph_gave_once_survives_a_lookup_that_omits_it() -> None:
+@pytest.mark.parametrize("name_first", [True, False])
+def test_a_name_graph_gave_survives_a_racing_lookup_that_omits_it(
+    name_first: bool,
+) -> None:
     """Two workers may look up the same new id at once. The answer that names
-    the user wins, so an omission on the other does not take access away."""
+    the user wins in either order, so an omission on the other lookup does
+    not take access away."""
     directory = UserDirectory(graph_client({}))
-    both_asking = threading.Barrier(2, timeout=5)
+    named: dict[str, str | None] = {"u1": "ada@example.com"}
+    omitted: dict[str, str | None] = {"u1": None}
     answers: Iterator[dict[str, str | None]] = iter(
-        [{"u1": "ada@example.com"}, {"u1": None}]
+        [named, omitted] if name_first else [omitted, named]
     )
+    both_asking = threading.Barrier(2, timeout=5)
     answers_lock = threading.Lock()
-    named = threading.Event()
+    first_written = threading.Event()
+    asked: list[int] = []
 
     def lookup(_batch: list[str]) -> dict[str, str | None]:
         both_asking.wait()
         with answers_lock:
             answer = next(answers)
-        if answer["u1"] is None:
-            # Written after the name, so the omission would overwrite it.
-            assert named.wait(timeout=5)
+            asked.append(len(asked))
+            is_second = len(asked) == 2
+        if is_second:
+            # Written after the first answer, so the order under test holds.
+            assert first_written.wait(timeout=5)
         return answer
 
     workers = [
@@ -277,10 +286,10 @@ def test_a_name_graph_gave_once_survives_a_lookup_that_omits_it() -> None:
         for worker in workers:
             worker.start()
         deadline = time.monotonic() + 5
-        while directory._principal_names.get("u1") is None:
+        while "u1" not in directory._principal_names:
             assert time.monotonic() < deadline
             time.sleep(0.01)
-        named.set()
+        first_written.set()
         for worker in workers:
             worker.join(timeout=5)
 

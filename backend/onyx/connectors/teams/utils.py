@@ -252,10 +252,11 @@ class UserDirectory:
         for start in range(0, len(unknown), USER_LOOKUP_BATCH_SIZE):
             found.update(self._lookup(unknown[start : start + USER_LOOKUP_BATCH_SIZE]))
         with self._lock:
-            # First answer wins: a later lookup that omits an id Graph once
-            # named must not take the name away.
+            # A name wins over an omission in either order: two lookups may
+            # race, and a user Graph named once must stay a reader.
             for uid, name in found.items():
-                self._principal_names.setdefault(uid, name)
+                if name is not None or uid not in self._principal_names:
+                    self._principal_names[uid] = name
             return {
                 uid: name
                 for uid in user_ids
