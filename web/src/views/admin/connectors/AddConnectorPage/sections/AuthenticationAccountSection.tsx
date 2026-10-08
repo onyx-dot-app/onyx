@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, SelectCard, Tabs } from "@opal/components";
+import { Button, SelectButton, SelectCard, Tabs } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/credentials/types";
@@ -68,6 +69,7 @@ export default function AuthenticationAccountSection({
     isAuthorizing,
   } = useCredentialSetup(connector);
   const checkReports = useCredentialCheckReports(connector);
+  const [showSavedAccounts, setShowSavedAccounts] = useState<boolean>(true);
 
   // The create card's one label, whatever the number of routes; the tabs
   // inside it name the routes.
@@ -164,11 +166,17 @@ export default function AuthenticationAccountSection({
         padding={0}
         rightChildren={
           <>
-            <Button icon={SvgListTree} prominence="tertiary">
+            <SelectButton
+              icon={SvgListTree}
+              variant="select-light"
+              state={showSavedAccounts ? "selected" : "empty"}
+              aria-pressed={showSavedAccounts}
+              onClick={() => setShowSavedAccounts((shown) => !shown)}
+            >
               {t("add.savedAccountsButton.label", {
                 count: credentials?.length ?? 0,
               })}
-            </Button>
+            </SelectButton>
             <Button
               icon={isCreating ? SvgFold : SvgExpand}
               prominence="tertiary"
@@ -189,20 +197,22 @@ export default function AuthenticationAccountSection({
       {!credentials ? null : (
         <Section gap={6} alignItems="stretch" width="full">
           <Section gap={4} alignItems="stretch" width="full">
-            {credentials.map((credential) => (
-              <AuthenticationAccountCard
-                key={credential.id}
-                credential={credential}
-                source={connector}
-                sourceName={displayName}
-                selected={credential.id === currentCredential?.id}
-                onSelect={onSwap}
-                onDeselect={() => onCredentialChange(null)}
-                onDelete={onDeleteCredential}
-                checkReport={checkReports.reportFor(credential.id)}
-                onRerunChecks={(picked) => checkReports.rerun(picked.id)}
-              />
-            ))}
+            {/* Hidden accounts leave the page entirely, not just the view. */}
+            {showSavedAccounts &&
+              credentials.map((credential) => (
+                <AuthenticationAccountCard
+                  key={credential.id}
+                  credential={credential}
+                  source={connector}
+                  sourceName={displayName}
+                  selected={credential.id === currentCredential?.id}
+                  onSelect={onSwap}
+                  onDeselect={() => onCredentialChange(null)}
+                  onDelete={onDeleteCredential}
+                  checkReport={checkReports.reportFor(credential.id)}
+                  onRerunChecks={(picked) => checkReports.rerun(picked.id)}
+                />
+              ))}
 
             {canAuthorize && (
               <Section flexDirection="row" justifyContent="start" gap={1}>
