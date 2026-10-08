@@ -10,6 +10,7 @@ from sqlalchemy.pool import NullPool
 
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.db.engine.iam_auth import provide_iam_token
+from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -29,6 +30,7 @@ def installation_seed() -> bytes:
         build_connection_string(db_api=SYNC_DB_API),
         poolclass=NullPool,
         connect_args={
+            **pg_ssl_psycopg2_connect_args(),
             "connect_timeout": 2,
             "application_name": "onyx_fleet_enrollment",
             "options": "-c statement_timeout=1500 -c lock_timeout=100",

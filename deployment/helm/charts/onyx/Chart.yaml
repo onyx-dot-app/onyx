@@ -22,7 +22,8 @@ annotations:
   artifacthub.io/changes: |
     - kind: added
       description: Automatic fleet enrollment and a namespace-scoped collector
-        for connector, job, queue, and service health.
+        for connector, job, queue, and service health, with source TLS settings
+        and PostgreSQL/Redis CA mounts.
     - kind: added
       description: Configure Craft proxy, OpenCode, daemon, and generated web app
         listeners for IPv6-only clusters while keeping IPv4 defaults.

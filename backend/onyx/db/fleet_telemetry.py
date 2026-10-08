@@ -7,6 +7,8 @@ from typing import Any
 
 from sqlalchemy import Connection, Engine, create_engine, event, text
 
+from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
+
 SAFE_BOOLEAN_SETTINGS = (
     "include_shared_drives",
     "include_my_drives",
@@ -80,6 +82,11 @@ def collector_engine(database_url: str) -> Engine:
         pool_timeout=0.2,
         pool_pre_ping=False,
         connect_args={
+            **(
+                pg_ssl_psycopg2_connect_args()
+                if not os.environ.get("ONYX_TELEMETRY_DATABASE_URL")
+                else {}
+            ),
             "connect_timeout": 2,
             "application_name": "onyx_fleet_collector",
         },

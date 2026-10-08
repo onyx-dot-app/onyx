@@ -107,6 +107,11 @@ spec:
               drop: ["ALL"]
           resources:
             {{- toYaml .Values.fleetTelemetry.collector.resources | nindent 12 }}
+          volumeMounts:
+            - name: collector-tmp
+              mountPath: /tmp
+            {{- include "onyx.postgresTls.volumeMount" . | nindent 12 }}
+            {{- include "onyx.redisTls.volumeMount" . | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
@@ -158,4 +163,11 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+      volumes:
+        - name: collector-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        {{- include "onyx.postgresTls.volume" . | nindent 8 }}
+        {{- include "onyx.redisTls.volume" . | nindent 8 }}
 {{- end }}

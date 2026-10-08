@@ -542,6 +542,12 @@ Related: [[llm-providers]], [[multi-tenancy]], [[editions-and-gating]],
 
 ### Automatic fleet enrollment
 
+The Slack listener starts its own sender because Slack answers run inside that process.
+Kubernetes HTTP 410 responses clear expired pod page tokens. The next scheduled poll starts a fresh scan.
+Transient errors preserve the current page token and the bounded poll cadence.
+Automatic database and queue connections use the source PostgreSQL and Redis TLS settings.
+The Helm collector mounts the configured database and Redis CA sources.
+
 Application startup schedules background identity initialization. It never waits for storage or network access.
 `backend/onyx/db/fleet_enrollment.py` persists one installation seed in the existing encrypted key-value table.
 The sender derives separate enrollment and privacy keys, then enrolls at `https://telemetry.onyx.app/v1/enroll`.

@@ -11,7 +11,7 @@ from urllib.parse import quote, urlsplit
 
 import requests
 
-from onyx.utils.fleet_telemetry import _VERSION, BoundedTelemetry, poll_due
+from onyx.utils.fleet_telemetry import BoundedTelemetry, is_valid_version, poll_due
 
 _SERVICE_ROLES = {
     "api-server": "api",
@@ -129,7 +129,7 @@ class KubernetesCollector:
         version = "unknown"
         if isinstance(image, str) and len(image) <= 1024 and ":" in image:
             tag = image.rsplit(":", 1)[1]
-            if _VERSION.fullmatch(tag):
+            if is_valid_version(tag):
                 version = tag
         digest: str | None = None
         for status in statuses:
@@ -176,6 +176,9 @@ class KubernetesCollector:
                 stream=True,
                 allow_redirects=False,
             ) as response:
+                if response.status_code == 410 and params and "continue" in params:
+                    # Expired pod pages must restart the scan at the next poll.
+                    self._continuation = None
                 if not response.ok or response.headers.get(
                     "Content-Encoding", "identity"
                 ) not in {"", "identity"}:

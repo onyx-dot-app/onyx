@@ -18,6 +18,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.db.fleet_enrollment import source_database_url
@@ -43,7 +44,7 @@ from onyx.utils.fleet_telemetry import (
 )
 from shared_configs.configs import MULTI_TENANT
 
-SOURCE_EVENT_REVISION = 1
+SOURCE_EVENT_REVISION: int = 1
 
 
 def _iso(value: Any) -> str | None:
@@ -56,7 +57,7 @@ def _iso(value: Any) -> str | None:
     return None
 
 
-_ERROR_PATTERNS = (
+_ERROR_PATTERNS: tuple[tuple[str, str], ...] = (
     (
         "auth",
         r"\b(?:401|unauthorized|authentication|invalid.?token|expired.?token|credential)\b",
@@ -79,7 +80,7 @@ _ERROR_PATTERNS = (
 
 def classify_local_error(*samples: Any) -> str:
     """Examine bounded local samples; emit only a fixed category, never text."""
-    candidate = " ".join(
+    candidate: str = " ".join(
         sample[:2048] for sample in samples if isinstance(sample, str)
     )[:6144]
     for category, pattern in _ERROR_PATTERNS:
@@ -91,7 +92,7 @@ def classify_local_error(*samples: Any) -> str:
 def safe_attempt_error_data(
     row: dict[str, Any], client: BoundedTelemetry
 ) -> dict[str, Any]:
-    category = classify_local_error(
+    category: str = classify_local_error(
         row.get("local_error_type"),
         row.get("local_error_sample"),
         row.get("local_item_error_sample"),
@@ -103,9 +104,11 @@ def safe_attempt_error_data(
             "attempt:" + str(row["connector_type"]) + ":" + category
         ),
     }
-    stage = {"embedding": "embed", "index_write": "write", "parse": "prepare"}.get(
-        category
-    )
+    stage: str | None = {
+        "embedding": "embed",
+        "index_write": "write",
+        "parse": "prepare",
+    }.get(category)
     if stage is not None:
         data["stage"] = stage
     return data
@@ -114,8 +117,8 @@ def safe_attempt_error_data(
 def safe_connector_data(
     row: dict[str, Any], client: BoundedTelemetry
 ) -> dict[str, Any]:
-    raw = row.get("metadata", {})
-    allowed = set(SAFE_BOOLEAN_SETTINGS + SAFE_NUMBER_SETTINGS) | {
+    raw: Any = row.get("metadata", {})
+    allowed: set[str] = set(SAFE_BOOLEAN_SETTINGS + SAFE_NUMBER_SETTINGS) | {
         "selection_count",
         "include_rule_count",
         "exclude_rule_count",
@@ -124,7 +127,7 @@ def safe_connector_data(
         "file_type_count",
         "has_time_filter",
     }
-    metadata = (
+    metadata: dict[str, bool | int | float] = (
         {
             key: value
             for key, value in raw.items()
@@ -141,7 +144,7 @@ def safe_connector_data(
         "auto_sync_enabled",
         "permission_sync_enabled",
     }:
-        value = row.get(key)
+        value: object = row.get(key)
         if isinstance(value, (bool, int, float)) and 0 <= value <= 1e18:
             metadata[key] = value
     return {
@@ -162,29 +165,33 @@ class FleetCollector:
     def __init__(
         self, client: BoundedTelemetry, database_url: str, schemas: list[str]
     ) -> None:
-        self.client = client
-        self.engine = collector_engine(database_url)
-        self.schemas = schemas
-        self.shard_count = max(
+        self.client: BoundedTelemetry = client
+        self.engine: Engine = collector_engine(database_url)
+        self.schemas: list[str] = schemas
+        self.shard_count: int = max(
             1, min(1000, int(os.environ.get("ONYX_TELEMETRY_SCHEMA_SHARD_COUNT", "1")))
         )
-        self.shard_index = int(os.environ.get("ONYX_TELEMETRY_SCHEMA_SHARD_INDEX", "0"))
+        self.shard_index: int = int(
+            os.environ.get("ONYX_TELEMETRY_SCHEMA_SHARD_INDEX", "0")
+        )
         if not 0 <= self.shard_index < self.shard_count:
             raise ValueError("Invalid collector shard")
         self.schemas = self._partition(schemas)
         self._last_discovery: float | None = None
-        self._discover = MULTI_TENANT and "ONYX_TELEMETRY_SCHEMAS" not in os.environ
+        self._discover: bool = (
+            MULTI_TENANT and "ONYX_TELEMETRY_SCHEMAS" not in os.environ
+        )
         self._failed_schema: dict[str, tuple[float, int]] = {}
         self._connector_cursor: dict[str, int] = {}
         self._last_connectors: dict[str, float] = {}
         self._domain_cursor: dict[str, str] = {}
         self._last_domains: dict[str, float] = {}
-        self.email_domain_errors = 0
-        self.license_errors = 0
+        self.email_domain_errors: int = 0
+        self.license_errors: int = 0
         self._last_license: dict[str, float] = {}
         self._stage_cursor: dict[str, tuple[datetime, int]] = {}
         self._last_stages: dict[str, float] = {}
-        self.stage_errors = 0
+        self.stage_errors: int = 0
         self._last_opensearch: float | None = None
         self._attempt_cursor: dict[str, tuple[datetime, int]] = {}
         self._job_cursor: dict[str, tuple[datetime, str]] = {}
@@ -192,20 +199,20 @@ class FleetCollector:
         self._last_attempts: dict[str, float] = {}
         self._last_jobs: dict[str, float] = {}
         self._last_active_jobs: dict[str, float] = {}
-        self._schema_position = 0
+        self._schema_position: int = 0
         self._last_queues: float | None = None
         self._last_aws: float | None = None
         self._last_health: float | None = None
         self._metadata: OrderedDict[tuple[str, str, str], tuple[str, float, int]] = (
             OrderedDict()
         )
-        self._last_issue_level = 0
+        self._last_issue_level: int = 0
         self._source_success: dict[str, float] = {}
-        self.source_errors = 0
-        self._discovery_failures = 0
-        self.queue_errors = 0
-        self.aws_errors = 0
-        self.aws_consecutive_errors = 0
+        self.source_errors: int = 0
+        self._discovery_failures: int = 0
+        self.queue_errors: int = 0
+        self.aws_errors: int = 0
+        self.aws_consecutive_errors: int = 0
         self.last_aws_success_at: str | None = None
 
     def _partition(self, schemas: list[str]) -> list[str]:
@@ -228,14 +235,14 @@ class FleetCollector:
         durable_id: bool,
         observed_at: datetime | None = None,
     ) -> bool:
-        identity = f"{self.client.config.deployment_id}:{schema}:{event_type}:{entity}:{revision.isoformat()}:{SOURCE_EVENT_REVISION}"
+        identity: str = f"{self.client.config.deployment_id}:{schema}:{event_type}:{entity}:{revision.isoformat()}:{SOURCE_EVENT_REVISION}"
         if durable_id and observed_at is not None:
             # Active source rows may update counters without a revision timestamp.
             # Only already-sanitized structural state participates in identity.
             identity += ":" + self.client.fingerprint(
                 json.dumps(data, sort_keys=True, separators=(",", ":"))
             )
-        event_id = (
+        event_id: str | None = (
             str(
                 uuid.uuid5(
                     uuid.UUID(self.client.config.customer_uuid),
@@ -245,15 +252,15 @@ class FleetCollector:
             if durable_id
             else None
         )
-        metadata_key = (event_type, schema, entity)
-        signature = ""
-        observed = time.monotonic()
-        loss = self.client.dropped + self.client.rejected
+        metadata_key: tuple[str, str, str] = (event_type, schema, entity)
+        signature: str = ""
+        observed: float = time.monotonic()
+        loss: int = self.client.dropped + self.client.rejected
         if event_type == "tenant_domain" or (
             event_type == "license" and data.get("action") == "snapshot"
         ):
             signature = json.dumps(data, sort_keys=True, separators=(",", ":"))
-            previous = self._metadata.get(metadata_key)
+            previous: tuple[str, float, int] | None = self._metadata.get(metadata_key)
             if (
                 previous
                 and previous[0] == signature
@@ -262,7 +269,7 @@ class FleetCollector:
                 and not self.client.failures
             ):
                 return True
-        emitted = self.client.emit(
+        emitted: bool = self.client.emit(
             event_type,
             data,
             tenant_id=schema if MULTI_TENANT else None,
@@ -285,7 +292,7 @@ class FleetCollector:
         ):
             return False
         try:
-            rows = email_domain_page(
+            rows: list[dict[str, Any]] = email_domain_page(
                 self.engine, schema, self._domain_cursor.get(schema, "")
             )
         except SQLAlchemyError:
@@ -322,12 +329,12 @@ class FleetCollector:
         ):
             return False
         try:
-            row = license_snapshot(self.engine, schema)
+            row: dict[str, Any] = license_snapshot(self.engine, schema)
         except SQLAlchemyError:
             self.license_errors += 1
             self._last_license[schema] = now
             return False
-        sent = self._event(
+        sent: bool = self._event(
             "license",
             {
                 "license_present": row["license_present"],
@@ -350,13 +357,15 @@ class FleetCollector:
             self.client.settings["connector_interval_seconds"],
         ):
             return
-        scan_started = datetime.now(timezone.utc)
-        oldest = scan_started - timedelta(days=30)
+        scan_started: datetime = datetime.now(timezone.utc)
+        oldest: datetime = scan_started - timedelta(days=30)
         since, after_id = self._stage_cursor.get(schema, (oldest, 0))
         try:
-            rows = stage_metric_page(self.engine, schema, max(since, oldest), after_id)
+            rows: list[dict[str, Any]] = stage_metric_page(
+                self.engine, schema, max(since, oldest), after_id
+            )
             for row in rows:
-                data = {
+                data: dict[str, Any] = {
                     key: row[key]
                     for key in (
                         "attempt_id",
@@ -375,7 +384,7 @@ class FleetCollector:
                     first_event_at=_iso(row["first_event_at"]),
                     last_event_at=_iso(row["last_event_at"]),
                 )
-                updated = row["last_event_at"]
+                updated: datetime = row["last_event_at"]
                 if not self._event(
                     "stage",
                     data,
@@ -398,20 +407,20 @@ class FleetCollector:
     def collect_one_schema(self) -> bool:
         if not self.schemas:
             return False
-        schema = self.schemas[self._schema_position % len(self.schemas)]
+        schema: str = self.schemas[self._schema_position % len(self.schemas)]
         self._schema_position += 1
-        now = time.monotonic()
+        now: float = time.monotonic()
         if self._failed_schema.get(schema, (0, 0))[0] > now:
             return False
         self.collect_stages(schema, now)
-        collected = self.collect_email_domains(schema, now)
+        collected: bool = self.collect_email_domains(schema, now)
         collected = self.collect_license(schema, now) or collected
         if poll_due(
             self._last_connectors.get(schema),
             now,
             self.client.settings["connector_interval_seconds"],
         ):
-            rows = connector_page(
+            rows: list[dict[str, Any]] | None = connector_page(
                 self.engine, schema, self._connector_cursor.get(schema, 0)
             )
             collected = True
@@ -430,9 +439,9 @@ class FleetCollector:
                 if len(rows) < 200:
                     self._connector_cursor[schema] = 0
                     self._last_connectors[schema] = now
-        oldest = datetime.now(timezone.utc) - timedelta(days=184)
+        oldest: datetime = datetime.now(timezone.utc) - timedelta(days=184)
         since, after_id = self._attempt_cursor.get(schema, (oldest, 0))
-        interval = self.client.settings["connector_interval_seconds"]
+        interval: int = self.client.settings["connector_interval_seconds"]
         rows = (
             attempt_page(self.engine, schema, since, after_id)
             if poll_due(self._last_attempts.get(schema), now, interval)
@@ -440,9 +449,9 @@ class FleetCollector:
         )
         collected = collected or rows is not None
         for row in rows or []:
-            state = row["state"]
-            updated = row["time_updated"]
-            data = {
+            state: str = row["state"]
+            updated: datetime = row["time_updated"]
+            data: dict[str, Any] = {
                 key: row[key]
                 for key in {
                     "attempt_id",
@@ -491,13 +500,13 @@ class FleetCollector:
                 )
                 self._last_attempts[schema] = now
         job_since, job_after_id = self._job_cursor.get(schema, (oldest, ""))
-        observed_at = datetime.now(timezone.utc)
-        historical = (
+        observed_at: datetime = datetime.now(timezone.utc)
+        historical: list[dict[str, Any]] | None = (
             job_page(self.engine, schema, job_since, job_after_id)
             if poll_due(self._last_jobs.get(schema), now, interval)
             else None
         )
-        active = (
+        active: list[dict[str, Any]] | None = (
             job_page(
                 self.engine,
                 schema,
@@ -509,9 +518,9 @@ class FleetCollector:
             else None
         )
         collected = collected or historical is not None or active is not None
-        job_rows = [(row, False) for row in historical or []] + [
-            (row, True) for row in active or []
-        ]
+        job_rows: list[tuple[dict[str, Any], bool]] = [
+            (row, False) for row in historical or []
+        ] + [(row, True) for row in active or []]
         for row, active_only in job_rows:
             data = {
                 "job_id": row["id"],
@@ -582,7 +591,8 @@ class FleetCollector:
             OnyxCeleryQueues,
         )
 
-        url = os.environ.get("ONYX_TELEMETRY_REDIS_URL")
+        url: str | None = os.environ.get("ONYX_TELEMETRY_REDIS_URL")
+        tls_options: dict[str, Any] = {}
         if not url and (not self.client.config.auto_enroll or self.shard_index != 0):
             return
         if not url:
@@ -594,28 +604,45 @@ class FleetCollector:
                 REDIS_PASSWORD,
                 REDIS_PORT,
                 REDIS_SSL,
+                REDIS_SSL_CA_CERTS,
+                REDIS_SSL_CERT_REQS,
+                REDIS_SSL_CERTFILE,
+                REDIS_SSL_CHECK_HOSTNAME,
+                REDIS_SSL_KEYFILE,
                 USE_REDIS_IAM_AUTH,
             )
 
             if USE_REDIS_IAM_AUTH:
                 return
-            scheme = "rediss" if REDIS_SSL else "redis"
-            password = (
+            scheme: str = "rediss" if REDIS_SSL else "redis"
+            password: str = (
                 ":" + quote(REDIS_PASSWORD, safe="") + "@" if REDIS_PASSWORD else ""
             )
             url = f"{scheme}://{password}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY}"
+            if REDIS_SSL:
+                tls_options = {
+                    "ssl_cert_reqs": REDIS_SSL_CERT_REQS,
+                    "ssl_check_hostname": REDIS_SSL_CHECK_HOSTNAME,
+                    "ssl_ca_certs": REDIS_SSL_CA_CERTS,
+                    "ssl_certfile": REDIS_SSL_CERTFILE,
+                    "ssl_keyfile": REDIS_SSL_KEYFILE,
+                }
         # Connection failures follow the same bounded poll cadence as success.
         self._last_queues = time.monotonic()
-        redis = Redis.from_url(
-            url, socket_connect_timeout=0.2, socket_timeout=0.2, max_connections=1
+        redis: Redis = Redis.from_url(
+            url,
+            socket_connect_timeout=0.2,
+            socket_timeout=0.2,
+            max_connections=1,
+            **tls_options,
         )
         try:
-            queues = [
+            queues: list[str] = [
                 queue
                 for key, queue in vars(OnyxCeleryQueues).items()
                 if not key.startswith("_") and isinstance(queue, str)
             ]
-            priorities = len(OnyxCeleryPriority)
+            priorities: int = len(OnyxCeleryPriority)
             with redis.pipeline(transaction=False) as pipeline:
                 for queue in queues:
                     for priority in range(priorities):
@@ -624,7 +651,7 @@ class FleetCollector:
                             if priority == 0
                             else queue + CELERY_SEPARATOR + str(priority)
                         )
-                lengths = pipeline.execute()
+                lengths: list[int] = pipeline.execute()
             for position, queue in enumerate(queues):
                 self.client.emit(
                     "queue",
@@ -642,7 +669,7 @@ class FleetCollector:
     def tick(self) -> None:
         if not self.client.settings["enabled"]:
             return
-        now = time.monotonic()
+        now: float = time.monotonic()
         if self._discover and poll_due(self._last_discovery, now, 60):
             try:
                 self.schemas = self._partition(tenant_schemas(self.engine))
@@ -651,9 +678,9 @@ class FleetCollector:
                 self.source_errors += 1
                 self._discovery_failures = min(8, self._discovery_failures + 1)
             self._last_discovery = now
-        started = time.monotonic()
+        started: float = time.monotonic()
         for _ in range(min(10, len(self.schemas))):
-            schema = self.schemas[self._schema_position % len(self.schemas)]
+            schema: str = self.schemas[self._schema_position % len(self.schemas)]
             if self._failed_schema.get(schema, (0, 0))[0] > time.monotonic():
                 self._schema_position += 1
                 continue
@@ -663,7 +690,7 @@ class FleetCollector:
                     self._source_success[schema] = time.time()
             except Exception:
                 # No SQL, endpoint, identifiers, or exception strings are logged.
-                failures = min(self._failed_schema.get(schema, (0, 0))[1] + 1, 8)
+                failures: int = min(self._failed_schema.get(schema, (0, 0))[1] + 1, 8)
                 self._failed_schema[schema] = (
                     time.monotonic() + min(300, 2**failures),
                     failures,
@@ -683,7 +710,7 @@ class FleetCollector:
             try:
                 from onyx.utils.fleet_telemetry_aws import collect_aws_resources
 
-                result = collect_aws_resources(self.client)
+                result: bool | None = collect_aws_resources(self.client)
                 if result is True:
                     self.aws_consecutive_errors = 0
                     self.last_aws_success_at = datetime.now(timezone.utc).isoformat()
@@ -732,7 +759,7 @@ class FleetCollector:
             "aws_consecutive_errors": self.aws_consecutive_errors,
             "last_aws_success_at": self.last_aws_success_at,
         }
-        level = self.client.health["source_consecutive_errors"]
+        level: int = self.client.health["source_consecutive_errors"]
         if poll_due(self._last_health, time.monotonic(), 300) or (
             level >= 3 and self._last_issue_level < 3
         ):
@@ -750,10 +777,10 @@ class FleetCollector:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser: argparse.ArgumentParser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true")
-    args = parser.parse_args()
-    stopped = threading.Event()
+    args: argparse.Namespace = parser.parse_args()
+    stopped: threading.Event = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stopped.set())
     signal.signal(signal.SIGINT, lambda *_: stopped.set())
     if telemetry_disabled():
@@ -761,24 +788,24 @@ def main() -> None:
         if not args.once:
             stopped.wait()
         return
-    client = start_telemetry("collector")
+    client: BoundedTelemetry | None = start_telemetry("collector")
     while client is None and not stopped.wait(2):
         client = start_telemetry("collector")
     if client is None:
         stop_telemetry()
         return
-    database_url = source_database_url()
-    schemas = [
+    database_url: str = source_database_url()
+    schemas: list[str] = [
         value
         for value in os.environ.get(
             "ONYX_TELEMETRY_SCHEMAS", "" if MULTI_TENANT else "public"
         ).split(",")
         if value
     ]
-    collector = FleetCollector(client, database_url, schemas)
+    collector: FleetCollector = FleetCollector(client, database_url, schemas)
     from onyx.utils.fleet_telemetry_kubernetes import KubernetesCollector
 
-    kubernetes = (
+    kubernetes: KubernetesCollector | None = (
         KubernetesCollector(client)
         if os.environ.get("ONYX_TELEMETRY_KUBERNETES", "").lower() == "true"
         else None

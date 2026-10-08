@@ -499,4 +499,6 @@ See `backend/AGENTS.md` for required env and secrets.
 ### Legacy callhome removal
 
 Slack queries use fleet query instrumentation. Legacy usage reporting and its extra Slack email lookup are removed.
+`listener.py:main` starts the bounded fleet sender before the handler starts its message-processing threads.
+Its `finally` block closes telemetry on normal exit, startup failure, and signal-driven exit without waiting for delivery.
 Invocation gates, user provisioning, and permission checks are unchanged.

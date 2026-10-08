@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from onyx.utils.fleet_telemetry import BoundedTelemetry
 
-_METRICS = {
+_METRICS: dict[str, tuple[str, str, str, dict[str, str]]] = {
     "rds": (
         "AWS/RDS",
         "DBInstanceIdentifier",
@@ -49,7 +49,7 @@ _METRICS = {
 
 
 def _allocation(resource: dict[str, Any], name: str) -> float | None:
-    value = resource.get(name)
+    value: object = resource.get(name)
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
     return float(value) if math.isfinite(value) and 0 < value <= 1e18 else None
@@ -58,22 +58,25 @@ def _allocation(resource: dict[str, Any], name: str) -> float | None:
 def _target(
     resource: dict[str, Any],
 ) -> tuple[str, str, dict[str, str], list[dict[str, str]]] | None:
-    kind, resource_id = resource.get("kind"), resource.get("resource_id")
+    kind: object = resource.get("kind")
+    resource_id: object = resource.get("resource_id")
     if (
-        kind not in _METRICS
+        not isinstance(kind, str)
+        or kind not in _METRICS
         or not isinstance(resource_id, str)
         or not 0 < len(resource_id) <= 256
     ):
         return None
     namespace, dimension, service, metrics = _METRICS[kind]
-    dimensions = [{"Name": dimension, "Value": resource_id}]
+    dimensions: list[dict[str, str]] = [{"Name": dimension, "Value": resource_id}]
     if kind == "elasticache":
-        node = resource.get("node_id")
+        node: object = resource.get("node_id")
         if not isinstance(node, str) or not node:
             return None
         dimensions.append({"Name": "CacheNodeId", "Value": node})
     elif kind == "opensearch":
-        account, node = resource.get("account_id"), resource.get("node_id")
+        account: object = resource.get("account_id")
+        node = resource.get("node_id")
         if (
             not isinstance(account, str)
             or not account.isdigit()
@@ -91,12 +94,12 @@ def _target(
 def collect_aws_resources(client: "BoundedTelemetry") -> bool | None:
     """At most 32 resources, one bounded AWS request with zero retries."""
     try:
-        raw = os.environ.get("ONYX_TELEMETRY_AWS_RESOURCES_JSON", "[]")
+        raw: str = os.environ.get("ONYX_TELEMETRY_AWS_RESOURCES_JSON", "[]")
         if raw == "[]":
             return None
         if len(raw) > 16384:
             return False
-        resources = json.loads(raw)
+        resources: Any = json.loads(raw)
         if not isinstance(resources, list) or len(resources) > 32:
             return False
         queries: list[dict[str, Any]] = []
@@ -104,13 +107,15 @@ def collect_aws_resources(client: "BoundedTelemetry") -> bool | None:
         for resource in resources:
             if not isinstance(resource, dict):
                 continue
-            target = _target(resource)
+            target: tuple[str, str, dict[str, str], list[dict[str, str]]] | None = (
+                _target(resource)
+            )
             if target is None:
                 continue
-            namespace, service, metrics, dimensions = target
-            ids = {}
-            for metric_key, metric_name in metrics.items():
-                query_id = f"m{len(queries)}"
+            namespace, service, metric_names, dimensions = target
+            ids: dict[str, str] = {}
+            for metric_key, metric_name in metric_names.items():
+                query_id: str = f"m{len(queries)}"
                 ids[metric_key] = query_id
                 queries.append(
                     {
@@ -141,15 +146,15 @@ def collect_aws_resources(client: "BoundedTelemetry") -> bool | None:
             ),
         )
         # Five completed minute buckets keep all 32 x 3 metrics below the cap.
-        end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-        response = cloudwatch.get_metric_data(
+        end: datetime = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        response: dict[str, Any] = cloudwatch.get_metric_data(
             MetricDataQueries=queries,
             StartTime=end - timedelta(minutes=5),
             EndTime=end,
             ScanBy="TimestampDescending",
             MaxDatapoints=500,
         )
-        values = {
+        values: dict[str, float] = {
             result["Id"]: float(result["Values"][0])
             for result in response.get("MetricDataResults", [])
             if result.get("StatusCode") == "Complete"
@@ -158,16 +163,16 @@ def collect_aws_resources(client: "BoundedTelemetry") -> bool | None:
             and result["Values"][0] >= 0
         }
         for resource, service, ids in targets:
-            metrics = {
+            metrics: dict[str, float] = {
                 name: values[query_id]
                 for name, query_id in ids.items()
                 if query_id in values
             }
             if not metrics:
                 continue
-            memory_limit = _allocation(resource, "memory_limit_bytes")
-            disk_limit = _allocation(resource, "disk_limit_bytes")
-            cpu_limit = _allocation(resource, "cpu_limit_cores")
+            memory_limit: float | None = _allocation(resource, "memory_limit_bytes")
+            disk_limit: float | None = _allocation(resource, "disk_limit_bytes")
+            cpu_limit: float | None = _allocation(resource, "cpu_limit_cores")
             data: dict[str, Any] = {
                 "service_instance_id": client.fingerprint(
                     "aws:"
@@ -185,9 +190,11 @@ def collect_aws_resources(client: "BoundedTelemetry") -> bool | None:
                     cpu_cores=cpu_limit * metrics["cpu"] / 100,
                 )
             if "memory_used" in metrics:
-                used = metrics["memory_used"]
-                percent = metrics.get("memory_percent", 0)
-                limit = memory_limit or (used * 100 / percent if percent > 0 else None)
+                used: float = metrics["memory_used"]
+                percent: float = metrics.get("memory_percent", 0)
+                limit: float | None = memory_limit or (
+                    used * 100 / percent if percent > 0 else None
+                )
                 data.update(
                     memory_bytes=round(used),
                     memory_limit_bytes=round(limit) if limit else None,
@@ -204,7 +211,7 @@ def collect_aws_resources(client: "BoundedTelemetry") -> bool | None:
                     ),
                     memory_limit_bytes=round(memory_limit),
                 )
-            free = metrics.get(
+            free: float = metrics.get(
                 "disk_free", metrics.get("disk_free_mb", 0) * 1024 * 1024
             )
             if disk_limit is not None and (

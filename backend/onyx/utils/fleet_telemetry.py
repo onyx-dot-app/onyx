@@ -14,7 +14,7 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 import requests
 
@@ -23,15 +23,16 @@ from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
-_HEX = re.compile(r"[a-f0-9]{64}\Z")
-_EMAIL_DOMAIN = re.compile(
+_HEX: re.Pattern[str] = re.compile(r"[a-f0-9]{64}\Z")
+_EMAIL_DOMAIN: re.Pattern[str] = re.compile(
     r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\Z"
 )
-_OPAQUE = re.compile(r"[A-Za-z0-9_.:-]{1,128}\Z")
-_VERSION = re.compile(
+_OPAQUE: re.Pattern[str] = re.compile(r"[A-Za-z0-9_.:-]{1,128}\Z")
+_VERSION: re.Pattern[str] = re.compile(
     r"(?:v?\d{1,4}\.\d{1,4}(?:\.\d{1,4})?(?:[-.](?:cloud|beta|alpha|rc|dev|nightly|release)(?:[-.]?\d{1,8})?){0,3}|[a-f0-9]{7,40}|unknown|dev|nightly)\Z"
 )
-_STATES = frozenset(
+
+_STATES: frozenset[str] = frozenset(
     {
         "not_started",
         "in_progress",
@@ -49,7 +50,7 @@ _STATES = frozenset(
         "unknown",
     }
 )
-_ERRORS = frozenset(
+_ERRORS: frozenset[str] = frozenset(
     {
         "auth",
         "permission",
@@ -64,13 +65,13 @@ _ERRORS = frozenset(
         "unknown",
     }
 )
-_SOURCES = frozenset(source.value for source in DocumentSource)
-_QUEUES = frozenset(
+_SOURCES: frozenset[str] = frozenset(source.value for source in DocumentSource)
+_QUEUES: frozenset[str] = frozenset(
     value
     for key, value in vars(OnyxCeleryQueues).items()
     if not key.startswith("_") and isinstance(value, str)
 )
-_JOB_TYPES = frozenset(
+_JOB_TYPES: frozenset[str] = frozenset(
     {
         "document_set",
         "user_group",
@@ -87,7 +88,7 @@ _JOB_TYPES = frozenset(
         "unknown",
     }
 )
-_SERVICES = frozenset(
+_SERVICES: frozenset[str] = frozenset(
     {
         "api",
         "worker",
@@ -105,7 +106,7 @@ _SERVICES = frozenset(
         "unknown",
     }
 )
-_METADATA = frozenset(
+_METADATA: frozenset[str] = frozenset(
     {
         "refresh_seconds",
         "prune_seconds",
@@ -162,7 +163,7 @@ _METADATA = frozenset(
         "european_residency",
     }
 )
-_COUNTERS = frozenset(
+_COUNTERS: frozenset[str] = frozenset(
     {
         "fetch_docs",
         "fetch_bytes",
@@ -359,7 +360,7 @@ _FIELDS: dict[str, frozenset[str]] = {
         }
     ),
 }
-_ENUM_FIELDS = {
+_ENUM_FIELDS: dict[str, frozenset[str]] = {
     "action": frozenset({"snapshot", "set", "removed"}),
     "state": _STATES,
     "connector_type": _SOURCES,
@@ -390,6 +391,11 @@ _ENUM_FIELDS = {
 }
 
 
+def is_valid_version(value: str) -> bool:
+    """Accept only bounded release tags, build hashes, and fixed version labels."""
+    return _VERSION.fullmatch(value) is not None
+
+
 def normalize_email_domain(domain: str) -> str | None:
     if not domain or len(domain) > 253:
         return None
@@ -402,7 +408,7 @@ def normalize_email_domain(domain: str) -> str | None:
 
 def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | None:  # noqa: C901 - Central privacy boundary has explicit type cases.
     """Reject unknown fields and all unreviewed string values before queueing."""
-    allowed = _FIELDS.get(event_type)
+    allowed: frozenset[str] | None = _FIELDS.get(event_type)
     if allowed is None or len(data) > 40 or not data.keys() <= allowed:
         return None
     safe: dict[str, Any] = {}
@@ -410,7 +416,9 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
         if value is None:
             safe[key] = None
         elif key in {"metadata", "counters"}:
-            nested_allowed = _METADATA if key == "metadata" else _COUNTERS
+            nested_allowed: frozenset[str] = (
+                _METADATA if key == "metadata" else _COUNTERS
+            )
             if (
                 not isinstance(value, dict)
                 or len(value) > len(nested_allowed)
@@ -462,14 +470,14 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
             if not isinstance(value, str) or len(value) > 40:
                 return None
             try:
-                parsed = datetime.fromisoformat(value)
+                parsed: datetime = datetime.fromisoformat(value)
                 if parsed.tzinfo is None:
                     return None
             except ValueError:
                 return None
             safe[key] = value
         elif key == "version":
-            if not isinstance(value, str) or not _VERSION.fullmatch(value):
+            if not isinstance(value, str) or not is_valid_version(value):
                 return None
             safe[key] = value
         elif key == "commit_sha":
@@ -521,11 +529,11 @@ class TelemetryConfig:
         try:
             if telemetry_disabled():
                 return None
-            values = {**os.environ, **(identity or {})}
-            endpoint = (
+            values: dict[str, str] = {**os.environ, **(identity or {})}
+            endpoint: str = (
                 values.get("ONYX_TELEMETRY_ENDPOINT") or "https://telemetry.onyx.app"
             ).rstrip("/")
-            parsed = urlsplit(endpoint)
+            parsed: SplitResult = urlsplit(endpoint)
             if parsed.scheme != "https" and not (
                 parsed.scheme == "http"
                 and parsed.hostname in {"localhost", "127.0.0.1", "telemetry"}
@@ -539,10 +547,10 @@ class TelemetryConfig:
                 or parsed.fragment
             ):
                 return None
-            token = values["ONYX_TELEMETRY_TOKEN"]
-            customer = str(uuid.UUID(values["ONYX_TELEMETRY_CUSTOMER_UUID"]))
-            deployment = values["ONYX_TELEMETRY_DEPLOYMENT_ID"]
-            privacy_key = values["ONYX_TELEMETRY_PRIVACY_KEY"].encode()
+            token: str = values["ONYX_TELEMETRY_TOKEN"]
+            customer: str = str(uuid.UUID(values["ONYX_TELEMETRY_CUSTOMER_UUID"]))
+            deployment: str = values["ONYX_TELEMETRY_DEPLOYMENT_ID"]
+            privacy_key: bytes = values["ONYX_TELEMETRY_PRIVACY_KEY"].encode()
             if (
                 not _OPAQUE.fullmatch(deployment)
                 or len(privacy_key) < 32
@@ -551,12 +559,12 @@ class TelemetryConfig:
             ):
                 return None
             domain_hash: str | None = None
-            domain = os.environ.get("ONYX_TELEMETRY_INSTANCE_DOMAIN") or os.environ.get(
-                "WEB_DOMAIN"
-            )
+            domain: str | None = os.environ.get(
+                "ONYX_TELEMETRY_INSTANCE_DOMAIN"
+            ) or os.environ.get("WEB_DOMAIN")
             if domain and len(domain) <= 2048:
                 try:
-                    domain_parts = urlsplit(
+                    domain_parts: SplitResult = urlsplit(
                         domain if "://" in domain else "https://" + domain
                     )
                     if (
@@ -564,7 +572,7 @@ class TelemetryConfig:
                         and not domain_parts.username
                         and not domain_parts.password
                     ):
-                        host = (
+                        host: str = (
                             domain_parts.hostname.rstrip(".")
                             .encode("idna")
                             .decode("ascii")
@@ -594,33 +602,33 @@ class BoundedTelemetry:
     """One daemon thread per process. Full queues and lock contention shed events."""
 
     def __init__(self, config: TelemetryConfig) -> None:
-        self.config = config
-        self.pid = os.getpid()
+        self.config: TelemetryConfig = config
+        self.pid: int = os.getpid()
         self._queue: deque[
             tuple[
                 str, dict[str, Any], str | None, str | None, float, str | None, str, int
             ]
         ] = deque()
-        self._lock = threading.Lock()
-        self._flush_lock = threading.Lock()
-        self._stop = threading.Event()
+        self._lock: threading.Lock = threading.Lock()
+        self._flush_lock: threading.Lock = threading.Lock()
+        self._stop: threading.Event = threading.Event()
         self._thread: threading.Thread | None = None
-        self.dropped = 0
-        self.rejected = 0
-        self.invalid = 0
-        self._reported_dropped = 0
-        self._recent_dropped = 0
-        self._last_loss_at = float("-inf")
-        self.sent = 0
-        self.failures = 0
-        self._blocked_until = 0.0
+        self.dropped: int = 0
+        self.rejected: int = 0
+        self.invalid: int = 0
+        self._reported_dropped: int = 0
+        self._recent_dropped: int = 0
+        self._last_loss_at: float = float("-inf")
+        self.sent: int = 0
+        self.failures: int = 0
+        self._blocked_until: float = 0.0
         self._pending: list[dict[str, Any]] = []
         self._session: requests.Session | None = None
-        self._enrolled = not config.auto_enroll
+        self._enrolled: bool = not config.auto_enroll
         self._stage_pending: OrderedDict[tuple[str, ...], dict[str, Any]] = (
             OrderedDict()
         )
-        self._last_stage_flush = time.monotonic()
+        self._last_stage_flush: float = time.monotonic()
         self.health: dict[str, Any] = {}
         # Source-owned schedule. Delivery receipts never change these settings.
         self.settings: dict[str, Any] = {
@@ -654,7 +662,7 @@ class BoundedTelemetry:
                 or not 0 <= revision <= 1_000_000_000
             ):
                 return False
-            safe = sanitize_data(event_type, data)
+            safe: dict[str, Any] | None = sanitize_data(event_type, data)
             if safe is None:
                 self.invalid += 1
                 self.dropped += 1
@@ -703,6 +711,10 @@ class BoundedTelemetry:
         # Shutdown must not wait on DNS, TLS, transport, or collectors.
         self._stop.set()
 
+    @property
+    def closed(self) -> bool:
+        return self._stop.is_set()
+
     def fingerprint(self, value: str) -> str:
         return hmac.new(
             self.config.privacy_key, value.encode(), hashlib.sha256
@@ -714,7 +726,7 @@ class BoundedTelemetry:
                 self._queue.popleft()
                 for _ in range(min(len(self._queue), self.config.batch_size))
             ]
-        events = []
+        events: list[dict[str, Any]] = []
         for (
             event_type,
             data,
@@ -725,12 +737,12 @@ class BoundedTelemetry:
             service,
             revision,
         ) in items:
-            customer = (
+            customer: str = (
                 str(uuid.uuid5(uuid.NAMESPACE_X500, tenant))
                 if MULTI_TENANT and tenant
                 else self.config.customer_uuid
             )
-            scope = (
+            scope: str | None = (
                 customer
                 if MULTI_TENANT and tenant and self.config.auto_enroll
                 else None
@@ -784,7 +796,7 @@ class BoundedTelemetry:
                     self._session = requests.Session()
                 transport = self._session.post
             self._enroll(transport)
-            response = transport(
+            response: requests.Response = transport(
                 self.config.endpoint + "/v1/events",
                 headers={
                     "Authorization": "Bearer " + self.config.token,
@@ -818,15 +830,15 @@ class BoundedTelemetry:
                         self.dropped += len(self._pending)
                         self._pending = []
                     raise RuntimeError("telemetry delivery failed")
-                raw = response.raw.read(65537)
+                raw: bytes = response.raw.read(65537)
                 if len(raw) > 65536:
                     raise ValueError("Telemetry response exceeds limit")
-                result = json.loads(raw)
+                result: Any = json.loads(raw)
             outcomes: dict[int, str] = {}
             if isinstance(result, dict) and isinstance(result.get("results"), list):
                 for item in result["results"][: self.config.batch_size]:
                     if isinstance(item, dict) and type(item.get("index")) is int:
-                        index = item["index"]
+                        index: int = item["index"]
                         if 0 <= index < len(self._pending) and item.get("status") in {
                             "accepted",
                             "rejected",
@@ -838,9 +850,9 @@ class BoundedTelemetry:
                             }:
                                 continue
                             outcomes[index] = item["status"]
-            retained = []
+            retained: list[dict[str, Any]] = []
             for index, event in enumerate(self._pending):
-                outcome = outcomes.get(index)
+                outcome: str | None = outcomes.get(index)
                 if outcome == "accepted":
                     self.sent += 1
                 elif outcome == "rejected":
@@ -861,7 +873,7 @@ class BoundedTelemetry:
     def _enroll(self, transport: Any) -> None:
         if self._enrolled:
             return
-        response = transport(
+        response: requests.Response = transport(
             self.config.endpoint + "/v1/enroll",
             headers={
                 "Authorization": "Bearer " + self.config.token,
@@ -877,10 +889,10 @@ class BoundedTelemetry:
                 "Content-Encoding", "identity"
             ) not in {"", "identity"}:
                 raise ValueError("Fleet enrollment unavailable")
-            raw = response.raw.read(4097)
+            raw: bytes = response.raw.read(4097)
             if len(raw) > 4096:
                 raise ValueError("Fleet enrollment receipt too large")
-            result = json.loads(raw)
+            result: object = json.loads(raw)
             if result != {
                 "customer_uuid": self.config.customer_uuid,
                 "deployment_id": self.config.deployment_id,
@@ -892,7 +904,7 @@ class BoundedTelemetry:
         """Combine batch counters in the sender thread; errors bypass the short window."""
         ready: list[dict[str, Any]] = []
         for event in events:
-            data = event["data"]
+            data: dict[str, Any] = event["data"]
             if (
                 event["event_type"] != "attempt"
                 or data.get("counter_mode") != "delta"
@@ -900,7 +912,7 @@ class BoundedTelemetry:
             ):
                 ready.append(event)
                 continue
-            key = tuple(
+            key: tuple[str, ...] = tuple(
                 str(event.get(k, ""))
                 for k in (
                     "customer_uuid",
@@ -913,10 +925,10 @@ class BoundedTelemetry:
                 str(data.get("stage", "unknown")),
                 str(data.get("generation", 0)),
             )
-            previous = self._stage_pending.pop(key, None)
+            previous: dict[str, Any] | None = self._stage_pending.pop(key, None)
             if previous:
-                old = previous["data"]
-                counters = dict(old.get("counters", {}))
+                old: dict[str, Any] = previous["data"]
+                counters: dict[str, int | float] = dict(old.get("counters", {}))
                 for name, value in data.get("counters", {}).items():
                     counters[name] = counters.get(name, 0) + value
                 data["counters"] = counters
@@ -934,7 +946,13 @@ class BoundedTelemetry:
                         data[name] = data.get(name, 0) + old[name]
             if any(
                 data.get(name) or data.get("counters", {}).get(name)
-                for name in ("error_count", "write_errors", "write_rejected")
+                for name in (
+                    "error_count",
+                    "fetch_errors",
+                    "embed_errors",
+                    "write_errors",
+                    "write_rejected",
+                )
             ):
                 ready.append(event)
             else:
@@ -952,11 +970,11 @@ class BoundedTelemetry:
 
     def delivery_health(self) -> dict[str, int]:
         """Background observations distinguish new loss from historical totals."""
-        dropped = self.dropped
-        now = time.monotonic()
+        dropped: int = self.dropped
+        now: float = time.monotonic()
         if now - self._last_loss_at >= 60:
             self._recent_dropped = 0
-        delta = max(0, dropped - self._reported_dropped)
+        delta: int = max(0, dropped - self._reported_dropped)
         if delta:
             self._recent_dropped += delta
             self._last_loss_at = now
@@ -986,16 +1004,16 @@ class BoundedTelemetry:
             )
             from onyx import __version__
 
-            version = "dev" if __version__ == "Development" else __version__
-            version_data = {
-                "version": version if _VERSION.fullmatch(version) else "unknown"
+            version: str = "dev" if __version__ == "Development" else __version__
+            version_data: dict[str, Any] = {
+                "version": version if is_valid_version(version) else "unknown"
             }
-            commit_sha = os.environ.get("ONYX_BUILD_SHA", "")
+            commit_sha: str = os.environ.get("ONYX_BUILD_SHA", "")
             if re.fullmatch(r"[a-f0-9]{7,40}", commit_sha):
                 version_data["commit_sha"] = commit_sha
             self.emit("version", version_data)
             while not self._stop.is_set():
-                now = time.monotonic()
+                now: float = time.monotonic()
                 if self.settings["enabled"] and poll_due(
                     last_resource, now, self.settings["resource_interval_seconds"]
                 ):
@@ -1030,15 +1048,15 @@ def poll_due(previous: float | None, now: float, interval: float) -> bool:
 
 
 _client: BoundedTelemetry | None = None
-_bootstrap_lock = threading.Lock()
+_bootstrap_lock: threading.Lock = threading.Lock()
 _bootstrap_thread: threading.Thread | None = None
-_bootstrap_stop = threading.Event()
-_bootstrap_pid = 0
+_bootstrap_stop: threading.Event = threading.Event()
+_bootstrap_pid: int = 0
 
 
 def automatic_config(service: str, seed: bytes) -> TelemetryConfig | None:
-    token = hmac.new(seed, b"fleet-enrollment-v1", hashlib.sha256).hexdigest()
-    namespace = uuid.uuid5(
+    token: str = hmac.new(seed, b"fleet-enrollment-v1", hashlib.sha256).hexdigest()
+    namespace: uuid.UUID = uuid.uuid5(
         uuid.NAMESPACE_URL,
         "https://telemetry.onyx.app/installations/"
         + hashlib.sha256(token.encode()).hexdigest(),
@@ -1058,15 +1076,17 @@ def automatic_config(service: str, seed: bytes) -> TelemetryConfig | None:
 
 def _bootstrap(service: str, stopped: threading.Event) -> None:
     global _client
-    delay = 2.0
+    delay: float = 2.0
     while not stopped.is_set() and not telemetry_disabled():
         try:
             from onyx.db.fleet_enrollment import installation_seed
 
-            config = automatic_config(service, installation_seed())
+            config: TelemetryConfig | None = automatic_config(
+                service, installation_seed()
+            )
             if config is None or stopped.is_set() or telemetry_disabled():
                 return
-            client = BoundedTelemetry(config)
+            client: BoundedTelemetry = BoundedTelemetry(config)
             _client = client
             client.start()
             return
@@ -1081,13 +1101,9 @@ def start_telemetry(service: str = "api") -> BoundedTelemetry | None:
     if telemetry_disabled():
         return None
     try:
-        if (
-            _client is not None
-            and _client.pid == os.getpid()
-            and not _client._stop.is_set()
-        ):
+        if _client is not None and _client.pid == os.getpid() and not _client.closed:
             return _client
-        config = TelemetryConfig.from_env(service)
+        config: TelemetryConfig | None = TelemetryConfig.from_env(service)
         if config is None:
             # Partial explicit credentials fail closed instead of creating a new identity.
             if any(
@@ -1152,7 +1168,7 @@ def emit_signup_domain(email: str, created_at: datetime) -> None:
     try:
         if _client is None or len(email) > 320 or email.count("@") != 1:
             return
-        domain = normalize_email_domain(email.partition("@")[2])
+        domain: str | None = normalize_email_domain(email.partition("@")[2])
         if domain and created_at.tzinfo is not None:
             emit_telemetry(
                 "tenant_domain",
@@ -1202,7 +1218,7 @@ def emit_stage_counter(
 
 def error_category(error: BaseException) -> str:
     """Classify by known exception type names. Never inspect exception text/arguments."""
-    name = type(error).__name__
+    name: str = type(error).__name__
     if name in {"TimeoutError", "ReadTimeout", "ConnectTimeout", "APITimeoutError"}:
         return "timeout"
     if name in {"AuthenticationError", "ConnectorAuthError", "AuthError"}:

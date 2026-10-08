@@ -3,12 +3,51 @@
 import os
 import threading
 import time
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
 from onyx.utils import fleet_telemetry as fleet
 from tests.unit.onyx.utils.test_fleet_telemetry import Response
+
+
+@pytest.mark.parametrize("explicit_url", [False, True])
+def test_database_connections_apply_source_tls_only_to_standard_settings(
+    monkeypatch: pytest.MonkeyPatch, explicit_url: bool
+) -> None:
+    from onyx.db import fleet_enrollment, fleet_telemetry
+    from onyx.db.engine import pg_ssl
+
+    monkeypatch.setattr(pg_ssl, "USE_IAM_AUTH", False)
+    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLMODE", "verify-full")
+    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLROOTCERT", "/test/ca.crt")
+    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLCERT", "/test/client.crt")
+    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLKEY", "/test/client.key")
+    if explicit_url:
+        monkeypatch.setenv("ONYX_TELEMETRY_DATABASE_URL", "postgresql://explicit")
+    else:
+        monkeypatch.delenv("ONYX_TELEMETRY_DATABASE_URL", raising=False)
+    for module, operation in (
+        (fleet_enrollment, fleet_enrollment.installation_seed),
+        (
+            fleet_telemetry,
+            lambda: fleet_telemetry.collector_engine("postgresql://test"),
+        ),
+    ):
+        factory: Mock = Mock(side_effect=RuntimeError("connection intercepted"))
+        monkeypatch.setattr(module, "create_engine", factory)
+        with pytest.raises(RuntimeError, match="connection intercepted"):
+            operation()
+        options: dict[str, Any] = factory.call_args.kwargs["connect_args"]
+        assert options["connect_timeout"] == 2
+        if module is fleet_enrollment or not explicit_url:
+            assert options["sslmode"] == "verify-full"
+            assert options["sslrootcert"] == "/test/ca.crt"
+            assert options["sslcert"] == "/test/client.crt"
+            assert options["sslkey"] == "/test/client.key"
+        else:
+            assert not any(key.startswith("ssl") for key in options)
 
 
 def test_auto_identity_is_stable_and_privacy_key_stays_local(

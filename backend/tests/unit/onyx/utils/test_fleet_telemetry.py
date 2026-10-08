@@ -188,8 +188,13 @@ def test_emit_latency_and_bounded_memory_under_overload() -> None:
     assert statistics.quantiles(elapsed, n=100)[98] < 1_000_000
 
 
+@pytest.mark.parametrize(
+    "error_counter",
+    ["error_count", "fetch_errors", "embed_errors", "write_errors", "write_rejected"],
+)
 def test_stage_coalescing_preserves_counters_and_bypasses_errors(
     monkeypatch: pytest.MonkeyPatch,
+    error_counter: str,
 ) -> None:
     clock = [100.0]
     monkeypatch.setattr(fleet.time, "monotonic", lambda: clock[0])
@@ -211,11 +216,104 @@ def test_stage_coalescing_preserves_counters_and_bypasses_errors(
     assert combined[0]["data"]["duration_ms"] == 15
     assert sender.emit("attempt", data)
     assert sender._coalesce_stages(sender._take_batch()) == []
-    assert sender.emit("attempt", {**data, "error_count": 1})
+    failure: dict[str, Any] = (
+        {**data, "error_count": 1}
+        if error_counter == "error_count"
+        else {**data, "counters": {"embed_chunks": 30, error_counter: 1}}
+    )
+    assert sender.emit("attempt", failure)
     failed = sender._coalesce_stages(sender._take_batch())
-    assert len(failed) == 1 and failed[0]["data"]["error_count"] == 1
+    assert len(failed) == 1
+    errors: dict[str, Any] = (
+        failed[0]["data"]
+        if error_counter == "error_count"
+        else failed[0]["data"]["counters"]
+    )
+    assert errors[error_counter] == 1
     assert failed[0]["data"]["counters"]["embed_chunks"] == 60
     assert not sender._stage_pending
+
+
+@pytest.mark.parametrize("status", [410, 500])
+def test_kubernetes_expired_page_recovers_but_transient_failure_keeps_cursor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, status: int
+) -> None:
+    from onyx.utils import fleet_telemetry_kubernetes as kubernetes
+
+    clock: list[float] = [100.0]
+    monkeypatch.setattr(kubernetes, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    sender: fleet.BoundedTelemetry = client()
+    watcher: KubernetesCollector = KubernetesCollector(sender)
+    watcher.token_path = tmp_path / "token"
+    watcher.token_path.write_text("test-token")
+    pages: list[dict[str, Any]] = []
+
+    def get(path: str, **kwargs: Any) -> Response:
+        if "/apis/metrics" in path:
+            return Response({"items": []})
+        pages.append(dict(kwargs["params"]))
+        if len(pages) == 1:
+            return Response({"items": [], "metadata": {"continue": "page-two"}})
+        if len(pages) == 2:
+            return Response({}, status=status)
+        return Response({"items": [], "metadata": {}})
+
+    monkeypatch.setattr("requests.get", get)
+    watcher.tick()
+    clock[0] += 30
+    watcher.tick()
+    watcher.tick()
+    assert len(pages) == 2  # Keep the bounded cadence after a rejected page.
+    clock[0] += 30
+    watcher.tick()
+    assert pages == [
+        {"limit": 25},
+        {"limit": 25, "continue": "page-two"},
+        {"limit": 25} if status == 410 else {"limit": 25, "continue": "page-two"},
+    ]
+    assert watcher.errors == 1
+
+
+@pytest.mark.parametrize("explicit_url", [False, True])
+def test_queue_collection_inherits_tls_without_overriding_explicit_url(
+    monkeypatch: pytest.MonkeyPatch, explicit_url: bool
+) -> None:
+    from dataclasses import replace
+
+    from onyx.configs import app_configs
+    from onyx.utils import fleet_telemetry_collector as source
+
+    monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
+    monkeypatch.setattr(app_configs, "USE_REDIS_IAM_AUTH", False)
+    monkeypatch.setattr(app_configs, "REDIS_SSL", True)
+    monkeypatch.setattr(app_configs, "REDIS_SSL_CERT_REQS", "required")
+    monkeypatch.setattr(app_configs, "REDIS_SSL_CHECK_HOSTNAME", True)
+    monkeypatch.setattr(app_configs, "REDIS_SSL_CA_CERTS", "/test/redis-ca.crt")
+    monkeypatch.setattr(app_configs, "REDIS_SSL_CERTFILE", "/test/redis-client.crt")
+    monkeypatch.setattr(app_configs, "REDIS_SSL_KEYFILE", "/test/redis-client.key")
+    if explicit_url:
+        monkeypatch.setenv("ONYX_TELEMETRY_REDIS_URL", "rediss://custom:6380/15")
+    else:
+        monkeypatch.delenv("ONYX_TELEMETRY_REDIS_URL", raising=False)
+    sender: fleet.BoundedTelemetry = client()
+    sender.config = replace(sender.config, auto_enroll=True)
+    collector: FleetCollector = FleetCollector(sender, "postgresql://test", ["public"])
+    factory: Mock = Mock(side_effect=RuntimeError("connection intercepted"))
+    monkeypatch.setattr("redis.Redis.from_url", factory)
+    with pytest.raises(RuntimeError, match="connection intercepted"):
+        collector.collect_queues()
+    options: dict[str, Any] = dict(factory.call_args.kwargs)
+    assert factory.call_args.args[0].startswith("rediss://")
+    assert options["socket_timeout"] == options["socket_connect_timeout"] == 0.2
+    assert options["max_connections"] == 1
+    if explicit_url:
+        assert not any(key.startswith("ssl") for key in options)
+    else:
+        assert options["ssl_cert_reqs"] == "required"
+        assert options["ssl_check_hostname"] is True
+        assert options["ssl_ca_certs"] == "/test/redis-ca.crt"
+        assert options["ssl_certfile"] == "/test/redis-client.crt"
+        assert options["ssl_keyfile"] == "/test/redis-client.key"
 
 
 def test_unchanged_metadata_reconciles_after_loss_and_six_hours(

@@ -143,8 +143,13 @@ The following advanced variables belong to the isolated collector rather than ap
 | `ONYX_TELEMETRY_KUBERNETES_TOKEN_FILE` | Default mounted service-account token; optional token-file override. |
 | `ONYX_TELEMETRY_KUBERNETES_CA_FILE` | Default mounted service-account CA; optional CA-file override. |
 | `KUBERNETES_SERVICE_HOST` / `KUBERNETES_SERVICE_PORT_HTTPS` | Injected by Kubernetes; API host and HTTPS port (`443`). |
-| `ONYX_TELEMETRY_AWS_RESOURCES_JSON` | Optional JSON inventory or `@file` reference for managed CloudWatch resources; omit to disable. |
+| `ONYX_TELEMETRY_AWS_RESOURCES_JSON` | Optional inline JSON inventory for managed CloudWatch resources; omit to disable. |
 | `AWS_REGION` | AWS SDK region, default `us-east-2` for the telemetry adapter. |
+
+Automatic connections inherit standard PostgreSQL and Redis TLS options, including client certificates.
+The Helm collector mounts the configured PostgreSQL and Redis CA sources.
+Mount client certificates and keys at their configured paths when using custom manifests.
+Explicit telemetry database and Redis URLs must include their own TLS options.
 
 `ONYX_TELEMETRY_DISK_MOUNT` optionally selects the mount used for process disk metrics;
 the default is `/`. This affects background resource reads only.
