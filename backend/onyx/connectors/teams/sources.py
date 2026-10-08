@@ -19,6 +19,9 @@ T = TypeVar("T")
 # Pruning and permission sync both run the slim walk, so its signals name the
 # walk and not either caller.
 SLIM_WALK = "teams_slim_walk"
+# The runner's lock lives on the progress reports, so a long batch reports
+# again every so many documents it yields, from the consuming thread.
+PROGRESS_EVERY_DOCUMENTS = 500
 
 
 @dataclass
@@ -45,13 +48,19 @@ class SlimWalk:
         batch: int | None = None,
     ) -> Iterator[SlimDocument]:
         """Batches of ``batch`` items drained by ``workers``, with a stop check
-        and a progress report per batch: the runner's lock lives on those
-        reports. Each listing honors a stop before every page of its own."""
+        and a progress report per batch and again every
+        PROGRESS_EVERY_DOCUMENTS yielded, since the runner's lock lives on
+        those reports. Each listing honors a stop before every page of its own."""
+        yielded = 0
         for items_batch in batch_generator(items, batch or workers):
             self.raise_if_stopped()
             if self.callback:
                 self.callback.progress(SLIM_WALK, len(items_batch))
-            yield from drain(items_batch, listing, workers)
+            for document in drain(items_batch, listing, workers):
+                yielded += 1
+                if self.callback and yielded % PROGRESS_EVERY_DOCUMENTS == 0:
+                    self.callback.progress(SLIM_WALK, 0)
+                yield document
 
     def batch_signals(self) -> None:
         """The stop and progress signals the runner gets before every batch."""

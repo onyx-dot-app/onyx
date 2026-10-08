@@ -24,7 +24,7 @@ from onyx.connectors.teams.connector import (
 from onyx.connectors.teams.files import FileSource, file_document_id
 from onyx.connectors.teams.meeting_chats import chat_document_id
 from onyx.connectors.teams.organizers import OrganizerSource
-from onyx.connectors.teams.sources import SLIM_WALK
+from onyx.connectors.teams.sources import SLIM_WALK, SlimWalk
 from onyx.connectors.teams.transcripts import transcript_document_id
 from onyx.connectors.teams.utils import message_delta_url
 from tests.unit.onyx.connectors.teams.helpers import (
@@ -352,3 +352,25 @@ def test_a_slow_item_holds_back_only_its_own_worker() -> None:
         "second",
         "third",
     ]
+
+
+def test_a_long_batch_keeps_reporting_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The permission-sync lock is renewed on progress reports, so a batch
+    that outlasts the lock timeout must report while it drains."""
+    from onyx.connectors.teams import sources
+
+    monkeypatch.setattr(sources, "PROGRESS_EVERY_DOCUMENTS", 2)
+    callback = MagicMock()
+    callback.should_stop.return_value = False
+    walk = SlimWalk(start=0, callback=callback, with_readers=False)
+
+    def listing(item: int) -> Any:
+        for n in range(3):
+            yield SlimDocument(id=f"{item}-{n}", external_access=None)
+
+    assert len(list(walk.fan_out([1, 2], listing, workers=2))) == 6
+    # One report for the batch of two items, then one per two documents.
+    assert (
+        callback.progress.call_args_list
+        == [call(SLIM_WALK, 2)] + [call(SLIM_WALK, 0)] * 3
+    )
