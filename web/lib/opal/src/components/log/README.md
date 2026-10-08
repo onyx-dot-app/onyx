@@ -4,39 +4,39 @@
 
 One line of a log or report: an icon, a title, details, and trailing content.
 A list of checks, the steps of a job, or the entries of an audit trail are each
-a column of `Log`s.
+a column of `Log`s. A line is not interactive.
 
 ## Props
 
-| Prop            | Type                            | Default     | Description                                                    |
-| --------------- | ------------------------------- | ----------- | -------------------------------------------------------------- |
-| `variant`       | `StatusVariants`                | `"default"` | Colours the icon and tints the row on hover                    |
-| `icon`          | `IconFunctionComponent`         | —           | Shown at 1rem with 0.125rem padding                            |
-| `title`         | `string \| RichStr`             | —           | `secondary-action`, one line, at most 10rem wide               |
-| `details`       | `string \| RichStr`             | —           | `main-ui-body`, one line, fills the rest of the row            |
-| `rightChildren` | `ReactNode`                     | —           | Trailing content, such as a tag or an action; not padded       |
-| `interaction`   | `"rest" \| "hover" \| "active"` | —           | Overrides the interaction state; unset, it follows the pointer |
+| Prop            | Type                    | Default     | Description                                                        |
+| --------------- | ----------------------- | ----------- | ------------------------------------------------------------------ |
+| `variant`       | `LogVariant`            | `"default"` | Status and weight: colours the icon and details, tints heavy lines |
+| `icon`          | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                |
+| `title`         | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, at most 10rem wide      |
+| `details`       | `string \| RichStr`     | —           | `main-ui-body`, start-aligned, one line, fills the row             |
+| `rightChildren` | `ReactNode`             | —           | Trailing content, such as a tag or an action; not padded           |
 
 ## Variants
 
-| Variant   | Icon stroke         | Hover background     |
-| --------- | ------------------- | -------------------- |
-| `default` | `text-03`           | `background-tint-02` |
-| `pending` | `text-03`           | `background-tint-02` |
-| `info`    | `status-info-05`    | `status-info-01`     |
-| `success` | `status-success-05` | `status-success-01`  |
-| `warning` | `theme-amber-05`    | `theme-amber-01`     |
-| `error`   | `status-error-05`   | `status-error-01`    |
+`LogVariant` is `"default"` or a status and a weight, e.g. `"error-heavy"`. The
+statuses are a subset of `StatusVariants`:
+`LogStatus = Extract<StatusVariants, "default" | "success" | "warning" | "error">`.
 
-The variant sets colours only; pass the icon that fits the state (for example
-a spinner, a clock or an hourglass for `pending`).
+| Status    | Icon and details    | `heavy` background  |
+| --------- | ------------------- | ------------------- |
+| `default` | `text-03`           | — (never heavy)     |
+| `success` | `status-success-05` | `status-success-01` |
+| `warning` | `theme-amber-05`    | `theme-amber-01`    |
+| `error`   | `status-error-05`   | `status-error-01`   |
+
+A `light` line has no background. Use `heavy` for the lines that need action,
+such as a failure that blocks. The variant sets colours only; pass the icon
+that fits the state (for example a spinner, a clock or an hourglass).
 
 ## Layout
 
-- `Interactive.Stateless` (`default`, `tertiary`) wraps an
-  `Interactive.Container` of size `lg`: 2.25rem tall with 0.5rem padding, so
-  tall trailing content cannot stretch the line.
-- The contents sit in one row with a 0.25rem gap, centred.
+- A row `Section`, 2.25rem tall with 0.5rem padding and a 0.25rem gap, so tall
+  trailing content cannot stretch the line.
 - A title or details too long for its line is cut with an ellipsis and shows
   in full in a tooltip.
 
@@ -44,7 +44,7 @@ a spinner, a clock or an hourglass for `pending`).
 
 ```tsx
 <Log
-  variant="error"
+  variant="error-heavy"
   icon={SvgXCircle}
   title="Check attachment access"
   details="Attachment download timed out"

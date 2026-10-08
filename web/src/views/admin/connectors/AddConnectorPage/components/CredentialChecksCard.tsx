@@ -8,6 +8,7 @@ import {
   Card,
   Divider,
   Log,
+  type LogVariant,
   Tag,
   Text,
   Tooltip,
@@ -25,7 +26,7 @@ import {
   SvgRefreshCw,
   SvgXCircle,
 } from "@opal/icons";
-import type { IconFunctionComponent, StatusVariants } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
@@ -61,10 +62,15 @@ type CheckLine = Pick<
 > & { state: CheckLineState };
 
 const CHECK_LOGS = {
-  passed: { variant: "success", icon: SvgCheckCircle, detail: "status.passed" },
-  failed: { variant: "error", icon: SvgXCircle, detail: "status.failed" },
+  passed: {
+    variant: "success-light",
+    icon: SvgCheckCircle,
+    detail: "status.passed",
+  },
+  // A failed required check blocks, so `CheckLog` makes it heavy.
+  failed: { variant: "error-light", icon: SvgXCircle, detail: "status.failed" },
   indeterminate: {
-    variant: "warning",
+    variant: "warning-light",
     icon: SvgAlertCircle,
     detail: "status.indeterminate",
   },
@@ -73,12 +79,12 @@ const CHECK_LOGS = {
     icon: SvgMinusCircle,
     detail: "status.skipped",
   },
-  running: { variant: "pending", icon: IconLoader, detail: "status.running" },
-  pending: { variant: "pending", icon: SvgClock, detail: "status.pending" },
-  waiting: { variant: "pending", icon: SvgHourglass, detail: "status.waiting" },
+  running: { variant: "default", icon: IconLoader, detail: "status.running" },
+  pending: { variant: "default", icon: SvgClock, detail: "status.pending" },
+  waiting: { variant: "default", icon: SvgHourglass, detail: "status.waiting" },
 } as const satisfies Record<
   CheckLineState,
-  { variant: StatusVariants; icon: IconFunctionComponent; detail: string }
+  { variant: LogVariant; icon: IconFunctionComponent; detail: string }
 >;
 
 /** Group order: what blocks first, what is unknown next, then the rest. */
@@ -108,7 +114,7 @@ function CheckLog({ check }: CheckLogProps) {
 
   return (
     <Log
-      variant={variant}
+      variant={blocking ? "error-heavy" : variant}
       icon={icon}
       title={check.display_name}
       details={check.message || t(detail)}

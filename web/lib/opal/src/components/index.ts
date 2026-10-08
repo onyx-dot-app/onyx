@@ -125,7 +125,13 @@ export {
 } from "@opal/components/tag/components";
 
 /* Log */
-export { Log, type LogProps } from "@opal/components/log/components";
+export {
+  Log,
+  type LogProps,
+  type LogStatus,
+  type LogVariant,
+  type LogWeight,
+} from "@opal/components/log/components";
 
 /* Divider */
 export {

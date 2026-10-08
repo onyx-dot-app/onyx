@@ -4,7 +4,6 @@ import {
   SvgCheckCircle,
   SvgClock,
   SvgHourglass,
-  SvgInfo,
   SvgMinusCircle,
   SvgAlertCircle,
   SvgXCircle,
@@ -16,7 +15,7 @@ const meta: Meta<typeof Log> = {
   component: Log,
   tags: ["autodocs"],
   args: {
-    variant: "success",
+    variant: "success-light",
     icon: SvgCheckCircle,
     title: "Authenticate connection",
     details: "Signed in as service-account@acme.com",
@@ -28,34 +27,34 @@ type Story = StoryObj<typeof Log>;
 
 export const Default: Story = {};
 
-// Every variant, as a list of checks. Hover a line to see its tint.
+// The variants, as a list of checks. Heavy lines are tinted.
 export const Variants: Story = {
   render: () => (
     <div style={{ width: 560, display: "flex", flexDirection: "column" }}>
       <Log
-        variant="error"
+        variant="error-heavy"
         icon={SvgXCircle}
         title="Check attachment access"
         details="Attachment download timed out"
         rightChildren={<Tag title="Required" color="gray" />}
       />
       <Log
-        variant="warning"
+        variant="warning-light"
         icon={SvgAlertCircle}
         title="Check group membership"
         details="Could not be verified"
       />
       <Log
-        variant="success"
+        variant="success-light"
         icon={SvgCheckCircle}
         title="Check connector scopes"
         details="42 spaces available"
       />
       <Log
-        variant="info"
-        icon={SvgInfo}
-        title="Check rate limit"
-        details="Shared with 3 other connectors"
+        variant="error-light"
+        icon={SvgXCircle}
+        title="Check comments access"
+        details="Optional check failed"
       />
       <Log
         variant="default"
@@ -64,19 +63,19 @@ export const Variants: Story = {
         details="Skipped"
       />
       <Log
-        variant="pending"
+        variant="default"
         icon={IconLoader}
         title="Check space permissions"
         details="Testing…"
       />
       <Log
-        variant="pending"
+        variant="default"
         icon={SvgClock}
         title="Test permission syncing"
         details="Queued"
       />
       <Log
-        variant="pending"
+        variant="default"
         icon={SvgHourglass}
         title="Test indexing documents"
         details="Waiting for user to select content to index"
@@ -90,7 +89,7 @@ export const LongText: Story = {
   render: () => (
     <div style={{ width: 420 }}>
       <Log
-        variant="error"
+        variant="error-heavy"
         icon={SvgXCircle}
         title="A check whose name is far too long to fit"
         details="The token lacks the read:confluence-space.summary scope. Add it in the Atlassian developer console, then run the checks again."

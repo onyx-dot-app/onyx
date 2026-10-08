@@ -1,57 +1,33 @@
 @reference "#reference.css";
 
 /* ── Log ─────────────────────────────────────────────────────────────────────
-   A Log sits on `Interactive.Stateless` (default, tertiary). Its variant
-   sets the icon's stroke colour (icons stroke with `currentColor`, so a
-   `text-*` colour sets it) and replaces the tertiary grey hover with a status tint.
-   Each rule names one more attribute than the tertiary rules it overrides, so
-   it wins without !important. */
+   Not interactive: the status colours the icon (icons stroke with
+   `currentColor`, so a `text-*` colour sets it), and the heavy weight tints the
+   line. The details colour comes from `Text`. */
 
-.interactive[data-opal-log-variant] .opal-log-icon {
+.opal-log {
+  @apply rounded-08;
+}
+
+.opal-log .opal-log-icon {
   @apply shrink-0 text-text-03;
 }
-.interactive[data-opal-log-variant="info"] .opal-log-icon {
-  @apply text-status-info-05;
-}
-.interactive[data-opal-log-variant="success"] .opal-log-icon {
+.opal-log[data-opal-log-status="success"] .opal-log-icon {
   @apply text-status-success-05;
 }
-.interactive[data-opal-log-variant="warning"] .opal-log-icon {
+.opal-log[data-opal-log-status="warning"] .opal-log-icon {
   @apply text-theme-amber-05;
 }
-.interactive[data-opal-log-variant="error"] .opal-log-icon {
+.opal-log[data-opal-log-status="error"] .opal-log-icon {
   @apply text-status-error-05;
 }
 
-.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-opal-log-variant="info"]:is(
-  :hover,
-  :active,
-  [data-interaction="hover"],
-  [data-interaction="active"]
-):not([data-disabled]) {
-  @apply bg-status-info-01;
-}
-.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-opal-log-variant="success"]:is(
-  :hover,
-  :active,
-  [data-interaction="hover"],
-  [data-interaction="active"]
-):not([data-disabled]) {
+.opal-log[data-opal-log-weight="heavy"][data-opal-log-status="success"] {
   @apply bg-status-success-01;
 }
-.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-opal-log-variant="warning"]:is(
-  :hover,
-  :active,
-  [data-interaction="hover"],
-  [data-interaction="active"]
-):not([data-disabled]) {
+.opal-log[data-opal-log-weight="heavy"][data-opal-log-status="warning"] {
   @apply bg-theme-amber-01;
 }
-.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-opal-log-variant="error"]:is(
-  :hover,
-  :active,
-  [data-interaction="hover"],
-  [data-interaction="active"]
-):not([data-disabled]) {
+.opal-log[data-opal-log-weight="heavy"][data-opal-log-status="error"] {
   @apply bg-status-error-01;
 }
