@@ -8903,7 +8903,7 @@
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
         "completed": "Vérifications terminées.",
-        "inProgress": "Vérifications en cours."
+        "inProgress": "Vérifications en cours…"
       }
     }
   },

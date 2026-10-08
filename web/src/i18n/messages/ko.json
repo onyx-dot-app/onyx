@@ -8903,7 +8903,7 @@
       "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
       "state": {
         "completed": "검사가 완료되었습니다.",
-        "inProgress": "검사가 진행 중입니다."
+        "inProgress": "검사 진행 중…"
       }
     }
   },
