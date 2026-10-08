@@ -6,6 +6,7 @@ import { setDefaultLlmModel } from "@/lib/languageModels/svc";
 const PERSONA_PROVIDER_ENDPOINT_PATTERN =
   /^\/api\/llm\/persona\/\d+\/providers$/;
 const ADMIN_PROVIDER_ENDPOINT_PATTERN = /^\/api\/admin\/llm\/provider\/\d+$/;
+const LLM_ROUTER_MODELS_PATTERN = /^llm-router-models:/;
 
 export async function refreshLlmProviderCaches(
   mutate: ScopedMutator
@@ -17,7 +18,8 @@ export async function refreshLlmProviderCaches(
       (key) =>
         typeof key === "string" &&
         (PERSONA_PROVIDER_ENDPOINT_PATTERN.test(key) ||
-          ADMIN_PROVIDER_ENDPOINT_PATTERN.test(key))
+          ADMIN_PROVIDER_ENDPOINT_PATTERN.test(key) ||
+          LLM_ROUTER_MODELS_PATTERN.test(key))
     ),
   ]);
 }

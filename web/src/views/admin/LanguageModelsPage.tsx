@@ -19,6 +19,7 @@ import {
   InputSwitch,
   Text,
   Card,
+  OnyxLoader,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
@@ -43,11 +44,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
-import {
-  LLMProviderName,
-  LLMProviderView,
-  ModelConfigurationPage,
-} from "@/lib/languageModels/types";
+import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
@@ -394,27 +391,29 @@ export default function LanguageModelsPage() {
   );
 
   // Router models (openrouter/auto, gateway configs) usable as the model
-  // routing target. Fetched independently of each provider's first page —
-  // hidden routers sort past it when the visible set fills a page, which
-  // would otherwise leave them unselectable or claim none exist.
+  // routing target. Loaded through the admin provider endpoint so hidden
+  // and persona-restricted routers still appear, regardless of what each
+  // provider's paged first page happened to include.
   const providerIdsKey = (existingLlmProviders ?? [])
     .map((provider) => provider.id)
     .join(",");
   const { data: routerProviders } = useSWR<LLMProviderView[]>(
-    providerIdsKey === "" ? null : ["llm-router-models", providerIdsKey],
+    providerIdsKey === "" ? null : SWR_KEYS.llmRouterModels(providerIdsKey),
     async () => {
       const pages = await Promise.all(
         (existingLlmProviders ?? []).map(async (provider) => {
-          const page = await errorHandlingFetcher<ModelConfigurationPage>(
-            `${SWR_KEYS.llmProviderModels(provider.id)}?offset=0&router_only=true`
+          const full = await errorHandlingFetcher<LLMProviderView>(
+            SWR_KEYS.adminLlmProvider(provider.id)
           );
           return {
             ...provider,
-            model_configurations: page.model_configurations.map((mc) => ({
-              ...mc,
-              effectiveDisplayName:
-                mc.custom_display_name || mc.display_name || mc.name,
-            })),
+            model_configurations: full.model_configurations
+              .filter((mc) => mc.is_router)
+              .map((mc) => ({
+                ...mc,
+                effectiveDisplayName:
+                  mc.custom_display_name || mc.display_name || mc.name,
+              })),
           };
         })
       );
@@ -687,8 +686,9 @@ export default function LanguageModelsPage() {
                     description={t("modelRouting.target.description")}
                     withLabel
                   >
-                    {routerProviders ===
-                    undefined ? null : routerProviders.length > 0 ? (
+                    {routerProviders === undefined ? (
+                      <OnyxLoader size={24} />
+                    ) : routerProviders.length > 0 ? (
                       <SimpleModelSelector
                         providers={routerProviders}
                         value={

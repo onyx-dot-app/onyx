@@ -51,6 +51,10 @@ export const SWR_KEYS = {
   adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
+  // Synthetic key (not a URL): the admin routing-target selector's per-provider
+  // router fetches keyed on the provider id list.
+  llmRouterModels: (providerIdsKey: string) =>
+    `llm-router-models:${providerIdsKey}`,
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",

@@ -1004,7 +1004,6 @@ def list_llm_provider_models(
     provider_id: int,
     offset: int = Query(0, ge=0),
     query: str | None = Query(None, max_length=200),
-    router_only: bool = Query(False),
     persona_id: int | None = Query(None),
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
@@ -1038,11 +1037,7 @@ def list_llm_provider_models(
         )
 
     window = fetch_model_configurations_page(
-        db_session,
-        [provider_id],
-        offset=offset,
-        name_query=query,
-        router_only=router_only,
+        db_session, [provider_id], offset=offset, name_query=query
     )[provider_id]
     return ModelConfigurationPage.from_model(
         provider, window.model_configurations, window.next_offset
