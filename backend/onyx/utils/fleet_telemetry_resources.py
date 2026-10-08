@@ -11,6 +11,8 @@ import psutil
 if TYPE_CHECKING:
     from onyx.utils.fleet_telemetry import BoundedTelemetry
 
+# Disk usage is read for the mount that holds application data.
+_DISK_MOUNT: str = os.environ.get("ONYX_TELEMETRY_DISK_MOUNT", "/")
 _last_cpu: tuple[float, float] | None = None
 
 
@@ -53,7 +55,7 @@ def collect_process_resource(client: "BoundedTelemetry") -> None:
             else None
         )
         _last_cpu = (cpu_seconds, now)
-        disk = shutil.disk_usage(os.environ.get("ONYX_TELEMETRY_DISK_MOUNT", "/"))
+        disk = shutil.disk_usage(_DISK_MOUNT)
         client.emit(
             "resource",
             {

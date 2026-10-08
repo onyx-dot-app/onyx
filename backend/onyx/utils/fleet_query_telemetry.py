@@ -33,22 +33,6 @@ def _channel(kwargs: dict[str, Any]) -> str:
     return "slack" if kwargs.get("slack_context") is not None else "web"
 
 
-def _observation(
-    channel: str, mode: str, user_id: str | None = None
-) -> "QueryObservation | None":
-    try:
-        return QueryObservation(channel=channel, mode=mode, user_id=user_id)
-    except Exception:
-        return None
-
-
-def _user_id() -> str | None:
-    try:
-        return get_current_user_id()
-    except Exception:
-        return None
-
-
 class QueryObservation:
     def __init__(self, *, channel: str, mode: str, user_id: str | None = None) -> None:
         self.started = time.monotonic()
@@ -65,47 +49,34 @@ class QueryObservation:
         self.error_code: str | None = None
 
     def answer(self) -> None:
-        try:
-            if self.first_answer_ms is None:
-                self.first_answer_ms = max(0, (time.monotonic() - self.started) * 1000)
-        except Exception:
-            pass
+        if self.first_answer_ms is None:
+            self.first_answer_ms = max(0, (time.monotonic() - self.started) * 1000)
 
     def results(self) -> None:
-        try:
-            if self.time_to_results_ms is None:
-                self.time_to_results_ms = max(
-                    0, (time.monotonic() - self.started) * 1000
-                )
-        except Exception:
-            pass
+        if self.time_to_results_ms is None:
+            self.time_to_results_ms = max(0, (time.monotonic() - self.started) * 1000)
 
     def failed(self, error: BaseException | None = None) -> None:
         self.outcome = "failure"
-        try:
-            self.error_code = error_category(error) if error is not None else "unknown"
-        except Exception:
-            self.error_code = "unknown"
+        self.error_code = error_category(error) if error is not None else "unknown"
 
     def finish(self) -> None:
-        try:
-            emit_telemetry(
-                "query",
-                {
-                    "query_id": self.query_id,
-                    "channel": self.channel,
-                    "mode": self.mode,
-                    "outcome": self.outcome,
-                    "total_ms": max(0, (time.monotonic() - self.started) * 1000),
-                    "first_answer_ms": self.first_answer_ms,
-                    "time_to_results_ms": self.time_to_results_ms,
-                    "request_count": 1,
-                    "error_code": self.error_code,
-                },
-                user_id=self.user_id,
-            )
-        except Exception:
-            pass
+        # emit_telemetry never raises, so a stream always finishes normally.
+        emit_telemetry(
+            "query",
+            {
+                "query_id": self.query_id,
+                "channel": self.channel,
+                "mode": self.mode,
+                "outcome": self.outcome,
+                "total_ms": max(0, (time.monotonic() - self.started) * 1000),
+                "first_answer_ms": self.first_answer_ms,
+                "time_to_results_ms": self.time_to_results_ms,
+                "request_count": 1,
+                "error_code": self.error_code,
+            },
+            user_id=self.user_id,
+        )
 
 
 def observe_chat_packets(
@@ -119,10 +90,9 @@ def observe_chat_packets(
         PacketException,
     )
 
-    observation = _observation(channel, "chat", user_id)
-    if observation is None:
-        yield from packets
-        return
+    observation: QueryObservation = QueryObservation(
+        channel=channel, mode="chat", user_id=user_id
+    )
     try:
         for packet in packets:
             try:
@@ -188,23 +158,17 @@ def telemetry_query(*, mode: str) -> Callable[[F], F]:
 
             @wraps(function)
             def stream(*args: Any, **kwargs: Any) -> Iterator[Any]:
-                observation = _observation("web", mode, _user_id())
-                if observation is None:
-                    yield from function(*args, **kwargs)
-                    return
+                observation: QueryObservation = QueryObservation(
+                    channel="web", mode=mode, user_id=get_current_user_id()
+                )
                 try:
                     for packet in function(*args, **kwargs):
-                        # Search packet classes are fixed; no packet text is exported.
-                        if type(packet).__name__ in {
-                            "SearchErrorPacket",
-                            "SearchError",
-                        }:
+                        # Matched by class name: the EE packet models are not
+                        # importable here. No packet text is exported.
+                        packet_type: str = type(packet).__name__
+                        if packet_type == "SearchErrorPacket":
                             observation.failed()
-                        elif type(packet).__name__ in {
-                            "SearchResultsPacket",
-                            "SearchDocsPacket",
-                            "SearchDocPacket",
-                        }:
+                        elif packet_type == "SearchDocsPacket":
                             observation.results()
                         yield packet
                 except GeneratorExit:
@@ -220,9 +184,9 @@ def telemetry_query(*, mode: str) -> Callable[[F], F]:
 
         @wraps(function)
         def run(*args: Any, **kwargs: Any) -> Any:
-            observation = _observation("api", mode, _user_id())
-            if observation is None:
-                return function(*args, **kwargs)
+            observation: QueryObservation = QueryObservation(
+                channel="api", mode=mode, user_id=get_current_user_id()
+            )
             try:
                 result = function(*args, **kwargs)
                 observation.results()

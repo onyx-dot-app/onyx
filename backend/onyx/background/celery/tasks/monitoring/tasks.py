@@ -434,7 +434,7 @@ def cloud_monitor_celery_pidbox(
     # task_logger.info(f"Deleted idle pidbox: pidbox={key_str}")
 
 
-"""Version telemetry heartbeat"""
+"""OpenSearch resource health"""
 
 
 @shared_task(

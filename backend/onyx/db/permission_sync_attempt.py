@@ -228,8 +228,6 @@ def complete_doc_permission_sync_attempt(
 
         attempt.time_finished = func.now()
         db_session.commit()
-
-        # Add telemetry
         return attempt
     except Exception:
         db_session.rollback()
@@ -496,8 +494,6 @@ def complete_external_group_sync_attempt(
 
         attempt.time_finished = func.now()
         db_session.commit()
-
-        # Add telemetry
         return attempt
     except Exception:
         db_session.rollback()

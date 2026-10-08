@@ -2145,7 +2145,6 @@ def _docprocessing_task(
 
         # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.
         _finalization_start = time.monotonic()
-        coordination_status = None
         # Record failures in the database
         if index_pipeline_result.failures:
             with get_session_with_current_tenant() as db_session:

@@ -360,7 +360,6 @@ def verify_and_store_license(
     try:
         from onyx.utils.fleet_telemetry import emit_license_state
 
-        # The collector's license snapshot reports the first stored time.
         emit_license_state(True, "set")
     except Exception:
         pass

@@ -166,7 +166,7 @@ def connector_page(
         SELECT p.id AS cc_pair_id, c.id AS connector_id, c.source AS connector_type,
           lower(p.status) AS state, p.total_docs_indexed AS doc_count,
           p.last_successful_index_time AS last_success_at,
-          c.time_updated, c.refresh_freq AS refresh_seconds, c.prune_freq AS prune_seconds,
+          c.refresh_freq AS refresh_seconds, c.prune_freq AS prune_seconds,
           (p.auto_sync_options IS NOT NULL) AS auto_sync_enabled,
           (p.access_type = 'SYNC') AS permission_sync_enabled,
           {_SAFE_CONFIGURATION} AS metadata
@@ -191,7 +191,7 @@ def attempt_page(
     statement = f"""
         SELECT a.id AS attempt_id, p.id AS cc_pair_id, c.id AS connector_id,
           c.source AS connector_type, lower(a.status) AS state,
-          a.total_docs_indexed AS docs_indexed, a.total_docs_indexed AS docs_processed,
+          a.total_docs_indexed AS docs_indexed,
           a.total_chunks AS chunks_indexed, a.total_batches, a.completed_batches,
           a.time_started AS started_at, a.time_updated,
           a.last_progress_time AS last_progress_at, a.last_heartbeat_time AS last_heartbeat_at,

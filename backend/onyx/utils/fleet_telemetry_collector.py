@@ -59,6 +59,8 @@ _REPAIR_OVERLAP: timedelta = timedelta(minutes=10)
 # A wider sweep resends recent rows every six hours and after deferred events expire.
 _REPAIR_WINDOW: timedelta = timedelta(hours=24)
 _REPAIR_INTERVAL_SECONDS: int = 6 * 3600
+# Explicit broker URL for queue reads; otherwise the standard Redis settings apply.
+_REDIS_URL: str | None = os.environ.get("ONYX_TELEMETRY_REDIS_URL") or None
 
 
 def _iso(value: Any) -> str | None:
@@ -181,7 +183,6 @@ class FleetCollector:
     ) -> None:
         self.client: BoundedTelemetry = client
         self.engine: Engine = collector_engine(database_url)
-        self.schemas: list[str] = schemas
         self.shard_count: int = max(
             1, min(1000, int(os.environ.get("ONYX_TELEMETRY_SCHEMA_SHARD_COUNT", "1")))
         )
@@ -190,7 +191,7 @@ class FleetCollector:
         )
         if not 0 <= self.shard_index < self.shard_count:
             raise ValueError("Invalid collector shard")
-        self.schemas = self._partition(schemas)
+        self.schemas: list[str] = self._partition(schemas)
         self._last_discovery: float | None = None
         self._discover: bool = (
             MULTI_TENANT and "ONYX_TELEMETRY_SCHEMAS" not in os.environ
@@ -501,7 +502,6 @@ class FleetCollector:
                     "cc_pair_id",
                     "connector_type",
                     "state",
-                    "docs_processed",
                     "docs_indexed",
                     "chunks_indexed",
                     "total_batches",
@@ -634,7 +634,7 @@ class FleetCollector:
             OnyxCeleryQueues,
         )
 
-        url: str | None = os.environ.get("ONYX_TELEMETRY_REDIS_URL")
+        url: str | None = _REDIS_URL
         tls_options: dict[str, Any] = {}
         if not url and (not self.client.config.auto_enroll or self.shard_index != 0):
             return
@@ -721,10 +721,8 @@ class FleetCollector:
             self._last_discovery = now
         started: float = time.monotonic()
         for _ in range(min(10, len(self.schemas))):
+            # collect_one_schema skips this schema while its failure backoff lasts.
             schema: str = self.schemas[self._schema_position % len(self.schemas)]
-            if self._failed_schema.get(schema, (0, 0))[0] > time.monotonic():
-                self._schema_position += 1
-                continue
             try:
                 if self.collect_one_schema():
                     self._failed_schema.pop(schema, None)

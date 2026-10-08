@@ -242,10 +242,7 @@ def test_emit_latency_and_bounded_memory_under_overload() -> None:
     assert statistics.quantiles(elapsed, n=100)[98] < 1_000_000
 
 
-@pytest.mark.parametrize(
-    "error_counter",
-    ["error_count", "fetch_errors", "embed_errors", "write_errors", "write_rejected"],
-)
+@pytest.mark.parametrize("error_counter", fleet._ERROR_COUNTERS)
 def test_stage_coalescing_preserves_counters_and_bypasses_errors(
     monkeypatch: pytest.MonkeyPatch,
     error_counter: str,
@@ -270,20 +267,14 @@ def test_stage_coalescing_preserves_counters_and_bypasses_errors(
     assert combined[0]["data"]["duration_ms"] == 15
     assert sender.emit("attempt", data)
     assert sender._coalesce_stages(sender._take_batch(), 100) == []
-    failure: dict[str, Any] = (
-        {**data, "error_count": 1}
-        if error_counter == "error_count"
-        else {**data, "counters": {"embed_chunks": 30, error_counter: 1}}
-    )
+    failure: dict[str, Any] = {
+        **data,
+        "counters": {"embed_chunks": 30, error_counter: 1},
+    }
     assert sender.emit("attempt", failure)
     failed = sender._coalesce_stages(sender._take_batch(), 100)
     assert len(failed) == 1
-    errors: dict[str, Any] = (
-        failed[0]["data"]
-        if error_counter == "error_count"
-        else failed[0]["data"]["counters"]
-    )
-    assert errors[error_counter] == 1
+    assert failed[0]["data"]["counters"][error_counter] == 1
     assert failed[0]["data"]["counters"]["embed_chunks"] == 60
     assert not sender._stage_pending
 
@@ -345,10 +336,9 @@ def test_queue_collection_inherits_tls_without_overriding_explicit_url(
     monkeypatch.setattr(app_configs, "REDIS_SSL_CA_CERTS", "/test/redis-ca.crt")
     monkeypatch.setattr(app_configs, "REDIS_SSL_CERTFILE", "/test/redis-client.crt")
     monkeypatch.setattr(app_configs, "REDIS_SSL_KEYFILE", "/test/redis-client.key")
-    if explicit_url:
-        monkeypatch.setenv("ONYX_TELEMETRY_REDIS_URL", "rediss://custom:6380/15")
-    else:
-        monkeypatch.delenv("ONYX_TELEMETRY_REDIS_URL", raising=False)
+    monkeypatch.setattr(
+        source, "_REDIS_URL", "rediss://custom:6380/15" if explicit_url else None
+    )
     sender: fleet.BoundedTelemetry = client()
     sender.config = replace(sender.config, auto_enroll=True)
     collector: FleetCollector = FleetCollector(sender, "postgresql://test", ["public"])
@@ -380,7 +370,7 @@ def test_no_vector_db_deployments_do_not_read_queues(
     # Lite deployments replace Celery with an in-process runner and have no broker.
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "DISABLE_VECTOR_DB", True)
-    monkeypatch.setenv("ONYX_TELEMETRY_REDIS_URL", "redis://localhost:1/0")
+    monkeypatch.setattr(source, "_REDIS_URL", "redis://localhost:1/0")
     factory: Mock = Mock(side_effect=AssertionError("read a missing broker"))
     monkeypatch.setattr("redis.Redis.from_url", factory)
     sender: fleet.BoundedTelemetry = client()
@@ -1027,24 +1017,6 @@ def test_collector_schema_partition_covers_large_fleet_without_truncation() -> N
     assert set(seen) == set(schemas)
 
 
-def test_measurement_initialization_failure_preserves_application_results(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        query,
-        "QueryObservation",
-        Mock(side_effect=RuntimeError("PRIVATE telemetry failure")),
-    )
-    packets = [object(), object()]
-    assert list(query.observe_chat_packets(iter(packets), channel="web")) == packets
-
-    @query.telemetry_query(mode="search")
-    def search() -> str:
-        return "application result"
-
-    assert search() == "application result"
-
-
 def test_schema_names_allow_real_cloud_hyphens_and_reject_sql() -> None:
     from onyx.db.fleet_telemetry import _schema
 
@@ -1079,7 +1051,7 @@ def test_instance_domain_is_startup_hmac_of_canonical_host_only(
     assert config is not None
     sender = fleet.BoundedTelemetry(config)
     assert config.instance_domain_hash == sender.fingerprint("private.example")
-    sender.emit("heartbeat", {"collector_enabled": True})
+    sender.emit("heartbeat", {"dropped_events": 0})
     event = sender._take_batch()[0]
     assert event["instance_domain"] == config.instance_domain_hash
     assert "PRIVATE" not in json.dumps(event) and "private-folder" not in json.dumps(
@@ -1274,7 +1246,6 @@ def test_live_edge_rereads_a_short_overlap_and_sweeps_after_expiry(
         "cc_pair_id": 2,
         "connector_type": "file",
         "state": "success",
-        "docs_processed": 1,
         "docs_indexed": 1,
         "chunks_indexed": 1,
         "total_batches": 1,
@@ -1335,7 +1306,7 @@ def test_unexpected_compression_fails_closed_with_bounded_retry(
     monkeypatch.setattr("requests.get", compressed)
     assert watcher._get("/api/v1/namespaces/default/pods") is None
     assert watcher.errors == 1 and sender.health["kubernetes_errors"] == 1
-    sender.emit("heartbeat", {"collector_enabled": True})
+    sender.emit("heartbeat", {"dropped_events": 0})
     assert not sender.flush_once(compressed)
     assert sender.failures == 1 and len(sender._pending) == 1
     assert sender.sent == 0
@@ -1396,7 +1367,7 @@ def test_failed_queue_reads_wait_for_configured_poll_interval(
     monkeypatch.setattr(
         source, "time", SimpleNamespace(monotonic=lambda: uptime, time=time.time)
     )
-    monkeypatch.setenv("ONYX_TELEMETRY_REDIS_URL", "redis://localhost:1/0")
+    monkeypatch.setattr(source, "_REDIS_URL", "redis://localhost:1/0")
     unavailable = Mock(side_effect=TimeoutError("PRIVATE unavailable Redis"))
     monkeypatch.setattr("redis.Redis.from_url", unavailable)
     sender = client()
@@ -1515,7 +1486,7 @@ def test_sender_only_emits_and_samples_resources_at_low_host_uptime(
         SimpleNamespace(monotonic=lambda: uptime, time=time.time, time_ns=time.time_ns),
     )
     monkeypatch.setattr("onyx.__version__", "Development")
-    monkeypatch.setenv("ONYX_BUILD_SHA", "a" * 40)
+    monkeypatch.setattr(fleet, "_BUILD_SHA", "a" * 40)
     sender = client()
     remote_get = Mock(side_effect=AssertionError("No telemetry configuration reads"))
     resource = Mock()
@@ -1631,7 +1602,7 @@ def test_license_telemetry_excludes_credentials_and_fails_open(monkeypatch) -> N
 
     sender = client()
     monkeypatch.setattr(telemetry, "_client", sender)
-    telemetry.emit_license_state(True, "set", datetime.now(timezone.utc))
+    telemetry.emit_license_state(True, "set")
     assert sender._take_batch()[0]["data"]["license_present"] is True
     assert (
         telemetry.sanitize_data(
@@ -1646,7 +1617,7 @@ def test_license_telemetry_excludes_credentials_and_fails_open(monkeypatch) -> N
 
 def test_delivery_receipts_only_settle_events() -> None:
     sender = client()
-    sender.emit("heartbeat", {"collector_enabled": True})
+    sender.emit("heartbeat", {"dropped_events": 0})
     response = Response(
         {
             "results": [{"index": 0, "status": "accepted"}],
@@ -1659,7 +1630,7 @@ def test_delivery_receipts_only_settle_events() -> None:
     assert sender.flush_once(lambda *_args, **_kwargs: response)
     assert sender.sent == 1
     assert fleet.CONNECTOR_INTERVAL_SECONDS == 300
-    assert sender.emit("heartbeat", {"collector_enabled": True})
+    assert sender.emit("heartbeat", {"dropped_events": 0})
 
 
 @pytest.mark.parametrize(

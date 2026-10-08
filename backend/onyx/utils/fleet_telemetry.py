@@ -29,6 +29,9 @@ _EMAIL_DOMAIN: re.Pattern[str] = re.compile(
     r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\Z"
 )
 _OPAQUE: re.Pattern[str] = re.compile(r"[A-Za-z0-9_.:-]{1,128}\Z")
+_COMMIT_SHA: re.Pattern[str] = re.compile(r"[a-f0-9]{7,40}\Z")
+# Image build commit, reported with the version when the image sets it.
+_BUILD_SHA: str = os.environ.get("ONYX_BUILD_SHA", "")
 _VERSION: re.Pattern[str] = re.compile(
     r"(?:v?\d{1,4}\.\d{1,4}(?:\.\d{1,4})?(?:[-.](?:cloud|beta|alpha|rc|dev|nightly|release)(?:[-.]?\d{1,8})?){0,3}|[a-f0-9]{7,40}|unknown|dev|nightly)\Z"
 )
@@ -48,7 +51,6 @@ _STATES: frozenset[str] = frozenset(
         "paused",
         "deleting",
         "invalid",
-        "unknown",
     }
 )
 _ERRORS: frozenset[str] = frozenset(
@@ -61,7 +63,6 @@ _ERRORS: frozenset[str] = frozenset(
         "parse",
         "embedding",
         "index_write",
-        "storage",
         "internal",
         "unknown",
     }
@@ -82,11 +83,8 @@ _JOB_TYPES: frozenset[str] = frozenset(
         "external_group",
         "permission_sync",
         "group_sync",
-        "metadata",
         "hierarchy",
-        "file_processing",
         "migration",
-        "unknown",
     }
 )
 _SERVICES: frozenset[str] = frozenset(
@@ -101,7 +99,6 @@ _SERVICES: frozenset[str] = frozenset(
         "slack",
         "discord",
         "opensearch",
-        "vespa",
         "postgres",
         "redis",
         "unknown",
@@ -120,7 +117,6 @@ _METADATA: frozenset[str] = frozenset(
         "exclude_pattern_count",
         "has_time_filter",
         "file_type_count",
-        "scope_hashes_count",
         "batch_size",
         "num_threads",
         "max_workers",
@@ -167,23 +163,13 @@ _METADATA: frozenset[str] = frozenset(
 _COUNTERS: frozenset[str] = frozenset(
     {
         "fetch_docs",
-        "fetch_bytes",
-        "fetch_requests",
         "fetch_errors",
-        "fetch_throttles",
         "prepare_docs",
-        "prepare_chunks",
         "embed_chunks",
         "embed_errors",
-        "embed_throttles",
-        "write_docs",
         "write_chunks",
         "write_errors",
         "write_rejected",
-        "pending_fetch_docs",
-        "pending_embed_chunks",
-        "pending_write_chunks",
-        "oldest_pending_seconds",
     }
 )
 _FIELDS: dict[str, frozenset[str]] = {
@@ -212,13 +198,10 @@ _FIELDS: dict[str, frozenset[str]] = {
             "mode",
             "outcome",
             "total_ms",
-            "latency_ms",
             "first_answer_ms",
             "time_to_results_ms",
-            "retry_count",
             "request_count",
             "error_code",
-            "error_fingerprint",
         }
     ),
     "connector": frozenset(
@@ -230,9 +213,7 @@ _FIELDS: dict[str, frozenset[str]] = {
             "doc_count",
             "config_hash",
             "metadata",
-            "scope_hashes",
             "last_success_at",
-            "last_attempt_id",
         }
     ),
     "attempt": frozenset(
@@ -242,7 +223,6 @@ _FIELDS: dict[str, frozenset[str]] = {
             "cc_pair_id",
             "connector_type",
             "state",
-            "docs_processed",
             "docs_indexed",
             "chunks_indexed",
             "total_batches",
@@ -250,9 +230,6 @@ _FIELDS: dict[str, frozenset[str]] = {
             "error_count",
             "error_code",
             "error_fingerprint",
-            "fetch_docs",
-            "embed_chunks",
-            "write_chunks",
             "counters",
             "counter_mode",
             "stage",
@@ -269,16 +246,12 @@ _FIELDS: dict[str, frozenset[str]] = {
             "job_type",
             "state",
             "docs_processed",
-            "docs_total",
             "duration_ms",
             "error_count",
-            "error_code",
-            "error_fingerprint",
             "started_at",
             "ended_at",
             "entity_id",
             "cc_pair_id",
-            "last_progress_at",
             "users_processed",
             "groups_processed",
             "memberships_synced",
@@ -288,12 +261,6 @@ _FIELDS: dict[str, frozenset[str]] = {
         {
             "queue",
             "depth",
-            "oldest_age_seconds",
-            "in_flight",
-            "enqueued",
-            "dequeued",
-            "retries",
-            "drain_seconds",
             "shared",
         }
     ),
@@ -341,14 +308,11 @@ _FIELDS: dict[str, frozenset[str]] = {
             "email_domain_errors",
             "stage_errors",
             "license_errors",
-            "config_revision",
             "dropped_events",
             "recent_dropped_events",
             "rejected_events",
             "invalid_events",
             "spool_events",
-            "connector_count",
-            "collector_enabled",
             "source_errors",
             "source_consecutive_errors",
             "last_source_success_at",
@@ -368,9 +332,7 @@ _ENUM_FIELDS: dict[str, frozenset[str]] = {
     "error_code": _ERRORS,
     "channel": frozenset({"web", "slack", "discord", "api"}),
     "mode": frozenset({"chat", "search"}),
-    "outcome": frozenset(
-        {"success", "failure", "partial", "canceled", "disconnected", "timeout"}
-    ),
+    "outcome": frozenset({"success", "failure", "canceled", "disconnected"}),
     "stage_name": frozenset(stage.value for stage in IndexAttemptStage),
     "opensearch_status": frozenset({"green", "yellow", "red", "unavailable"}),
     "queue": _QUEUES,
@@ -386,7 +348,6 @@ _ENUM_FIELDS: dict[str, frozenset[str]] = {
             "crash",
             "restart",
             "unready",
-            "unknown",
         }
     ),
 }
@@ -406,6 +367,13 @@ EXIT_FLUSH_SECONDS: float = 2.0
 # Indexing counter deltas combine per attempt and stage for a short window.
 _STAGE_WINDOW_SECONDS: float = 30.0
 _MAX_STAGE_KEYS: int = 256
+# Counter deltas with any of these skip the window, so failures report at once.
+_ERROR_COUNTERS: tuple[str, ...] = (
+    "fetch_errors",
+    "embed_errors",
+    "write_errors",
+    "write_rejected",
+)
 
 
 def is_valid_version(value: str) -> bool:
@@ -426,7 +394,7 @@ def normalize_email_domain(domain: str) -> str | None:
 def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | None:  # noqa: C901 - Central privacy boundary has explicit type cases.
     """Reject unknown fields and all unreviewed string values before queueing."""
     allowed: frozenset[str] | None = _FIELDS.get(event_type)
-    if allowed is None or len(data) > 40 or not data.keys() <= allowed:
+    if allowed is None or not data.keys() <= allowed:
         return None
     safe: dict[str, Any] = {}
     for key, value in data.items():
@@ -436,11 +404,7 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
             nested_allowed: frozenset[str] = (
                 _METADATA if key == "metadata" else _COUNTERS
             )
-            if (
-                not isinstance(value, dict)
-                or len(value) > len(nested_allowed)
-                or not value.keys() <= nested_allowed
-            ):
+            if not isinstance(value, dict) or not value.keys() <= nested_allowed:
                 return None
             safe[key] = {}
             for nested_key, nested_value in value.items():
@@ -454,17 +418,6 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
                     safe[key][nested_key] = nested_value
                 else:
                     return None
-        elif key == "scope_hashes":
-            if (
-                not isinstance(value, list)
-                or len(value) > 32
-                or any(
-                    not isinstance(item, str) or not _HEX.fullmatch(item)
-                    for item in value
-                )
-            ):
-                return None
-            safe[key] = list(value)
         elif key == "domain":
             if not isinstance(value, str) or not (
                 domain := normalize_email_domain(value)
@@ -498,7 +451,7 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
                 return None
             safe[key] = value
         elif key == "commit_sha":
-            if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{7,40}", value):
+            if not isinstance(value, str) or not _COMMIT_SHA.fullmatch(value):
                 return None
             safe[key] = value
         elif key == "image_digest":
@@ -976,28 +929,11 @@ class BoundedTelemetry:
                     if value is not None:
                         counters[name] = (counters.get(name) or 0) + value
                 data["counters"] = counters
-                for name in (
-                    "duration_ms",
-                    "fetch_docs",
-                    "embed_chunks",
-                    "write_docs",
-                    "write_chunks",
-                    "write_errors",
-                    "write_rejected",
-                    "error_count",
-                ):
-                    if old.get(name) is not None:
-                        data[name] = (data.get(name) or 0) + old[name]
-            if any(
-                data.get(name) or (data.get("counters") or {}).get(name)
-                for name in (
-                    "error_count",
-                    "fetch_errors",
-                    "embed_errors",
-                    "write_errors",
-                    "write_rejected",
-                )
-            ):
+                if old.get("duration_ms") is not None:
+                    data["duration_ms"] = (data.get("duration_ms") or 0) + old[
+                        "duration_ms"
+                    ]
+            if any((data.get("counters") or {}).get(name) for name in _ERROR_COUNTERS):
                 ready.append(event)
             else:
                 self._stage_pending[key] = event
@@ -1052,9 +988,8 @@ class BoundedTelemetry:
         version_data: dict[str, Any] = {
             "version": version if is_valid_version(version) else "unknown"
         }
-        commit_sha: str = os.environ.get("ONYX_BUILD_SHA", "")
-        if re.fullmatch(r"[a-f0-9]{7,40}", commit_sha):
-            version_data["commit_sha"] = commit_sha
+        if _COMMIT_SHA.fullmatch(_BUILD_SHA):
+            version_data["commit_sha"] = _BUILD_SHA
         self.emit("version", version_data)
 
     def _run(self) -> None:
@@ -1147,7 +1082,7 @@ def _bootstrap(service: str, report_process: bool, stopped: threading.Event) -> 
     global _client
     delay: float = 2.0
     edition_wait: float = 0.1
-    while not stopped.is_set() and not DISABLE_TELEMETRY:
+    while not stopped.is_set():
         try:
             from onyx.db.fleet_enrollment import edition_selected, installation_seed
 
@@ -1159,7 +1094,7 @@ def _bootstrap(service: str, report_process: bool, stopped: threading.Event) -> 
             config: TelemetryConfig | None = automatic_config(
                 service, installation_seed()
             )
-            if config is None or stopped.is_set() or DISABLE_TELEMETRY:
+            if config is None or stopped.is_set():
                 return
             client: BoundedTelemetry = BoundedTelemetry(
                 config, report_process=report_process
@@ -1263,20 +1198,9 @@ def emit_signup_domain(email: str, created_at: datetime) -> None:
         return
 
 
-def emit_license_state(
-    present: bool, action: str, first_set_at: datetime | None = None
-) -> None:
-    try:
-        emit_telemetry(
-            "license",
-            {
-                "license_present": present,
-                "action": action,
-                "first_set_at": first_set_at.isoformat() if first_set_at else None,
-            },
-        )
-    except Exception:
-        return
+def emit_license_state(present: bool, action: str) -> None:
+    """The collector's license snapshot reports when a license was first stored."""
+    emit_telemetry("license", {"license_present": present, "action": action})
 
 
 def emit_stage_counter(
