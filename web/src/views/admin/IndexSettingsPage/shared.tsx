@@ -106,6 +106,7 @@ interface TextFieldProps {
   suffix?: string;
   placeholder?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  readOnly?: boolean;
 }
 
 export function TextField({
@@ -115,6 +116,7 @@ export function TextField({
   suffix,
   placeholder,
   inputMode,
+  readOnly = false,
 }: TextFieldProps) {
   return (
     <InputVertical
@@ -127,6 +129,7 @@ export function TextField({
         name={name}
         placeholder={placeholder}
         inputMode={inputMode}
+        variant={readOnly ? "readOnly" : undefined}
       />
     </InputVertical>
   );

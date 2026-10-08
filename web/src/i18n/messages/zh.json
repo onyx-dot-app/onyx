@@ -5127,7 +5127,8 @@
           "title": "基础 URL"
         },
         "modelName": {
-          "description": "Bifrost 模型 ID，例如 openai/text-embedding-3-large。保存时，{appName} 会对一段测试文本进行嵌入，以确认这是嵌入模型并获取其维度。"
+          "description": "Bifrost 模型 ID，例如 openai/text-embedding-3-large。保存时，{appName} 会对一段测试文本进行嵌入，以确认这是嵌入模型并获取其维度。",
+          "editDescription": "{appName} 当前使用此模型。保存时会使用新的 URL 和密钥对其进行测试。要使用其他模型，请在模型列表中选择。"
         }
       },
       "cancelReindexModal": {

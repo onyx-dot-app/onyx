@@ -5127,7 +5127,8 @@
           "title": "عنوان URL الأساسي"
         },
         "modelName": {
-          "description": "معرّف نموذج Bifrost، مثل openai/text-embedding-3-large. عند الحفظ، يضمّن {appName} نصًا تجريبيًا للتأكد من أن هذا نموذج تضمين ولمعرفة أبعاده."
+          "description": "معرّف نموذج Bifrost، مثل openai/text-embedding-3-large. عند الحفظ، يضمّن {appName} نصًا تجريبيًا للتأكد من أن هذا نموذج تضمين ولمعرفة أبعاده.",
+          "editDescription": "يستخدم {appName} هذا النموذج حاليًا. عند الحفظ يتم اختباره مع عنوان URL والمفتاح الجديدين. لاستخدام نموذج آخر، اختره من قائمة النماذج."
         }
       },
       "cancelReindexModal": {

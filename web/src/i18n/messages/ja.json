@@ -5127,7 +5127,8 @@
           "title": "ベース URL"
         },
         "modelName": {
-          "description": "Bifrost のモデル ID（例: openai/text-embedding-3-large）。保存時に {appName} がテスト文字列を埋め込み、埋め込みモデルであることを確認して次元数を取得します。"
+          "description": "Bifrost のモデル ID（例: openai/text-embedding-3-large）。保存時に {appName} がテスト文字列を埋め込み、埋め込みモデルであることを確認して次元数を取得します。",
+          "editDescription": "{appName} は現在このモデルを使用しています。保存すると、新しい URL とキーでテストされます。別のモデルを使うには、モデル一覧から選択してください。"
         }
       },
       "cancelReindexModal": {

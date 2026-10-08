@@ -22,16 +22,15 @@ from onyx.natural_language_processing.embedding_auth import (
     CloudEmbeddingAuth,
     build_embedding_auth,
 )
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
     CloudEmbeddingProviderCreationRequest,
     TestEmbeddingRequest,
     TestEmbeddingResponse,
 )
+from onyx.server.manage.embedding.probe import probe_embedding_dimension
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MODEL_SERVER_HOST, MODEL_SERVER_PORT
-from shared_configs.enums import EmbeddingProvider, EmbedTextType
+from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
 
@@ -51,50 +50,6 @@ def _build_request_auth(
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
 
 
-def run_embedding_test(
-    *,
-    provider_type: EmbeddingProvider,
-    api_key: str | None,
-    api_url: str | None,
-    model_name: str | None,
-    auth: CloudEmbeddingAuth,
-    api_version: str | None = None,
-    deployment_name: str | None = None,
-    reduced_dimension: int | None = None,
-) -> int:
-    """Embed one test string and return the vector length."""
-    try:
-        test_model = EmbeddingModel(
-            server_host=MODEL_SERVER_HOST,
-            server_port=MODEL_SERVER_PORT,
-            api_key=api_key,
-            api_url=api_url,
-            provider_type=provider_type,
-            model_name=model_name,
-            api_version=api_version,
-            deployment_name=deployment_name,
-            reduced_dimension=reduced_dimension,
-            auth=auth,
-            normalize=False,
-            query_prefix=None,
-            passage_prefix=None,
-        )
-        embeddings = test_model.encode(
-            ["Testing Embedding"], text_type=EmbedTextType.QUERY
-        )
-        return len(embeddings[0])
-
-    except ValueError as e:
-        error_msg = f"Not a valid embedding model. Exception thrown: {e}"
-        logger.error(error_msg)
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg) from e
-
-    except Exception as e:
-        error_msg = "An error occurred while testing your embedding model. Please check your configuration."
-        logger.error("%s Error message: %s", error_msg, e, exc_info=True)
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg)
-
-
 @admin_router.post("/test-embedding")
 def test_embedding_configuration(
     test_llm_request: TestEmbeddingRequest,
@@ -110,7 +65,7 @@ def test_embedding_configuration(
             auth = build_embedding_auth(
                 test_llm_request.provider_type, api_key, test_llm_request.vertex_config
             )
-    dimension = run_embedding_test(
+    dimension = probe_embedding_dimension(
         provider_type=test_llm_request.provider_type,
         api_key=api_key,
         api_url=test_llm_request.api_url,

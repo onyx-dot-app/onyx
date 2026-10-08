@@ -65,7 +65,7 @@ export async function testEmbedding({
  *
  * Returns the vector length of the test embedding, or `null` when no test ran.
  * `alwaysTest` runs the test even when the stored key is kept, for providers
- * where the model can change on edit.
+ * whose model is free text (Bifrost).
  */
 export async function connectEmbeddingProvider({
   providerType,
@@ -227,7 +227,7 @@ export async function setNewSearchSettings({
   acknowledgedWontPortCcPairIds,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
-  // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
+  // (openai/cohere/voyage/google/litellm/azure/bifrost). Self-hosted models live
   // under the frontend's EmbeddingProviderName for UI grouping (icon,
   // docs link), but the backend expects provider_type=null for them.
   const providerType = isCloudBased(providerName) ? providerName : null;

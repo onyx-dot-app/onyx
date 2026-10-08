@@ -5127,7 +5127,8 @@
           "title": "URL base"
         },
         "modelName": {
-          "description": "O ID do modelo no Bifrost, por exemplo openai/text-embedding-3-large. Ao salvar, o {appName} gera o embedding de um texto de teste para confirmar que é um modelo de embedding e obter sua dimensão."
+          "description": "O ID do modelo no Bifrost, por exemplo openai/text-embedding-3-large. Ao salvar, o {appName} gera o embedding de um texto de teste para confirmar que é um modelo de embedding e obter sua dimensão.",
+          "editDescription": "O {appName} usa este modelo agora. Ao salvar, ele é testado com a nova URL e a nova chave. Para usar outro modelo, selecione-o na lista de modelos."
         }
       },
       "cancelReindexModal": {

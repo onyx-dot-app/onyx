@@ -32,9 +32,15 @@ describe("Bifrost embedding provider", () => {
 
   test("does not save the provider when the gateway rejects the model", async () => {
     const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ detail: "Not a valid embedding model" }), {
-        status: 400,
-      })
+      new Response(
+        JSON.stringify({
+          detail:
+            "The embedding provider rejected the model openai/gpt-5-mini: The model `gpt-5-mini` does not support embeddings.",
+        }),
+        {
+          status: 400,
+        }
+      )
     );
     await expect(
       connectEmbeddingProvider({
@@ -46,7 +52,7 @@ describe("Bifrost embedding provider", () => {
         deploymentName: null,
         alwaysTest: true,
       })
-    ).rejects.toThrow("Not a valid embedding model");
+    ).rejects.toThrow("does not support embeddings");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });

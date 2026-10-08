@@ -587,6 +587,16 @@ function LiteLLMProviderModal({
 // rejects non-embedding models and gives the dimension.
 // ---------------------------------------------------------------------------
 
+function isHttpUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const { protocol, hostname } = new URL(value.trim());
+    return (protocol === "http:" || protocol === "https:") && hostname !== "";
+  } catch {
+    return false;
+  }
+}
+
 interface BifrostFormValues {
   apiUrl: string;
   apiKey: string;
@@ -602,12 +612,16 @@ function BifrostProviderModal({
   const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
+  // Editing manages the connection only; another model is picked from the
+  // model list. The kept model is tested against the new URL and key.
+  const isModelLocked = isEditing && !!existingModel;
 
   const schema = Yup.object({
     apiUrl: Yup.string()
       .trim()
       .required(t("validation.apiBaseUrlRequired"))
-      .url(t("validation.urlInvalid")),
+      // Yup's .url() rejects in-cluster hosts such as http://bifrost:8080.
+      .test("http-url", t("validation.urlInvalid"), isHttpUrl),
     apiKey: Yup.string().trim(),
     modelName: Yup.string().trim().required(t("validation.modelNameRequired")),
   });
@@ -659,7 +673,12 @@ function BifrostProviderModal({
           name="modelName"
           title={t("fields.modelName.title")}
           placeholder="openai/text-embedding-3-large"
-          subDescription={t("bifrost.modelName.description", { appName })}
+          subDescription={
+            isModelLocked
+              ? t("bifrost.modelName.editDescription", { appName })
+              : t("bifrost.modelName.description", { appName })
+          }
+          readOnly={isModelLocked}
         />
       </ModalShell>
     </Formik>

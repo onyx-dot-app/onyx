@@ -18,6 +18,7 @@ from httpx import HTTPError
 from requests import JSONDecodeError, RequestException, Response
 from tenacity import (
     retry,
+    retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
@@ -51,6 +52,7 @@ from onyx.natural_language_processing.embedding_auth import (
 )
 from onyx.natural_language_processing.exceptions import (
     CohereBillingLimitError,
+    EmbeddingRequestRejectedError,
     ModelServerRateLimitError,
 )
 from onyx.natural_language_processing.utils import get_tokenizer, tokenizer_trim_content
@@ -246,6 +248,44 @@ _GEMINI_EMBEDDING_2_MODEL_PREFIX = "gemini-embedding-2"
 
 # Bifrost model IDs are `<provider>/<model>`; these routes accept `task_type`.
 _BIFROST_GOOGLE_MODEL_PREFIXES = ("gemini/", "vertex/")
+_BIFROST_OPENAI_MODEL_PREFIXES = ("openai/", "azure/")
+# Bifrost forwards a batch upstream unsplit; Cohere's cap is a safe default.
+_BIFROST_DEFAULT_MAX_INPUT_LEN = _COHERE_MAX_INPUT_LEN
+_BIFROST_MAX_CONCURRENT_REQUESTS = 8
+_BIFROST_REQUEST_TRIES = 3
+_BIFROST_RETRY_WAIT = wait_exponential(multiplier=1, max=20) + wait_random(0, 1)
+_BIFROST_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+# Client errors that are not a verdict on the request itself.
+_BIFROST_NON_FINAL_STATUSES = frozenset({401, 408, 429})
+
+
+def _bifrost_batch_size(model_name: str) -> int:
+    # Bifrost releases up to v2.2.6 apply the task type to the first input of a
+    # Gemini/Vertex batch only, so send one input per request.
+    if model_name.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES):
+        return 1
+    if model_name.startswith(_BIFROST_OPENAI_MODEL_PREFIXES):
+        return _OPENAI_MAX_INPUT_LEN
+    return _BIFROST_DEFAULT_MAX_INPUT_LEN
+
+
+def _is_retryable_bifrost_error(error: BaseException) -> bool:
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code in _BIFROST_RETRYABLE_STATUSES
+    # Timeouts are not retried: each one already waited the full timeout.
+    return isinstance(error, (httpx.ConnectError, httpx.RemoteProtocolError))
+
+
+def _bifrost_error_message(response: httpx.Response) -> str:
+    """The gateway's error text, e.g. "The model `gpt-5-mini` does not support embeddings."."""
+    try:
+        error = response.json().get("error")
+    except ValueError:
+        error = None
+    if isinstance(error, dict) and isinstance(error.get("message"), str):
+        return error["message"]
+    return response.text[:500] or f"HTTP {response.status_code}"
+
 
 # Gemini embedding-2 ignores task_type entirely; instead the documented way
 # to differentiate query vs. document is to wrap the input in Google's task
@@ -605,7 +645,7 @@ class CloudEmbedding:
         if not self.api_url:
             raise ValueError("API URL is required for Bifrost embedding.")
 
-        api_base = self.api_url.strip().rstrip("/")
+        api_base = self.api_url.strip().rstrip("/").removesuffix("/embeddings")
         url = (
             f"{api_base}/embeddings"
             if api_base.endswith("/v1")
@@ -617,37 +657,73 @@ class CloudEmbedding:
             else {"Authorization": f"Bearer {api_key}"}
         )
 
-        # Bifrost forwards `task_type` as-is, and OpenAI rejects unknown fields.
-        is_google_model = model_name.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES)
-        is_gemini_embedding_2 = _is_gemini_embedding_2_model(model_name)
-        # Bifrost releases up to v2.2.6 apply the task type to the first input
-        # of a Gemini/Vertex batch only, so send one input per request.
-        batch_size = 1 if is_google_model else _OPENAI_MAX_INPUT_LEN
+        model: str = model_name
+        is_google_model = model.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES)
+        is_gemini_embedding_2 = _is_gemini_embedding_2_model(model)
 
-        final_embeddings: list[Embedding] = []
-        for text_batch in batch_list(texts, batch_size):
+        # Retry one request here so a transient failure does not resend the
+        # whole call through the outer @retry.
+        @retry(
+            retry=retry_if_exception(_is_retryable_bifrost_error),
+            stop=stop_after_attempt(_BIFROST_REQUEST_TRIES),
+            wait=_BIFROST_RETRY_WAIT,
+            reraise=True,
+        )
+        async def post(payload: dict[str, Any]) -> httpx.Response:
+            response = await self.http_client.post(url, json=payload, headers=headers)
+            if (
+                response.is_client_error
+                and response.status_code not in _BIFROST_NON_FINAL_STATUSES
+            ):
+                raise EmbeddingRequestRejectedError(_bifrost_error_message(response))
+            response.raise_for_status()
+            return response
+
+        async def embed_batch(text_batch: list[str]) -> list[Embedding]:
             payload: dict[str, Any] = {
-                "model": model_name,
+                "model": model,
                 "input": [
                     _format_vertex_embedding_text(
-                        text=text, model=model_name, embedding_type=embedding_type
+                        text=text, model=model, embedding_type=embedding_type
                     )
                     for text in text_batch
                 ],
             }
+            # Bifrost strips `task_type` for OpenAI, but other upstreams may reject it.
             if is_google_model and not is_gemini_embedding_2:
                 payload["task_type"] = embedding_type
                 # Bifrost releases up to v2.2.6 read Gemini's task type only from `taskType`.
-                if model_name.startswith("gemini/"):
+                if model.startswith("gemini/"):
                     payload["taskType"] = embedding_type
             if reduced_dimension:
                 payload["dimensions"] = reduced_dimension
 
-            response = await self.http_client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            result = response.json()
-            data = sorted(result["data"], key=lambda item: item.get("index", 0))
-            final_embeddings.extend(item["embedding"] for item in data)
+            response = await post(payload)
+            data = sorted(response.json()["data"], key=lambda item: item["index"])
+            if len(data) != len(text_batch):
+                raise RuntimeError(
+                    f"Bifrost returned {len(data)} embeddings for {len(text_batch)} inputs."
+                )
+            return [item["embedding"] for item in data]
+
+        semaphore = asyncio.Semaphore(_BIFROST_MAX_CONCURRENT_REQUESTS)
+
+        async def embed_batch_bounded(text_batch: list[str]) -> list[Embedding]:
+            async with semaphore:
+                return await embed_batch(text_batch)
+
+        results = await asyncio.gather(
+            *(
+                embed_batch_bounded(text_batch)
+                for text_batch in batch_list(texts, _bifrost_batch_size(model))
+            ),
+            return_exceptions=True,
+        )
+        final_embeddings: list[Embedding] = []
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+            final_embeddings.extend(result)
         return final_embeddings
 
     @retry(
@@ -692,6 +768,9 @@ class CloudEmbedding:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:
             raise AuthenticationError(provider="OpenAI")
+        except EmbeddingRequestRejectedError:
+            # A refusal of the request itself; retrying cannot change it.
+            raise
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 raise AuthenticationError(provider=str(self.provider))

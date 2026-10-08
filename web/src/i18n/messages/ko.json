@@ -5127,7 +5127,8 @@
           "title": "기본 URL"
         },
         "modelName": {
-          "description": "Bifrost 모델 ID입니다(예: openai/text-embedding-3-large). 저장할 때 {appName}이(가) 테스트 문자열을 임베딩하여 임베딩 모델인지 확인하고 차원을 가져옵니다."
+          "description": "Bifrost 모델 ID입니다(예: openai/text-embedding-3-large). 저장할 때 {appName}이(가) 테스트 문자열을 임베딩하여 임베딩 모델인지 확인하고 차원을 가져옵니다.",
+          "editDescription": "{appName}은(는) 현재 이 모델을 사용합니다. 저장하면 새 URL과 키로 테스트합니다. 다른 모델을 사용하려면 모델 목록에서 선택하세요."
         }
       },
       "cancelReindexModal": {

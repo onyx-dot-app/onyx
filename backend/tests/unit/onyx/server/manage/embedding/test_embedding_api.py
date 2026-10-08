@@ -155,7 +155,7 @@ def test_connection_test_reuses_saved_api_key() -> None:
             "onyx.server.manage.embedding.api.fetch_embedding_provider",
             return_value=stored,
         ),
-        patch("onyx.server.manage.embedding.api.EmbeddingModel") as model,
+        patch("onyx.server.manage.embedding.probe.EmbeddingModel") as model,
     ):
         run_embedding_test(request, _=MagicMock(), db_session=MagicMock())
     auth = model.call_args.kwargs["auth"]
@@ -174,7 +174,7 @@ def test_workload_identity_connection_test_never_loads_saved_key() -> None:
     )
     with (
         patch("onyx.server.manage.embedding.api.fetch_embedding_provider") as fetch,
-        patch("onyx.server.manage.embedding.api.EmbeddingModel") as model,
+        patch("onyx.server.manage.embedding.probe.EmbeddingModel") as model,
     ):
         run_embedding_test(request, _=MagicMock(), db_session=MagicMock())
     fetch.assert_not_called()

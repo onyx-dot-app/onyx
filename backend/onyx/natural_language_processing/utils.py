@@ -128,9 +128,12 @@ def _try_initialize_tokenizer(
     tokenizer: BaseTokenizer | None = None
 
     if model_provider is not None:
-        # Try using TiktokenTokenizer first if model_provider exists. Gateway
+        # Try using TiktokenTokenizer first if model_provider exists. Bifrost
         # IDs like "openai/text-embedding-3-small" also try the bare model name.
-        for candidate in dict.fromkeys([model_name, model_name.split("/")[-1]]):
+        candidates = [model_name]
+        if model_provider == EmbeddingProvider.BIFROST:
+            candidates.append(model_name.split("/")[-1])
+        for candidate in dict.fromkeys(candidates):
             try:
                 tokenizer = TiktokenTokenizer(candidate)
                 logger.info("Initialized TiktokenTokenizer for: %s", candidate)

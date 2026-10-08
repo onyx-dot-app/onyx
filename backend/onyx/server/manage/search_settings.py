@@ -83,8 +83,8 @@ from onyx.file_processing.unstructured import (
 )
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
-from onyx.server.manage.embedding.api import run_embedding_test
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
+from onyx.server.manage.embedding.probe import probe_embedding_dimension
 from onyx.server.manage.models import (
     FullModelVersionResponse,
     UnstructuredApiKeyRequest,
@@ -139,9 +139,9 @@ def set_new_search_settings(
         )
 
         if cloud_provider is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
             )
 
         if search_settings_new.provider_type == EmbeddingProvider.BIFROST:
@@ -300,7 +300,7 @@ def _validate_gateway_embedding_model(
         if cloud_provider.api_key is not None
         else None
     )
-    dimension = run_embedding_test(
+    dimension = probe_embedding_dimension(
         provider_type=cloud_provider.provider_type,
         api_key=api_key,
         api_url=cloud_provider.api_url,
@@ -310,7 +310,7 @@ def _validate_gateway_embedding_model(
     )
     if dimension != search_settings_new.final_embedding_dim:
         raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
+            OnyxErrorCode.VALIDATION_ERROR,
             f"The model {search_settings_new.model_name} returns {dimension}-dimension "
             f"vectors, but the search settings expect "
             f"{search_settings_new.final_embedding_dim}.",
