@@ -1874,16 +1874,26 @@ class SharepointConnector(
             checkpoint.seen_hierarchy_node_raw_ids.add(folder_url)
             external_access = None
             if include_permissions:
-                ctx = self._create_rest_client_context(site_url)
-                external_access = get_sharepoint_hierarchy_node_external_access(
-                    ctx,
-                    self.graph_client,
-                    checkpoint.permission_cache,
-                    HierarchyNodeType.FOLDER,
-                    folder_server_relative_path=self._build_folder_server_relative_path(
-                        drive.web_url, current_path
-                    ),
+                folder_server_relative_path = self._build_folder_server_relative_path(
+                    drive.web_url, current_path
                 )
+                # One folder must not fail the whole sync. A node without
+                # external_access keeps the permissions it already has.
+                try:
+                    ctx = self._create_rest_client_context(site_url)
+                    external_access = get_sharepoint_hierarchy_node_external_access(
+                        ctx,
+                        self.graph_client,
+                        checkpoint.permission_cache,
+                        HierarchyNodeType.FOLDER,
+                        folder_server_relative_path=folder_server_relative_path,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to get permissions for folder %s, skipping: %s",
+                        folder_server_relative_path,
+                        e,
+                    )
 
             parent_url = (
                 drive.web_url
