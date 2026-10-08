@@ -2743,8 +2743,7 @@
             "description": "Gespeicherte Kontozugangsdaten können nicht bearbeitet oder an einen anderen Host umgeleitet werden. Sie können das Konto vor der Wiederverwendung testen oder stattdessen ein neues Konto hinzufügen."
           },
           "rerunButton": {
-            "label": "Prüfungen erneut ausführen",
-            "runningLabel": "Prüfungen laufen"
+            "label": "Prüfungen erneut ausführen"
           },
           "authenticationType": {
             "label": "Authentifizierungstyp"

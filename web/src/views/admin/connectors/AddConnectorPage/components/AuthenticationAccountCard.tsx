@@ -30,6 +30,7 @@ import type {
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import { IconLoader } from "@opal/loaders";
 import { getSourceMetadata } from "@/lib/sources";
 import { useUser } from "@/providers/UserProvider";
 
@@ -222,13 +223,13 @@ export default function AuthenticationAccountCard({
                       />
                       <Button
                         prominence="secondary"
-                        icon={SvgPlay}
+                        // The label holds still while the checks run; only
+                        // the icon turns into a spinner.
+                        icon={running ? IconLoader : SvgPlay}
                         disabled={running}
                         onClick={rerunChecks}
                       >
-                        {running
-                          ? t("rerunButton.runningLabel")
-                          : t("rerunButton.label")}
+                        {t("rerunButton.label")}
                       </Button>
                     </Section>
                   }

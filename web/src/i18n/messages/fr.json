@@ -2743,8 +2743,7 @@
             "description": "Les identifiants d’un compte enregistré ne peuvent pas être modifiés ni redirigés vers un autre hôte. Vous pouvez tester le compte avant de le réutiliser ou ajouter un nouveau compte."
           },
           "rerunButton": {
-            "label": "Relancer les vérifications",
-            "runningLabel": "Vérifications en cours"
+            "label": "Relancer les vérifications"
           },
           "authenticationType": {
             "label": "Type d’authentification"

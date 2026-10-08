@@ -2743,8 +2743,7 @@
             "description": "Saved account credentials can't be edited or redirected to a different host. You can test the account before reuse or add a new account instead."
           },
           "rerunButton": {
-            "label": "Re-run Checks",
-            "runningLabel": "Running Checks"
+            "label": "Re-run Checks"
           },
           "authenticationType": {
             "label": "Authentication Type"
