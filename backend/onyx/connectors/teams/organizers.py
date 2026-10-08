@@ -25,7 +25,7 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.teams.refusals import graph_said, status
 from onyx.connectors.teams.session import TeamsSession
-from onyx.connectors.teams.sources import SlimWalk, drain
+from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.utils import (
     GraphRetriesExhausted,
     escape_odata_string,
@@ -34,6 +34,7 @@ from onyx.connectors.teams.utils import (
     next_page_url,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import drain
 
 logger = setup_logger()
 

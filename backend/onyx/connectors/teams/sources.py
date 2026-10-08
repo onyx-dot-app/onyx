@@ -1,9 +1,8 @@
 """What the connector asks of every content source, whatever it indexes."""
 
 import threading
-from collections import deque
-from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 from typing import TypeVar
 
 import requests
@@ -13,7 +12,7 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.teams.refusals import is_permanent
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
-from onyx.utils.threadpool_concurrency import parallel_yield
+from onyx.utils.threadpool_concurrency import drain
 
 T = TypeVar("T")
 
@@ -25,22 +24,26 @@ SLIM_WALK = "teams_slim_walk"
 PROGRESS_EVERY_DOCUMENTS = 500
 
 
-@dataclass
 class SlimWalk:
     """One pruning or permission sync walk: ids alone, or ids with their
     readers. Readers cost calls that pruning would throw away."""
 
-    start: SecondsSinceUnixEpoch
-    callback: IndexingHeartbeatInterface | None
-    with_readers: bool
-    # False when the caller has no use for threads: the group a thread names
-    # never changes, and the group sync says who is in it.
-    lists_threads: bool = True
-    # Workers report from their own threads and the runner's callback is not
-    # built for that, so every report goes through one lock.
-    _signal_lock: threading.Lock = field(
-        default_factory=threading.Lock, repr=False, compare=False
-    )
+    def __init__(
+        self,
+        start: SecondsSinceUnixEpoch,
+        callback: IndexingHeartbeatInterface | None,
+        with_readers: bool,
+        lists_threads: bool = True,
+    ) -> None:
+        self.start = start
+        self.callback = callback
+        self.with_readers = with_readers
+        # False when the caller has no use for threads: the group a thread
+        # names never changes, and the group sync says who is in it.
+        self.lists_threads = lists_threads
+        # Workers report from their own threads and the runner's callback is
+        # not built for that, so every report goes through one lock.
+        self._signal_lock: threading.Lock = threading.Lock()
 
     def raise_if_stopped(self) -> None:
         if self.callback and self.callback.should_stop():
@@ -84,33 +87,6 @@ class SlimWalk:
         """The stop and progress signals the runner gets before every batch."""
         self.raise_if_stopped()
         self.report_progress(1)
-
-
-R = TypeVar("R")
-
-
-def drain(
-    items: Sequence[T], listing: Callable[[T], Iterator[R]], workers: int
-) -> Iterator[R]:
-    """Every item listed, ``workers`` at a time, each worker taking the next
-    item off a shared queue so a slow item holds back only its own worker."""
-    if workers <= 1 or len(items) <= 1:
-        for item in items:
-            yield from listing(item)
-        return
-    queue: deque[T] = deque(items)
-
-    def worker() -> Iterator[R]:
-        while queue:
-            try:
-                item = queue.popleft()
-            except IndexError:
-                return
-            yield from listing(item)
-
-    yield from parallel_yield(
-        [worker() for _ in range(min(workers, len(items)))], max_workers=workers
-    )
 
 
 @dataclass

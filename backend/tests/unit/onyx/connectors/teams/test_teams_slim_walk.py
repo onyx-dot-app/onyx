@@ -2,6 +2,7 @@
 them can leave unread."""
 
 import threading
+from collections.abc import Iterator
 from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, call
@@ -16,6 +17,7 @@ from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.models import Document, SlimDocument
 from onyx.connectors.teams import files as files_module
 from onyx.connectors.teams import listing as listing_module
+from onyx.connectors.teams import sources as sources_module
 from onyx.connectors.teams.connector import (
     ORGANIZER_SOURCE_TYPES,
     PREFIXED_DOCUMENT_ID_PREFIXES,
@@ -27,6 +29,7 @@ from onyx.connectors.teams.organizers import OrganizerSource
 from onyx.connectors.teams.sources import SLIM_WALK, SlimWalk
 from onyx.connectors.teams.transcripts import transcript_document_id
 from onyx.connectors.teams.utils import message_delta_url
+from onyx.utils.threadpool_concurrency import drain
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL_ID,
     TEAM_ID,
@@ -357,11 +360,9 @@ def test_a_slow_item_holds_back_only_its_own_worker() -> None:
     """Three items, two workers: the first item waits for the third to start,
     which only happens when a worker takes the next item off the queue instead
     of the batch waiting for its slowest member."""
-    from onyx.connectors.teams.sources import drain
-
     third_started: threading.Event = threading.Event()
 
-    def listing(item: str) -> Any:
+    def listing(item: str) -> Iterator[str]:
         if item == "first":
             assert third_started.wait(timeout=5), "the third item never started"
         if item == "third":
@@ -378,14 +379,12 @@ def test_a_slow_item_holds_back_only_its_own_worker() -> None:
 def test_a_long_batch_keeps_reporting_progress(monkeypatch: pytest.MonkeyPatch) -> None:
     """The permission-sync lock is renewed on progress reports, so a batch
     that outlasts the lock timeout must report while it drains."""
-    from onyx.connectors.teams import sources
-
-    monkeypatch.setattr(sources, "PROGRESS_EVERY_DOCUMENTS", 2)
+    monkeypatch.setattr(sources_module, "PROGRESS_EVERY_DOCUMENTS", 2)
     callback: MagicMock = MagicMock()
     callback.should_stop.return_value = False
     walk: SlimWalk = SlimWalk(start=0, callback=callback, with_readers=False)
 
-    def listing(item: int) -> Any:
+    def listing(item: int) -> Iterator[SlimDocument]:
         for n in range(3):
             yield SlimDocument(id=f"{item}-{n}", external_access=None)
 
@@ -406,7 +405,7 @@ def test_quiet_listings_report_progress_from_their_pages() -> None:
     walk: SlimWalk = SlimWalk(start=0, callback=callback, with_readers=False)
     reporters: set[int] = set()
 
-    def listing(_item: int) -> Any:
+    def listing(_item: int) -> Iterator[SlimDocument]:
         for _ in range(2):
             walk.page_signals()
             reporters.add(threading.get_ident())
