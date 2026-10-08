@@ -244,6 +244,9 @@ def is_authentication_error(error: Exception) -> bool:
 
 _GEMINI_EMBEDDING_2_MODEL_PREFIX = "gemini-embedding-2"
 
+# Bifrost model IDs are `<provider>/<model>`; these routes accept `task_type`.
+_BIFROST_GOOGLE_MODEL_PREFIXES = ("gemini/", "vertex/")
+
 # Gemini embedding-2 ignores task_type entirely; instead the documented way
 # to differentiate query vs. document is to wrap the input in Google's task
 # instruction format. The exact templates come from
@@ -589,6 +592,64 @@ class CloudEmbedding:
         result = response.json()
         return [embedding["embedding"] for embedding in result["data"]]
 
+    async def _embed_bifrost(
+        self,
+        texts: list[str],
+        model_name: str | None,
+        embedding_type: str,
+        reduced_dimension: int | None,
+    ) -> list[Embedding]:
+        if not model_name:
+            raise ValueError("Model name is required for Bifrost embedding.")
+
+        if not self.api_url:
+            raise ValueError("API URL is required for Bifrost embedding.")
+
+        api_base = self.api_url.strip().rstrip("/")
+        url = (
+            f"{api_base}/embeddings"
+            if api_base.endswith("/v1")
+            else f"{api_base}/v1/embeddings"
+        )
+        headers = (
+            {}
+            if not (api_key := self._resolve_api_key())
+            else {"Authorization": f"Bearer {api_key}"}
+        )
+
+        # Bifrost forwards `task_type` as-is, and OpenAI rejects unknown fields.
+        is_google_model = model_name.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES)
+        is_gemini_embedding_2 = _is_gemini_embedding_2_model(model_name)
+        # Bifrost sends one upstream request per call; Gemini caps its batch size.
+        batch_size = _OPENAI_MAX_INPUT_LEN
+        if is_gemini_embedding_2:
+            batch_size = 1
+        elif is_google_model:
+            batch_size = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+
+        final_embeddings: list[Embedding] = []
+        for text_batch in batch_list(texts, batch_size):
+            payload: dict[str, Any] = {
+                "model": model_name,
+                "input": [
+                    _format_vertex_embedding_text(
+                        text=text, model=model_name, embedding_type=embedding_type
+                    )
+                    for text in text_batch
+                ],
+            }
+            if is_google_model and not is_gemini_embedding_2:
+                payload["task_type"] = embedding_type
+            if reduced_dimension:
+                payload["dimensions"] = reduced_dimension
+
+            response = await self.http_client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            result = response.json()
+            data = sorted(result["data"], key=lambda item: item.get("index", 0))
+            final_embeddings.extend(item["embedding"] for item in data)
+        return final_embeddings
+
     @retry(
         retry=retry_if_exception_type(RuntimeError),
         stop=stop_after_attempt(_RETRY_TRIES),
@@ -621,6 +682,10 @@ class CloudEmbedding:
                 return await self._embed_voyage(texts, model_name, embedding_type)
             elif self.provider == EmbeddingProvider.GOOGLE:
                 return await self._embed_vertex(
+                    texts, model_name, embedding_type, reduced_dimension
+                )
+            elif self.provider == EmbeddingProvider.BIFROST:
+                return await self._embed_bifrost(
                     texts, model_name, embedding_type, reduced_dimension
                 )
             else:

@@ -42,6 +42,7 @@ from onyx.db.llm import (
     update_default_contextual_model,
     update_no_default_contextual_rag_provider,
 )
+from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import IndexModelStatus, SearchSettings, User
 from onyx.db.port_attempt import (
     ReindexErrorRow,
@@ -80,7 +81,9 @@ from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     update_unstructured_api_key,
 )
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
+from onyx.server.manage.embedding.api import run_embedding_test
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import (
     FullModelVersionResponse,
@@ -101,6 +104,7 @@ from shared_configs.configs import (
     PRESERVED_SEARCH_FIELDS,
 )
 from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.enums import EmbeddingProvider
 
 router = APIRouter(prefix="/search-settings")
 logger = setup_logger()
@@ -139,6 +143,9 @@ def set_new_search_settings(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
             )
+
+        if search_settings_new.provider_type == EmbeddingProvider.BIFROST:
+            _validate_gateway_embedding_model(search_settings_new, cloud_provider)
 
     validate_contextual_rag_model(
         model_configuration_id=search_settings_new.contextual_rag_model_configuration_id,
@@ -278,6 +285,36 @@ def set_new_search_settings(
     # Atomic: FUTURE row, its seeds, and the reclaim intent become visible together.
     db_session.commit()
     return IdReturn(id=new_search_settings.id)
+
+
+def _validate_gateway_embedding_model(
+    search_settings_new: SearchSettingsCreationRequest,
+    cloud_provider: CloudEmbeddingProviderModel,
+) -> None:
+    """A gateway accepts any model ID, so prove the model embeds at the set dimension.
+
+    Rejects a chat model or a wrong dimension before indexing starts.
+    """
+    api_key = (
+        cloud_provider.api_key.get_value(apply_mask=False)
+        if cloud_provider.api_key is not None
+        else None
+    )
+    dimension = run_embedding_test(
+        provider_type=cloud_provider.provider_type,
+        api_key=api_key,
+        api_url=cloud_provider.api_url,
+        model_name=search_settings_new.model_name,
+        auth=build_embedding_auth(cloud_provider.provider_type, api_key),
+        reduced_dimension=search_settings_new.reduced_dimension,
+    )
+    if dimension != search_settings_new.final_embedding_dim:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"The model {search_settings_new.model_name} returns {dimension}-dimension "
+            f"vectors, but the search settings expect "
+            f"{search_settings_new.final_embedding_dim}.",
+        )
 
 
 def _validate_vector_quantization_supported(

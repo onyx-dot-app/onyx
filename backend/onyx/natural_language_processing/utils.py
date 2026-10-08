@@ -128,17 +128,19 @@ def _try_initialize_tokenizer(
     tokenizer: BaseTokenizer | None = None
 
     if model_provider is not None:
-        # Try using TiktokenTokenizer first if model_provider exists
-        try:
-            tokenizer = TiktokenTokenizer(model_name)
-            logger.info("Initialized TiktokenTokenizer for: %s", model_name)
-            return tokenizer
-        except Exception as tiktoken_error:
-            logger.debug(
-                "TiktokenTokenizer not available for model %s: %s",
-                model_name,
-                tiktoken_error,
-            )
+        # Try using TiktokenTokenizer first if model_provider exists. Gateway
+        # IDs like "openai/text-embedding-3-small" also try the bare model name.
+        for candidate in dict.fromkeys([model_name, model_name.split("/")[-1]]):
+            try:
+                tokenizer = TiktokenTokenizer(candidate)
+                logger.info("Initialized TiktokenTokenizer for: %s", candidate)
+                return tokenizer
+            except Exception as tiktoken_error:
+                logger.debug(
+                    "TiktokenTokenizer not available for model %s: %s",
+                    candidate,
+                    tiktoken_error,
+                )
     else:
         # If no provider specified, try HuggingFaceTokenizer
         try:

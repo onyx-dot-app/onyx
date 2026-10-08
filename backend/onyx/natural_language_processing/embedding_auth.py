@@ -40,8 +40,12 @@ class ApiKeyEmbeddingCredentials(BaseModel):
 
 
 class ApiKeyEmbeddingAuth(EmbeddingAuth[ApiKeyEmbeddingCredentials]):
-    def __init__(self, config: ApiKeyEmbeddingConfig) -> None:
+    def __init__(
+        self, config: ApiKeyEmbeddingConfig, api_key_optional: bool = False
+    ) -> None:
         self.config = config
+        # Gateways such as Bifrost can run without auth; an empty key sends no header.
+        self.api_key_optional = api_key_optional
 
     @property
     def requires_api_key(self) -> bool:
@@ -51,14 +55,12 @@ class ApiKeyEmbeddingAuth(EmbeddingAuth[ApiKeyEmbeddingCredentials]):
         pass
 
     def validate_credentials(self) -> None:
-        if self.config.api_key is None:
+        if self.config.api_key is None and not self.api_key_optional:
             raise ValueError("API key not provided for cloud model")
 
     def resolve_credentials(self) -> ApiKeyEmbeddingCredentials:
         self.validate_credentials()
-        if self.config.api_key is None:
-            raise ValueError("API key not provided for cloud model")
-        return ApiKeyEmbeddingCredentials(api_key=self.config.api_key)
+        return ApiKeyEmbeddingCredentials(api_key=self.config.api_key or SecretStr(""))
 
 
 class VertexEmbeddingAuth(EmbeddingAuth[VertexEmbeddingCredentials]):
@@ -113,6 +115,9 @@ def build_embedding_auth(
             raise ValueError(
                 "Vertex configuration is only supported for Google embeddings."
             )
-        auth = ApiKeyEmbeddingAuth(ApiKeyEmbeddingConfig(api_key=secret))
+        auth = ApiKeyEmbeddingAuth(
+            ApiKeyEmbeddingConfig(api_key=secret),
+            api_key_optional=provider == EmbeddingProvider.BIFROST,
+        )
     auth.validate_configuration()
     return auth

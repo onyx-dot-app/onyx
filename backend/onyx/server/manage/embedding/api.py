@@ -27,6 +27,7 @@ from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
     CloudEmbeddingProviderCreationRequest,
     TestEmbeddingRequest,
+    TestEmbeddingResponse,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MODEL_SERVER_HOST, MODEL_SERVER_PORT
@@ -50,37 +51,38 @@ def _build_request_auth(
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
 
 
-@admin_router.post("/test-embedding")
-def test_embedding_configuration(
-    test_llm_request: TestEmbeddingRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> None:
-    auth = _build_request_auth(test_llm_request)
-    api_key = test_llm_request.api_key
-    if api_key is None and auth.requires_api_key:
-        existing = fetch_embedding_provider(db_session, test_llm_request.provider_type)
-        if existing is not None and existing.api_key is not None:
-            api_key = existing.api_key.get_value(apply_mask=False)
-            auth = build_embedding_auth(
-                test_llm_request.provider_type, api_key, test_llm_request.vertex_config
-            )
+def run_embedding_test(
+    *,
+    provider_type: EmbeddingProvider,
+    api_key: str | None,
+    api_url: str | None,
+    model_name: str | None,
+    auth: CloudEmbeddingAuth,
+    api_version: str | None = None,
+    deployment_name: str | None = None,
+    reduced_dimension: int | None = None,
+) -> int:
+    """Embed one test string and return the vector length."""
     try:
         test_model = EmbeddingModel(
             server_host=MODEL_SERVER_HOST,
             server_port=MODEL_SERVER_PORT,
             api_key=api_key,
-            api_url=test_llm_request.api_url,
-            provider_type=test_llm_request.provider_type,
-            model_name=test_llm_request.model_name,
-            api_version=test_llm_request.api_version,
-            deployment_name=test_llm_request.deployment_name,
+            api_url=api_url,
+            provider_type=provider_type,
+            model_name=model_name,
+            api_version=api_version,
+            deployment_name=deployment_name,
+            reduced_dimension=reduced_dimension,
             auth=auth,
             normalize=False,
             query_prefix=None,
             passage_prefix=None,
         )
-        test_model.encode(["Testing Embedding"], text_type=EmbedTextType.QUERY)
+        embeddings = test_model.encode(
+            ["Testing Embedding"], text_type=EmbedTextType.QUERY
+        )
+        return len(embeddings[0])
 
     except ValueError as e:
         error_msg = f"Not a valid embedding model. Exception thrown: {e}"
@@ -91,6 +93,33 @@ def test_embedding_configuration(
         error_msg = "An error occurred while testing your embedding model. Please check your configuration."
         logger.error("%s Error message: %s", error_msg, e, exc_info=True)
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg)
+
+
+@admin_router.post("/test-embedding")
+def test_embedding_configuration(
+    test_llm_request: TestEmbeddingRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> TestEmbeddingResponse:
+    auth = _build_request_auth(test_llm_request)
+    api_key = test_llm_request.api_key
+    if api_key is None and auth.requires_api_key:
+        existing = fetch_embedding_provider(db_session, test_llm_request.provider_type)
+        if existing is not None and existing.api_key is not None:
+            api_key = existing.api_key.get_value(apply_mask=False)
+            auth = build_embedding_auth(
+                test_llm_request.provider_type, api_key, test_llm_request.vertex_config
+            )
+    dimension = run_embedding_test(
+        provider_type=test_llm_request.provider_type,
+        api_key=api_key,
+        api_url=test_llm_request.api_url,
+        model_name=test_llm_request.model_name,
+        auth=auth,
+        api_version=test_llm_request.api_version,
+        deployment_name=test_llm_request.deployment_name,
+    )
+    return TestEmbeddingResponse(dimension=dimension)
 
 
 @admin_router.get("", response_model=list[EmbeddingModelDetail])
