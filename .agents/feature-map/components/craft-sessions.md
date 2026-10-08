@@ -51,6 +51,9 @@ over; the entire agentic loop runs inside the sandbox's `opencode serve`
 process, and the backend's job is to start it, stream its events, persist
 them, and know when to stop.
 
+The composer moves from the welcome position to the conversation footer with
+a shared layout animation. Reduced-motion users get an immediate transition.
+
 The user can interrupt a running turn at any time. Partial output stays
 visible and stays saved; sending a new message does not erase what was
 already produced. When the agent is about to do something that needs
