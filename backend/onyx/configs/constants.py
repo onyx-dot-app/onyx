@@ -23,7 +23,6 @@ SOURCE_TYPE = "source_type"
 IGNORE_FOR_QA = "ignore_for_qa"
 PUBLIC_DOC_PAT = "PUBLIC"
 ID_SEPARATOR = ":;:"
-CELERY_SEPARATOR = ":"
 DEFAULT_BOOST = 0
 
 # Tag for endpoints that should be included in the public API documentation
@@ -154,6 +153,9 @@ def lock_timeout_from_env(name: str, default: int, minimum: int = 1) -> int:
     )
     return default
 
+
+# Joins a Celery queue name and its priority in broker list keys.
+CELERY_SEPARATOR = ":"
 
 CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 

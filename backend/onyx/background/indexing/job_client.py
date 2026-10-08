@@ -87,7 +87,6 @@ def _initializer(
         pool_size=4, max_overflow=12, pool_recycle=60, pool_pre_ping=True
     )
 
-    # Proceed with executing the target function
     from onyx.utils.fleet_telemetry import (
         EXIT_FLUSH_SECONDS,
         start_telemetry,
@@ -96,6 +95,8 @@ def _initializer(
 
     # The parent worker reports this container; the child only delivers its counters.
     start_telemetry("indexing", report_process=False)
+
+    # Proceed with executing the target function
     try:
         return func(*args, **kwargs)
     except SimpleJobException as e:

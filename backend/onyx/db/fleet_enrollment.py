@@ -3,7 +3,7 @@
 import re
 import secrets
 
-from sqlalchemy import create_engine, event, select
+from sqlalchemy import Connection, create_engine, event, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.pool import NullPool
 
@@ -39,12 +39,19 @@ def installation_seed() -> bytes:
             **pg_ssl_psycopg2_connect_args(),
             "connect_timeout": 2,
             "application_name": "onyx_fleet_enrollment",
-            "options": "-c statement_timeout=1500 -c lock_timeout=100",
         },
         execution_options={"schema_translate_map": {None: POSTGRES_DEFAULT_SCHEMA}},
     )
     if USE_IAM_AUTH:
         event.listen(engine, "do_connect", provide_iam_token)
+
+    # Transaction-scoped limits also work through poolers such as PgBouncer,
+    # which reject the libpq `options` startup parameter by default.
+    @event.listens_for(engine, "begin")
+    def _limits(connection: Connection) -> None:
+        connection.exec_driver_sql("SET LOCAL statement_timeout = '1500ms'")
+        connection.exec_driver_sql("SET LOCAL lock_timeout = '100ms'")
+
     key = "fleet_telemetry_installation_seed_v1"
     try:
         with engine.begin() as connection:

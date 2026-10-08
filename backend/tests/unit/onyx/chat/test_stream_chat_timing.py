@@ -16,7 +16,6 @@ from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from onyx.utils import timing
-from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR
 
 _USER_ID = "3f1c9a7e-0f38-4c3d-9a55-2d9e8a1b4c6d"
 
@@ -44,16 +43,6 @@ def _request() -> Request:
             "query_string": b"",
         }
     )
-
-
-@pytest.fixture(autouse=True)
-def request_user_context() -> Generator[None, None, None]:
-    # Preserve the endpoint request context during the stubbed turn.
-    token = CURRENT_USER_ID_CONTEXTVAR.set(_USER_ID)
-    try:
-        yield
-    finally:
-        CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
 
 @pytest.fixture
@@ -165,8 +154,7 @@ def test_non_streaming_logs_elapsed_time(
 
     assert isinstance(response, ChatFullResponse)
     assert response.message_id == 2
-    # The turn record plus the aggregation record. ``gather_stream_full`` has no
-    # ``user`` argument, so its user id comes from the request contextvar.
+    # The turn record plus the aggregation record.
     assert set(_timing_records_by_function(timing_sink)) == {
         "handle_stream_message_objects",
         "gather_stream_full",

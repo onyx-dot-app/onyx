@@ -1,7 +1,8 @@
-"""Enterprise code loads when the build ships it.
+"""Enterprise code loads only when the build ships a real `ee.onyx` package.
 
-Fleet domain privacy is covered by test_fleet_telemetry; the legacy callhome
-sender and its license-dependent raw-domain behavior have been removed.
+`is_ee_available` rejects a missing `ee` package, a bare `ee` package, and an
+`ee/onyx` directory with no `__init__.py`. `set_is_ee_if_available` selects
+the Enterprise Edition only when `is_ee_available` is true.
 """
 
 from importlib.machinery import ModuleSpec

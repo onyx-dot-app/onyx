@@ -8,19 +8,7 @@ import pytest
 
 from onyx.document_index.opensearch import resource_health
 from onyx.utils import fleet_telemetry_opensearch as health
-from onyx.utils.fleet_telemetry import BoundedTelemetry, TelemetryConfig
-
-
-def sender() -> BoundedTelemetry:
-    return BoundedTelemetry(
-        TelemetryConfig(
-            "http://localhost:8787",
-            "test",
-            "11111111-1111-4111-8111-111111111111",
-            "test-deployment",
-            b"test-installation-key",
-        )
-    )
+from tests.utils.fleet_telemetry import make_sender
 
 
 @pytest.mark.parametrize("stale", [False, True])
@@ -52,10 +40,10 @@ def test_opensearch_allowlist_and_stale_pressure(
         }
     )
     redis = Mock(return_value=cache)
-    monkeypatch.setattr(resource_health.redis_pool, "get_client", redis)
+    monkeypatch.setattr(resource_health, "get_shared_redis_client", redis)
     monkeypatch.setattr(health, "DISABLE_VECTOR_DB", False)
     monkeypatch.setattr(resource_health, "DISABLE_VECTOR_DB", False)
-    client = sender()
+    client = make_sender()
     health.collect_opensearch_health(client)
     event = client._take_batch()[0]
     assert event["data"]["opensearch_status"] == "yellow"
@@ -72,13 +60,13 @@ def test_opensearch_outage_is_unknown_and_disabled_is_no_io(
     search = Mock(side_effect=RuntimeError("PRIVATE"))
     monkeypatch.setattr(health, "OpenSearchClient", search)
     monkeypatch.setattr(
-        resource_health.redis_pool,
-        "get_client",
+        resource_health,
+        "get_shared_redis_client",
         Mock(side_effect=RuntimeError("PRIVATE")),
     )
     monkeypatch.setattr(health, "DISABLE_VECTOR_DB", False)
     monkeypatch.setattr(resource_health, "DISABLE_VECTOR_DB", False)
-    client = sender()
+    client = make_sender()
     health.collect_opensearch_health(client)
     data = client._take_batch()[0]["data"]
     assert data["opensearch_status"] == "unavailable"

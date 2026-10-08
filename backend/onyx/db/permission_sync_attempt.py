@@ -180,7 +180,6 @@ def mark_doc_permission_sync_attempt_failed(
         attempt.total_docs_synced = total_docs_synced
         attempt.docs_with_permission_errors = docs_with_permission_errors
         db_session.commit()
-
     except Exception:
         db_session.rollback()
         raise
@@ -437,7 +436,6 @@ def mark_external_group_sync_attempt_failed(
         attempt.error_message = error_message
         attempt.full_exception_trace = full_exception_trace
         db_session.commit()
-
     except Exception:
         db_session.rollback()
         raise

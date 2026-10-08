@@ -9,6 +9,7 @@ from sqlalchemy import Connection, Engine, create_engine, event, text
 
 from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
+from onyx.db.enums import IndexingStatus
 from onyx.utils.fleet_telemetry import SAFE_BOOLEAN_SETTINGS, SAFE_NUMBER_SETTINGS
 
 # Separate read-only collector credentials. Without them, the collector uses the
@@ -23,6 +24,12 @@ SOURCE_DATABASE_URL: str = TELEMETRY_DATABASE_URL or build_connection_string(
 PAGE_SIZE: int = 200
 # Stage summaries stay inside the service's 30-day diagnostics horizon.
 STAGE_HORIZON: timedelta = timedelta(days=29)
+# Attempt and hierarchy states after which a row stops changing.
+TERMINAL_INDEXING_STATES: tuple[str, ...] = tuple(
+    status.value for status in IndexingStatus if status.is_terminal()
+)
+# Job states whose counters change without a new revision time.
+ACTIVE_JOB_STATES: tuple[str, ...] = ("not_started", "in_progress")
 
 _SCOPE_ARRAYS: tuple[str, ...] = (
     "folder_ids",
@@ -99,16 +106,6 @@ def _safe_configuration_expression() -> str:
         for key in _SCOPE_ARRAYS
     )
     entries.append("'selection_count'," + counts)
-    for output, key in {
-        "include_rule_count": "include_rules",
-        "exclude_rule_count": "exclude_rules",
-        "include_pattern_count": "include_patterns",
-        "exclude_pattern_count": "exclude_patterns",
-        "file_type_count": "file_types",
-    }.items():
-        entries.append(
-            f"'{output}',CASE WHEN jsonb_typeof({config}->'{key}')='array' THEN jsonb_array_length({config}->'{key}') ELSE 0 END"
-        )
     entries.append(
         f"'has_time_filter',({config} ? 'start_date' OR {config} ? 'time_range' OR {config} ? 'start_time')"
     )
@@ -119,7 +116,7 @@ _SAFE_CONFIGURATION: str = _safe_configuration_expression()
 
 
 def connector_page(
-    engine: Engine, schema: str, after_id: int = 0, limit: int = PAGE_SIZE
+    engine: Engine, schema: str, after_id: int = 0
 ) -> list[dict[str, Any]]:
     scoped = _schema(schema)
     statement = f"""
@@ -139,17 +136,13 @@ def connector_page(
             dict(row)
             for row in connection.execute(
                 text(statement),
-                {"after_id": after_id, "limit": min(PAGE_SIZE, max(1, limit))},
+                {"after_id": after_id, "limit": PAGE_SIZE},
             ).mappings()
         ]
 
 
 def attempt_page(
-    engine: Engine,
-    schema: str,
-    since: datetime,
-    after_id: int = 0,
-    limit: int = PAGE_SIZE,
+    engine: Engine, schema: str, since: datetime, after_id: int = 0
 ) -> list[dict[str, Any]]:
     scoped = _schema(schema)
     statement = f"""
@@ -184,29 +177,15 @@ def attempt_page(
                 {
                     "since": since,
                     "after_id": after_id,
-                    "limit": min(PAGE_SIZE, max(1, limit)),
+                    "limit": PAGE_SIZE,
                 },
             ).mappings()
         ]
 
 
-def job_page(
-    engine: Engine,
-    schema: str,
-    since: datetime,
-    after_id: str = "",
-    limit: int = PAGE_SIZE,
-    *,
-    active_only: bool = False,
-) -> list[dict[str, Any]]:
-    scoped = _schema(schema)
-    selection = (
-        "state IN ('not_started','in_progress','scheduled') AND id > :after_id"
-        if active_only
-        else "(revision_at,id) > (:since,:after_id)"
-    )
-    ordering = "id" if active_only else "revision_at,id"
-    statement = f"""
+def _job_rows(scoped: str) -> str:
+    """Every background job table in one row shape."""
+    return f"""
         SELECT *, now() AS source_time FROM (
           SELECT 'sync:' || id::text AS id, entity_id, lower(sync_type) AS job_type,
             lower(sync_status) AS state, num_docs_synced AS docs_processed,
@@ -229,33 +208,59 @@ def job_page(
           UNION ALL
           SELECT 'hierarchy:' || id::text, connector_credential_pair_id, 'hierarchy',
             lower(status), 0, 0, 0, 0, (error_msg IS NOT NULL)::integer,
-            time_started, CASE WHEN lower(status) IN ('success','failed','canceled','interrupted','completed_with_errors') THEN time_updated END,
+            time_started, CASE WHEN lower(status) = ANY(:terminal) THEN time_updated END,
             time_updated
           FROM {scoped}.hierarchy_fetch_attempt
           UNION ALL
           SELECT 'port:' || id::text, cc_pair_id, 'migration', lower(status), docs_ported,
             0,0,0,(error_msg IS NOT NULL)::integer,time_started,time_completed,time_updated
           FROM {scoped}.port_attempt
-        ) jobs
-        WHERE {selection}
-        ORDER BY {ordering} LIMIT :limit
-    """  # noqa: S608 - Schema is strictly validated; values are bound.
+        ) jobs"""  # noqa: S608 - Schema is strictly validated; values are bound.
+
+
+def _read_jobs(
+    engine: Engine, statement: str, values: dict[str, Any]
+) -> list[dict[str, Any]]:
     with engine.connect() as connection:
         return [
             dict(row)
             for row in connection.execute(
                 text(statement),
                 {
-                    "since": since,
-                    "after_id": str(after_id) if after_id else "",
-                    "limit": min(PAGE_SIZE, max(1, limit)),
+                    **values,
+                    "terminal": list(TERMINAL_INDEXING_STATES),
+                    "limit": PAGE_SIZE,
                 },
             ).mappings()
         ]
 
 
+def job_page(
+    engine: Engine, schema: str, since: datetime, after_id: str = ""
+) -> list[dict[str, Any]]:
+    """Read jobs whose revision time is after the cursor."""
+    statement = f"""{_job_rows(_schema(schema))}
+        WHERE (revision_at,id) > (:since,:after_id)
+        ORDER BY revision_at,id LIMIT :limit
+    """
+    return _read_jobs(engine, statement, {"since": since, "after_id": after_id})
+
+
+def active_job_page(
+    engine: Engine, schema: str, after_id: str = ""
+) -> list[dict[str, Any]]:
+    """Read running jobs, whose counters change without a new revision time."""
+    statement = f"""{_job_rows(_schema(schema))}
+        WHERE state = ANY(:active) AND id > :after_id
+        ORDER BY id LIMIT :limit
+    """
+    return _read_jobs(
+        engine, statement, {"active": list(ACTIVE_JOB_STATES), "after_id": after_id}
+    )
+
+
 def email_domain_page(
-    engine: Engine, schema: str, after_domain: str = "", limit: int = PAGE_SIZE
+    engine: Engine, schema: str, after_domain: str = ""
 ) -> list[dict[str, Any]]:
     scoped = _schema(schema)
     statement = f"""SELECT domain,first_signup_at FROM {scoped}.fleet_signup_email_domains
@@ -265,7 +270,7 @@ def email_domain_page(
             dict(row)
             for row in connection.execute(
                 text(statement),
-                {"after_domain": after_domain, "limit": min(PAGE_SIZE, max(1, limit))},
+                {"after_domain": after_domain, "limit": PAGE_SIZE},
             ).mappings()
         ]
 
@@ -289,11 +294,7 @@ def tenant_schemas(engine: Engine) -> list[str]:
 
 
 def stage_metric_page(
-    engine: Engine,
-    schema: str,
-    since: datetime,
-    after_id: int = 0,
-    limit: int = PAGE_SIZE,
+    engine: Engine, schema: str, since: datetime, after_id: int = 0
 ) -> list[dict[str, Any]]:
     """Read changed numeric stage summaries using the timestamp/id index."""
     scoped = _schema(schema)
@@ -321,7 +322,7 @@ def stage_metric_page(
                     "since": since,
                     "after_id": after_id,
                     "horizon": STAGE_HORIZON,
-                    "limit": min(PAGE_SIZE, max(1, limit)),
+                    "limit": PAGE_SIZE,
                 },
             ).mappings()
         ]

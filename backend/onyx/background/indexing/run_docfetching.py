@@ -284,7 +284,7 @@ _CONNECTOR_FETCH_FLUSH_EVERY = 8
 def _emit_fetch_telemetry(
     index_attempt_id: int,
     item: object,
-    fetch_start: float,
+    duration_ms: int,
     *,
     failed: bool = False,
 ) -> None:
@@ -306,12 +306,7 @@ def _emit_fetch_telemetry(
             }
         else:
             return
-        emit_stage_counter(
-            index_attempt_id,
-            "fetch",
-            counters,
-            duration_ms=max(0, int((time.monotonic() - fetch_start) * 1000)),
-        )
+        emit_stage_counter(index_attempt_id, "fetch", counters, duration_ms=duration_ms)
     except Exception:
         # Unexpected metadata or telemetry failures cannot replace connector output.
         pass
@@ -342,13 +337,15 @@ def _timed_connector_runs(
             except StopIteration:
                 return
             except Exception:
-                _emit_fetch_telemetry(index_attempt_id, None, fetch_start, failed=True)
                 # Record the partial duration of the failing fetch so the
                 # terminal error iteration isn't lost from the metric.
-                buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
+                failed_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
+                buffer.record(failed_ms)
+                _emit_fetch_telemetry(index_attempt_id, None, failed_ms, failed=True)
                 raise
-            buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
-            _emit_fetch_telemetry(index_attempt_id, item, fetch_start)
+            fetch_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
+            buffer.record(fetch_ms)
+            _emit_fetch_telemetry(index_attempt_id, item, fetch_ms)
             if buffer.count >= _CONNECTOR_FETCH_FLUSH_EVERY:
                 buffer.flush()
             yield item

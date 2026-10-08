@@ -4,22 +4,14 @@ from unittest.mock import Mock
 import boto3
 import pytest
 
-from onyx.utils.fleet_telemetry import BoundedTelemetry, TelemetryConfig
 from onyx.utils.fleet_telemetry_aws import collect_aws_resources
+from tests.utils.fleet_telemetry import make_sender
 
 
 def test_managed_node_metrics_include_allocations_without_identifiers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sender = BoundedTelemetry(
-        TelemetryConfig(
-            "http://localhost:8787",
-            "test-token",
-            "11111111-1111-4111-8111-111111111111",
-            "test-deployment",
-            b"installation-secret-not-central-token",
-        )
-    )
+    sender = make_sender()
     resource = {
         "kind": "opensearch",
         "resource_id": "PRIVATE_DOMAIN_SENTINEL",

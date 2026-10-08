@@ -25,12 +25,10 @@ _STOP_OUTCOMES: dict[str, str] = {"user_cancelled": "canceled"}
 
 def _channel(kwargs: dict[str, Any]) -> str:
     request = kwargs.get("new_msg_req")
-    if request is not None:
-        # The origin enum is part of SendMessageRequest, not user text.
-        channel: str | None = _ORIGIN_CHANNELS.get(request.origin.value.lower())
-        if channel is not None:
-            return channel
-    return "slack" if kwargs.get("slack_context") is not None else "web"
+    if request is None:
+        return "web"
+    # The origin enum is part of SendMessageRequest, not user text.
+    return _ORIGIN_CHANNELS.get(request.origin.value.lower(), "web")
 
 
 class QueryObservation:

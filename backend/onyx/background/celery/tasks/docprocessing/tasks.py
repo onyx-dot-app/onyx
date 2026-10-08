@@ -2202,7 +2202,7 @@ def _docprocessing_task(
         # Record BATCH_TOTAL on the successful path. We deliberately do not
         # record on the exception path -- a partially-completed batch's total
         # would skew the average. BATCH_TOTAL spans run_indexing_pipeline and
-        # all post-indexing bookkeeping (coord update, telemetry, cleanup).
+        # all post-indexing bookkeeping (coord update, failure records, cleanup).
         batch_total_ms = max(0, int((time.monotonic() - batch_total_start) * 1000))
         safe_record_single_event(
             IndexAttemptStage.BATCH_TOTAL, index_attempt_id, batch_total_ms

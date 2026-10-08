@@ -23,9 +23,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB
 from onyx.db.fleet_telemetry import (
+    ACTIVE_JOB_STATES,
     PAGE_SIZE,
     SOURCE_DATABASE_URL,
     STAGE_HORIZON,
+    TERMINAL_INDEXING_STATES,
+    active_job_page,
     attempt_page,
     collector_engine,
     connector_page,
@@ -52,7 +55,7 @@ from onyx.utils.fleet_telemetry import (
     stop_telemetry,
 )
 from onyx.utils.variable_functionality import set_is_ee_if_available
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 SOURCE_EVENT_REVISION: int = 1
 # Attempt and job history stays inside the service's 190-day horizon.
@@ -248,8 +251,8 @@ class FleetCollector:
     ) -> bool:
         identity: str = f"{self.client.config.deployment_id}:{schema}:{event_type}:{entity}:{revision.isoformat()}:{SOURCE_EVENT_REVISION}"
         if durable_id and observed_at is not None:
-            # Active source rows may update counters without a revision timestamp.
-            # Only already-sanitized structural state participates in identity.
+            # Active source rows may update counters without a revision timestamp,
+            # so a keyed hash of the event data tells their snapshots apart.
             identity += ":" + self.client.fingerprint(_canonical_json(data))
         event_id: str | None = (
             str(
@@ -273,7 +276,7 @@ class FleetCollector:
             if (
                 previous
                 and previous[0] == signature
-                and observed - previous[1] < 21600
+                and observed - previous[1] < _REPAIR_INTERVAL_SECONDS
                 and previous[2] == loss
                 and not self.client.failures
             ):
@@ -493,7 +496,6 @@ class FleetCollector:
                     "attempt_id",
                     "connector_id",
                     "cc_pair_id",
-                    "connector_type",
                     "state",
                     "docs_indexed",
                     "chunks_indexed",
@@ -506,13 +508,7 @@ class FleetCollector:
             data["connector_type"] = row["connector_type"].lower()
             for key in {"started_at", "last_progress_at", "last_heartbeat_at"}:
                 data[key] = _iso(row.get(key))
-            if state in {
-                "success",
-                "failed",
-                "completed_with_errors",
-                "canceled",
-                "interrupted",
-            }:
+            if state in TERMINAL_INDEXING_STATES:
                 data["ended_at"] = _iso(updated)
             if row["has_error"] or row["error_count"]:
                 data.update(safe_attempt_error_data(row, self.client))
@@ -542,12 +538,8 @@ class FleetCollector:
         )
         self._note_scan(schema, "job", historical or [])
         active: list[dict[str, Any]] | None = (
-            job_page(
-                self.engine,
-                schema,
-                oldest,
-                self._active_job_cursor.get(schema, ""),
-                active_only=True,
+            active_job_page(
+                self.engine, schema, self._active_job_cursor.get(schema, "")
             )
             if poll_due(self._last_active_jobs.get(schema), now, interval)
             else None
@@ -590,9 +582,7 @@ class FleetCollector:
                 row["revision_at"],
                 str(row["id"]),
                 durable_id=True,
-                observed_at=observed_at
-                if row["state"] in {"not_started", "in_progress", "scheduled"}
-                else None,
+                observed_at=observed_at if row["state"] in ACTIVE_JOB_STATES else None,
             ):
                 break
             if active_only:
@@ -816,7 +806,7 @@ def main() -> None:
     schemas: list[str] = [
         value
         for value in os.environ.get(
-            "ONYX_TELEMETRY_SCHEMAS", "" if MULTI_TENANT else "public"
+            "ONYX_TELEMETRY_SCHEMAS", "" if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA
         ).split(",")
         if value
     ]

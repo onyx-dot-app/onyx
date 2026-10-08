@@ -587,9 +587,8 @@ uv run --env-file .vscode/.env pytest -xv backend/tests/external_dependency_unit
 cd backend && uv run pytest -k hook tests/unit tests/external_dependency_unit
 
 # Fleet telemetry
-cd backend && uv run pytest -xv tests/unit/onyx/utils/test_fleet_telemetry.py \
-  tests/unit/onyx/utils/test_fleet_enrollment.py tests/unit/onyx/utils/test_fleet_telemetry_aws.py \
-  tests/unit/onyx/utils/test_fleet_telemetry_opensearch.py tests/unit/onyx/onyxbot/test_slack_telemetry_lifecycle.py
+cd backend && uv run pytest -xv tests/unit/onyx/utils/test_fleet_*.py \
+  tests/unit/onyx/onyxbot/test_slack_telemetry_lifecycle.py
 uv run --env-file .vscode/.env pytest -xv backend/tests/external_dependency_unit/telemetry \
   backend/tests/external_dependency_unit/test_instance_identity_storage.py
 ```

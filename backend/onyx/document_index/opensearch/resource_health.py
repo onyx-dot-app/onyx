@@ -13,10 +13,9 @@ from onyx.document_index.opensearch.models import (
     ResourceSnapshot,
     VectorResourceStats,
 )
-from onyx.redis.redis_pool import get_shared_redis_client, redis_pool
+from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import DEFAULT_REDIS_PREFIX
 
 logger = setup_logger()
 
@@ -86,12 +85,8 @@ def get_resource_health(*, operation_timeout_s: float | None = None) -> Resource
     """`operation_timeout_s` bounds the read for background callers."""
     if DISABLE_VECTOR_DB:
         return ResourceHealth()
-    redis: TenantRedisClient = (
-        get_shared_redis_client()
-        if operation_timeout_s is None
-        else redis_pool.get_client(
-            DEFAULT_REDIS_PREFIX, operation_timeout_s=operation_timeout_s
-        )
+    redis: TenantRedisClient = get_shared_redis_client(
+        operation_timeout_s=operation_timeout_s
     )
     raw: bytes | str | None = redis.get(RESOURCE_SNAPSHOT_KEY)
     if raw is None:

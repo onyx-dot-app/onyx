@@ -30,7 +30,7 @@ _EMAIL_DOMAIN: re.Pattern[str] = re.compile(
 )
 _OPAQUE: re.Pattern[str] = re.compile(r"[A-Za-z0-9_.:-]{1,128}\Z")
 _COMMIT_SHA: re.Pattern[str] = re.compile(r"[a-f0-9]{7,40}\Z")
-# Image build commit, reported with the version when the image sets it.
+# Optional build commit that the deployment sets, reported with the version.
 _BUILD_SHA: str = os.environ.get("ONYX_BUILD_SHA", "")
 _VERSION: re.Pattern[str] = re.compile(
     r"(?:v?\d{1,4}\.\d{1,4}(?:\.\d{1,4})?(?:[-.](?:cloud|beta|alpha|rc|dev|nightly|release)(?:[-.]?\d{1,8})?){0,3}|[a-f0-9]{7,40}|unknown|dev|nightly)\Z"
@@ -152,15 +152,7 @@ SAFE_NUMBER_SETTINGS: tuple[str, ...] = (
     "experiment_row_lookback_days",
 )
 # Counts and flags the collector derives from connector configuration in SQL.
-CONNECTOR_CONFIG_COUNTS: tuple[str, ...] = (
-    "selection_count",
-    "include_rule_count",
-    "exclude_rule_count",
-    "include_pattern_count",
-    "exclude_pattern_count",
-    "file_type_count",
-    "has_time_filter",
-)
+CONNECTOR_CONFIG_COUNTS: tuple[str, ...] = ("selection_count", "has_time_filter")
 # Scheduling and sync settings the collector reads from connector columns.
 CONNECTOR_ROW_SETTINGS: tuple[str, ...] = (
     "refresh_seconds",
@@ -373,6 +365,8 @@ QUEUE_INTERVAL_SECONDS: int = 600
 RESOURCE_INTERVAL_SECONDS: int = 300
 
 # Delivery bounds. The fleet service accepts up to 500 events per request.
+_BATCH_SIZE: int = 100
+_FLUSH_SECONDS: float = 2.0
 _MAX_BATCHES_PER_WAKEUP: int = 5
 _MAX_EVENT_ATTEMPTS: int = 5
 _FINAL_FLUSH_SECONDS: float = 5.0
@@ -388,6 +382,10 @@ _ERROR_COUNTERS: tuple[str, ...] = (
     "write_errors",
     "write_rejected",
 )
+
+
+def _keyed_hash(key: bytes, value: str) -> str:
+    return hmac.new(key, value.encode(), hashlib.sha256).hexdigest()
 
 
 def is_valid_version(value: str) -> bool:
@@ -508,8 +506,6 @@ class TelemetryConfig:
     privacy_key: bytes
     service: str = "api"
     capacity: int = 2048
-    batch_size: int = 100
-    flush_seconds: float = 2.0
     instance_domain_hash: str | None = None
     auto_enroll: bool = False
 
@@ -518,11 +514,23 @@ class TelemetryConfig:
         cls, service: str, identity: dict[str, str] | None = None
     ) -> "TelemetryConfig | None":
         try:
-            if DISABLE_TELEMETRY:
-                return None
-            values: dict[str, str] = {**os.environ, **(identity or {})}
+            # Automatic enrollment supplies a derived identity; otherwise the
+            # operator provisions one.
+            values: dict[str, str] = identity or {
+                "ONYX_TELEMETRY_TOKEN": os.environ.get("ONYX_TELEMETRY_TOKEN", ""),
+                "ONYX_TELEMETRY_CUSTOMER_UUID": os.environ.get(
+                    "ONYX_TELEMETRY_CUSTOMER_UUID", ""
+                ),
+                "ONYX_TELEMETRY_DEPLOYMENT_ID": os.environ.get(
+                    "ONYX_TELEMETRY_DEPLOYMENT_ID", ""
+                ),
+                "ONYX_TELEMETRY_PRIVACY_KEY": os.environ.get(
+                    "ONYX_TELEMETRY_PRIVACY_KEY", ""
+                ),
+            }
             endpoint: str = (
-                values.get("ONYX_TELEMETRY_ENDPOINT") or "https://telemetry.onyx.app"
+                os.environ.get("ONYX_TELEMETRY_ENDPOINT")
+                or "https://telemetry.onyx.app"
             ).rstrip("/")
             parsed: SplitResult = urlsplit(endpoint)
             if parsed.scheme != "https" and not (
@@ -570,10 +578,8 @@ class TelemetryConfig:
                             .lower()
                         )
                         if len(host) <= 253:
-                            domain_hash = hmac.new(
-                                privacy_key, host.encode(), hashlib.sha256
-                            ).hexdigest()
-                except (ValueError, UnicodeError):
+                            domain_hash = _keyed_hash(privacy_key, host)
+                except ValueError:
                     pass
             return cls(
                 endpoint,
@@ -705,13 +711,11 @@ class BoundedTelemetry:
         return self._stop.is_set()
 
     def fingerprint(self, value: str) -> str:
-        return hmac.new(
-            self.config.privacy_key, value.encode(), hashlib.sha256
-        ).hexdigest()
+        return _keyed_hash(self.config.privacy_key, value)
 
     def _take_batch(self, limit: int | None = None) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
-        for _ in range(self.config.batch_size if limit is None else limit):
+        for _ in range(_BATCH_SIZE if limit is None else limit):
             try:
                 (
                     event_type,
@@ -801,7 +805,7 @@ class BoundedTelemetry:
     def _flush_once(self, transport: Any = None) -> bool:
         if time.monotonic() < self._blocked_until:
             return False
-        room: int = self.config.batch_size - len(self._pending)
+        room: int = _BATCH_SIZE - len(self._pending)
         if room > 0:
             self._pending.extend(self._coalesce_stages(self._take_batch(room), room))
         if not self._pending:
@@ -1027,15 +1031,12 @@ class BoundedTelemetry:
                         last_resource = now
                     # A backlog drains in consecutive batches; an idle queue sends nothing.
                     for _ in range(_MAX_BATCHES_PER_WAKEUP):
-                        if (
-                            not self.flush_once()
-                            or len(self._queue) < self.config.batch_size
-                        ):
+                        if not self.flush_once() or len(self._queue) < _BATCH_SIZE:
                             break
                 except Exception:
                     # One failed iteration never ends delivery for the process.
                     pass
-                self._stop.wait(self.config.flush_seconds)
+                self._stop.wait(_FLUSH_SECONDS)
             self._final_flush()
         except Exception:
             # Telemetry failure never reaches the application, including initialization.
@@ -1139,8 +1140,13 @@ def start_telemetry(
         if config is None:
             # Partial explicit credentials fail closed instead of creating a new identity.
             if any(
-                os.environ.get("ONYX_TELEMETRY_" + key)
-                for key in ("TOKEN", "CUSTOMER_UUID", "DEPLOYMENT_ID", "PRIVACY_KEY")
+                os.environ.get(name)
+                for name in (
+                    "ONYX_TELEMETRY_TOKEN",
+                    "ONYX_TELEMETRY_CUSTOMER_UUID",
+                    "ONYX_TELEMETRY_DEPLOYMENT_ID",
+                    "ONYX_TELEMETRY_PRIVACY_KEY",
+                )
             ):
                 return None
             if not _bootstrap_lock.acquire(blocking=False):
@@ -1243,11 +1249,11 @@ def error_category(error: BaseException) -> str:
     name: str = type(error).__name__
     if name in {"TimeoutError", "ReadTimeout", "ConnectTimeout", "APITimeoutError"}:
         return "timeout"
-    if name in {"AuthenticationError", "ConnectorAuthError", "AuthError"}:
+    if name in {"AuthenticationError", "AuthError"}:
         return "auth"
     if name in {"PermissionError", "PermissionDeniedError"}:
         return "permission"
-    if name in {"RateLimitError", "RateLimitException"}:
+    if name == "RateLimitError":
         return "rate_limit"
     if name in {"BulkIndexError", "OpenSearchIndexError", "TransportError"}:
         return "index_write"
