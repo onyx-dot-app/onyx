@@ -75,6 +75,9 @@ class ReembedStrategy(enum.Enum):
     MODEL_ONLY = "model_only"
     # The contextual-RAG enrichment changed; rebuild the text, then re-embed.
     AUGMENTATION = "augmentation"
+    # Only the vector quantization changed: the stored content vector is what
+    # re-embedding would produce, so copy it.
+    COPY_VECTORS = "copy_vectors"
 
 
 @dataclass
@@ -97,7 +100,8 @@ def select_reembed_strategy(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> ReembedStrategy:
     """AUGMENTATION when the contextual-RAG *enrichment* differs (the embedded
-    text changes), otherwise MODEL_ONLY. A change in
+    text changes); COPY_VECTORS when only the vector quantization differs (the
+    stored vector is unchanged); otherwise MODEL_ONLY. A change in
     `contextual_rag_model_configuration_id` only matters when contextual RAG is
     on in present or future — if it is off in both, no enrichment exists in
     either index, so a stale model-id difference must not force AUGMENTATION.
@@ -113,11 +117,49 @@ def select_reembed_strategy(
             != future_ss.contextual_rag_model_configuration_id
         )
     )
+    if augmentation_changed:
+        return ReembedStrategy.AUGMENTATION
+    if (
+        _content_vector_settings_match(present_ss, future_ss)
+        and present_ss.vector_quantization != future_ss.vector_quantization
+    ):
+        return ReembedStrategy.COPY_VECTORS
+    return ReembedStrategy.MODEL_ONLY
+
+
+def _content_vector_settings_match(
+    present_ss: SearchSettings, future_ss: SearchSettings
+) -> bool:
+    """True when every setting that shapes a content vector is unchanged, so the
+    PRESENT vector is what re-embedding under FUTURE would produce."""
     return (
-        ReembedStrategy.AUGMENTATION
-        if augmentation_changed
-        else ReembedStrategy.MODEL_ONLY
+        present_ss.model_name == future_ss.model_name
+        and present_ss.model_dim == future_ss.model_dim
+        and present_ss.normalize == future_ss.normalize
+        and present_ss.query_prefix == future_ss.query_prefix
+        and present_ss.passage_prefix == future_ss.passage_prefix
+        and present_ss.provider_type == future_ss.provider_type
+        and present_ss.reduced_dimension == future_ss.reduced_dimension
     )
+
+
+def split_copyable_chunks(
+    stored_chunks: list[DocumentChunk], strip_stored_context: bool
+) -> tuple[list[DocumentChunk], list[DocumentChunk]]:
+    """Splits COPY_VECTORS chunks into (copy as is, re-embed).
+
+    A chunk keeps its stored vector unless the FUTURE strips stored context
+    (contextual RAG off) and the chunk still holds some: then its vector encodes
+    text the FUTURE no longer has, so it must be re-embedded.
+    """
+    copy: list[DocumentChunk] = []
+    reembed: list[DocumentChunk] = []
+    for chunk in stored_chunks:
+        if strip_stored_context and (chunk.doc_summary or chunk.chunk_context):
+            reembed.append(chunk)
+        else:
+            copy.append(chunk)
+    return copy, reembed
 
 
 def rebuild_semantic_tail(chunk: DocumentChunkWithoutVectors) -> str:

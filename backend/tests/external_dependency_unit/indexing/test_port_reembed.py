@@ -28,13 +28,17 @@ from onyx.connectors.models import (
     convert_metadata_dict_to_list_of_strings,
     convert_metadata_list_of_strings_to_dict,
 )
+from onyx.db.enums import VectorQuantization
 from onyx.db.models import SearchSettings
 from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_embedding,
 )
 from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
+from onyx.document_index.opensearch.schema import (
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+)
 from onyx.indexing.chunker import get_metadata_suffix_for_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
@@ -49,6 +53,7 @@ from onyx.indexing.port_reembed import (
     rebuild_semantic_tail,
     recover_embedding_input,
     select_reembed_strategy,
+    split_copyable_chunks,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tracing.framework.traces import TraceContentMode
@@ -169,6 +174,75 @@ def test_select_reembed_strategy() -> None:
             _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=2),
         )
         is ReembedStrategy.MODEL_ONLY
+    )
+
+
+def _vector_ss(
+    vector_quantization: VectorQuantization,
+    model_name: str = "model-a",
+    enable_contextual_rag: bool = False,
+) -> SearchSettings:
+    return SearchSettings(
+        model_name=model_name,
+        model_dim=8,
+        normalize=True,
+        query_prefix=None,
+        passage_prefix=None,
+        provider_type=None,
+        reduced_dimension=None,
+        enable_contextual_rag=enable_contextual_rag,
+        contextual_rag_model_configuration_id=None,
+        vector_quantization=vector_quantization,
+    )
+
+
+def test_select_reembed_strategy_copies_vectors_on_quantization_only_change() -> None:
+    none, one_bit = VectorQuantization.NONE, VectorQuantization.SCALAR_1_BIT
+    # Only quantization differs -> the stored vector is reused.
+    assert (
+        select_reembed_strategy(_vector_ss(none), _vector_ss(one_bit))
+        is ReembedStrategy.COPY_VECTORS
+    )
+    assert (
+        select_reembed_strategy(_vector_ss(one_bit), _vector_ss(none))
+        is ReembedStrategy.COPY_VECTORS
+    )
+    # Quantization plus a model change -> the vector changes -> re-embed.
+    assert (
+        select_reembed_strategy(
+            _vector_ss(none), _vector_ss(one_bit, model_name="model-b")
+        )
+        is ReembedStrategy.MODEL_ONLY
+    )
+    # Nothing changed -> an explicit re-index still re-embeds.
+    assert (
+        select_reembed_strategy(_vector_ss(none), _vector_ss(none))
+        is ReembedStrategy.MODEL_ONLY
+    )
+    # Quantization plus a contextual-RAG change -> the text changes.
+    assert (
+        select_reembed_strategy(
+            _vector_ss(none), _vector_ss(one_bit, enable_contextual_rag=True)
+        )
+        is ReembedStrategy.AUGMENTATION
+    )
+
+
+def test_split_copyable_chunks_reembeds_only_stripped_context() -> None:
+    plain = DocumentChunk(**dict(_stored_chunk("plain")), content_vector=[0.1])
+    with_context = DocumentChunk(
+        **dict(_stored_chunk("ctx", chunk_index=1, chunk_context=" more context")),
+        content_vector=[0.2],
+    )
+    # FUTURE keeps contextual RAG on -> nothing is stripped -> copy everything.
+    assert split_copyable_chunks([plain, with_context], False) == (
+        [plain, with_context],
+        [],
+    )
+    # FUTURE has it off -> a chunk still holding context must be re-embedded.
+    assert split_copyable_chunks([plain, with_context], True) == (
+        [plain],
+        [with_context],
     )
 
 
