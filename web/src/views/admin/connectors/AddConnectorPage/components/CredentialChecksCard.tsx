@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import type { TextColor } from "@onyx-ai/shared/contracts";
+import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import { useOverflow } from "@opal/hooks";
 import { ContentAction, Section } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
@@ -63,30 +63,67 @@ type CheckLine = Pick<
   | "docs_link"
 > & { state: CheckLineState };
 
+// Outcomes that need reading (passed, failed, unverified) show their details
+// in a heavier font and their status colour; the rest stay muted.
+const OUTCOME_FONT: TextFont = "main-ui-action";
+const MUTED = { font: "secondary-body", color: "text-03" } as const;
+
 const CHECK_LOGS = {
   passed: {
     variant: "success-light",
     icon: SvgCheckCircle,
     detail: "status.passed",
+    font: OUTCOME_FONT,
+    color: "text-04",
   },
   // A failed required check blocks, so `CheckLog` makes it heavy.
-  failed: { variant: "error-light", icon: SvgXCircle, detail: "status.failed" },
+  failed: {
+    variant: "error-light",
+    icon: SvgXCircle,
+    detail: "status.failed",
+    font: OUTCOME_FONT,
+    color: "status-error-05",
+  },
   indeterminate: {
     variant: "warning-light",
     icon: SvgAlertCircle,
     detail: "status.indeterminate",
+    font: OUTCOME_FONT,
+    color: "theme-amber-05",
   },
   skipped: {
     variant: "default",
     icon: SvgMinusCircle,
     detail: "status.skipped",
+    ...MUTED,
   },
-  running: { variant: "default", icon: IconLoader, detail: "status.running" },
-  pending: { variant: "default", icon: SvgClock, detail: "status.pending" },
-  waiting: { variant: "default", icon: SvgHourglass, detail: "status.waiting" },
+  running: {
+    variant: "default",
+    icon: IconLoader,
+    detail: "status.running",
+    ...MUTED,
+  },
+  pending: {
+    variant: "default",
+    icon: SvgClock,
+    detail: "status.pending",
+    ...MUTED,
+  },
+  waiting: {
+    variant: "default",
+    icon: SvgHourglass,
+    detail: "status.waiting",
+    ...MUTED,
+  },
 } as const satisfies Record<
   CheckLineState,
-  { variant: LogVariant; icon: IconFunctionComponent; detail: string }
+  {
+    variant: LogVariant;
+    icon: IconFunctionComponent;
+    detail: string;
+    font: TextFont;
+    color: TextColor;
+  }
 >;
 
 /** Group order: what blocks first, what is unknown next, then the rest. */
@@ -102,19 +139,13 @@ const GROUPS = [
   states: readonly CheckLineState[];
 }>;
 
-/** A heavy line's details take its status colour; every other line's are text-04. */
-const HEAVY_DETAILS_COLORS: Partial<Record<LogVariant, TextColor>> = {
-  "success-heavy": "status-success-05",
-  "warning-heavy": "theme-amber-05",
-  "error-heavy": "status-error-05",
-};
-
 interface CheckDetailsProps {
   text: string;
+  font: TextFont;
   color: TextColor;
 }
 /** A check's details on one line; cut off, it shows in full in a tooltip. */
-function CheckDetails({ text, color }: CheckDetailsProps) {
+function CheckDetails({ text, font, color }: CheckDetailsProps) {
   // `Text` takes no ref, so the wrapper finds it by its marker.
   const [textElement, setTextElement] = useState<HTMLElement | null>(null);
   const ref = useCallback((node: HTMLElement | null) => {
@@ -135,7 +166,7 @@ function CheckDetails({ text, color }: CheckDetailsProps) {
       >
         <Text
           as="p"
-          font="main-ui-body"
+          font={font}
           color={color}
           textPosition="text-start"
           maxLines={1}
@@ -153,7 +184,7 @@ interface CheckLogProps {
 }
 function CheckLog({ check }: CheckLogProps) {
   const t = useTranslations("admin.connectorChecks");
-  const { variant, icon, detail } = CHECK_LOGS[check.state];
+  const { variant, icon, detail, font, color } = CHECK_LOGS[check.state];
   // A failed required check blocks the form or Create, so its line is heavy.
   const blocking = check.state === "failed" && check.required;
   const showGuidance =
@@ -170,7 +201,8 @@ function CheckLog({ check }: CheckLogProps) {
       centerChildren={
         <CheckDetails
           text={check.message || t(detail)}
-          color={HEAVY_DETAILS_COLORS[logVariant] ?? "text-04"}
+          font={font}
+          color={color}
         />
       }
       rightChildren={
