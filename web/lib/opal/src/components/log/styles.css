@@ -1,0 +1,54 @@
+/* ── Log ─────────────────────────────────────────────────────────────────────
+   A Log sits on `Interactive.Stateless` (default, internal). Its variant
+   sets the icon's stroke colour and replaces the internal grey hover with a status tint.
+   Each rule names one more attribute than the internal rules it overrides, so
+   it wins without !important. */
+
+.interactive[data-opal-log-variant] .opal-log-icon {
+  @apply shrink-0 stroke-text-03;
+}
+.interactive[data-opal-log-variant="info"] .opal-log-icon {
+  @apply stroke-status-info-05;
+}
+.interactive[data-opal-log-variant="success"] .opal-log-icon {
+  @apply stroke-status-success-05;
+}
+.interactive[data-opal-log-variant="warning"] .opal-log-icon {
+  @apply stroke-theme-amber-05;
+}
+.interactive[data-opal-log-variant="error"] .opal-log-icon {
+  @apply stroke-status-error-05;
+}
+
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-opal-log-variant="info"]:is(
+  :hover,
+  :active,
+  [data-interaction="hover"],
+  [data-interaction="active"]
+):not([data-disabled]) {
+  @apply bg-status-info-00;
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-opal-log-variant="success"]:is(
+  :hover,
+  :active,
+  [data-interaction="hover"],
+  [data-interaction="active"]
+):not([data-disabled]) {
+  @apply bg-status-success-00;
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-opal-log-variant="warning"]:is(
+  :hover,
+  :active,
+  [data-interaction="hover"],
+  [data-interaction="active"]
+):not([data-disabled]) {
+  @apply bg-theme-amber-01;
+}
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-opal-log-variant="error"]:is(
+  :hover,
+  :active,
+  [data-interaction="hover"],
+  [data-interaction="active"]
+):not([data-disabled]) {
+  @apply bg-status-error-00;
+}

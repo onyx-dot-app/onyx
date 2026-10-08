@@ -124,6 +124,9 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Log */
+export { Log, type LogProps } from "@opal/components/log/components";
+
 /* Divider */
 export {
   Divider,
