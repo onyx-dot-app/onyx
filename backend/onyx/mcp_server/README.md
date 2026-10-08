@@ -180,6 +180,8 @@ For PAT or API-key authentication:
 
 For OAuth, use the public frontend MCP URL, such as `http://localhost:3000/mcp/`. Start the frontend too, since it hosts the login and consent pages. Use the client's OAuth flow instead of pasting a bearer token.
 
+`next dev` proxies discovery to `INTERNAL_URL` (default `http://localhost:8080`) and `MCP_INTERNAL_URL` (default `http://127.0.0.1:8090`). Set `WEB_DOMAIN=http://localhost:3000` for local OAuth. Production builds omit these discovery rewrites; nginx or Helm must route discovery.
+
 Once connected, you can:
 - Browse available tools
 - Test tool calls with different parameters

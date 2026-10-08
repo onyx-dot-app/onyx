@@ -107,7 +107,6 @@ def _read(relative_path: str) -> str:
 def test_mcp_oauth_discovery_routes_use_generic_oauth_provider() -> None:
     nginx = _read("deployment/data/nginx/mcp.conf.inc.template")
     helm_nginx = _read("deployment/helm/charts/onyx/templates/nginx-conf.yaml")
-    next_config = _read("web/next.config.js")
     ingress = _read("deployment/helm/charts/onyx/templates/ingress-api.yaml")
 
     for content in (nginx, helm_nginx, ingress):
@@ -115,12 +114,10 @@ def test_mcp_oauth_discovery_routes_use_generic_oauth_provider() -> None:
         assert "/mcp-oauth/metadata" not in content
 
     assert r"^/\.well-known/oauth-authorization-server(/.*)?$" in nginx
-    assert 'source: "/.well-known/oauth-authorization-server/:path*"' not in next_config
     assert r"path: /\.well-known/oauth-authorization-server(/|$)(.*)" in ingress
     assert ingress.count("pathType: ImplementationSpecific") == 3
     assert ingress.count('nginx.ingress.kubernetes.io/use-regex: "true"') == 2
     assert "proxy_pass http://mcp_server;" in nginx
-    assert 'source: "/.well-known/oauth-protected-resource/:path*"' not in next_config
 
 
 def test_deployment_restarts_nginx() -> None:

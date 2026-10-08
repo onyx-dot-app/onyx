@@ -216,7 +216,10 @@ The API ingress also routes `/api/oauth-provider` on the web host in split-host
 deployments, removing `/api` before forwarding to the backend.
 Nginx serves authorization metadata at the RFC 8414 issuer path and the root
 and `/mcp` compatibility aliases. All aliases retain the canonical issuer.
-Discovery is handled by the public proxy, without Next.js rewrite destinations.
+Production discovery is handled by the public proxy, without Next.js rewrite destinations.
+For local OAuth, `next dev` rewrites authorization discovery to `INTERNAL_URL`
+and protected-resource discovery to `MCP_INTERNAL_URL`. These rewrites exist
+only in `PHASE_DEVELOPMENT_SERVER`; production builds and servers omit them.
 
 ### 4.3 A search call, end to end
 
