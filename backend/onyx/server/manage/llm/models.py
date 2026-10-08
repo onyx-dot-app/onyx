@@ -641,7 +641,7 @@ class OpenRouterModelDetails(BaseModel):
         OpenRouter marks them with tokenizer "Router" and prices them at -1."""
         if self.architecture.get("tokenizer") == "Router":
             return True
-        pricing = self.pricing or {}
+        pricing: dict[str, Any] = self.pricing or {}
         return pricing.get("prompt") == "-1" or pricing.get("completion") == "-1"
 
 

@@ -467,7 +467,7 @@ export default function ModelSelectorContent({
   // Router entries (openrouter/auto, gateway configs) live behind the "Auto"
   // tab so the model list stays a list of concrete models. The toggle only
   // renders when at least one router is enabled by the admin.
-  const hasRouters = useMemo(
+  const hasRouters = useMemo<boolean>(
     () => llmOptions.some((opt) => opt.isRouter),
     [llmOptions]
   );

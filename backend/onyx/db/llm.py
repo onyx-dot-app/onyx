@@ -655,7 +655,7 @@ def sync_model_configurations(
 
     new_models: list[NewModelConfiguration] = []
     # Rows touched in place: flow additions plus newly-marked routers.
-    upgraded_count = 0
+    upgraded_count: int = 0
     for model in models:
         existing = existing_by_name.get(model.name)
         if existing is None:
