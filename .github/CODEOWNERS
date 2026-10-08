@@ -1,9 +1,0 @@
-* @onyx-dot-app/onyx-core-team
-# Helm charts Owners
-/helm/ @justin-tahara
-
-# Web standards updates
-/web/STANDARDS.md @raunakab @Weves
-
-# Beta cherry-pick workflow owners
-/.github/workflows/post-merge-beta-cherry-pick.yml @justin-tahara

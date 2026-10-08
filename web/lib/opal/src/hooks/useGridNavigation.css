@@ -1,9 +1,0 @@
-/* Keyboard mode: while the keyboard moves focus through the grid, its
-   contents ignore the pointer, so the pointer's hover cannot paint a second
-   highlight beside the focused item. A pointer movement switches to pointer
-   mode, and hover returns. The same rule as the dropdown family's listbox.
-   Pointer mode's half lives in Interactive's stylesheet, which owns the
-   focus paint. */
-[data-opal-nav-mode="keyboard"] * {
-  pointer-events: none;
-}

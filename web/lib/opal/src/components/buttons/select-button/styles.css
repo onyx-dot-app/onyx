@@ -1,7 +1,0 @@
-@reference "#reference.css";
-
-/* SelectButton — layout only; colors handled by Interactive.Stateful */
-
-.opal-select-content {
-  @apply flex flex-row items-center gap-1;
-}

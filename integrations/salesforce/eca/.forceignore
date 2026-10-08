@@ -1,5 +1,0 @@
-package.xml
-**/jsconfig.json
-**/.eslintrc.json
-**/__tests__/**
-node_modules/

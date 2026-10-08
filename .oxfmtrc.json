@@ -1,5 +1,0 @@
-{
-  "printWidth": 80,
-  "trailingComma": "es5",
-  "ignorePatterns": ["backend/tests/integration/tests/pruning/website"]
-}
