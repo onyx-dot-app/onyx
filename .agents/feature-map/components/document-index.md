@@ -39,13 +39,6 @@ through the monitoring worker. The API only reads cached results. Stale warnings
 in the banner, but cannot trigger a popup. See `backend/onyx/document_index/opensearch/README.md`
 for thresholds, timeouts, and recovery behavior.
 
-The optional isolated fleet collector also reports allowlisted cluster status/counts and cached
-resource pressure through `backend/onyx/utils/fleet_telemetry_opensearch.py`. Network reads have
-short timeouts and run outside application requests. Cluster, node, index names and raw errors
-are excluded. Missing/stale pressure remains unknown. During indexing, the bulk client
-reports write counters through `emit_stage_counter`; create-only 409 conflicts are not
-write errors. See [[observability]] and `deployment/fleet-telemetry.md`.
-
 An admin experiences it directly on the embedding-model page. They pick a new
 embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, Bifrost,
 and more), optionally run a sample embedding test (a fixed test string, not a document), and start a re-index. Bifrost
@@ -238,6 +231,13 @@ re-embed. `MetadataUpdateRequest` can raise `SecondaryIndexDocumentMissingError`
 mid-port, when a metadata update lands on the primary before the reindex port has
 copied that document into the FUTURE index; callers use this to defer the secondary
 sync instead of failing outright.
+
+The bulk write path wraps the OpenSearch client in
+`opensearch/client.py:_MeasuredBulkClient`. When an index attempt is in context
+(`INDEX_ATTEMPT_INFO_CONTEXTVAR`), it counts accepted, failed, and 429-rejected items
+and sends them as fleet `write` counters through `emit_stage_counter`. A create-only
+write (`use_create_only`) counts a 409 conflict as neither accepted nor failed.
+Telemetry errors never change the bulk result. See [[observability]] §4.11.
 
 `SchemaVerifiable.verify_and_create_index_if_necessary(embedding_dim)` is called on backend construction paths and at swap time
 (`swap_index.py:_perform_index_swap`) to make sure the physical index exists before
@@ -442,6 +442,11 @@ comment reads `# No longer used`. See §9.
   and drive document-set/ACL updates through `Updatable.update`.
 - [[core-chat-loop]]: search tools ultimately bottom out in this component's retrieval
   methods.
+- [[observability]]: the fleet telemetry collector reads cluster health and the
+  cached resource snapshot
+  (`utils/fleet_telemetry_opensearch.py:collect_opensearch_health`, which calls
+  `opensearch/resource_health.py:get_resource_health` with a short Redis timeout).
+  Only status, counts, pressure flags, and check times leave the collector.
 
 ---
 

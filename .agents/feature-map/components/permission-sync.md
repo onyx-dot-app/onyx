@@ -565,6 +565,10 @@ document to the wrong person.
 - [[auth-and-identity]]: `batch_add_ext_perm_user_if_not_exists`
   (`onyx/db/users.py`) can create a `User` row for someone who has never
   logged into Onyx, purely because a sync mentioned their email.
+- [[observability]]: the fleet telemetry collector reads
+  `DocPermissionSyncAttempt` and `ExternalGroupPermissionSyncAttempt` rows as fleet
+  job snapshots (`db/fleet_telemetry.py:job_page`, `active_job_page`). No
+  permission-sync code path calls the fleet sender.
 
 ---
 
@@ -712,8 +716,3 @@ fixed ACL; this one proves **sync correctly changes** the ACL over time.
   Salesforce access bug is reported, do not look for a failed
   `DocPermissionSyncAttempt`; there will never be one. Look at
   `censor_salesforce_chunks` and `_post_query_chunk_censoring` instead.
-
-### Legacy callhome removal
-
-The isolated fleet collector reads permission and group-sync attempts. Unused legacy progress and completion exports are removed.
-Permission writes, sync status updates, and scheduling remain unchanged.

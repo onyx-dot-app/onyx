@@ -246,6 +246,12 @@ POST /auth/login     → fastapi-users login router
      | SingleTenantJWTStrategy, keyed by AUTH_BACKEND
 ```
 
+After a `STANDARD` account registers, `UserManager.on_after_register`
+(`auth/users.py`) queues a fleet `tenant_domain` event through
+`utils/fleet_telemetry.py:emit_signup_domain`. The event holds only the normalized
+email domain and the signup time. A telemetry failure does not stop registration.
+See [[observability]] §4.11.
+
 ### 4.2 OAuth / OIDC (single- and multi-provider)
 
 ```
@@ -588,6 +594,7 @@ is marked as such.
 | adds a new SSO provider or protocol | `sso_url_guard.py` validation on every new admin-configurable URL, `auth_check.py`'s public-route list if it adds a new pre-session endpoint, and [[multi-tenancy]] if it touches cloud discovery |
 | changes API key or PAT issuance/validation | confirm the raw value is still returned exactly once, the stored value is still hashed, and `require_permission`'s token-scope capping still applies to the new code path |
 | changes `UserManager.create` or any signup gate (captcha, disposable email, invite list, rate limit) | test both the enabled and disabled path for each gate independently; they are independent checks, not one pipeline |
+| changes the `User` columns `email`, `account_type`, or `created_at` | the `fleet_signup_email_domains` view (migration `b67c3fa177d6`) reads them, so PostgreSQL rejects a drop or type change unless the same migration drops and re-creates the view; see [[observability]] §3 |
 | touches `fetch_versioned_implementation`/EE dispatch anywhere in this component | verify the CE fallback narrows rather than widens, mirroring the rule in [[access-control]] §5.9 |
 | adds a new non-human credential type (beyond API key / PAT / SCIM) | it needs its own hashed-storage table, its own `optional_user`/`_resolve_optional_user` resolution branch, and its own entry in `auth_check.py`'s recognized-dependency list if it introduces a new FastAPI dependency |
 
@@ -705,8 +712,3 @@ secrets/env.
   assumes "no session = no `User` object" will not notice an
   `AccountType.ANONYMOUS` or `AccountType.BOT` user flowing through the same
   code paths as a standard interactive user.
-
-### Legacy callhome removal
-
-Signup emits the reviewed fleet email-domain event. The unused legacy signup callhome event is removed.
-Sentry retains installation identity in `backend/onyx/utils/instance_identity.py`; API startup no longer creates a legacy telemetry UUID.

@@ -1,13 +1,13 @@
 # Observability
 
 > How Onyx is watched: Prometheus metrics, LLM tracing, audit logging, usage
-> and cost accounting, and outbound hooks. This component watches the system;
-> it does not run the system.
+> and cost accounting, fleet telemetry, and outbound hooks. This component
+> watches the system; it does not run the system.
 
 **Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** observability
-**Edition:** CE for metrics, tracing, and audit logging. EE for hooks, usage
-export/reporting, log export, and query history.
+**Edition:** CE for metrics, tracing, audit logging, and fleet telemetry. EE for
+hooks, usage export/reporting, log export, and query history.
 **Owns:**
 `backend/onyx/server/metrics/` (all files), `backend/onyx/tracing/` (all files,
 including `framework/` and `processors/`), `backend/onyx/server/manage/tracing/api.py`,
@@ -17,13 +17,20 @@ including `framework/` and `processors/`), `backend/onyx/server/manage/tracing/a
 `backend/onyx/server/features/hooks/`, `backend/ee/onyx/server/features/hooks/`,
 `backend/onyx/server/middleware/latency_logging.py`,
 `backend/onyx/utils/audit.py`, `backend/onyx/utils/credential_audit.py`,
+`backend/onyx/utils/fleet_telemetry.py`, `fleet_query_telemetry.py`,
+`fleet_telemetry_collector.py`, `fleet_telemetry_kubernetes.py`,
+`fleet_telemetry_aws.py`, `fleet_telemetry_opensearch.py`,
+`fleet_telemetry_resources.py`, `instance_identity.py`, `telemetry.py`, `timing.py`,
+`backend/onyx/db/fleet_telemetry.py`, `db/fleet_enrollment.py`,
+`deployment/helm/charts/onyx/templates/fleet-telemetry.yaml`,
 `backend/ee/onyx/server/query_history/`, `backend/ee/onyx/server/log_export/`,
 `backend/ee/onyx/background/celery/tasks/usage_reporting/`,
 `backend/ee/onyx/background/celery/tasks/log_export/`,
 `web/src/app/admin/tracing/`, `web/src/app/admin/systeminfo/`
 
-**Read first:** `docs/METRICS.md` and `docs/AUDIT_LOGGING.md`. They are the
-primary specs; this document maps them to code and adds verification guidance.
+**Read first:** `docs/METRICS.md` and `docs/AUDIT_LOGGING.md`, plus
+`deployment/fleet-telemetry.md` for fleet telemetry. They are the primary specs;
+this document maps them to code and adds verification guidance.
 
 ---
 
@@ -62,6 +69,13 @@ An admin can also register an **outbound hook**: an HTTPS endpoint Onyx calls
 synchronously at a fixed point in a pipeline (document ingestion, document
 push, or query processing) and waits on for a response, configurable at
 **Admin > Hooks** (`ee/onyx/server/features/hooks/api.py`).
+
+By default, every installation also sends fleet telemetry to the Onyx fleet
+service. It sends approved health, version, connector, indexing, query-timing,
+license-presence, and signup-domain values. It never sends document content,
+names, credentials, or full email addresses. The operator does not need to configure it, and one deployment setting
+turns it off (see §2). Onyx continues to operate when the fleet service is not
+available.
 
 ---
 
@@ -114,6 +128,13 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 `ee/onyx/server/log_export/api.py`: `POST /admin/log-export`,
 `GET /admin/log-export/{export_id}`, `GET /admin/log-export/{export_id}/download`.
 
+### Fleet telemetry
+
+| Surface | Code | Notes |
+|---|---|---|
+| Collector process | `utils/fleet_telemetry_collector.py:main` | Runs as `python -m onyx.utils.fleet_telemetry_collector` in its own container: `fleet-telemetry.yaml` in Helm, the `telemetry_collector` service in Compose. `--once` runs one collection pass. |
+| Outbound `POST /v1/enroll` and `POST /v1/events` | `utils/fleet_telemetry.py:BoundedTelemetry` | Calls to the fleet service at `ONYX_TELEMETRY_ENDPOINT`. Onyx has no inbound fleet route. |
+
 ### Environment configuration
 
 | Variable | Default | Effect |
@@ -128,6 +149,15 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 | `TRACING_CONFIG_CACHE_TTL_SECONDS` | `30` | Re-read interval for the effective tracing config. |
 | `USER_USAGE_TRACKING_ENABLED` | `true` | Gates the per-user usage recording processor. Independent of Braintrust/Langfuse. |
 | `MULTI_TENANT` | | Forces tracing config to env-only and blocks `/admin/tracing/*`. |
+| `DISABLE_TELEMETRY` | `false` | `true` stops fleet enrollment, sending, and collection (`utils/fleet_telemetry.py:start_telemetry`, `fleet_telemetry_collector.py:main`). Set it on every service and on the collector. Prometheus metrics, tracing, and the `monitoring` worker's tasks do not change. |
+| `ONYX_TELEMETRY_ENDPOINT` | `https://telemetry.onyx.app` | Fleet service base URL. HTTPS only, except plain HTTP to `localhost` or `127.0.0.1` (`TelemetryConfig.from_env`). |
+| `ONYX_TELEMETRY_TOKEN`, `ONYX_TELEMETRY_CUSTOMER_UUID`, `ONYX_TELEMETRY_DEPLOYMENT_ID`, `ONYX_TELEMETRY_PRIVACY_KEY` | unset | Operator-provisioned identity, used instead of automatic enrollment. Set all four or none: a partial or invalid set stops the sender and does not enroll (`start_telemetry`). |
+| `ONYX_TELEMETRY_INSTANCE_DOMAIN` | `WEB_DOMAIN` | Instance host. Only its keyed hash leaves the process. |
+| `ONYX_TELEMETRY_DATABASE_URL` | unset | Collector only. A read-only PostgreSQL DSN; unset means the standard Onyx PostgreSQL settings (`db/fleet_telemetry.py:SOURCE_DATABASE_URL`). |
+| `ONYX_TELEMETRY_SCHEMAS` | `POSTGRES_DEFAULT_SCHEMA` | Collector only. Comma-separated schemas to read. Under `MULTI_TENANT`, unset means the collector discovers tenant schemas (`FleetCollector.tick`). |
+
+`deployment/fleet-telemetry.md` documents the other fleet settings: the Redis URL,
+schema shards, Kubernetes, AWS, disk mount, and `ONYX_BUILD_SHA`.
 
 ---
 
@@ -158,6 +188,14 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
   `timeout_seconds`, `is_active`, `is_reachable`, soft-deleted via `deleted`)
   and its failure log (`db/hook.py`). At most one non-deleted hook per
   `HookPoint` (`db/hook.py:create_hook__no_commit`).
+- **Fleet telemetry storage.** No table holds fleet events; the sender queue is in
+  memory. `db/fleet_enrollment.py:installation_seed` keeps one random seed in
+  `EncryptedKeyValueStore` under the key `fleet_telemetry_installation_seed_v1`.
+  Two views give the collector domain-only data: `fleet_signup_email_domains`
+  (email domains of `STANDARD` users, migration `b67c3fa177d6`) and
+  `fleet_license_state` (license presence and first store time, migration
+  `93b903235ac2`). The `ix_stage_metric_updated_id` index on
+  `IndexAttemptStageMetric` (`db/models.py`) serves the collector's stage reads.
 - Audit events are **not** a table. They are JSON-serialized log lines on the
   `onyx.audit` logger tree (`utils/audit.py`); there is no `audit_event` table
   yet (`docs/AUDIT_LOGGING.md` calls this a planned follow-up).
@@ -165,31 +203,6 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 ---
 
 ## 4. How it works
-
-### Fleet telemetry
-
-Fleet telemetry replaces the legacy anonymous Go telemetry protocol. The bounded
-sender in `backend/onyx/utils/fleet_telemetry.py` emits allowlisted events without
-network I/O on request paths: application threads only check the allow-lists and
-append to a bounded queue without a lock. A background thread compresses batches,
-reuses its HTTP session, and reads only bounded delivery receipts. The isolated
-collector supplies connector, queue, job, resource, OpenSearch, and index attempt
-snapshots. The old anonymous endpoint, adapter, duplicate Celery monitoring task,
-and daily version task are removed. Timing decorators retain local logs only.
-
-Startup schedules identity initialization in the background and never waits for
-storage or network access. `backend/onyx/db/fleet_enrollment.py` keeps one
-installation seed in the encrypted key-value table and reads it only after the
-process selects its edition; an earlier read would cache the Community secret codec
-for the whole process. The sender derives separate enrollment and privacy keys, then
-enrolls at `https://telemetry.onyx.app/v1/enroll`. The Slack listener starts its own
-sender because Slack answers run in that process.
-
-Set `DISABLE_TELEMETRY=true` at deployment startup to disable fleet senders and
-collectors. Collection configuration comes from the deployment; the service cannot
-change it. See `deployment/fleet-telemetry.md` for configuration and verification.
-Cloud PostHog analytics remain separate in `backend/onyx/utils/telemetry.py`.
-Sentry retains its instance identity through `backend/onyx/utils/instance_identity.py`.
 
 ### 4.1 Prometheus metrics
 
@@ -372,6 +385,68 @@ app; it never fires for `/gateway/*` requests, so a hook cannot inspect or
 reject content an external tool sends to a model provider through
 [[llm-gateway]] (`hooks/points/query_processing.py`).
 
+### 4.11 Fleet telemetry
+
+Fleet telemetry has two parts: one sender in each instrumented process, and an
+isolated collector. `deployment/fleet-telemetry.md` is the operator reference.
+
+**Sender.** `utils/fleet_telemetry.py:start_telemetry` starts one `BoundedTelemetry`
+for the process and returns at once. `onyx/main.py:lifespan` calls it for the API
+server, `app_base.py:on_worker_ready` for each Celery worker, and
+`onyxbot/slack/listener.py:main` for the Slack listener, because Slack answers run
+in that process. A spawned docfetching process starts its own sender in
+`background/indexing/job_client.py:_initializer` and waits at most
+`EXIT_FLUSH_SECONDS` at exit for its last counters. `BoundedTelemetry.emit` checks
+the event against the allow-lists (`sanitize_data`) and appends it to a bounded
+in-memory queue. It takes no lock and does no I/O. A full queue drops the event.
+A daemon thread sends compressed batches. After a failed delivery, it waits longer
+before it tries again. Unless `report_process` is false, the thread also reports
+`runtime` and `version` events at start, and process resources and a delivery
+heartbeat every five minutes.
+
+**Hooks.** Application code emits events from these places:
+
+- Query timing: `utils/fleet_query_telemetry.py:telemetry_chat` wraps
+  `chat/process_message.py:handle_stream_message_objects` and
+  `handle_multi_model_stream`. `telemetry_query` wraps
+  `server/features/search/api.py:search`,
+  `server/query_and_chat/query_backend.py:admin_search`, and
+  `ee/onyx/search/process_search_query.py:stream_search_query`.
+- Indexing counters: the fetch, prepare, embed, and write steps call
+  `emit_stage_counter` ([[indexing-pipeline]] §4.10). The sender thread adds the
+  deltas for one attempt and stage over at most 30 seconds. Error counters skip
+  this window.
+- Signup domain: `auth/users.py:UserManager.on_after_register` calls
+  `emit_signup_domain`.
+- License changes: `ee/onyx/utils/license.py:verify_and_store_license` and
+  `ee/onyx/db/license.py:delete_license` call `emit_license_state`.
+
+**Collector.** `utils/fleet_telemetry_collector.py:FleetCollector.tick` reads
+connectors, index attempts, stage summaries, background jobs, signup domains, and
+license state through the read-only, time-limited queries in `db/fleet_telemetry.py`.
+It also reads Celery queue depths from Redis and OpenSearch health
+(`utils/fleet_telemetry_opensearch.py:collect_opensearch_health`). When configured,
+it reads Kubernetes pod status and metrics
+(`fleet_telemetry_kubernetes.py:KubernetesCollector`) and AWS CloudWatch metrics
+(`fleet_telemetry_aws.py:collect_aws_resources`). Index attempt and job state reach
+the fleet only from these snapshots. The collection intervals are constants in
+`utils/fleet_telemetry.py` (`CONNECTOR_INTERVAL_SECONDS` and the others); the fleet
+service cannot change them.
+
+**Identity.** Automatic enrollment needs no settings. `start_telemetry` runs
+`_bootstrap` in a background thread, so startup never waits for storage or the
+network. `db/fleet_enrollment.py:installation_seed` reads the seed only after the
+process selects its edition (see §9). `automatic_config` derives the enrollment
+token and a separate privacy key from the seed. The sender enrolls at `/v1/enroll`
+before its first batch and uses the response only to confirm its identity
+(`BoundedTelemetry._enroll`).
+
+**Other mechanisms.** `utils/telemetry.py` holds Cloud PostHog analytics
+(`mt_cloud_telemetry`), not fleet telemetry.
+`utils/instance_identity.py:get_or_generate_uuid` keeps the installation UUID that
+`configs/sentry.py:_add_instance_tags` sends to Sentry.
+`utils/timing.py:log_function_time` writes local logs only.
+
 ---
 
 ## 5. Contracts and invariants
@@ -409,6 +484,15 @@ reject content an external tool sends to a model provider through
 10. **A `HookFailStrategy.HARD` hook failure must abort the calling
     pipeline; `SOFT` must fall back to default behavior**, never silently
     succeed with no data.
+11. **Fleet telemetry never blocks or fails the caller.** `BoundedTelemetry.emit`
+    takes no lock and does no I/O, and `utils/fleet_telemetry.py:emit_telemetry`
+    catches every exception. A new hook must not read the database or call the
+    network on an application or indexing thread; the collector does all source
+    reads.
+12. **Only allowlisted fields leave the process.** `sanitize_data` drops an event
+    that has an unknown field or an unapproved string value. A new field needs an
+    allow-list entry in `utils/fleet_telemetry.py`. Never send names, email
+    addresses, URLs, paths, document content, or raw error text.
 
 ---
 
@@ -426,14 +510,25 @@ reject content an external tool sends to a model provider through
   is the sibling of the incognito tracing suppression described here.
 - [[background-jobs]]: the usage-report Celery task, the log-export Celery
   collector, and per-worker Celery signal handlers that emit task metrics.
+  `app_base.py:on_worker_ready` starts each worker's fleet sender, and
+  `on_worker_shutdown` stops it. The fleet collector reads the Celery queue
+  depths and `SyncRecord` rows.
 - [[rate-and-usage-limits]]: `TenantUsage` and `db/usage.py:check_usage_limit`
   are the cloud usage-limit ledger this component also touches.
+- [[indexing-pipeline]], [[cc-pairs-and-credentials]], [[permission-sync]],
+  [[document-index]], [[auth-and-identity]], [[billing]]: the fleet collector
+  reads their tables, the two fleet views, and the OpenSearch health snapshot
+  (`db/fleet_telemetry.py`, `utils/fleet_telemetry_opensearch.py`). A column
+  change there can break the collector and fail no application test (§7).
 
 **Depended on by**
 - [[core-chat-loop]]: every chat turn opens tagged generation spans and
   produces usage records through this component.
 - [[indexing-pipeline]]: contextual RAG summarization and connector-state
-  metrics are emitted from here.
+  metrics are emitted from here. Its fetch, prepare, embed, and write steps send
+  fleet stage counters through `emit_stage_counter`.
+- [[slack-bot]]: `listener.py:main` starts the fleet sender that Slack answers
+  use for query events.
 - [[llm-providers]]: cost tracking and the tracing admin endpoints live in
   this component even though `llm-providers.md` documents the LLM-side
   factory that calls into them.
@@ -451,6 +546,8 @@ reject content an external tool sends to a model provider through
 | adds a usage-recorded action (a new `LLMFlow`, a new system attribution) | `tracing/flows.py:SYSTEM_TEXT_GENERATION_FLOWS` if it should count as system usage; `processors/user_usage_processor.py:_system_attribution`; the usage export/report pipeline that reads `UserUsage` |
 | adds a new `HookPoint` | `hooks/registry.py:_REGISTRY` (validated at startup by `validate_registry`); a new `HookPointSpec`; the EE UI's hook-point catalogue |
 | changes the audit action taxonomy | `docs/AUDIT_LOGGING.md`; every downstream SIEM filter rule depends on the exact string |
+| adds a fleet telemetry field or hook | the allow-lists that `sanitize_data` uses (§5 item 12); no lock or I/O on the calling thread (§5 item 11); the fleet service's ingestion contract, which lives in a separate repository (`deployment/fleet-telemetry.md`) |
+| renames or drops a table, column, or view that the fleet collector reads | the SQL in `db/fleet_telemetry.py`; the two fleet views (§3), because PostgreSQL rejects a drop or type change on a column that a view uses; the read-only grants in `deployment/fleet-telemetry.md`; `backend/tests/external_dependency_unit/telemetry/test_fleet_collector.py`. A broken collector query fails no application path: the collector only counts the error in its heartbeat. |
 
 ---
 
@@ -488,6 +585,13 @@ uv run --env-file .vscode/.env pytest -xv backend/tests/external_dependency_unit
 
 # Hooks
 cd backend && uv run pytest -k hook tests/unit tests/external_dependency_unit
+
+# Fleet telemetry
+cd backend && uv run pytest -xv tests/unit/onyx/utils/test_fleet_telemetry.py \
+  tests/unit/onyx/utils/test_fleet_enrollment.py tests/unit/onyx/utils/test_fleet_telemetry_aws.py \
+  tests/unit/onyx/utils/test_fleet_telemetry_opensearch.py tests/unit/onyx/onyxbot/test_slack_telemetry_lifecycle.py
+uv run --env-file .vscode/.env pytest -xv backend/tests/external_dependency_unit/telemetry \
+  backend/tests/external_dependency_unit/test_instance_identity_storage.py
 ```
 
 Notable existing tests: `tests/unit/onyx/tracing/test_flows_registry.py`,
@@ -543,6 +647,20 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 - **A hook's `is_reachable` update and its failure log are written in
   separate sessions on purpose**, so a concurrent hook deletion (which makes
   the `is_reachable` write raise `NOT_FOUND`) cannot suppress the failure log.
+- **Read encrypted values only after the process selects its edition.** Each
+  process caches its secret codec on first use. If a read occurs earlier, the
+  process keeps the Community codec, and later connector credential decrypts in
+  that process fail. For this reason, `db/fleet_enrollment.py:installation_seed`
+  raises until `edition_selected()` is true. A spawned docfetching process
+  selects its edition after it starts.
+- **`utils/telemetry.py` is not fleet telemetry.** It holds the Cloud PostHog
+  analytics calls (`mt_cloud_telemetry`, `mt_cloud_identify_user`), which run only
+  under `MULTI_TENANT`. `DISABLE_TELEMETRY` does not affect them.
+- **`telemetry_chat` reads its labels from keyword arguments.** It reads
+  `new_msg_req` and `user` from the call's keywords
+  (`utils/fleet_query_telemetry.py:_channel`). If a caller passes them by
+  position, the query event reports the channel `web`, and the user ID comes from
+  the current-user context variable. Nothing fails.
 
 ---
 

@@ -125,6 +125,9 @@ this document.
   raising `WorkerShutdown` on timeout. `on_worker_ready` and `on_worker_shutdown`
   touch/remove a file-based readiness probe (`app_base.py:make_probe_path`,
   checked by `celery_k8s_probe.py`'s `main_readiness`/`main_liveness`).
+  They also start and stop the worker's fleet telemetry sender
+  (`utils/fleet_telemetry.py:start_telemetry`, `stop_telemetry`). The stop does
+  not wait for delivery. See [[observability]] §4.11.
   `LivenessProbe` (`app_base.py:LivenessProbe`) is a Celery bootstep that
   refreshes the liveness file every 15 seconds.
 - The primary worker additionally holds a singleton Redis lock,
@@ -423,7 +426,10 @@ See [[document-index]] for the cached admin warnings it supplies.
   fallback path.
 - [[chat-persistence]]: `chat_ttl_deletion` queue (Light worker).
 - [[observability]]: `monitoring` worker, Prometheus metrics, `BackgroundError`
-  rows.
+  rows. The fleet telemetry collector reads Celery queue depths from the broker
+  (`utils/fleet_telemetry_collector.py:FleetCollector.collect_queues`) and
+  `SyncRecord` rows (`db/fleet_telemetry.py:job_page`). `DISABLE_TELEMETRY` stops
+  only fleet telemetry; the `monitoring` tasks still run.
 
 ---
 
@@ -532,11 +538,3 @@ shared machinery, not feature correctness.
 - **Worker code changes need a manual restart.** There is no file-watcher
   auto-reload for Celery workers; `backend/AGENTS.md` says to ask the user to
   restart the worker after any change to task or app code.
-
-### Fleet telemetry replaces legacy callhome
-
-The legacy `monitor_background_processes` and `emit_version_telemetry` tasks and schedules are removed.
-The isolated fleet collector reads queues, connectors, and sync jobs with bounded source queries.
-The fleet sender emits version at startup; Kubernetes collection also reports observed runtime versions.
-Operational queue watchdogs, process-memory logs, and OpenSearch health caching remain application functions.
-`DISABLE_TELEMETRY=true` prevents fleet sender and collector startup without disabling those operational functions.

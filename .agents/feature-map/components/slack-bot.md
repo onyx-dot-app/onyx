@@ -79,11 +79,17 @@ thread left off.
 ### Background process
 
 `backend/onyx/onyxbot/slack/listener.py` runs as its own long-lived process
-(`if __name__ == "__main__"`, not an ASGI app). One `SlackbotHandler` per pod
+(`listener.py:main`, not an ASGI app). One `SlackbotHandler` per pod
 manages a `TenantSocketModeClient` per `(tenant_id, slack_bot_id)` pair, acquiring
 tenants via a Redis lock (`OnyxRedisLocks.SLACK_BOT_LOCK`,
 `config.py:TENANT_LOCK_EXPIRATION` = 1800s) so exactly one pod owns a tenant's
 Slack bots at a time, up to `MAX_TENANTS_PER_POD` (default 50).
+
+`listener.py:main` starts the process's fleet telemetry sender
+(`utils/fleet_telemetry.py:start_telemetry`) before it creates the
+`SlackbotHandler` and its message-processing threads. Its `finally` block calls
+`stop_telemetry` on a normal exit, a startup failure, and a signal exit. The stop
+does not wait for delivery.
 
 ### Environment configuration (`backend/onyx/configs/onyxbot_configs.py`)
 
@@ -245,6 +251,10 @@ message.
 never issues an HTTP request to `POST /chat/send-chat-message`
 (`chat_backend.py:handle_send_chat_message`), so it never goes through that
 endpoint's FastAPI `Depends` chain. See §5 and §9 for what that skips.
+Because `handle_stream_message_objects` carries
+`utils/fleet_query_telemetry.py:telemetry_chat`, each Slack answer also queues a
+fleet `query` event with the channel `slack` (from `MessageOrigin.SLACKBOT`) on the
+listener's sender.
 
 It passes
 `slack_context=message_info.slack_context` (drives federated Slack search,
@@ -356,6 +366,8 @@ that point is not the message's original asker.
   `ChatSession`/`ChatMessage` rows via the same tables `save_chat_turn` writes.
 - [[rate-and-usage-limits]]: `check_token_rate_limits(usage_user)` runs
   before each answer; see §9 for why it must be called inline.
+- [[observability]]: the fleet telemetry sender that `listener.py:main` starts and
+  stops (§2), which carries the Slack answers' query events.
 
 **Depended on by**
 - [[chat-persistence]]: seeded web sessions from
@@ -495,10 +507,3 @@ See `backend/AGENTS.md` for required env and secrets.
   standard answer can be given again in a different Slack thread even if a user
   already saw it elsewhere, because `used_standard_answer_ids` is computed from
   `get_chat_sessions_by_slack_thread_id` for the current thread only.
-
-### Legacy callhome removal
-
-Slack queries use fleet query instrumentation. Legacy usage reporting and its extra Slack email lookup are removed.
-`listener.py:main` starts the bounded fleet sender before the handler starts its message-processing threads.
-Its `finally` block closes telemetry on normal exit, startup failure, and signal-driven exit without waiting for delivery.
-Invocation gates, user provisioning, and permission checks are unchanged.
