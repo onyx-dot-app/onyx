@@ -706,12 +706,16 @@ export default function ModelSelectorContent({
             <Tabs.Trigger value="models">
               {t("modeToggle.models.label")}
             </Tabs.Trigger>
-            <Tabs.Trigger
-              value="routers"
-              icon={SvgInfoSmall}
-              tooltip={t("autoMode.tooltip.text")}
-            >
-              {t("modeToggle.routers.label")}
+            <Tabs.Trigger value="routers" tooltip={t("autoMode.tooltip.text")}>
+              <span className="flex items-center gap-1">
+                <Text color="inherit" font="secondary-body">
+                  {t("modeToggle.routers.label")}
+                </Text>
+                <SvgInfoSmall
+                  size={12}
+                  className="interactive-foreground-icon"
+                />
+              </span>
             </Tabs.Trigger>
           </Tabs.List>
         </Tabs>

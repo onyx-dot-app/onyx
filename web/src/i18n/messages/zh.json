@@ -11071,7 +11071,7 @@
           "label": "模型"
         },
         "routers": {
-          "label": "自动"
+          "label": "路由器"
         }
       },
       "modelSettingsButton": {

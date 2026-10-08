@@ -11071,7 +11071,7 @@
           "label": "모델"
         },
         "routers": {
-          "label": "자동"
+          "label": "라우터"
         }
       },
       "modelSettingsButton": {
