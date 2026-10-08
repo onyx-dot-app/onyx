@@ -1,8 +1,9 @@
 """What the connector asks of every content source, whatever it indexes."""
 
+import threading
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TypeVar
 
 import requests
@@ -35,10 +36,28 @@ class SlimWalk:
     # False when the caller has no use for threads: the group a thread names
     # never changes, and the group sync says who is in it.
     lists_threads: bool = True
+    # Workers report from their own threads and the runner's callback is not
+    # built for that, so every report goes through one lock.
+    _signal_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False, compare=False
+    )
 
     def raise_if_stopped(self) -> None:
         if self.callback and self.callback.should_stop():
             raise RuntimeError(f"{SLIM_WALK}: Stop signal detected")
+
+    def report_progress(self, amount: int) -> None:
+        if self.callback is None:
+            return
+        with self._signal_lock:
+            self.callback.progress(SLIM_WALK, amount)
+
+    def page_signals(self) -> None:
+        """What a listing gets before each of its pages, on whichever worker
+        reads it: a stop check and a progress report, so a run of listings
+        that page for long and yield nothing still keeps the runner's lock."""
+        self.raise_if_stopped()
+        self.report_progress(0)
 
     def fan_out(
         self,
@@ -50,23 +69,21 @@ class SlimWalk:
         """Batches of ``batch`` items drained by ``workers``, with a stop check
         and a progress report per batch and again every
         PROGRESS_EVERY_DOCUMENTS yielded, since the runner's lock lives on
-        those reports. Each listing honors a stop before every page of its own."""
+        those reports. Each listing signals before every page of its own."""
         yielded: int = 0
         for items_batch in batch_generator(items, batch or workers):
             self.raise_if_stopped()
-            if self.callback:
-                self.callback.progress(SLIM_WALK, len(items_batch))
+            self.report_progress(len(items_batch))
             for document in drain(items_batch, listing, workers):
                 yielded += 1
-                if self.callback and yielded % PROGRESS_EVERY_DOCUMENTS == 0:
-                    self.callback.progress(SLIM_WALK, 0)
+                if yielded % PROGRESS_EVERY_DOCUMENTS == 0:
+                    self.report_progress(0)
                 yield document
 
     def batch_signals(self) -> None:
         """The stop and progress signals the runner gets before every batch."""
         self.raise_if_stopped()
-        if self.callback:
-            self.callback.progress(SLIM_WALK, 1)
+        self.report_progress(1)
 
 
 R = TypeVar("R")
@@ -108,7 +125,7 @@ class PagedListing:
 
     def before_page(self) -> None:
         if self.walk is not None:
-            self.walk.raise_if_stopped()
+            self.walk.page_signals()
         self.pages += 1
 
     def lost_access(self, error: requests.RequestException) -> bool:

@@ -259,7 +259,7 @@ class OrganizerStage:
         organizers = iter_organizers(
             self._session.graph(),
             self._principal_names,
-            before_page=walk.raise_if_stopped,
+            before_page=walk.page_signals,
         )
         yield from walk.fan_out(
             organizers,

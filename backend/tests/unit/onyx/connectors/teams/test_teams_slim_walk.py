@@ -374,3 +374,27 @@ def test_a_long_batch_keeps_reporting_progress(monkeypatch: pytest.MonkeyPatch) 
         callback.progress.call_args_list
         == [call(SLIM_WALK, 2)] + [call(SLIM_WALK, 0)] * 3
     )
+
+
+def test_quiet_listings_report_progress_from_their_pages() -> None:
+    """A batch of listings that page for long and yield nothing must still
+    renew the runner's lock, so each page reports from its worker, and the
+    reports are serialized for a callback not built for threads."""
+    callback: MagicMock = MagicMock()
+    callback.should_stop.return_value = False
+    walk: SlimWalk = SlimWalk(start=0, callback=callback, with_readers=False)
+    reporters: set[int] = set()
+
+    def listing(_item: int) -> Any:
+        for _ in range(2):
+            walk.page_signals()
+            reporters.add(threading.get_ident())
+        yield from ()
+
+    assert list(walk.fan_out([1, 2, 3, 4], listing, workers=2, batch=4)) == []
+    # One report for the batch, then one per page of every listing.
+    assert (
+        callback.progress.call_args_list
+        == [call(SLIM_WALK, 4)] + [call(SLIM_WALK, 0)] * 8
+    )
+    assert threading.get_ident() not in reporters
