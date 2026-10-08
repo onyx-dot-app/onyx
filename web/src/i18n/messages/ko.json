@@ -2639,9 +2639,6 @@
           "label": "{source}(으)로 인증",
           "pendingLabel": "인증하는 중..."
         },
-        "collapseButton": {
-          "ariaLabel": "접기"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
@@ -2661,9 +2658,6 @@
         },
         "error": {
           "toast": "오류: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "펼치기"
         },
         "federated": {
           "tooltip": {

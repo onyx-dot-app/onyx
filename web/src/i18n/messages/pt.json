@@ -2639,9 +2639,6 @@
           "label": "Autorizar com {source}",
           "pendingLabel": "Autorizando..."
         },
-        "collapseButton": {
-          "ariaLabel": "Recolher"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
@@ -2661,9 +2658,6 @@
         },
         "error": {
           "toast": "Erro: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Expandir"
         },
         "federated": {
           "tooltip": {

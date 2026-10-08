@@ -2639,9 +2639,6 @@
           "label": "التفويض عبر {source}",
           "pendingLabel": "جارٍ التفويض..."
         },
-        "collapseButton": {
-          "ariaLabel": "طي"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
@@ -2661,9 +2658,6 @@
         },
         "error": {
           "toast": "خطأ: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "توسيع"
         },
         "federated": {
           "tooltip": {

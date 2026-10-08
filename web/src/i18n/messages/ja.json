@@ -2639,9 +2639,6 @@
           "label": "{source} で認可",
           "pendingLabel": "認可しています..."
         },
-        "collapseButton": {
-          "ariaLabel": "折りたたむ"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
@@ -2661,9 +2658,6 @@
         },
         "error": {
           "toast": "エラー: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "展開"
         },
         "federated": {
           "tooltip": {

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Fold, SelectButton, SelectCard, Tabs } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
-import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
+import { SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/credentials/types";
 import {
   useCredentialCheckReports,
@@ -165,38 +165,26 @@ export default function AuthenticationAccountSection({
         variant="section"
         padding={0}
         rightChildren={
-          <>
-            <SelectButton
-              icon={SvgListTree}
-              variant="select-heavy"
-              // Blue while an account is picked; held in its hover look
-              // while the list is open.
-              state={
-                !currentCredential
-                  ? "empty"
-                  : showSavedAccounts
-                    ? "selected"
-                    : "filled"
-              }
-              interaction={showSavedAccounts ? "hover" : "rest"}
-              aria-expanded={showSavedAccounts}
-              onClick={() => setShowSavedAccounts((shown) => !shown)}
-            >
-              {t("add.savedAccountsButton.label", {
-                count: credentials?.length ?? 0,
-              })}
-            </SelectButton>
-            <Button
-              icon={isCreating ? SvgFold : SvgExpand}
-              prominence="tertiary"
-              aria-label={
-                isCreating
-                  ? t("add.collapseButton.ariaLabel")
-                  : t("add.expandButton.ariaLabel")
-              }
-              onClick={close}
-            />
-          </>
+          <SelectButton
+            icon={SvgListTree}
+            variant="select-heavy"
+            // Blue while an account is picked; held in its hover look
+            // while the list is open.
+            state={
+              !currentCredential
+                ? "empty"
+                : showSavedAccounts
+                  ? "selected"
+                  : "filled"
+            }
+            interaction={showSavedAccounts ? "hover" : "rest"}
+            aria-expanded={showSavedAccounts}
+            onClick={() => setShowSavedAccounts((shown) => !shown)}
+          >
+            {t("add.savedAccountsButton.label", {
+              count: credentials?.length ?? 0,
+            })}
+          </SelectButton>
         }
       />
 

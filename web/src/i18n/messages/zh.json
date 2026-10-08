@@ -2639,9 +2639,6 @@
           "label": "使用 {source} 授权",
           "pendingLabel": "正在授权…"
         },
-        "collapseButton": {
-          "ariaLabel": "折叠"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
@@ -2661,9 +2658,6 @@
         },
         "error": {
           "toast": "错误：{detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "展开"
         },
         "federated": {
           "tooltip": {
