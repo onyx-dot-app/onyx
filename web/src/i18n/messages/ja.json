@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Onyx に接続",
+      "request": "{clientName} に Onyx の検索を許可しますか？",
+      "account": "ログイン中: {email}",
+      "workspace": "ワークスペース: {workspaceName}",
+      "appAddress": "アプリのアドレス: {origin}",
+      "access": "アクセス可能なドキュメントの検索結果を読み取ります。ウェブ検索を使用し、ウェブページを開きます。",
+      "allow": "アクセスを許可",
+      "deny": "拒否",
+      "pending": "選択を保存中...",
+      "loading": "認可リクエストを読み込み中...",
+      "unavailable": "このリクエストは期限切れ、または変更されています。アプリからやり直してください。",
+      "failed": "認可を完了できませんでした。アプリからやり直してください。",
+      "signInRequired": "このアプリを認可するにはログインしてください。",
+      "signIn": "ログイン",
+      "forbidden": "このアプリを認可できません。ワークスペース管理者にお問い合わせください。",
+      "loadFailed": "Onyx はこのリクエストを読み込めませんでした。もう一度お試しください。",
+      "retry": "再試行"
+    },
+    "connections": {
+      "cancel": "キャンセル",
+      "title": "接続済みアプリ",
+      "description": "Onyx の検索を許可したアプリです。",
+      "empty": "接続済みアプリはありません。",
+      "loading": "接続済みアプリを読み込み中...",
+      "expires": "有効期限: {date}",
+      "disconnect": "接続を解除",
+      "disconnectAriaLabel": "{clientName} の接続を解除",
+      "pending": "接続を解除中...",
+      "failed": "アプリの接続を解除できませんでした。もう一度お試しください。",
+      "loadFailed": "接続済みアプリを読み込めませんでした。",
+      "confirmTitle": "{clientName} の接続を解除しますか？",
+      "confirmDescription": "このアプリは Onyx にアクセスできなくなります。後で再接続できます。"
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "アカウント"

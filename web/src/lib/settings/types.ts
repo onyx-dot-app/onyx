@@ -74,6 +74,8 @@ export interface Settings {
   // /api/gateway). When false, all gateway routes reject requests.
   llm_gateway_enabled?: boolean;
 
+  oauth_provider_enabled?: boolean;
+
   // Workspace-wide instructions injected into every Craft agent's system
   // prompt (AGENTS.md).
   craft_instructions?: string | null;

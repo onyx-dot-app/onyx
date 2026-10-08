@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Mit Onyx verbinden",
+      "request": "Darf {clientName} Onyx durchsuchen?",
+      "account": "Angemeldet als {email}",
+      "workspace": "Arbeitsbereich: {workspaceName}",
+      "appAddress": "App-Adresse: {origin}",
+      "access": "Suchergebnisse aus Dokumenten lesen, auf die du Zugriff hast. Die Websuche nutzen und Webseiten öffnen.",
+      "allow": "Zugriff erlauben",
+      "deny": "Ablehnen",
+      "pending": "Auswahl wird gespeichert...",
+      "loading": "Autorisierungsanfrage wird geladen...",
+      "unavailable": "Diese Anfrage ist abgelaufen oder wurde geändert. Starte erneut in deiner App.",
+      "failed": "Die Autorisierung konnte nicht abgeschlossen werden. Starte erneut in deiner App.",
+      "signInRequired": "Melde dich an, um diese App zu autorisieren.",
+      "signIn": "Anmelden",
+      "forbidden": "Du kannst diese App nicht autorisieren. Wende dich an die Administration deines Arbeitsbereichs.",
+      "loadFailed": "Onyx konnte diese Anfrage nicht laden. Versuche es erneut.",
+      "retry": "Erneut versuchen"
+    },
+    "connections": {
+      "cancel": "Abbrechen",
+      "title": "Verbundene Apps",
+      "description": "Apps, denen du erlaubt hast, Onyx zu durchsuchen.",
+      "empty": "Keine verbundenen Apps.",
+      "loading": "Verbundene Apps werden geladen...",
+      "expires": "Läuft am {date} ab",
+      "disconnect": "Trennen",
+      "disconnectAriaLabel": "Verbindung zu {clientName} trennen",
+      "pending": "Verbindung wird getrennt...",
+      "failed": "Die App konnte nicht getrennt werden. Versuche es erneut.",
+      "loadFailed": "Verbundene Apps konnten nicht geladen werden.",
+      "confirmTitle": "Verbindung mit {clientName} trennen?",
+      "confirmDescription": "Diese App verliert den Zugriff auf Onyx. Du kannst sie später erneut verbinden."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "Konto"

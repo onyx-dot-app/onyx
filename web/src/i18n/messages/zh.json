@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "连接到 Onyx",
+      "request": "允许 {clientName} 搜索 Onyx 吗？",
+      "account": "当前登录账号：{email}",
+      "workspace": "工作区：{workspaceName}",
+      "appAddress": "应用地址：{origin}",
+      "access": "读取你有权访问的文档的搜索结果。使用网页搜索并打开网页。",
+      "allow": "允许访问",
+      "deny": "拒绝",
+      "pending": "正在保存你的选择...",
+      "loading": "正在加载授权请求...",
+      "unavailable": "此请求已过期或发生更改。请从应用重新开始。",
+      "failed": "未能完成授权。请从应用重新开始。",
+      "signInRequired": "请登录以授权此应用。",
+      "signIn": "登录",
+      "forbidden": "你无法授权此应用。请联系工作区管理员。",
+      "loadFailed": "Onyx 无法加载此请求。请重试。",
+      "retry": "重试"
+    },
+    "connections": {
+      "cancel": "取消",
+      "title": "已连接的应用",
+      "description": "你已允许搜索 Onyx 的应用。",
+      "empty": "没有已连接的应用。",
+      "loading": "正在加载已连接的应用...",
+      "expires": "到期日期：{date}",
+      "disconnect": "断开连接",
+      "disconnectAriaLabel": "断开与 {clientName} 的连接",
+      "pending": "正在断开连接...",
+      "failed": "无法断开应用连接。请重试。",
+      "loadFailed": "无法加载已连接的应用。",
+      "confirmTitle": "断开 {clientName} 的连接吗？",
+      "confirmDescription": "此应用将失去对 Onyx 的访问权限。你可以稍后重新连接。"
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "账户"

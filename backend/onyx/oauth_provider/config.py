@@ -1,5 +1,5 @@
 import ipaddress
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 from pydantic import AnyUrl
 
@@ -31,8 +31,8 @@ def validate_oauth_url(value: str, *, allow_query: bool) -> str:
     Requires HTTPS (plain HTTP only for loopback hosts) and rejects credentials,
     fragments, wildcards, whitespace and control characters."""
     try:
-        split = urlsplit(value)
-        hostname = split.hostname
+        split: SplitResult = urlsplit(value)
+        hostname: str | None = split.hostname
         if (
             len(value) <= OAUTH_PROVIDER_MAX_URL_LENGTH
             and not any(ord(c) < 32 or ord(c) == 127 or c.isspace() for c in value)
@@ -57,15 +57,15 @@ def load_oauth_provider_settings() -> OAuthProviderSettings | None:
     """Settings for the OAuth provider, or None when `WEB_DOMAIN` cannot host it:
     it must be HTTPS (plain HTTP only on a loopback host)."""
     try:
-        web_url = validate_oauth_url(app_configs.WEB_DOMAIN, allow_query=False).rstrip(
-            "/"
-        )
+        web_url: str = validate_oauth_url(
+            app_configs.WEB_DOMAIN, allow_query=False
+        ).rstrip("/")
     except ValueError:
         logger.warning(
             "OAuth provider is off: WEB_DOMAIN must be HTTPS, or HTTP on localhost"
         )
         return None
-    split = urlsplit(web_url)
+    split: SplitResult = urlsplit(web_url)
     return OAuthProviderSettings(
         issuer_url=f"{web_url}/api/oauth-provider",
         mcp_resource_url=f"{web_url}/mcp/",

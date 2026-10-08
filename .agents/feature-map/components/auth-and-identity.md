@@ -429,6 +429,9 @@ which rejects unknown tenants before routing), then `_resolve_optional_user`
 authenticates it (§4.7). `introspect` lets the MCP server verify a token
 through the API ([[mcp-server]] §4.2).
 
+The consent page uses explicit Allow and Deny actions. Connected apps under
+Accounts & Access lists the user's grants and requires confirmation to disconnect.
+
 ---
 
 ## 5. Contracts and invariants
