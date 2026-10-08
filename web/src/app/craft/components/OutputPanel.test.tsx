@@ -185,3 +185,50 @@ it("polls a starting session after leaving a ready session with the same refresh
     });
   }
 });
+
+it("keeps the serving preview until its replacement is ready and stops polling afterward", async () => {
+  jest.useFakeTimers();
+  let info: Awaited<ReturnType<typeof fetchWebappInfo>> = {
+    has_webapp: true,
+    ready: true,
+    webapp_url: "/original-webapp",
+    status: "active",
+    sharing_scope: "private",
+  };
+  jest.mocked(fetchWebappInfo).mockImplementation(async () => info);
+  store().setActiveOutputTab(sessionId, "preview");
+  const { unmount } = render(<BuildOutputPanel isOpen />);
+  try {
+    await act(async () => jest.advanceTimersByTimeAsync(300));
+    const frame = screen.getByTitle("Web App Preview");
+    expect(frame).toHaveAttribute("src", "/original-webapp");
+
+    info = { ...info, ready: false, webapp_url: "/replacement-webapp" };
+    await act(async () => {
+      store().updateSessionData(sessionId, { webappNeedsRefresh: 1 });
+    });
+    expect(frame).toHaveAttribute("src", "/original-webapp");
+
+    info = { ...info, ready: true };
+    await act(async () => jest.advanceTimersByTimeAsync(2100));
+    expect(screen.getByTitle("Web App Preview")).toBe(frame);
+    expect(frame).toHaveAttribute("src", "/replacement-webapp");
+
+    await act(async () => {
+      store().updateSessionData(sessionId, { webappNeedsRefresh: 2 });
+    });
+    const requests = jest.mocked(fetchWebappInfo).mock.calls.length;
+    await act(async () => jest.advanceTimersByTimeAsync(6000));
+    expect(fetchWebappInfo).toHaveBeenCalledTimes(requests);
+  } finally {
+    unmount();
+    jest.useRealTimers();
+    jest.mocked(fetchWebappInfo).mockResolvedValue({
+      has_webapp: false,
+      webapp_url: null,
+      status: "active",
+      ready: false,
+      sharing_scope: "private",
+    });
+  }
+});

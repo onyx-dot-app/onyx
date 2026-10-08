@@ -705,8 +705,6 @@ export interface BuildSessionData {
   filesTabState: FilesTabState;
   /** Browser-style tab navigation history for back/forward */
   tabHistory: TabNavigationHistory;
-  /** Closing the panel suppresses automatic opening until the next interactive turn. */
-  panelManuallyDismissed: boolean;
   /** Shared metadata for discovery, Artifacts, and preview revisions. */
   outputInventory: Record<string, OutputFile> | null;
   outputInventoryStatus: "loading" | "complete" | "partial" | "error";
@@ -714,7 +712,7 @@ export interface BuildSessionData {
   outputBaselinePending: boolean;
   /** Explicit preview reloads, keyed by file path. File edits use inventory revisions. */
   filePreviewRefreshKeys: Record<string, number>;
-  /** Manual navigation or the first automatic output selection locks this turn's selection. */
+  /** Manual navigation, panel dismissal, or the first automatic selection locks selection until the next task. */
   outputSelectionLocked: boolean;
 }
 
@@ -781,7 +779,6 @@ function automaticallySelectOutput(
 ): Partial<BuildSessionData> {
   if (
     session.outputSelectionLocked ||
-    (!session.outputPanelOpen && session.panelManuallyDismissed) ||
     session.isInterrupting ||
     session.wasInterrupted ||
     session.status === "failed"
@@ -802,6 +799,13 @@ function selectOutputTarget(
     target.kind === "file"
       ? { type: "panel-tab", tabId: panelTabId(target) }
       : { type: "pinned", tab: target.kind };
+  const currentEntry =
+    session.tabHistory.entries[session.tabHistory.currentIndex];
+  const isCurrentEntry =
+    entry.type === "pinned"
+      ? currentEntry?.type === "pinned" && currentEntry.tab === entry.tab
+      : currentEntry?.type === "panel-tab" &&
+        currentEntry.tabId === entry.tabId;
   const entries = [
     ...session.tabHistory.entries.slice(0, session.tabHistory.currentIndex + 1),
     entry,
@@ -815,7 +819,9 @@ function selectOutputTarget(
       !session.panelTabs.some((tab) => panelTabId(tab) === panelTabId(target))
         ? [...session.panelTabs, target]
         : session.panelTabs,
-    tabHistory: { entries, currentIndex: entries.length - 1 },
+    tabHistory: isCurrentEntry
+      ? session.tabHistory
+      : { entries, currentIndex: entries.length - 1 },
   };
 }
 
@@ -1082,7 +1088,6 @@ const createInitialSessionData = (
     ],
     currentIndex: 0,
   },
-  panelManuallyDismissed: false,
   outputInventory: null,
   outputInventoryStatus: "loading",
   outputBaselinePending: initialData?.outputInventory == null,
@@ -1281,7 +1286,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         const update: Partial<BuildSessionData> = {
           outputPanelOpen: !session.outputPanelOpen,
         };
-        if (closing) update.panelManuallyDismissed = true;
+        if (closing) update.outputSelectionLocked = true;
         updateSessionData(currentSessionId, update);
       }
     } else {
@@ -2231,12 +2236,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
   maybeAutoOpenWebapp: async (sessionId) => {
     const started = get().sessions.get(sessionId);
-    if (
-      !started ||
-      (!started.outputPanelOpen && started.panelManuallyDismissed) ||
-      started.outputSelectionLocked
-    )
-      return;
+    if (!started || started.outputSelectionLocked) return;
 
     let readiness = webappReadinessChecks.get(sessionId);
     if (!readiness) {

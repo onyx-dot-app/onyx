@@ -33,6 +33,9 @@ A URL or source-file edit alone cannot open Preview or its Files fallback.
 Concurrent opening requests share one readiness check per session with a 30-second deadline.
 The deadline aborts stalled requests and releases the shared check so later tasks can retry.
 Late checks respect dismissal, newer turns, and an already-open artifact.
+The panel retains the last serving URL for the current session through readiness failures.
+It switches to a replacement URL only after that URL is ready. Switching sessions clears this state.
+Readiness polling stops on a successful ready response or after 30 seconds.
 
 Only the session owner can load the Preview tab, because `get_webapp_info`
 verifies ownership. The proxy also admits any authenticated tenant user who

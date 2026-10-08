@@ -138,7 +138,6 @@ it("honors manual dismissal even when a request was already in flight", async ()
   await store().refreshOutputInventory(sessionId);
   expect(session()).toMatchObject({
     outputPanelOpen: false,
-    panelManuallyDismissed: true,
     activePanelTabId: null,
   });
 });
@@ -256,7 +255,7 @@ it("releases a stalled readiness check so a later task can retry", async () => {
   }
 });
 
-it.each(["file", "dismissal", "new turn"] as const)(
+it.each(["file", "dismissal", "reopened panel", "new turn"] as const)(
   "does not let a late webapp check override %s",
   async (change) => {
     let resolveReady:
@@ -271,9 +270,10 @@ it.each(["file", "dismissal", "new turn"] as const)(
     if (change === "file") {
       await refresh([]);
       await refresh([slides]);
-    } else if (change === "dismissal") {
+    } else if (change === "dismissal" || change === "reopened panel") {
       store().toggleCurrentOutputPanel();
       store().toggleCurrentOutputPanel();
+      if (change === "reopened panel") store().toggleCurrentOutputPanel();
     } else {
       store().updateSessionData(sessionId, { turnGeneration: 1 });
     }
@@ -288,8 +288,13 @@ it.each(["file", "dismissal", "new turn"] as const)(
     expect(session()).toMatchObject(
       change === "file"
         ? { outputPanelOpen: true, activePanelTabId: `file:${slides.path}` }
-        : { outputPanelOpen: false, activePanelTabId: null }
+        : {
+            outputPanelOpen: change === "reopened panel",
+            activePanelTabId: null,
+          }
     );
+    if (change === "reopened panel")
+      expect(session()?.activeOutputTab).toBe("files");
   }
 );
 
@@ -457,16 +462,28 @@ it("preserves the baseline on a failed read", async () => {
   warn.mockRestore();
 });
 
-it("allows new-file selection after a dismissed panel has been reopened", async () => {
-  await refresh([]);
-  store().updateSessionData(sessionId, {
-    outputPanelOpen: true,
-    panelManuallyDismissed: true,
-    outputSelectionLocked: false,
-  });
-  await refresh([slides]);
-  expect(session()?.activePanelTabId).toBe(`file:${slides.path}`);
-});
+it.each([oldFile, slides])(
+  "keeps Files selected after closing and reopening the panel before $path arrives",
+  async (file) => {
+    await refresh([]);
+    store().toggleCurrentOutputPanel();
+    store().toggleCurrentOutputPanel();
+    store().toggleCurrentOutputPanel();
+
+    await refresh([file]);
+
+    expect(session()).toMatchObject({
+      outputPanelOpen: true,
+      activeOutputTab: "files",
+      activePanelTabId: null,
+    });
+    expect(session()?.panelTabs).toContainEqual({
+      kind: "file",
+      path: file.path,
+      fileName: file.path.split("/").pop(),
+    });
+  }
+);
 
 it.each([
   ["a pinned tab click", () => store().setActiveOutputTab(sessionId, "files")],
@@ -510,6 +527,25 @@ it.each([
     path: newFile.path,
     fileName: "new.pdf",
   });
+});
+
+it("keeps Back and Forward useful when the current tab is selected again", () => {
+  store().openFilePreview(sessionId, oldFile.path, "old.pdf");
+  store().openFilePreview(sessionId, oldFile.path, "old.pdf");
+  store().setActivePanelTabId(sessionId, `file:${oldFile.path}`);
+  store().setActiveOutputTab(sessionId, "artifacts");
+  store().setActiveOutputTab(sessionId, "artifacts");
+
+  store().navigateTabBack(sessionId);
+  expect(session()?.activePanelTabId).toBe(`file:${oldFile.path}`);
+
+  store().setActivePanelTabId(sessionId, `file:${oldFile.path}`);
+  store().navigateTabForward(sessionId);
+  expect(session()).toMatchObject({
+    activeOutputTab: "artifacts",
+    activePanelTabId: null,
+  });
+  expect(session()?.tabHistory.entries).toHaveLength(3);
 });
 
 it("reopens closed file tabs through history without adding history entries", async () => {

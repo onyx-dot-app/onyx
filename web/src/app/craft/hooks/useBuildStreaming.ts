@@ -917,7 +917,6 @@ export function useBuildStreaming() {
         activeTurnId: turnId,
         ...(existingSession?.activeTurnId !== turnId && {
           outputSelectionLocked: false,
-          panelManuallyDismissed: false,
           wasInterrupted: false,
         }),
       });
@@ -1060,7 +1059,6 @@ export function useBuildStreaming() {
         wasInterrupted: false,
         outputSelectionLocked: false,
         outputBaselinePending: true,
-        panelManuallyDismissed: false,
         turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
         activeTurnId: null,
         activeTurnIndex: null,

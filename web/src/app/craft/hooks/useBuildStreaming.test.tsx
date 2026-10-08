@@ -955,7 +955,7 @@ describe("useBuildStreaming thinking packets", () => {
     });
     expect(store().sessions.get(sessionId)).toMatchObject({
       outputPanelOpen: false,
-      panelManuallyDismissed: true,
+      activePanelTabId: null,
     });
 
     jest
@@ -977,7 +977,6 @@ describe("useBuildStreaming thinking packets", () => {
     });
     expect(store().sessions.get(sessionId)).toMatchObject({
       outputPanelOpen: true,
-      panelManuallyDismissed: false,
       activePanelTabId: "file:outputs/report.pdf",
     });
   });

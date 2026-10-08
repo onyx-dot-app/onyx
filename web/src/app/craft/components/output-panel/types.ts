@@ -14,10 +14,3 @@ export function getWebappState(
   if (hasWebapp == null) return "unknown";
   return hasWebapp ? "starting" : "none";
 }
-
-export function isWebappPreviewEnabled(
-  state: WebappState,
-  canQueryWebapp: boolean
-): boolean {
-  return canQueryWebapp && state !== "none";
-}

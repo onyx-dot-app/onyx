@@ -294,13 +294,14 @@ gives slide images a fresh browser cache token. PDF previews release each viewer
 object URL and payload on unmount. Presentation keyboard navigation stays inside
 the viewer.
 
-The first automatic output selection, manual tab selection, closing a tab, and
+The first automatic output selection, manual tab selection, closing a tab or the panel, and
 history navigation suppress further automatic selection for the current turn.
-A new interactive turn clears this selection lock.
-Scheduled runs use fresh sessions; reattaching preserves their selection lock. Manually
-closing the panel suppresses automatic opening until the next interactive turn. Explicit file
-clicks still open their preview. The inventory keeps updating while navigation
+A single `outputSelectionLocked` flag controls this behavior independently of panel visibility.
+A new interactive turn clears the lock. Reopening the panel does not clear it.
+Scheduled runs use fresh sessions; reattaching preserves their selection lock.
+Explicit file clicks still open their preview. The inventory keeps updating while navigation
 is suppressed, so old changes do not appear as new files later.
+Selecting the current history entry preserves Back and Forward history instead of adding a duplicate entry.
 
 ## 5. Contracts and invariants
 

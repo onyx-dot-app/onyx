@@ -33,7 +33,6 @@ import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
 import {
   getWebappState,
-  isWebappPreviewEnabled,
   type WebappState,
 } from "@/app/craft/components/output-panel/types";
 
@@ -203,23 +202,11 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
     }
   }, [isOpen]);
 
-  // Session-scoped URL caching
-  const [cachedWebappUrl, setCachedWebappUrl] = useState<string | null>(null);
-  const [cachedForSessionId, setCachedForSessionId] = useState<string | null>(
-    null
-  );
-  // Latches once the webapp has been observed ready for this session, so a
-  // later crash/restart does not hide the Preview tab again.
-  const [webappHasBeenReady, setWebappHasBeenReady] = useState(false);
-
-  // Clear cache when session changes
-  useEffect(() => {
-    if (session?.id !== cachedForSessionId) {
-      setCachedWebappUrl(null);
-      setCachedForSessionId(session?.id ?? null);
-      setWebappHasBeenReady(false);
-    }
-  }, [session?.id, cachedForSessionId]);
+  // Keep the last serving URL through a restart, but never across sessions.
+  const [readyWebapp, setReadyWebapp] = useState<{
+    sessionId: string;
+    url: string;
+  } | null>(null);
 
   // Webapp refresh trigger from streaming / restore
   const webappNeedsRefresh = useWebappNeedsRefresh();
@@ -227,11 +214,9 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
 
   // Track polling window: poll for up to 30s after a restore/refresh trigger
   const [pollingDeadline, setPollingDeadline] = useState<number | null>(null);
-  const [isWebappReady, setIsWebappReady] = useState(false);
 
   // Refresh counters are session-local. Switching sessions must reset polling too.
   useEffect(() => {
-    setIsWebappReady(false);
     if (webappNeedsRefresh > 0) {
       setPollingDeadline(Date.now() + 30_000);
 
@@ -252,8 +237,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const shouldFetchWebapp = isFullyOpen && canQueryWebapp;
 
   // Poll every 2s while NextJS is starting up (capped at 30s), then stop
-  const shouldPoll =
-    !isWebappReady && pollingDeadline !== null && Date.now() < pollingDeadline;
+  const shouldPoll = pollingDeadline !== null && Date.now() < pollingDeadline;
 
   const { data: webappInfo, mutate } = useSWR(
     shouldFetchWebapp && session
@@ -263,15 +247,9 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
     {
       refreshInterval: shouldPoll ? 2000 : 0,
       revalidateOnFocus: true,
-      // Stop polling via onSuccess (not a useEffect over `ready`) — a refresh
-      // bump resets isWebappReady while `ready` stays true across fetches, so
-      // an effect keyed on the value never re-fires and each poll window runs
-      // its full 30s instead of stopping at the first healthy response.
+      // A successful read must stop each new polling window, even if readiness is unchanged.
       onSuccess: (data) => {
-        if (data?.ready) {
-          setIsWebappReady(true);
-          setPollingDeadline(null);
-        }
+        if (data?.ready) setPollingDeadline(null);
       },
     }
   );
@@ -279,20 +257,13 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   // Gate on `ready`, not webapp_url alone - the URL can exist before the
   // dev server has actually started serving.
   useEffect(() => {
-    if (
-      webappInfo?.ready &&
-      webappInfo.webapp_url &&
-      session?.id === cachedForSessionId
-    ) {
-      setCachedWebappUrl(webappInfo.webapp_url);
-      setWebappHasBeenReady(true);
-    }
-  }, [
-    webappInfo?.ready,
-    webappInfo?.webapp_url,
-    session?.id,
-    cachedForSessionId,
-  ]);
+    setReadyWebapp((previous) => {
+      if (session?.id && webappInfo?.ready && webappInfo.webapp_url) {
+        return { sessionId: session.id, url: webappInfo.webapp_url };
+      }
+      return previous?.sessionId === session?.id ? previous : null;
+    });
+  }, [webappInfo?.ready, webappInfo?.webapp_url, session?.id]);
 
   // Re-fetch webapp-info when web/ files change or after restore. Live code
   // edits reach the iframe via the proxied HMR websocket — no remount needed.
@@ -302,23 +273,17 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
     }
   }, [webappNeedsRefresh, isFullyOpen, mutate, session?.id]);
 
-  const webappUrl = webappInfo?.webapp_url ?? null;
-
-  // Use cache only if it belongs to current session
-  const validCachedUrl =
-    cachedForSessionId === session?.id ? cachedWebappUrl : null;
-  const displayUrl = webappUrl ?? validCachedUrl;
-
-  const iframeUrl = webappHasBeenReady ? displayUrl : null;
+  const iframeUrl =
+    readyWebapp?.sessionId === session?.id ? (readyWebapp?.url ?? null) : null;
 
   const webappState: WebappState = getWebappState(
-    webappHasBeenReady,
+    iframeUrl !== null,
     webappInfo?.has_webapp
   );
 
   // Existing sessions stay on Preview while webapp-info loads. Provisioning
   // sessions cannot be queried yet, so they start on Files instead.
-  const previewEnabled = isWebappPreviewEnabled(webappState, canQueryWebapp);
+  const previewEnabled = canQueryWebapp && webappState !== "none";
 
   // Redirect away from the Preview tab while it's disabled without
   // mutating the user's stored tab preference.
