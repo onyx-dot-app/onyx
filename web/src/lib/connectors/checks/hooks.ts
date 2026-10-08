@@ -1,6 +1,13 @@
 "use client";
 
-import { createElement, useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 import { SvgProgressRing } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
@@ -77,11 +84,6 @@ function blocks(check: DraftCheckState): boolean {
     case "waiting":
       return true;
   }
-}
-
-/** A check is the same across a plan and a run by its capability and ID. */
-function checkKey(check: DraftCheckState): string {
-  return `${check.capability}:${check.check_id}`;
 }
 
 function isFinished(
@@ -231,7 +233,7 @@ export function useConnectorChecks({
     () => JSON.stringify([accessType, formState]),
     [accessType, formState]
   );
-  const { data: plan } = useConnectorCheckPlan(source, accessType);
+  const { data: plan } = useConnectorCheckPlan(source, accessType, formState);
 
   const runId: string | null = session?.runId ?? null;
   const { data: run } = useSWR<DraftCheckRunSnapshot>(
@@ -336,16 +338,19 @@ export function useConnectorChecks({
   const applicable: DraftCheckState[] = (plan?.checks ?? []).filter(
     (check) => check.state !== "not_applicable"
   );
-  const runStates: Map<string, DraftCheckState> = new Map(
-    checks.map((check) => [checkKey(check), check])
-  );
-  const bindingChecks = applicable.filter((check) => check.validates_binding);
-  const formUnlocked: boolean =
-    plan !== undefined &&
-    bindingChecks.every((check) => {
-      const result = runStates.get(checkKey(check));
-      return result !== undefined && !blocks(result);
-    });
+  // Which checks validate the binding can depend on the form (e.g. a scoped
+  // token picks its own sign-in check). A current run worked them out from
+  // the form it ran on, so it decides; before one, the plan does, and the
+  // form waits for a run while any apply.
+  const formUnlocked: boolean = snapshot
+    ? checks.every(
+        (check) =>
+          !check.validates_binding ||
+          check.state === "not_applicable" ||
+          !blocks(check)
+      )
+    : plan !== undefined &&
+      !applicable.some((check) => check.validates_binding);
   const ranThisForm: boolean =
     !!session &&
     !session.requesting &&
@@ -394,24 +399,39 @@ export function useConnectorChecks({
   };
 }
 
+const PLAN_DEBOUNCE_MS = 300;
+
+/** `value`, once it has held still for `delayMs`. */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timeout);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 /**
- * The checks a run would hold for `source` with this access type, fetched
- * once per pair. Which checks exist and which are required does not depend
- * on the credential.
+ * The checks a run would hold for `source` with this access type and form.
+ * Which checks apply can depend on the form, so the plan follows it, a little
+ * behind typing, and keeps its last answer while a new one loads. It does not
+ * depend on the credential.
  */
 export function useConnectorCheckPlan(
   source: ConfigurableSources,
-  accessType: AccessType
+  accessType: AccessType,
+  formState: Record<string, unknown>
 ): SWRResponse<DraftCheckPlan> {
+  const form = useDebouncedValue(formState, PLAN_DEBOUNCE_MS);
   return useSWR<DraftCheckPlan>(
-    SWR_KEYS.connectorCheckPlan(source, accessType),
+    SWR_KEYS.connectorCheckPlan(source, accessType, JSON.stringify(form)),
     () =>
       fetchDraftCheckPlan({
         source,
         access_type: accessType,
-        form_state: {},
+        form_state: form,
       }),
-    { revalidateOnFocus: false }
+    { revalidateOnFocus: false, keepPreviousData: true }
   );
 }
 

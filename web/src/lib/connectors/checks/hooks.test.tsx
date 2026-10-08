@@ -160,6 +160,27 @@ it("unlocks the form once the binding checks pass, before Create can run", async
   expect(result.current.checks.createReady).toBe(false);
 });
 
+it("gates the form on the binding checks the run found, not the plan's", async () => {
+  // Planned with an empty form, the plain sign-in check applies. The run's
+  // form picks the scoped sign-in instead, and that check failed.
+  startMock.mockResolvedValue(
+    run([
+      check({ ...BINDING, state: "not_applicable" }),
+      check({
+        check_id: "scoped_sign_in",
+        state: "failed",
+        validates_binding: true,
+      }),
+      CONTENT,
+    ])
+  );
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+
+  await waitFor(() => expect(result.current.checks.status).toBe("failed"));
+  expect(result.current.checks.formUnlocked).toBe(false);
+});
+
 it("unlocks the form without a run when no check validates the binding", async () => {
   planMock.mockResolvedValue(plan([CONTENT]));
   const { result } = renderChecks();

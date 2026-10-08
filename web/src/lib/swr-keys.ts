@@ -84,11 +84,11 @@ export const SWR_KEYS = {
     source,
   ],
   // The checks a run would hold for an unsaved connector form (a POST).
-  connectorCheckPlan: (source: string, accessType: string | null) => [
-    "connector-check-plan",
-    source,
-    accessType,
-  ],
+  connectorCheckPlan: (
+    source: string,
+    accessType: string | null,
+    form: string
+  ) => ["connector-check-plan", source, accessType, form],
   // One capability-check run for an unsaved connector form.
   connectorCheckRun: (runId: string) =>
     `/api/manage/admin/connector-checks/runs/${runId}`,
