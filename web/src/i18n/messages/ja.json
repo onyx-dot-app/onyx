@@ -2745,14 +2745,6 @@
           },
           "rerunFailed": {
             "toast": "チェックを開始できませんでした。もう一度お試しください。"
-          },
-          "draft": {
-            "description": "未保存",
-            "detailsTitle": "未保存",
-            "detailsDescription": "このアカウントはコネクタの作成時に保存されます。このページを離れると破棄されます。",
-            "discardButton": {
-              "label": "アカウントを破棄"
-            }
           }
         }
       },

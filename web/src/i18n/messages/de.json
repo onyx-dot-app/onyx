@@ -2745,14 +2745,6 @@
           },
           "rerunFailed": {
             "toast": "Die Prüfungen konnten nicht gestartet werden. Versuchen Sie es erneut."
-          },
-          "draft": {
-            "description": "Noch nicht gespeichert",
-            "detailsTitle": "Noch nicht gespeichert",
-            "detailsDescription": "Dieses Konto wird gespeichert, wenn Sie den Connector erstellen. Wenn Sie diese Seite verlassen, wird es verworfen.",
-            "discardButton": {
-              "label": "Konto verwerfen"
-            }
           }
         }
       },
