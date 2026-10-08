@@ -398,9 +398,27 @@ class TeamsConnector(
             if export.fell_back:
                 checkpoint.todo_channels.extend(export.channels)
                 continue
-            for channel in export.channels:
-                yield from self._opened_channel_files(channel, start)
+            if self._files is None:
+                continue
+            # A channel's files on a worker each, the way the channel walk reads
+            # them: the SharePoint REST context is per thread.
+            per_channel: list[list[Document | ConnectorFailure]] = (
+                run_functions_tuples_in_parallel(
+                    [
+                        (self._opened_channel_file_items, (channel, start))
+                        for channel in export.channels
+                    ],
+                    max_workers=self.max_workers,
+                )
+            )
+            for items in per_channel:
+                yield from items
         del checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
+
+    def _opened_channel_file_items(
+        self, channel: ChannelRef, start: SecondsSinceUnixEpoch
+    ) -> list[Document | ConnectorFailure]:
+        return list(self._opened_channel_files(channel, start))
 
     def _opened_channel_files(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch
@@ -456,27 +474,21 @@ class TeamsConnector(
                 self._restarted_channel_ids.add(advance.cursor.channel.id)
             if not advance.done:
                 active.append(advance.cursor)
-                continue
-            # The SharePoint REST client behind file readers is not safe across
-            # threads, so a channel's files are read here, after its last page.
-            if advance.files_due and self._files is not None:
-                yield from self._channel_files(advance.cursor.channel, start)
-            if self._files is not None:
-                self._files.leave(advance.cursor.channel)
         checkpoint.active = active
 
     def _advance_channel(
         self, cursor: ChannelCursor, start: SecondsSinceUnixEpoch
     ) -> ChannelAdvance:
         """One page of the cursor's channel: its threads with their replies and
-        images. Done when the page was its last or is refused; the step leaves
-        the channel."""
+        images, and after the last page its files. Leaves the channel when the
+        page was its last or is refused."""
         channel = cursor.channel
         items: list[Document | ConnectorFailure] = []
 
         type_failure = self._threads.type_failure(channel)
         if type_failure is not None:
             items.append(type_failure)
+            self._leave_files(channel)
             return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         # No library means the files grant the admin turned on is missing, so a
@@ -493,6 +505,7 @@ class TeamsConnector(
             if not is_permanent(e):
                 raise
             items.append(channel_failure(channel, "files", e))
+            self._leave_files(channel)
             return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         try:
@@ -511,16 +524,22 @@ class TeamsConnector(
             if not is_permanent(e):
                 raise
             items.append(channel_failure(channel, "messages", e))
+            self._leave_files(channel)
             return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         items.extend(self._threads.documents(channel, roots, start))
         cursor.next_messages_url = next_url
-        return ChannelAdvance(
-            cursor=cursor,
-            items=items,
-            done=next_url is None,
-            files_due=next_url is None,
-        )
+        if next_url is not None:
+            return ChannelAdvance(cursor=cursor, items=items)
+        # The files follow the last page, on this worker: the SharePoint REST
+        # context behind their readers is per thread.
+        items.extend(self._channel_files(channel, start))
+        self._leave_files(channel)
+        return ChannelAdvance(cursor=cursor, items=items, done=True)
+
+    def _leave_files(self, channel: ChannelRef) -> None:
+        if self._files is not None:
+            self._files.leave(channel)
 
     def _channel_files(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch

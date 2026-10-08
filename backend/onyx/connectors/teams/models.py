@@ -125,7 +125,6 @@ class ChannelAdvance(BaseModel):
     cursor: ChannelCursor
     items: list[Document | ConnectorFailure]
     done: bool = False
-    files_due: bool = False
     restarted: bool = False
 
 

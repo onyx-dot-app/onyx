@@ -367,8 +367,10 @@ of meeting chats.
   finished its page, so a raise in one leaves the step to be retried. A
   checkpoint saved by the one-channel walk joins `active` when it is loaded.
 - **Files.** After a channel's last page, or its team's export stream, its
-  library is read on the consuming thread (`FileSource.index`): the folder children, each file's text, and its
-  readers through SharePoint REST, whose client is kept per site.
+  library is read on the same worker (`FileSource.index`): the folder
+  children, each file's text, and its readers through a SharePoint REST
+  context kept per site and per thread, so the files of several channels are
+  read side by side.
 - **Organizers.** The meeting side follows the channels: a page of licensed
   users per step, then 32 organizers per step drained by eight workers from a
   queue (`sources.drain`), each organizer read for its transcripts and the
