@@ -36,6 +36,7 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     parse_graph_sharepoint_ids,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
+    GRAPH_API_RETRYABLE_STATUSES,
     TRANSIENT_TRANSPORT_EXCEPTIONS,
     GraphApiClient,
     backoff_seconds,
@@ -399,6 +400,27 @@ def stream_response_to_buffer_with_cap(
     for attempt in range(max_retries + 1):
         try:
             with request_factory() as resp:
+                # A throttled or gateway-failed download is retried like any
+                # other Graph call, honoring Retry-After, instead of failing
+                # the attempt.
+                if (
+                    resp.status_code in GRAPH_API_RETRYABLE_STATUSES
+                    and attempt < max_retries
+                ):
+                    sleep_time = backoff_seconds(
+                        attempt, resp.headers.get("Retry-After")
+                    )
+                    logger.warning(
+                        "Download for %s answered %s on attempt %s/%s. "
+                        "Sleeping %.1fs before retry.",
+                        description,
+                        resp.status_code,
+                        attempt + 1,
+                        max_retries + 1,
+                        sleep_time,
+                    )
+                    time.sleep(sleep_time)
+                    continue
                 log_and_raise_for_status(resp)
 
                 cl_header = resp.headers.get("Content-Length")

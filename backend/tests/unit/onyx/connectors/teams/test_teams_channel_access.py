@@ -1,7 +1,7 @@
 """Channel readership: a thread names the group of its channel's members, and
 the group sync names the people in it."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -222,6 +222,28 @@ def test_an_id_graph_does_not_name_is_not_asked_for_again() -> None:
         assert _emails(client, directory) == []
 
     assert len(client.posted) == 1
+
+
+def test_the_directory_lookup_runs_with_the_lock_released() -> None:
+    """Workers share the directory, so a page of names must not stall the
+    others: only the cache is guarded, the lookup itself is not."""
+    client = graph_client(
+        {
+            MEMBERS_URL: {"value": [member("Ada", None, "u1")]},
+            USER_LOOKUP_URL: {"u1": "ada@example.com"},
+        }
+    )
+    directory = UserDirectory(client)
+    original = directory._lookup
+    locked_during_lookup: list[bool] = []
+
+    def observed(batch: list[str]) -> dict[str, str | None]:
+        locked_during_lookup.append(directory._lock.locked())
+        return original(batch)
+
+    with patch.object(directory, "_lookup", side_effect=observed):
+        assert _emails(client, directory) == ["ada@example.com"]
+    assert locked_during_lookup == [False]
 
 
 def test_a_channel_whose_members_all_carry_an_email_asks_for_no_names() -> None:
