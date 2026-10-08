@@ -7,7 +7,6 @@ test and passes it as an override.
 import base64
 import hashlib
 from datetime import datetime, timezone
-from io import BytesIO
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -101,6 +100,9 @@ def change_json(**overrides: Any) -> dict[str, Any]:
         "conversationId": CONVERSATION_ID,
         "conversationIndex": conversation_index(CONVERSATION_ID),
         "receivedDateTime": "2026-09-01T10:00:00Z",
+        "sender": recipient_json(MAILBOX_ADDRESS, "Alice"),
+        "toRecipients": [recipient_json("bob@contoso.com", "Bob")],
+        "ccRecipients": [],
     }
     return fields | overrides
 
@@ -149,11 +151,11 @@ def message(**overrides: Any) -> OutlookMessage:
     return OutlookMessage(**(fields | overrides))
 
 
-def conversation_index(conversation_id: str) -> str:
-    """A conversation index whose thread root is unique to the conversation id."""
-    return base64.b64encode(
-        hashlib.sha256(conversation_id.encode()).digest()[:22]
-    ).decode()
+def conversation_index(conversation_id: str, reply: bool = False) -> str:
+    """A conversation index whose thread root is unique to the conversation
+    id: the root message's own, or a reply's with one child block appended."""
+    root = hashlib.sha256(conversation_id.encode()).digest()[:22]
+    return base64.b64encode(root + (bytes(5) if reply else b"")).decode()
 
 
 def thread_doc_id(conversation_id: str) -> str:
@@ -163,18 +165,38 @@ def thread_doc_id(conversation_id: str) -> str:
     return thread_document_id(key)
 
 
-def change(**overrides: Any) -> OutlookMessageChange:
+def change(reply: bool = False, **overrides: Any) -> OutlookMessageChange:
+    """A listing row, the thread's first message unless ``reply`` says so.
+    Sent by Alice to Bob unless the headers are overridden."""
     fields: dict[str, Any] = {
         "id": "msg-1",
         "internet_message_id": f"<{overrides.get('id', 'msg-1')}@contoso.com>",
         "conversation_id": CONVERSATION_ID,
         "parent_folder_id": INBOX_ID,
         "received_at": RECEIVED,
+        "sender": OutlookRecipient(address=MAILBOX_ADDRESS, name="Alice"),
+        "to_recipients": [OutlookRecipient(address="bob@contoso.com", name="Bob")],
     }
     conversation_id = overrides.get("conversation_id", CONVERSATION_ID)
     if conversation_id is not None:
-        fields["conversation_index"] = conversation_index(conversation_id)
+        fields["conversation_index"] = conversation_index(conversation_id, reply)
     return OutlookMessageChange(**(fields | overrides))
+
+
+def change_of(m: OutlookMessage, reply: bool = False) -> OutlookMessageChange:
+    """The listing row a delta page or an outline reports for a message."""
+    return change(
+        reply,
+        id=m.id,
+        internet_message_id=m.internet_message_id,
+        conversation_id=m.conversation_id,
+        parent_folder_id=m.parent_folder_id,
+        received_at=m.received_at,
+        is_draft=m.is_draft,
+        sender=m.sender,
+        to_recipients=m.to_recipients,
+        cc_recipients=m.cc_recipients,
+    )
 
 
 def event_json(**overrides: Any) -> dict[str, Any]:
@@ -242,36 +264,3 @@ def attachment(**overrides: Any) -> OutlookAttachment:
         "is_file": True,
     }
     return OutlookAttachment(**(fields | overrides))
-
-
-def memory_file_store() -> MagicMock:
-    """A file store kept in a dict, with the records the thread table lists."""
-    files: dict[str, bytes] = {}
-    store = MagicMock()
-
-    def save_file(*, content: BytesIO, file_id: str, **_: object) -> None:
-        files[file_id] = content.read()
-
-    def read_file(file_id: str, mode: str = "b") -> BytesIO:  # noqa: ARG001
-        return BytesIO(files[file_id])
-
-    def list_files_by_prefix(prefix: str) -> list[MagicMock]:
-        return [
-            MagicMock(file_id=f, created_at=datetime.now(timezone.utc))
-            for f in files
-            if f.startswith(prefix)
-        ]
-
-    def has_file(file_id: str, *_: object) -> bool:
-        return file_id in files
-
-    def delete_file(file_id: str, error_on_missing: bool = True) -> None:  # noqa: ARG001
-        files.pop(file_id, None)
-
-    store.save_file.side_effect = save_file
-    store.read_file.side_effect = read_file
-    store.list_files_by_prefix.side_effect = list_files_by_prefix
-    store.delete_file.side_effect = delete_file
-    store.has_file.side_effect = has_file
-    store.files = files
-    return store

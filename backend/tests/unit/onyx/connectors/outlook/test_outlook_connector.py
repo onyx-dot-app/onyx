@@ -6,7 +6,7 @@ machine and document assembly against the gateway's plain models.
 
 import json
 import threading
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock, call, create_autospec, patch
@@ -41,6 +41,7 @@ from onyx.connectors.models import (
 from onyx.connectors.outlook import connector as connector_module
 from onyx.connectors.outlook.connector import (
     ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS,
+    COMPARED_FETCH_LIMIT,
     CONVERSATION_FETCH_LIMIT,
     EVENT_DOCUMENT_ID_PREFIX,
     FILTERED_DELTA_CAP,
@@ -48,7 +49,6 @@ from onyx.connectors.outlook.connector import (
     MAX_ATTACHMENT_READS_PER_CONVERSATION,
     MAX_ATTACHMENT_TEXT_PER_CONVERSATION,
     MAX_ATTACHMENTS_PER_MESSAGE,
-    MAX_MESSAGES_PER_CONVERSATION,
     MAX_TRACKED_SERIES_PER_MAILBOX,
     SLIM_BATCH_SIZE,
     THROTTLED_MESSAGE,
@@ -69,6 +69,7 @@ from onyx.connectors.outlook.models import (
     OutlookEventPage,
     OutlookFolder,
     OutlookFolderPage,
+    OutlookMailbox,
     OutlookMailboxPage,
     OutlookMessage,
     OutlookMessageChange,
@@ -76,7 +77,11 @@ from onyx.connectors.outlook.models import (
     OutlookRecipient,
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
-from onyx.connectors.outlook.threads import copy_document_id
+from onyx.connectors.outlook.threads import (
+    MAX_MESSAGES_PER_CONVERSATION,
+    copy_document_id,
+    own_document_id,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.process_isolation import IsolatedProcessError
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
@@ -86,26 +91,16 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     RECEIVED,
     attachment,
     change,
+    change_of,
     event,
     folder,
     graph_error,
     mailbox,
-    memory_file_store,
     message,
     thread_doc_id,
 )
 
 CONNECTOR_MODULE = "onyx.connectors.outlook.connector"
-
-
-@pytest.fixture(autouse=True)
-def _memory_thread_table() -> Generator[MagicMock, None, None]:
-    """The real thread table over a file store kept in memory."""
-    store = memory_file_store()
-    with patch(
-        "onyx.connectors.outlook.threads.get_default_file_store", return_value=store
-    ):
-        yield store
 
 
 JUNK_ID = "folder-junk"
@@ -236,24 +231,21 @@ def _outline_of(gateway: MagicMock) -> Callable[..., OutlookDeltaPage]:
     copy, so the two fetches agree unless a test says otherwise."""
 
     def outline(
-        *, mailbox_id: str, conversation_id: str, next_link: str | None = None
+        *,
+        mailbox_id: str,
+        conversation_id: str,
+        next_link: str | None = None,
+        oldest_first: bool = False,
     ) -> OutlookDeltaPage:
         del mailbox_id, conversation_id, next_link
         page: OutlookMessagePage = gateway.fetch_conversation_messages_page.return_value
-        return OutlookDeltaPage(
-            changes=[
-                change(
-                    id=m.id,
-                    internet_message_id=m.internet_message_id,
-                    conversation_id=m.conversation_id,
-                    parent_folder_id=m.parent_folder_id,
-                    received_at=m.received_at,
-                    is_draft=m.is_draft,
-                )
-                for m in page.messages
-            ],
-            next_link=page.next_link,
-        )
+        # The oldest message of the copy is the thread's first.
+        messages = sorted(page.messages, key=lambda m: m.received_at or RECEIVED)
+        changes = [
+            change_of(m, reply=m.id != messages[0].id)
+            for m in (messages if oldest_first else page.messages)
+        ]
+        return OutlookDeltaPage(changes=changes, next_link=page.next_link)
 
     return outline
 
@@ -298,6 +290,11 @@ def _step(
         if include_permissions
         else connector.load_from_checkpoint
     )
+    # A parked cursor is driven as the process that listed its mailbox would.
+    for cursor in checkpoint.active:
+        connector._listings.setdefault(
+            cursor.mailbox.id, connector_module._MailboxListing()
+        )
     generator = load(start, END, checkpoint)
     while True:
         try:
@@ -326,12 +323,13 @@ def _finish(
     connector: OutlookConnector,
     checkpoint: OutlookCheckpoint,
     include_permissions: bool = False,
+    start: int = START,
 ) -> list[Document | HierarchyNode | ConnectorFailure]:
     """Drive the walk from the given checkpoint to completion, mutating it in
     place the way a failing step leaves it."""
     collected: list[Document | HierarchyNode | ConnectorFailure] = []
     for _ in range(50):
-        items, checkpoint = _step(connector, checkpoint, include_permissions)
+        items, checkpoint = _step(connector, checkpoint, include_permissions, start)
         collected.extend(items)
         if not checkpoint.has_more:
             return collected
@@ -475,76 +473,78 @@ def test_document_drops_excluded_and_draft_messages_and_keeps_order() -> None:
 
 
 def test_conversation_paging_continues_past_excluded_messages() -> None:
-    """Drafts and trashed replies among the newest messages must not displace
-    older indexable ones."""
+    """Drafts and trashed replies among the newest messages must not stop
+    the read before the listed messages behind them."""
     gateway = _happy_gateway()
-    newest = [
-        message(
-            id=f"draft-{i}", is_draft=True, received_at=RECEIVED + timedelta(hours=i)
-        )
-        for i in range(60)
-    ] + [
+    kept = [
         message(id=f"kept-{i}", received_at=RECEIVED + timedelta(minutes=i))
         for i in range(40)
     ]
-    older = [
-        message(id=f"old-{i}", received_at=RECEIVED - timedelta(minutes=i))
-        for i in range(70)
+    drafts = [
+        message(
+            id=f"draft-{i}", is_draft=True, received_at=RECEIVED + timedelta(hours=i)
+        )
+        for i in range(100)
     ]
+    gateway.fetch_folder_delta_page.side_effect = None
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
+        changes=[change_of(m, reply=m.id != "kept-0") for m in kept]
+    )
     gateway.fetch_conversation_messages_page.side_effect = [
-        OutlookMessagePage(messages=newest, next_link="https://graph/messages?p=2"),
-        OutlookMessagePage(messages=older),
+        OutlookMessagePage(messages=drafts, next_link="https://graph/messages?p=2"),
+        OutlookMessagePage(messages=kept[::-1]),
     ]
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    items = _finish(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint(), start=0)
 
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs) == 1
-    assert len(docs[0].sections) == MAX_MESSAGES_PER_CONVERSATION
+    assert len(docs[0].sections) == 40
     assert docs[0].doc_updated_at == RECEIVED + timedelta(minutes=39)
     assert gateway.fetch_conversation_messages_page.call_count == 2
 
 
 def test_conversation_paging_stops_at_the_fetch_limit() -> None:
     gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = None
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(changes=[change()])
     drafts = [message(id=f"draft-{i}", is_draft=True) for i in range(100)]
     gateway.fetch_conversation_messages_page.return_value = OutlookMessagePage(
         messages=drafts, next_link="https://graph/messages?more"
     )
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    items = _finish(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint(), start=0)
 
-    assert items == []
+    assert not [item for item in items if isinstance(item, Document)]
     assert gateway.fetch_conversation_messages_page.call_count == (
-        CONVERSATION_FETCH_LIMIT // 100
+        COMPARED_FETCH_LIMIT // 100
     )
 
 
 def test_conversation_fetch_limit_cuts_the_last_page_before_filtering() -> None:
-    """The budget counts raw messages, so an indexable message just past it is
-    not kept even when it shares a page with messages inside it."""
+    """The budget counts raw messages, so a listed message just past it is
+    not read even when it shares a page with messages inside it."""
     gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = None
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(changes=[change()])
     drafts = [message(id=f"draft-{i}", is_draft=True) for i in range(99)]
-    last_page = [
-        message(id="draft-last", is_draft=True),
-        message(id="just-past-the-budget"),
-    ]
+    last_page = [message(id="draft-last", is_draft=True), message()]
     pages = [
         OutlookMessagePage(
             messages=drafts + [message(id="draft-99", is_draft=True)], next_link="p"
         )
-        for _ in range(CONVERSATION_FETCH_LIMIT // 100 - 1)
+        for _ in range(COMPARED_FETCH_LIMIT // 100 - 1)
     ]
     pages.append(OutlookMessagePage(messages=drafts, next_link="p"))
     pages.append(OutlookMessagePage(messages=last_page))
     gateway.fetch_conversation_messages_page.side_effect = pages
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    items = _finish(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint(), start=0)
 
-    assert items == []
+    assert not [item for item in items if isinstance(item, Document)]
 
 
 def test_unresolved_configured_mailbox_is_a_recorded_failure() -> None:
@@ -704,33 +704,84 @@ def test_pruning_lists_a_shared_thread_once_with_every_holder() -> None:
     }
 
 
-def test_listing_step_replayed_after_a_failure_rewrites_the_same_page(
-    _memory_thread_table: MagicMock,
-) -> None:
+def test_a_checkpoint_from_another_process_walks_its_mailboxes_again() -> None:
+    """The listing of a mailbox in flight lived in the process that saved
+    the checkpoint, so a new process opens the mailbox again and lists it
+    from the start, then finishes the walk."""
     gateway = _happy_gateway()
-    gateway.fetch_folder_delta_page.side_effect = None
-    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
-        changes=[change()], next_link="https://graph/delta?more"
-    )
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
     checkpoint = _folder_checkpoint()
-    saved = checkpoint.model_copy(deep=True)
+    assert checkpoint.active[0].opened
 
-    _step(connector, checkpoint)
-    # The step's checkpoint was never persisted, so the saved one runs again.
-    _step(connector, saved)
+    generator = connector.load_from_checkpoint(0, END, checkpoint)
+    items: list[Document | HierarchyNode | ConnectorFailure] = []
+    while True:
+        try:
+            items.append(next(generator))
+        except StopIteration as stop:
+            checkpoint = stop.value
+            break
 
-    pages = [f for f in _memory_thread_table.files if "listing-" in f]
-    assert pages == [f"outlook-threads/{checkpoint.run_id}/listing-0.jsonl"]
-    assert saved.listing_pages == 1
+    assert [item for item in items if isinstance(item, HierarchyNode)]
+    gateway.probe_mailbox.assert_called_once_with(mailbox_id=mailbox().id)
+    (cursor,) = checkpoint.active
+    assert cursor.opened and not cursor.listed and cursor.current_folder is None
+    documents = [
+        item
+        for item in _finish(connector, checkpoint, start=0)
+        if isinstance(item, Document)
+    ]
+    assert [doc.id for doc in documents] == [thread_doc_id(CONVERSATION_ID)]
 
 
-def test_thread_table_is_deleted_once_the_walk_finishes(
-    _memory_thread_table: MagicMock,
+def test_a_checkpoint_from_the_table_based_walk_starts_the_attempt_over() -> None:
+    """Its listing lived in a store this connector no longer reads."""
+    saved = {
+        "has_more": True,
+        "run_id": "abc",
+        "mailboxes": [],
+        "active": [],
+        "listing_pages": 3,
+        "listing_rows": 10,
+        "build_buckets": 1,
+        "bucketed_pages": 3,
+        "buckets_ready": True,
+        "next_bucket": 0,
+        "next_thread": 5,
+    }
+
+    checkpoint = OutlookCheckpoint.model_validate_json(json.dumps(saved))
+
+    assert checkpoint.has_more
+    assert checkpoint.mailboxes is None
+    assert checkpoint.active == []
+
+
+def test_a_mailbox_past_the_listing_cap_is_a_recorded_failure_and_skipped(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _run(_connector(_happy_gateway(), mailboxes=[MAILBOX_ADDRESS]))
+    monkeypatch.setattr(connector_module, "MAX_LISTING_ROWS_PER_MAILBOX", 1)
+    gateway = _happy_gateway()
 
-    assert _memory_thread_table.files == {}
+    items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]), start=0)
+
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert [f.failed_entity.entity_id for f in failures if f.failed_entity] == [
+        MAILBOX_ADDRESS
+    ]
+    assert "more than 1 messages" in failures[0].failure_message
+    assert not [item for item in items if isinstance(item, Document)]
+    gateway.fetch_conversation_messages_page.assert_not_called()
+
+
+def test_slim_walk_stops_at_a_mailbox_past_the_listing_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(connector_module, "MAX_LISTING_ROWS_PER_MAILBOX", 1)
+    connector = _connector(_happy_gateway(), mailboxes=[MAILBOX_ADDRESS])
+
+    with pytest.raises(ConnectorValidationError, match="more than 1 messages"):
+        list(connector.retrieve_all_slim_docs())
 
 
 def test_pruning_stops_at_an_unresolved_group() -> None:
@@ -742,10 +793,14 @@ def test_pruning_stops_at_an_unresolved_group() -> None:
         list(connector.retrieve_all_slim_docs())
 
 
+def _nth_mailbox(n: int) -> OutlookMailbox:
+    return mailbox(id=f"user-{n}", address=f"user{n}@contoso.com")
+
+
 def _many_mailbox_gateway(count: int) -> MagicMock:
     gateway = _happy_gateway()
     gateway.list_mailbox_users.return_value = OutlookMailboxPage(
-        mailboxes=[mailbox(id=f"user-{n}") for n in range(count)]
+        mailboxes=[_nth_mailbox(n) for n in range(count)]
     )
     return gateway
 
@@ -761,10 +816,12 @@ def test_mailboxes_are_walked_side_by_side_up_to_the_worker_limit() -> None:
         f"user-{n}" for n in range(MAILBOX_WORKERS)
     ]
     assert all(cursor.opened for cursor in checkpoint.active)
-    assert checkpoint.mailboxes == [mailbox(id=f"user-{MAILBOX_WORKERS}")]
+    assert checkpoint.mailboxes == [_nth_mailbox(MAILBOX_WORKERS)]
 
 
 def test_every_mailbox_past_the_worker_limit_is_still_walked() -> None:
+    """The fixture mail comes from outside the walked mailboxes, so each one
+    writes its own copy."""
     gateway = _many_mailbox_gateway(MAILBOX_WORKERS + 2)
 
     items = _run(_connector(gateway))
@@ -772,7 +829,10 @@ def test_every_mailbox_past_the_worker_limit_is_still_walked() -> None:
     probed = {c.kwargs["mailbox_id"] for c in gateway.probe_mailbox.call_args_list}
     assert probed == {f"user-{n}" for n in range(MAILBOX_WORKERS + 2)}
     documents = [item for item in items if isinstance(item, Document)]
-    assert [doc.id for doc in documents] == [thread_doc_id(CONVERSATION_ID)]
+    key = thread_doc_id(CONVERSATION_ID).split(":", 1)[1]
+    assert sorted(doc.id for doc in documents) == sorted(
+        own_document_id(key, _nth_mailbox(n)) for n in range(MAILBOX_WORKERS + 2)
+    )
 
 
 def test_thread_held_by_several_mailboxes_is_built_once_for_all_holders() -> None:
@@ -806,8 +866,9 @@ DAVE = mailbox(id="user-3", address="dave@contoso.com")
 
 
 def _private_reply_gateway() -> MagicMock:
-    """Alice and Bob share a thread. Dave replied to Alice alone, then Alice
-    answered Bob. Alice holds three messages, Bob two, Dave one."""
+    """Alice wrote to Bob. Dave, who was not on that message, replied to
+    Alice alone, then Alice answered Bob. Alice holds three messages, Bob
+    two, Dave one."""
     root = message(id="root", received_at=RECEIVED)
     private = message(
         id="private",
@@ -830,54 +891,69 @@ def _private_reply_gateway() -> MagicMock:
         if folder_id != INBOX_ID:
             return OutlookDeltaPage(changes=[])
         return OutlookDeltaPage(
-            changes=[
-                change(
-                    id=m.id,
-                    conversation_id=m.conversation_id,
-                    received_at=m.received_at,
-                )
-                for m in held[mailbox_id]
-            ]
+            changes=[change_of(m, reply=m.id != "root") for m in held[mailbox_id]]
         )
 
     def messages(*, mailbox_id: str, **_: Any) -> OutlookMessagePage:
         return OutlookMessagePage(messages=held[mailbox_id])
 
-    def outline(*, mailbox_id: str, **_: Any) -> OutlookDeltaPage:
+    def outline(
+        *, mailbox_id: str, oldest_first: bool = False, **_: Any
+    ) -> OutlookDeltaPage:
+        copy = held[mailbox_id]
         return OutlookDeltaPage(
             changes=[
-                change(
-                    id=m.id,
-                    conversation_id=m.conversation_id,
-                    received_at=m.received_at,
-                )
-                for m in held[mailbox_id]
+                change_of(m, reply=m.id != "root")
+                for m in (copy[::-1] if oldest_first else copy)
             ]
         )
-
-    def find(
-        *, mailbox_id: str, internet_message_id: str
-    ) -> OutlookMessageChange | None:
-        for m in held[mailbox_id]:
-            if m.internet_message_id == internet_message_id:
-                return change(
-                    id=m.id,
-                    conversation_id=m.conversation_id,
-                    received_at=m.received_at,
-                )
-        return None
 
     gateway.fetch_folder_delta_page.side_effect = delta
     gateway.fetch_conversation_messages_page.side_effect = messages
     gateway.fetch_conversation_outline_page.side_effect = outline
-    gateway.find_message_by_internet_message_id.side_effect = find
     return gateway
 
 
-def test_a_poll_writes_documents_for_the_holders_it_did_not_list() -> None:
-    """Only Alice's copy changed in the window, so only Alice is listed. Bob
-    and Dave are found from the messages' recipients and get the documents a
-    full listing would have given them."""
+def test_a_private_reply_is_readable_only_by_the_mailboxes_that_hold_it() -> None:
+    gateway = _private_reply_gateway()
+
+    items = _run(_connector(gateway), include_permissions=True)
+
+    documents = {item.id: item for item in items if isinstance(item, Document)}
+    thread = documents[thread_doc_id(CONVERSATION_ID)]
+    key = thread.id.split(":", 1)[1]
+    # Dave's private reply names Alice alone, so she is the thread's only reader.
+    assert len(thread.sections) == 3
+    assert _readers(thread) == {"alice@contoso.com"}
+    # Bob is named on the first message but not on the private reply, so
+    # Alice writes him the messages that name him.
+    bob = documents[copy_document_id(key, BOB)]
+    assert len(bob.sections) == 2
+    assert _readers(bob) == {"bob@contoso.com"}
+    # Dave is not named on the first message, so he writes his copy himself.
+    dave = documents[own_document_id(key, DAVE)]
+    assert len(dave.sections) == 1
+    assert _readers(dave) == {"dave@contoso.com"}
+    assert set(documents) == {thread.id, bob.id, dave.id}
+    # On a poll every listed copy is read whole through its outline, and a
+    # copy without the first message is asked for its oldest as well.
+    outlines = [
+        (c.kwargs["mailbox_id"], bool(c.kwargs.get("oldest_first")))
+        for c in gateway.fetch_conversation_outline_page.call_args_list
+    ]
+    assert sorted(outlines) == [
+        (ALICE.id, False),
+        (BOB.id, False),
+        (DAVE.id, False),
+        (DAVE.id, True),
+    ]
+
+
+def test_a_poll_that_lists_only_the_builder_still_writes_the_readers_documents() -> (
+    None
+):
+    """Only Alice's copy changed in the window. Bob's document comes from her
+    copy, and Dave's own document is his to write when his copy changes."""
     gateway = _private_reply_gateway()
     list_everyone = gateway.fetch_folder_delta_page.side_effect
 
@@ -891,135 +967,20 @@ def test_a_poll_writes_documents_for_the_holders_it_did_not_list() -> None:
     items = _run(_connector(gateway), include_permissions=True)
 
     documents = {item.id: item for item in items if isinstance(item, Document)}
-    thread = documents[thread_doc_id(CONVERSATION_ID)]
-    assert len(thread.sections) == 3
-    assert _readers(thread) == {"alice@contoso.com"}
-    key = thread.id.split(":", 1)[1]
-    assert len(documents[copy_document_id(key, BOB)].sections) == 2
-    assert _readers(documents[copy_document_id(key, BOB)]) == {"bob@contoso.com"}
-    assert len(documents[copy_document_id(key, DAVE)].sections) == 1
-    assert set(documents) == {
-        thread.id,
-        copy_document_id(key, BOB),
-        copy_document_id(key, DAVE),
-    }
-    assert sorted(
-        c.kwargs["mailbox_id"]
-        for c in gateway.find_message_by_internet_message_id.call_args_list
-    ) == [BOB.id, DAVE.id]
-
-
-def test_a_poll_skips_an_unlisted_holder_graph_refuses() -> None:
-    """Dave's mailbox is refused at the probe, so it was never opened and the
-    thread is still built for everyone else without a failure."""
-    gateway = _private_reply_gateway()
-    list_everyone = gateway.fetch_folder_delta_page.side_effect
-    gateway.fetch_folder_delta_page.side_effect = lambda *, mailbox_id, **kw: (
-        list_everyone(mailbox_id=mailbox_id, **kw)
-        if mailbox_id == ALICE.id
-        else OutlookDeltaPage(changes=[])
-    )
-
-    def probe(*, mailbox_id: str) -> OutlookFolder:
-        if mailbox_id == DAVE.id:
-            raise OutlookGraphError(403, "ErrorAccessDenied", "out of scope")
-        return folder()
-
-    find_held = gateway.find_message_by_internet_message_id.side_effect
-
-    def find(*, mailbox_id: str, **kw: Any) -> OutlookMessageChange | None:
-        if mailbox_id == DAVE.id:
-            raise OutlookGraphError(403, "ErrorAccessDenied", "out of scope")
-        return find_held(mailbox_id=mailbox_id, **kw)
-
-    gateway.probe_mailbox.side_effect = probe
-    gateway.find_message_by_internet_message_id.side_effect = find
-
-    items = _run(_connector(gateway), include_permissions=True)
-
-    documents = {item.id: item for item in items if isinstance(item, Document)}
     key = thread_doc_id(CONVERSATION_ID).split(":", 1)[1]
     assert set(documents) == {
         thread_doc_id(CONVERSATION_ID),
         copy_document_id(key, BOB),
     }
-    assert not [item for item in items if isinstance(item, ConnectorFailure)]
-
-
-def test_an_unlisted_holder_keeps_its_own_folder_exclusions() -> None:
-    """Bob's copy of the root sits in his Archive, which the connector
-    excludes by name, so his document holds the answer alone."""
-    gateway = _private_reply_gateway()
-    list_everyone = gateway.fetch_folder_delta_page.side_effect
-    gateway.fetch_folder_delta_page.side_effect = lambda *, mailbox_id, **kw: (
-        list_everyone(mailbox_id=mailbox_id, **kw)
-        if mailbox_id == ALICE.id
-        else OutlookDeltaPage(changes=[])
-    )
-    read_everyone = gateway.fetch_conversation_messages_page.side_effect
-
-    def bobs_root_is_archived(*, mailbox_id: str, **kw: Any) -> OutlookMessagePage:
-        page = read_everyone(mailbox_id=mailbox_id, **kw)
-        if mailbox_id != BOB.id:
-            return page
-        return OutlookMessagePage(
-            messages=[
-                m.model_copy(update={"parent_folder_id": ARCHIVE_ID})
-                if m.id == "root"
-                else m
-                for m in page.messages
-            ]
-        )
-
-    gateway.fetch_conversation_messages_page.side_effect = bobs_root_is_archived
-
-    items = _run(
-        _connector(gateway, excluded_folders=["Archive"]), include_permissions=True
-    )
-
-    documents = {item.id: item for item in items if isinstance(item, Document)}
-    key = thread_doc_id(CONVERSATION_ID).split(":", 1)[1]
-    assert len(documents[copy_document_id(key, BOB)].sections) == 1
-
-
-def test_a_listing_from_the_beginning_never_looks_for_unlisted_holders() -> None:
-    gateway = _private_reply_gateway()
-
-    _run(_connector(gateway), include_permissions=True, start=0)
-
-    gateway.find_message_by_internet_message_id.assert_not_called()
-
-
-def test_a_private_reply_is_readable_only_by_the_mailboxes_that_hold_it() -> None:
-    gateway = _private_reply_gateway()
-
-    items = _run(_connector(gateway), include_permissions=True)
-
-    documents = {item.id: item for item in items if isinstance(item, Document)}
-    thread = documents[thread_doc_id(CONVERSATION_ID)]
-    assert len(thread.sections) == 3
-    assert _readers(thread) == {"alice@contoso.com"}
-    # Bob holds the newest message but not the private reply, Dave only the
-    # private reply: each gets a document of his own copy.
-    bob = documents[copy_document_id(thread.id.split(":", 1)[1], BOB)]
-    assert len(bob.sections) == 2
-    assert _readers(bob) == {"bob@contoso.com"}
-    dave = documents[copy_document_id(thread.id.split(":", 1)[1], DAVE)]
-    assert len(dave.sections) == 1
-    assert _readers(dave) == {"dave@contoso.com"}
-    assert set(documents) == {thread.id, bob.id, dave.id}
-    # Alice and Bob were compared on their outlines. Dave was never a candidate.
-    assert sorted(
+    assert [
         c.kwargs["mailbox_id"]
         for c in gateway.fetch_conversation_outline_page.call_args_list
-    ) == [ALICE.id, BOB.id]
+    ] == [ALICE.id]
 
 
-def test_a_listing_from_the_beginning_compares_copies_without_reading_outlines() -> (
-    None
-):
+def test_a_listing_from_the_beginning_decides_copies_without_reading_outlines() -> None:
     """A window that opens at the beginning lists every message of each copy,
-    so the copies are compared on the listing and no outline is fetched."""
+    so the copies are decided on the listing and no outline is fetched."""
     gateway = _private_reply_gateway()
     connector = _connector(gateway)
 
@@ -1047,6 +1008,69 @@ def test_only_an_unbounded_listing_counts_as_listed_from_the_beginning() -> None
     assert not connector._listed_from_the_beginning(START)
 
 
+GUEST = mailbox(id="user-9", address="guest@contoso.com")
+
+
+def test_a_thread_started_from_a_mailbox_the_run_cannot_open_is_built_by_the_next() -> (
+    None
+):
+    """Every-mailbox mode lists a guest whose mailbox Graph refuses. Mail the
+    guest sent names Alice and Bob, so Alice builds it, and the guest's
+    mailbox is probed once for the whole run."""
+    gateway = _happy_gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[ALICE, BOB, GUEST]
+    )
+    guest_mail = message(
+        sender=OutlookRecipient(address=GUEST.address, name="Guest"),
+        to_recipients=[
+            OutlookRecipient(address=ALICE.address, name="Alice"),
+            OutlookRecipient(address=BOB.address, name="Bob"),
+        ],
+    )
+
+    def probe(*, mailbox_id: str) -> OutlookFolder:
+        if mailbox_id == GUEST.id:
+            raise OutlookGraphError(404, "MailboxNotEnabledForRESTAPI", "no mailbox")
+        return folder()
+
+    def delta(*, folder_id: str, **_: Any) -> OutlookDeltaPage:
+        if folder_id != INBOX_ID:
+            return OutlookDeltaPage(changes=[])
+        return OutlookDeltaPage(changes=[change_of(guest_mail)])
+
+    gateway.probe_mailbox.side_effect = probe
+    gateway.fetch_folder_delta_page.side_effect = delta
+    gateway.fetch_conversation_messages_page.return_value = OutlookMessagePage(
+        messages=[guest_mail]
+    )
+    connector = _connector(gateway)
+
+    indexed = {
+        item.id: _readers(item)
+        for item in _run(connector, include_permissions=True, start=0)
+        if isinstance(item, Document)
+    }
+    slim = {
+        item.id: _readers(item)
+        for batch in connector.retrieve_all_slim_docs_perm_sync()
+        for item in batch
+        if isinstance(item, SlimDocument)
+    }
+
+    assert indexed == slim
+    assert indexed == {
+        thread_doc_id(CONVERSATION_ID): {ALICE.address, BOB.address, GUEST.address}
+    }
+    guest_probes = [
+        c
+        for c in gateway.probe_mailbox.call_args_list
+        if c.kwargs["mailbox_id"] == GUEST.id
+    ]
+    # Once when the walk opened it, once when the slim walk did.
+    assert len(guest_probes) == 2
+
+
 def test_slim_walk_yields_the_documents_indexing_builds_with_the_same_readers() -> None:
     gateway = _private_reply_gateway()
     connector = _connector(gateway)
@@ -1067,66 +1091,23 @@ def test_slim_walk_yields_the_documents_indexing_builds_with_the_same_readers() 
     assert len(indexed) == 3
 
 
-def test_long_thread_copies_are_compared_on_the_same_window_in_both_walks() -> None:
-    """Bob holds the most messages in all, Alice holds a private reply among
-    the newest. Compared on everything, Bob builds and Alice reads his copy.
-    Compared on the newest CONVERSATION_FETCH_LIMIT, the copies tie, Alice
-    builds, and Bob must not read the private reply. Both walks must agree."""
-    newest = RECEIVED + timedelta(days=2)
-    shared = [
+def test_a_long_copy_is_asked_for_its_first_message_on_a_poll() -> None:
+    """Bob opened the thread, Alice answered more times than an outline
+    reads. A poll's outline stops short of the first message, so the copy
+    is asked for its oldest, and Bob builds in every walk."""
+    root = message(
+        id="root",
+        received_at=RECEIVED - timedelta(days=1),
+        sender=OutlookRecipient(address=BOB.address, name="Bob"),
+        to_recipients=[OutlookRecipient(address=ALICE.address, name="Alice")],
+    )
+    replies = [
         message(id=f"m-{i}", received_at=RECEIVED + timedelta(minutes=i))
         for i in range(CONVERSATION_FETCH_LIMIT + 100)
     ]
-    older = [
-        message(id=f"old-{i}", received_at=RECEIVED - timedelta(days=1, minutes=i))
-        for i in range(50)
-    ]
-    private = message(id="private", received_at=newest - timedelta(minutes=1))
-    last = message(id="last", received_at=newest)
-    held: dict[str, list[OutlookMessage]] = {
-        ALICE.id: [last, private] + shared[::-1],
-        BOB.id: [last] + shared[::-1] + older,
-    }
-    gateway = _happy_gateway()
-    gateway.list_mailbox_users.return_value = OutlookMailboxPage(mailboxes=[ALICE, BOB])
-
-    def delta(*, mailbox_id: str, folder_id: str, **_: Any) -> OutlookDeltaPage:
-        if folder_id != INBOX_ID:
-            return OutlookDeltaPage(changes=[])
-        return OutlookDeltaPage(
-            changes=[
-                change(id=m.id, received_at=m.received_at) for m in held[mailbox_id]
-            ]
-        )
-
-    def pages(items: list[Any], next_link: str | None) -> tuple[list[Any], str | None]:
-        start = int(next_link.rsplit("=", 1)[1]) if next_link else 0
-        chunk = items[start : start + 100]
-        link = (
-            f"https://graph/messages?skip={start + 100}"
-            if start + 100 < len(items)
-            else None
-        )
-        return chunk, link
-
-    def messages(
-        *, mailbox_id: str, next_link: str | None = None, **_: Any
-    ) -> OutlookMessagePage:
-        chunk, link = pages(held[mailbox_id], next_link)
-        return OutlookMessagePage(messages=chunk, next_link=link)
-
-    def outline(
-        *, mailbox_id: str, next_link: str | None = None, **_: Any
-    ) -> OutlookDeltaPage:
-        chunk, link = pages(held[mailbox_id], next_link)
-        return OutlookDeltaPage(
-            changes=[change(id=m.id, received_at=m.received_at) for m in chunk],
-            next_link=link,
-        )
-
-    gateway.fetch_folder_delta_page.side_effect = delta
-    gateway.fetch_conversation_messages_page.side_effect = messages
-    gateway.fetch_conversation_outline_page.side_effect = outline
+    gateway = _two_copy_gateway(
+        {ALICE.id: replies[::-1] + [root], BOB.id: replies[::-1] + [root]}
+    )
     connector = _connector(gateway)
 
     indexed = {
@@ -1134,6 +1115,11 @@ def test_long_thread_copies_are_compared_on_the_same_window_in_both_walks() -> N
         for item in _run(connector, include_permissions=True)
         if isinstance(item, Document)
     }
+    oldest_first_calls = [
+        c
+        for c in gateway.fetch_conversation_outline_page.call_args_list
+        if c.kwargs.get("oldest_first")
+    ]
     slim = {
         item.id: _readers(item)
         for batch in connector.retrieve_all_slim_docs_perm_sync()
@@ -1141,13 +1127,15 @@ def test_long_thread_copies_are_compared_on_the_same_window_in_both_walks() -> N
         if isinstance(item, SlimDocument)
     }
 
-    thread_id = thread_doc_id(CONVERSATION_ID)
-    assert indexed[thread_id] == {"alice@contoso.com"}
-    assert indexed == slim
-    assert set(indexed) == {
-        thread_id,
-        copy_document_id(thread_id.split(":", 1)[1], BOB),
-    }
+    assert (
+        indexed
+        == slim
+        == {thread_doc_id(CONVERSATION_ID): {ALICE.address, BOB.address}}
+    )
+    assert sorted(c.kwargs["mailbox_id"] for c in oldest_first_calls) == [
+        ALICE.id,
+        BOB.id,
+    ]
 
 
 def _paged(items: list[Any], next_link: str | None) -> tuple[list[Any], str | None]:
@@ -1159,24 +1147,26 @@ def _paged(items: list[Any], next_link: str | None) -> tuple[list[Any], str | No
 
 
 def _two_copy_gateway(held: dict[str, list[OutlookMessage]]) -> MagicMock:
-    """Alice and Bob each hold the given messages, paged by 100 for the
-    listing, the outline and the bodies."""
+    """Alice and Bob each hold the given messages, newest first, paged by 100
+    for the listing, the outline and the bodies. The oldest message of a
+    copy is the thread's first."""
     gateway = _happy_gateway()
     gateway.list_mailbox_users.return_value = OutlookMailboxPage(mailboxes=[ALICE, BOB])
+
+    def rows(
+        mailbox_id: str, chunk: list[OutlookMessage]
+    ) -> list[OutlookMessageChange]:
+        first = held[mailbox_id][-1].id
+        return [change_of(m, reply=m.id != first) for m in chunk]
 
     def delta(*, mailbox_id: str, folder_id: str, **_: Any) -> OutlookDeltaPage:
         if folder_id != INBOX_ID:
             return OutlookDeltaPage(changes=[])
         return OutlookDeltaPage(
-            changes=[
-                change(
-                    id=m.id,
-                    received_at=m.received_at,
-                    parent_folder_id=m.parent_folder_id,
-                )
-                for m in held[mailbox_id]
-                if m.parent_folder_id == INBOX_ID
-            ]
+            changes=rows(
+                mailbox_id,
+                [m for m in held[mailbox_id] if m.parent_folder_id == INBOX_ID],
+            )
         )
 
     def messages(
@@ -1186,20 +1176,15 @@ def _two_copy_gateway(held: dict[str, list[OutlookMessage]]) -> MagicMock:
         return OutlookMessagePage(messages=chunk, next_link=link)
 
     def outline(
-        *, mailbox_id: str, next_link: str | None = None, **_: Any
+        *,
+        mailbox_id: str,
+        next_link: str | None = None,
+        oldest_first: bool = False,
+        **_: Any,
     ) -> OutlookDeltaPage:
-        chunk, link = _paged(held[mailbox_id], next_link)
-        return OutlookDeltaPage(
-            changes=[
-                change(
-                    id=m.id,
-                    received_at=m.received_at,
-                    parent_folder_id=m.parent_folder_id,
-                )
-                for m in chunk
-            ],
-            next_link=link,
-        )
+        copy = held[mailbox_id][::-1] if oldest_first else held[mailbox_id]
+        chunk, link = _paged(copy, next_link)
+        return OutlookDeltaPage(changes=rows(mailbox_id, chunk), next_link=link)
 
     gateway.fetch_folder_delta_page.side_effect = delta
     gateway.fetch_conversation_messages_page.side_effect = messages
@@ -1208,9 +1193,9 @@ def _two_copy_gateway(held: dict[str, list[OutlookMessage]]) -> MagicMock:
 
 
 def test_shared_messages_buried_under_trashed_ones_still_reach_the_document() -> None:
-    """Bob's copy is the larger one but its newest 499 messages sit in Deleted
-    Items. The bodies are read over the same pages as the outline, so the
-    document still holds every shared message."""
+    """Alice builds, and the newest 499 messages of her copy sit in Deleted
+    Items. The bodies are read over the same pages the listing covered, so
+    the document still holds every shared message."""
     newest = RECEIVED + timedelta(days=2)
     shared = [
         message(id=f"m-{i}", received_at=RECEIVED + timedelta(minutes=i))
@@ -1229,7 +1214,7 @@ def test_shared_messages_buried_under_trashed_ones_still_reach_the_document() ->
         for i in range(CONVERSATION_FETCH_LIMIT - 1)
     ]
     gateway = _two_copy_gateway(
-        {ALICE.id: shared[::-1], BOB.id: trashed + shared[::-1] + older}
+        {ALICE.id: trashed + shared[::-1], BOB.id: shared[::-1] + older}
     )
     connector = _connector(gateway)
 
@@ -1241,7 +1226,7 @@ def test_shared_messages_buried_under_trashed_ones_still_reach_the_document() ->
 
     thread = documents[thread_doc_id(CONVERSATION_ID)]
     assert len(thread.sections) == MAX_MESSAGES_PER_CONVERSATION
-    assert thread.metadata["mailbox"] == BOB.address
+    assert thread.metadata["mailbox"] == ALICE.address
     assert _readers(thread) == {ALICE.address, BOB.address}
     assert set(documents) == {thread.id}
 
@@ -1490,14 +1475,16 @@ def test_conversations_of_a_page_are_yielded_in_page_order() -> None:
     def messages(*, conversation_id: str, **_: Any) -> OutlookMessagePage:
         if conversation_id == CONVERSATION_ID:
             assert first_may_finish.wait(timeout=5)
-        else:
-            first_may_finish.set()
-        return OutlookMessagePage(messages=[message()])
+            return OutlookMessagePage(messages=[message()])
+        first_may_finish.set()
+        return OutlookMessagePage(
+            messages=[message(id="msg-b", conversation_id="conv-b")]
+        )
 
     gateway.fetch_conversation_messages_page.side_effect = messages
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    items = _finish(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint(), start=0)
 
     assert [item.id for item in items if isinstance(item, Document)] == [
         thread_doc_id(CONVERSATION_ID),
@@ -1505,7 +1492,7 @@ def test_conversations_of_a_page_are_yielded_in_page_order() -> None:
     ]
 
 
-def test_failure_part_way_through_a_shard_leaves_the_shard_to_be_rebuilt() -> None:
+def test_failure_part_way_through_a_build_step_leaves_the_step_to_be_rebuilt() -> None:
     gateway = _happy_gateway()
     gateway.fetch_folder_delta_page.side_effect = None
     gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
@@ -1519,11 +1506,10 @@ def test_failure_part_way_through_a_shard_leaves_the_shard_to_be_rebuilt() -> No
     checkpoint = _folder_checkpoint()
 
     with pytest.raises(OutlookAuthError):
-        _finish(connector, checkpoint)
+        _finish(connector, checkpoint, start=0)
 
-    assert checkpoint.active == []
-    assert checkpoint.build_buckets == 1
-    assert checkpoint.next_bucket == 0 and checkpoint.next_thread == 0
+    (cursor,) = checkpoint.active
+    assert cursor.listed and cursor.to_build == 2 and cursor.built == 0
 
 
 def test_throttling_past_the_retries_fails_the_attempt_in_plain_words() -> None:
@@ -1595,21 +1581,25 @@ def test_folder_that_fills_the_filtered_cap_is_reread_without_the_filter() -> No
     assert items == []
     assert checkpoint.active[0].current_folder is None
     assert windows == [datetime.fromtimestamp(START, tz=timezone.utc), None]
-    assert checkpoint.listing_pages == 1
 
 
-def test_conversation_fetch_refusal_is_a_document_failure() -> None:
+def test_conversation_fetch_refusal_is_a_recorded_failure() -> None:
+    """The failure names the copy, since the thread document may be another
+    mailbox's to write."""
     gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = None
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(changes=[change()])
     gateway.fetch_conversation_messages_page.side_effect = graph_error(
         404, "ErrorItemNotFound"
     )
 
-    items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]))
+    items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]), start=0)
 
     failures = [item for item in items if isinstance(item, ConnectorFailure)]
     assert len(failures) == 1
-    assert failures[0].failed_document is not None
-    assert failures[0].failed_document.document_id == thread_doc_id(CONVERSATION_ID)
+    assert failures[0].failed_entity is not None
+    assert failures[0].failed_entity.entity_id == f"{MAILBOX_ADDRESS}:{CONVERSATION_ID}"
+    assert not [item for item in items if isinstance(item, Document)]
 
 
 @pytest.mark.parametrize("status", [429, 503, 509, None])
@@ -1627,10 +1617,10 @@ def test_transient_conversation_fetch_failure_keeps_the_checkpoint(
 
     expected = RateLimitTriedTooManyTimesError if status == 429 else OutlookGraphError
     with pytest.raises(expected):
-        _finish(connector, checkpoint)
+        _finish(connector, checkpoint, start=0)
 
-    assert checkpoint.build_buckets == 1
-    assert checkpoint.next_bucket == 0 and checkpoint.next_thread == 0
+    (cursor,) = checkpoint.active
+    assert cursor.listed and cursor.built == 0
 
 
 def test_indexable_messages_drop_drafts_and_excluded_folders() -> None:
@@ -1640,20 +1630,6 @@ def test_indexable_messages_drop_drafts_and_excluded_folders() -> None:
         [message(is_draft=True), message(id="junk", parent_folder_id=JUNK_ID), kept],
         {JUNK_ID},
     ) == [kept]
-
-
-def test_conversation_keeps_only_the_newest_messages() -> None:
-    messages = [
-        message(id=f"msg-{i}", received_at=RECEIVED + timedelta(minutes=i))
-        for i in range(MAX_MESSAGES_PER_CONVERSATION + 5)
-    ]
-
-    doc = _build(messages)
-
-    assert doc is not None
-    assert len(doc.sections) == MAX_MESSAGES_PER_CONVERSATION
-    assert doc.doc_updated_at == messages[-1].received_at
-    assert doc.doc_created_at == messages[5].received_at
 
 
 def test_conversation_without_messages_is_dropped() -> None:
@@ -1832,9 +1808,10 @@ def test_throttled_attachment_read_keeps_the_checkpoint() -> None:
     checkpoint = _folder_checkpoint()
 
     with pytest.raises(RateLimitTriedTooManyTimesError):
-        _finish(connector, checkpoint)
+        _finish(connector, checkpoint, start=0)
 
-    assert checkpoint.next_bucket == 0 and checkpoint.next_thread == 0
+    (cursor,) = checkpoint.active
+    assert cursor.built == 0
 
 
 def test_refused_attachment_listing_keeps_the_message_text() -> None:
@@ -2061,7 +2038,9 @@ def test_slim_docs_read_mailboxes_side_by_side_and_list_them_all() -> None:
         if isinstance(item, HierarchyNode) and item.raw_parent_id is None
     ]
     assert len(roots) == MAILBOX_WORKERS + 2
-    assert _slim_ids(batches).count(thread_doc_id(CONVERSATION_ID)) == 1
+    key = thread_doc_id(CONVERSATION_ID).split(":", 1)[1]
+    own = [own_document_id(key, _nth_mailbox(n)) for n in range(MAILBOX_WORKERS + 2)]
+    assert sorted(i for i in _slim_ids(batches) if i in own) == sorted(own)
 
 
 def test_slim_docs_batch_and_report_progress() -> None:
@@ -2077,17 +2056,17 @@ def test_slim_docs_batch_and_report_progress() -> None:
 
     batches = list(connector.retrieve_all_slim_docs(callback=callback))
 
-    # Three walked folders of 501 threads each, listed per folder and
-    # batched once every mailbox is read, with one report for the bucket.
-    slim_batches = [b for b in batches if isinstance(b[0], SlimDocument)]
-    assert [len(b) for b in slim_batches] == [SLIM_BATCH_SIZE] * 3 + [3]
-    # The four are the mailbox root and its three folders, the zero is the
-    # heartbeat of the cut into buckets.
+    # Three walked folders of 501 threads each, decided once the mailbox is
+    # listed and batched with its four nodes from there.
+    assert all(len(b) <= SLIM_BATCH_SIZE for b in batches)
+    assert sum(len(b) for b in batches) == 4 + 3 * SLIM_BATCH_SIZE + 3
+    assert [len(b) for b in batches[:-1]] == [SLIM_BATCH_SIZE] * 3
+    # The four are the mailbox root and its three folders, the zeros are the
+    # heartbeats of the three delta pages.
     assert callback.progress.call_args_list == [call("outlook_slim_docs", 4)] + [
-        call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)
-    ] * 3 + [
-        call("outlook_slim_docs", 0),
-        call("outlook_slim_docs", 3 * SLIM_BATCH_SIZE + 3),
+        call("outlook_slim_docs", 0)
+    ] * 3 + [call("outlook_slim_docs", SLIM_BATCH_SIZE)] * 3 + [
+        call("outlook_slim_docs", 3)
     ]
 
 
@@ -2118,11 +2097,12 @@ def test_slim_docs_follow_delta_pages_by_their_link() -> None:
         thread_doc_id(CONVERSATION_ID),
         thread_doc_id("conv-2"),
     ]
-    inbox_progress = [
-        c for c in callback.progress.call_args_list if c == call("outlook_slim_docs", 1)
+    # Three Inbox pages and one page for each of the two other folders.
+    heartbeats = [
+        c for c in callback.progress.call_args_list if c == call("outlook_slim_docs", 0)
     ]
-    assert len(inbox_progress) == 2
-    assert call("outlook_slim_docs", 0) in callback.progress.call_args_list
+    assert len(heartbeats) == 5
+    assert call("outlook_slim_docs", 2) in callback.progress.call_args_list
 
 
 # ---------------------------------------------------------------------------
@@ -2197,16 +2177,16 @@ def test_calendar_follows_the_folders_with_one_document_per_event_or_series() ->
     ]
     docs = [item for item in items if isinstance(item, Document)]
     assert [doc.id for doc in docs] == [
+        thread_doc_id(CONVERSATION_ID),
         event_document_id(mailbox(), "evt-1"),
         event_document_id(mailbox(), SERIES_ID),
         event_document_id(mailbox(), "exc-1"),
-        thread_doc_id(CONVERSATION_ID),
     ]
     # Two occurrences, one master read, one document carrying the pattern.
     gateway.get_event.assert_called_once_with(
         mailbox_id=mailbox().id, event_id=SERIES_ID
     )
-    series = docs[1]
+    series = docs[2]
     assert series.semantic_identifier == "Standup"
     assert "Repeats: every week on monday from 2026-01-05" in (
         series.sections[0].text or ""
@@ -2302,7 +2282,7 @@ def test_calendar_round_restarts_when_graph_drops_its_state() -> None:
     )
     connector = _calendar_connector(gateway)
     checkpoint = _folder_checkpoint(
-        current_folder=None, calendar_next_link="https://graph/next"
+        current_folder=None, listed=True, calendar_next_link="https://graph/next"
     )
 
     items, checkpoint = _step(connector, checkpoint)
@@ -2335,7 +2315,7 @@ def test_throttled_calendar_read_keeps_the_checkpoint() -> None:
     gateway = _calendar_gateway()
     gateway.fetch_calendar_delta_page.side_effect = graph_error(429, "TooManyRequests")
     connector = _calendar_connector(gateway)
-    checkpoint = _folder_checkpoint(current_folder=None)
+    checkpoint = _folder_checkpoint(current_folder=None, listed=True)
 
     with pytest.raises(RateLimitTriedTooManyTimesError):
         _step(connector, checkpoint)
@@ -2372,7 +2352,7 @@ def test_rejected_token_on_a_series_master_keeps_the_checkpoint() -> None:
     gateway = _calendar_gateway()
     gateway.get_event.side_effect = graph_error(401, "InvalidAuthenticationToken")
     connector = _calendar_connector(gateway)
-    checkpoint = _folder_checkpoint(current_folder=None)
+    checkpoint = _folder_checkpoint(current_folder=None, listed=True)
 
     with pytest.raises(OutlookGraphError):
         _step(connector, checkpoint)
