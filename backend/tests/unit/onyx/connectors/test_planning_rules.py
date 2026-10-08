@@ -156,6 +156,41 @@ def test_every_rule_reads_the_config_class_of_its_source() -> None:
             {"calendar_future_days": ScopeDirection.NARROW},
         ),
         (DocumentSource.OUTLOOK, {}, {"calendar_past_days": 400}, {}),
+        # Outlook walks the listed mailboxes plus the members of the listed
+        # groups, and every mailbox when neither is listed.
+        (
+            DocumentSource.OUTLOOK,
+            {},
+            {"mailbox_groups": ["Sales"]},
+            {"mailbox_groups": ScopeDirection.NARROW},
+        ),
+        (
+            DocumentSource.OUTLOOK,
+            {"mailboxes": ["a@example.com"]},
+            {"mailboxes": ["a@example.com"], "mailbox_groups": ["Sales"]},
+            {"mailbox_groups": ScopeDirection.WIDEN},
+        ),
+        (
+            DocumentSource.OUTLOOK,
+            {"mailboxes": ["a@example.com"]},
+            {"mailbox_groups": ["Sales"]},
+            {
+                "mailboxes": ScopeDirection.BOTH,
+                "mailbox_groups": ScopeDirection.BOTH,
+            },
+        ),
+        (
+            DocumentSource.OUTLOOK,
+            {"mailbox_groups": ["Sales"]},
+            {"mailbox_groups": []},
+            {"mailbox_groups": ScopeDirection.WIDEN},
+        ),
+        (
+            DocumentSource.OUTLOOK,
+            {"mailboxes": ["A@example.com"]},
+            {"mailboxes": [" a@example.com"]},
+            {},
+        ),
         # Salesforce
         (
             DocumentSource.SALESFORCE,
