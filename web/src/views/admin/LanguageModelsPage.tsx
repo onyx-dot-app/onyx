@@ -391,35 +391,21 @@ export default function LanguageModelsPage() {
   );
 
   // Router models (openrouter/auto, gateway configs) usable as the model
-  // routing target. Loaded through the admin provider endpoint so hidden
-  // and persona-restricted routers still appear, regardless of what each
-  // provider's paged first page happened to include.
-  const providerIdsKey = (existingLlmProviders ?? [])
-    .map((provider) => provider.id)
-    .join(",");
+  // routing target. The dedicated endpoint returns every router regardless
+  // of visibility or paging, so hidden and persona-restricted routers all
+  // appear.
   const { data: routerProviders } = useSWR<LLMProviderView[]>(
-    providerIdsKey === "" ? null : SWR_KEYS.llmRouterModels(providerIdsKey),
-    async () => {
-      const pages = await Promise.all(
-        (existingLlmProviders ?? []).map(async (provider) => {
-          const full = await errorHandlingFetcher<LLMProviderView>(
-            SWR_KEYS.adminLlmProvider(provider.id)
-          );
-          return {
-            ...provider,
-            model_configurations: full.model_configurations
-              .filter((mc) => mc.is_router)
-              .map((mc) => ({
-                ...mc,
-                effectiveDisplayName:
-                  mc.custom_display_name || mc.display_name || mc.name,
-              })),
-          };
-        })
-      );
-      return pages.filter(
-        (provider) => provider.model_configurations.length > 0
-      );
+    SWR_KEYS.llmRouterModels,
+    async (url: string) => {
+      const providers = await errorHandlingFetcher<LLMProviderView[]>(url);
+      return providers.map((provider) => ({
+        ...provider,
+        model_configurations: provider.model_configurations.map((mc) => ({
+          ...mc,
+          effectiveDisplayName:
+            mc.custom_display_name || mc.display_name || mc.name,
+        })),
+      }));
     }
   );
 

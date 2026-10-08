@@ -26,6 +26,7 @@ from onyx.db.llm import (
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
     fetch_existing_models,
+    fetch_llm_providers_with_router_models,
     fetch_model_configuration_by_id,
     fetch_model_configurations_page,
     fetch_persona_with_groups,
@@ -623,6 +624,24 @@ def get_llm_provider(
     provider_view = LLMProviderView.from_model(llm_provider_model)
     _mask_provider_credentials(provider_view)
     return provider_view
+
+
+@admin_router.get("/router-models")
+def list_router_model_providers(
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[LLMProviderView]:
+    """Every router model configuration, grouped under its provider. Unlike
+    the paged listings this never truncates: pickers offering a routing
+    target must see hidden routers too, so no visibility or page filter."""
+    return [
+        LLMProviderView.from_model(
+            provider,
+            include_api_key=False,
+            model_configurations=provider.model_configurations,
+        )
+        for provider in fetch_llm_providers_with_router_models(db_session)
+    ]
 
 
 @admin_router.put("/provider")

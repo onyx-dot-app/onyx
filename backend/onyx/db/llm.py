@@ -1208,6 +1208,33 @@ def fetch_model_configuration_by_id(
     )
 
 
+def fetch_llm_providers_with_router_models(
+    db_session: Session,
+) -> list[LLMProviderModel]:
+    """Providers that own at least one router model configuration, each with
+    only its router rows loaded (`provider.model_configurations` is routers
+    only). For pickers offering a routing target without paging a whole
+    catalog."""
+    return list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(
+                LLMProviderModel.model_configurations.any(
+                    ModelConfiguration.is_router == True  # noqa: E712
+                )
+            )
+            .options(
+                selectinload(
+                    LLMProviderModel.model_configurations.and_(
+                        ModelConfiguration.is_router == True  # noqa: E712
+                    )
+                )
+            )
+            .order_by(LLMProviderModel.id)
+        )
+    )
+
+
 def mark_model_configuration_visible(
     db_session: Session, model_configuration: ModelConfiguration
 ) -> bool:
