@@ -59,7 +59,7 @@ runs:
               -X POST https://slack.com/api/chat.postMessage \
               -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
               -H 'Content-type: application/json; charset=utf-8' --data-binary @- \
-          | jq -e '.ok' > /dev/null \
+          | jq -e 'if .ok then true else error("Slack API error: " + (.error // "unknown_error")) end' > /dev/null \
           || {
             echo "::warning::Slack post to ${SLACK_CHANNEL} failed (is the bot in the channel?)"
             if [ "${FAIL_ON_ERROR}" = "true" ]; then
