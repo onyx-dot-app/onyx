@@ -5350,9 +5350,6 @@
           },
           "title": "为您的 {provider} embedding 提供商添加配置。"
         },
-        "deprecated": {
-          "suffix": "（已弃用）"
-        },
         "disconnect": {
           "errorToast": "断开 {provider} 的连接失败",
           "successToast": "已断开 {provider} 的连接"

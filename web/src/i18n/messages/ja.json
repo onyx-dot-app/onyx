@@ -5350,9 +5350,6 @@
           },
           "title": "{provider} の embedding プロバイダーの設定を追加します。"
         },
-        "deprecated": {
-          "suffix": "(非推奨)"
-        },
         "disconnect": {
           "errorToast": "{provider} の接続を解除できませんでした",
           "successToast": "{provider} の接続を解除しました"

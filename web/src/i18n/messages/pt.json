@@ -5350,9 +5350,6 @@
           },
           "title": "Adicione configurações para seus provedores de embedding {provider}."
         },
-        "deprecated": {
-          "suffix": "(descontinuado)"
-        },
         "disconnect": {
           "errorToast": "Falha ao desconectar {provider}",
           "successToast": "{provider} desconectado"

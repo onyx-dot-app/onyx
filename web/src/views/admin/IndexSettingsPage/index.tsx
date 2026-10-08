@@ -308,7 +308,7 @@ function ProviderGroup({
 
   const handleModelSelect = useCallback(
     (model: EmbeddingModel) => {
-      if (provider.deprecated || model.deprecated) return;
+      if (model.deprecated) return;
       const state = getModelState(model);
 
       if (state === "selected" || state === "current") {
@@ -329,7 +329,6 @@ function ProviderGroup({
       onSelectModel,
       onDeselectModel,
       connectModal,
-      provider.deprecated,
       isCloud,
       setPendingConnectModel,
     ]
@@ -423,11 +422,6 @@ function ProviderGroup({
                         `[${provider.displayName}](${provider.docsLink})`
                       )
                     : provider.displayName
-                }
-                suffix={
-                  provider.deprecated
-                    ? t("providerGroup.deprecated.suffix")
-                    : undefined
                 }
                 sizePreset="secondary"
               />
@@ -528,7 +522,7 @@ function EmbeddingModelCard({
 }: EmbeddingModelCardProps) {
   const t = useTranslations("admin.indexSettings");
   const { appName } = useSettings();
-  const isDeprecated = provider.deprecated || model.deprecated;
+  const isDeprecated = model.deprecated;
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":
