@@ -44,7 +44,14 @@ def domain_groups(client: ZoomClient) -> Generator[ExternalUserGroup, None, None
             members_by_domain[domain].add(email)
     # Read before anything is yielded, so a refused catalogue fails the attempt
     # with no group half-written.
-    patterns = sorted(wildcard_rule_domains(client, any_user_id))
+    patterns = sorted(
+        {
+            domain
+            for grant in load_rule_grants(client, any_user_id).values()
+            for domain in grant.domains
+            if "*" in domain
+        }
+    )
 
     # A roster domain matches only itself, so one pass serves both.
     for name in [*sorted(members_by_domain), *patterns]:
@@ -56,15 +63,6 @@ def domain_groups(client: ZoomClient) -> Generator[ExternalUserGroup, None, None
         )
         if members:
             yield ExternalUserGroup(id=build_domain_group_id(name), user_emails=members)
-
-
-def wildcard_rule_domains(client: ZoomClient, user_id: str | None) -> set[str]:
-    return {
-        domain
-        for grant in load_rule_grants(client, user_id).values()
-        for domain in grant.domains
-        if "*" in domain
-    }
 
 
 def account_roster(client: ZoomClient) -> tuple[set[str], str | None]:
