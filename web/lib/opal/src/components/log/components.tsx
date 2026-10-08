@@ -33,7 +33,7 @@ type LogWeight = "heavy" | "light";
 type LogVariant = "default" | `${Exclude<LogStatus, "default">}-${LogWeight}`;
 
 interface LogProps {
-  /** Colours the icon and the details; a heavy variant tints the line. */
+  /** Colours the icon; a heavy variant also colours the details and tints the line. */
   variant?: LogVariant;
   /** Shown at 1rem, in the status colour. */
   icon: IconFunctionComponent;
@@ -45,21 +45,31 @@ interface LogProps {
   rightChildren?: React.ReactNode;
 }
 
-const VARIANTS: Record<LogVariant, { status: LogStatus; weight: LogWeight }> = {
-  default: { status: "default", weight: "light" },
-  "success-heavy": { status: "success", weight: "heavy" },
-  "success-light": { status: "success", weight: "light" },
-  "warning-heavy": { status: "warning", weight: "heavy" },
-  "warning-light": { status: "warning", weight: "light" },
-  "error-heavy": { status: "error", weight: "heavy" },
-  "error-light": { status: "error", weight: "light" },
-};
-
-const DETAILS_COLORS: Record<LogStatus, TextColor> = {
-  default: "text-03",
-  success: "status-success-05",
-  warning: "theme-amber-05",
-  error: "status-error-05",
+// A heavy line's details take its status colour; a light line's stay neutral,
+// so only the icon carries the status.
+const VARIANTS: Record<
+  LogVariant,
+  { status: LogStatus; weight: LogWeight; details: TextColor }
+> = {
+  default: { status: "default", weight: "light", details: "text-03" },
+  "success-heavy": {
+    status: "success",
+    weight: "heavy",
+    details: "status-success-05",
+  },
+  "success-light": { status: "success", weight: "light", details: "text-04" },
+  "warning-heavy": {
+    status: "warning",
+    weight: "heavy",
+    details: "theme-amber-05",
+  },
+  "warning-light": { status: "warning", weight: "light", details: "text-04" },
+  "error-heavy": {
+    status: "error",
+    weight: "heavy",
+    details: "status-error-05",
+  },
+  "error-light": { status: "error", weight: "light", details: "text-04" },
 };
 
 // ---------------------------------------------------------------------------
@@ -84,8 +94,8 @@ function useClamped(): [(node: HTMLElement | null) => void, boolean] {
 
 /**
  * One line of a log or report: an icon, a title, details, and trailing
- * content, 2.25rem tall. Not interactive. The variant colours the icon and the
- * details, and a heavy variant tints the line. A title or details too long for
+ * content, 2.25rem tall. Not interactive. The variant colours the icon; a
+ * heavy variant also colours the details and tints the line. A title or details too long for
  * its line shows in full in a tooltip.
  */
 function Log({
@@ -95,7 +105,7 @@ function Log({
   details,
   rightChildren,
 }: LogProps) {
-  const { status, weight } = VARIANTS[variant];
+  const { status, weight, details: detailsColor } = VARIANTS[variant];
   const [titleRef, titleClamped] = useClamped();
   const [detailsRef, detailsClamped] = useClamped();
 
@@ -144,7 +154,7 @@ function Log({
             <Text
               as="p"
               font="main-ui-body"
-              color={DETAILS_COLORS[status]}
+              color={detailsColor}
               textPosition="text-start"
               maxLines={1}
               data-opal-log-text=""

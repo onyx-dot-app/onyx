@@ -8,13 +8,13 @@ a column of `Log`s. A line is not interactive.
 
 ## Props
 
-| Prop            | Type                    | Default     | Description                                                        |
-| --------------- | ----------------------- | ----------- | ------------------------------------------------------------------ |
-| `variant`       | `LogVariant`            | `"default"` | Status and weight: colours the icon and details, tints heavy lines |
-| `icon`          | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                |
-| `title`         | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, at most 10rem wide      |
-| `details`       | `string \| RichStr`     | —           | `main-ui-body`, start-aligned, one line, fills the row             |
-| `rightChildren` | `ReactNode`             | —           | Trailing content, such as a tag or an action; not padded           |
+| Prop            | Type                    | Default     | Description                                                               |
+| --------------- | ----------------------- | ----------- | ------------------------------------------------------------------------- |
+| `variant`       | `LogVariant`            | `"default"` | Status and weight: colours the icon; heavy also colours details and tints |
+| `icon`          | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                       |
+| `title`         | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, at most 10rem wide             |
+| `details`       | `string \| RichStr`     | —           | `main-ui-body`, start-aligned, one line, fills the row                    |
+| `rightChildren` | `ReactNode`             | —           | Trailing content, such as a tag or an action; not padded                  |
 
 ## Variants
 
@@ -22,14 +22,15 @@ a column of `Log`s. A line is not interactive.
 statuses are a subset of `StatusVariants`:
 `LogStatus = Extract<StatusVariants, "default" | "success" | "warning" | "error">`.
 
-| Status    | Icon and details    | `heavy` background  |
-| --------- | ------------------- | ------------------- |
-| `default` | `text-03`           | — (never heavy)     |
-| `success` | `status-success-05` | `status-success-01` |
-| `warning` | `theme-amber-05`    | `theme-amber-01`    |
-| `error`   | `status-error-05`   | `status-error-01`   |
+| Status    | Icon                | `heavy` details     | `heavy` background  |
+| --------- | ------------------- | ------------------- | ------------------- |
+| `default` | `text-03`           | — (never heavy)     | —                   |
+| `success` | `status-success-05` | `status-success-05` | `status-success-01` |
+| `warning` | `theme-amber-05`    | `theme-amber-05`    | `theme-amber-01`    |
+| `error`   | `status-error-05`   | `status-error-05`   | `status-error-01`   |
 
-A `light` line has no background. Use `heavy` for the lines that need action,
+A `light` line has no background, and its details stay `text-04`: only the
+icon carries the status. `default` details are `text-03`. Use `heavy` for the lines that need action,
 such as a failure that blocks. The variant sets colours only; pass the icon
 that fits the state (for example a spinner, a clock or an hourglass).
 
