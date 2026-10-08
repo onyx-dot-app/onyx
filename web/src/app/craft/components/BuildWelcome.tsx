@@ -40,7 +40,7 @@ export default function BuildWelcome({
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
   const t = useTranslations("craft.welcome");
-  const reduceMotion = useReducedMotion();
+  const reduceMotion: boolean | null = useReducedMotion();
   const inputBarRef = useRef<CraftInputBarHandle>(null);
   const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
     null
