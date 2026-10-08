@@ -537,3 +537,15 @@ variable "alarm_actions" {
   description = "SNS topic ARNs for RDS/ElastiCache CloudWatch alarm + ok actions. Empty = infra alarms exist but notify nothing."
   default     = []
 }
+
+variable "iam_role_permissions_boundary" {
+  type        = string
+  description = "ARN of a permissions boundary to attach to every IAM role the stack creates (VPC flow logs, EKS cluster and node groups, IRSA and add-on roles). Null attaches none."
+  default     = null
+}
+
+variable "iam_role_path" {
+  type        = string
+  description = "IAM path for every role the stack creates. Null keeps the default path (/). Changing it on an existing stack replaces the roles."
+  default     = null
+}

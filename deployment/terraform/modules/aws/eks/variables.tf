@@ -295,3 +295,15 @@ variable "vpc_cni_addon_version" {
   description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (set CLUSTER_NAME, then: aws eks describe-addon --cluster-name \"$CLUSTER_NAME\" --addon-name vpc-cni --query 'addon.addonVersion') to avoid an unintended CNI upgrade on adoption."
   default     = "v1.20.4-eksbuild.2"
 }
+
+variable "iam_role_permissions_boundary" {
+  type        = string
+  description = "ARN of a permissions boundary to attach to every IAM role this module creates. Null attaches none. Needed when the caller may only create bounded roles."
+  default     = null
+}
+
+variable "iam_role_path" {
+  type        = string
+  description = "IAM path for every role this module creates. Null keeps the default path (/). Changing it on an existing stack replaces the roles."
+  default     = null
+}
