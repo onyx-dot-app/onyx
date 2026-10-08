@@ -209,7 +209,7 @@ export default function AuthenticationAccountSection({
             {/* Hidden accounts animate away, then leave the page. The fold
             holds the cards' gap, so a closed one leaves no space behind. */}
             <Fold open={showSavedAccounts && credentials.length > 0}>
-              <div className="flex flex-col gap-4 pb-4">
+              <div className="flex flex-col gap-2 pb-2">
                 {credentials.map((credential) => (
                   <AuthenticationAccountCard
                     key={credential.id}
@@ -226,7 +226,7 @@ export default function AuthenticationAccountSection({
                 ))}
               </div>
             </Fold>
-            <Section gap={4} alignItems="stretch" width="full">
+            <Section gap={2} alignItems="stretch" width="full">
               {canAuthorize && (
                 <Section flexDirection="row" justifyContent="start" gap={1}>
                   <Button
