@@ -9,7 +9,7 @@ import pytest
 
 from onyx.connectors.models import ConnectorFailure, Document
 from onyx.connectors.teams import export as export_module
-from onyx.connectors.teams.connector import TeamsCheckpoint
+from onyx.connectors.teams.connector import TeamsCheckpoint, TeamsConnector
 from onyx.connectors.teams.models import ChannelRef
 from onyx.connectors.teams.utils import (
     GraphRetriesExhausted,
@@ -42,7 +42,7 @@ def _in_channel(row: dict[str, Any], channel: ChannelRef) -> dict[str, Any]:
 
 
 def _sdk_channel(channel: ChannelRef) -> MagicMock:
-    sdk = MagicMock()
+    sdk: MagicMock = MagicMock()
     sdk.id = channel.id
     sdk.properties = {
         "displayName": channel.display_name,
@@ -73,7 +73,7 @@ def test_a_team_streams_whole_threads_without_a_replies_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _team_with_channels(monkeypatch)
-    client = graph_client(
+    client: MagicMock = graph_client(
         {
             PROBE: {"value": []},
             team_export_url(TEAM_ID, 0, 1): {
@@ -88,7 +88,7 @@ def test_a_team_streams_whole_threads_without_a_replies_call(
 
     items, checkpoint = step(connector(client), _team_checkpoint())
 
-    documents = _documents(items)
+    documents: dict[str, Document] = _documents(items)
     assert set(documents) == {"m1", "o1"}
     assert [section.text or "" for section in documents["m1"].sections][-1].endswith(
         "reply"
@@ -103,8 +103,8 @@ def test_an_older_thread_that_only_gained_a_reply_is_read_whole(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _team_with_channels(monkeypatch)
-    old = "2020-01-01T10:00:00Z"
-    client = graph_client(
+    old: str = "2020-01-01T10:00:00Z"
+    client: MagicMock = graph_client(
         {
             PROBE: {"value": []},
             team_export_url(TEAM_ID, START, START + 1): {
@@ -135,7 +135,7 @@ def test_an_older_thread_that_only_gained_a_reply_is_read_whole(
 
     items, checkpoint = step(connector(client), _team_checkpoint(), start=START)
 
-    documents = _documents(items)
+    documents: dict[str, Document] = _documents(items)
     assert set(documents) == {"m9"}
     assert [
         (section.text or "").split("\n")[-1] for section in documents["m9"].sections
@@ -151,7 +151,7 @@ def test_an_app_without_the_approval_walks_channels(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _team_with_channels(monkeypatch)
-    client = graph_client({}, refused={PROBE: 403})
+    client: MagicMock = graph_client({}, refused={PROBE: 403})
 
     items, checkpoint = step(connector(client), _team_checkpoint())
 
@@ -170,8 +170,10 @@ def test_the_export_decision_is_kept_for_the_attempt(
     """A second team step never probes again, so every step of an attempt
     takes the path the first one took."""
     _team_with_channels(monkeypatch)
-    client = graph_client({}, refused={PROBE: 403})
-    saved = TeamsCheckpoint(has_more=True, todo_team_ids=[TEAM_ID], export=False)
+    client: MagicMock = graph_client({}, refused={PROBE: 403})
+    saved: TeamsCheckpoint = TeamsCheckpoint(
+        has_more=True, todo_team_ids=[TEAM_ID], export=False
+    )
 
     _, checkpoint = step(connector(client), saved)
 
@@ -184,7 +186,7 @@ def test_a_team_too_large_to_hold_goes_to_the_channel_walk(
 ) -> None:
     _team_with_channels(monkeypatch)
     monkeypatch.setattr(export_module, "EXPORT_MESSAGES_CAP", 1)
-    client = graph_client(
+    client: MagicMock = graph_client(
         {
             PROBE: {"value": []},
             team_export_url(TEAM_ID, 0, 1): {
@@ -219,8 +221,10 @@ def test_a_worker_lists_its_teams_channels_on_its_own_client(
         return [CHANNEL]
 
     monkeypatch.setattr("onyx.connectors.teams.listing.team_channels", team_channels)
-    client = graph_client({PROBE: {"value": []}, team_export_url(TEAM_ID, 0, 1): {}})
-    teams_connector = connector(client)
+    client: MagicMock = graph_client(
+        {PROBE: {"value": []}, team_export_url(TEAM_ID, 0, 1): {}}
+    )
+    teams_connector: TeamsConnector = connector(client)
 
     step(teams_connector, _team_checkpoint())
 
@@ -235,7 +239,7 @@ def test_a_team_whose_stream_is_refused_goes_to_the_channel_walk(
     what each of its channels refuses, as it does for an app without the
     approval."""
     _team_with_channels(monkeypatch)
-    client = graph_client(
+    client: MagicMock = graph_client(
         {PROBE: {"value": []}}, refused={team_export_url(TEAM_ID, 0, 1): 403}
     )
 
@@ -255,7 +259,7 @@ def test_a_team_whose_stream_is_down_fails_the_step(
 ) -> None:
     monkeypatch.setattr("onyx.connectors.teams.utils.time.sleep", lambda _: None)
     _team_with_channels(monkeypatch)
-    client = graph_client(
+    client: MagicMock = graph_client(
         {PROBE: {"value": []}}, refused={team_export_url(TEAM_ID, 0, 1): 503}
     )
 
@@ -268,10 +272,10 @@ def test_a_thread_in_a_channel_the_team_does_not_list_is_one_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _team_with_channels(monkeypatch)
-    stranger = ChannelRef(
+    stranger: ChannelRef = ChannelRef(
         team_id=TEAM_ID, id="19:gone@thread.tacv2", display_name="Gone"
     )
-    client = graph_client(
+    client: MagicMock = graph_client(
         {
             PROBE: {"value": []},
             team_export_url(TEAM_ID, 0, 1): {
@@ -282,7 +286,9 @@ def test_a_thread_in_a_channel_the_team_does_not_list_is_one_failure(
 
     items, _ = step(connector(client), _team_checkpoint())
 
-    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    failures: list[ConnectorFailure] = [
+        item for item in items if isinstance(item, ConnectorFailure)
+    ]
     assert len(failures) == 1
     assert failures[0].failed_entity is not None
     assert failures[0].failed_entity.entity_id == "m1"

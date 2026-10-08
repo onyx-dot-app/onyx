@@ -36,12 +36,17 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.teams import groups, listing, threads
 from onyx.connectors.teams.config import CHANNEL_BATCH_PER_WORKER, MAX_WORKERS
-from onyx.connectors.teams.export import EXPORT_TEAM_WORKERS, ExportSource, TeamExport
+from onyx.connectors.teams.export import EXPORT_TEAM_WORKERS, ExportSource
 from onyx.connectors.teams.files import FileSource
 from onyx.connectors.teams.meeting_chats import (
     ChatSource,
 )
-from onyx.connectors.teams.models import ChannelAdvance, ChannelCursor, ChannelRef
+from onyx.connectors.teams.models import (
+    ChannelAdvance,
+    ChannelCursor,
+    ChannelRef,
+    TeamExport,
+)
 from onyx.connectors.teams.organizers import (
     Organizer,
     OrganizerSource,
@@ -361,7 +366,7 @@ class TeamsConnector(
         team finished, so a raise in one leaves the step to be retried."""
         if checkpoint.todo_team_ids is None:
             raise RuntimeError("The teams are listed before any export step")
-        team_ids = checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
+        team_ids: list[str] = checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
         exports: list[TeamExport] = run_functions_tuples_in_parallel(
             [(self._export.team, (team_id, start, end)) for team_id in team_ids],
             max_workers=EXPORT_TEAM_WORKERS,

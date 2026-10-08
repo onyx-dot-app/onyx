@@ -8,12 +8,12 @@ from collections import defaultdict
 from collections.abc import Iterator
 
 import requests
-from pydantic import BaseModel
+from office365.graph_client import GraphClient
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, Document, EntityFailure
 from onyx.connectors.teams import listing
-from onyx.connectors.teams.models import ChannelRef, Message
+from onyx.connectors.teams.models import ChannelRef, Message, TeamExport
 from onyx.connectors.teams.refusals import is_permanent, status
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.threads import ThreadSource
@@ -36,16 +36,6 @@ EXPORT_MESSAGES_CAP = 250_000
 # A still-metered tenant refuses the export API with 402: a refusal, not an
 # outage.
 _PAYMENT_REQUIRED = 402
-
-
-class TeamExport(BaseModel):
-    """What one worker brings back from a team's stream."""
-
-    items: list[Document | ConnectorFailure]
-    channels: list[ChannelRef]
-    # The stream was refused or too large to hold, so the channels go to the
-    # channel walk.
-    fell_back: bool = False
 
 
 class ExportSource:
@@ -78,9 +68,11 @@ class ExportSource:
         too when the stream lacks it."""
         # The listing is an SDK query, which must run on this worker's own
         # client. The stream is direct requests on the shared one.
-        channels = listing.team_channels(self._session.graph_for_thread(), team_id)
-        by_id = {channel.id: channel for channel in channels}
-        graph_client = self._session.graph()
+        channels: list[ChannelRef] = listing.team_channels(
+            self._session.graph_for_thread(), team_id
+        )
+        by_id: dict[str, ChannelRef] = {channel.id: channel for channel in channels}
+        graph_client: GraphClient = self._session.graph()
 
         threads: dict[str, list[Message]] = defaultdict(list)
         roots: dict[str, Message] = {}
@@ -95,7 +87,7 @@ class ExportSource:
                         EXPORT_MESSAGES_CAP,
                     )
                     return TeamExport(items=[], channels=channels, fell_back=True)
-                root_id = message.replyToId or message.id
+                root_id: str = message.replyToId or message.id
                 threads[root_id].append(message)
                 if message.replyToId is None:
                     roots[root_id] = message
@@ -113,7 +105,7 @@ class ExportSource:
 
         items: list[Document | ConnectorFailure] = []
         for root_id, messages in threads.items():
-            channel = _channel_of(messages, by_id)
+            channel: ChannelRef | None = _channel_of(messages, by_id)
             if channel is None:
                 items.append(
                     ConnectorFailure(
@@ -151,7 +143,7 @@ class ExportSource:
                 return
         # Every reply is younger than its root, so a root created inside the
         # window has every reply changed inside it in the stream too.
-        replies = (
+        replies: list[Message] | None = (
             [message for message in messages if message.id != root_id]
             if root.created_date_time.timestamp() >= start
             else None

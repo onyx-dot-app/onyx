@@ -116,6 +116,16 @@ class ChannelAdvance(BaseModel):
     restarted: bool = False
 
 
+class TeamExport(BaseModel):
+    """What one worker brings back from a team's export stream."""
+
+    items: list[Document | ConnectorFailure]
+    channels: list[ChannelRef]
+    # The stream was refused or too large to hold, so the channels go to the
+    # channel walk.
+    fell_back: bool = False
+
+
 class ChannelLibrary(BaseModel):
     drive_id: str
     list_id: str
