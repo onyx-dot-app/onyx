@@ -13053,9 +13053,6 @@
         "calls": {
           "tag": "{count, plural, one {# appel} other {# appels}}"
         },
-        "failed": {
-          "tag": "{count} en échec"
-        },
         "working": {
           "label": "En cours"
         }

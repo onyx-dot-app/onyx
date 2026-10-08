@@ -13053,9 +13053,6 @@
         "calls": {
           "tag": "{count, plural, one {호출 #건} other {호출 #건}}"
         },
-        "failed": {
-          "tag": "{count}개 실패"
-        },
         "working": {
           "label": "작업 중"
         }

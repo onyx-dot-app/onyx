@@ -13053,9 +13053,6 @@
         "calls": {
           "tag": "{count, plural, one {# 件の呼び出し} other {# 件の呼び出し}}"
         },
-        "failed": {
-          "tag": "{count} 件失敗"
-        },
         "working": {
           "label": "作業中"
         }
