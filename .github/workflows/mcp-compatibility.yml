@@ -10,7 +10,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "17 * * * *"
+    - cron: "17 9 * * 1"
     - cron: "37 9 * * *"
 
 permissions:
@@ -104,7 +104,9 @@ jobs:
           backend/tests/external_dependency_unit/oauth_provider/test_protocol.py
 
   compose-smoke:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' && github.event.schedule == '17 9 * * 1')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

@@ -377,7 +377,7 @@ PRs use pinned CLI versions; the nightly run uses their latest releases.
 The same job checks the OAuth protocol with omitted resource parameters, which
 legacy Claude Code clients use. Tokens remain bound to the configured MCP URL.
 
-An hourly canary builds the backend under test and starts an isolated Compose
+A weekly canary, Mondays at 09:17 UTC, builds the backend under test and starts an isolated Compose
 stack with the API, MCP server, PostgreSQL, Redis, and shipped nginx routing.
 It checks loopback discovery aliases, both endpoint URL forms, the advertised
 resource, MCP auth challenges, and provider routing without creating users or grants.

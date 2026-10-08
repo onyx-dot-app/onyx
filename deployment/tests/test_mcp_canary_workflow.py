@@ -13,6 +13,14 @@ def test_scheduled_canary_uses_an_isolated_compose_stack() -> None:
     workflow: dict[str, Any] = yaml.safe_load(source)
     job: dict[str, Any] = workflow["jobs"]["compose-smoke"]
 
+    triggers: dict[str, Any] = workflow.get("on", workflow.get(True))
+    assert triggers["schedule"] == [
+        {"cron": "17 9 * * 1"},
+        {"cron": "37 9 * * *"},
+    ]
+    assert "github.event.schedule == '17 9 * * 1'" in job["if"]
+    assert "github.event_name == 'workflow_dispatch'" in job["if"]
+
     assert "craft-dev.onyx.app" not in source
     assert "st-dev.onyx.app" not in source
     assert "MCP_COMPATIBILITY_BASE_URL" not in source
