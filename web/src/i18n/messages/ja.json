@@ -2726,7 +2726,7 @@
           },
           "deleteButton": {
             "label": "アカウントを削除",
-            "inUseTooltip": "コネクタがこのアカウントを使用しているため、削除できません。"
+            "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません"
           },
           "usedBy": {
             "label": "{count, plural, other {# 個のコネクタ}}で使用中"

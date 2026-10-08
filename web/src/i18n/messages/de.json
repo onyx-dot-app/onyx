@@ -2726,7 +2726,7 @@
           },
           "deleteButton": {
             "label": "Konto löschen",
-            "inUseTooltip": "Connectors verwenden dieses Konto, daher kann es nicht gelöscht werden."
+            "inUseTooltip": "Diese Zugangsdaten können nicht gelöscht werden, da andere Connectors sie verwenden"
           },
           "usedBy": {
             "label": "Verwendet von {count, plural, one {# Connector} other {# Connectors}}"
