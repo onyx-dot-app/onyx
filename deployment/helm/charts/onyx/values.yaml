@@ -1661,7 +1661,8 @@ configMap:
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
   # Air-gapped deployments: set to "true" to disable outbound calls to
   # onyx-controlled endpoints (recommended-models sync, remote model catalog
-  # lookup). Inbound traffic and user-configured integrations are unaffected.
+  # lookup, release notes). Inbound traffic and user-configured integrations
+  # are unaffected.
   ONYX_AIRGAPPED: ""
   # Redis socket deadlines in seconds for the app client (not Celery), default
   # 30 and 10. A peer that stops replying but keeps the TCP session open raises
