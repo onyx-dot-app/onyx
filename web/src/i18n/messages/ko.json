@@ -2662,9 +2662,6 @@
           "description": "공유 서비스 계정을 사용합니다. {appName}이(가) 이 계정으로 콘텐츠를 인덱싱합니다.",
           "title": "인증 계정"
         },
-        "credentialSwapped": {
-          "toast": "자격 증명을 교체했습니다!"
-        },
         "error": {
           "toast": "오류: {detail}"
         },
@@ -2709,6 +2706,30 @@
         },
         "unknownError": {
           "toast": "알 수 없는 오류가 발생했습니다"
+        },
+        "account": {
+          "untitled": {
+            "label": "제목 없음"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "{date}에 추가됨"
+          },
+          "selected": {
+            "label": "선택됨"
+          },
+          "useButton": {
+            "label": "계정 사용"
+          },
+          "expandButton": {
+            "ariaLabel": "계정 세부 정보 표시"
+          },
+          "collapseButton": {
+            "ariaLabel": "계정 세부 정보 숨기기"
+          },
+          "deleteButton": {
+            "label": "계정 삭제"
+          }
         }
       },
       "credentialRequired": {

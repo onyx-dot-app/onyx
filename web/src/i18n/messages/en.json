@@ -2662,9 +2662,6 @@
           "description": "Use a shared service account. {appName} indexes content as this account.",
           "title": "Authentication Account"
         },
-        "credentialSwapped": {
-          "toast": "Swapped credential successfully!"
-        },
         "error": {
           "toast": "Error: {detail}"
         },
@@ -2709,6 +2706,30 @@
         },
         "unknownError": {
           "toast": "An unknown error occurred"
+        },
+        "account": {
+          "untitled": {
+            "label": "Untitled"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Added on {date}"
+          },
+          "selected": {
+            "label": "Selected"
+          },
+          "useButton": {
+            "label": "Use Account"
+          },
+          "expandButton": {
+            "ariaLabel": "Show account details"
+          },
+          "collapseButton": {
+            "ariaLabel": "Hide account details"
+          },
+          "deleteButton": {
+            "label": "Delete Account"
+          }
         }
       },
       "credentialRequired": {

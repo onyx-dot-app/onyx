@@ -2662,9 +2662,6 @@
           "description": "استخدم حساب خدمة مشتركًا. يفهرس {appName} المحتوى باسم هذا الحساب.",
           "title": "حساب المصادقة"
         },
-        "credentialSwapped": {
-          "toast": "تم تبديل بيانات الاعتماد بنجاح!"
-        },
         "error": {
           "toast": "خطأ: {detail}"
         },
@@ -2709,6 +2706,30 @@
         },
         "unknownError": {
           "toast": "حدث خطأ غير معروف"
+        },
+        "account": {
+          "untitled": {
+            "label": "بدون عنوان"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "أُضيف في {date}"
+          },
+          "selected": {
+            "label": "محدد"
+          },
+          "useButton": {
+            "label": "استخدام الحساب"
+          },
+          "expandButton": {
+            "ariaLabel": "عرض تفاصيل الحساب"
+          },
+          "collapseButton": {
+            "ariaLabel": "إخفاء تفاصيل الحساب"
+          },
+          "deleteButton": {
+            "label": "حذف الحساب"
+          }
         }
       },
       "credentialRequired": {
