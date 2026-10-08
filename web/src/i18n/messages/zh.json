@@ -2662,9 +2662,6 @@
           "description": "使用共享服务账户。{appName} 将以此账户为内容建立索引。",
           "title": "身份验证账户"
         },
-        "credentialSwapped": {
-          "toast": "已成功更换凭据！"
-        },
         "error": {
           "toast": "错误：{detail}"
         },
@@ -2709,6 +2706,30 @@
         },
         "unknownError": {
           "toast": "发生未知错误"
+        },
+        "account": {
+          "untitled": {
+            "label": "未命名"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "添加于 {date}"
+          },
+          "selected": {
+            "label": "已选择"
+          },
+          "useButton": {
+            "label": "使用此账户"
+          },
+          "expandButton": {
+            "ariaLabel": "显示账户详情"
+          },
+          "collapseButton": {
+            "ariaLabel": "隐藏账户详情"
+          },
+          "deleteButton": {
+            "label": "删除账户"
+          }
         }
       },
       "credentialRequired": {

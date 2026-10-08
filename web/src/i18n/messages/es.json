@@ -2662,9 +2662,6 @@
           "description": "Usa una cuenta de servicio compartida. {appName} indexa el contenido como esta cuenta.",
           "title": "Cuenta de autenticación"
         },
-        "credentialSwapped": {
-          "toast": "¡Credencial cambiada!"
-        },
         "error": {
           "toast": "Error: {detail}"
         },
@@ -2709,6 +2706,30 @@
         },
         "unknownError": {
           "toast": "Ocurrió un error desconocido"
+        },
+        "account": {
+          "untitled": {
+            "label": "Sin título"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Añadida el {date}"
+          },
+          "selected": {
+            "label": "Seleccionada"
+          },
+          "useButton": {
+            "label": "Usar cuenta"
+          },
+          "expandButton": {
+            "ariaLabel": "Mostrar detalles de la cuenta"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar detalles de la cuenta"
+          },
+          "deleteButton": {
+            "label": "Eliminar cuenta"
+          }
         }
       },
       "credentialRequired": {

@@ -2662,9 +2662,6 @@
           "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto.",
           "title": "Authentifizierungskonto"
         },
-        "credentialSwapped": {
-          "toast": "Anmeldedaten erfolgreich gewechselt!"
-        },
         "error": {
           "toast": "Fehler: {detail}"
         },
@@ -2709,6 +2706,30 @@
         },
         "unknownError": {
           "toast": "Ein unbekannter Fehler ist aufgetreten"
+        },
+        "account": {
+          "untitled": {
+            "label": "Ohne Titel"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Hinzugefügt am {date}"
+          },
+          "selected": {
+            "label": "Ausgewählt"
+          },
+          "useButton": {
+            "label": "Konto verwenden"
+          },
+          "expandButton": {
+            "ariaLabel": "Kontodetails anzeigen"
+          },
+          "collapseButton": {
+            "ariaLabel": "Kontodetails ausblenden"
+          },
+          "deleteButton": {
+            "label": "Konto löschen"
+          }
         }
       },
       "credentialRequired": {

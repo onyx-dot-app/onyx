@@ -2662,9 +2662,6 @@
           "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
           "title": "認証アカウント"
         },
-        "credentialSwapped": {
-          "toast": "認証情報を切り替えました！"
-        },
         "error": {
           "toast": "エラー: {detail}"
         },
@@ -2709,6 +2706,30 @@
         },
         "unknownError": {
           "toast": "不明なエラーが発生しました"
+        },
+        "account": {
+          "untitled": {
+            "label": "無題"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "{date} に追加"
+          },
+          "selected": {
+            "label": "選択中"
+          },
+          "useButton": {
+            "label": "このアカウントを使用"
+          },
+          "expandButton": {
+            "ariaLabel": "アカウントの詳細を表示"
+          },
+          "collapseButton": {
+            "ariaLabel": "アカウントの詳細を非表示"
+          },
+          "deleteButton": {
+            "label": "アカウントを削除"
+          }
         }
       },
       "credentialRequired": {

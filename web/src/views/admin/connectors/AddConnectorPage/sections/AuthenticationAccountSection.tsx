@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
+import { Button, SelectCard, Tabs } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
 import { SvgPlusCircle } from "@opal/icons";
@@ -11,11 +11,11 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
-import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 import { shouldRedirectToOAuth } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage/components/AuthenticationAccountCard";
 import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 
 interface AuthenticationAccountSectionProps {
@@ -25,8 +25,8 @@ interface AuthenticationAccountSectionProps {
   accessType: AccessType;
   /** The credential the page links once the connector is created. */
   currentCredential: Credential<any> | null;
-  /** Called when the user picks or creates a credential. */
-  onCredentialChange: (credential: Credential<any>) => void;
+  /** Called when the user picks or creates a credential, or drops it. */
+  onCredentialChange: (credential: Credential<any> | null) => void;
   /** The credential the capability checks run with; `null` locks them. */
   checkedCredential: Credential<any> | null;
   /** Locks the Start Checks prompt, as the configuration below is locked. */
@@ -82,7 +82,6 @@ export default function AuthenticationAccountSection({
 
   async function onSwap(selectedCredential: Credential<any>) {
     onCredentialChange(selectedCredential);
-    toast.success(t("add.credentialSwapped.toast"));
     refresh();
   }
 
@@ -189,39 +188,34 @@ export default function AuthenticationAccountSection({
       {!credentials ? null : (
         <Section gap={6} alignItems="stretch" width="full">
           <Section gap={4} alignItems="stretch" width="full">
-            <Card border="solid" rounding={4} padding={6}>
-              <Section gap={4} alignItems="start" width="full">
-                <ModifyCredential
-                  showIfEmpty
-                  accessType={accessType}
-                  defaultedCredential={currentCredential!}
-                  credentials={credentials}
-                  onDeleteCredential={onDeleteCredential}
-                  onSwitch={onSwap}
-                />
+            {credentials.map((credential) => (
+              <AuthenticationAccountCard
+                key={credential.id}
+                credential={credential}
+                source={connector}
+                sourceName={displayName}
+                selected={credential.id === currentCredential?.id}
+                onSelect={onSwap}
+                onDeselect={() => onCredentialChange(null)}
+                onDelete={onDeleteCredential}
+              />
+            ))}
 
-                {canAuthorize && (
-                  <Section
-                    flexDirection="row"
-                    justifyContent="start"
-                    gap={1}
-                    className="mt-6"
-                  >
-                    <Button
-                      disabled={isAuthorizing}
-                      variant="action"
-                      onClick={handleAuthorize}
-                    >
-                      {isAuthorizing
-                        ? t("add.authorizeButton.pendingLabel")
-                        : t("add.authorizeButton.label", {
-                            source: displayName,
-                          })}
-                    </Button>
-                  </Section>
-                )}
+            {canAuthorize && (
+              <Section flexDirection="row" justifyContent="start" gap={1}>
+                <Button
+                  disabled={isAuthorizing}
+                  variant="action"
+                  onClick={handleAuthorize}
+                >
+                  {isAuthorizing
+                    ? t("add.authorizeButton.pendingLabel")
+                    : t("add.authorizeButton.label", {
+                        source: displayName,
+                      })}
+                </Button>
               </Section>
-            </Card>
+            )}
 
             {/* One card creates a credential. Its header toggles it; the fold
           below is a plain container, so a click in the open form cannot fold

@@ -145,8 +145,10 @@ export default function CreateCredential({
         }
         onClose();
       } else {
+        // With `onSwitch`, the new credential is picked at once, and the
+        // picked credential is the confirmation.
         if (isSuccess) {
-          toast.success(message);
+          if (!onSwitch) toast.success(message);
         } else {
           toast.error(message);
         }

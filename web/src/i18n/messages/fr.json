@@ -2662,9 +2662,6 @@
           "description": "Utilisez un compte de service partagé. {appName} indexe le contenu avec ce compte.",
           "title": "Compte d'authentification"
         },
-        "credentialSwapped": {
-          "toast": "Identifiant remplacé avec succès !"
-        },
         "error": {
           "toast": "Erreur : {detail}"
         },
@@ -2709,6 +2706,30 @@
         },
         "unknownError": {
           "toast": "Une erreur inconnue est survenue"
+        },
+        "account": {
+          "untitled": {
+            "label": "Sans titre"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Ajouté le {date}"
+          },
+          "selected": {
+            "label": "Sélectionné"
+          },
+          "useButton": {
+            "label": "Utiliser le compte"
+          },
+          "expandButton": {
+            "ariaLabel": "Afficher les détails du compte"
+          },
+          "collapseButton": {
+            "ariaLabel": "Masquer les détails du compte"
+          },
+          "deleteButton": {
+            "label": "Supprimer le compte"
+          }
         }
       },
       "credentialRequired": {
