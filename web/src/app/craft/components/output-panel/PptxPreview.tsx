@@ -32,7 +32,7 @@ export default function PptxPreview({
   isActive = true,
 }: PptxPreviewProps) {
   const t = useTranslations("craft.pptxPreview");
-  const format = useFormatter();
+  const format: ReturnType<typeof useFormatter> = useFormatter();
   const selectedThumbnailRef = useRef<HTMLDivElement>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imageLoading, setImageLoading] = useState(true);

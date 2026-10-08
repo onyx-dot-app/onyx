@@ -15,7 +15,8 @@ jest.mock("@/app/craft/services/apiServices", () => ({
   fetchPptxPreview: jest.fn(),
 }));
 
-const originalScrollIntoView = Element.prototype.scrollIntoView;
+const originalScrollIntoView: typeof Element.prototype.scrollIntoView =
+  Element.prototype.scrollIntoView;
 beforeEach(() => {
   Element.prototype.scrollIntoView = jest.fn();
 });
@@ -259,4 +260,62 @@ it("navigates from thumbnails and ignores keyboard events while its tab is hidde
   rerender(<PptxPreview sessionId="thumbnails" filePath="outputs/deck.pptx" />);
   fireEvent.keyDown(window, { key: "ArrowRight" });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
+});
+
+it.each(["input", "textarea", "select", "contenteditable"])(
+  "keeps the selected slide when arrow keys come from a %s",
+  async (targetKind: string) => {
+    jest.mocked(fetchPptxPreview).mockResolvedValue({
+      slide_count: 3,
+      slide_paths: ["slide-1.jpg", "slide-2.jpg", "slide-3.jpg"],
+      cached: false,
+    });
+    const { container } = render(
+      <PptxPreview sessionId="editing-prompt" filePath="outputs/deck.pptx" />
+    );
+    await screen.findByRole("img");
+    fireEvent.click(screen.getByRole("button", { name: "Slide 2 of 3" }));
+
+    const editor: HTMLElement = document.createElement(
+      targetKind === "contenteditable" ? "div" : targetKind
+    );
+    let eventTarget: HTMLElement = editor;
+    if (targetKind === "contenteditable") {
+      editor.setAttribute("contenteditable", "true");
+      eventTarget = document.createElement("span");
+      editor.append(eventTarget);
+    }
+    container.append(editor);
+    eventTarget.focus();
+
+    for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]) {
+      expect(fireEvent.keyDown(eventTarget, { key })).toBe(true);
+      expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
+    }
+  }
+);
+
+it("reverses horizontal arrows in RTL and keeps vertical arrows unchanged", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 3,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg", "slide-3.jpg"],
+    cached: false,
+  });
+  const originalDirection: string = document.documentElement.dir;
+  document.documentElement.dir = "rtl";
+  try {
+    render(<PptxPreview sessionId="rtl-slides" filePath="outputs/deck.pptx" />);
+    await screen.findByRole("img");
+    fireEvent.click(screen.getByRole("button", { name: "Slide 2 of 3" }));
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 1 of 3");
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
+  } finally {
+    document.documentElement.dir = originalDirection;
+  }
 });
