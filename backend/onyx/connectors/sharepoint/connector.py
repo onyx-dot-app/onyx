@@ -2142,6 +2142,12 @@ class SharepointConnector(
                         checkpoint.cached_site_descriptors.popleft()
                     )
                     checkpoint.cached_drives = None
+                    # The next site's drives point at its node as their parent.
+                    yield from self._yield_site_hierarchy_node(
+                        checkpoint.current_site_descriptor,
+                        checkpoint,
+                        include_permissions=include_permissions,
+                    )
                     return checkpoint
                 else:
                     checkpoint.has_more = False
