@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -22,7 +21,6 @@ from onyx.connectors.zoom.client import (
     _MAX_PAGE_SIZE,
     MAX_LISTING_PAGES,
     ZoomClient,
-    ZoomNotEntitledError,
     _reject_non_zoom_download_url,
 )
 from onyx.connectors.zoom.connector import (
@@ -41,8 +39,6 @@ from onyx.connectors.zoom.endpoints import (
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
     ZoomRecordingFile,
-    ZoomRecordingRegistrant,
-    ZoomRegistrant,
     ZoomShareRecording,
 )
 from onyx.connectors.zoom.rate_limit import (
@@ -178,20 +174,6 @@ _DOCUMENTED_WEBINAR = {
 }
 
 
-_DOCUMENTED_PARTICIPANT = {
-    "id": "30R7kT7bTIKSNUFEuH_Qlg",
-    "name": "Jill Chill",
-    "user_id": "27423744",
-    "registrant_id": "_f08HhPJS82MIVLuuFaJPg",
-    "user_email": "jchill@example.com",
-    "join_time": "2022-03-23T06:58:09Z",
-    "leave_time": "2022-03-23T07:02:28Z",
-    "duration": 259,
-    "failover": False,
-    "status": "in_meeting",
-    "internal_user": False,
-}
-
 _DOCUMENTED_REGISTRANT = {
     "id": "9tboDiHUQAeOnbmudzWa5g",
     "email": "jchill@example.com",
@@ -199,13 +181,6 @@ _DOCUMENTED_REGISTRANT = {
     "last_name": "Chill",
     "status": "approved",
     "create_time": "2022-03-22T05:59:09Z",
-    "join_url": "https://example.com/j/11111",
-}
-
-_DOCUMENTED_PANELIST = {
-    "id": "Tg2b6GhcQKKbV7nSCbDKug",
-    "email": "jchill@example.com",
-    "name": "Jill Chill",
     "join_url": "https://example.com/j/11111",
 }
 
@@ -1336,187 +1311,7 @@ class TestDownloadRedirects:
         assert safe_get.call_args.args[0] == "https://zoom.us/rec/other.vtt"
 
 
-class TestListPastMeetingParticipants:
-    def test_pages_are_joined_into_one_list(self) -> None:
-        """A next_page_token dies 15 minutes after Zoom issues it, so the whole
-        list is paged in one call rather than resumed later."""
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.side_effect = [
-            _response(
-                200,
-                {
-                    "participants": [
-                        {**_DOCUMENTED_PARTICIPANT, "user_email": "a@example.com"}
-                    ],
-                    "next_page_token": "page-2",
-                },
-            ),
-            _response(
-                200,
-                {
-                    "participants": [
-                        {**_DOCUMENTED_PARTICIPANT, "user_email": "b@example.com"}
-                    ],
-                    "next_page_token": "",
-                },
-            ),
-        ]
-
-        participants = client.list_past_meeting_participants("uuid-abc")
-
-        assert [p.user_email for p in participants] == [
-            "a@example.com",
-            "b@example.com",
-        ]
-        assert (
-            client._session.request.call_args_list[1].kwargs["params"][
-                "next_page_token"
-            ]
-            == "page-2"
-        )
-
-    def test_a_blank_email_survives_as_far_as_the_model(self) -> None:
-        """Zoom empties this for anyone outside the host's account. Dropping it
-        here would hide how many people were lost."""
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            200, {"participants": [{**_DOCUMENTED_PARTICIPANT, "user_email": ""}]}
-        )
-
-        assert client.list_past_meeting_participants("uuid-abc")[0].user_email == ""
-
-    def test_a_session_with_one_attendee_returns_nothing_rather_than_failing(
-        self,
-    ) -> None:
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(200, {})
-
-        assert client.list_past_meeting_participants("uuid-abc") == []
-
-    def test_a_deleted_session_reaches_the_caller_as_a_404(self) -> None:
-        """An empty page means nobody attended, but a 404 means Zoom has no such
-        session. access.py tells those apart, so the client must not answer both
-        with an empty list."""
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(404, {"code": 3001})
-
-        with pytest.raises(requests.HTTPError):
-            client.list_past_meeting_participants("uuid-abc")
-
-    def test_the_retention_window_error_reaches_the_caller(self) -> None:
-        """Zoom answers 400 with code 12702 once a meeting is out of range. The
-        access layer turns that into "no data"; the client must not hide it."""
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            400, {"code": 12702, "message": "Can not access a meeting a year ago."}
-        )
-
-        with pytest.raises(requests.HTTPError) as caught:
-            client.list_past_meeting_participants("uuid-abc")
-
-        assert "12702" in str(caught.value)
-
-
-class TestListRegistrants:
-    def test_the_caller_chooses_which_registrants_zoom_sends(self) -> None:
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(200, {"registrants": []})
-
-        client.list_meeting_registrants("111", status="approved")
-
-        params = client._session.request.call_args.kwargs["params"]
-        assert params["status"] == "approved"
-        assert params["page_size"] == _MAX_PAGE_SIZE
-
-    def test_no_status_asks_zoom_for_every_registrant(self) -> None:
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(200, {"registrants": []})
-
-        client.list_meeting_registrants("111")
-
-        assert "status" not in client._session.request.call_args.kwargs["params"]
-
-    def test_the_status_is_kept_on_each_record(self) -> None:
-        """access.py decides who a registration grants access to, so it needs
-        the status even though Zoom was asked to filter."""
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            200,
-            {
-                "registrants": [
-                    {**_DOCUMENTED_REGISTRANT, "status": "approved"},
-                    {**_DOCUMENTED_REGISTRANT, "status": "denied"},
-                ]
-            },
-        )
-
-        registrants = client.list_meeting_registrants("111")
-
-        assert [r.status for r in registrants] == ["approved", "denied"]
-
-    def test_registration_being_off_returns_nothing(self) -> None:
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(200, {"registrants": []})
-
-        assert client.list_meeting_registrants("111") == []
-
-    @pytest.mark.parametrize(
-        "method, message",
-        [
-            (
-                ZoomClient.list_meeting_registrants,
-                "Registration has not been enabled for this meeting: 111.",
-            ),
-            (
-                ZoomClient.list_webinar_registrants,
-                "Registration has not been enabled for this webinar: 111.",
-            ),
-            # Zoom words the same answer differently for a recording.
-            (
-                ZoomClient.list_recording_registrants,
-                "This meeting recording has not registration required.",
-            ),
-        ],
-        ids=["meeting", "webinar", "recording"],
-    )
-    def test_registration_never_enabled_reads_as_no_registrants(
-        self,
-        method: Callable[
-            [ZoomClient, str], list[ZoomRegistrant] | list[ZoomRecordingRegistrant]
-        ],
-        message: str,
-    ) -> None:
-        # Zoom's real answer is a 400, and it used to fail the whole document.
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            400, {"code": 300, "message": message}
-        )
-
-        assert method(client, "111") == []
-
-    def test_another_code_300_is_still_an_error(self) -> None:
-        # 300 is Zoom's generic bad-request code; only the message is specific.
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            400, {"code": 300, "message": "Invalid meeting id."}
-        )
-
-        with pytest.raises(requests.HTTPError):
-            client.list_meeting_registrants("111")
-
-
-# Read live on 2026-09-22 from a recording on "Only people with access". Note
+# Read from a live recording on "Only people with access". Note
 # share_recording still says "publicly"; the passcode is what the model drops.
 _SHARED_WITH_NAMED_PEOPLE = {
     "topic": "test channel meeting",
@@ -1529,7 +1324,7 @@ _SHARED_WITH_NAMED_PEOPLE = {
     "password": "hunter22",
 }
 
-# The whole answer for a recording on "Private to me", read the same day.
+# The whole answer for a live recording on "Private to me".
 _PRIVATE_TO_OWNER = {"topic": "test channel meeting", "share_recording": "none"}
 
 
@@ -1641,6 +1436,75 @@ class TestListRecordingRegistrants:
 
         client._session.request.assert_not_called()
 
+    def test_pages_are_joined_into_one_list(self) -> None:
+        """A next_page_token dies 15 minutes after Zoom issues it, so the whole
+        list is paged in one call rather than resumed later."""
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.side_effect = [
+            _response(
+                200,
+                {
+                    "registrants": [
+                        {**_DOCUMENTED_REGISTRANT, "email": "a@example.com"}
+                    ],
+                    "next_page_token": "page-2",
+                },
+            ),
+            _response(
+                200,
+                {
+                    "registrants": [
+                        {**_DOCUMENTED_REGISTRANT, "email": "b@example.com"}
+                    ],
+                    "next_page_token": "",
+                },
+            ),
+        ]
+
+        registrants = client.list_recording_registrants("uuid-1")
+
+        assert [r.email for r in registrants] == ["a@example.com", "b@example.com"]
+        assert (
+            client._session.request.call_args_list[1].kwargs["params"][
+                "next_page_token"
+            ]
+            == "page-2"
+        )
+
+    def test_no_status_asks_zoom_for_every_registrant(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"registrants": []})
+
+        client.list_recording_registrants("uuid-1")
+
+        assert "status" not in client._session.request.call_args.kwargs["params"]
+
+    def test_registration_never_enabled_reads_as_no_registrants(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400,
+            {
+                "code": 300,
+                "message": "This meeting recording has not registration required.",
+            },
+        )
+
+        assert client.list_recording_registrants("uuid-1") == []
+
+    def test_another_code_300_is_still_an_error(self) -> None:
+        # 300 is Zoom's generic bad-request code; only the message is specific.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 300, "message": "Invalid meeting id."}
+        )
+
+        with pytest.raises(requests.HTTPError):
+            client.list_recording_registrants("uuid-1")
+
 
 class TestGetUser:
     def test_it_reads_one_user_by_id(self) -> None:
@@ -1666,7 +1530,7 @@ class TestGetUser:
 
 
 class TestGetRecordingAuthenticationRules:
-    # Read live on 2026-09-22: the built-in rule and one the admin added.
+    # Read from a live account: the built-in rule and one the admin added.
     _CATALOGUE = {
         "recording_authentication": True,
         "authentication_options": [
@@ -1733,82 +1597,15 @@ class TestGetMeetingDetails:
         assert details.host_id == "u1"
         assert client._session.request.call_args.args[1].endswith("/meetings/111")
 
-    def test_invitees_are_read_out_of_the_settings_block(self) -> None:
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            200,
-            {
-                **self._SCHEDULED,
-                "settings": {
-                    "meeting_invitees": [
-                        {"email": "a@example.com", "internal_user": True},
-                        {"email": "b@example.com", "internal_user": False},
-                    ]
-                },
-            },
-        )
-
-        invitees = client.get_meeting_details("111").settings.meeting_invitees
-
-        assert [i.email for i in invitees] == ["a@example.com", "b@example.com"]
-        assert [i.internal_user for i in invitees] == [True, False]
-
-    def test_an_ad_hoc_meeting_has_no_invitees(self) -> None:
-        """An instant meeting was never scheduled, so there is no invite list."""
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            200, {**self._SCHEDULED, "settings": {}}
-        )
-
-        assert client.get_meeting_details("111").settings.meeting_invitees == []
-
     def test_a_deleted_meeting_reaches_the_caller_as_a_404(self) -> None:
-        """Returning an empty list here would read as a meeting nobody was invited
-        to. access.py decides what a meeting Zoom has forgotten means."""
+        """A 404 is how the host lookup learns Zoom has no such meeting, so the
+        client must not hide it."""
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(404)
 
         with pytest.raises(requests.HTTPError):
             client.get_meeting_details("111")
-
-
-class TestListWebinarPanelists:
-    def test_panelists_are_returned(self) -> None:
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            200,
-            {"panelists": [{**_DOCUMENTED_PANELIST, "email": "speaker@example.com"}]},
-        )
-
-        assert client.list_webinar_panelists("222")[0].email == "speaker@example.com"
-
-    def test_a_missing_webinar_addon_raises_the_entitlement_type(self) -> None:
-        """Zoom sends this as a 400, not a 403. It gets its own type so callers
-        can carry on without the data, unlike a missing scope."""
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            400, {"code": 200, "message": "Webinar plan is missing."}
-        )
-
-        with pytest.raises(ZoomNotEntitledError) as caught:
-            client.list_webinar_panelists("222")
-
-        assert "Webinar add-on" in str(caught.value)
-
-    def test_a_missing_scope_stays_a_plain_permissions_error(self) -> None:
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(403)
-
-        with pytest.raises(InsufficientPermissionsError) as caught:
-            client.list_webinar_panelists("222")
-
-        assert not isinstance(caught.value, ZoomNotEntitledError)
 
 
 def _rate_limited(retry_after: str | None = None) -> MagicMock:
@@ -1861,18 +1658,7 @@ class TestRateLimitTiers:
                 ),
                 ZoomRateLimitTier.MEDIUM,
             ),
-            (
-                lambda c: c.list_past_meeting_participants("uuid"),
-                ZoomRateLimitTier.MEDIUM,
-            ),
-            (
-                lambda c: c.list_past_webinar_participants("uuid"),
-                ZoomRateLimitTier.MEDIUM,
-            ),
-            (lambda c: c.list_meeting_registrants("1"), ZoomRateLimitTier.MEDIUM),
-            (lambda c: c.list_webinar_registrants("1"), ZoomRateLimitTier.MEDIUM),
             (lambda c: c.get_meeting_details("1"), ZoomRateLimitTier.LIGHT),
-            (lambda c: c.list_webinar_panelists("1"), ZoomRateLimitTier.MEDIUM),
             (lambda c: c.get_recording_settings("uuid"), ZoomRateLimitTier.LIGHT),
             (lambda c: c.get_user("u"), ZoomRateLimitTier.LIGHT),
             (
@@ -2395,8 +2181,8 @@ class TestEndpointTable:
         assert mismatched == []
 
 
-class TestAccessListPagingGuards:
-    """An access list is drained in one call, so a cursor Zoom never ends would
+class TestListingPagingGuards:
+    """A listing is drained in one call, so a cursor Zoom never ends would
     spin the worker forever. Celery runs these in a thread pool, where its time
     limits are silently disabled, so nothing outside would stop it."""
 
@@ -2408,11 +2194,11 @@ class TestAccessListPagingGuards:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(
-            200, {"participants": [], "next_page_token": "stuck"}
+            200, {"registrants": [], "next_page_token": "stuck"}
         )
 
         with pytest.raises(ValueError) as caught:
-            client.list_past_meeting_participants("uuid-abc")
+            client.list_recording_registrants("uuid-abc")
 
         assert "stopped advancing" in str(caught.value)
         # The point of the check is catching this before it spends the budget.
@@ -2423,12 +2209,12 @@ class TestAccessListPagingGuards:
         client._session = MagicMock()
         pages = iter(range(MAX_LISTING_PAGES + 10))
         client._session.request.side_effect = [
-            _response(200, {"participants": [], "next_page_token": f"page-{n}"})
+            _response(200, {"registrants": [], "next_page_token": f"page-{n}"})
             for n in pages
         ]
 
         with pytest.raises(ValueError) as caught:
-            client.list_past_meeting_participants("uuid-abc")
+            client.list_recording_registrants("uuid-abc")
 
         assert str(MAX_LISTING_PAGES) in str(caught.value)
         assert client._session.request.call_count == MAX_LISTING_PAGES

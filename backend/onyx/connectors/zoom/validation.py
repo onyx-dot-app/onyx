@@ -22,8 +22,11 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import APPROVED_REGISTRANT_STATUS, ZoomRecordingEntry
-from onyx.connectors.zoom.recordings.access import session_is_gone
 from onyx.connectors.zoom.recordings.discovery import session_ids
+from onyx.connectors.zoom.recordings.models import (
+    definitely_absent,
+    zoom_cannot_reach_back,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -57,7 +60,7 @@ def _probe(description: str, call: Callable[[], _T]) -> _T | None:
     except ValidationError:
         raise
     except requests.HTTPError as e:
-        if session_is_gone(e):
+        if definitely_absent(e) or zoom_cannot_reach_back(e):
             return None
         status = e.response.status_code if e.response is not None else None
         if status == 400:
