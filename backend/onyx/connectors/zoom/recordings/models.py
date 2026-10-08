@@ -44,15 +44,21 @@ class OccurrenceWork(BaseModel):
 
 
 class HostScope(BaseModel):
-    """The host and Group mechanisms scope by `session_types`, keeping every
-    recording of those types. The ID allowlist scopes by `sessions`, keeping
-    those numbers whatever else the host recorded."""
+    """Which of one host's recordings to keep, and as which document type."""
 
     host: Host
+    # Set when the admin listed this host by email or through a Zoom Group.
+    # Holds the ticked checkboxes, meetings and/or webinars: keep every
+    # recording of those kinds.
     session_types: frozenset[ZoomSessionType] = frozenset()
+    # Set when the admin typed a meeting or webinar number this host owns.
+    # Each entry is (the field it was typed into, the number), for example
+    # (MEETING, "111"): keep that number's recordings as meetings.
     sessions: frozenset[tuple[ZoomSessionType, str]] = frozenset()
 
     def merged_with(self, other: "HostScope") -> "HostScope":
+        """Join the scopes of a host that was both listed by email or Group and
+        named by a number, so the host is walked once."""
         return HostScope(
             host=Host(
                 user_id=self.host.user_id,
@@ -62,25 +68,30 @@ class HostScope(BaseModel):
             sessions=self.sessions | other.sessions,
         )
 
+    # TODO(subash): reject a number typed into the wrong field at validation and
+    # collapse this to one type. Zoom lists a webinar's occurrences on
+    # /past_meetings/{id}/instances, so a webinar number in the meeting field is
+    # indexed under the wrong type today; /meetings/{id} answers such a number
+    # with 400 code 3000, which is the check. Checked live on 2026-09-23.
     def emitted_types(
         self, session_id: str, derived: ZoomSessionType | None
     ) -> set[ZoomSessionType]:
-        """Every session type any scope claims for this recording.
+        """Which document types to make for one recording.
 
-        Generous on purpose, because an id the index never held costs nothing
-        while a missing one deletes a document. That covers a number configured
-        as both a meeting and a webinar, a number typed into the wrong field,
-        and a type code Zoom adds after this was written."""
-        claimed = {
+        The recording is kept as a meeting if the admin typed its number into
+        the meeting field, and likewise for webinars. It is also kept as its
+        own kind, `derived`, when that checkbox is ticked. When Zoom's type
+        code is one this connector cannot read, `derived` is None and the
+        recording is kept as every ticked kind: an extra id costs nothing,
+        while a missing one deletes a document."""
+        typed_as = {
             session_type
-            for session_type, claimed_id in self.sessions
-            if claimed_id == session_id
+            for session_type, number in self.sessions
+            if number == session_id
         }
         if derived is None:
-            return claimed | set(self.session_types)
-        if derived in self.session_types:
-            claimed.add(derived)
-        return claimed
+            return typed_as | set(self.session_types)
+        return typed_as | ({derived} & self.session_types)
 
 
 class SessionHost(BaseModel):
@@ -92,6 +103,14 @@ class SessionHost(BaseModel):
 
     host_id: str | None = None
     anchor: ZoomRecordingEntry | None = None
+
+
+class ProvenRecording(BaseModel):
+    """A recording Zoom answered for by its session number, under the type the
+    admin typed the number into."""
+
+    session_type: ZoomSessionType
+    recording: ZoomRecordingEntry
 
 
 class RecordingsState(BaseModel):
