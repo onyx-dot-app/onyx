@@ -564,11 +564,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     batch.append(
                         Document(
                             id=f"{self.bucket_type}:{self.bucket_name}:{key}",
-                            sections=(
-                                sections
-                                if sections
-                                else [TextSection(link=link, text="")]
-                            ),
+                            sections=(sections or [TextSection(link=link, text="")]),
                             source=source_type,
                             semantic_identifier=file_display_name,
                             doc_updated_at=time_updated,

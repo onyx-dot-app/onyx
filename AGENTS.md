@@ -22,6 +22,8 @@ This file provides guidance to AI agents when working with code in this reposito
   This works on a host checkout and inside the devcontainer. If no `psql` client is available, fall back to
   `docker exec onyx-relational_db-1 psql -U postgres -c "<SQL>"` (no `-it` — agent shells have no TTY).
 - When making calls to the backend, always go through the frontend. E.g. make a call to `http://localhost:3000/api/persona` not `http://localhost:8080/api/persona`
+- If `.agents-local.md` exists at the repo root and its rules are not already in your context,
+  read and follow it. It carries developer-local agent guidance and is never committed.
 
 ## Project Overview
 
@@ -50,6 +52,28 @@ there:
 
 Explore the tree with `ls` rather than relying on docs for the full package list.
 
+### Feature Map
+
+`.agents/feature-map/` maps the product: every surface, what it does, the code behind
+it, and how the parts connect. Use it before you change a product surface, when you
+review a diff or PR, and when you need to know what a feature does or what a change
+can break. The `feature-map` skill (`.agents/skills/feature-map/SKILL.md`) gives the
+procedure.
+
+- Look up a code path in `.agents/feature-map/PATHS.md` to find its component.
+- The step-by-step review procedure is `.agents/feature-map/VERIFYING.md`.
+- Onyx overloads words such as Persona, Tool, turn, and SearchDoc. Read
+  `.agents/feature-map/GLOSSARY.md` before trusting a name.
+
+If you change behaviour a component document describes, update that document in the
+same pull request. The `feature-map-integrity` pre-commit hook fails when a file the
+map cites is renamed or deleted.
+
+### Skills
+
+Shared agent skills live in `.agents/skills/`. `.claude/skills`, `.cursor/skills` and
+`.codex/skills` are symlinks to it, so add or edit skills only in `.agents/skills/`.
+
 ## Code Quality
 
 ```bash
@@ -60,6 +84,16 @@ pre-commit run --all-files
 # Faster: run only on the files you touched
 pre-commit run --files <path> [<path> ...]
 ```
+
+Claude Code and Codex also run pre-commit on the files you changed in a turn when
+you end it (`.agents/hooks/pre_commit_on_stop.py`, wired as `UserPromptSubmit` and
+`Stop` hooks in `.claude/settings.json` and `.codex/hooks.json`). Files that were
+already dirty when the turn started are skipped unless you change them. Codex runs
+the hooks only after you trust the project `.codex/` layer. If pre-commit fails, fix
+the reported problems before you finish. When the repo has the feature map
+(`.agents/feature-map/stale_docs.py`), the same hook also names any feature-map
+component whose code the turn changed but whose document the branch did not. Update
+the document if your change alters what it states.
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 
@@ -120,6 +154,14 @@ This is a minimal list - feel free to include more. Do NOT write code as part of
 Keep it high level. You can reference certain files or functions though.
 
 Before writing your plan, make sure to do research. Explore the relevant sections in the codebase.
+
+## Reuse Existing Standards
+
+Before you add a helper, utility, pattern or convention, search the codebase for one that does
+the same job, and use it. For example, use the existing rate limiting, caching, URL validation,
+router and settings patterns. Do not invent a parallel mechanism. If the existing one does not
+do enough, extend it so other callers get the change too. A new pattern needs a reason that the
+existing ones cannot meet.
 
 ## Best Practices
 

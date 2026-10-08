@@ -24,18 +24,19 @@ export function externalAppContextFromSearchParams({
 }: ExternalAppSearchParams): ExternalAppContext {
   const parsedAppId =
     typeof externalAppId === "string" ? Number(externalAppId) : undefined;
-  return {
-    ...(Number.isInteger(parsedAppId) &&
+  const hasAppId =
     parsedAppId !== undefined &&
-    parsedAppId > 0
-      ? { externalAppId: parsedAppId }
-      : {}),
-    ...(typeof externalAppName === "string" ? { externalAppName } : {}),
+    Number.isInteger(parsedAppId) &&
+    parsedAppId > 0;
+  return {
+    externalAppId: hasAppId ? parsedAppId : undefined,
+    externalAppName:
+      typeof externalAppName === "string" ? externalAppName : undefined,
   };
 }
 
 export function externalAppAdminUrl(externalAppId: number): Route {
-  return `/admin/craft/apps?editAppId=${externalAppId}` as Route;
+  return `/admin/craft/apps?editAppId=${externalAppId}`;
 }
 
 export function skillEditorUrlForApp(
@@ -44,12 +45,12 @@ export function skillEditorUrlForApp(
 ): Route {
   const params = externalAppParams(app);
   if (draftId) params.set("draft", draftId);
-  return `/craft/v1/skills/new?${params.toString()}` as Route;
+  return `/craft/v1/skills/new?${params.toString()}`;
 }
 
 export function skillEditUrlForApp(
   skillId: string,
   app: ExternalAppAdminResponse
-): Route {
-  return `/craft/v1/skills/edit/${skillId}?${externalAppParams(app).toString()}` as Route;
+): `/craft/v1/skills/edit/${string}?${string}` {
+  return `/craft/v1/skills/edit/${skillId}?${externalAppParams(app).toString()}`;
 }

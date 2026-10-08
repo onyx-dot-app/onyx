@@ -1,11 +1,12 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { adminSearch } from "@/lib/searchFilters/svc";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import { updateHiddenStatus } from "../lib";
 import { toast } from "@opal/layouts";
 import { getErrorMsg } from "@/lib/fetchUtils";
@@ -16,10 +17,9 @@ import { buildFilters } from "@/lib/searchFilters/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import { Connector } from "@/lib/connectors/connectors";
+import type { Connector } from "@/lib/connectors/types";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import { InputTypeIn } from "@opal/components";
-import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { clickOnKeyDown } from "@opal/utils";
 
 const DocumentDisplay = ({
@@ -98,7 +98,7 @@ const DocumentDisplay = ({
             )}
           </div>
           <div className="ms-1 my-auto">
-            <Checkbox checked={!document.hidden} />
+            <InputCheckbox checked={!document.hidden} />
           </div>
         </div>
       </div>
@@ -138,7 +138,10 @@ export function Explorer({
       setIsLoading(true);
       try {
         const filters = buildFilters(
-          filterManager.selectedSources,
+          // Empty here means "no filter", never "match nothing".
+          filterManager.selectedSources.length > 0
+            ? filterManager.selectedSources
+            : null,
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
           filterManager.selectedTags
@@ -190,7 +193,7 @@ export function Explorer({
             if (
               event.key === "Enter" &&
               !event.shiftKey &&
-              !(event.nativeEvent as any).isComposing
+              !event.nativeEvent.isComposing
             ) {
               onSearch(query);
               event.preventDefault();
@@ -224,7 +227,7 @@ export function Explorer({
       )}
       {isLoading && (
         <div className="flex justify-center py-12">
-          <SvgSimpleLoader className="h-6 w-6" />
+          <IconLoader className="h-6 w-6" />
         </div>
       )}
     </div>

@@ -5,6 +5,7 @@ import {
   DEFAULT_LOCALE,
   LOCALE_COOKIE_NAME,
   isSupportedLocale,
+  runtimeLocale,
 } from "@/i18n/config";
 import englishMessages from "@/i18n/messages/en.json";
 
@@ -39,12 +40,14 @@ export default getRequestConfig(async () => {
     ? cookieLocale
     : DEFAULT_LOCALE;
 
-  if (locale === DEFAULT_LOCALE) {
-    return { locale, messages: english };
-  }
-
-  // SAFETY: same catalog shape as en.json, enforced by the i18n catalog test.
-  const overlay = (await import(`@/i18n/messages/${locale}.json`))
-    .default as MessageTree;
-  return { locale, messages: withEnglishFallback(english, overlay) };
+  const messages =
+    locale === DEFAULT_LOCALE
+      ? english
+      : withEnglishFallback(
+          english,
+          // SAFETY: same catalog shape as en.json, enforced by the i18n catalog test.
+          (await import(`@/i18n/messages/${locale}.json`))
+            .default as MessageTree
+        );
+  return { locale: runtimeLocale(locale), messages };
 });

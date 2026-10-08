@@ -1,43 +1,38 @@
 "use client";
 
-import { AccessType, ValidSources } from "@/lib/types";
+import { AccessType } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, type ErrorResponseBody } from "@/lib/fetcher";
 import { useState } from "react";
 import {
   deleteCredential,
   swapCredential,
   updateCredential,
   updateCredentialWithPrivateKey,
-} from "@/lib/credential";
+} from "@/lib/credentials/svc";
 import { Section, toast } from "@opal/layouts";
-import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
+import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { Button, Card, Modal, Text } from "@opal/components";
-import {
-  buildCCPairInfoUrl,
-  buildSimilarCredentialInfoURL,
-} from "@/app/admin/connector/[ccPairId]/lib";
+import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { getSourceDisplayName } from "@/lib/sources";
-import {
-  ConfluenceCredentialJson,
-  Credential,
-} from "@/lib/connectors/credentials";
-import {
-  getConnectorOauthRedirectUrl,
-  useOAuthDetails,
-} from "@/lib/connectors/oauth";
+import type { Credential } from "@/lib/credentials/types";
+import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
+import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { Spinner } from "@/components/Spinner";
-import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
+import { TypedFile } from "@/lib/connectors/fileTypes";
 import { SvgEdit, SvgKey } from "@opal/icons";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import type { CredentialFieldValues } from "@/lib/credentials/types";
 import {
-  CredentialCreationMethod,
   getCredentialCreationActionLabel,
   getCredentialCreationMethods,
+  getCredentialFileType,
   shouldRedirectToOAuth,
-} from "@/lib/credentials/credentialCreation";
+} from "@/lib/credentials/utils";
+import { CredentialCreationMethod } from "@/lib/credentials/types";
 import EditCredential from "@/lib/credentials/components/EditCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 
@@ -54,43 +49,30 @@ export default function CredentialSection({
 }: CredentialSectionProps) {
   const t = useTranslations("admin");
   const tCommon = useTranslations("common");
-  const { data: credentials } = useSWR<Credential<ConfluenceCredentialJson>[]>(
-    buildSimilarCredentialInfoURL(sourceType),
-    errorHandlingFetcher,
-    { refreshInterval: 5000 } // 5 seconds
-  );
-  const { data: editableCredentials } = useSWR<Credential<any>[]>(
-    buildSimilarCredentialInfoURL(sourceType, true),
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
-  );
-  const { data: oauthDetails, isLoading: oauthDetailsLoading } =
-    useOAuthDetails(sourceType);
-
-  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
-  const sourceDisplayName = getSourceDisplayName(sourceType) || sourceType;
+  const {
+    displayName: sourceDisplayName,
+    credentials,
+    oauthDetails,
+    isLoading: oauthDetailsLoading,
+    methods: credentialCreationMethods,
+    open,
+    refresh: refreshCredentials,
+  } = useCredentialSetup(sourceType);
 
   const openCredentialCreationMethod = async (
     method: CredentialCreationMethod
   ) => {
+    const error = await open(method);
+    if (error !== null) {
+      toast.error(error || t("credentials.oauth.startError.message"));
+      return;
+    }
+    // A redirect leaves the page, so there is nothing left to show.
     if (
       method === CredentialCreationMethod.OAuth &&
       oauthDetails &&
       shouldRedirectToOAuth(oauthDetails)
     ) {
-      try {
-        const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
-        window.location.href = redirectUrl;
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t("credentials.oauth.startError.message")
-        );
-      }
-      return;
-    }
-    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
       return;
     }
 
@@ -128,12 +110,12 @@ export default function CredentialSection({
       accessType
     );
     if (response.ok) {
-      mutate(buildSimilarCredentialInfoURL(sourceType));
+      refreshCredentials();
       refresh();
 
       toast.success(t("credentials.swap.success.toast"));
     } else {
-      const errorData = await response.json();
+      const errorData: ErrorResponseBody = await response.json();
       toast.error(
         t("credentials.swap.error.toast", {
           detail:
@@ -147,12 +129,12 @@ export default function CredentialSection({
 
   const onUpdateCredential = async (
     selectedCredential: Credential<any | null>,
-    details: any,
+    details: CredentialFieldValues,
     onSucces: () => void
   ) => {
     let privateKey: TypedFile | null = null;
     Object.entries(details).forEach(([key, value]) => {
-      if (isTypedFileField(key)) {
+      if (getCredentialFileType(key) !== null) {
         privateKey = value as TypedFile;
         delete details[key];
       }
@@ -248,7 +230,7 @@ export default function CredentialSection({
     : editingCredential
       ? closeEditingCredential
       : closeModifyCredential;
-  if (!credentials || !editableCredentials) {
+  if (!credentials) {
     return <></>;
   }
 
@@ -391,7 +373,6 @@ export default function CredentialSection({
                   attachedConnector={ccPair.connector}
                   defaultedCredential={defaultedCredential}
                   credentials={credentials}
-                  editableCredentials={editableCredentials}
                   onDeleteCredential={onDeleteCredential}
                   onEditCredential={(credential: Credential<any>) =>
                     onEditCredential(credential)

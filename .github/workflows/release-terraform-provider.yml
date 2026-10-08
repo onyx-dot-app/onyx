@@ -78,6 +78,11 @@ jobs:
           owner: onyx-dot-app
           repositories: terraform-provider-onyx
           permission-contents: write
+          # The mirrored tree contains .github/workflows/publish.yml, and GitHub
+          # refuses a push from an App that changes a workflow file without this.
+          # Only bites on a release that alters publish.yml, so the first four
+          # releases did not need it.
+          permission-workflows: write
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6

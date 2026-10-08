@@ -1,178 +1,200 @@
-import * as Yup from "yup";
-import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
-import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
-import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
+import { useTranslations } from "next-intl";
+import type {
+  BooleanOption,
+  ConnectionConfiguration,
+  ListOption,
+} from "@/lib/connectors/types";
+import { OneDriveScope } from "@/lib/connectors/types";
 
-export function isLoadState(connector_name: string): boolean {
-  // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
-  const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
-  if (loadStateConnectors.includes(connector_name)) {
-    return true;
-  }
+const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
+const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";
 
-  return false;
+interface OneDriveConfigurationText {
+  description: string;
+  indexingScopeLabel: string;
+  generalLabel: string;
+  generalDescription: string;
+  specificLabel: string;
+  usersLabel: string;
+  usersDescription: string;
+  excludedPathsLabel: string;
+  excludedPathsDescription: string;
+  organizationLinksLabel: string;
+  organizationLinksDescription: string;
+  authorityHostLabel: string;
+  authorityHostDescription: string;
+  graphApiHostLabel: string;
+  graphApiHostDescription: string;
 }
 
-export type InputType =
-  | "list"
-  | "text"
-  | "select"
-  | "multiselect"
-  | "boolean"
-  | "number"
-  | "file";
-
-export type StringWithDescription = {
-  value: string;
-  name: string;
-  description?: string;
+const ONE_DRIVE_TRANSLATION_KEYS: OneDriveConfigurationText = {
+  description: "description",
+  indexingScopeLabel: "indexingScope.label",
+  generalLabel: "indexingScope.general.label",
+  generalDescription: "indexingScope.general.description",
+  specificLabel: "indexingScope.specific.label",
+  usersLabel: "indexingScope.specific.users.label",
+  usersDescription: "indexingScope.specific.users.description",
+  excludedPathsLabel: "excludedPaths.label",
+  excludedPathsDescription: "excludedPaths.description",
+  organizationLinksLabel: "organizationLinks.label",
+  organizationLinksDescription: "organizationLinks.description",
+  authorityHostLabel: "authorityHost.label",
+  authorityHostDescription: "authorityHost.description",
+  graphApiHostLabel: "graphApiHost.label",
+  graphApiHostDescription: "graphApiHost.description",
 };
 
-export interface Option {
-  label: string | ((currentCredential: Credential<any> | null) => string);
-  name: string;
-  description?:
-    | string
-    | ((currentCredential: Credential<any> | null) => string);
-  query?: string;
-  optional?: boolean;
-  hidden?: boolean;
-  visibleCondition?: (
-    values: any,
-    currentCredential: Credential<any> | null
-  ) => boolean;
-  wrapInCollapsible?: boolean;
-  disabled?: boolean | ((currentCredential: Credential<any> | null) => boolean);
+function buildOneDriveConfiguration(
+  text: OneDriveConfigurationText
+): ConnectionConfiguration {
+  return {
+    description: text.description,
+    values: [
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: text.indexingScopeLabel,
+        optional: true,
+        tabs: [
+          {
+            value: OneDriveScope.General,
+            label: text.generalLabel,
+            fields: [
+              {
+                type: "string_tab",
+                label: text.generalLabel,
+                name: "all_users_description",
+                optional: true,
+                description: text.generalDescription,
+              },
+            ],
+          },
+          {
+            value: OneDriveScope.Specific,
+            label: text.specificLabel,
+            fields: [
+              {
+                type: "list",
+                label: text.usersLabel,
+                name: "users",
+                optional: true,
+                default: [],
+                description: text.usersDescription,
+              },
+            ],
+          },
+        ],
+        defaultTab: OneDriveScope.General,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: text.excludedPathsLabel,
+        name: "excluded_paths",
+        optional: true,
+        default: [],
+        description: text.excludedPathsDescription,
+      },
+      {
+        type: "checkbox",
+        label: text.organizationLinksLabel,
+        name: "treat_organization_link_as_public",
+        optional: true,
+        default: false,
+        description: text.organizationLinksDescription,
+      },
+      {
+        type: "text",
+        label: text.authorityHostLabel,
+        name: "authority_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_AUTHORITY_HOST,
+        description: text.authorityHostDescription,
+      },
+      {
+        type: "text",
+        label: text.graphApiHostLabel,
+        name: "graph_api_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_GRAPH_API_HOST,
+        description: text.graphApiHostDescription,
+      },
+    ],
+  };
 }
 
-export interface SelectOption extends Option {
-  type: "select";
-  options?: StringWithDescription[];
-  default?: string;
-}
+export function useConnectorConfiguration(
+  connector: ConfigurableSources
+): ConnectionConfiguration {
+  const t = useTranslations("admin.connectorsList.oneDrive");
 
-export interface MultiSelectOption extends Option {
-  type: "multiselect";
-  options?: StringWithDescription[];
-  default?: string[];
-}
+  if (connector !== "onedrive") {
+    return connectorConfigs[connector];
+  }
 
-export interface ListOption extends Option {
-  type: "list";
-  default?: string[];
-  transform?: (values: string[]) => string[];
-}
-
-export interface StringPairListOption extends Option {
-  type: "string_pair_list";
-  // Object keys each row serializes to, e.g. { leftKey: "source", rightKey: "target" }.
-  leftKey: string;
-  rightKey: string;
-  default?: Record<string, string>[];
-  leftLabel: string;
-  rightLabel: string;
-  leftPlaceholder?: string;
-  rightPlaceholder?: string;
-}
-
-export interface TextOption extends Option {
-  type: "text";
-  default?: string;
-  initial?: string | ((currentCredential: Credential<any> | null) => string);
-  isTextArea?: boolean;
-}
-
-export interface NumberOption extends Option {
-  type: "number";
-  default?: number;
-}
-
-export interface BooleanOption extends Option {
-  type: "checkbox";
-  default?: boolean;
-}
-
-export interface FileOption extends Option {
-  type: "file";
-  default?: string;
-}
-
-export interface StringTabOption extends Option {
-  type: "string_tab";
-  default?: string;
-}
-
-export interface TabOption extends Option {
-  type: "tab";
-  defaultTab?: string;
-  tabs: {
-    label: string;
-    value: string;
-    fields: (
-      | BooleanOption
-      | ListOption
-      | StringPairListOption
-      | TextOption
-      | NumberOption
-      | SelectOption
-      | MultiSelectOption
-      | FileOption
-      | StringTabOption
-    )[];
-  }[];
-  default?: [];
-}
-
-export interface ConnectionConfiguration {
-  description: string;
-  subtext?: string;
-  initialConnectorName?: string; // a key in the credential to prepopulate the connector name field
-  values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
-  advanced_values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
-  overrideDefaultFreq?: number;
-  advancedValuesVisibleCondition?: (
-    values: any,
-    currentCredential: Credential<any> | null
-  ) => boolean;
+  return buildOneDriveConfiguration({
+    description: t("description"),
+    indexingScopeLabel: t("indexingScope.label"),
+    generalLabel: t("indexingScope.general.label"),
+    generalDescription: t("indexingScope.general.description"),
+    specificLabel: t("indexingScope.specific.label"),
+    usersLabel: t("indexingScope.specific.users.label"),
+    usersDescription: t("indexingScope.specific.users.description"),
+    excludedPathsLabel: t("excludedPaths.label"),
+    excludedPathsDescription: t("excludedPaths.description"),
+    organizationLinksLabel: t("organizationLinks.label"),
+    organizationLinksDescription: t("organizationLinks.description"),
+    authorityHostLabel: t("authorityHost.label"),
+    authorityHostDescription: t("authorityHost.description"),
+    graphApiHostLabel: t("graphApiHost.label"),
+    graphApiHostDescription: t("graphApiHost.description"),
+  });
 }
 
 // Shared "Include Attachments" checkbox. Pair with an `include_attachments`
 // kwarg on the backend connector; see backend/onyx/connectors/README.md for
 // the convention, including how to pick the default.
 export function buildIncludeAttachmentsOption(
-  defaultValue: boolean
+  defaultValue: boolean,
+  description: string = "Enable processing of page attachments including images and documents"
 ): BooleanOption {
   return {
     type: "checkbox",
     query: "Include attachments?",
     label: "Include Attachments",
     name: "include_attachments",
-    description:
-      "Enable processing of page attachments including images and documents",
+    description,
     default: defaultValue,
   };
 }
+
+const zoomMeetingIdsOption: ListOption = {
+  type: "list",
+  query: "Enter the Zoom meeting IDs to index:",
+  label: "Meeting IDs",
+  name: "meeting_ids",
+  optional: true,
+  description:
+    "Each recurring meeting is indexed occurrence by occurrence. Zoom returns " +
+    "occurrences from the last 15 months only, so older ones are out of reach " +
+    "of a meeting ID. To index history further back, scope by host email or by " +
+    "Zoom Group instead — neither has that limit.",
+};
+
+const zoomWebinarIdsOption: ListOption = {
+  type: "list",
+  query: "Enter the Zoom webinar IDs to index:",
+  label: "Webinar IDs",
+  name: "webinar_ids",
+  optional: true,
+  description:
+    "Webinars also need the Webinar add-on, enabled for the host. Unlike " +
+    "meeting IDs, webinar history has no 15-month limit.",
+};
 
 export const connectorConfigs: Record<
   ConfigurableSources,
@@ -291,7 +313,7 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "github_mode",
-        label: "What should we index from GitHub?",
+        label: "GitHub content to index",
         optional: true,
         tabs: [
           {
@@ -326,8 +348,8 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        query: "Include pull requests?",
-        label: "Include pull requests?",
+        query: "Include pull requests",
+        label: "Include pull requests",
         description: "Index pull requests from repositories",
         name: "include_prs",
         optional: true,
@@ -335,7 +357,7 @@ export const connectorConfigs: Record<
       {
         type: "checkbox",
         query: "Include issues?",
-        label: "Include Issues?",
+        label: "Include Issues",
         name: "include_issues",
         description: "Index issues from repositories",
         optional: true,
@@ -343,7 +365,7 @@ export const connectorConfigs: Record<
       {
         type: "checkbox",
         query: "Include documents?",
-        label: "Include Documents?",
+        label: "Include Documents",
         name: "include_files",
         description:
           "Index text-based documents (markdown, text, etc.) from repositories",
@@ -453,7 +475,7 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "bitbucket_mode",
-        label: "What should be indexed from Bitbucket?",
+        label: "Bitbucket content to index",
         optional: true,
         tabs: [
           {
@@ -526,16 +548,15 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How should we index your Google Drive?",
         optional: true,
         tabs: [
           {
-            value: "general",
+            value: OneDriveScope.General,
             label: "General",
             fields: [
               {
                 type: "checkbox",
-                label: "Include shared drives?",
+                label: "Include shared drives",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
                     ? "This will allow Onyx to index everything in the shared drives you have access to."
@@ -548,8 +569,8 @@ export const connectorConfigs: Record<
                 type: "checkbox",
                 label: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "Include My Drive?"
-                    : "Include Everyone's My Drive?";
+                    ? "Include My Drive"
+                    : "Include Everyone's My Drive";
                 },
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
@@ -563,7 +584,7 @@ export const connectorConfigs: Record<
                 type: "checkbox",
                 description:
                   "This will allow Onyx to index all files shared with you.",
-                label: "Include All Files Shared With You?",
+                label: "Include All Files Shared With You",
                 name: "include_files_shared_with_me",
                 visibleCondition: (values, currentCredential) =>
                   currentCredential?.credential_json?.google_tokens,
@@ -572,7 +593,7 @@ export const connectorConfigs: Record<
             ],
           },
           {
-            value: "specific",
+            value: OneDriveScope.Specific,
             label: "Specific",
             fields: [
               {
@@ -610,7 +631,7 @@ export const connectorConfigs: Record<
             ],
           },
         ],
-        defaultTab: "general",
+        defaultTab: OneDriveScope.General,
       },
     ],
     advanced_values: [
@@ -628,7 +649,7 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        label: "Hide domain link-only files?",
+        label: "Hide domain link-only files",
         description:
           "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
         name: "exclude_domain_link_only",
@@ -637,6 +658,7 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  onedrive: buildOneDriveConfiguration(ONE_DRIVE_TRANSLATION_KEYS),
   gmail: {
     description: "Configure Gmail connector",
     values: [],
@@ -663,8 +685,17 @@ export const connectorConfigs: Record<
         name: "is_cloud",
         optional: false,
         default: true,
+        tabLabels: {
+          true: "confluenceCloud",
+          false: "confluenceDataCenter",
+        },
         description:
-          "Check if this is a Confluence Cloud instance, uncheck for Confluence Server/Data Center",
+          "Choose Confluence Cloud for a site on atlassian.net, or Confluence Data Center for a self-hosted Confluence Server or Data Center site.",
+        // An OAuth credential is for Confluence Cloud only.
+        initial: (currentCredential) =>
+          currentCredential?.credential_json?.confluence_refresh_token
+            ? true
+            : undefined,
         disabled: (currentCredential) => {
           if (currentCredential?.credential_json?.confluence_refresh_token) {
             return true;
@@ -675,7 +706,7 @@ export const connectorConfigs: Record<
       {
         type: "text",
         query: "Enter the wiki base URL:",
-        label: "Wiki Base URL",
+        label: "Site URL",
         name: "wiki_base",
         optional: false,
         initial: (currentCredential) => {
@@ -687,21 +718,23 @@ export const connectorConfigs: Record<
           }
           return false;
         },
-        description:
-          "The base URL of your Confluence instance (e.g., https://your-domain.atlassian.net/wiki)",
+        placeholder: "https://your-domain.atlassian.net/wiki",
+        subDescription: "siteUrl",
       },
       {
         type: "checkbox",
         query: "Using scoped token?",
-        label: "Using scoped token",
+        label: "This is an API token with scopes",
+        description:
+          "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens.",
         name: "scoped_token",
         optional: true,
         default: false,
+        asCheckbox: true,
       },
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Your Confluence?",
         optional: true,
         tabs: [
           {
@@ -766,7 +799,7 @@ export const connectorConfigs: Record<
                 name: "cql_query",
                 default: "",
                 description:
-                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details.",
+                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. Do not use ORDER BY, because the connector sets its own sort order. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details.",
               },
             ],
           },
@@ -801,7 +834,6 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Your Jira?",
         optional: true,
         tabs: [
           {
@@ -900,15 +932,9 @@ export const connectorConfigs: Record<
                 isTextArea: true,
                 description:
                   "Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure." +
-                  "\n\nExample:" +
-                  "\n{" +
-                  '\n  "Account": {' +
-                  '\n    "fields": ["Id", "Name", "Industry"],' +
-                  '\n    "associations": {' +
-                  '\n      "Contact": ["Id", "FirstName", "LastName", "Email"]' +
-                  "\n    }" +
-                  "\n  }" +
-                  "\n}" +
+                  "\n\nExample: " +
+                  '`{"Account": {"fields": ["Id", "Name", "Industry"], ' +
+                  '"associations": {"Contact": ["Id", "FirstName", "LastName", "Email"]}}}`' +
                   `\n\n[See our docs](${DOCS_ADMINS_PATH}/connectors/official/salesforce) for more details.`,
               },
             ],
@@ -928,11 +954,11 @@ export const connectorConfigs: Record<
         label: "Sites",
         name: "sites",
         optional: true,
-        description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
-• Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
-• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
-• Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.
-`,
+        description: `- If no sites are specified, all sites in your organization will be indexed (\`Sites.Read.All\` permission required).
+- Specifying \`https://onyxai.sharepoint.com/sites/support\` for example only indexes this site.
+- Specifying \`https://onyxai.sharepoint.com/sites/support/subfolder\` for example only indexes this folder.
+- To index users' personal sites, use the [OneDrive connector](${DOCS_ADMINS_PATH}/connectors/official/onedrive).
+- Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.`,
       },
     ],
     advanced_values: [
@@ -958,7 +984,7 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        label: "Treat sharing links as public?",
+        label: "Treat sharing links as public",
         description:
           "When enabled, documents with a sharing link (anonymous or organization-wide) " +
           "are treated as public (visible to all Onyx users). " +
@@ -976,8 +1002,8 @@ export const connectorConfigs: Record<
         description:
           "Site URLs or glob patterns to exclude from indexing. " +
           "Matched sites will never be indexed, even if they appear in the sites list above. " +
-          "Examples: 'https://contoso.sharepoint.com/sites/archive' (exact), " +
-          "'*://*/sites/archive-*' (glob pattern).",
+          "Examples: `https://contoso.sharepoint.com/sites/archive` (exact), " +
+          "`*://*/sites/archive-*` (glob pattern).",
       },
       {
         type: "list",
@@ -988,7 +1014,7 @@ export const connectorConfigs: Record<
         description:
           "Glob patterns for file paths to exclude from indexing within document libraries. " +
           "Patterns are matched against both the full relative path and the filename. " +
-          "Examples: '*.tmp' (temp files), '~$*' (Office lock files), 'Archive/*' (folder).",
+          "Examples: `*.tmp` (temp files), `~$*` (Office lock files), `Archive/*` (folder).",
       },
       {
         type: "text",
@@ -1039,8 +1065,170 @@ export const connectorConfigs: Record<
         optional: true,
         description: `Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'onyxai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed.`,
       },
+      buildIncludeAttachmentsOption(
+        false,
+        "Index the files in each channel's Files tab as their own documents, " +
+          "with the readers SharePoint grants them. Needs a certificate " +
+          "credential, Files.Read.All or Sites.Read.All on Graph, and " +
+          "Sites.FullControl.All on the SharePoint API to read each file's " +
+          "readers. With Sites.Selected, grant the app full control on each " +
+          "channel site."
+      ),
+      {
+        type: "checkbox",
+        query: "Include inline images?",
+        label: "Include Inline Images",
+        name: "include_inline_images",
+        description:
+          "Index the images pasted into channel messages with their thread. " +
+          "Needs no extra permission. Nothing is downloaded while image " +
+          "extraction and analysis is off in the search settings.",
+        default: false,
+      },
+      {
+        type: "checkbox",
+        query: "Include meeting transcripts?",
+        label: "Include Meeting Transcripts",
+        name: "include_meeting_transcripts",
+        description:
+          "Index the transcripts of scheduled meetings as their own documents, " +
+          "readable by the organizer and the attendees. Needs the " +
+          "OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All and " +
+          "User.Read.All application permissions, the tenant setting that " +
+          "allows Graph API access to transcripts, and an application access " +
+          "policy granted to the organizers. Channel meetings are not covered. " +
+          "Transcripts from the last six months are indexed, and a transcript " +
+          "leaves the index once it is older than that.",
+        default: false,
+      },
+      {
+        type: "checkbox",
+        query: "Include meeting chats?",
+        label: "Include Meeting Chats",
+        name: "include_meeting_chats",
+        description:
+          "Index what people write in the chat of a scheduled meeting, a " +
+          "document per day, readable by the members of the chat. Needs the " +
+          "Chat.Read.All and User.Read.All application permissions. Covers " +
+          "meetings organized in this tenant: Microsoft does not serve the " +
+          "chat of a meeting another organization set up.",
+        default: false,
+      },
+      {
+        type: "list",
+        query: "Enter meeting organizers to include:",
+        label: "Meeting Organizers",
+        name: "meeting_organizers",
+        optional: true,
+        description:
+          "User principal names of the organizers whose meeting transcripts " +
+          "and chats to index. Leave empty to include every enabled user with " +
+          "a Teams license.",
+      },
     ],
     advanced_values: [
+      {
+        type: "text",
+        query: "Microsoft Authority Host:",
+        label: "Authority Host",
+        name: "authority_host",
+        optional: true,
+        default: "https://login.microsoftonline.com",
+        description:
+          "The Microsoft identity authority host used for authentication. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://login.microsoftonline.us",
+      },
+      {
+        type: "text",
+        query: "Microsoft Graph API Host:",
+        label: "Graph API Host",
+        name: "graph_api_host",
+        optional: true,
+        default: "https://graph.microsoft.com",
+        description:
+          "The Microsoft Graph API host. " +
+          "For most deployments, leave as default. " +
+          "For GCC High / DoD, use https://graph.microsoft.us",
+      },
+    ],
+  },
+  outlook: {
+    description: "Configure Outlook connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter mailboxes to index:",
+        label: "Mailboxes",
+        name: "mailboxes",
+        optional: true,
+        description:
+          "User principal names or primary email addresses of the mailboxes to index. " +
+          "Leave this and Mailbox Groups empty to index every mailbox the app registration may open. " +
+          "Shared mailboxes are never picked up automatically and must be listed here.",
+      },
+      {
+        type: "list",
+        query: "Enter groups whose mailboxes to index:",
+        label: "Mailbox Groups",
+        name: "mailbox_groups",
+        optional: true,
+        description:
+          "Display names or object IDs of Entra groups. The mailbox of every member is indexed, " +
+          "members of nested groups included, so a tenant can be limited to the people who use Onyx. " +
+          "Needs the GroupMember.Read.All application permission.",
+      },
+      buildIncludeAttachmentsOption(
+        false,
+        "Index the text of file attachments. Inline images, nested items and cloud links are skipped."
+      ),
+      {
+        type: "checkbox",
+        query: "Include calendar events?",
+        label: "Include Calendar",
+        name: "include_calendar",
+        description:
+          "Index the calendar of each mailbox as well as its mail. " +
+          "Needs the Calendars.Read application permission.",
+        default: false,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter folders to skip:",
+        label: "Excluded Folders",
+        name: "excluded_folders",
+        optional: true,
+        description:
+          "Folder names to skip in every mailbox, in addition to Junk Email, " +
+          "Deleted Items, Drafts and Outbox, which are always skipped.",
+      },
+      {
+        type: "number",
+        query: "Days of past calendar to index:",
+        label: "Calendar Past Days",
+        name: "calendar_past_days",
+        optional: true,
+        default: 365,
+        description:
+          "Used when Include Calendar is on. How far back the calendar window " +
+          "reaches. Events older than this leave the index at the next prune as " +
+          "the window moves forward. Widening it later needs a re-index, since " +
+          "unchanged events do not re-enter on their own.",
+      },
+      {
+        type: "number",
+        query: "Days of future calendar to index:",
+        label: "Calendar Future Days",
+        name: "calendar_future_days",
+        optional: true,
+        default: 180,
+        description:
+          "Used when Include Calendar is on. How far ahead the calendar window " +
+          "reaches. Widening it later needs a re-index, since unchanged events " +
+          "do not re-enter on their own.",
+      },
       {
         type: "text",
         query: "Microsoft Authority Host:",
@@ -1102,7 +1290,7 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "indexing_scope",
-        label: "What should we index from Drupal Wiki?",
+        label: "Drupal Wiki content to index",
         optional: true,
         tabs: [
           {
@@ -1193,7 +1381,8 @@ export const connectorConfigs: Record<
         label: "Enable Channel Regex",
         name: "channel_regex_enabled",
         description: `If enabled, we will treat the "channels" specified above as regular expressions. A channel's messages will be pulled in by the connector if the name of the channel fully matches any of the specified regular expressions.
-For example, specifying .*-support.* as a "channel" will cause the connector to include any channels with "-support" in the name.`,
+
+For example, specifying \`.*-support.*\` as a "channel" will cause the connector to include any channels with "-support" in the name.`,
         optional: true,
       },
       {
@@ -1212,7 +1401,8 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         label: "Enable Exclude Channel Regex",
         name: "exclude_channel_regex_enabled",
         description: `If enabled, we will treat the "channels to exclude" specified above as regular expressions. A channel will be excluded if its name fully matches any of the specified regular expressions.
-For example, specifying .*-alerts as a "channel to exclude" will cause the connector to skip any channels ending in "-alerts".`,
+
+For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the connector to skip any channels ending in "-alerts".`,
         optional: true,
       },
       {
@@ -1761,7 +1951,7 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         name: "recurse_depth",
         description:
           "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen.",
-        optional: true,
+        optional: false,
       },
     ],
     advanced_values: [],
@@ -1805,6 +1995,106 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     description: "Configure Fireflies connector",
     values: [],
     advanced_values: [],
+  },
+  zoom: {
+    description: "Configure Zoom connector",
+    subtext:
+      "Indexes the Cloud Recording transcript of each Zoom session, on a Zoom " +
+      "Pro plan or higher. A session that was never cloud-recorded is skipped. " +
+      "Set an Indexing Start date under Advanced. Zoom lists recordings a month " +
+      "per request, so without one the first crawl asks for every month back to " +
+      "2013 and spends your account's API allowance on years that hold nothing.",
+    values: [
+      // Two lists rather than one: the same number can be a legal meeting id
+      // and a legal webinar id, so the list it is typed into says which.
+      zoomMeetingIdsOption,
+      zoomWebinarIdsOption,
+      {
+        type: "list",
+        query: "Enter the Zoom host emails to index:",
+        label: "Host Emails",
+        name: "host_emails",
+        optional: true,
+        description:
+          "Index every session these people host, of the types ticked " +
+          "below. An email that matches no Zoom user is reported as an " +
+          "indexing error rather than silently ignored.",
+      },
+      {
+        type: "text",
+        query: "Enter the Zoom Group ID to index:",
+        label: "Zoom Group ID",
+        name: "group_id",
+        optional: true,
+        description:
+          "Index every session the members of one Zoom Group host, of the " +
+          "types ticked below. Zoom re-reads the member list on every run, " +
+          "so a joiner or leaver is picked up without editing this connector.",
+      },
+      {
+        type: "checkbox",
+        query: "Include meetings?",
+        label: "Include meetings",
+        name: "include_meetings",
+        description:
+          "Applies to Host Emails and Zoom Group. The ID lists above already " +
+          "say which type each ID is.",
+        default: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include webinars?",
+        label: "Include webinars",
+        name: "include_webinars",
+        description:
+          "Applies to Host Emails and Zoom Group. Webinars also need the " +
+          "Webinar add-on, enabled for the host.",
+        default: true,
+      },
+      {
+        type: "checkbox",
+        query: "Treat link access as public?",
+        label: "Treat link access as public",
+        name: "treat_link_access_as_public",
+        description:
+          "Only matters with permission sync. When on, a recording whose Link " +
+          'access is "Anyone with the link" or a signed-in rule is visible ' +
+          "to all Onyx users, and a domain rule to users of those domains. " +
+          "When off, every transcript is visible to the recording's owner " +
+          'alone, because Zoom cannot say who is in "People with access".',
+        default: true,
+      },
+      {
+        type: "select",
+        query: "Select the Zoom plan:",
+        label: "Zoom Plan",
+        name: "plan_tier",
+        optional: false,
+        options: [
+          { name: "pro", value: "pro" },
+          { name: "business_plus", value: "business_plus" },
+        ],
+        description:
+          "Sets how fast this connector is allowed to call Zoom. Pick `pro` on " +
+          "a Pro account, and `business_plus` on Business, Education, " +
+          "Enterprise or Partner.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        query: "Enter the share of Zoom's rate limit to use:",
+        label: "Zoom API Rate Limit",
+        name: "rate_limit_percent",
+        optional: true,
+        description:
+          "Whole percent, 1 to 100, of the account's Zoom rate limit this " +
+          "connector may spend. Blank means 50, which leaves room for the " +
+          "customer's other Zoom integrations. Each Zoom connector paces " +
+          "itself and cannot see the others, so two connectors on one Zoom " +
+          "account spend this percent each — divide it if you run several.",
+      },
+    ],
   },
   braintrust: {
     description: "Configure Braintrust connector",
@@ -1867,7 +2157,7 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       {
         type: "tab",
         name: "airtable_scope",
-        label: "What should we index from Airtable?",
+        label: "Airtable content to index",
         optional: true,
         tabs: [
           {
@@ -1926,7 +2216,7 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       {
         type: "tab",
         name: "highspot_scope",
-        label: "What should we index from Highspot?",
+        label: "Highspot content to index",
         optional: true,
         tabs: [
           {
@@ -1995,375 +2285,15 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     advanced_values: [],
   },
 };
-type ConnectorField = ConnectionConfiguration["values"][number];
-
-const buildInitialValuesForFields = (
-  fields: ConnectorField[]
-): Record<string, any> =>
-  fields.reduce(
-    (acc, field) => {
-      if (field.type === "select") {
-        acc[field.name] = null;
-      } else if (field.type === "list") {
-        acc[field.name] = field.default || [];
-      } else if (field.type === "multiselect") {
-        acc[field.name] = field.default || [];
-      } else if (field.type === "checkbox") {
-        acc[field.name] = field.default ?? false;
-      } else if (field.default !== undefined) {
-        acc[field.name] = field.default;
-      }
-      return acc;
-    },
-    {} as Record<string, any>
-  );
-
-export function createConnectorInitialValues(
-  connector: ConfigurableSources
-): Record<string, any> & AccessTypeGroupSelectorFormType {
-  const configuration = connectorConfigs[connector];
-
-  return {
-    name: "",
-    groups: [],
-    access_type: "public",
-    ...buildInitialValuesForFields(configuration.values),
-    ...buildInitialValuesForFields(configuration.advanced_values),
-  };
-}
-
-export function createConnectorValidationSchema(
-  connector: ConfigurableSources,
-  requireGroups: boolean = false
-): Yup.ObjectSchema<Record<string, any>> {
-  const configuration = connectorConfigs[connector];
-
-  const object = Yup.object().shape({
-    access_type: Yup.string().required("Access Type is required"),
-    name: Yup.string().required("Connector Name is required"),
-    groups: Yup.array()
-      .of(Yup.number())
-      .when("access_type", ([accessType], schema) =>
-        requireGroups && accessType !== "sync"
-          ? schema.min(1, "Select at least one group you manage")
-          : schema
-      ),
-    ...[...configuration.values, ...configuration.advanced_values].reduce(
-      (acc, field) => {
-        let schema: any =
-          field.type === "select"
-            ? Yup.string()
-            : field.type === "list"
-              ? Yup.array().of(Yup.string())
-              : field.type === "multiselect"
-                ? Yup.array().of(Yup.string())
-                : field.type === "string_pair_list"
-                  ? Yup.array().of(Yup.object())
-                  : field.type === "checkbox"
-                    ? Yup.boolean()
-                    : field.type === "file"
-                      ? Yup.mixed()
-                      : Yup.string();
-
-        if (!field.optional) {
-          schema = schema.required(`${field.label} is required`);
-        }
-
-        acc[field.name] = schema;
-        return acc;
-      },
-      {} as Record<string, any>
-    ),
-    // These are advanced settings
-    indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(
-      0.083,
-      "Prune frequency must be at least 0.083 hours (5 minutes)"
-    ),
-    refreshFreq: Yup.number().min(
-      1,
-      "Refresh frequency must be at least 1 minute"
-    ),
-  });
-
-  return object;
-}
 export const defaultRefreshFreqMinutes = 30; // 30 minutes
-
-// CONNECTORS
-export interface ConnectorBase<T> {
-  name: string;
-  source: ValidSources;
-  input_type: ValidInputTypes;
-  connector_specific_config: T;
-  refresh_freq: number | null;
-  prune_freq: number | null;
-  indexing_start: Date | null;
-  access_type: string;
-  groups?: number[];
-  from_beginning?: boolean;
-}
-
-export interface Connector<T> extends ConnectorBase<T> {
-  id: number;
-  credential_ids: number[];
-  time_created: string;
-  time_updated: string;
-}
-
-export interface ConnectorSnapshot {
-  id: number;
-  name: string;
-  source: ValidSources;
-  input_type: ValidInputTypes;
-  // connector_specific_config
-  refresh_freq: number | null;
-  prune_freq: number | null;
-  credential_ids: number[];
-  indexing_start: number | null;
-  time_created: string;
-  time_updated: string;
-  from_beginning?: boolean;
-}
-
-export interface UrlRewriteRule {
-  source: string;
-  target: string;
-}
-
-export interface WebConfig {
-  base_url: string;
-  web_connector_type?: "recursive" | "single" | "sitemap";
-  url_rewrites?: UrlRewriteRule[];
-}
-
-export interface GithubConfig {
-  repo_owner: string;
-  repositories: string; // Comma-separated list of repository names
-  include_prs: boolean;
-  include_issues: boolean;
-  include_files: boolean;
-  branch?: string;
-}
-
-export interface GitlabConfig {
-  project_owner: string;
-  project_name: string;
-  include_mrs: boolean;
-  include_issues: boolean;
-}
-
-export interface LumAppsConfig {
-  base_url: string;
-  organization_id: string;
-  instance_ids?: string[];
-  custom_content_types?: string[];
-  lang?: string;
-}
-
-export interface BitbucketConfig {
-  workspace: string;
-  repositories?: string;
-  projects?: string;
-}
-
-export interface GoogleDriveConfig {
-  include_shared_drives?: boolean;
-  shared_drive_urls?: string;
-  include_my_drives?: boolean;
-  my_drive_emails?: string;
-  shared_folder_urls?: string;
-}
-
-export interface GmailConfig {}
-
-export interface BookstackConfig {}
-
-export interface OutlineConfig {}
-
-export interface ConfluenceConfig {
-  wiki_base: string;
-  space?: string;
-  page_id?: string;
-  is_cloud?: boolean;
-  index_recursively?: boolean;
-  cql_query?: string;
-  include_attachments?: boolean;
-}
-
-export interface JiraConfig {
-  jira_project_url: string;
-  project_key?: string;
-  comment_email_blacklist?: string[];
-  jql_query?: string;
-}
-
-export interface SalesforceConfig {
-  requested_objects?: string[];
-}
-
-export interface SharepointConfig {
-  sites?: string[];
-  include_site_pages?: boolean;
-  treat_sharing_link_as_public?: boolean;
-  include_site_documents?: boolean;
-  authority_host?: string;
-  graph_api_host?: string;
-  sharepoint_domain_suffix?: string;
-}
-
-export interface TeamsConfig {
-  teams?: string[];
-  authority_host?: string;
-  graph_api_host?: string;
-}
-
-export interface DiscourseConfig {
-  base_url: string;
-  categories?: string[];
-}
-
-export interface AxeroConfig {
-  spaces?: string[];
-}
-
-export interface CanvasConfig {
-  canvas_base_url: string;
-}
-
-export interface DrupalWikiConfig {
-  base_url: string;
-  spaces?: string[];
-  pages?: string[];
-  include_attachments?: boolean;
-}
-
-export interface ProductboardConfig {}
-
-export interface SlackConfig {
-  workspace: string;
-  channels?: string[];
-  channel_regex_enabled?: boolean;
-  exclude_channels?: string[];
-  exclude_channel_regex_enabled?: boolean;
-  include_bot_messages?: boolean;
-}
-
-export interface SlabConfig {
-  base_url: string;
-}
-
-export interface GuruConfig {}
-
-export interface GongConfig {
-  workspaces?: string[];
-}
-
-export interface LoopioConfig {
-  loopio_stack_name?: string;
-}
-
-export interface FileConfig {
-  file_locations: string[];
-  file_names: string[];
-  zip_metadata_file_id: string | null;
-}
-
-export interface ZulipConfig {
-  realm_name: string;
-  realm_url: string;
-}
-
-export interface CodaConfig {
-  workspace_id?: string;
-}
-
-export interface NotionConfig {
-  root_page_id?: string;
-}
-
-export interface HubSpotConfig {
-  object_types?: string[];
-}
-
-export interface Document360Config {
-  workspace: string;
-  categories?: string[];
-}
-
-export interface ClickupConfig {
-  connector_type: "list" | "folder" | "space" | "workspace";
-  connector_ids?: string[];
-  retrieve_task_comments: boolean;
-}
-
-export interface GoogleSitesConfig {
-  zip_path: string;
-  base_url: string;
-}
-
-export interface XenforoConfig {
-  base_url: string;
-}
-
-export interface ZendeskConfig {
-  content_type?: "articles" | "tickets";
-  calls_per_minute?: number;
-}
-
-export interface DropboxConfig {}
-
-export interface S3Config {
-  bucket_type: "s3";
-  bucket_name: string;
-  prefix: string;
-}
-
-export interface R2Config {
-  bucket_type: "r2";
-  bucket_name: string;
-  prefix: string;
-  european_residency?: boolean;
-}
-
-export interface GCSConfig {
-  bucket_type: "google_cloud_storage";
-  bucket_name: string;
-  prefix: string;
-}
-
-export interface OCIConfig {
-  bucket_type: "oci_storage";
-  bucket_name: string;
-  prefix: string;
-}
-
-export interface MediaWikiBaseConfig {
-  connector_name: string;
-  language_code: string;
-  categories?: string[];
-  pages?: string[];
-  recurse_depth?: number;
-}
-
-export interface AsanaConfig {
-  asana_workspace_id: string;
-  asana_project_ids?: string;
-  asana_team_id?: string;
-}
-
-export interface FreshdeskConfig {}
-
-export interface FirefliesConfig {}
-
-export interface MediaWikiConfig extends MediaWikiBaseConfig {
-  hostname: string;
-}
-
-export interface WikipediaConfig extends MediaWikiBaseConfig {}
-
-export interface ImapConfig {
-  host: string;
-  port?: number;
-  mailboxes?: string[];
-}
+// Match the backend minimums in Connector.validate_refresh_freq / validate_prune_freq.
+const MIN_REFRESH_FREQ_SECONDS = 60;
+const MIN_PRUNE_FREQ_SECONDS = 300;
+export const MIN_REFRESH_FREQ_MINUTES = MIN_REFRESH_FREQ_SECONDS / 60;
+// Rounded up to the prune input's 3 decimals, so it converts to at least 300s.
+export const MIN_PRUNE_FREQ_HOURS =
+  Math.ceil((MIN_PRUNE_FREQ_SECONDS / 3600) * 1000) / 1000;
+// The columns are 32-bit integers of seconds; larger values fail on save.
+const MAX_FREQ_SECONDS = 2_147_483_647;
+export const MAX_REFRESH_FREQ_MINUTES = Math.floor(MAX_FREQ_SECONDS / 60);
+export const MAX_PRUNE_FREQ_HOURS = Math.floor(MAX_FREQ_SECONDS / 3600);

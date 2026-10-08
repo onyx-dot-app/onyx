@@ -71,7 +71,7 @@ test.describe("Chat retention control @exclusive", () => {
     await chatPrefs.setCustomRetention("45");
     await chatPrefs.restoreRetentionDefault();
 
-    await expect(chatPrefs.retentionTrigger).toContainText("Forever");
+    await expect(chatPrefs.retentionTrigger).toHaveValue("Forever");
   });
 
   test("reducing retention prompts confirmation; cancel keeps the current value", async ({
@@ -89,6 +89,6 @@ test.describe("Chat retention control @exclusive", () => {
     await chatPrefs.cancelRetentionReduction();
 
     // The value was not changed.
-    await expect(chatPrefs.retentionTrigger).toContainText("Forever");
+    await expect(chatPrefs.retentionTrigger).toHaveValue("Forever");
   });
 });

@@ -19,12 +19,13 @@ import type {
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
-} from "@/lib/hierarchy/interfaces";
+} from "@/lib/hierarchy/types";
 import type { ProjectFile } from "@/lib/projects/types";
-import type { DocumentSetSummary, ValidSources } from "@/lib/types";
+import type { DocumentSetSummary } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import { searchDocuments } from "@/ee/lib/search/svc";
 import { Disabled } from "@opal/core";
-import { Card, Switch } from "@opal/components";
+import { Card, InputSwitch } from "@opal/components";
 import { Content, InputHorizontal, Section } from "@opal/layouts";
 
 import { KnowledgeAddView } from "@/sections/knowledge/agent-knowledge/KnowledgeAddView";
@@ -39,7 +40,7 @@ import type {
   KnowledgeNavState,
   KnowledgeSearchResults,
   KnowledgeView,
-} from "@/sections/knowledge/agent-knowledge/interfaces";
+} from "@/sections/knowledge/agent-knowledge/types";
 
 interface AgentKnowledgePaneProps {
   enableKnowledge: boolean;
@@ -533,7 +534,7 @@ export default function AgentKnowledgePane({
               description={t("pane.useKnowledge.description")}
               withLabel
             >
-              <Switch
+              <InputSwitch
                 name="enable_knowledge"
                 checked={enableKnowledge}
                 onCheckedChange={onEnableKnowledgeChange}

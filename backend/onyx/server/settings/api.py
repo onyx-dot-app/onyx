@@ -10,6 +10,7 @@ from onyx.auth.users import is_user_admin
 from onyx.configs.app_configs import (
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
+    HIDE_ONYX_BRANDING,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
     POSTHOG_API_KEY,
     POSTHOG_HOST,
@@ -27,6 +28,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.oauth_provider.config import OAUTH_PROVIDER_SETTINGS
 from onyx.server.features.build.utils import (
     is_craft_available_for_deployment,
     is_craft_enabled_for_user,
@@ -123,6 +125,15 @@ def admin_patch_settings(
                 OnyxErrorCode.FEATURE_NOT_AVAILABLE,
                 "Chat history retention requires the Enterprise plan.",
             )
+        # The LLM gateway is Business+; keep the write gate aligned with the
+        # tier_gate middleware that rejects /api/gateway calls below it.
+        if merged.llm_gateway_enabled != existing.llm_gateway_enabled and (
+            not tier_at_least(current_tier, Tier.BUSINESS)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+                "The LLM gateway requires the Business or Enterprise plan.",
+            )
 
         store_settings(merged)
 
@@ -133,6 +144,15 @@ def admin_patch_settings(
                 actor=actor_from_user(current_user),
                 resource_type="settings",
                 extra={"craft_default_enabled": merged.craft_default_enabled},
+            )
+
+        if merged.llm_gateway_enabled != existing.llm_gateway_enabled:
+            emit_audit_event(
+                AuditAction.LLM_GATEWAY_ENABLED_CHANGE,
+                AuditOutcome.SUCCESS,
+                actor=actor_from_user(current_user),
+                resource_type="settings",
+                extra={"llm_gateway_enabled": merged.llm_gateway_enabled},
             )
 
         # Read back rather than returning `merged`, so the response matches what
@@ -170,6 +190,11 @@ def fetch_settings(
         apply_license_status_to_settings,
     )
     general_settings = apply_fn(general_settings)
+    # The EE apply_fn resolves tier on every path. On CE the stored value is
+    # client-writable, so it never counts.
+    resolved_tier = (
+        general_settings.tier if global_version.is_ee_version() else Tier.COMMUNITY
+    )
 
     # Craft workspace instructions are visible to authenticated users (they
     # appear in sandbox AGENTS.md anyway) but not to anonymous visitors.
@@ -196,12 +221,15 @@ def fetch_settings(
 
     return UserSettings(
         **general_settings.model_dump(),
+        oauth_provider_enabled=OAUTH_PROVIDER_SETTINGS is not None,
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
         onyx_craft_available=onyx_craft_available,
         opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
+        hide_onyx_branding=HIDE_ONYX_BRANDING
+        and tier_at_least(resolved_tier, Tier.ENTERPRISE),
         hooks_enabled=not MULTI_TENANT,
         version=onyx_version,
         max_allowed_upload_size_mb=MAX_ALLOWED_UPLOAD_SIZE_MB,

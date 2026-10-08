@@ -46,11 +46,11 @@ runs:
       run: |
         {
           echo "DHI_NODE_BUILD_ARGS<<EOF"
-          echo "NODE_BUILDER_IMAGE=dhi.io/node:24-debian13-dev@sha256:35dae551ffb9790b9e0416c5359c80b1b45c345b950b0670615a307451f0005f"
-          echo "NODE_RUNTIME_IMAGE=dhi.io/node:24-debian13@sha256:d6ae37f15884f5c9a3b945beba1dd5781b7107ecbcb72b64db9bbb7a74d7d870"
+          echo "NODE_BUILDER_IMAGE=dhi.io/node:24-debian13-dev@sha256:58f5e0226611a5a9eb0094919278a81b6ce88aa9dff8b5d9370da9c5d605b29b"
+          echo "NODE_RUNTIME_IMAGE=dhi.io/node:24-debian13@sha256:f3575cf1e68ffe163703b691c465af833fd2d94cccc1e825d052c943018f2aa3"
           echo "EOF"
           echo "DHI_PYTHON_BUILD_ARGS<<EOF"
-          echo "PYTHON_BUILDER_IMAGE=dhi.io/python:3.13-debian13-dev@sha256:e80760f68bff8d37c82b9f407951cb6286c90be39b1120e7798cb4621cee8bd6"
-          echo "PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13@sha256:fec8992879e8a634f0af282f67bf09a837212d0a386eb810427d3e72a1dd8fde"
+          echo "PYTHON_BUILDER_IMAGE=dhi.io/python:3.13-debian13-dev@sha256:6d654952feccb9af5c171c372ebe92a8b928749abbfa113ece3ae7c0651b7efd"
+          echo "PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13@sha256:004349ff1c97794f036976f1cab54b468524e599fabd276eb63f062c1f9c4dcf"
           echo "EOF"
         } >> "$GITHUB_ENV"

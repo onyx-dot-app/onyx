@@ -1,9 +1,9 @@
 import hashlib
-import mimetypes
 import os
 import re
 from io import BytesIO
 from typing import Any, cast
+from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter
 from sqlalchemy.orm import Session
@@ -20,7 +20,13 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
-from onyx.file_store.utils import build_full_frontend_file_url, get_default_file_store
+from onyx.file_processing.file_types import guess_mime_type
+from onyx.file_store.utils import (
+    build_full_frontend_file_url,
+    chat_image_gen_metadata,
+    get_default_file_store,
+)
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
@@ -226,9 +232,15 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
     DISPLAY_NAME = "Code Interpreter"
     DESCRIPTION = "Execute Python code in an isolated sandbox environment."
 
-    def __init__(self, tool_id: int, emitter: Emitter) -> None:
+    def __init__(
+        self,
+        tool_id: int,
+        emitter: Emitter,
+        chat_session_id: UUID,
+    ) -> None:
         super().__init__(emitter=emitter)
         self._id = tool_id
+        self._chat_session_id = chat_session_id
         # Cache of (filename, content_hash) -> ci_file_id to avoid re-uploading
         # the same file on every tool call iteration within the same agent session.
         # Filename is included in the key so two files with identical bytes but
@@ -266,24 +278,21 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         with CodeInterpreterClient() as client:
             return client.health(use_cache=True).healthy
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        CODE_FIELD: {
-                            "type": "string",
-                            "description": "Python source code to execute",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    CODE_FIELD: {
+                        "type": "string",
+                        "description": "Python source code to execute",
                     },
-                    "required": [CODE_FIELD],
                 },
+                "required": [CODE_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         """Emit start packet for this tool. Code will be emitted in run() method."""
@@ -476,9 +485,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
                         # Determine MIME type from file extension
                         filename = workspace_file.path.split("/")[-1]
-                        mime_type, _ = mimetypes.guess_type(filename)
-                        # Default to binary if we can't determine the type
-                        mime_type = mime_type or "application/octet-stream"
+                        mime_type = (
+                            guess_mime_type(filename) or "application/octet-stream"
+                        )
 
                         # Save to Onyx file store
                         onyx_file_id = file_store.save_file(
@@ -486,6 +495,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                             display_name=filename,
                             file_origin=FileOrigin.CHAT_IMAGE_GEN,
                             file_type=mime_type,
+                            file_metadata=chat_image_gen_metadata(
+                                self._chat_session_id
+                            ),
                         )
 
                         generated_files.append(

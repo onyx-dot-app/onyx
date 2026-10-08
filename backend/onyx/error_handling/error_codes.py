@@ -45,6 +45,9 @@ class OnyxErrorCode(Enum):
     ENV_VAR_GATED = ("ENV_VAR_GATED", 403)
     # The deployment cannot support the feature at all, so no grant helps.
     DEPLOYMENT_UNSUPPORTED = ("DEPLOYMENT_UNSUPPORTED", 403)
+    # An admin turned the feature off for this workspace; no credential
+    # change re-enables it.
+    FEATURE_DISABLED = ("FEATURE_DISABLED", 403)
 
     # --------------------------------------------------------------------------
     # Validation / Bad Request (400)
@@ -79,6 +82,9 @@ class OnyxErrorCode(Enum):
     # A write refused because a background sync is still applying the last one.
     # Retryable, unlike NOT_FOUND, which these routes used to report instead.
     RESOURCE_SYNCING = ("RESOURCE_SYNCING", 409)
+    # A re-index refused because an earlier generation still holds the index name it
+    # wants. Reclamation is draining that index now, so the same request works shortly.
+    INDEX_NAME_RECLAIMING = ("INDEX_NAME_RECLAIMING", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)

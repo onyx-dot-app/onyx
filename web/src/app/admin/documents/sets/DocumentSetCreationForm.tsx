@@ -28,7 +28,7 @@ import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
 import { NonSelectableConnectors } from "@/components/NonSelectableConnectors";
 import { FederatedConnectorSelector } from "@/components/FederatedConnectorSelector";
-import { useFederatedConnectors } from "@/lib/hooks";
+import { useFederatedConnectors } from "@/lib/connectors/hooks";
 
 interface SetCreationPopupProps {
   ccPairs: ConnectorStatus<any, any>[];

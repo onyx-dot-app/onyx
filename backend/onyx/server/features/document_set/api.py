@@ -13,6 +13,7 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_connector_credential_pairs_for_user,
 )
 from onyx.db.document_set import (
@@ -85,20 +86,20 @@ def _assert_attachable_cc_pairs(
     user: User, db_session: Session, cc_pair_ids: list[int]
 ) -> None:
     """Bounds attachments to the connectors the caller can already reach: public and
-    sync pairs, pairs in a group they belong to or manage, and groupless pairs they
-    created. ``update_document_set`` checks connectors against the *requested* groups,
-    so it checks nothing once those are empty; only the editable query carries the
-    creator fallback."""
+    sync pairs, pairs in a group they belong to, pairs they may operate, and groupless
+    pairs they created. ``update_document_set`` checks connectors against the
+    *requested* groups, so it checks nothing once those are empty; only the operate
+    query carries the creator fallback."""
     if not cc_pair_ids:
         return
 
     attachable = {
         cc_pair.id
-        for editable in (False, True)
+        for access_level in (CCPairAccessLevel.READ, CCPairAccessLevel.OPERATE)
         for cc_pair in get_connector_credential_pairs_for_user(
             db_session=db_session,
             user=user,
-            get_editable=editable,
+            access_level=access_level,
             ids=cc_pair_ids,
             processing_mode=None,
         )
@@ -283,7 +284,10 @@ def get_document_set(
 
 @router.get("/document-set")
 def list_document_sets_for_user(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    # Search filter vocabulary. READ_DOCUMENT_SETS is deliberately not used: it
+    # means "see every document set", which this route must not grant — the
+    # results stay ACL-filtered below.
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
     get_editable: bool = Query(
         False, description="If true, return editable document sets"

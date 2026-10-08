@@ -1,15 +1,14 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import {
   Button,
   InputTypeIn,
-  LineItemButton,
   MessageCard,
-  Popover,
+  Dropdown,
   Text,
 } from "@opal/components";
 import {
@@ -24,10 +23,9 @@ import {
   SvgBlocks,
   SvgEdit,
   SvgPlus,
-  SvgSimpleLoader,
   SvgUploadCloud,
 } from "@opal/icons";
-import { SvgGithub } from "@opal/logos";
+import { SvgGitHub } from "@opal/logos";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -41,6 +39,7 @@ import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
+import { useSettings } from "@/lib/settings/hooks";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -48,6 +47,7 @@ import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 
 export default function SkillsPage() {
   const t = useTranslations("skills");
+  const { appName } = useSettings();
   const router = useRouter();
   const externalAppIdParam = useSearchParams().get("externalAppId");
   const focusedExternalAppId =
@@ -77,7 +77,7 @@ export default function SkillsPage() {
   });
 
   function handleEdit(item: CustomSkillCardItem) {
-    router.push(`/craft/v1/skills/edit/${item.id}` as Route);
+    router.push(`/craft/v1/skills/edit/${item.id}`);
   }
 
   async function updateSkillEnabled(
@@ -290,52 +290,50 @@ export default function SkillsPage() {
         icon={SvgBlocks}
         title={t("page.header.title")}
         description={t("page.header.description")}
-        rightChildren={
-          <Popover open={createMenuOpen} onOpenChange={setCreateMenuOpen}>
-            <Popover.Trigger asChild>
+        actions={[
+          <Dropdown
+            key="primary"
+            open={createMenuOpen}
+            onOpenChange={setCreateMenuOpen}
+          >
+            <Dropdown.Trigger asChild>
               <Button icon={SvgPlus}>
                 {t("page.createMenu.trigger.label")}
               </Button>
-            </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="xl">
-              <Popover.Menu>
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgEdit}
-                  description={t("page.createMenu.scratch.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    router.push("/craft/v1/skills/new" as Route);
-                  }}
-                  title={t("page.createMenu.scratch.title")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgUploadCloud}
-                  description={t("page.createMenu.upload.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setCreateOpen(true);
-                  }}
-                  title={t("page.createMenu.upload.title")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgGithub}
-                  description={t("page.createMenu.github.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setGitHubImportOpen(true);
-                  }}
-                  title={t("page.createMenu.github.title")}
-                />
-              </Popover.Menu>
-            </Popover.Content>
-          </Popover>
-        }
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("page.createMenu.trigger.label")}
+              items={[
+                {
+                  kind: "action",
+                  id: "scratch",
+                  icon: SvgEdit,
+                  title: t("page.createMenu.scratch.title"),
+                  description: t("page.createMenu.scratch.description", {
+                    appName,
+                  }),
+                  onSelect: () => router.push("/craft/v1/skills/new"),
+                },
+                {
+                  kind: "action",
+                  id: "upload",
+                  icon: SvgUploadCloud,
+                  title: t("page.createMenu.upload.title"),
+                  description: t("page.createMenu.upload.description"),
+                  onSelect: () => setCreateOpen(true),
+                },
+                {
+                  kind: "action",
+                  id: "github",
+                  icon: SvgGitHub,
+                  title: t("page.createMenu.github.title"),
+                  description: t("page.createMenu.github.description"),
+                  onSelect: () => setGitHubImportOpen(true),
+                },
+              ]}
+            />
+          </Dropdown>,
+        ]}
       >
         <InputTypeIn
           ref={searchInputRef}
@@ -362,7 +360,7 @@ export default function SkillsPage() {
           />
         )}
 
-        {isLoading && <SvgSimpleLoader />}
+        {isLoading && <IconLoader />}
 
         {error && !isLoading && (
           <MessageCard
@@ -430,7 +428,7 @@ export default function SkillsPage() {
         onContinue={(draft) => {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
-          router.push(`/craft/v1/skills/new?draft=${draftId}` as Route);
+          router.push(`/craft/v1/skills/new?draft=${draftId}`);
         }}
       />
 

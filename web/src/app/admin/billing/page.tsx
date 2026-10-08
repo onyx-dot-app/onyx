@@ -28,6 +28,7 @@ import { LinkButton, MessageCard } from "@opal/components";
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
 import BillingDetailsView from "./BillingDetailsView";
+import DowngradeToCommunityLink from "@/app/admin/billing/DowngradeToCommunityLink";
 import LicenseActivationCard from "./LicenseActivationCard";
 import "./billing.css";
 
@@ -82,6 +83,7 @@ function FooterLinks({
           </LinkButton>
         </>
       )}
+      <DowngradeToCommunityLink />
       <LinkButton href={billingHelpHref}>
         {t("footer.billingHelp.label")}
       </LinkButton>
@@ -535,7 +537,7 @@ export default function BillingPage() {
       <SettingsLayouts.Header
         icon={viewConfig.icon}
         title={viewConfig.title}
-        backButton={viewConfig.showBackButton && handleBack}
+        cancel={viewConfig.showBackButton && handleBack}
         divider
       />
       <SettingsLayouts.Body>

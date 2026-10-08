@@ -134,13 +134,18 @@ export type OrientationVariants = "horizontal" | "vertical";
 export type BorderVariants = "none" | "dashed" | "solid";
 
 /**
- * Background fill variants shared across card-like surfaces.
- *
- * - `"none"`: transparent background.
- * - `"light"`: lightly tinted background.
- * - `"heavy"`: heavily tinted background.
+ * Card surface colors, named for the token they paint — no intensity
+ * adjectives. `"transparent"` is the sentinel for no fill.
  */
-export type BackgroundVariants = "none" | "light" | "heavy";
+export type CardColor =
+  | "transparent"
+  | "background-tint-00"
+  | "background-tint-01"
+  | "status-info-00"
+  | "status-success-00"
+  | "status-warning-00"
+  | "status-error-00"
+  | "theme-amber-01";
 
 // ---------------------------------------------------------------------------
 // Color Types
@@ -152,19 +157,16 @@ export type BackgroundVariants = "none" | "light" | "heavy";
  *
  * - `"default"` — standard text/border color (`text-04` / `border-01`)
  * - `"muted"` — de-emphasized color (`text-03`)
- * - `"danger"` — destructive / error state
- * - `"muted-success"` / `"muted-warning"`: status glyph against muted body text,
- *   for messages where the icon carries the state and the text stays secondary
+ * - `"success"` / `"warning"` / `"danger"` — a status glyph against muted body
+ *   text: the icon carries the state and the text stays secondary (`text-03`)
  * - `"interactive"` — follows the interactive coloring system (`currentColor` / `--interactive-foreground`)
  */
 export type ColorTypes =
   | "default"
   | "muted"
   | "success"
-  | "danger"
   | "warning"
-  | "muted-success"
-  | "muted-warning"
+  | "danger"
   | "interactive";
 
 // ---------------------------------------------------------------------------
@@ -216,7 +218,11 @@ export interface IconProps extends SVGProps<SVGSVGElement> {
 }
 
 /** Strips `className` and `style` from a props type to enforce design-system styling. */
-export type WithoutStyles<T> = Omit<T, "className" | "style">;
+// Distributive so a union prop type keeps its arms (identical to plain Omit
+// for non-union types) — e.g. the selects' mode/options pairing survives.
+export type WithoutStyles<T> = T extends unknown
+  ? Omit<T, "className" | "style">
+  : never;
 
 // ---------------------------------------------------------------------------
 // Rich Strings

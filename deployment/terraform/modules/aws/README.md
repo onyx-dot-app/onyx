@@ -208,6 +208,20 @@ module "onyx" {
 }
 ```
 
+### Accounts that require a permissions boundary on new roles
+Some AWS accounts let operators create IAM roles only if each role carries a set permissions boundary. Pass that boundary, and optionally an IAM path, to apply it to every role the stack creates (VPC flow logs, EKS cluster and node groups, EBS CSI, workload, load balancer controller and cluster autoscaler roles):
+
+```hcl
+module "onyx" {
+  source = "./modules/aws/onyx"
+  # ...
+  iam_role_permissions_boundary = "arn:aws:iam::123456789012:policy/MyBoundary"
+  iam_role_path                 = "/bounded/"
+}
+```
+
+Both default to null, which leaves existing stacks unchanged. Setting `iam_role_path` on an existing stack replaces its roles, so set it only on new stacks.
+
 ## What each module does
 
 ### `onyx`
@@ -251,7 +265,7 @@ Key inputs include:
 - `vpc_id`, `subnet_ids`
 - `public_cluster_enabled` (default true), `private_cluster_enabled` (default true)
 - `cluster_endpoint_public_access_cidrs` (default `[]`). Empty denies all public API access. Set it when `public_cluster_enabled` is true and you need to reach the API server
-- `eks_managed_node_groups` (defaults include a main and a vespa-dedicated group with GP3 volumes)
+- `eks_managed_node_groups` (defaults include a main group and a dedicated document-index group, legacy key `vespa`, with GP3 volumes)
 - `s3_bucket_names` (optional list). If set, creates an IRSA role and Kubernetes service account for S3 access
 
 ### `postgres`

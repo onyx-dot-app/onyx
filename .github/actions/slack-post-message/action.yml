@@ -1,0 +1,69 @@
+name: "Slack Post Message"
+description: "Posts a message to a Slack channel via chat.postMessage using a bot token"
+inputs:
+  bot-token:
+    description: "Slack bot token (xoxb) with chat:write in the channel's workspace"
+    required: true
+  channel:
+    description: "Slack channel ID to post to (e.g. C0C5SMAM4TT)"
+    required: true
+  text:
+    description: "Message body in mrkdwn. {mention} is replaced by the resolved mention."
+    required: true
+  mention:
+    description: "GitHub username to resolve to a Slack @-mention. Falls back to the plain username."
+    required: false
+  fail-on-error:
+    description: "Fail the step when the post is skipped or rejected"
+    required: false
+    default: "false"
+runs:
+  using: "composite"
+  steps:
+    - name: Post message to Slack
+      shell: bash
+      env:
+        SLACK_BOT_TOKEN: ${{ inputs.bot-token }}
+        SLACK_CHANNEL: ${{ inputs.channel }}
+        TEXT: ${{ inputs.text }}
+        MENTION_USER: ${{ inputs.mention }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+      run: |
+        if [ -z "${SLACK_BOT_TOKEN}" ]; then
+          echo "bot-token input is not set, skipping Slack post"
+          [ "${FAIL_ON_ERROR}" = "true" ] && exit 1
+          exit 0
+        fi
+
+        # Resolve {mention}: user-mappings.json is shared with the slack-notify
+        # action (GITHUB_ACTION_PATH works whichever checkout loaded this
+        # action). An unmapped username stays plain text — <@login> only works
+        # for Slack IDs.
+        if [ -n "${MENTION_USER}" ]; then
+          slack_id="$(jq -r --arg gh "${MENTION_USER}" \
+            'to_entries[] | select(.value | ascii_downcase == ($gh | ascii_downcase)) | .key' \
+            "${GITHUB_ACTION_PATH}/../slack-notify/user-mappings.json" 2>/dev/null | head -1)"
+          if [ -n "${slack_id}" ]; then
+            mention="<@${slack_id}>"
+          else
+            mention="${MENTION_USER}"
+          fi
+          TEXT="${TEXT//\{mention\}/${mention}}"
+        else
+          TEXT="${TEXT//\{mention\}/}"
+        fi
+
+        jq -cn --arg channel "${SLACK_CHANNEL}" --arg text "${TEXT}" \
+          '{channel: $channel, text: $text, unfurl_links: false, unfurl_media: false}' \
+          | curl -sS --fail-with-body --connect-timeout 10 --max-time 30 \
+              -X POST https://slack.com/api/chat.postMessage \
+              -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+              -H 'Content-type: application/json; charset=utf-8' --data-binary @- \
+          | jq -e '.ok' > /dev/null \
+          || {
+            echo "::warning::Slack post to ${SLACK_CHANNEL} failed (is the bot in the channel?)"
+            if [ "${FAIL_ON_ERROR}" = "true" ]; then
+              exit 1
+            fi
+            exit 0
+          }

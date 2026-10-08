@@ -39,7 +39,7 @@ def _parse_highspot_timestamp(value: Any) -> datetime | None:
     if not value or not isinstance(value, str):
         return None
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     except (ValueError, TypeError):
         return None
     return datetime_to_utc(parsed)
@@ -199,7 +199,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                         # Convert to datetime for comparison
                                         try:
                                             updated_time = datetime.fromisoformat(
-                                                updated_at.replace("Z", "+00:00")
+                                                updated_at
                                             )
                                             if (
                                                 start
@@ -337,7 +337,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                 if not url:
                     return default_content
                 content = scrape_url_content(url, True)
-                return content if content else default_content
+                return content or default_content
 
             elif (
                 is_valid_format
@@ -350,7 +350,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                     text_content = extract_file_text(
                         BytesIO(content_response), content_name, False
                     )
-                    return text_content if text_content else default_content
+                    return text_content or default_content
                 return default_content
 
             else:

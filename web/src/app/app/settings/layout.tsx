@@ -4,15 +4,14 @@ import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
-import { SidebarTab, Text } from "@opal/components";
+import { InputSingleSelect, SidebarTab } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useUser } from "@/providers/UserProvider";
 import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 
 interface LayoutProps {
@@ -31,7 +30,7 @@ export default function Layout({ children }: LayoutProps) {
   const { user } = useUser();
   const isMultiTenant = useIsMultiTenant();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders } = useLanguageModels();
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = isMultiTenant !== null;
@@ -64,10 +63,8 @@ export default function Layout({ children }: LayoutProps) {
     { href: "/app/settings/usage", label: t("tabs.usage.label") },
   ];
 
-  // Derive the trigger label from the pathname directly. InputSelect normally
-  // surfaces the selected label via item registration, but its items are
-  // unmounted while the dropdown is closed, so the label would otherwise be
-  // missing on initial load.
+  // A route outside `tabs` selects nothing, so the select shows its
+  // placeholder instead of the raw path.
   const activeTab = tabs.find((tab) => tab.href === pathname);
 
   return (
@@ -91,27 +88,19 @@ export default function Layout({ children }: LayoutProps) {
             data-testid="settings-tab-navigation-dropdown"
             className="sm:hidden"
           >
-            <InputSelect
-              value={pathname}
+            <InputSingleSelect
+              // A route outside `tabs` shows the placeholder, not the raw path.
+              value={activeTab?.href ?? ""}
               onValueChange={(href) =>
+                // SAFETY: the options are the static hrefs in `tabs`.
                 router.push(href as Route, { scroll: false })
               }
-            >
-              <InputSelect.Trigger placeholder={t("sectionSelect.placeholder")}>
-                {activeTab && (
-                  <Text font="main-ui-body" color="text-04" nowrap>
-                    {activeTab.label}
-                  </Text>
-                )}
-              </InputSelect.Trigger>
-              <InputSelect.Content>
-                {tabs.map((tab) => (
-                  <InputSelect.Item key={tab.href} value={tab.href}>
-                    {tab.label}
-                  </InputSelect.Item>
-                ))}
-              </InputSelect.Content>
-            </InputSelect>
+              placeholder={t("sectionSelect.placeholder")}
+              options={tabs.map((tab) => ({
+                value: tab.href,
+                title: tab.label,
+              }))}
+            />
           </div>
 
           {/* Wide screens: left tab navigation */}

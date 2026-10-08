@@ -4,7 +4,7 @@
     "incremental": false,
     "composite": false,
     "noEmit": false,
-    // Map @onyx-ai/shared subpaths to their built .d.ts so the tsup/rollup dts
+    // Map @onyx-ai/shared subpaths to their built .d.ts so the dts
     // bundler resolves and INLINES these types into Opal's published .d.ts. Its
     // resolver doesn't follow the package `exports` map, so without this it leaves
     // `from "@onyx-ai/shared/contracts"` imports in the output — which break
@@ -13,5 +13,6 @@
       "@opal/*": ["./src/*"],
       "@onyx-ai/shared/contracts": ["../shared/dist/contracts/index.d.ts"]
     }
-  }
+  },
+  "exclude": ["node_modules", "**/*.stories.tsx", "**/*.test.ts", "**/*.test.tsx"]
 }

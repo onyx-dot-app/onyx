@@ -32,7 +32,6 @@ on:
     - cron: "0 8 * * *" # 08:00 UTC nightly
   merge_group:
   pull_request:
-    branches: [main]
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test job runs. This avoids
     # the dual-workflow skip pattern where a `paths-ignore`'d skip workflow can
@@ -46,13 +45,13 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26.5"
+  GO_VERSION: "1.27.1"
   IMAGE_TAG: "latest"
   POSTGRES_USER: "postgres"
   POSTGRES_PASSWORD: "password"
   # Pin defensively. Compose's ${VAR:-default} prefers a leaked host value over
   # the --env-file one.
-  S3_ENDPOINT_URL: "http://minio:9000"
+  S3_ENDPOINT_URL: "http://object-store:8333"
 
 jobs:
   changes:
@@ -95,6 +94,7 @@ jobs:
               - 'deployment/docker_compose/env.template'
               - '.github/workflows/pr-terraform-provider-tests.yml'
               - '.github/actions/login-ecr-pullthrough-cache/**'
+              - '.github/actions/setup-test-license/**'
 
   docs-check:
     # docs/ is generated from the schema descriptions and examples/. A hand-edited
@@ -184,6 +184,8 @@ jobs:
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:tf-provider-backend-${{ github.run_id }}
+          # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+          labels: ci.run-id=${{ github.run_id }}
           push: true
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
@@ -197,6 +199,7 @@ jobs:
     needs: [changes, build-backend-image]
     if: needs.changes.outputs.provider == 'true'
     permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange (license)
       contents: read
     runs-on:
       - runs-on
@@ -254,9 +257,13 @@ jobs:
           echo "ONYX_MODEL_SERVER_IMAGE=${BASE_IMAGE_REGISTRY}/onyxdotapp/onyx-model-server:${IMAGE_TAG}" \
             >> "$GITHUB_ENV"
 
-      # LICENSE_ENFORCEMENT_ENABLED already defaults to false; it is set here so
-      # the lane keeps working if that default changes, and so it needs no
-      # license and no AWS credentials.
+      # The provider manages Business-tier resources (API keys, user groups),
+      # which the license unlocks.
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
       - name: Write compose .env
         working-directory: deployment/docker_compose
         run: |
@@ -264,15 +271,13 @@ jobs:
           AUTH_TYPE=basic
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          LICENSE_ENFORCEMENT_ENABLED=false
           USER_AUTH_SECRET=tf-provider-ci-only-dummy-secret
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
           EOF
 
       # api_server and background are named; depends_on pulls in db / cache /
-      # opensearch / model servers / minio. web_server + nginx are omitted.
+      # opensearch / model servers / object store. web_server + nginx are omitted.
       - name: Bring up the stack
         working-directory: deployment/docker_compose
         run: |
@@ -282,6 +287,11 @@ jobs:
             --env-file env.template \
             up -d --wait --wait-timeout 600 \
             api_server background
+
+      - name: Seed dev license
+        run: |
+          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+            python -m scripts.seed_dev_license
 
       # Several resources only settle once the sync gate marks them up to date,
       # and beat is what schedules the task that moves the gate. Without this

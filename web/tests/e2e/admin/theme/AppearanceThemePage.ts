@@ -2,7 +2,7 @@
  * Page Object Model for the Admin Appearance / Theme page (/admin/theme).
  *
  * Encapsulates locators and interactions for the custom help link and
- * hide-onyx-branding controls so specs stay declarative. Existing tests in
+ * "Powered by Onyx" tagline so specs stay declarative. Existing tests in
  * `appearance_theme_settings.spec.ts` still use inline locators; new tests
  * should drive the page through this class.
  */
@@ -37,7 +37,6 @@ export class AppearanceThemePage {
   readonly applicationNameInput: Locator;
   readonly customHelpLinkUrlInput: Locator;
   readonly customHelpLinkLabelInput: Locator;
-  readonly hideBrandingToggle: Locator;
   readonly saveButton: Locator;
 
   // Sidebar / popover
@@ -53,9 +52,6 @@ export class AppearanceThemePage {
     );
     this.customHelpLinkLabelInput = page.locator(
       '[data-label="custom-help-link-label-input"]'
-    );
-    this.hideBrandingToggle = page.locator(
-      '[data-label="hide-onyx-branding-toggle"]'
     );
     this.saveButton = page.getByRole("button", { name: "Apply Changes" });
 
@@ -94,11 +90,6 @@ export class AppearanceThemePage {
 
   async clearCustomHelpLinkLabel() {
     await this.customHelpLinkLabelInput.clear();
-  }
-
-  async toggleHideBranding() {
-    await this.hideBrandingToggle.scrollIntoViewIfNeeded();
-    await this.hideBrandingToggle.click();
   }
 
   /**
@@ -165,23 +156,10 @@ export class AppearanceThemePage {
     await expect(link).toContainText(text);
   }
 
-  /**
-   * Locator for the Logo's tagline, scoped exactly so it doesn't also match
-   * the toggle's helper text on the same page ("Remove 'powered by Onyx'
-   * and other Onyx branding..."). `getByText` is case-insensitive +
-   * substring by default; `exact: true` makes it strict equality on the
-   * element's full text content.
-   */
-  private get poweredByOnyxTagline(): Locator {
-    return this.page.getByText("Powered by Onyx", { exact: true });
-  }
-
   async expectPoweredByOnyxVisible() {
-    await expect(this.poweredByOnyxTagline).toBeVisible({ timeout: 5_000 });
-  }
-
-  async expectPoweredByOnyxAbsent() {
-    await expect(this.poweredByOnyxTagline).toHaveCount(0, { timeout: 5_000 });
+    await expect(
+      this.page.getByText("Powered by Onyx", { exact: true })
+    ).toBeVisible({ timeout: 5_000 });
   }
 
   // ---------------------------------------------------------------------------

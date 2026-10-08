@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -198,10 +200,205 @@ func TestFormatPickerLabelAlignsDetail(t *testing.T) {
 	}
 }
 
+func TestSelectAgentByName(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+		{ID: 2, Name: "Engineering Bot"},
+	}
+
+	m, _ = cmdSelectAgent(m, "support")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+	if m.agentName != "Support Agent" {
+		t.Errorf("agentName = %q, want Support Agent", m.agentName)
+	}
+}
+
+func TestSelectAgentWithNoAgentsShowsHelpfulMessage(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+
+	m, _ = cmdSelectAgent(m, "support")
+
+	if len(m.viewport.entries) == 0 {
+		t.Fatal("expected a warning entry")
+	}
+	got := m.viewport.entries[len(m.viewport.entries)-1].content
+	want := "no agents available; run /agent to refresh the list"
+	if got != want {
+		t.Errorf("warning = %q, want %q", got, want)
+	}
+}
+
+func TestSelectAgentByID(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "1")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+}
+
+func TestSelectAgentByNumericName(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 100, Name: "42"},
+		{ID: 1, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "42")
+	if m.agentID != 100 {
+		t.Errorf("agentID = %d, want 100 (match name before ID)", m.agentID)
+	}
+}
+
+func TestSelectAgentByNumericIDWhenNoNameMatch(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 5, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "5")
+	if m.agentID != 5 {
+		t.Errorf("agentID = %d, want 5", m.agentID)
+	}
+}
+
+func TestSelectAgentFromPickerUsesIDWhenNameMatches(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+		{ID: 100, Name: "1"},
+	}
+
+	m, _ = cmdSelectAgentByID(m, "1")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+}
+
+func TestAttachRefusedInRemoteMode(t *testing.T) {
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	m := NewModel(config.DefaultConfig(), nil)
+	m, cmd := cmdAttach(m, "/etc/passwd")
+
+	if cmd != nil {
+		t.Fatal("expected no upload command in remote mode")
+	}
+	if len(m.viewport.entries) == 0 {
+		t.Fatal("expected a warning entry")
+	}
+	got := m.viewport.entries[len(m.viewport.entries)-1].content
+	if !strings.Contains(got, "disabled over SSH") {
+		t.Errorf("warning = %q, want a refusal mentioning SSH", got)
+	}
+}
+
+func TestDetectFileDropIgnoredInRemoteMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(path, []byte("secret"), 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	if got := detectFileDrop(path); got != path {
+		t.Fatalf("local detectFileDrop = %q, want %q", got, path)
+	}
+
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	if got := detectFileDrop(path); got != "" {
+		t.Errorf("remote detectFileDrop = %q, want no match", got)
+	}
+}
+
 func TestSelectModelInvalidIndex(t *testing.T) {
 	m := NewModel(config.DefaultConfig(), nil)
 	m, _ = cmdSelectModel(m, "5")
 	if m.modelOverride != nil {
 		t.Error("expected no override for an out-of-range index")
+	}
+}
+
+func TestConfigureRefusedInRemoteMode(t *testing.T) {
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	m := NewModel(config.DefaultConfig(), nil)
+	m, cmd := handleSlashCommand(m, "/configure")
+
+	if cmd != nil || m.configState != nil {
+		t.Fatal("expected configure mode to stay closed in remote mode")
+	}
+	got := m.viewport.entries[len(m.viewport.entries)-1].content
+	if !strings.Contains(got, "disabled over SSH") {
+		t.Errorf("warning = %q, want a refusal mentioning SSH", got)
+	}
+}
+
+func TestAgentSelectionDoesNotSaveConfigInRemoteMode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	operator := config.DefaultConfig()
+	operator.ServerURL = "https://onyx.example.com"
+	operator.APIKey = "operator-pat"
+	operator.DefaultAgentID = 1
+	if err := config.Save(operator); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	before, err := os.ReadFile(config.ConfigFilePath())
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	m := NewModel(operator, nil)
+	m.agents = []models.AgentSummary{{ID: 1, Name: "Default"}, {ID: 7, Name: "Other"}}
+	m, _ = cmdSelectAgent(m, "7")
+	m, _ = cmdSelectAgentByID(m, "7")
+
+	if m.agentID != 7 {
+		t.Errorf("agentID = %d, want 7 for this session", m.agentID)
+	}
+	after, err := os.ReadFile(config.ConfigFilePath())
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Errorf("config file changed in remote mode:\nbefore: %s\nafter:  %s", before, after)
+	}
+}
+
+func TestWebPagesNotOpenedInRemoteMode(t *testing.T) {
+	var opened []string
+	orig := openBrowser
+	openBrowser = func(url string) bool {
+		opened = append(opened, url)
+		return true
+	}
+	t.Cleanup(func() { openBrowser = orig })
+
+	RemoteMode = true
+	t.Cleanup(func() { RemoteMode = false })
+
+	cfg := config.DefaultConfig()
+	cfg.ServerURL = "https://onyx.example.com"
+	m := NewModel(cfg, nil)
+	for _, command := range []string{"/connectors", "/settings"} {
+		m, _ = handleSlashCommand(m, command)
+		got := m.viewport.entries[len(m.viewport.entries)-1].content
+		if !strings.HasPrefix(got, "Visit: https://onyx.example.com/") {
+			t.Errorf("%s message = %q, want the URL to visit", command, got)
+		}
+	}
+	if len(opened) != 0 {
+		t.Errorf("browser launched on the host for %v", opened)
 	}
 }

@@ -44,6 +44,10 @@ export interface MultiModelResponseViewProps {
   readOnly?: boolean;
 }
 
+/** Fades the last 6rem of a panel that has more content below the fold. */
+const PANEL_FADE_MASK =
+  "linear-gradient(to bottom, black calc(100% - 6rem), transparent 100%)";
+
 // How many pixels of a non-preferred panel are visible at the viewport edge
 const PEEK_W = 64;
 // Uniform panel width used in the selection-mode carousel
@@ -727,14 +731,8 @@ export default function MultiModelResponseView({
                       : "none",
                   maxHeight: capped ? preferredPanelHeight : undefined,
                   overflow: "clip",
-                  ...(overflows
-                    ? {
-                        maskImage:
-                          "linear-gradient(to bottom, black calc(100% - 6rem), transparent 100%)",
-                        WebkitMaskImage:
-                          "linear-gradient(to bottom, black calc(100% - 6rem), transparent 100%)",
-                      }
-                    : {}),
+                  maskImage: overflows ? PANEL_FADE_MASK : undefined,
+                  WebkitMaskImage: overflows ? PANEL_FADE_MASK : undefined,
                 }}
               >
                 {/* Content is laid out at the final width so the wrapper's

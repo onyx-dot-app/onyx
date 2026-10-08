@@ -100,9 +100,7 @@ class GooglePSEClient(WebSearchProvider):
                 )
                 if published_str:
                     try:
-                        published_date = datetime.fromisoformat(
-                            published_str.replace("Z", "+00:00")
-                        )
+                        published_date = datetime.fromisoformat(published_str)
                     except ValueError:
                         logger.debug(
                             "Failed to parse published_date '%s' for link %s",

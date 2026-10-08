@@ -15,7 +15,7 @@ pytest -xv backend/tests/unit
 
 ### External Dependency Unit Tests (`tests/external_dependency_unit/`)
 
-Real Postgres, Redis, MinIO, and Vespa available. Real OpenAI key when set. Real
+Real Postgres, Redis, MinIO, and OpenSearch available. Real OpenAI key when set. Real
 Docker daemon when a Docker-backend test opts into it. Onyx application
 processes (API server, Celery workers) are **not** running. Tests import and
 call functions directly and can mock selectively.
@@ -32,9 +32,10 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit
 
 ### Integration Tests (`tests/integration/`)
 
-Full Onyx deployment running. No mocking. Prefer this over other test types when
-possible. Most integration tests exercise the product through HTTP API manager
-helpers under `tests/integration/common_utils`.
+Full Onyx deployment running. Do not mock Onyx code. Faking an external service
+(for example the scripted LLM server behind the `mock_llm` fixture) is fine.
+Prefer this over other test types when possible. Most integration tests exercise
+the product through HTTP API manager helpers under `tests/integration/common_utils`.
 
 Craft Kubernetes coverage lives in `tests/integration/tests/craft/k8s/` and
 runs in the dedicated Helm-installed kind job

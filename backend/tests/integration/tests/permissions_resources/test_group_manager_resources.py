@@ -1,11 +1,12 @@
 """Escalation suite for two-gate scoping on connectors, document sets + ingestion.
 
-A scoped group manager may only create/edit non-PUBLIC resources (PRIVATE or SYNC
+A scoped group manager may only create non-PUBLIC resources (PRIVATE or SYNC
 connectors; PRIVATE document sets) whose every group is one they manage; they can
 never widen to PUBLIC, capture another group's resource by reassignment, or act
-outside their managed scope. DELETE is admin-only except for a resource in no group
-that they created — shared with nobody, so its creator isn't stranded. Global holders
-(admins) bypass GATE 2. Managers are seeded by flipping ``User__UserGroup.is_manager``
+outside their managed scope. On an existing connector, the role of a group they
+manage decides: Operators run it, Editors also change and delete it. A document set
+DELETE is admin-only except for a set in no group that they created, and a connector
+in no manage group has its creator as Editor. Global holders (admins) bypass GATE 2. Managers are seeded by flipping ``User__UserGroup.is_manager``
 directly (no manager-creation helper exists yet).
 
 Allowed actions go through the shared Manager classes (which assert real success);
@@ -23,7 +24,7 @@ from sqlalchemy import select, update
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, ConnectorManageRole
 from onyx.db.models import (
     ConnectorCredentialPair,
     Document,
@@ -42,6 +43,7 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import (
+    DATestCCPair,
     DATestDocumentSet,
     DATestUser,
     DATestUserGroup,
@@ -52,11 +54,12 @@ from tests.integration.tests.permissions._access_matrix import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Group manager scoping is an enterprise-only capability",
 )
 
 _DOC_SET_PATH = "/manage/admin/document-set"
+_CONNECTOR_PATH = "/manage/admin/connector"
 _INGESTION_PATH = "/onyx-api/ingestion"
 # GATE 1 has its own wording, so asserting on this pins the denial to the scope check
 _CC_PAIR_SCOPE_DETAIL = "Connection not found for current user's permissions"
@@ -135,7 +138,10 @@ def _associate_body(access_type: AccessType, groups: list[int]) -> dict[str, Any
     return {
         "name": f"cc-{uuid4()}",
         "access_type": access_type.value,
-        "groups": groups,
+        "manage_access": [
+            {"group_id": group_id, "role": ConnectorManageRole.EDITOR.value}
+            for group_id in groups
+        ],
     }
 
 
@@ -161,21 +167,12 @@ def _doc_set_body(
 
 
 def _detach_cc_pair_from_group(group: DATestUserGroup, admin: DATestUser) -> None:
-    """Drop every cc_pair off a group and wait out the sync.
+    """Drop every cc_pair off a group.
 
     The only route to a manager-owned groupless connector: creating one directly is
     refused (no managed scope in zero groups), so it has to start in a group and lose
-    it. Attaching the connector already left the group syncing, and an edit is refused
-    (404) while is_up_to_date is False — so both waits are load-bearing.
-    """
-    UserGroupManager.wait_for_sync(
-        user_performing_action=admin, user_groups_to_check=[group]
-    )
-    group.cc_pair_ids = []
-    UserGroupManager.edit(group, user_performing_action=admin)
-    UserGroupManager.wait_for_sync(
-        user_performing_action=admin, user_groups_to_check=[group]
-    )
+    it."""
+    UserGroupManager.set_managed_cc_pairs(group, {}, user_performing_action=admin)
 
 
 def _create_synced_doc_set(
@@ -517,11 +514,11 @@ def test_manager_cannot_delete_doc_set(env: _ScopedEnv) -> None:
     assert_response(resp, "DELETE", path, "manager", "denied")
 
 
-def test_manager_cannot_delete_cc_pair(env: _ScopedEnv) -> None:
+def test_manager_cannot_delete_cc_pair_of_unmanaged_group(env: _ScopedEnv) -> None:
     cc_pair = CCPairManager.create_from_scratch(
-        user_performing_action=env.manager,
+        user_performing_action=env.admin,
         access_type=AccessType.PRIVATE,
-        groups=[env.managed_group.id],
+        groups=[env.other_group.id],
     )
     path = "/manage/admin/deletion-attempt"
     resp = call_endpoint(
@@ -531,7 +528,9 @@ def test_manager_cannot_delete_cc_pair(env: _ScopedEnv) -> None:
         env.manager.headers,
         env.manager.cookies,
     )
-    assert_response(resp, "POST", path, "manager", "denied")
+    # the EDIT fetch hides the pair, so the route answers as if it were gone
+    assert resp.status_code == 404, resp.text
+    assert _cc_pair_status(cc_pair.id) != "DELETING"
 
 
 def test_manager_reads_detail_of_managed_cc_pair(env: _ScopedEnv) -> None:
@@ -546,6 +545,8 @@ def test_manager_reads_detail_of_managed_cc_pair(env: _ScopedEnv) -> None:
         f"/manage/admin/cc-pair/{cc_pair.id}",
         f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=10",
         f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
+        f"/manage/admin/cc-pair/{cc_pair.id}/errors?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
     ]:
         resp = call_endpoint(
             "GET", path, None, env.manager.headers, env.manager.cookies
@@ -594,6 +595,24 @@ def test_manager_cannot_read_stage_metrics_of_unmanaged_cc_pair(
     path = f"/manage/admin/index-attempt/{attempt.id}/stage-metrics"
     resp = call_endpoint("GET", path, None, env.manager.headers, env.manager.cookies)
     assert_response(resp, "GET", path, "manager", "denied")
+
+
+def test_manager_cannot_read_errors_of_unmanaged_cc_pair(env: _ScopedEnv) -> None:
+    """allow_scope lets the manager reach the route; the row filter must still hide
+    a connector outside their groups."""
+    admin_cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.other_group.id],
+    )
+    for path in [
+        f"/manage/admin/cc-pair/{admin_cc_pair.id}/errors?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{admin_cc_pair.id}/get-docs-sync-status",
+    ]:
+        resp = call_endpoint(
+            "GET", path, None, env.manager.headers, env.manager.cookies
+        )
+        assert_response(resp, "GET", path, "manager", "denied")
 
 
 def test_manager_reads_credentials_for_connector_form(env: _ScopedEnv) -> None:
@@ -708,9 +727,14 @@ def test_admin_cc_pair_detail_carries_permissions_map(env: _ScopedEnv) -> None:
 
     body = resp.json()
     # admin holds global MANAGE_CONNECTORS, so every action is allowed
-    assert body["permissions"] == {"edit": True, "delete": True, "publish": True}
-    # edit is stamped from is_editable_for_current_user, so the two must agree
-    assert body["permissions"]["edit"] == body["is_editable_for_current_user"]
+    assert body["permissions"] == {
+        "operate": True,
+        "edit": True,
+        "delete": True,
+        "publish": True,
+    }
+    # operate is stamped from is_editable_for_current_user, so the two must agree
+    assert body["permissions"]["operate"] == body["is_editable_for_current_user"]
 
 
 def test_manager_reads_detail_of_own_groupless_cc_pair(env: _ScopedEnv) -> None:
@@ -732,6 +756,8 @@ def test_manager_reads_detail_of_own_groupless_cc_pair(env: _ScopedEnv) -> None:
         f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=10",
         f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
         f"/manage/admin/cc-pair/{cc_pair.id}/permission-sync-attempts",
+        f"/manage/admin/cc-pair/{cc_pair.id}/errors?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
     ]:
         resp = call_endpoint(
             "GET", path, None, env.manager.headers, env.manager.cookies
@@ -756,11 +782,12 @@ def test_manager_cannot_read_groupless_cc_pair_of_another_creator(
     assert resp.status_code in (403, 404), resp.text
 
 
-def test_manager_cc_pair_detail_stamps_delete_once_groupless(
+def test_manager_cc_pair_detail_stamps_delete_for_editor_and_groupless_creator(
     env: _ScopedEnv,
 ) -> None:
-    """The Delete control renders off permissions.delete, so the map must track the
-    same carve-out the deletion route enforces — not stay admin-only behind it."""
+    """The Delete control renders off permissions.delete, so the map must track what
+    the deletion route enforces: an Editor deletes, and so does the creator of a pair
+    left in no manage group."""
     cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.manager,
         access_type=AccessType.PRIVATE,
@@ -771,8 +798,9 @@ def test_manager_cc_pair_detail_stamps_delete_once_groupless(
     shared = call_endpoint(
         "GET", path, None, env.manager.headers, env.manager.cookies
     ).json()
+    assert shared["permissions"]["operate"] is True
     assert shared["permissions"]["edit"] is True
-    assert shared["permissions"]["delete"] is False, "shared connector is admin-only"
+    assert shared["permissions"]["delete"] is True, "an Editor deletes"
 
     _detach_cc_pair_from_group(env.managed_group, env.admin)
 
@@ -1099,3 +1127,133 @@ def test_admin_ingests_over_any_pairs_document(env: _ScopedEnv) -> None:
     _ingest_ok(env.admin, document_id, admin_pair.id, "overwritten")
 
     assert _document_semantic_id(document_id) == "overwritten"
+
+
+def _file_connector_config(file_id: str, file_name: str) -> dict[str, Any]:
+    return {
+        "file_locations": [file_id],
+        "file_names": [file_name],
+        "zip_metadata_file_id": None,
+    }
+
+
+def _seed_file_cc_pair(
+    creator: DATestUser, name: str, access_type: AccessType, groups: list[int]
+) -> tuple[DATestCCPair, str]:
+    """A file connector carrying one real uploaded file, so the file routes have
+    something to list and remove."""
+    upload = FileManager.upload_connector_file(
+        f"{name}.txt", f"{name} contents".encode(), creator
+    )
+    file_id, file_name = upload.file_paths[0], upload.file_names[0]
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=creator,
+        access_type=access_type,
+        groups=groups,
+        connector_specific_config=_file_connector_config(file_id, file_name),
+    )
+    return cc_pair, file_id
+
+
+def _expect_file_routes_denied(
+    env: _ScopedEnv, cc_pair: DATestCCPair, file_id: str
+) -> None:
+    path = f"{_CONNECTOR_PATH}/{cc_pair.connector_id}/files"
+    assert_response(
+        FileManager.list_connector_files(cc_pair.connector_id, env.manager),
+        "GET",
+        path,
+        "manager",
+        "denied_gate2",
+    )
+    assert_response(
+        FileManager.update_connector_files(
+            cc_pair.connector_id, env.manager, file_ids_to_remove=[file_id]
+        ),
+        "POST",
+        f"{path}/update",
+        "manager",
+        "denied_gate2",
+    )
+
+
+def test_manager_creates_file_connector_end_to_end(env: _ScopedEnv) -> None:
+    """The reported bug: the upload is step 1 of the file connector form, and a
+    GLOBAL-only gate on it blocked the whole flow before any scope check ran."""
+    cc_pair, file_id = _seed_file_cc_pair(
+        env.manager, "managed", AccessType.PRIVATE, [env.managed_group.id]
+    )
+
+    listed = FileManager.list_connector_files(cc_pair.connector_id, env.manager)
+    assert listed.status_code == 200, listed.text
+    assert [f["file_id"] for f in listed.json()["files"]] == [file_id]
+
+
+def test_manager_updates_files_on_managed_connector(env: _ScopedEnv) -> None:
+    cc_pair, file_id = _seed_file_cc_pair(
+        env.manager, "updatable", AccessType.PRIVATE, [env.managed_group.id]
+    )
+
+    updated = FileManager.update_connector_files(
+        cc_pair.connector_id,
+        env.manager,
+        file_ids_to_remove=[file_id],
+        files=[("added.txt", b"added by the manager")],
+    )
+    assert updated.status_code == 200, updated.text
+
+    listed = FileManager.list_connector_files(cc_pair.connector_id, env.manager)
+    assert listed.status_code == 200, listed.text
+    assert [f["file_name"] for f in listed.json()["files"]] == ["added.txt"]
+
+
+def test_manager_manages_files_on_own_groupless_connector(env: _ScopedEnv) -> None:
+    """The creator half of GATE 2 — a connector that lost its last group must not
+    strand the manager who made it."""
+    cc_pair, file_id = _seed_file_cc_pair(
+        env.manager, "groupless", AccessType.PRIVATE, [env.managed_group.id]
+    )
+    _detach_cc_pair_from_group(env.managed_group, env.admin)
+
+    listed = FileManager.list_connector_files(cc_pair.connector_id, env.manager)
+    assert listed.status_code == 200, listed.text
+
+    updated = FileManager.update_connector_files(
+        cc_pair.connector_id,
+        env.manager,
+        file_ids_to_remove=[file_id],
+        files=[("added.txt", b"added by the manager")],
+    )
+    assert updated.status_code == 200, updated.text
+
+
+def test_manager_cannot_manage_files_on_unmanaged_connector(env: _ScopedEnv) -> None:
+    """allow_scope must not widen the row filter. The list half is the case the old
+    read-side filter would have allowed once GATE 1 opened."""
+    cc_pair, file_id = _seed_file_cc_pair(
+        env.admin, "unmanaged", AccessType.PRIVATE, [env.other_group.id]
+    )
+    _expect_file_routes_denied(env, cc_pair, file_id)
+
+
+def test_manager_cannot_manage_files_on_public_connector(env: _ScopedEnv) -> None:
+    """The public-connector bypass reads global effective permissions, so a scoped
+    manager never gets it — they may only act on private resources."""
+    cc_pair, file_id = _seed_file_cc_pair(env.admin, "public", AccessType.PUBLIC, [])
+    _expect_file_routes_denied(env, cc_pair, file_id)
+
+
+def test_plain_member_cannot_upload_connector_files(env: _ScopedEnv) -> None:
+    """allow_scope admits managers, not everyone in the group."""
+    member = UserManager.create(name="file_plain_member")
+    UserGroupManager.add_users(
+        env.managed_group, [member.id], user_performing_action=env.admin
+    )
+
+    assert_response(
+        FileManager.upload_connector_files([("member.txt", b"member file")], member),
+        "POST",
+        f"{_CONNECTOR_PATH}/file/upload",
+        "member",
+        "denied_gate1",
+    )

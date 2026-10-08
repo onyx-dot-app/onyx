@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useAppPosition } from "@/lib/position/hooks";
 import CommandMenu, {
@@ -54,8 +54,8 @@ function DynamicFooter() {
 }
 
 interface ChatSearchCommandMenuProps {
-  /** Renders the control that opens the menu. */
-  trigger: (open: () => void) => React.ReactNode;
+  /** Renders the control that opens the menu. `isOpen` lets it show a selected state. */
+  trigger: (open: () => void, isOpen: boolean) => React.ReactNode;
 }
 
 interface FilterableProject {
@@ -69,6 +69,7 @@ export default function ChatSearchCommandMenu({
   trigger,
 }: ChatSearchCommandMenuProps) {
   const t = useTranslations("sidebar");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [activeFilter, setActiveFilter] = useState<
@@ -210,7 +211,7 @@ export default function ChatSearchCommandMenu({
 
   return (
     <>
-      {trigger(handleOpen)}
+      {trigger(handleOpen, open)}
 
       <CommandMenu open={open} onOpenChange={handleOpenChange}>
         <CommandMenu.Content>
@@ -277,7 +278,7 @@ export default function ChatSearchCommandMenu({
                             text03
                             data-testid="command-menu-timestamp"
                           >
-                            {timeAgo(chat.time)}
+                            {timeAgo(chat.time, locale)}
                           </Text>
                         )
                       }
@@ -338,7 +339,7 @@ export default function ChatSearchCommandMenu({
                           text03
                           data-testid="command-menu-timestamp"
                         >
-                          {timeAgo(project.time)}
+                          {timeAgo(project.time, locale)}
                         </Text>
                       )
                     }

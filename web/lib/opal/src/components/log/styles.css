@@ -1,0 +1,33 @@
+@reference "#reference.css";
+
+/* ── Log ─────────────────────────────────────────────────────────────────────
+   Not interactive: the status colours the icon (icons stroke with
+   `currentColor`, so a `text-*` colour sets it), and the heavy weight tints the
+   line. The centre content brings its own colour. */
+
+.opal-log {
+  @apply rounded-08;
+}
+
+.opal-log .opal-log-icon {
+  @apply shrink-0 text-text-03;
+}
+.opal-log[data-opal-log-status="success"] .opal-log-icon {
+  @apply text-status-success-05;
+}
+.opal-log[data-opal-log-status="warning"] .opal-log-icon {
+  @apply text-theme-amber-05;
+}
+.opal-log[data-opal-log-status="error"] .opal-log-icon {
+  @apply text-status-error-05;
+}
+
+.opal-log[data-opal-log-weight="heavy"][data-opal-log-status="success"] {
+  @apply bg-status-success-01;
+}
+.opal-log[data-opal-log-weight="heavy"][data-opal-log-status="warning"] {
+  @apply bg-theme-amber-01;
+}
+.opal-log[data-opal-log-weight="heavy"][data-opal-log-status="error"] {
+  @apply bg-status-error-01;
+}

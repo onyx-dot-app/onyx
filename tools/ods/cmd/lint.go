@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -48,17 +49,25 @@ Examples:
   ods lint tf deployment/terraform/modules/aws   # Check one subtree
   ods lint tf path/to/main.tf                    # Check a single file`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runLintTerraform(args)
+			clean, err := runLintTerraform(args, os.Stderr)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if !clean {
+				os.Exit(1)
+			}
 		},
 	}
 }
 
-func runLintTerraform(args []string) {
+// runLintTerraform writes any findings to stderr and reports whether there
+// were none.
+func runLintTerraform(args []string, stderr io.Writer) (bool, error) {
 	// The repository root only shortens paths and supplies the default target,
 	// so explicit arguments still work outside a checkout.
 	root, err := paths.GitRoot()
 	if err != nil && len(args) == 0 {
-		log.Fatalf("Cannot locate the repository root: %v", err)
+		return false, fatalErrorf("Cannot locate the repository root: %v", err)
 	}
 
 	roots := args
@@ -68,31 +77,31 @@ func runLintTerraform(args []string) {
 
 	files, err := terraform.Discover(roots)
 	if err != nil {
-		log.Fatalf("Cannot collect Terraform files: %v", err)
+		return false, fatalErrorf("Cannot collect Terraform files: %v", err)
 	}
 
 	var findings []terraform.Finding
 	for _, file := range files {
 		found, err := terraform.LintFile(file, relativeTo(root, file))
 		if err != nil {
-			log.Fatalf("Cannot read %s: %v", file, err)
+			return false, fatalErrorf("Cannot read %s: %v", file, err)
 		}
 		findings = append(findings, found...)
 	}
 
 	if len(findings) == 0 {
 		log.Info("✅ No internal values found in published Terraform modules!")
-		return
+		return true, nil
 	}
 
-	fmt.Fprintln(os.Stderr, "Internal values found in published Terraform modules:")
-	fmt.Fprintln(os.Stderr)
+	_, _ = fmt.Fprintln(stderr, "Internal values found in published Terraform modules:")
+	_, _ = fmt.Fprintln(stderr)
 	for _, finding := range findings {
-		fmt.Fprintf(os.Stderr, "  %s\n", finding)
+		_, _ = fmt.Fprintf(stderr, "  %s\n", finding)
 	}
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Move the value to the caller, or append '# public-safe: ok' if the line is genuinely safe to publish.")
-	os.Exit(1)
+	_, _ = fmt.Fprintln(stderr)
+	_, _ = fmt.Fprintln(stderr, "Move the value to the caller, or append '# public-safe: ok' if the line is genuinely safe to publish.")
+	return false, nil
 }
 
 // relativeTo shortens a path for display, and falls back to the path itself

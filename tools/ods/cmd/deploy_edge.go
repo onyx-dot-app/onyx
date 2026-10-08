@@ -57,7 +57,9 @@ Example usage:
     $ ods deploy edge`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			deployEdge(opts)
+			if err := deployEdge(opts, defaultRunPolling()); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -71,14 +73,17 @@ Example usage:
 	return cmd
 }
 
-func deployEdge(opts *DeployEdgeOptions) {
+func deployEdge(opts *DeployEdgeOptions, polling runPolling) error {
 	git.CheckGitHubCLI()
 
-	deployRepo, deployWorkflow := resolveDeployTarget(
+	deployRepo, deployWorkflow, err := resolveDeployTarget(
 		opts.TargetRepo,
 		opts.TargetWorkflow,
 		func(c *config.Config) *string { return &c.DeployEdge.TargetWorkflow },
 	)
+	if err != nil {
+		return err
+	}
 
 	if opts.DryRun {
 		log.Warning("=== DRY RUN MODE: tag push and workflow dispatch will be skipped (read-only gh and git fetch still run) ===")
@@ -88,7 +93,7 @@ func deployEdge(opts *DeployEdgeOptions) {
 		msg := "About to force-push tag 'edge' to origin/main and trigger an ad-hoc deploy. Continue? (Y/n): "
 		if !prompt.Confirm(msg) {
 			log.Info("Exiting...")
-			return
+			return nil
 		}
 	}
 
@@ -96,71 +101,72 @@ func deployEdge(opts *DeployEdgeOptions) {
 	// can reliably identify the new run we trigger and not pick up a stale one.
 	priorBuildRunID, err := latestWorkflowRunID(onyxRepo, deploymentWorkflowFile, "push", edgeTagName)
 	if err != nil {
-		log.Fatalf("Failed to query existing deployment runs: %v", err)
+		return fatalErrorf("Failed to query existing deployment runs: %w", err)
 	}
 	log.Debugf("Most recent prior edge build run id: %d", priorBuildRunID)
 
 	log.Info("Fetching origin/main...")
 	if err := git.RunCommand("fetch", "origin", "main"); err != nil {
-		log.Fatalf("Failed to fetch origin/main: %v", err)
+		return fatalErrorf("Failed to fetch origin/main: %w", err)
 	}
 
 	if opts.DryRun {
 		log.Warnf("[DRY RUN] Would move local '%s' tag to origin/main", edgeTagName)
 		log.Warnf("[DRY RUN] Would force-push tag '%s' to origin", edgeTagName)
 		log.Warn("[DRY RUN] Would wait for build then dispatch the configured deploy workflow")
-		return
+		return nil
 	}
 
 	log.Infof("Moving local '%s' tag to origin/main...", edgeTagName)
 	if err := git.RunCommand("tag", "-f", edgeTagName, "origin/main"); err != nil {
-		log.Fatalf("Failed to move local tag: %v", err)
+		return fatalErrorf("Failed to move local tag: %w", err)
 	}
 
 	log.Infof("Force-pushing tag '%s' to origin...", edgeTagName)
 	if err := git.PushTag(edgeTagName, true, opts.Verify); err != nil {
-		log.Fatalf("Failed to push edge tag: %v", err)
+		return fatalErrorf("Failed to push edge tag: %w", err)
 	}
 
 	// Find the new build run, then poll it to completion.
 	log.Info("Waiting for build workflow to start...")
-	buildRun, err := waitForNewRun(onyxRepo, deploymentWorkflowFile, "push", edgeTagName, priorBuildRunID)
+	buildRun, err := waitForNewRun(polling, onyxRepo, deploymentWorkflowFile, "push", edgeTagName, priorBuildRunID)
 	if err != nil {
-		log.Fatalf("Failed to find triggered build run: %v", err)
+		return fatalErrorf("Failed to find triggered build run: %w", err)
 	}
 	log.Infof("Build run started: %s", buildRun.URL)
 
-	if err := waitForRunCompletion(onyxRepo, buildRun.DatabaseID, buildPollTimeout, "build"); err != nil {
-		log.Fatalf("Build did not complete successfully: %v", err)
+	if err := waitForRunCompletion(polling, onyxRepo, buildRun.DatabaseID, buildPollTimeout, "build"); err != nil {
+		return fatalErrorf("Build did not complete successfully: %w", err)
 	}
 	log.Info("Build completed successfully.")
 
 	// Dispatch the deploy workflow.
 	priorDeployRunID, err := latestWorkflowRunID(deployRepo, deployWorkflow, "workflow_dispatch", "")
 	if err != nil {
-		log.Fatalf("Failed to query existing deploy runs: %v", err)
+		return fatalErrorf("Failed to query existing deploy runs: %w", err)
 	}
 	log.Debugf("Most recent prior deploy run id: %d", priorDeployRunID)
 
 	log.Info("Dispatching deploy workflow with version_tag=edge...")
 	if err := dispatchWorkflow(deployRepo, deployWorkflow, map[string]string{"version_tag": edgeTagName}); err != nil {
-		log.Fatalf("Failed to dispatch deploy workflow: %v", err)
+		return fatalErrorf("Failed to dispatch deploy workflow: %w", err)
 	}
 
-	deployRun, err := waitForNewRun(deployRepo, deployWorkflow, "workflow_dispatch", "", priorDeployRunID)
+	deployRun, err := waitForNewRun(polling, deployRepo, deployWorkflow, "workflow_dispatch", "", priorDeployRunID)
 	if err != nil {
-		log.Fatalf("Failed to find dispatched deploy run: %v", err)
+		return fatalErrorf("Failed to find dispatched deploy run: %w", err)
 	}
 	log.Infof("Deploy run started: %s", deployRun.URL)
 	log.Info("A kickoff Slack message will appear in the deployments Slack channel.")
 
 	if opts.NoWaitDeploy {
 		log.Info("--no-wait-deploy set; not waiting for deploy completion.")
-		return
+		return nil
 	}
 
-	if err := waitForRunCompletion(deployRepo, deployRun.DatabaseID, deployPollTimeout, "deploy"); err != nil {
-		log.Fatalf("Deploy did not complete successfully: %v", err)
+	if err := waitForRunCompletion(polling, deployRepo, deployRun.DatabaseID, deployPollTimeout, "deploy"); err != nil {
+		return fatalErrorf("Deploy did not complete successfully: %w", err)
 	}
 	log.Info("Deploy completed successfully.")
+	return nil
 }

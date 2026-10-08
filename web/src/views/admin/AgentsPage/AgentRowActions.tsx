@@ -4,13 +4,12 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
-  LineItemButton,
-  Popover,
-  PopoverMenu,
+  Dropdown,
   useCreateModal,
+  type DropdownMenuItem,
 } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
-import { cn, markdown } from "@opal/utils";
+import { cn, escapeMarkdown, markdown } from "@opal/utils";
 import {
   SvgMoreHorizontal,
   SvgEdit,
@@ -32,7 +31,6 @@ import {
   toggleAgentListed,
 } from "@/lib/agents/svc";
 import type { Agent } from "@/lib/agents/types";
-import type { Route } from "next";
 import { ShareAgentModal } from "@/lib/agents/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -71,7 +69,7 @@ export default function AgentRowActions({
   const hasOverflowItems =
     canList || canShare || (businessTier && canViewStats) || canDeleteRow;
 
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [featuredOpen, setFeaturedOpen] = useState(false);
@@ -96,6 +94,65 @@ export default function AgentRowActions({
       setIsSubmitting(false);
     }
   }
+
+  const menuItems: DropdownMenuItem[] = [
+    ...(canList
+      ? [
+          {
+            kind: "action" as const,
+            id: "visibility",
+            icon: agent.is_listed ? SvgEyeOff : SvgEye,
+            title: agent.is_listed
+              ? t("rowActions.unlistItem.title")
+              : t("rowActions.listItem.title"),
+            onSelect: () => {
+              if (agent.is_listed) {
+                setUnlistOpen(true);
+              } else {
+                handleAction(
+                  () => toggleAgentListed(agent.id, agent.is_listed),
+                  () => {}
+                );
+              }
+            },
+          },
+        ]
+      : []),
+    ...(canShare
+      ? [
+          {
+            kind: "action" as const,
+            id: "share",
+            icon: SvgShare,
+            title: t("rowActions.shareItem.title"),
+            onSelect: () => shareModal.toggle(true),
+          },
+        ]
+      : []),
+    ...(businessTier && canViewStats
+      ? [
+          {
+            kind: "action" as const,
+            id: "stats",
+            icon: SvgBarChart,
+            title: t("rowActions.statsItem.title"),
+            onSelect: () => router.push(`/ee/agents/stats/${agent.id}`),
+          },
+        ]
+      : []),
+    ...(canDeleteRow
+      ? [
+          {
+            kind: "action" as const,
+            id: "delete",
+            icon: SvgTrash,
+            danger: true,
+            title: t("rowActions.deleteItem.title"),
+            onSelect: () => setDeleteOpen(true),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <>
@@ -122,9 +179,7 @@ export default function AgentRowActions({
               data-testid={`edit-agent-${agent.id}`}
               onClick={() =>
                 router.push(
-                  `/app/agents/edit/${
-                    agent.id
-                  }?u=${Date.now()}&admin=true` as Route
+                  `/app/agents/edit/${agent.id}?u=${Date.now()}&admin=true`
                 )
               }
             />
@@ -167,7 +222,7 @@ export default function AgentRowActions({
                       : t("rowActions.setFeaturedButton.label")
                   }
                   onClick={() => {
-                    setPopoverOpen(false);
+                    setMenuOpen(false);
                     setFeaturedOpen(true);
                   }}
                 />
@@ -176,92 +231,26 @@ export default function AgentRowActions({
 
         {/* Overflow menu */}
         {hasOverflowItems && (
-          <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
             <div
               className={cn(
-                !popoverOpen &&
+                !menuOpen &&
                   "opacity-0 group-hover/row:opacity-100 transition-opacity"
               )}
             >
-              <Popover.Trigger asChild>
+              <Dropdown.Trigger asChild>
                 <Button
                   prominence="tertiary"
                   icon={SvgMoreHorizontal}
                   aria-label={t("rowActions.menuButton.ariaLabel")}
                 />
-              </Popover.Trigger>
+              </Dropdown.Trigger>
             </div>
-            <Popover.Content align="end" width="sm">
-              <PopoverMenu>
-                {[
-                  canList ? (
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding={2}
-                      key="visibility"
-                      icon={agent.is_listed ? SvgEyeOff : SvgEye}
-                      onClick={() => {
-                        setPopoverOpen(false);
-                        if (agent.is_listed) {
-                          setUnlistOpen(true);
-                        } else {
-                          handleAction(
-                            () => toggleAgentListed(agent.id, agent.is_listed),
-                            () => {}
-                          );
-                        }
-                      }}
-                      title={
-                        agent.is_listed
-                          ? t("rowActions.unlistItem.title")
-                          : t("rowActions.listItem.title")
-                      }
-                    />
-                  ) : undefined,
-                  canShare ? (
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding={2}
-                      key="share"
-                      icon={SvgShare}
-                      onClick={() => {
-                        setPopoverOpen(false);
-                        shareModal.toggle(true);
-                      }}
-                      title={t("rowActions.shareItem.title")}
-                    />
-                  ) : undefined,
-                  businessTier && canViewStats ? (
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding={2}
-                      key="stats"
-                      icon={SvgBarChart}
-                      onClick={() => {
-                        setPopoverOpen(false);
-                        router.push(`/ee/agents/stats/${agent.id}` as Route);
-                      }}
-                      title={t("rowActions.statsItem.title")}
-                    />
-                  ) : undefined,
-                  canDeleteRow ? (
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding={2}
-                      key="delete"
-                      icon={SvgTrash}
-                      color="danger"
-                      onClick={() => {
-                        setPopoverOpen(false);
-                        setDeleteOpen(true);
-                      }}
-                      title={t("rowActions.deleteItem.title")}
-                    />
-                  ) : undefined,
-                ]}
-              </PopoverMenu>
-            </Popover.Content>
-          </Popover>
+            <Dropdown.Data
+              label={t("rowActions.menuButton.ariaLabel")}
+              items={menuItems}
+            />
+          </Dropdown>
         )}
       </div>
 
@@ -341,7 +330,9 @@ export default function AgentRowActions({
       {unlistOpen && (
         <ConfirmationModalLayout
           icon={SvgEyeOff}
-          title={markdown(t("unlistModal.header.title", { name: agent.name }))}
+          title={markdown(
+            t("unlistModal.header.title", { name: escapeMarkdown(agent.name) })
+          )}
           onClose={isSubmitting ? undefined : () => setUnlistOpen(false)}
           submit={
             <Button

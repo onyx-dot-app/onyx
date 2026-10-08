@@ -6,9 +6,18 @@ operation carries an ``untested`` reason. A per-connector session that registers
 a gateway is picked up here automatically; it cannot forget to wire the test.
 """
 
+from collections.abc import Callable
+from typing import Any
+from unittest.mock import MagicMock
+
 import pytest
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.registry import get_capability_checks
+from onyx.connectors.confluence.source_operations import (
+    ConfluenceRestSpacePermissionsNotAvailableError,
+    ConfluenceSpacePermissionsVariant,
+)
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
@@ -19,6 +28,26 @@ from tests.unit.onyx.connectors.source_operation_harnesses import (
 )
 
 import_all_source_operation_gateways()
+
+
+def _configure_confluence_spy(spy: MagicMock) -> None:
+    """A DC 9.1+ site whose REST space-permissions endpoint is missing: the
+    checks try REST and then fall back to JSON-RPC, so both DC units run."""
+
+    def get_space_permissions(
+        *, variant: ConfluenceSpacePermissionsVariant, **_kwargs: Any
+    ) -> list[dict[str, Any]]:
+        if variant == ConfluenceSpacePermissionsVariant.DC_REST:
+            raise ConfluenceRestSpacePermissionsNotAvailableError("coverage spy")
+        return []
+
+    spy.get_server_version.return_value = (9, 1)
+    spy.get_space_permissions.side_effect = get_space_permissions
+
+
+_SPY_CONFIGURATIONS: dict[DocumentSource, Callable[[MagicMock], None]] = {
+    DocumentSource.CONFLUENCE: _configure_confluence_spy,
+}
 
 
 @pytest.mark.usefixtures("enable_ee")
@@ -39,7 +68,9 @@ def test_every_operation_unit_is_exercised_by_a_check(
     checks = get_capability_checks(gateway_class.source)
 
     # Under test.
-    uncovered = compute_uncovered_units(gateway_class, checks)
+    uncovered = compute_uncovered_units(
+        gateway_class, checks, _SPY_CONFIGURATIONS.get(gateway_class.source)
+    )
 
     # Postcondition.
     assert not uncovered, (

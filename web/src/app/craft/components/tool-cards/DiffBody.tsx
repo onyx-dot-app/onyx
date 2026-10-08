@@ -316,7 +316,11 @@ export default function DiffBody({ toolCall }: ToolCardBodyProps) {
       >
         {toolCall.description && (
           <span className="truncate flex-1 min-w-0">
-            <Text font="secondary-mono" color="text-03" nowrap>
+            <Text
+              font="secondary-mono"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
               {toolCall.description}
             </Text>
           </span>

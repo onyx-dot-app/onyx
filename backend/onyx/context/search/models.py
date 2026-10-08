@@ -51,8 +51,8 @@ class SavedSearchSettings(IndexingSetting):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
-            embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
+            vector_quantization=search_settings.vector_quantization,
             switchover_type=search_settings.switchover_type,
             use_port_flow=search_settings.use_port_flow,
             enable_contextual_rag=search_settings.enable_contextual_rag,
@@ -61,7 +61,8 @@ class SavedSearchSettings(IndexingSetting):
 
 
 class ContextualRagModelUpdateResponse(BaseModel):
-    contextual_rag_model_configuration_id: int
+    # PRESENT's model after the update. Turning Contextual Retrieval off keeps it.
+    contextual_rag_model_configuration_id: int | None
 
 
 class Tag(BaseModel):
@@ -125,7 +126,8 @@ class BaseFilters(BaseModel):
 
 
 class UserFileFilters(BaseModel):
-    # Scopes search to user files tagged with a given project/persona in Vespa.
+    # Scopes search to user files tagged with a given project/persona in the
+    # document index.
     # These are NOT simply the IDs of the current project or persona — they are
     # only set when the persona's/project's user files overflowed the LLM
     # context window and must be searched via vector DB instead of being loaded
@@ -149,10 +151,47 @@ class AssistantKnowledgeFilters(BaseModel):
     hierarchy_node_ids: list[int] | None = None
 
 
+class CCPairAccessMode(str, Enum):
+    # The cc-pair filter is off. It is built only to hide SYNC_RESTRICTED
+    # pairs from the old ACL filter.
+    OFF = "off"
+    # Results use the old ACL filter; the cc-pair filter is only compared.
+    SHADOW = "shadow"
+    # Results use the cc-pair filter.
+    ENFORCE = "enforce"
+
+
+class CCPairAccessFilter(BaseModel):
+    """Query-time access by cc-pair. A chunk is visible if it is in an open
+    pair, or in an ACL pair and public or matching user_acl. Chunks with no
+    cc-pair (user files) fall back to the old ACL filter."""
+
+    mode: CCPairAccessMode
+    open_cc_pair_ids: list[int]
+    acl_cc_pair_ids: list[int]
+    # The user's user_email: and external_group: entries. No group: entries,
+    # since group access comes from open_cc_pair_ids.
+    user_acl: list[str]
+    # SYNC_RESTRICTED pairs that grant the user nothing. The old ACL filter
+    # cannot express the restriction, so it hides their chunks unless an open
+    # or ACL pair of the chunk grants access.
+    hidden_restricted_cc_pair_ids: list[int] = []
+
+
+class UserAccessFilters(BaseModel):
+    # NOTE: These strings must be formatted in the same way as the output of
+    # DocumentAccess::to_acl.
+    access_control_list: list[str]
+    # None when query-time cc-pair access is off.
+    cc_pair_access: CCPairAccessFilter | None
+
+
 class IndexFilters(BaseFilters, UserFileFilters, AssistantKnowledgeFilters):
     # NOTE: These strings must be formatted in the same way as the output of
     # DocumentAccess::to_acl.
     access_control_list: list[str] | None
+    # Only read when access_control_list is not None.
+    cc_pair_access: CCPairAccessFilter | None = None
     tenant_id: str | None = None
     # Operator-forced document-set scope (NAMES, not IDs). When set, retrieval is
     # restricted to these sets via a standalone AND clause — distinct from
@@ -176,9 +215,6 @@ class BasicChunkRequest(BaseModel):
 class ChunkSearchRequest(BasicChunkRequest):
     # Final filters are calculated from these
     user_selected_filters: BaseFilters | None = None
-
-    # Use with caution!
-    bypass_acl: bool = False
 
 
 # From the Chat Session we know what project (if any) this search should include
@@ -210,12 +246,13 @@ class InferenceChunk(BaseChunk):
     # TODO(andrei): Ideally we could improve this to where each value is just a
     # list of strings.
     metadata: dict[str, str | list[str]]
-    # Matched sections in the chunk. Uses Vespa syntax e.g. <hi>TEXT</hi>
+    # Matched sections in the chunk. Matches are wrapped in <hi>TEXT</hi>
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
     match_highlights: list[str]
     doc_summary: str
     chunk_context: str
+    source_types: tuple[DocumentSource, ...] | None = None
 
     # when the doc was last updated
     updated_at: datetime | None
@@ -287,8 +324,7 @@ class InferenceChunkUncleaned(InferenceChunk):
         inference_chunk_data = {
             k: v
             for k, v in self.model_dump().items()
-            if k
-            not in ["metadata_suffix"]  # May be other fields to throw out in the future
+            if k != "metadata_suffix"  # May be other fields to throw out in the future
         }
         return InferenceChunk(**inference_chunk_data)
 
@@ -318,10 +354,11 @@ class SearchDoc(BaseModel):
     score: float | None = None
     is_relevant: bool | None = None
     relevance_explanation: str | None = None
-    # Matched sections in the doc. Uses Vespa syntax e.g. <hi>TEXT</hi>
+    # Matched sections in the doc. Matches are wrapped in <hi>TEXT</hi>
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "the answer is <hi>42</hi>""]
     match_highlights: list[str]
+    source_types: tuple[DocumentSource, ...] | None = None
     # when the doc was last updated
     updated_at: datetime | None = None
     primary_owners: list[str] | None = None
@@ -355,6 +392,7 @@ class SearchDoc(BaseModel):
                 link=chunk.source_links[0] if chunk.source_links else None,
                 blurb=chunk.blurb,
                 source_type=chunk.source_type,
+                source_types=chunk.source_types,
                 boost=chunk.boost,
                 hidden=chunk.hidden,
                 metadata=chunk.metadata,
@@ -409,17 +447,8 @@ class SearchDocsResponse(BaseModel):
     # document id is  the most staightforward way.
     citation_mapping: dict[int, str]
 
-    # For cases where the frontend only needs to display a subset of the search docs
-    # The whole list is typically still needed for later steps but this set should be saved separately
+    # None uses all retrieved documents; an empty list selects no documents.
     displayed_docs: list[SearchDoc] | None = None
-
-    @field_validator("displayed_docs", mode="before")
-    @classmethod
-    def normalize_empty_displayed_docs(
-        cls,
-        value: list[SearchDoc] | None,
-    ) -> list[SearchDoc] | None:
-        return value or None
 
 
 class SavedSearchDoc(SearchDoc):

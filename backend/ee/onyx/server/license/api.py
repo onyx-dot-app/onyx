@@ -5,9 +5,16 @@ These endpoints allow self-hosted Onyx instances to:
 2. Upload a license file manually (for air-gapped deployments)
 3. View license status and seat usage
 4. Refresh/delete the local license
+5. Downgrade to the Community tier
 
 NOTE: Cloud (MULTI_TENANT) deployments do NOT use these endpoints.
 Cloud licensing is managed via the control plane and gated_tenants Redis key.
+
+Every handler here is sync `def`, not `async def`, so FastAPI runs it in the
+threadpool. All of the work is blocking: control-plane calls over `requests`
+with a 30s timeout, sync SQLAlchemy sessions, RSA signature verification that
+reads the public key off disk, and Redis. An `async def` handler runs on the
+event loop and would stall every other request in the worker for the duration.
 """
 
 import requests
@@ -15,13 +22,22 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
+from ee.onyx.db.community_downgrade import (
+    disable_paid_features__no_commit,
+    make_all_cc_pairs_public__no_commit,
+    remove_custom_user_groups__no_commit,
+)
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import (
     get_license_metadata,
     refresh_license_cache,
 )
 from ee.onyx.server.billing.api import invalidate_billing_info_cache
+from ee.onyx.server.enterprise_settings.store import (
+    reset_settings as reset_enterprise_settings,
+)
 from ee.onyx.server.license.models import (
+    CommunityDowngradeResponse,
     LicenseResponse,
     LicenseStatusResponse,
     LicenseUploadResponse,
@@ -42,6 +58,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
+from onyx.server.settings.store import clear_chat_retention
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -51,7 +69,7 @@ router = APIRouter(prefix="/license")
 
 
 @router.get("")
-async def get_license_status(
+def get_license_status(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseStatusResponse:
@@ -77,7 +95,7 @@ async def get_license_status(
 
 
 @router.get("/seats")
-async def get_seat_usage(
+def get_seat_usage(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SeatUsageResponse:
@@ -99,7 +117,7 @@ async def get_seat_usage(
 
 
 @router.post("/claim")
-async def claim_license(
+def claim_license(
     session_id: str | None = None,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -125,8 +143,13 @@ async def claim_license(
                 timeout=30,
             )
             response.raise_for_status()
+            # A caller-supplied checkout id must not replace the license this
+            # instance holds with another tenant's. Compared under the store
+            # lock, which also leaves the session idle across the call above.
             payload = verify_and_store_license(
-                db_session, license_from_control_plane_response(response)
+                db_session,
+                license_from_control_plane_response(response),
+                keep_stored_tenant=True,
             )
         else:
             if claim_cooldown_is_active():
@@ -174,7 +197,7 @@ async def claim_license(
 
 
 @router.post("/upload")
-async def upload_license(
+def upload_license(
     license_file: UploadFile = File(...),
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -192,7 +215,7 @@ async def upload_license(
         )
 
     try:
-        content = await license_file.read()
+        content = license_file.file.read()
         license_data = normalize_license_file(content.decode("utf-8"))
     except UnicodeDecodeError:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid license file format")
@@ -211,7 +234,7 @@ async def upload_license(
 
 
 @router.post("/refresh")
-async def refresh_license_cache_endpoint(
+def refresh_license_cache_endpoint(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseStatusResponse:
@@ -242,7 +265,7 @@ async def refresh_license_cache_endpoint(
 
 
 @router.delete("")
-async def delete_license(
+def delete_license(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, bool]:
@@ -262,3 +285,49 @@ async def delete_license(
     deleted = db_delete_license(db_session)
 
     return {"deleted": deleted}
+
+
+@router.post("/downgrade")
+def downgrade_to_community(
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> CommunityDowngradeResponse:
+    """
+    Drop this deployment to the Community tier.
+
+    Every connector becomes public, permissions synced from the sources stop
+    applying, user groups are removed with what they shared made public, the
+    other paid features are switched off, and the license is removed. Lives
+    under /license so it stays reachable while an expired license gates the
+    rest of the API.
+    """
+    if MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Downgrading is only available for self-hosted deployments",
+        )
+
+    # The license goes last: a failure before it leaves a licensed deployment
+    # that is part way to Community, which a retry finishes.
+    cc_pair_ids: list[int] = make_all_cc_pairs_public__no_commit(db_session)
+    user_groups_removed: int = remove_custom_user_groups__no_commit(db_session)
+    disable_paid_features__no_commit(db_session)
+    db_session.commit()
+    # Listings are cached per group set, so a provider that just became public
+    # would stay hidden from users outside its old groups until the TTL.
+    invalidate_provider_listing_cache()
+    reset_enterprise_settings()
+    clear_chat_retention()
+    db_delete_license(db_session)
+
+    logger.notice(
+        "Downgraded to Community by %s: %d connectors made public, "
+        "%d user groups removed",
+        user.email,
+        len(cc_pair_ids),
+        user_groups_removed,
+    )
+    return CommunityDowngradeResponse(
+        connectors_made_public=len(cc_pair_ids),
+        user_groups_removed=user_groups_removed,
+    )

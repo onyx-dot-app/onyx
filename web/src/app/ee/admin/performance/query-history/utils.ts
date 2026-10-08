@@ -1,4 +1,4 @@
-import type { DateRange } from "@/refresh-components/DateRangePicker";
+import type { DateRange } from "@opal/components";
 import { START_QUERY_HISTORY_EXPORT_URL } from "./constants";
 
 export const withRequestId = (url: string, requestId: string): string =>

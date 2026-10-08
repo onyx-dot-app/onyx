@@ -45,11 +45,6 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
 }
 
 STOPPING_TOOLS_NAMES: list[str] = [ImageGenerationTool.NAME]
-CITEABLE_TOOLS_NAMES: list[str] = [
-    SearchTool.NAME,
-    WebSearchTool.NAME,
-    OpenURLTool.NAME,
-]
 
 
 def get_built_in_tool_ids() -> list[str]:

@@ -37,6 +37,11 @@ type mcpServerResource struct {
 }
 
 type mcpServerResourceModel struct {
+	Groups                    types.Set    `tfsdk:"groups"`
+	Users                     types.Set    `tfsdk:"users"`
+	AuthTemplateHeaders       types.Map    `tfsdk:"auth_template_headers"`
+	AdminCredentials          types.Map    `tfsdk:"admin_credentials"`
+	AdminCredentialsWO        types.Map    `tfsdk:"admin_credentials_wo"`
 	ID                        types.String `tfsdk:"id"`
 	Name                      types.String `tfsdk:"name"`
 	Description               types.String `tfsdk:"description"`
@@ -46,19 +51,14 @@ type mcpServerResourceModel struct {
 	AuthPerformer             types.String `tfsdk:"auth_performer"`
 	APIToken                  types.String `tfsdk:"api_token"`
 	APITokenWO                types.String `tfsdk:"api_token_wo"`
-	APITokenWOVersion         types.Int64  `tfsdk:"api_token_wo_version"`
-	AuthTemplateHeaders       types.Map    `tfsdk:"auth_template_headers"`
-	AdminCredentials          types.Map    `tfsdk:"admin_credentials"`
-	AdminCredentialsWO        types.Map    `tfsdk:"admin_credentials_wo"`
-	AdminCredentialsWOVersion types.Int64  `tfsdk:"admin_credentials_wo_version"`
-	IsPublic                  types.Bool   `tfsdk:"is_public"`
-	Groups                    types.Set    `tfsdk:"groups"`
-	Users                     types.Set    `tfsdk:"users"`
-	AvailableInCraft          types.Bool   `tfsdk:"available_in_craft"`
 	Owner                     types.String `tfsdk:"owner"`
 	Status                    types.String `tfsdk:"status"`
-	ToolCount                 types.Int64  `tfsdk:"tool_count"`
 	LastRefreshedAt           types.String `tfsdk:"last_refreshed_at"`
+	APITokenWOVersion         types.Int64  `tfsdk:"api_token_wo_version"`
+	AdminCredentialsWOVersion types.Int64  `tfsdk:"admin_credentials_wo_version"`
+	ToolCount                 types.Int64  `tfsdk:"tool_count"`
+	IsPublic                  types.Bool   `tfsdk:"is_public"`
+	AvailableInCraft          types.Bool   `tfsdk:"available_in_craft"`
 }
 
 func (r *mcpServerResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {

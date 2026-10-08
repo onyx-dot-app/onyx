@@ -13,6 +13,7 @@ from shared_configs.configs import (
     MULTI_TENANT,
     POSTGRES_DEFAULT_SCHEMA,
     TENANT_ID_PREFIX,
+    TENANT_TEMPLATE_SCHEMA,
 )
 
 # Regex pattern for valid tenant IDs:
@@ -25,6 +26,7 @@ TENANT_ID_PATTERN = re.compile(
     r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"  # UUID
     r"|i-[a-f0-9]+"  # AWS instance ID
     r"|dev"  # staff dev tenant
+    r"|template(_[a-f0-9]{32})?"  # rollout template, and its parity scratch copies
     r")$"
 )
 
@@ -179,4 +181,22 @@ def get_all_tenant_ids() -> list[str]:
         return [POSTGRES_DEFAULT_SCHEMA]
 
     # Deduped: a tenant mid-copy exists on two shards but is still one tenant.
-    return sorted(set(chain.from_iterable(get_tenant_ids_by_shard().values())))
+    # The template and the parity scratch schemas are nobody's workspace, so
+    # no scheduled work runs against them.
+    return sorted(
+        {
+            tenant_id
+            for tenant_id in chain.from_iterable(get_tenant_ids_by_shard().values())
+            if not tenant_id.startswith(TENANT_TEMPLATE_SCHEMA)
+        }
+    )
+
+
+def get_template_shards() -> list[str]:
+    """Shards holding a rollout template. Every shard has its own copy under one
+    name, so maintenance that must reach them, such as key rotation, goes by shard."""
+    return sorted(
+        shard_name
+        for shard_name, tenant_ids in get_tenant_ids_by_shard().items()
+        if TENANT_TEMPLATE_SCHEMA in tenant_ids
+    )

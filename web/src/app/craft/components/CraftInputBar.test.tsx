@@ -78,7 +78,7 @@ jest.mock("@/hooks/useUserExternalApps", () => ({
   default: () => ({ data: undefined }),
 }));
 
-jest.mock("@/lib/tools/hooks", () => ({
+jest.mock("@/lib/mcp/hooks", () => ({
   useCraftMcpServers: () => ({ data: undefined }),
 }));
 

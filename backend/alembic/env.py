@@ -1,4 +1,5 @@
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
+from onyx.db.engine.migration_lock import schema_migration_lock
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
@@ -36,11 +37,11 @@ from celery.backends.database.session import (
     ResultModelBase,  # ty: ignore[unresolved-import]
 )
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+from onyx.utils.variable_functionality import set_is_ee_if_available
 
 # Match the app processes' edition so migrations that use versioned
 # implementations (e.g. encrypt_string_to_bytes) resolve the EE variants.
-set_is_ee_based_on_env_variable()
+set_is_ee_if_available()
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
@@ -317,13 +318,14 @@ async def _migrate_schemas(
             schema,
         )
         try:
-            async with engine.connect() as connection:
-                await connection.run_sync(
-                    do_run_migrations,
-                    schema_name=schema,
-                    create_schema=create_schema,
-                )
-                await connection.commit()
+            async with schema_migration_lock(engine, schema):
+                async with engine.connect() as connection:
+                    await connection.run_sync(
+                        do_run_migrations,
+                        schema_name=schema,
+                        create_schema=create_schema,
+                    )
+                    await connection.commit()
         except Exception as e:
             logger.error("Error migrating schema %s: %s", schema, e)
             if not continue_on_error:

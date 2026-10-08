@@ -47,6 +47,14 @@ interface InteractiveStatelessProps
   interaction?: InteractiveStatelessInteraction;
 
   /**
+   * Keeps the resting colours but drops the hover, focus and pressed states,
+   * for a surface that is not clickable right now (e.g. an open card that a
+   * click only folds while closed). Children stay fully interactive, unlike
+   * the HTML `inert` attribute.
+   */
+  passive?: boolean;
+
+  /**
    * Tailwind group class (e.g. `"group/Card"`) for `group-hover:*` utilities.
    */
   group?: string;
@@ -93,6 +101,7 @@ function InteractiveStateless({
   href,
   target,
   disabled,
+  passive,
   ...props
 }: InteractiveStatelessProps) {
   const isDisabled = !!disabled;
@@ -101,13 +110,15 @@ function InteractiveStateless({
   // so Radix Slot-injected handlers don't bypass this guard.
   const classes = cn(
     "interactive",
-    !props.onClick && !href && !type && "cursor-default! select-auto!",
+    (passive || (!props.onClick && !href && !type)) &&
+      "cursor-default! select-auto!",
     group
   );
 
   const dataAttrs = {
     "data-interactive-variant": variant,
     "data-interactive-prominence": prominence,
+    "data-passive": passive ? "true" : undefined,
     "data-interaction": interaction !== "rest" ? interaction : undefined,
     "data-disabled": isDisabled ? "true" : undefined,
     "aria-disabled": isDisabled || undefined,

@@ -15,13 +15,14 @@ import type {
   RunNowResponse,
 } from "@/app/craft/v1/tasks/interfaces";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 const API_BASE = `${BUILD_API_BASE}/scheduled-tasks`;
 
 async function readError(res: Response, fallback: string): Promise<never> {
   let detail: string | undefined;
   try {
-    const body = (await res.json()) as { detail?: string };
+    const body: ErrorResponseBody | null = await res.json();
     detail = body?.detail;
   } catch {
     // ignore parse errors
@@ -47,7 +48,7 @@ export async function createScheduledTask(
     body: JSON.stringify(body),
   });
   if (!res.ok) await readError(res, "Failed to create scheduled task");
-  return (await res.json()) as ScheduledTaskListItem;
+  return await res.json();
 }
 
 export async function updateScheduledTask(
@@ -60,7 +61,7 @@ export async function updateScheduledTask(
     body: JSON.stringify(body),
   });
   if (!res.ok) await readError(res, "Failed to update scheduled task");
-  return (await res.json()) as ScheduledTaskDetail;
+  return await res.json();
 }
 
 export async function deleteScheduledTask(taskId: string): Promise<void> {
@@ -75,7 +76,7 @@ export async function runScheduledTaskNow(
 ): Promise<RunNowResponse> {
   const res = await fetch(`${API_BASE}/${taskId}/run-now`, { method: "POST" });
   if (!res.ok) await readError(res, "Failed to run scheduled task");
-  return (await res.json()) as RunNowResponse;
+  return await res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -95,5 +96,5 @@ export async function listScheduledTaskRuns(
     : `${API_BASE}/${taskId}/runs`;
   const res = await fetch(url, { method: "GET" });
   if (!res.ok) await readError(res, "Failed to load runs");
-  return (await res.json()) as ScheduledRunListResponse;
+  return await res.json();
 }

@@ -47,9 +47,11 @@ export type TextColor =
   | "text-light-05"
   | "text-dark-03"
   | "text-dark-05"
+  | "action-selection-05"
   | "status-error-01"
   | "status-error-02"
   | "status-error-05"
   | "status-success-01"
   | "status-success-02"
-  | "status-success-05";
+  | "status-success-05"
+  | "theme-amber-05";

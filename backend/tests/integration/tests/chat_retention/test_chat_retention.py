@@ -79,7 +79,7 @@ def _is_session_deleted(chat_session: DATestChatSession, user: DATestUser) -> bo
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Chat retention tests are enterprise only",
 )
 def test_chat_retention(
@@ -125,7 +125,7 @@ def test_chat_retention(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Chat retention tests are enterprise only",
 )
 def test_chat_retention_uses_last_message_time(
@@ -222,17 +222,17 @@ def _run_perform_ttl(retention_days: int) -> None:
         ex=CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
     )
     result = ttl_tasks.perform_ttl_management_task.apply(
-        kwargs=dict(
-            retention_limit_days=retention_days,
-            chain_token=token,
-            tenant_id=tenant_id,
-        ),
+        kwargs={
+            "retention_limit_days": retention_days,
+            "chain_token": token,
+            "tenant_id": tenant_id,
+        },
     )
     assert result.successful(), f"TTL task failed: {result.traceback}"
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Chat retention tests are enterprise only",
 )
 def test_perform_ttl_deletes_oldest_expired(
@@ -254,7 +254,7 @@ def test_perform_ttl_deletes_oldest_expired(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Chat retention tests are enterprise only",
 )
 def test_perform_ttl_continues_past_failing_session(

@@ -6,10 +6,11 @@ import { Modal } from "@opal/components";
 import {
   Button,
   MessageCard,
-  PasswordInputTypeIn,
+  InputPasswordTypeIn,
   Text,
 } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
+import { toTitleCase } from "@opal/utils";
 
 interface UserCredentialsModalProps {
   open: boolean;
@@ -24,15 +25,6 @@ interface UserCredentialsModalProps {
   /** Previously stored (masked) values, for pre-filling. */
   credentialValues: Record<string, string>;
   save: (values: Record<string, string>) => Promise<void>;
-}
-
-/** Turn a credential key (`discord_token`, `apiKey`) into a readable label. */
-function humanizeKey(key: string): string {
-  return key
-    .replace(/[_-]+/g, " ")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /**
@@ -98,8 +90,8 @@ export default function UserCredentialsModal({
             <div className="flex flex-col gap-3 w-full">
               {credentialKeys.map((key) => (
                 <div key={key} className="flex flex-col gap-1 w-full">
-                  <Text font="main-ui-action">{humanizeKey(key)}</Text>
-                  <PasswordInputTypeIn
+                  <Text font="main-ui-action">{toTitleCase(key)}</Text>
+                  <InputPasswordTypeIn
                     value={values[key] ?? ""}
                     onChange={(e) =>
                       setValues((prev) => ({ ...prev, [key]: e.target.value }))
@@ -112,6 +104,8 @@ export default function UserCredentialsModal({
 
             {error && (
               <MessageCard
+                outerPadding={1}
+                innerPadding={1}
                 variant="error"
                 title={t("errors.connectFailedTitle")}
                 description={error}

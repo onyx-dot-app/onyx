@@ -1,11 +1,12 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
-import { Table, createTableColumns } from "@opal/components";
+import { useLocale, useTranslations } from "next-intl";
+import { Table, type TableColumn } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
+import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import { AccountType, UserStatus } from "@/lib/types";
@@ -24,7 +25,7 @@ import type {
   GroupOption,
   StatusFilter,
   StatusCountMap,
-} from "./interfaces";
+} from "./types";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import type { User } from "@/lib/types";
 
@@ -62,10 +63,10 @@ function renderStatusColumn(
   );
 }
 
-function renderLastUpdatedColumn(value: string | null) {
+function renderLastActiveColumn(value: string | null, locale: string) {
   return (
     <Text as="span" secondaryBody text03>
-      {value ? (timeAgo(value) ?? "\u2014") : "\u2014"}
+      {value ? (timeAgo(value, locale) ?? "\u2014") : "\u2014"}
     </Text>
   );
 }
@@ -74,24 +75,27 @@ function renderLastUpdatedColumn(value: string | null) {
 // Columns
 // ---------------------------------------------------------------------------
 
-const tc = createTableColumns<UserRow>();
-
 interface ColumnLabels {
   name: string;
   groups: string;
   accountType: string;
-  lastUpdated: string;
+  lastActive: string;
   statusHeader: string;
   status: Record<UserStatus, string>;
   scimSynced: string;
 }
 
-function buildColumns(onMutate: () => void, labels: ColumnLabels) {
+function buildColumns(
+  onMutate: () => void,
+  labels: ColumnLabels,
+  locale: string
+): TableColumn<UserRow>[] {
   return [
-    tc.qualifier({
+    {
+      kind: "qualifier",
       content: "icon",
-      iconSize: "lg",
-      getContent: (row) => {
+      avatar: true,
+      icon: (row) => {
         const user = {
           email: row.email,
           personalization: row.personal_name
@@ -100,38 +104,49 @@ function buildColumns(onMutate: () => void, labels: ColumnLabels) {
         } as User;
         return (props) => <UserAvatar user={user} size={props.size} />;
       },
-    }),
-    tc.column("email", {
-      header: labels.name,
+    },
+    {
+      kind: "data",
+      field: "email",
+      title: labels.name,
       weight: 22,
       cell: renderNameColumn,
-    }),
-    tc.column("groups", {
-      header: labels.groups,
+    },
+    {
+      kind: "data",
+      field: "groups",
+      title: labels.groups,
       weight: 24,
-      enableSorting: false,
+      sortable: false,
       cell: (value, row) => (
         <GroupsCell groups={value} user={row} onMutate={onMutate} />
       ),
-    }),
-    tc.column("account_type", {
-      header: labels.accountType,
+    },
+    {
+      kind: "data",
+      field: "account_type",
+      title: labels.accountType,
       weight: 16,
       cell: (_value, row) => <AccountTypeCell user={row} onMutate={onMutate} />,
-    }),
-    tc.column("status", {
-      header: labels.statusHeader,
+    },
+    {
+      kind: "data",
+      field: "status",
+      title: labels.statusHeader,
       weight: 14,
       cell: (value, row) => renderStatusColumn(value, row, labels),
-    }),
-    tc.column("updated_at", {
-      header: labels.lastUpdated,
+    },
+    {
+      kind: "data",
+      field: "last_active",
+      title: labels.lastActive,
       weight: 14,
-      cell: renderLastUpdatedColumn,
-    }),
-    tc.actions({
+      cell: (value) => renderLastActiveColumn(value, locale),
+    },
+    {
+      kind: "actions",
       cell: (row) => <UserRowActions user={row} onMutate={onMutate} />,
-    }),
+    },
   ];
 }
 
@@ -155,6 +170,7 @@ export default function UsersTable({
   statusCounts,
 }: UsersTableProps) {
   const t = useTranslations("admin.users");
+  const locale = useLocale();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAccountTypes, setSelectedAccountTypes] = useState<
     AccountType[]
@@ -177,21 +193,25 @@ export default function UsersTable({
 
   const columns = useMemo(
     () =>
-      buildColumns(refresh, {
-        name: t("table.columns.name.header"),
-        groups: t("table.columns.groups.header"),
-        accountType: t("table.columns.accountType.header"),
-        lastUpdated: t("table.columns.lastUpdated.header"),
-        statusHeader: t("table.columns.status.header"),
-        status: {
-          [UserStatus.ACTIVE]: t("status.active.label"),
-          [UserStatus.INACTIVE]: t("status.inactive.label"),
-          [UserStatus.INVITED]: t("status.invited.label"),
-          [UserStatus.REQUESTED]: t("status.requested.label"),
+      buildColumns(
+        refresh,
+        {
+          name: t("table.columns.name.header"),
+          groups: t("table.columns.groups.header"),
+          accountType: t("table.columns.accountType.header"),
+          lastActive: t("table.columns.lastActive.header"),
+          statusHeader: t("table.columns.status.header"),
+          status: {
+            [UserStatus.ACTIVE]: t("status.active.label"),
+            [UserStatus.INACTIVE]: t("status.inactive.label"),
+            [UserStatus.INVITED]: t("status.invited.label"),
+            [UserStatus.REQUESTED]: t("status.requested.label"),
+          },
+          scimSynced: t("table.status.scimSynced.label"),
         },
-        scimSynced: t("table.status.scimSynced.label"),
-      }),
-    [refresh, t]
+        locale
+      ),
+    [refresh, t, locale]
   );
 
   // Client-side filtering
@@ -222,7 +242,7 @@ export default function UsersTable({
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <SvgSimpleLoader className="h-6 w-6" />
+        <IconLoader className="h-6 w-6" />
       </div>
     );
   }
@@ -255,11 +275,11 @@ export default function UsersTable({
         statusCounts={statusCounts}
       />
       <Table
-        data={filteredUsers}
+        items={filteredUsers}
         columns={columns}
         getRowId={(row) => row.id ?? row.email}
         pageSize={PAGE_SIZE}
-        searchTerm={searchTerm}
+        query={searchTerm}
         emptyState={
           <IllustrationContent
             illustration={SvgNoResult}

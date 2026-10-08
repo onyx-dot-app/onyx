@@ -59,10 +59,15 @@ from onyx.indexing.chunker import (
 )
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk, IndexChunk
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.framework.traces import TraceContentMode
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
     from onyx.natural_language_processing.utils import BaseTokenizer
+
+
+CONTEXTUAL_RAG_REEMBED_TRACE_NAME = "contextual_rag_reembed"
 
 
 class ReembedStrategy(enum.Enum):
@@ -266,6 +271,7 @@ def re_embed_chunks(
     embedder: IndexingEmbedder,
     augmentation_ctx: AugmentationReembedContext | None = None,
     present_tokenizer: BaseTokenizer | None = None,
+    strip_stored_context: bool = False,
 ) -> list[DocumentChunk]:
     """Re-embed stored chunks under a prebuilt strategy + embedder (no DB access).
 
@@ -283,6 +289,11 @@ def re_embed_chunks(
     exactly. The FUTURE embedder's tokenizer must NOT be substituted: on a model
     change it can count the tail differently and flip the threshold, re-embedding
     text the PRESENT index never did.
+
+    `strip_stored_context` (the FUTURE has contextual RAG off) drops a chunk's
+    stored doc summary and chunk context from its content and fields before
+    the MODEL_ONLY re-embed: after a forward-only disable the PRESENT index
+    still holds them with the flag off.
     """
     if not stored_chunks:
         return []
@@ -295,6 +306,8 @@ def re_embed_chunks(
 
     if present_tokenizer is None:
         raise ValueError("MODEL_ONLY re-embed requires the PRESENT tokenizer")
+    if strip_stored_context:
+        stored_chunks = [_strip_stored_context(chunk) for chunk in stored_chunks]
     embed_inputs = [
         recover_embedding_input(chunk, present_tokenizer) for chunk in stored_chunks
     ]
@@ -314,6 +327,37 @@ def re_embed_chunks(
         )
         for stored, index_chunk in zip(stored_chunks, matched, strict=True)
     ]
+
+
+def _strip_stored_context(
+    chunk: DocumentChunkWithoutVectors,
+) -> DocumentChunkWithoutVectors:
+    """The chunk without the doc summary and chunk context indexing stored in
+    it, removed only where indexing put them: the summary right after the
+    title prefix, the context right before the metadata suffix. The title
+    prefix is kept as stored. A no-op for a chunk that holds neither."""
+    if not chunk.doc_summary and not chunk.chunk_context:
+        return chunk
+    content = chunk.content
+    suffix = chunk.metadata_suffix or ""
+    if suffix and content.endswith(suffix):
+        content = content.removesuffix(suffix)
+    else:
+        suffix = ""
+    if chunk.chunk_context and content.endswith(chunk.chunk_context):
+        content = content.removesuffix(chunk.chunk_context)
+    if chunk.doc_summary:
+        # The summary starts right after the title prefix, whose separator a
+        # title never contains, so the first separator marks that spot.
+        separator_at = content.find(RETURN_SEPARATOR) if chunk.title else -1
+        summary_at = separator_at + len(RETURN_SEPARATOR) if separator_at >= 0 else 0
+        if content.startswith(chunk.doc_summary, summary_at):
+            content = (
+                content[:summary_at] + content[summary_at + len(chunk.doc_summary) :]
+            )
+    return chunk.model_copy(
+        update={"content": content + suffix, "doc_summary": "", "chunk_context": ""}
+    )
 
 
 def _bare_contents(stored_chunks: list[DocumentChunkWithoutVectors]) -> list[str]:
@@ -430,12 +474,16 @@ def _augmentation_reembed(
         from onyx.indexing.indexing_pipeline import add_contextual_summaries
 
         # Groups by source_document.id internally, so the mixed-doc input is fine.
-        add_contextual_summaries(
-            chunks=doc_aware_chunks,
-            llm=ctx.llm,
-            tokenizer=ctx.tokenizer,
-            chunk_token_limit=ctx.chunk_token_limit,
-        )
+        with ensure_trace(
+            CONTEXTUAL_RAG_REEMBED_TRACE_NAME,
+            content_mode=TraceContentMode.METADATA_ONLY,
+        ):
+            add_contextual_summaries(
+                chunks=doc_aware_chunks,
+                llm=ctx.llm,
+                tokenizer=ctx.tokenizer,
+                chunk_token_limit=ctx.chunk_token_limit,
+            )
 
     embedded = embedder.embed_chunks(doc_aware_chunks)
     # Pair each stored chunk with its OWN vector by identity, not list position.

@@ -16,7 +16,8 @@ import {
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import { StreamStopInfo } from "@/lib/search/interfaces";
+import { StreamStopInfo } from "@/lib/search/types";
+import type { SourceMetadata } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
 import {
@@ -31,7 +32,7 @@ import {
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
@@ -48,7 +49,7 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/interfaces";
-import { StreamStopReason } from "@/lib/search/interfaces";
+import { StreamStopReason } from "@/lib/search/types";
 import { createChatSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
@@ -59,7 +60,12 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import { buildFilters } from "@/lib/searchFilters/utils";
+import {
+  agentDeclaresOwnSources,
+  buildFilters,
+  effectiveAvailableSourcesFor,
+  selectedSourcesFrom,
+} from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
@@ -83,7 +89,8 @@ import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
+import { useAvailableSources } from "@/lib/connectors/hooks";
+import { getConfiguredSources } from "@/lib/sources";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -126,13 +133,20 @@ interface UseChatControllerProps {
   resetInputBar: () => void;
 }
 
-async function stopChatSession(chatSessionId: string): Promise<void> {
-  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+async function stopChatSession(
+  chatSessionId: string,
+  streamId: number | undefined
+): Promise<void> {
+  const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
+  const response = await fetch(
+    `/api/chat/stop-chat-session/${chatSessionId}${query}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to stop chat session: ${response.statusText}`);
@@ -148,7 +162,25 @@ export default function useChatController({
   selectedDocuments,
   resetInputBar,
 }: UseChatControllerProps) {
-  const searchFilters = useSharedSearchFilters();
+  // The chat's search filters ride the tool configuration, resolved against
+  // the sources the active agent can reach. An explicit selection resolves
+  // only against a complete roster — `settled` allows stale data (a failed
+  // revalidation must not drop a restriction) but never a partial first
+  // load, which would narrow the send wrongly. An agent declaring its own
+  // knowledge_sources carries its complete roster and never waits.
+  const { availableSources, settled: sourcesSettled } = useAvailableSources();
+  const selectedSearchSources = useMemo<SourceMetadata[] | null>(
+    () =>
+      activeAgent && (sourcesSettled || agentDeclaresOwnSources(activeAgent))
+        ? selectedSourcesFrom(
+            toolConfiguration.filters,
+            getConfiguredSources(
+              effectiveAvailableSourcesFor(activeAgent, availableSources)
+            )
+          )
+        : null,
+    [activeAgent, sourcesSettled, availableSources, toolConfiguration.filters]
+  );
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -273,6 +305,7 @@ export default function useChatController({
     const isOnChatPage = pathname === "/app";
 
     if (isOnChatPage && !navigatingAway.current) {
+      // SAFETY: buildChatUrl with search=false builds `/app?...`.
       router.push(newUrl as Route, { scroll: false });
     }
 
@@ -351,7 +384,10 @@ export default function useChatController({
     // This signals the backend to stop processing as soon as possible
     // The backend will emit a STOP packet when it detects the fence
     try {
-      await stopChatSession(currentSession);
+      await stopChatSession(
+        currentSession,
+        useChatSessionStore.getState().sessions.get(currentSession)?.streamId
+      );
     } catch (error) {
       console.error("Failed to stop chat session:", error);
       // Continue with UI cleanup even if backend call fails
@@ -404,6 +440,7 @@ export default function useChatController({
           const newUrl = params.toString()
             ? `${pathname}?${params.toString()}`
             : pathname;
+          // SAFETY: built from the current pathname, which is a route of this app.
           router.replace(newUrl as Route, { scroll: false });
         }
       }
@@ -599,6 +636,9 @@ export default function useChatController({
       // set the ability to cancel the request
       const controller = new AbortController();
       setAbortController(currChatSessionId, controller);
+      useChatSessionStore
+        .getState()
+        .updateSessionData(currChatSessionId, { streamId: undefined });
 
       const messageToResend = currentHistory.find(
         (message) => message.messageId === messageIdToResend
@@ -1064,10 +1104,12 @@ export default function useChatController({
           })(),
           chatSessionId: currChatSessionId,
           filters: buildFilters(
-            searchFilters.selectedSources,
-            searchFilters.selectedDocumentSets,
-            searchFilters.timeRange,
-            searchFilters.selectedTags
+            selectedSearchSources,
+            toolConfiguration.filters.documentSets,
+            toolConfiguration.filters.timeRange
+              ? { from: toolConfiguration.filters.timeRange.from }
+              : null,
+            toolConfiguration.filters.tags
           ),
           modelProvider: isMultiModel
             ? undefined
@@ -1170,6 +1212,11 @@ export default function useChatController({
             ) {
               newAgentMessageId = (packet as MessageResponseIDInfo)
                 .reserved_assistant_message_id;
+              useChatSessionStore
+                .getState()
+                .updateSessionData(frozenSessionId, {
+                  streamId: newAgentMessageId,
+                });
             }
 
             // Multi-model: handle reserved IDs for N parallel model responses.
@@ -1184,6 +1231,14 @@ export default function useChatController({
               const multiPacket = packet as MultiModelMessageResponseIDInfo;
               newUserMessageId =
                 multiPacket.user_message_id ?? newUserMessageId;
+              // A multi-model stream is keyed by its user message.
+              if (newUserMessageId !== null) {
+                useChatSessionStore
+                  .getState()
+                  .updateSessionData(frozenSessionId, {
+                    streamId: newUserMessageId,
+                  });
+              }
               for (let mi = 0; mi < multiPacket.responses.length; mi++) {
                 const slot = multiPacket.responses[mi]!;
                 assistantMessageIds[mi] = slot.message_id;
@@ -1483,10 +1538,7 @@ export default function useChatController({
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      searchFilters.selectedSources,
-      searchFilters.selectedDocumentSets,
-      searchFilters.selectedTags,
-      searchFilters.timeRange,
+      selectedSearchSources,
       llmManager.currentLlm,
       llmManager.temperature,
       llmManager.hasTemperatureOverride,

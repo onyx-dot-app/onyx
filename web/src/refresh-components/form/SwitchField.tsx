@@ -1,10 +1,10 @@
 "use client";
 
 import { useField } from "formik";
-import { Switch, type SwitchProps } from "@opal/components";
+import { InputSwitch, type InputSwitchProps } from "@opal/components";
 import { useOnChangeValue } from "@/hooks/formHooks";
 
-interface SwitchFieldProps extends Omit<SwitchProps, "checked"> {
+interface SwitchFieldProps extends Omit<InputSwitchProps, "checked"> {
   name: string;
 }
 
@@ -17,7 +17,7 @@ export default function SwitchField({
   const onChange = useOnChangeValue(name, onCheckedChange);
 
   return (
-    <Switch
+    <InputSwitch
       id={name}
       name={name}
       checked={field.value}

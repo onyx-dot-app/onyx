@@ -9,7 +9,7 @@ import {
   activateVoiceProvider,
   deactivateVoiceProvider,
 } from "@/lib/voice/svc";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -28,6 +28,7 @@ type ModelSubtitleKey =
   | "models.whisper.subtitle"
   | "models.azureSpeechStt.subtitle"
   | "models.elevenlabsStt.subtitle"
+  | "models.zoomScribe.subtitle"
   | "models.tts1.subtitle"
   | "models.tts1Hd.subtitle"
   | "models.azureSpeechTts.subtitle"
@@ -67,6 +68,12 @@ const STT_MODELS: ModelDetails[] = [
     label: "ElevenAPI",
     subtitleKey: "models.elevenlabsStt.subtitle",
     providerType: "elevenlabs",
+  },
+  {
+    id: "scribe-live",
+    label: "Zoom Scribe",
+    subtitleKey: "models.zoomScribe.subtitle",
+    providerType: "zoom",
   },
 ];
 

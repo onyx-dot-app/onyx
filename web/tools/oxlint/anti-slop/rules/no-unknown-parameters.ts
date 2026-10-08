@@ -41,13 +41,33 @@ function parameterName(parameter: Parameter, sourceText: string): string {
     : sourceText.replace(/\s*:\s*unknown\s*$/u, "");
 }
 
-/** Disallow unknown inputs except explicitly named error-cause enrichment. */
+/** Values that reach a `catch` handler or a promise rejection are `unknown` by
+ * construction: TypeScript gives no other annotation for them. */
+const ERROR_PARAMETER_NAMES = new Set(["cause", "error", "err"]);
+
+function isTypePredicate(node: ParameterOwner): boolean {
+  return node.returnType?.typeAnnotation.type === "TSTypePredicate";
+}
+
+/** True for a function passed to `.catch(fn)` or as the second `.then(_, fn)` argument. */
+function isRejectionCallback(node: ParameterOwner): boolean {
+  const call = node.parent;
+  if (call?.type !== "CallExpression") return false;
+  const callee = call.callee;
+  if (callee.type !== "MemberExpression" || callee.computed) return false;
+  if (callee.property.type !== "Identifier") return false;
+  if (callee.property.name === "catch") return call.arguments[0] === node;
+  if (callee.property.name === "then") return call.arguments[1] === node;
+  return false;
+}
+
+/** Disallow unknown inputs except error values and declared type guards. */
 export const noUnknownParametersRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow explicitly unknown function parameters except `cause`; decode unknown input at its I/O boundary instead.",
+        "Disallow explicitly unknown function parameters except error values and type-guard inputs; decode unknown input at its I/O boundary instead.",
     },
     messages: {
       unknownParameter:
@@ -56,6 +76,7 @@ export const noUnknownParametersRule = defineRule({
   },
   createOnce(context) {
     const checkParameters = (node: ParameterOwner) => {
+      if (isTypePredicate(node) || isRejectionCallback(node)) return;
       for (const parameter of node.params) {
         const annotation = parameterAnnotation(parameter);
         if (annotation?.typeAnnotation.type !== "TSUnknownKeyword") continue;
@@ -63,7 +84,7 @@ export const noUnknownParametersRule = defineRule({
           parameter,
           context.sourceCode.getText(parameter)
         );
-        if (name === "cause") continue;
+        if (ERROR_PARAMETER_NAMES.has(name) || name.startsWith("_")) continue;
         context.report({
           node: annotation.typeAnnotation,
           messageId: "unknownParameter",

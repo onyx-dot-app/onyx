@@ -70,6 +70,11 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/oauth/authorize", {"GET"}),
     ("/auth/oauth/callback", {"GET"}),
     ("/mcp/oauth/client-metadata", {"GET"}),
+    ("/oauth-provider/metadata", {"GET", "OPTIONS"}),
+    ("/oauth-provider/register", {"POST", "OPTIONS"}),
+    ("/oauth-provider/authorize", {"GET", "POST"}),
+    ("/oauth-provider/token", {"POST", "OPTIONS"}),
+    ("/oauth-provider/revoke", {"POST", "OPTIONS"}),
     # dedicated mobile google oauth (callback routes to the api_server, not the web app)
     ("/auth/mobile/oauth/authorize", {"GET"}),
     ("/auth/mobile/oauth/callback", {"GET"}),

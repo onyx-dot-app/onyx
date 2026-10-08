@@ -9,7 +9,7 @@
 # pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
 # Hub rate limits. Declared before the first FROM so it applies to every base image below.
 ARG BASE_IMAGE_REGISTRY=docker.io
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:881d80734ee05dca6f7f42dcb080975652a53c7eda9ba1f03bb8da31aa6a6ec2 AS builder
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /bin/
 
@@ -20,7 +20,6 @@ RUN apt-get update && \
     apt-get install -y \
         cmake \
         curl \
-        zip \
         ca-certificates \
         libgnutls30 \
         libblkid1 \
@@ -55,7 +54,49 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
 # The actual shipped image. Installs only runtime system libraries and copies the already-built
 # Python packages from the builder stage.
 ####################################################################################################
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:881d80734ee05dca6f7f42dcb080975652a53c7eda9ba1f03bb8da31aa6a6ec2 AS runtime
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c AS os
+
+# Install runtime system dependencies only (no build toolchain). This stage is
+# everything the shipped image holds outside the lockfiles, so the audit gate
+# builds and scans it on its own before the full build.
+# ca-certificates for HTTPS
+# libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
+# Interactive debugging tools (curl, vim, nano, psql, ps) are deliberately absent to keep the
+# shipped image minimal; they live in the dev stage below, published with a -dev tag suffix.
+RUN apt-get update && \
+    apt-get install -y \
+        ca-certificates \
+        libgnutls30 \
+        libblkid1 \
+        libmount1 \
+        libsmartcols1 \
+        libuuid1 \
+        libjemalloc2 \
+        libxmlsec1-openssl \
+        && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+# Chromium's OS-level runtime libraries come from the locked playwright's own
+# list, so the stage installs that exact playwright (the builder's copy lands on
+# top of it later) and lets it pick the packages.
+#
+# perl-base is part of the base Python Debian image but not needed for Onyx functionality; it is
+# removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
+# first `playwright install-deps`, because the font/X11 packages that install-deps pulls in run perl
+# scripts in their dpkg configure step. The second `playwright install-deps` then restores any
+# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade. The
+# runtime image stays perl-free from here on.
+RUN --mount=type=bind,source=requirements/default.txt,target=/requirements.txt \
+    pip install --no-cache-dir --no-deps "playwright==$(sed -n 's/^playwright==\([^ \\]*\).*/\1/p' /requirements.txt)" && \
+    playwright install-deps chromium && \
+    apt-get remove -y --allow-remove-essential perl-base && \
+    apt-get autoremove -y && \
+    playwright install-deps chromium && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+FROM os AS runtime
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -76,27 +117,6 @@ RUN groupadd -g 1001 onyx && \
     chmod 755 /var/log/onyx && \
     chown onyx:onyx /var/log/onyx
 
-# Install runtime system dependencies only (no build toolchain).
-# zip for Vespa step further down
-# ca-certificates for HTTPS
-# libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
-# Interactive debugging tools (curl, vim, nano, psql, ps) are deliberately absent to keep the
-# shipped image minimal; they live in the dev stage below, published with a -dev tag suffix.
-RUN apt-get update && \
-    apt-get install -y \
-        zip \
-        ca-certificates \
-        libgnutls30 \
-        libblkid1 \
-        libmount1 \
-        libsmartcols1 \
-        libuuid1 \
-        libjemalloc2 \
-        libxmlsec1-openssl \
-        && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
-
 # Copy the compiled Python packages and only the console scripts our services launch (api server,
 # celery workers/beat, alembic migrations, supervisord, Playwright). Both stages share the same base
 # image digest, so paths and ABI match. Listing the scripts explicitly keeps the base interpreter
@@ -111,37 +131,18 @@ COPY --from=builder \
     /usr/local/bin/playwright \
     /usr/local/bin/
 
-# Install the Chromium build used by Playwright and its OS-level runtime libraries. Must run after
-# the site-packages copy above so the playwright CLI is available.
+# Install the Chromium build used by Playwright; its OS-level runtime libraries came with the os
+# stage. Must run after the site-packages copy above so the playwright CLI is available.
 #
 # `--only-shell` installs the headless shell and skips the full headed Chromium build (~364 MB). Every
 # launch site in the backend passes headless=True with no channel, so Playwright picks the shell.
 # Remove the flag if a call site ever needs a headed browser or a branded channel.
-#
-# perl-base is part of the base Python Debian image but not needed for Onyx functionality; it is
-# removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
-# first `playwright install-deps`, because the font/X11 packages that install-deps pulls in run perl
-# scripts in their dpkg configure step. The second `playwright install-deps` then restores any
-# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade. The
-# runtime image stays perl-free from here on.
 RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
-    playwright install --only-shell chromium && \
-    playwright install-deps chromium && \
-    apt-get remove -y --allow-remove-essential perl-base && \
-    apt-get autoremove -y && \
-    playwright install-deps chromium && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
+    playwright install --only-shell chromium
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
 Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
-
-# Pre-downloading NLTK for setups with limited egress
-RUN python -c "import nltk; \
-    nltk.download('stopwords', quiet=True); \
-    nltk.download('punkt_tab', quiet=True);"
-# nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
 
 # Pre-downloading tiktoken for setups with limited egress
 RUN python -c "import tiktoken; \

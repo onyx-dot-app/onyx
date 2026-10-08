@@ -1,6 +1,6 @@
 output "agent_id" {
   description = "Id of the documentation agent."
-  value       = onyx_persona.docs.id
+  value       = onyx_agent.docs.id
 }
 
 output "cc_pair_id" {
