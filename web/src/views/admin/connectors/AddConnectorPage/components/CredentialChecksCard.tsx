@@ -325,7 +325,15 @@ function CheckCardView({
       icon={progress.icon}
       title={t("title")}
       suffix={progress.suffix}
-      description={collapsed ? summary : undefined}
+      // Expanded, a short state line keeps the header's height steady while
+      // the rows fold.
+      description={
+        collapsed
+          ? summary
+          : isRunning || inProgressCount > 0
+            ? t("state.inProgress")
+            : t("state.completed")
+      }
       sizePreset="main-content"
       variant="section"
       padding={1.5}

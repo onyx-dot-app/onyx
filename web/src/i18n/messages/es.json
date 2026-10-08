@@ -8900,7 +8900,11 @@
         "successful": "{count} correctas"
       },
       "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo.",
-      "requiredFailed": "{count, plural, one {# comprobación obligatoria fallida} other {# comprobaciones obligatorias fallidas}}"
+      "requiredFailed": "{count, plural, one {# comprobación obligatoria fallida} other {# comprobaciones obligatorias fallidas}}",
+      "state": {
+        "completed": "Comprobaciones completadas.",
+        "inProgress": "Comprobaciones en curso."
+      }
     }
   },
   "agents": {

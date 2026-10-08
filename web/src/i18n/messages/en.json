@@ -8900,7 +8900,11 @@
         "successful": "{count} successful"
       },
       "failedToRun": "Checks failed to run. Try again.",
-      "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}"
+      "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
+      "state": {
+        "completed": "Checks completed.",
+        "inProgress": "Checks in progress."
+      }
     }
   },
   "agents": {
