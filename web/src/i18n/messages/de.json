@@ -8902,7 +8902,7 @@
       "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
       "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
       "state": {
-        "completed": "Prüfungen abgeschlossen.",
+        "completed": "Prüfungen abgeschlossen",
         "inProgress": "Prüfungen laufen…"
       }
     }

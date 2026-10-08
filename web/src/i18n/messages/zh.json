@@ -8902,7 +8902,7 @@
       "failedToRun": "检查未能运行。请重试。",
       "requiredFailed": "{count, plural, one {# 项必需检查失败} other {# 项必需检查失败}}",
       "state": {
-        "completed": "检查已完成。",
+        "completed": "检查已完成",
         "inProgress": "检查进行中…"
       }
     }
