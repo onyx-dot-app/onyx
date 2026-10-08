@@ -48,7 +48,7 @@ class GCSBackedFileStore(FileStore):
     ) -> None:
         self._gcs_client: GCSClient | None = None
         # Shared across threads, so the first operations build one client.
-        self._client_lock = threading.Lock()
+        self._client_lock: threading.Lock = threading.Lock()
         self._bucket_name = bucket_name
         self._gcs_prefix = gcs_prefix or "onyx-files"
         self._project_id = project_id

@@ -371,7 +371,7 @@ class S3BackedFileStore(FileStore):
         self._legacy_s3_client: "S3Client | None" = None
         # The store is shared across threads and its clients are built lazily,
         # so the first operations of several threads build each client once.
-        self._client_lock = threading.Lock()
+        self._client_lock: threading.Lock = threading.Lock()
         self._bucket_name = bucket_name
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key

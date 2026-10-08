@@ -51,7 +51,7 @@ class AzureBlobBackedFileStore(FileStore):
     ) -> None:
         self._blob_service_client: BlobServiceClient | None = None
         # Shared across threads, so the first operations build one client.
-        self._client_lock = threading.Lock()
+        self._client_lock: threading.Lock = threading.Lock()
         self._container_name = container_name
         self._azure_prefix = azure_prefix or "onyx-files"
         self._connection_string = connection_string
