@@ -327,6 +327,7 @@ def test_automatic_identity_is_persistent_and_race_safe(
         )
     assert len(set(seeds)) == 1
     assert fleet_enrollment.installation_seed() == seeds[0]
+    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
     first = automatic_config("api", seeds[0])
     restarted = automatic_config("collector", seeds[0])
     assert first and restarted

@@ -121,6 +121,7 @@ def test_automatic_cloud_scopes_cannot_collide_with_explicit_identity(
 ) -> None:
     import uuid
 
+    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
     monkeypatch.setattr(fleet, "MULTI_TENANT", True)
     config = fleet.automatic_config("api", b"c" * 32)
     assert config
