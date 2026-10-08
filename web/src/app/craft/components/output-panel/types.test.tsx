@@ -2,7 +2,7 @@ import {
   getWebappState,
   isWebappPreviewEnabled,
   type WebappState,
-} from "@/app/craft/components/output-panel/interfaces";
+} from "@/app/craft/components/output-panel/types";
 
 describe("getWebappState", () => {
   test.each<{

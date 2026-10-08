@@ -22,6 +22,7 @@ import {
   fetchWebappInfo,
   fetchArtifacts,
   exportDocx,
+  downloadArtifactFile,
 } from "@/app/craft/services/apiServices";
 import { getFileIcon } from "@/lib/utils";
 import { cn } from "@opal/utils";
@@ -34,7 +35,7 @@ import {
   getWebappState,
   isWebappPreviewEnabled,
   type WebappState,
-} from "@/app/craft/components/output-panel/interfaces";
+} from "@/app/craft/components/output-panel/types";
 
 // Output panel sub-components. UrlBar is the always-visible chrome and stays
 // static; the heavy tab bodies (preview iframe, file browser, artifact list,
@@ -128,9 +129,6 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const openFilePreview = useBuildSessionStore(
     (state) => state.openFilePreview
   );
-  const closeFilePreview = useBuildSessionStore(
-    (state) => state.closeFilePreview
-  );
   const closePanelTab = useBuildSessionStore((state) => state.closePanelTab);
   const setActivePanelTabId = useBuildSessionStore(
     (state) => state.setActivePanelTabId
@@ -143,8 +141,11 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
 
   // Counters to force-reload previews
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
-  const [filePreviewRefreshKey, setFilePreviewRefreshKey] = useState(0);
+  const [filesRefreshKey, setFilesRefreshKey] = useState(0);
   const [filesRefreshing, setFilesRefreshing] = useState(false);
+  const handleFilesRefreshingChange = useCallback((loading: boolean) => {
+    if (!loading) setFilesRefreshing(false);
+  }, []);
 
   // Determine which tab is visually active
   const isFilePreviewActive = activePanelTabId !== null;
@@ -168,16 +169,11 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   );
 
   const handlePanelTabClose = useCallback(
-    (e: React.MouseEvent, tab: PanelTab) => {
-      e.stopPropagation();
+    (tab: PanelTab) => {
       if (!session?.id) return;
-      if (tab.kind === "file") {
-        closeFilePreview(session.id, tab.path);
-      } else {
-        closePanelTab(session.id, panelTabId(tab));
-      }
+      closePanelTab(session.id, panelTabId(tab));
     },
-    [session?.id, closeFilePreview, closePanelTab]
+    [session?.id, closePanelTab]
   );
 
   const handleFileClick = (path: string, fileName: string) => {
@@ -233,18 +229,18 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const [pollingDeadline, setPollingDeadline] = useState<number | null>(null);
   const [isWebappReady, setIsWebappReady] = useState(false);
 
-  // When webappNeedsRefresh bumps (restore or file edit), start a 30s polling window
-  // and reset readiness so we poll until the server is back up
+  // Refresh counters are session-local. Switching sessions must reset polling too.
   useEffect(() => {
+    setIsWebappReady(false);
     if (webappNeedsRefresh > 0) {
       setPollingDeadline(Date.now() + 30_000);
-      setIsWebappReady(false);
 
       // Force a re-render after 30s to stop polling even if server never responded
       const timer = setTimeout(() => setPollingDeadline(null), 30_000);
       return () => clearTimeout(timer);
     }
-  }, [webappNeedsRefresh]);
+    setPollingDeadline(null);
+  }, [session?.id, webappNeedsRefresh]);
 
   // Fetch webapp info from dedicated endpoint
   // Only fetch for real sessions when panel is fully open
@@ -329,39 +325,6 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const effectiveActiveTab: TabValue | null =
     activeTab === "preview" && !previewEnabled ? "files" : activeTab;
 
-  // One-shot auto-switch to Preview when this session's webapp is observed
-  // booting and then serving. Armed from the raw response rather than
-  // `webappState`, which is unavoidably "starting" for the one render between
-  // webapp-info arriving and `webappHasBeenReady` latching — reading it here
-  // would arm on every revisit of an already-serving session and force the
-  // tab the user had left.
-  const sawWebappStartingRef = useRef(false);
-  useEffect(() => {
-    // Wait for session-scoped state to catch up before evaluating - avoids
-    // reading stale webapp state left over from the prior session during
-    // the render right after switching.
-    if (session?.id !== cachedForSessionId) {
-      sawWebappStartingRef.current = false;
-      return;
-    }
-    if (webappInfo?.has_webapp && !webappInfo.ready) {
-      sawWebappStartingRef.current = true;
-    } else if (webappState === "ready" && sawWebappStartingRef.current) {
-      sawWebappStartingRef.current = false;
-      if (session?.id && !isFilePreviewActive) {
-        setActiveOutputTab(session.id, "preview");
-      }
-    }
-  }, [
-    webappInfo?.has_webapp,
-    webappInfo?.ready,
-    webappState,
-    session?.id,
-    cachedForSessionId,
-    isFilePreviewActive,
-    setActiveOutputTab,
-  ]);
-
   // Tab navigation history
   const tabHistory = useTabHistory();
   const navigateTabBack = useBuildSessionStore(
@@ -402,6 +365,12 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const isPdfPreview =
     isFilePreviewActive && activeFilePath && /\.pdf$/i.test(activeFilePath);
 
+  const contentSessionId: string | null =
+    session?.id ?? preProvisionedSessionId;
+  const selectedContentId: string | null = activePanel
+    ? panelTabId(activePanel)
+    : effectiveActiveTab;
+
   const [isExportingDocx, setIsExportingDocx] = useState(false);
 
   const handleDocxDownload = useCallback(async () => {
@@ -427,36 +396,47 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
 
   const handleRawFileDownload = useCallback(() => {
     if (!session?.id || !activeFilePath) return;
-    const encodedPath = activeFilePath
-      .split("/")
-      .map((s) => encodeURIComponent(s))
-      .join("/");
-    const link = document.createElement("a");
-    link.href = `/api/build/sessions/${session.id}/artifacts/${encodedPath}`;
-    link.download = activeFilePath.split("/").pop() || activeFilePath;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadArtifactFile(session.id, activeFilePath);
   }, [session?.id, activeFilePath]);
 
   // Unified refresh handler — dispatches based on the active tab/preview
   const handleRefresh = useCallback(() => {
     if (isFilePreviewActive) {
       // Transient panel tab: bump key to reload standalone + content previews
-      setFilePreviewRefreshKey((k) => k + 1);
+      if (!session?.id || !activeFilePath) return;
+      const store: ReturnType<typeof useBuildSessionStore.getState> =
+        useBuildSessionStore.getState();
+      const keys: Record<string, number> =
+        store.sessions.get(session.id)?.filePreviewRefreshKeys ?? {};
+      store.updateSessionData(session.id, {
+        filePreviewRefreshKeys: {
+          ...keys,
+          [activeFilePath]: (keys[activeFilePath] ?? 0) + 1,
+        },
+      });
     } else if (effectiveActiveTab === "preview") {
       // Remount the iframe, and re-probe readiness — while the panel is
       // showing "none"/"starting" the iframe isn't mounted, so the key bump
       // alone would make refresh a no-op.
       setPreviewRefreshKey((k) => k + 1);
       mutate();
-    } else if (effectiveActiveTab === "files" && session?.id) {
+    } else if (effectiveActiveTab === "files" && contentSessionId) {
       // Files tab: revalidate the visible directory listings
-      triggerFilesRefresh(session.id);
+      setFilesRefreshing(true);
+      setFilesRefreshKey((key) => key + 1);
+      triggerFilesRefresh(contentSessionId);
+    } else if (effectiveActiveTab === "artifacts" && session?.id) {
+      const store = useBuildSessionStore.getState();
+      const current = store.sessions.get(session.id);
+      void store.refreshOutputInventory(session.id, {
+        silent: !current?.activeTurnId && current?.status !== "running",
+      });
     }
   }, [
     isFilePreviewActive,
+    activeFilePath,
     effectiveActiveTab,
+    contentSessionId,
     session?.id,
     triggerFilesRefresh,
     mutate,
@@ -464,6 +444,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
 
   // Fetch artifacts - poll every 5 seconds when on artifacts tab
   const shouldFetchArtifacts =
+    isOpen &&
     session?.id &&
     !session.id.startsWith("temp-") &&
     session.status !== "creating" &&
@@ -592,11 +573,10 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                 case "file": {
                   const TabIcon = getFileIcon(tab.fileName);
                   return (
-                    <button
+                    <div
                       key={id}
-                      onClick={() => handlePanelTabClick(id)}
                       className={cn(
-                        "group relative inline-flex items-center justify-center gap-1.5 px-3 pe-2 py-1.5 rounded-t-lg",
+                        "group relative inline-flex items-center justify-center pe-2 rounded-t-lg",
                         "max-w-[150px] min-w-fit",
                         isActive
                           ? "bg-background-neutral-00 text-text-04 z-10"
@@ -609,19 +589,28 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                           style={jointMasks.start}
                         />
                       )}
-                      <TabIcon
-                        size={14}
-                        className={cn(
-                          "stroke-current shrink-0",
-                          isActive ? "stroke-text-04" : "stroke-text-03"
-                        )}
-                      />
-                      <Text font="secondary-body" color="text-05" maxLines={1}>
-                        {tab.fileName}
-                      </Text>
+                      <button
+                        onClick={() => handlePanelTabClick(id)}
+                        className="inline-flex min-w-0 items-center gap-1.5 ps-3 pe-1.5 py-1.5"
+                      >
+                        <TabIcon
+                          size={14}
+                          className={cn(
+                            "stroke-current shrink-0",
+                            isActive ? "stroke-text-04" : "stroke-text-03"
+                          )}
+                        />
+                        <Text
+                          font="secondary-body"
+                          color="text-05"
+                          maxLines={1}
+                        >
+                          {tab.fileName}
+                        </Text>
+                      </button>
                       {/* Close button */}
                       <button
-                        onClick={(e) => handlePanelTabClose(e, tab)}
+                        onClick={() => handlePanelTabClose(tab)}
                         className={cn(
                           "shrink-0 p-0.5 rounded-sm hover:bg-background-tint-03 transition-colors",
                           isActive
@@ -638,7 +627,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                           style={jointMasks.end}
                         />
                       )}
-                    </button>
+                    </div>
                   );
                 }
               }
@@ -709,52 +698,52 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
         onScopeChange={mutate}
       />
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-hidden rounded-b-08">
-        {/* Transient panel tab content - shown when a panel tab is active */}
-        {isFilePreviewActive && activePanel?.kind === "file" && session?.id && (
-          <FilePreviewContent
-            sessionId={session.id}
-            filePath={activePanel.path}
-            refreshKey={filePreviewRefreshKey}
-          />
-        )}
-        {/* Pinned tab content - only show when no file preview is active */}
-        {!isFilePreviewActive && (
-          <>
-            {effectiveActiveTab === "preview" &&
-              shouldRenderContent &&
-              // Show crafting loader only when no session exists (welcome state)
-              // Otherwise, PreviewTab handles the loading/iframe display
-              (!session ? (
+      <div className="relative flex-1 overflow-hidden rounded-b-08">
+        {shouldRenderContent && (
+          <div
+            key={`${contentSessionId}:${selectedContentId}`}
+            className="absolute inset-0"
+            aria-hidden={!isOpen}
+            inert={!isOpen}
+          >
+            {activePanel && session ? (
+              <FilePreviewContent
+                sessionId={session.id}
+                filePath={activePanel.path}
+                revision={session.outputInventory?.[activePanel.path]?.revision}
+                refreshKey={
+                  session.filePreviewRefreshKeys[activePanel.path] ?? 0
+                }
+                isActive={isOpen}
+              />
+            ) : effectiveActiveTab === "preview" ? (
+              !session ? (
                 <CraftingLoader />
               ) : (
                 <PreviewTab
                   webappUrl={iframeUrl}
                   webappState={webappState}
-                  // Remounts on manual refresh and after a restore (the new
-                  // pod's HMR socket can't update the old page). Live edits
-                  // flow through HMR and never remount.
                   refreshKey={previewRefreshKey + webappNeedsRemount}
                 />
-              ))}
-            {effectiveActiveTab === "files" && (
+              )
+            ) : effectiveActiveTab === "files" ? (
               <FilesTab
-                key={session?.id ?? preProvisionedSessionId}
-                sessionId={session?.id ?? preProvisionedSessionId}
+                sessionId={contentSessionId}
                 onFileClick={session ? handleFileClick : undefined}
-                onRefreshingChange={setFilesRefreshing}
+                onRefreshingChange={handleFilesRefreshingChange}
+                refreshKey={filesRefreshKey}
                 isPreProvisioned={!session && !!preProvisionedSessionId}
                 isProvisioning={!session && isPreProvisioning}
+                isActive={isOpen}
               />
-            )}
-            {effectiveActiveTab === "artifacts" && (
+            ) : effectiveActiveTab === "artifacts" ? (
               <ArtifactsTab
                 artifacts={artifacts}
                 sessionId={session?.id ?? null}
+                isActive={isOpen}
               />
-            )}
-          </>
+            ) : null}
+          </div>
         )}
       </div>
     </div>

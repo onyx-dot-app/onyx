@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "{name} 펼치기/접기"
+      },
+      "status": {
+        "loading": "결과를 불러오는 중…",
+        "incomplete": "일부 결과를 표시하지 못했습니다. 파일을 열어 작업 공간을 확인하세요.",
+        "error": "결과를 새로 고치지 못했습니다. 다시 시도하세요."
       }
     },
     "chatPanel": {

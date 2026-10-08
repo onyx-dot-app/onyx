@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "展开或折叠 {name}"
+      },
+      "status": {
+        "loading": "正在加载输出…",
+        "incomplete": "部分输出无法列出。请打开“文件”浏览工作区。",
+        "error": "无法刷新输出。请重试。"
       }
     },
     "chatPanel": {

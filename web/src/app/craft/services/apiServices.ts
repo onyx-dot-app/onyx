@@ -15,6 +15,7 @@ import {
   DirectoryListing,
   SharingScope,
   ApiSessionSkillsState,
+  type OutputInventory,
 } from "@/app/craft/types/streamingTypes";
 import {
   ApprovalListResponse,
@@ -568,10 +569,12 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
 // =============================================================================
 
 export async function fetchWebappInfo(
-  sessionId: string
+  sessionId: string,
+  signal?: AbortSignal
 ): Promise<ApiWebappInfoResponse> {
   const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/webapp-info`
+    `${BUILD_API_BASE}/sessions/${sessionId}/webapp-info`,
+    { signal }
   );
 
   if (!res.ok) {
@@ -585,9 +588,23 @@ export async function fetchWebappInfo(
 // Files API
 // =============================================================================
 
+export async function fetchOutputInventory(
+  sessionId: string,
+  signal?: AbortSignal
+): Promise<OutputInventory> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/outputs`,
+    { signal }
+  );
+  if (!response.ok)
+    throw new Error(`Failed to fetch output inventory: ${response.status}`);
+  return response.json();
+}
+
 export async function fetchDirectoryListing(
   sessionId: string,
-  path: string = ""
+  path: string = "",
+  signal?: AbortSignal
 ): Promise<DirectoryListing> {
   const url = new URL(
     `${BUILD_API_BASE}/sessions/${sessionId}/files`,
@@ -597,13 +614,27 @@ export async function fetchDirectoryListing(
     url.searchParams.set("path", path);
   }
 
-  const res = await fetch(url.toString());
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch directory listing: ${res.status}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () =>
+      controller.abort(
+        new DOMException("Directory listing timed out", "TimeoutError")
+      ),
+    10_000
+  );
+  try {
+    const res = await fetch(url.toString(), {
+      signal: signal
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch directory listing: ${res.status}`);
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json();
 }
 
 /**

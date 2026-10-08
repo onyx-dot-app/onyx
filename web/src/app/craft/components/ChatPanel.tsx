@@ -255,20 +255,20 @@ export default function BuildChatPanel({
     setActiveSession(activeSession);
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
-  const maybeAutoOpenPanelForPreview = useBuildSessionStore(
-    (s) => s.maybeAutoOpenPanelForPreview
+  const maybeAutoOpenWebapp = useBuildSessionStore(
+    (s) => s.maybeAutoOpenWebapp
   );
 
-  // Auto-open the panel the first time webappUrl becomes non-null this session.
+  // A URL starts readiness checks; only a serving webapp can open Preview.
   const prevWebappUrlRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const prev = prevWebappUrlRef.current;
     const current = session?.webappUrl ?? null;
     if (prev === null && current !== null && sessionId) {
-      maybeAutoOpenPanelForPreview(sessionId);
+      void maybeAutoOpenWebapp(sessionId);
     }
     prevWebappUrlRef.current = current;
-  }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
+  }, [session?.webappUrl, sessionId, maybeAutoOpenWebapp]);
 
   useEffect(() => {
     if (!scheduledSessionId || !shouldStreamScheduledRun) return;

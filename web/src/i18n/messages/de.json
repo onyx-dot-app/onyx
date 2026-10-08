@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "{name} umschalten"
+      },
+      "status": {
+        "loading": "Ausgaben werden geladen…",
+        "incomplete": "Einige Ausgaben konnten nicht aufgelistet werden. Öffne Dateien, um den Arbeitsbereich zu durchsuchen.",
+        "error": "Ausgaben konnten nicht aktualisiert werden. Versuche es erneut."
       }
     },
     "chatPanel": {

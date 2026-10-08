@@ -241,6 +241,71 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 
 ---
 
+### Output inventory and panel navigation
+
+The frontend keeps a temporary output inventory in each Zustand session.
+`useBuildSessionStore.ts:refreshOutputInventory` reads one flat response from
+`GET /build/sessions/{id}/outputs`. Each file has a path, size, and opaque revision.
+Artifacts derives its folder tree from this same inventory without directory requests.
+It shows loading, failed, and incomplete reads separately from complete empty results.
+Partial first reads can display known files but cannot establish a discovery baseline.
+Activating Artifacts reconciles the inventory; only idle sessions use a silent refresh.
+The browser does not walk output directories.
+The first complete response establishes a silent baseline. Session loading establishes this baseline. Each interactive prompt takes a silent
+snapshot before creating its backend turn, so outputs from a previous task are not
+selected as new. Inventory reads have a two-second timeout, so slow metadata cannot
+block prompts or stream settlement. Stopping during that snapshot aborts its request
+and cancels locally without setting a backend interrupt fence. Idle cached sessions reconcile revisions on entry and focus
+without adding tabs or changing selection.
+Reloading the page discards it; nothing is written to the database or local storage.
+If the first inventory stays incomplete, automatic file selection stays disabled.
+This can occur when a tree exceeds scan limits or contains an unreadable directory.
+A failed or incomplete pre-prompt scan leaves discovery pending until a complete baseline arrives.
+Cached revisions remain available, and later scans still refresh previews without selecting previous-task files.
+
+`useBuildSessionStore.ts:compareOutputInventory` compares paths and metadata
+revisions. Completed shell and edit tools, including child-agent tools,
+schedule a refresh. The private queue in `useBuildStreaming.ts` combines rapid
+completions and reconciles when the stream settles, even if it missed every tool packet.
+Tool completions during a read coalesce into one pending refresh.
+Settlement replaces that pending work with one final read, queued immediately.
+The store serializes all inventory reads per session, including focus and panel reads.
+A silent read cannot consume new files before pending turn discovery selects them.
+An already-settled turn also triggers reconciliation when the attach returns no stream.
+Partial responses retain unseen entries. Failed responses preserve the last
+inventory. Queued reads and responses from older turns are ignored.
+Aborted queued reads do not issue a request. Completed queues are released.
+
+New previewable files add tabs. One shared transition selects the first eligible output,
+opens the panel, and locks automatic selection for the task. Files and ready webapps
+use the same interruption, dismissal, and manual-navigation checks.
+Within that batch, PowerPoint and PDF take priority over Markdown and images.
+Later files add tabs without changing the selection. This also works when the
+panel is already open. Opening, selecting, and locking the selection happen in
+one store update. Other formats update the inventory without opening a generic tab;
+helper scripts must not reveal an empty Artifacts view before the deliverable exists. Changed files
+refresh their previews without selecting a tab. Deleted files invalidate their
+previews. Preview caches use the file path, inventory revision, and an explicit
+reload counter. Unchanged output previews reuse cached data across tab switches.
+Reload counters are per file and change only when the user requests a reload.
+Files without inventory revisions still revalidate when their preview mounts.
+Each successful PowerPoint conversion response gives slide images a fresh browser
+cache token. Cached conversions retain that token across tab switches.
+PDF previews release each viewer's object URL and payload on unmount.
+The panel retains up to five recently visited tab bodies, preserving scroll and
+slide selection across switches. Retained iframes stay in stable DOM order.
+Closed tabs and prior sessions are removed; closing the panel releases its bodies
+after the animation. Hidden file viewers retain their displayed revision and load the
+latest revision on activation. Presentation keyboard navigation stays inside the viewer.
+
+The first automatic output selection, manual tab selection, closing a tab, and
+history navigation suppress further automatic selection for the current turn.
+A new interactive turn clears this selection lock.
+Scheduled runs use fresh sessions; reattaching preserves their selection lock. Manually
+closing the panel suppresses automatic opening until the next interactive turn. Explicit file
+clicks still open their preview. The inventory keeps updating while navigation
+is suppressed, so old changes do not appear as new files later.
+
 ## 5. Contracts and invariants
 
 1. **Craft does not reuse chat's `Packet`/`Placement`.** It has its own two
@@ -357,6 +422,12 @@ cd backend && uv run pytest tests/unit/onyx/server/features/craft/sandbox/test_t
 
 # Craft integration tests exercising a live turn end to end
 cd backend && uv run pytest tests/integration -k craft
+```
+
+Frontend regression tests for output discovery and panel selection:
+
+```bash
+cd web && bun run test --runInBand useBuildStreaming.test.tsx useBuildSessionStore.outputs.test.ts
 ```
 
 `backend/tests/external_dependency_unit/craft/test_streaming_persistence.py`
