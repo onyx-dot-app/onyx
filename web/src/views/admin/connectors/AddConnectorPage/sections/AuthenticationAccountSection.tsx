@@ -168,7 +168,7 @@ export default function AuthenticationAccountSection({
           <>
             <Button
               icon={SvgListTree}
-              prominence="tertiary"
+              prominence="internal"
               // Shown, the button holds its hover look.
               interaction={showSavedAccounts ? "hover" : "rest"}
               aria-pressed={showSavedAccounts}
