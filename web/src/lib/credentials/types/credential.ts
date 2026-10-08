@@ -154,3 +154,20 @@ export interface CredentialFieldSpec {
 export interface CredentialSchemaResponse {
   credentials: Record<string, CredentialFieldSpec>;
 }
+
+/** Where a credential's stored capability check run stands. */
+export type CredentialCheckRunStatus = "running" | "completed" | "failed_to_run";
+
+/**
+ * One stored capability report. `connector_id` is null for the report on the
+ * credential alone; `report` is the last completed run, kept while a re-run
+ * is running.
+ */
+export interface CredentialCheckReport {
+  credential_id: number;
+  connector_id: number | null;
+  run_status: CredentialCheckRunStatus;
+  run_started_at: string | null;
+  report: { checked_at: string } | null;
+  time_updated: string;
+}

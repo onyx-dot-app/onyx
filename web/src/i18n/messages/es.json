@@ -2735,6 +2735,25 @@
           },
           "owner": {
             "you": "{name} (tú)"
+          },
+          "lastTested": {
+            "title": "Última prueba {date}"
+          },
+          "notTested": {
+            "title": "Aún no probada"
+          },
+          "details": {
+            "description": "Las credenciales de una cuenta guardada no se pueden editar ni redirigir a otro host. Puedes probar la cuenta antes de reutilizarla o añadir una cuenta nueva."
+          },
+          "rerunButton": {
+            "label": "Volver a ejecutar comprobaciones",
+            "runningLabel": "Ejecutando comprobaciones"
+          },
+          "authenticationType": {
+            "label": "Tipo de autenticación"
+          },
+          "rerunFailed": {
+            "toast": "No se pudieron iniciar las comprobaciones. Inténtalo de nuevo."
           }
         }
       },

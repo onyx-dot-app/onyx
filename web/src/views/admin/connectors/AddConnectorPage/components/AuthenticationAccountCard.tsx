@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Modal, SelectCard, Text } from "@opal/components";
-import { Content, Section } from "@opal/layouts";
+import { Button, Card, Modal, SelectCard, Text } from "@opal/components";
+import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import {
   SvgAlertTriangle,
   SvgArrowRightCircle,
@@ -11,10 +11,17 @@ import {
   SvgChevronDown,
   SvgChevronUp,
   SvgLinkedDots,
+  SvgPlay,
   SvgTrash,
   SvgUserKey,
 } from "@opal/icons";
-import type { Credential, SimilarCredential } from "@/lib/credentials/types";
+import type {
+  Credential,
+  CredentialCheckReport,
+  SimilarCredential,
+} from "@/lib/credentials/types";
+import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
+import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { getSourceMetadata } from "@/lib/sources";
 import { useUser } from "@/providers/UserProvider";
@@ -34,6 +41,10 @@ interface AuthenticationAccountCardProps {
   onDeselect: () => void;
   /** Called once the user confirms the deletion. */
   onDelete: (credential: Credential<any>) => void;
+  /** The account's stored check report, or null if it was never checked. */
+  checkReport: CredentialCheckReport | null;
+  /** Starts the checks on this account; resolves once the run is queued. */
+  onRerunChecks: (credential: Credential<any>) => Promise<void>;
 }
 
 /**
@@ -41,6 +52,36 @@ interface AuthenticationAccountCardProps {
  * picks the account, or drops it when it is already picked; the chevron
  * opens the details below it.
  */
+interface DetailRowProps {
+  label: string;
+  value: string;
+  /** Sets the value in the mono font, as for a secret. */
+  mono?: boolean;
+}
+
+/** One label and value of the account's details. */
+function DetailRow({ label, value, mono = false }: DetailRowProps) {
+  return (
+    <Section
+      flexDirection="row"
+      justifyContent="between"
+      alignItems="center"
+      gap={4}
+      width="full"
+    >
+      <Text font="main-content-body" color="text-03">
+        {label}
+      </Text>
+      <Text
+        font={mono ? "main-content-mono" : "main-content-body"}
+        color="text-04"
+      >
+        {value}
+      </Text>
+    </Section>
+  );
+}
+
 export default function AuthenticationAccountCard({
   credential,
   source,
@@ -49,11 +90,40 @@ export default function AuthenticationAccountCard({
   onSelect,
   onDeselect,
   onDelete,
+  checkReport,
+  onRerunChecks,
 }: AuthenticationAccountCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const tCredentials = useTranslations("admin.credentials.delete");
+  const tCredentialCopy = useTranslations("admin.credentials");
+  const fieldCopy = useCredentialFieldCopy(source);
+  const details = getCredentialDetails(credential, source);
   const format = useFormatter();
   const { user } = useUser();
+  const [starting, setStarting] = useState<boolean>(false);
+  const running: boolean = starting || checkReport?.run_status === "running";
+  const lastChecked: string | null = checkReport?.report?.checked_at ?? null;
+  const checkedAt: string | null = lastChecked
+    ? format.dateTime(new Date(lastChecked), {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : null;
+
+  async function rerunChecks() {
+    setStarting(true);
+    try {
+      await onRerunChecks(credential);
+    } catch {
+      toast.error(t("rerunFailed.toast"));
+    } finally {
+      setStarting(false);
+    }
+  }
   const [expanded, setExpanded] = useState<boolean>(false);
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
@@ -118,22 +188,61 @@ export default function AuthenticationAccountCard({
         data-testid="authentication-account"
         onClick={() => (selected ? onDeselect() : onSelect(credential))}
         expandedContent={
-          <Section
-            flexDirection="row"
-            justifyContent="start"
-            padding={4}
-            width="full"
-          >
-            <Button
-              variant="danger"
-              prominence="secondary"
-              icon={SvgTrash}
-              // The connector is about to use the selected account.
-              disabled={selected}
-              onClick={() => setConfirmingDelete(true)}
-            >
-              {t("deleteButton.label")}
-            </Button>
+          <Section padding={2} width="full">
+            <Card border="none" padding={2} rounding={3}>
+              <Section gap={2} alignItems="stretch" width="full">
+                <ContentAction
+                  title={
+                    checkedAt
+                      ? t("lastTested.title", { date: checkedAt })
+                      : t("notTested.title")
+                  }
+                  description={t("details.description")}
+                  sizePreset="main-content"
+                  variant="section"
+                  padding={0}
+                  rightChildren={
+                    <Section flexDirection="row" gap={1} width="fit">
+                      <Button
+                        variant="danger"
+                        prominence="tertiary"
+                        icon={SvgTrash}
+                        aria-label={t("deleteButton.label")}
+                        // The connector is about to use the selected account.
+                        disabled={selected}
+                        onClick={() => setConfirmingDelete(true)}
+                      />
+                      <Button
+                        prominence="secondary"
+                        icon={SvgPlay}
+                        disabled={running}
+                        onClick={rerunChecks}
+                      >
+                        {running
+                          ? t("rerunButton.runningLabel")
+                          : t("rerunButton.label")}
+                      </Button>
+                    </Section>
+                  }
+                />
+                {details.method && (
+                  <DetailRow
+                    label={t("authenticationType.label")}
+                    value={tCredentialCopy(
+                      `methods.labels.${details.method.label}`
+                    )}
+                  />
+                )}
+                {details.fields.map(({ key, field, value }) => (
+                  <DetailRow
+                    key={key}
+                    label={fieldCopy(key).title}
+                    value={value}
+                    mono={field.kind === "secret"}
+                  />
+                ))}
+              </Section>
+            </Card>
           </Section>
         }
       >

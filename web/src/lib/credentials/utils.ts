@@ -178,18 +178,35 @@ export function createEditingValidationSchema(
   return Yup.object().shape(schemaFields);
 }
 
+/**
+ * The method a stored credential uses: the one it names, else the first whose
+ * fields it holds, else the default.
+ */
+function findCredentialMethod(
+  credentialJson: Readonly<Record<string, unknown>>,
+  methods: readonly CredentialSpecMethod[],
+  storedAuthMethod: string | undefined
+): CredentialSpecMethod | undefined {
+  return (
+    methods.find((method) => method.value === storedAuthMethod) ??
+    methods.find((method) =>
+      method.fields.some((fieldKey) => fieldKey in credentialJson)
+    ) ??
+    methods[0]
+  );
+}
+
 function getAuthMethodFieldsForCredential(
   credentialJson: CredentialFieldValues,
   spec: CredentialSpec,
   methods: readonly CredentialSpecMethod[],
   storedAuthMethod: string | undefined
 ): CredentialFieldValues {
-  const selectedAuthMethod =
-    methods.find((method) => method.value === storedAuthMethod) ??
-    methods.find((method) =>
-      method.fields.some((fieldKey) => fieldKey in credentialJson)
-    ) ??
-    methods[0];
+  const selectedAuthMethod = findCredentialMethod(
+    credentialJson,
+    methods,
+    storedAuthMethod
+  );
 
   return {
     authentication_method: storedAuthMethod ?? selectedAuthMethod?.value ?? "",
@@ -202,7 +219,7 @@ function getAuthMethodFieldsForCredential(
 }
 
 function getStoredAuthMethod(
-  credentialJson: CredentialFieldValues,
+  credentialJson: Readonly<Record<string, unknown>>,
   sourceType: ValidSources
 ): string | undefined {
   const standardMethod = credentialJson[AUTHENTICATION_METHOD_KEY];
@@ -224,7 +241,7 @@ const OAUTH_MANAGED_CREDENTIAL_KEYS = new Set([
 ]);
 
 function isOAuthManagedCredentialJson(
-  credentialJson: CredentialFieldValues
+  credentialJson: Readonly<Record<string, unknown>>
 ): boolean {
   return Object.keys(credentialJson).some(
     (key) =>
@@ -382,4 +399,56 @@ export function getCredentialCreationActionLabel(
 
 export function shouldRedirectToOAuth(details: OAuthDetails): boolean {
   return details.additional_kwargs.length === 0;
+}
+
+/** What a saved credential shows of itself: its method and its text fields. */
+export interface CredentialDetails {
+  /** The method it uses, for a source with two or more. */
+  method: CredentialSpecMethod | null;
+  /** Its stored text fields, in the spec's order, with their values. */
+  fields: { key: string; field: CredentialSpecField; value: string }[];
+}
+
+/**
+ * The parts of a saved credential that can be shown: the method it uses and
+ * the text fields it stores. Files, toggles and an OAuth credential's tokens
+ * are left out. Values are as the server returns them, which may be masked.
+ */
+export function getCredentialDetails(
+  credential: Credential<Readonly<Record<string, unknown>>>,
+  sourceType: ValidSources = credential.source
+): CredentialDetails {
+  const credentialJson = credential.credential_json ?? {};
+  const spec = getCredentialSpec(sourceType);
+  if (!spec || isOAuthManagedCredentialJson(credentialJson)) {
+    return { method: null, fields: [] };
+  }
+
+  const method = spec.methods
+    ? findCredentialMethod(
+        credentialJson,
+        spec.methods,
+        getStoredAuthMethod(credentialJson, sourceType)
+      ) ?? null
+    : null;
+  const entries = method
+    ? methodFields(spec, method)
+    : Object.entries(spec.fields);
+
+  return {
+    method,
+    fields: entries.flatMap(([key, field]) => {
+      const value = credentialJson[key];
+      if (
+        field.kind === "file" ||
+        field.kind === "toggle" ||
+        field.kind === "checkbox" ||
+        typeof value !== "string" ||
+        value === ""
+      ) {
+        return [];
+      }
+      return [{ key, field, value }];
+    }),
+  };
 }

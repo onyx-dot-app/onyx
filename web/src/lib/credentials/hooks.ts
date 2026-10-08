@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { adminDeleteCredential, deleteCredential } from "@/lib/credentials/svc";
+import {
+  adminDeleteCredential,
+  deleteCredential,
+  startCredentialCheckRun,
+} from "@/lib/credentials/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
@@ -27,6 +31,7 @@ import {
 import type {
   AnyCredential,
   Credential,
+  CredentialCheckReport,
   SimilarCredential,
   CredentialSetup,
   GmailCredentialJson,
@@ -394,3 +399,46 @@ export const useGoogleDriveCredentials = (connector: string) => {
 export const useGoogleCredentials = (
   source: ValidSources.Gmail | ValidSources.GoogleDrive
 ): SourceCredentialsResult => useSourceCredentials(source);
+
+/** How often the check reports refresh while a run is going. */
+const CREDENTIAL_CHECK_POLL_MS = 2000;
+
+/** What `useCredentialCheckReports` returns. */
+export interface CredentialCheckReports {
+  /** A credential's own report (not a connector's), or null if it has none. */
+  reportFor: (credentialId: number) => CredentialCheckReport | null;
+  /** Starts the checks on one credential; resolves once the run is queued. */
+  rerun: (credentialId: number) => Promise<void>;
+}
+
+/**
+ * The stored capability reports of one source's credentials, polled while
+ * any run is going. Deployments without the checks report nothing, so a
+ * failed load shows as no reports.
+ */
+export function useCredentialCheckReports(
+  source: ValidSources
+): CredentialCheckReports {
+  const { data, mutate: refresh } = useSWR<CredentialCheckReport[]>(
+    SWR_KEYS.credentialCheckReports(source),
+    errorHandlingFetcher,
+    {
+      refreshInterval: (reports) =>
+        reports?.some((report) => report.run_status === "running")
+          ? CREDENTIAL_CHECK_POLL_MS
+          : 0,
+    }
+  );
+
+  return {
+    reportFor: (credentialId) =>
+      data?.find(
+        (report) =>
+          report.credential_id === credentialId && report.connector_id === null
+      ) ?? null,
+    rerun: async (credentialId) => {
+      await startCredentialCheckRun(credentialId);
+      await refresh();
+    },
+  };
+}
