@@ -13053,9 +13053,6 @@
         "calls": {
           "tag": "{count, plural, one {# استدعاء} other {# استدعاءات}}"
         },
-        "failed": {
-          "tag": "فشل {count}"
-        },
         "working": {
           "label": "قيد العمل"
         }

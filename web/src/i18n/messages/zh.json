@@ -13053,9 +13053,6 @@
         "calls": {
           "tag": "{count, plural, one {# 次调用} other {# 次调用}}"
         },
-        "failed": {
-          "tag": "{count} 个失败"
-        },
         "working": {
           "label": "处理中"
         }

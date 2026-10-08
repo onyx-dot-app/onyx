@@ -37,6 +37,10 @@ background and continues rendering it live; it does not lose the turn, but it
 also does not replay, byte-for-byte, whatever the client missed while
 disconnected (see §5, §9).
 
+The Working group shows the tool-call count without a failed-count badge.
+Its tool details start collapsed, including failures; users can expand each call
+to read its output.
+
 A sub-agent ("task" tool) has a separate sub-agent view (`SubagentView.tsx`).
 That view shows the sub-agent's own thinking and tool calls live while the
 run is active. The parent transcript shows only the task prompt and the final

@@ -54,6 +54,9 @@ them, and know when to stop.
 The composer moves from the welcome position to the conversation footer with
 a shared layout animation. Reduced-motion users get an immediate transition.
 
+A session with stale skills shows a blue information notice after its active turn
+ends. Its Reload action refreshes that session’s skills.
+
 The user can interrupt a running turn at any time. Partial output stays
 visible and stays saved; sending a new message does not erase what was
 already produced. When the agent is about to do something that needs
