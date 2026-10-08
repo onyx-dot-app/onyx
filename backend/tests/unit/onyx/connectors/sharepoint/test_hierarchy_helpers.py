@@ -148,3 +148,35 @@ def test_folder_permissions_use_library_url_not_display_name(
         f"{site_url}/R&D Docs/Plans",
         f"{site_url}/R&D Docs/Plans/Q1%20%26%20Q2",
     ]
+
+
+@patch(
+    "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access"
+)
+def test_folder_permission_failure_does_not_stop_hierarchy(
+    mock_get_access: MagicMock,
+) -> None:
+    access = ExternalAccess.empty()
+    mock_get_access.side_effect = [RuntimeError("401 Unauthorized"), access]
+    connector = SharepointConnector()
+    connector._graph_client = MagicMock()
+    site_url = "https://contoso.sharepoint.com/sites/eng"
+    checkpoint = SharepointConnectorCheckpoint(has_more=True)
+
+    with patch.object(
+        connector, "_create_rest_client_context", return_value=MagicMock()
+    ):
+        nodes = list(
+            connector._yield_folder_hierarchy_nodes(
+                site_url,
+                f"{site_url}/Shared%20Documents",
+                "Shared Documents",
+                "Plans/Q1",
+                checkpoint,
+                include_permissions=True,
+            )
+        )
+
+    assert [node.display_name for node in nodes] == ["Plans", "Q1"]
+    assert nodes[0].external_access is None
+    assert nodes[1].external_access is access
