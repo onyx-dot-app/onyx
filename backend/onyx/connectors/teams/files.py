@@ -103,9 +103,10 @@ class FileSource:
         # A channel's library, opened once per channel per attempt. None is a
         # channel whose library would not open, so every page does not try again.
         self._libraries: dict[str, ChannelLibrary | None] = {}
-        # One REST context per channel site and thread, since the SDK's context
-        # queues requests on the instance, rebuilt after _REST_CTX_MAX_AGE_S.
-        self._rest_contexts: dict[tuple[str, int], tuple[ClientContext, float]] = {}
+        # One REST context per channel site on each thread, since the SDK's
+        # context queues requests on the instance, rebuilt after
+        # _REST_CTX_MAX_AGE_S and freed with the thread.
+        self._rest_contexts = threading.local()
         # Group expansions SharePoint resolves, shared across files.
         self._permission_cache = SharepointPermissionCache()
 
@@ -238,8 +239,10 @@ class FileSource:
         """SharePoint REST for a channel's site, the way the SharePoint connector
         opens it: one context per site on the calling thread, rebuilt once its
         token could be stale."""
-        key = (site_url, threading.get_ident())
-        cached = self._rest_contexts.get(key)
+        by_site: dict[str, tuple[ClientContext, float]] = (
+            self._rest_contexts.__dict__.setdefault("by_site", {})
+        )
+        cached = by_site.get(site_url)
         if cached and time.monotonic() - cached[1] <= _REST_CTX_MAX_AGE_S:
             return cached[0]
         msal_app = self._msal_app()
@@ -248,7 +251,7 @@ class FileSource:
         context = ClientContext(site_url).with_access_token(
             lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
         )
-        self._rest_contexts[key] = (context, time.monotonic())
+        by_site[site_url] = (context, time.monotonic())
         return context
 
     def _file_access(

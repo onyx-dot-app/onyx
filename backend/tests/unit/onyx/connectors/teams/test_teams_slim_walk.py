@@ -2,7 +2,7 @@
 them can leave unread."""
 
 import threading
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, call
 
@@ -10,7 +10,11 @@ import pytest
 import requests
 from office365.teams.team import Team
 
+from onyx.access.models import ExternalAccess
+from onyx.connectors.microsoft_utils.drive_delta import SHAREPOINT_IDS_PROPERTY
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.models import Document, SlimDocument
+from onyx.connectors.teams import files as files_module
 from onyx.connectors.teams import listing as listing_module
 from onyx.connectors.teams.connector import (
     ORGANIZER_SOURCE_TYPES,
@@ -165,6 +169,72 @@ def test_a_walk_with_readers_reads_channels_side_by_side_too(
     client.execute_request_direct.side_effect = meet
 
     assert _ids(connector(client).retrieve_all_slim_docs_perm_sync()) == {"m1", "m2"}
+
+
+def test_a_walk_with_readers_gives_each_channel_its_own_rest_context_and_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """File readers come through the SDK's REST context and Graph client, both
+    of which queue requests on the instance, so two channels read side by
+    side must not share either."""
+    _team_with_channels(monkeypatch)
+    routes: dict[str, dict[str, Any]] = {}
+    for n, channel_id in enumerate(CHANNELS):
+        routes[_delta_url(channel_id)] = {"value": [message(f"m{n}", "one")]}
+        routes[f"teams/{TEAM_ID}/channels/{channel_id}/filesFolder"] = {
+            "id": f"folder-{n}",
+            "parentReference": {"driveId": f"drive-{n}", "siteId": None},
+        }
+        routes[f"drives/drive-{n}?$select={SHAREPOINT_IDS_PROPERTY}"] = {
+            SHAREPOINT_IDS_PROPERTY: {
+                "listId": f"list-{n}",
+                # One site for both, so a context cached per site alone
+                # would be shared.
+                "siteUrl": "https://tenant.sharepoint.example/sites/S",
+            }
+        }
+    client = graph_client(routes)
+    both_reading = threading.Barrier(2, timeout=5)
+    seen: list[tuple[int, Any, Any]] = []
+
+    def access(**kwargs: Any) -> ExternalAccess:
+        # Each reader waits for the other, so readers one channel at a time
+        # break the barrier.
+        both_reading.wait()
+        seen.append((threading.get_ident(), kwargs["ctx"], kwargs["graph_client"]))
+        return ExternalAccess(
+            external_user_emails=set(), external_user_group_ids=set(), is_public=False
+        )
+
+    def one_file(_client: Any, drive_id: str, **_kwargs: Any) -> Any:
+        yield DriveItemData(
+            id=f"file-{drive_id}",
+            name="Plan.pdf",
+            web_url="https://tenant.sharepoint.example/Plan.pdf",
+            size=10,
+            mime_type="application/pdf",
+            created_datetime=datetime(2026, 9, 1, tzinfo=timezone.utc),
+            last_modified_datetime=datetime(2026, 9, 2, tzinfo=timezone.utc),
+            drive_id=drive_id,
+        )
+
+    monkeypatch.setattr(files_module, "iter_drive_items_paged", one_file)
+    monkeypatch.setattr(files_module, "get_sharepoint_external_access", access)
+    monkeypatch.setattr(
+        files_module, "ClientContext", MagicMock(side_effect=lambda _: MagicMock())
+    )
+    monkeypatch.setattr(files_module, "acquire_token_for_rest", MagicMock())
+    monkeypatch.setattr(DriveItemData, "to_sdk_driveitem", lambda self, _client: self)
+    teams_connector = connector(client, include_attachments=True)
+    teams_connector._acquire_token = lambda: {"access_token": "token"}
+
+    ids = _ids(teams_connector.retrieve_all_slim_docs_perm_sync())
+
+    assert {file_document_id("file-drive-0"), file_document_id("file-drive-1")} <= ids
+    assert len(seen) == 2
+    assert seen[0][0] != seen[1][0]
+    assert seen[0][1] is not seen[1][1]
+    assert seen[0][2] is not seen[1][2]
 
 
 def test_a_refused_channel_fails_the_pruning_walk(

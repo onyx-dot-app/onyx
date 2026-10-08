@@ -80,6 +80,7 @@ class TeamsSession:
         self.graph_client = GraphClient(
             _acquire_token_func, environment=self._azure_environment
         )
+        # Clients built for an earlier credential must not outlive it.
         self._thread_clients = threading.local()
         # File downloads stream outside the SDK and carry the token themselves.
         self._acquire_token = _acquire_token_func
