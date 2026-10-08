@@ -42,12 +42,14 @@ interface DetailRowProps {
 function DetailRow({ label, value, mono = false }: DetailRowProps) {
   return (
     <Section flexDirection="row" gap={4}>
-      <Text font="main-ui-action" color="text-03" wordWrap="whitespace-nowrap">
-        {label}
-      </Text>
-      {/* The value takes what the label leaves, and a long one is cut with
-      its full text on hover. */}
-      <div className="min-w-0 flex-1 text-end">
+      {/* Each side is capped at the form's input column width, and a long
+      label or value is cut with its full text on hover. */}
+      <div className="min-w-0 max-w-(--block-width-form-input-column-max)">
+        <OverflowText as="p" font="main-ui-action" color="text-03">
+          {label}
+        </OverflowText>
+      </div>
+      <div className="ms-auto min-w-0 max-w-(--block-width-form-input-column-max) flex-1 text-end">
         <OverflowText
           as="p"
           font={mono ? "main-ui-mono" : "main-ui-body"}
