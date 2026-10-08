@@ -354,7 +354,7 @@ class TeamsConnector(
             checkpoint.active.append(
                 ChannelCursor(channel=checkpoint.todo_channels.pop())
             )
-        advances = cast(
+        advances: list[ChannelAdvance] = cast(
             list[ChannelAdvance],
             run_functions_tuples_in_parallel(
                 [
