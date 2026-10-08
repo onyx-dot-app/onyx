@@ -8,7 +8,9 @@ the fixture meeting among others."""
 import os
 import re
 import time
+from collections.abc import Generator
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -30,10 +32,23 @@ from onyx.connectors.outlook.connector import (
 from onyx.connectors.outlook.threads import THREAD_DOCUMENT_ID_PREFIX
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import ConnectorOutput, load_all_from_connector
+from tests.unit.onyx.connectors.outlook.outlook_api_shapes import memory_file_store
 from tests.utils.pytest_secrets import RedactedDict
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.SHAREPOINT_CLIENT_SECRET)
+
+
+@pytest.fixture(autouse=True)
+def thread_table_in_memory() -> Generator[None, None, None]:
+    """The thread table lives in the file store, which needs a database the
+    daily runner does not have. The walk under test is the Graph side."""
+    with patch(
+        "onyx.connectors.outlook.threads.get_default_file_store",
+        return_value=memory_file_store(),
+    ):
+        yield
+
 
 TEST_MAILBOX = "test@danswerai.onmicrosoft.com"
 # No tenant user has this address, so validation must refuse it every run.
