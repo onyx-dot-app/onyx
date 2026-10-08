@@ -13,6 +13,7 @@ import {
   SvgHourglass,
   SvgInfo,
   SvgMinusCircle,
+  SvgPlay,
   SvgRefreshCw,
   SvgXCircle,
   SvgProgressRing,
@@ -34,7 +35,7 @@ import {
   useConnectorChecksAutoRun,
   useConnectorChecksProgress,
 } from "@/lib/connectors/checks/hooks";
-import ConnectorsCheckPromptCard from "@/views/admin/connectors/AddConnectorPage/components/ConnectorsCheckPromptCard";
+import { useSettings } from "@/lib/settings/hooks";
 
 export interface CredentialChecksCardProps {
   source: ConfigurableSources;
@@ -110,6 +111,11 @@ const DETAIL_COLORS: Record<CapabilityCheckStatus, TextColor> = {
 // CheckRow
 // ---------------------------------------------------------------------------
 
+// A row's name and detail split the width 1 : 1.6; `min-w-0` lets their text
+// truncate instead of widening the row.
+const NAME_COLUMN = "min-w-0 flex-1";
+const DETAIL_COLUMN = "min-w-0 flex-[1.6]";
+
 function CheckRow({ result }: { result: CapabilityCheckResult }) {
   const t = useTranslations("admin.connectorChecks");
   const { icon: StatusIcon, className: iconClassName } =
@@ -122,15 +128,27 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
     (result.remediation !== null || result.docs_link !== null);
 
   const row = (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto] items-center gap-4">
-      <div className="flex min-w-0 items-center gap-3">
+    <Section flexDirection="row" justifyContent="start" height="fit" gap={4}>
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        height="fit"
+        gap={3}
+        className={NAME_COLUMN}
+      >
         <StatusIcon size={20} className={cn("shrink-0", iconClassName)} />
         <Text font="main-ui-action" color="text-04" maxLines={1}>
           {result.display_name}
         </Text>
-      </div>
+      </Section>
 
-      <div className="flex min-w-0 items-center gap-2">
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        height="fit"
+        gap={2}
+        className={DETAIL_COLUMN}
+      >
         <Text
           font="main-ui-body"
           color={DETAIL_COLORS[result.status]}
@@ -142,7 +160,13 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
           <Tooltip
             side="top"
             tooltip={
-              <div className="flex flex-col gap-1">
+              <Section
+                justifyContent="start"
+                alignItems="start"
+                width="fit"
+                height="fit"
+                gap={1}
+              >
                 {result.remediation !== null && (
                   <Text font="secondary-body" color="inherit">
                     {result.remediation}
@@ -160,17 +184,17 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
                     </Text>
                   </a>
                 )}
-              </div>
+              </Section>
             }
           >
-            <span className="inline-flex shrink-0">
+            <Section width="fit" height="fit">
               <SvgInfo size={16} className="stroke-status-warning-05" />
-            </span>
+            </Section>
           </Tooltip>
         )}
-      </div>
+      </Section>
 
-      <div className="justify-self-end">
+      <Section width="fit" height="fit">
         {result.required &&
           (blocking ? (
             <Tag title={t("required.label")} color="gray" />
@@ -179,8 +203,8 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
               {t("required.label")}
             </Text>
           ))}
-      </div>
-    </div>
+      </Section>
+    </Section>
   );
 
   return blocking ? (
@@ -188,7 +212,9 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
       {row}
     </Card>
   ) : (
-    <div className="p-2">{row}</div>
+    <Section height="fit" padding={2}>
+      {row}
+    </Section>
   );
 }
 
@@ -209,7 +235,7 @@ function CheckGroup({ status, results }: CheckGroupProps) {
       foldable
       defaultOpen
     >
-      <div className="flex flex-col">
+      <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
         {results.map((result) => (
           // The backend repeats some checks across capabilities under the
           // same ID, so the capability keeps the key unique.
@@ -218,7 +244,7 @@ function CheckGroup({ status, results }: CheckGroupProps) {
             result={result}
           />
         ))}
-      </div>
+      </Section>
     </Divider>
   );
 }
@@ -256,26 +282,39 @@ function OpenCheckRow({ check }: { check: DraftCheckState }) {
       : t(OPEN_DETAIL_KEYS[check.state]);
 
   return (
-    <div className="p-2">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto] items-center gap-4">
-        <div className="flex min-w-0 items-center gap-3">
+    <Section height="fit" padding={2}>
+      <Section flexDirection="row" justifyContent="start" height="fit" gap={4}>
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          height="fit"
+          gap={3}
+          className={NAME_COLUMN}
+        >
           <Icon size={20} className="shrink-0 stroke-text-03" />
           <Text font="main-ui-action" color="text-04" maxLines={1}>
             {check.display_name}
           </Text>
-        </div>
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
-          {detail}
-        </Text>
-        <div className="justify-self-end">
+        </Section>
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          height="fit"
+          className={DETAIL_COLUMN}
+        >
+          <Text font="main-ui-body" color="text-03" maxLines={1}>
+            {detail}
+          </Text>
+        </Section>
+        <Section width="fit" height="fit">
           {check.required && (
             <Text font="main-ui-body" color="text-03">
               {t("required.label")}
             </Text>
           )}
-        </div>
-      </div>
-    </div>
+        </Section>
+      </Section>
+    </Section>
   );
 }
 
@@ -289,14 +328,14 @@ function OpenCheckGroup({ label, checks }: OpenCheckGroupProps) {
   if (checks.length === 0) return null;
   return (
     <Divider title={t(label, { count: checks.length })} foldable defaultOpen>
-      <div className="flex flex-col">
+      <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
         {checks.map((check) => (
           <OpenCheckRow
             key={`${check.capability}:${check.check_id}`}
             check={check}
           />
         ))}
-      </div>
+      </Section>
     </Divider>
   );
 }
@@ -308,13 +347,16 @@ function OpenCheckGroup({ label, checks }: OpenCheckGroupProps) {
 /**
  * The capability checks for the connector being set up. Reads the shared
  * check session itself: before a run it shows the Start Checks prompt, after
- * one the results card.
+ * one the results card. The checks run only on request, so a page visit costs
+ * no credential calls.
  */
 export default function CredentialChecksCard({
   source,
   credentialId,
   locked,
 }: CredentialChecksCardProps) {
+  const promptT = useTranslations("admin.connectorChecks.prompt");
+  const { appName } = useSettings();
   const checks = useConnectorChecks({ source, credentialId });
   useConnectorChecksAutoRun(checks);
   // No check applies to this source and access type: nothing to start.
@@ -323,7 +365,21 @@ export default function CredentialChecksCard({
   }
   if (checks.status === "notStarted") {
     return (
-      <ConnectorsCheckPromptCard disabled={locked} onStart={checks.begin} />
+      <Card border="solid" rounding={4} padding={4}>
+        <ContentAction
+          title={promptT("title")}
+          description={promptT("description", { appName })}
+          sizePreset="main-content"
+          variant="section"
+          center
+          padding={0}
+          rightChildren={
+            <Button icon={SvgPlay} disabled={locked} onClick={checks.begin}>
+              {promptT("startButton.label")}
+            </Button>
+          }
+        />
+      </Card>
     );
   }
   return (
@@ -413,7 +469,7 @@ function CheckCardView({
 
   return (
     <Card border="solid" rounding={4} padding={2}>
-      <div className="flex flex-col gap-3">
+      <Section justifyContent="start" alignItems="stretch" height="fit" gap={3}>
         <ContentAction
           icon={progress.icon}
           title={t("title")}
@@ -458,7 +514,12 @@ function CheckCardView({
 
         {!collapsed &&
           (hasResults || openChecks.length > 0 ? (
-            <div className="flex flex-col gap-2">
+            <Section
+              justifyContent="start"
+              alignItems="stretch"
+              height="fit"
+              gap={2}
+            >
               {groups.map((group) => (
                 <CheckGroup
                   key={group.status}
@@ -474,7 +535,7 @@ function CheckCardView({
                 label="groups.expected"
                 checks={openChecks.filter((check) => check.state !== "running")}
               />
-            </div>
+            </Section>
           ) : (
             !notice && (
               <Text font="main-ui-body" color="text-03">
@@ -482,7 +543,7 @@ function CheckCardView({
               </Text>
             )
           ))}
-      </div>
+      </Section>
     </Card>
   );
 }
