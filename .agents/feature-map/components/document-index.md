@@ -563,17 +563,19 @@ Timing decorators now write local logs only. The obsolete print_only export opti
 ### Bounded transport and counter aggregation
 
 The fleet sender compresses batches and reuses its HTTP session in its background thread.
-Fetch/embed/write batch deltas are combined for up to 30 seconds by deployment, attempt, stage
-and generation, capped at 256 active keys; error counters bypass that window. Native cumulative
-stage summaries keep their collector schedule and 30-day central retention. Application threads
-still only sanitize allowlisted fields and try a nonblocking bounded enqueue. Unchanged license
+Fetch/embed/write batch deltas are combined for up to 30 seconds by attempt and stage,
+capped at 256 active keys; error counters bypass that window. Native cumulative stage
+summaries keep their collector schedule and 30-day central retention. Application threads
+only sanitize allowlisted fields and append to a bounded queue without a lock. Unchanged license
 and signup-domain metadata is reconciled every six hours, after delivery loss, or when changed.
+Spawned docfetching processes deliver their remaining counters at exit and wait at most two seconds.
 See `backend/tests/unit/onyx/utils/test_fleet_telemetry.py` for sum, failure, retry, and hot-path checks.
 
 ### Automatic fleet enrollment
 
 Application startup schedules background identity initialization. It never waits for storage or network access.
 `backend/onyx/db/fleet_enrollment.py` persists one installation seed in the existing encrypted key-value table.
+Identity storage waits until the process selects its edition. An earlier read would cache the Community secret codec for the whole process.
 The sender derives separate enrollment and privacy keys, then enrolls at `https://telemetry.onyx.app/v1/enroll`.
 Docker Compose and Helm enable the separate snapshot collector by default. `DISABLE_TELEMETRY=true` disables both paths.
 Optional explicit credentials retain their previous identity mapping. See `deployment/fleet-telemetry.md` for release order.

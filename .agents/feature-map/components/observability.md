@@ -171,7 +171,7 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 Fleet callhome replaces the legacy anonymous Go telemetry protocol. The bounded
 sender in `backend/onyx/utils/fleet_telemetry.py` emits allowlisted events without
 network I/O on request paths. The isolated collector supplies connector, queue,
-job, resource, and OpenSearch snapshots. Index attempt transitions emit directly.
+job, resource, OpenSearch, and index attempt snapshots.
 The old anonymous endpoint, adapter, duplicate Celery monitoring task, and daily
 version task are removed. Timing decorators retain local logs only.
 
@@ -550,6 +550,7 @@ The Helm collector mounts the configured database and Redis CA sources.
 
 Application startup schedules background identity initialization. It never waits for storage or network access.
 `backend/onyx/db/fleet_enrollment.py` persists one installation seed in the existing encrypted key-value table.
+Identity storage waits until the process selects its edition. An earlier read would cache the Community secret codec for the whole process.
 The sender derives separate enrollment and privacy keys, then enrolls at `https://telemetry.onyx.app/v1/enroll`.
 Docker Compose and Helm enable the separate snapshot collector by default. `DISABLE_TELEMETRY=true` disables both paths.
 Optional explicit credentials retain their previous identity mapping. See `deployment/fleet-telemetry.md` for release order.

@@ -6,15 +6,20 @@ This repository owns application hooks and the source collector implementation.
 Telemetry environment variables and the ingestion contract retain their names for compatibility.
 
 The API and workers emit reviewed fields into one bounded memory queue per process.
-Emissions perform no database, network, disk, serialization, or logging operations.
-Queue contention, overload, and disabled collection drop events without waiting.
-One sender retries retained batches with stable IDs and exponential backoff.
+Emissions take no lock and perform no database, network, disk, serialization, or logging operations.
+A full queue and disabled collection drop events without waiting.
+One sender retries retained batches with stable IDs and exponential backoff during outages.
 It reuses an HTTP session and gzip-compresses batches at level 1 in its background thread.
-Batch indexing counters are combined by deployment, attempt, stage and generation for up to
-30 seconds (at most 256 active keys). Error counters bypass this window. No aggregation or
-compression runs on application request or indexing threads.
-Shutdown does not wait for the sender. Query events can be lost during outages.
-Terminal attempts and jobs are recovered from authoritative source rows by a separate collector.
+A backlog drains in up to five 100-event batches per two-second wakeup.
+Events that the service answers with `retry` go out again with the next batch. After five sends
+they are dropped, so they cannot hold back newer events. Outages do not count against this limit.
+Batch indexing counters are combined by attempt and stage for up to 30 seconds (at most 256
+active keys). Error counters bypass this window. No aggregation or compression runs on
+application request or indexing threads.
+At shutdown, the sender makes one bounded final delivery attempt in its own thread.
+Long-running services do not wait for it. Spawned docfetching processes wait at most two
+seconds, so their final counters are not lost when they exit. Query events can be lost during outages.
+Attempt and job state comes from authoritative source rows that a separate collector reads.
 
 Connector metadata contains reviewed booleans, numbers, and selection counts.
 It excludes connector names, folder names, paths, URLs, credentials, and document content.
@@ -27,6 +32,10 @@ Installation fingerprints use a separate privacy key. The enrollment credential 
 New installations start reporting to `https://telemetry.onyx.app` without operator provisioning.
 API and worker startup schedules background enrollment and returns immediately.
 Until the local identity is ready, hooks drop observations; startup never waits for telemetry.
+Identity storage first waits until the process selects its edition. Each process caches its
+secret codec on first use, and a spawned docfetching child selects its edition after it starts.
+An earlier seed read would cache the Community codec and break connector credential decryption there.
+The standalone collector selects its edition at startup, like every other Onyx process.
 A background connection creates one random seed in the existing encrypted key-value store.
 Concurrent processes use an atomic insert and read the same stored seed.
 Storage uses Onyx's existing secret encryption configuration; community installations have its existing encryption limitations.
@@ -95,7 +104,10 @@ Run `python -m onyx.utils.fleet_telemetry_collector` in a separate container.
 One source connection has a two-second connect timeout, 1.5-second statement limit, and 100ms lock limit.
 Reads use pages of 200 rows. Unavailable sources back off independently.
 The collector scans up to ten schemas per tick with a one-second wall budget.
-Completed attempt/job repair sweeps wait for the configured connector interval.
+Attempt and job history starts 184 days back, inside the service's 190-day horizon.
+At the live edge, the next read starts ten minutes before the previous read, on the source clock.
+This catches rows that commit late. A 24-hour repair sweep runs every six hours and after
+deferred events expire. Durable event IDs let the service deduplicate these overlaps.
 A separate bounded active-job pass includes long-running permission/group jobs
 whose start timestamp predates the recent repair window. Changed state/counts get
 distinct safe event identities; terminal snapshots retain source timestamps and identities.
@@ -215,8 +227,9 @@ Connector jobs include the integration ID when their source table identifies it.
 work totals stay unavailable. Long-running jobs without a progress timestamp raise a
 coverage warning; a stale reported progress timestamp raises a stall issue.
 
-Unit tests cover strict privacy validation, fault isolation, lock contention, bounded queues,
-partial HTTP acknowledgments, stable retry IDs, first-answer timing, and OpenSearch item acknowledgments.
+Unit tests cover strict privacy validation, fault isolation, lock-free emission, bounded queues,
+partial HTTP acknowledgments, stable retry IDs, deferred-event expiry, backlog draining, bounded
+final delivery, first-answer timing, and OpenSearch item acknowledgments.
 They also verify Kubernetes resource denominators and content exclusion.
 
 Run source tests against a migrated test database:
@@ -265,8 +278,8 @@ unknown. All checks run in the isolated collector, outside application requests 
 
 The collector also reads `index_attempt_stage_metric`, which Onyx already maintains. The migration
 adds a concurrent `(time_last_event,id)` index. Grant the collector SELECT on this table as above.
-Changed summaries are read in 200-row pages on the connector interval, with 30-day initial backfill
-and a five-minute reconciliation overlap. Events carry the canonical stage, attempt/connector IDs,
+Changed summaries are read in 200-row pages on the connector interval, with 29-day initial backfill
+(inside the service's 30-day horizon) and a five-minute reconciliation overlap. Events carry the canonical stage, attempt/connector IDs,
 count, duration sum/min/max/M2, and first/last sample times. They contain no document or source labels.
 This adds no per-document emit calls and cannot block application threads.
 
@@ -284,7 +297,8 @@ Fleet-service labels, classifications, and alert thresholds cannot change deploy
 
 Fleet telemetry replaces the anonymous Go-server protocol. The legacy endpoint, record-type adapter,
 periodic metrics poller, daily version task, and unused signup, Slack, and permission-sync exports are removed.
-Index-attempt transitions emit directly through the bounded sender. The source collector recovers final attempt and job state.
+Attempt state comes only from collector snapshots. The fleet service rejects attempt state without the
+connector identity, and hooks cannot read that identity without a database query.
 Timing decorators keep local logging and no longer export arbitrary function names or user IDs.
 Sentry installation identity remains a separate utility because Sentry still uses it.
 Cloud PostHog analytics and feature flags are separate from this callhome pipeline.
