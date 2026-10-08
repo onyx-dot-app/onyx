@@ -106,7 +106,7 @@ interface CheckLogProps {
 function CheckLog({ check }: CheckLogProps) {
   const t = useTranslations("admin.connectorChecks");
   const { variant, icon, detail } = CHECK_LOGS[check.state];
-  // A failed required check blocks the form or Create, so its tag stands out.
+  // A failed required check blocks the form or Create, so its line is heavy.
   const blocking = check.state === "failed" && check.required;
   const showGuidance =
     (check.state === "failed" || check.state === "indeterminate") &&
@@ -156,14 +156,7 @@ function CheckLog({ check }: CheckLogProps) {
               </Section>
             </Tooltip>
           )}
-          {check.required &&
-            (blocking ? (
-              <Tag title={t("required.label")} color="gray" />
-            ) : (
-              <Text font="main-ui-body" color="text-03">
-                {t("required.label")}
-              </Text>
-            ))}
+          {check.required && <Tag title={t("required.label")} color="gray" />}
         </Section>
       }
     />
