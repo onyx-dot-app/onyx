@@ -2,18 +2,36 @@
 reads, compression roundtrip, size-cap truncation, the done marker's TTL switch,
 and missing-chunk gaps surfacing as non-replayable instead of broken replays."""
 
+import contextvars
 import os
 import zlib
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event, get_ident
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
 
+from onyx.agents.concurrency import EventDelivery
+from onyx.agents.events import AgentEvent, AgentStartEvent
 from onyx.chat import stream_buffer
+from onyx.chat.chat_processing_checker import (
+    ACTIVE_LEASE_SECONDS,
+    ChatTurnAdmission,
+    get_processing_stream_id,
+    is_chat_session_processing,
+)
+from onyx.chat.models import StreamingError
 from onyx.chat.stream_buffer import (
+    ChatDelivery,
     StreamBufferMeta,
     StreamBufferWriter,
+    _StreamStatus,
     read_stream_chunks,
 )
+from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.server.utils import get_json_line
 from tests.unit.fakes import FakeCache
 
 _STREAM_ID = 42
@@ -217,3 +235,227 @@ def test_corrupt_meta_reads_as_missing_buffer() -> None:
     cache.set(f"chatstream_{session_id}_{_STREAM_ID}:meta", b"not json{", ex=600)
 
     assert read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0) is None
+
+
+def test_truncation_cache_failure_does_not_prevent_content_free_cleanup(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cache = FakeCache()
+    writer = StreamBufferWriter(
+        cache=cache,
+        chat_session_id=uuid4(),
+        stream_id=_STREAM_ID,
+        delete_on_done=True,
+    )
+    writer.append_line('{"text": "private"}\n')
+    writer.flush()
+    assert cache.store
+
+    with patch.object(cache, "set", side_effect=RuntimeError("cache unavailable")):
+        writer.mark_truncated()
+        writer.mark_done()
+
+    assert not cache.store
+    assert "truncation update failed" in caplog.text
+
+
+def test_concurrent_delivery_keeps_reader_and_cache_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    delivery = ChatDelivery(_make_writer(cache, session_id))
+    first_entered = Event()
+    release_first = Event()
+    second_started = Event()
+    publish = delivery.reader.publish
+    first = Packet(
+        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="first")
+    )
+    second = Packet(
+        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="second")
+    )
+
+    def hold_first(item: Packet | StreamingError | _StreamStatus) -> None:
+        publish(item)
+        if item is first:
+            first_entered.set()
+            assert release_first.wait(2)
+
+    def publish_second() -> None:
+        second_started.set()
+        delivery.publish(second)
+
+    monkeypatch.setattr(delivery.reader, "publish", hold_first)
+    delivery.start()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first_write = executor.submit(
+            contextvars.copy_context().run, lambda: delivery.publish(first)
+        )
+        try:
+            assert first_entered.wait(2)
+            second_write = executor.submit(
+                contextvars.copy_context().run, publish_second
+            )
+            assert second_started.wait(2)
+            with pytest.raises(TimeoutError):
+                second_write.result(timeout=0.05)
+        finally:
+            release_first.set()
+        first_write.result(timeout=2)
+        second_write.result(timeout=2)
+    delivery.finish()
+    delivery.publish(first)
+
+    assert list(delivery.reader) == [first, second]
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+    assert saved is not None
+    assert saved.done
+    assert "".join(saved.blocks) == "".join(
+        get_json_line(packet.model_dump()) for packet in (first, second)
+    )
+
+
+def test_delayed_refresh_does_not_mark_stream_inactive() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    admission = ChatTurnAdmission(cache)
+    admission.claim(session_id)
+    admission.publish(_STREAM_ID)
+    for key in cache.expiries:
+        cache.expiries[key] = ACTIVE_LEASE_SECONDS - 20
+    assert is_chat_session_processing(session_id, cache)
+    assert get_processing_stream_id(session_id, cache) == _STREAM_ID
+    admission.release()
+    assert not is_chat_session_processing(session_id, cache)
+
+
+def test_event_delivery_and_cache_writes_share_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    output = ChatDelivery(_make_writer(cache, session_id))
+    channel = EventDelivery(output.events)
+    writing = Event()
+    release = Event()
+    workers: set[int] = set()
+    set_cache = cache.set
+
+    def write(
+        key: str, value: str | bytes | int | float, ex: int | None = None
+    ) -> None:
+        workers.add(get_ident())
+        writing.set()
+        assert release.wait(3)
+        set_cache(key, value, ex)
+
+    def receive(event: AgentEvent) -> None:
+        workers.add(get_ident())
+        output.publish(
+            Packet(
+                placement=Placement(turn_index=0),
+                obj=OverallStop(stop_reason=event.run_id),
+            )
+        )
+
+    monkeypatch.setattr(cache, "set", write)
+    channel.subscribe(receive)
+    output.start()
+    try:
+        channel.publish(AgentStartEvent(run_id="first"))
+        assert writing.wait(2)
+        assert next(output.reader) == Packet(
+            placement=Placement(turn_index=0), obj=OverallStop(stop_reason="first")
+        )
+        assert channel.tracker.wait_idle(timeout=0)
+        # Cache I/O must not hold the publication lock used by execution/control.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(
+                contextvars.copy_context().run,
+                lambda: output.publish(
+                    Packet(
+                        placement=Placement(turn_index=0),
+                        obj=OverallStop(stop_reason="control"),
+                    )
+                ),
+            ).result(timeout=1)
+        channel.publish(AgentStartEvent(run_id="second"))
+    finally:
+        release.set()
+        channel.close()
+        output.finish()
+    assert list(output.reader) == [
+        Packet(
+            placement=Placement(turn_index=0), obj=OverallStop(stop_reason="control")
+        ),
+        Packet(
+            placement=Placement(turn_index=0), obj=OverallStop(stop_reason="second")
+        ),
+    ]
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+    assert saved is not None and saved.done and not saved.gap
+    assert len(workers) == 1
+    assert get_ident() not in workers
+    assert "".join(saved.blocks) == "".join(
+        get_json_line(
+            Packet(
+                placement=Placement(turn_index=0), obj=OverallStop(stop_reason=reason)
+            ).model_dump()
+        )
+        for reason in ("first", "control", "second")
+    )
+
+
+def test_delivery_finish_drains_accepted_agent_events() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    output = ChatDelivery(_make_writer(cache, session_id))
+    channel = EventDelivery(output.events)
+    entered = Event()
+    release = Event()
+    finishing = Event()
+
+    def receive(event: AgentEvent) -> None:
+        if event.run_id == "first":
+            entered.set()
+            assert release.wait(3)
+        output.publish(
+            Packet(
+                placement=Placement(turn_index=0),
+                obj=OverallStop(stop_reason=event.run_id),
+            )
+        )
+
+    def finish() -> None:
+        finishing.set()
+        output.finish()
+
+    channel.subscribe(receive)
+    channel.publish(AgentStartEvent(run_id="first"))
+    try:
+        assert entered.wait(2)
+        channel.publish(AgentStartEvent(run_id="second"))
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            closing = executor.submit(contextvars.copy_context().run, finish)
+            try:
+                assert finishing.wait(2)
+                with pytest.raises(TimeoutError):
+                    closing.result(timeout=0.05)
+            finally:
+                release.set()
+            closing.result(timeout=2)
+    finally:
+        release.set()
+        channel.close()
+        output.finish()
+    packets = [
+        Packet(placement=Placement(turn_index=0), obj=OverallStop(stop_reason=reason))
+        for reason in ("first", "second")
+    ]
+    assert list(output.reader) == packets
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+    assert saved is not None and saved.done and not saved.gap
+    assert "".join(saved.blocks) == "".join(
+        get_json_line(packet.model_dump()) for packet in packets
+    )

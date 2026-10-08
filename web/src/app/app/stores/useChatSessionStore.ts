@@ -26,8 +26,7 @@ interface ChatSessionData {
   chatSessionSharedStatus: ChatSessionSharedStatus;
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
-  // Backend ID of the in-flight stream, so Stop cannot target a later one.
-  streamId?: number;
+  sendAcknowledged?: Promise<number | null>;
   hasPerformedInitialScroll: boolean;
   documentSidebarVisible: boolean;
   hasSentLocalUserMessage: boolean;
@@ -51,6 +50,7 @@ interface ChatSessionData {
 
   // Queued messages
   queuedMessages: QueuedMessage[];
+  queuedMessagesPaused: boolean;
 
   // True once the latest assistant message has fully rendered to the
   // user (backend stream done AND smooth-streaming typewriter caught up).
@@ -206,6 +206,7 @@ const createInitialSessionData = (
   lastAccessed: new Date(),
   isLoaded: false,
   queuedMessages: [],
+  queuedMessagesPaused: false,
   latestMessageRenderComplete: true,
   isStreamDraining: false,
   ...initialData,
@@ -583,7 +584,10 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
 
   // Abort Controller Actions
   setAbortController: (sessionId: string, controller: AbortController) => {
-    get().updateSessionData(sessionId, { abortController: controller });
+    get().updateSessionData(sessionId, {
+      abortController: controller,
+      sendAcknowledged: undefined,
+    });
   },
 
   abortSession: (sessionId: string) => {

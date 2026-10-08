@@ -1,10 +1,10 @@
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from onyx.context.search.models import SearchDoc
 from onyx.llm.models import ReasoningEffort
-from onyx.tools.models import ToolCallKickoff
 
 
 class ResearchConfiguration(BaseModel):
@@ -14,19 +14,9 @@ class ResearchConfiguration(BaseModel):
     reasoning_effort: ReasoningEffort
 
 
-class SpecialToolCalls(BaseModel):
-    think_tool_call: ToolCallKickoff | None = None
-    generate_report_tool_call: ToolCallKickoff | None = None
-
-
-class ResearchAgentCallFailure(BaseModel):
-    # LLM-facing explanation sent back as the failed call's tool response
-    message: str
-
-
-class CombinedResearchAgentCallResult(BaseModel):
-    # One entry per research agent call, in call order
-    intermediate_reports: list[str | ResearchAgentCallFailure]
+class ResearchAgentCallResult(BaseModel):
+    type: Literal["research_result"] = "research_result"
+    intermediate_report: str
     citation_mapping: dict[int, SearchDoc]
 
 

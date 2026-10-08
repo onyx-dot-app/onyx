@@ -251,15 +251,14 @@ Both tools convert their results into `InferenceSection`, the exact type
 web citations render identically to internal-search citations, downstream citation
 code (see [[citations]]) has no special case for web results.
 
-Citation numbering does not collide with a parallel internal search or another
-web-search call in the same turn: `tool_runner.py` assigns each search-like tool
-call (`SearchTool`, `WebSearchTool`, `OpenURLTool`) a `starting_citation_num`, then
-advances a shared counter by 100 before constructing the next tool's override
-kwargs (`tool_runner.py:run_tool_calls`, `starting_citation_num += 100` at each of the
-three branches). See [[internal-search]] for the internal side
-of the same mechanism.
+Citation numbering uses stable call indices from
+`backend/onyx/agents/tool_execution.py:ToolBatch`. Each search-like tool uses
+`context.next_citation_num + CITATIONS_PER_TOOL_CALL * invocation.call_index`.
+The constant is 100. See [[internal-search]] for the same rule in internal search.
 
 ---
+
+
 
 ## 5. Contracts and invariants
 
@@ -276,8 +275,8 @@ of the same mechanism.
    resolution and rendering stay uniform with [[internal-search]]. A change that
    returns a different shape breaks citations silently rather than loudly.
 3. **Citation ranges must not collide.** Any new search-like tool added to
-   `tool_runner.py`'s branch list must also reserve a `starting_citation_num` block
-   and advance the shared counter, or a parallel call can produce duplicate
+   the tool set must use the call-index offset from
+   `backend/onyx/tools/interface.py:CITATIONS_PER_TOOL_CALL`, or a parallel call can produce duplicate
    citation numbers across tools.
 4. **A fetched page must not bypass the SSRF guard.** `OnyxWebCrawler._fetch_url`
    routes every request through `ssrf_safe_get` (`onyx/utils/url.py`). Any new
@@ -335,7 +334,7 @@ of the same mechanism.
 | adds a new search or content provider | `WebSearchProviderType`/`WebContentProviderType` (`shared_configs/enums.py`), the factory branch in `providers.py`, `provider_requires_api_key`, the admin upsert/test endpoints, and `web/src/views/admin/WebSearchPage/` for the config form |
 | changes the result shape (`WebSearchResult`, `WebContent`, or the `InferenceSection` conversion in `web_search/utils.py`) | [[internal-search]] and [[citations]], since both assume the same `InferenceSection` contract; check citation rendering end to end |
 | changes the `open_url` fallback order (indexed / crawl / link-based) | `_merge_indexed_and_crawled_results`, `_fallback_link_lookup`, and the `DISABLE_VECTOR_DB` crawl-only branch, which has its own simplified order |
-| changes citation numbering (`starting_citation_num` increments) | `tool_runner.py`'s other two branches (`SearchTool`, and whichever new tool is added) and [[internal-search]] |
+| changes citation numbering (`starting_citation_num` increments) | `SearchTool`, `WebSearchTool`, and `OpenURLTool` call-index offsets and [[internal-search]] |
 | touches the WebSearch/OpenURL coupling (`should_disable_open_url_web_fetch`) | `backend/tests/unit/onyx/tools/test_open_url_web_search_coupling.py`, and [[tools-framework]]'s tool-picker filtering |
 | touches SSRF handling (`onyx/utils/url.py:ssrf_safe_get` or `OnyxWebCrawler._fetch_url`) | every caller of `ssrf_safe_get`, and whether a new content provider still routes through it or (like Firecrawl/Exa/Tavily) offloads fetching to a third-party service instead |
 | changes provider activation (`set_active_web_search_provider`/`set_active_web_content_provider`) | the exclusivity invariant in §5.6, and `/web-search/*` runtime endpoints that assume a single active row |

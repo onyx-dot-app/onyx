@@ -22,7 +22,6 @@ from onyx.llm.cancellation import (
     CancellationSignal,
     current_cancellation,
 )
-from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -34,7 +33,6 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import (
     FakeModelClient,
     FakeRunOwnership,
@@ -97,7 +95,6 @@ def test_cancelled_turn_retains_completed_tools_for_resume() -> None:
 
     agent = Agent(
         FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[echo(execute, sequential=True)],
     )
     with pytest.raises(AgentCancelled):
@@ -132,7 +129,6 @@ def test_all_calls_record_in_order_for_each_execution_mode(sequential: bool) -> 
     context = AgentState()
     agent = Agent(
         scripted(calls(9), answer()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=context,
         tools=[echo(sequential=sequential)],
     )
@@ -179,10 +175,7 @@ def test_observer_can_cancel_active_execution() -> None:
         if event.type == "message_start":
             signal.cancel()
 
-    run = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    ).start(
+    run = Agent(FakeModelClient(generate)).start(
         max_steps=1,
         cancellation=signal,
         on_event=observe,
@@ -215,12 +208,7 @@ def test_invalid_calls_get_paired_errors(invalid: str) -> None:
         from onyx.llm.models import ToolChoiceOptions
 
         options.tool_choice = ToolChoiceOptions.NONE
-    agent = Agent(
-        scripted(message, answer()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[echo()],
-        options=options,
-    )
+    agent = Agent(scripted(message, answer()), tools=[echo()], options=options)
     run_agent(agent, runs=runs, max_steps=2)
     tool_result = agent.state.messages[1]
     assert isinstance(tool_result, ToolResultMessage)
@@ -231,7 +219,6 @@ def test_context_transform_does_not_rewrite_durable_history() -> None:
     runs: list[Run] = []
     agent = Agent(
         scripted(answer()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="original")]),
         prepare_step=lambda _state: PreparedStep(
             assemble_messages=lambda _messages: []
@@ -275,9 +262,7 @@ def test_preparation_previous_output_shares_only_detached_callback_messages() ->
 
     agent = Agent(
         FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="history")]),
-        tools=[tool],
         prepare_step=prepare,
     )
     run = agent.start(max_steps=2, messages=[UserMessage(content="question")])
@@ -310,7 +295,6 @@ def test_tool_hooks_can_block_transform_and_report_progress() -> None:
 
     agent = Agent(
         scripted(calls(2), answer()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[echo(execute)],
         before_tool_call=lambda context: (
             ToolResult(content="blocked", is_error=True)
@@ -330,7 +314,7 @@ def test_tool_hooks_can_block_transform_and_report_progress() -> None:
     ] == ["raw!", "blocked!"]
     assert sorted(
         event.progress.content for event in events if event.type == "tool_update"
-    ) == ["", "raw", "working"]
+    ) == ["blocked", "raw", "working"]
 
 
 def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
@@ -351,10 +335,7 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
     def execute(invocation: ToolInvocation) -> ToolResult:
         signals.append(invocation.cancellation)
         submission = invocation.agents.spawn_agent(
-            Agent(
-                FakeModelClient(child_model),
-                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            ),
+            Agent(FakeModelClient(child_model)),
             name="child",
             description="Run the child task",
             max_steps=1,
@@ -365,7 +346,6 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
 
     agent = Agent(
         scripted(calls()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="echo", description="", parameters={}),
@@ -400,11 +380,7 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
 
 def test_limits_and_exception_lifecycle() -> None:
     runs: list[Run] = []
-    agent = Agent(
-        scripted(calls()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[echo()],
-    )
+    agent = Agent(scripted(calls()), tools=[echo()])
     events: list[AgentEvent] = []
     assert (
         run_agent(agent, runs=runs, listener=events.append, max_steps=1).stop_reason
@@ -419,10 +395,7 @@ def test_limits_and_exception_lifecycle() -> None:
     ) -> AssistantMessage:
         raise ValueError("provider failure")
 
-    agent = Agent(
-        FakeModelClient(fail),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
+    agent = Agent(FakeModelClient(fail))
     with pytest.raises(RunFailed):
         run_agent(agent, runs=runs, listener=events.append, max_steps=1)
     last_event = events[-1]
@@ -435,6 +408,7 @@ def test_incomplete_model_stream_cannot_complete_an_agent_turn() -> None:
     runs: list[Run] = []
     from collections.abc import Generator
 
+    from onyx.llm.interfaces import GenerationContext
     from onyx.llm.models import GenerationEvent, TextDeltaEvent
 
     closed: list[bool] = []
@@ -449,10 +423,7 @@ def test_incomplete_model_stream_cannot_complete_an_agent_turn() -> None:
             finally:
                 closed.append(True)
 
-    agent = Agent(
-        IncompleteClient(lambda *_: answer()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
+    agent = Agent(IncompleteClient(lambda *_: answer()))
     with pytest.raises(RunFailed):
         run_agent(agent, runs=runs, max_steps=1)
     assert closed == [True]
@@ -465,6 +436,7 @@ def test_cancellation_closes_active_client_stream() -> None:
     runs: list[Run] = []
     from collections.abc import Generator
 
+    from onyx.llm.interfaces import GenerationContext
     from onyx.llm.models import (
         GenerationDoneEvent,
         GenerationEvent,
@@ -480,22 +452,17 @@ def test_cancellation_closes_active_client_stream() -> None:
             self, request: GenerationRequest, context: GenerationContext | None = None
         ) -> Generator[GenerationEvent, None, None]:
             del request
-            assert context is not None and context.cancellation is not None
-            run_signal = context.cancellation
-            assert run_signal is not signal
+            assert context is not None and context.cancellation is signal
             try:
                 yield TextDeltaEvent(content_index=0, text="partial")
-                with run_signal.on_cancel(cancelled.set):
+                with signal.on_cancel(cancelled.set):
                     assert cancelled.wait(2)
-                run_signal.check()
+                signal.check()
                 yield GenerationDoneEvent()
             finally:
                 closed.append(True)
 
-    agent = Agent(
-        StreamingClient(lambda *_: answer()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
+    agent = Agent(StreamingClient(lambda *_: answer()))
     with pytest.raises(AgentCancelled):
         run_agent(
             agent,
@@ -517,6 +484,7 @@ def test_configured_cancellation_applies_unless_run_overrides_it(
     override: bool,
 ) -> None:
     runs: list[Run] = []
+    from onyx.llm.interfaces import GenerationContext
 
     configured = CancellationSignal()
     configured.cancel()
@@ -530,9 +498,7 @@ def test_configured_cancellation_applies_unless_run_overrides_it(
 
     agent = Agent(
         FakeModelClient(reply),
-        generation_context=GenerationContext(
-            flow=LLMFlow.CHAT_RESPONSE, cancellation=configured
-        ),
+        generation_context=GenerationContext(cancellation=configured),
     )
     if override:
         active = CancellationSignal()
@@ -540,8 +506,7 @@ def test_configured_cancellation_applies_unless_run_overrides_it(
             run_agent(agent, runs=runs, max_steps=1, cancellation=active).output.text
             == "done"
         )
-        assert called == [runs[-1].cancellation_signal]
-        assert not active.cancelled
+        assert called == [active]
     else:
         with pytest.raises(AgentCancelled):
             run_agent(agent, runs=runs, max_steps=1)
@@ -552,7 +517,6 @@ def test_failed_tool_status_survives_successful_agent_completion() -> None:
     runs: list[Run] = []
     agent = Agent(
         scripted(calls(), answer("Explained tool failure")),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             echo(lambda _invocation: ToolResult(content="unavailable", is_error=True))
         ],
@@ -583,10 +547,7 @@ def test_each_run_accepts_explicit_input_and_preserves_prior_history() -> None:
         return answer(f"answer {len(requests)}")
 
     supplied = UserMessage(content="first task")
-    agent = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
+    agent = Agent(FakeModelClient(generate))
     first = run_agent(agent, runs=runs, messages=[supplied], max_steps=1)
     first_snapshot = runs[-1].snapshot()
     assert first_snapshot is not None
@@ -618,10 +579,7 @@ def test_busy_run_rejects_input_without_changing_history() -> None:
         assert release.wait(3)
         return answer()
 
-    agent = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
+    agent = Agent(FakeModelClient(generate))
     with ThreadPoolExecutor(max_workers=1) as workers:
         running = workers.submit(
             lambda: agent.start(
@@ -682,10 +640,7 @@ def test_current_thread_start_completes_storage_before_return() -> None:
     )
 
     run = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=prepare,
-        after_step=after,
+        FakeModelClient(generate), prepare_step=prepare, after_step=after
     ).start(background=False, max_steps=1, coordinator=coordinator)
     assert run.result(0).output.text == "done"
     assert coordinator.completion(run.id).result(0).run_id == run.id
@@ -701,10 +656,7 @@ def test_release_failure_remains_observable_after_execution_drains(
         raise error_type("Ownership release failed")
 
     coordinator = AgentCoordinator(ownership=FakeRunOwnership(release=release))
-    agent = Agent(
-        FakeModelClient(lambda *_: answer()),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
+    agent = Agent(FakeModelClient(lambda *_: answer()))
     run = agent.start(background=False, max_steps=1, coordinator=coordinator)
     assert run.result(0).output.text == "done"
     assert coordinator.completion(run.id).result(0).run_id == run.id
@@ -737,10 +689,9 @@ def test_coordinator_view_inherits_ownership_independently_of_store(
         else None,
     )
     try:
-        run = Agent(
-            FakeModelClient(lambda *_: answer()),
-            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        ).start(background=False, max_steps=1, coordinator=view)
+        run = Agent(FakeModelClient(lambda *_: answer())).start(
+            background=False, max_steps=1, coordinator=view
+        )
         assert run.result(0).output.text == "done"
         scope = "view" if replace_ownership else "owner"
         assert events == [f"{scope}.register", "save", f"{scope}.release"]

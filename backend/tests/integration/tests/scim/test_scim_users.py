@@ -30,7 +30,10 @@ from ee.onyx.server.license.models import LicenseMetadata, LicenseSource, PlanTy
 from onyx.configs.app_configs import REDIS_DB_NUMBER, REDIS_HOST, REDIS_PORT
 from onyx.db.enums import AccountType
 from onyx.server.settings.models import ApplicationStatus
-from tests.integration.common_utils.constants import ADMIN_USER_NAME, GENERAL_HEADERS
+from tests.integration.common_utils.constants import (
+    ADMIN_USER_NAME,
+    GENERAL_HEADERS,
+)
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
 from tests.integration.common_utils.managers.user import (

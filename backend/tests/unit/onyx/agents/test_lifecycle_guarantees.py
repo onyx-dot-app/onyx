@@ -15,16 +15,12 @@ from litellm.exceptions import (
 )
 from pydantic import BaseModel
 
-from onyx.agents.events import AgentEndEvent, AgentEvent
-from onyx.agents.models import (
-    PreparedStep,
-    RunFailureKind,
-    StepInput,
-    StepResult,
-    ToolCallContext,
-)
+from onyx.agents.events import AgentEvent
+from onyx.agents.execution_records import RunFailureKind
+from onyx.agents.models import PreparedStep, StepInput, StepResult, ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.chat.errors import chat_error
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import ClassifiedLLMError, LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import GenerationContext
@@ -41,7 +37,6 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -77,7 +72,6 @@ def test_cancelled_callback_reserves_agent_until_it_returns(
 
     agent = Agent(
         FakeModelClient(answer),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=None if during_completion else prepare,
         after_step=complete if during_completion else None,
     )
@@ -117,7 +111,6 @@ def test_tool_execution_survives_enrichment_failure() -> None:
                 content=[ToolCall(id="call", name="write", arguments={})]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="write", description="", parameters={}),
@@ -152,10 +145,7 @@ def test_failed_handle_releases_agent_and_preserves_error_classification(
             is_retryable=True,
         )
 
-    agent = Agent(
-        FakeModelClient(fail),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
+    agent = Agent(FakeModelClient(fail))
     reference = weakref.ref(agent)
     run = agent.start(max_steps=1)
     for _ in range(2):
@@ -182,10 +172,7 @@ def test_wait_timeout_and_waiter_cancellation_leave_run_active() -> None:
         assert release.wait(3)
         return AssistantMessage(content=[TextContent(text="done")])
 
-    run = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    ).start(max_steps=1)
+    run = Agent(FakeModelClient(generate)).start(max_steps=1)
     try:
         wait_entered(entered)
         with pytest.raises(TimeoutError):
@@ -198,10 +185,7 @@ def test_wait_timeout_and_waiter_cancellation_leave_run_active() -> None:
 
 
 def test_unsubscribe_before_dispatch_and_after_idle_is_safe() -> None:
-    run = Agent(
-        FakeModelClient(answer),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    ).start(max_steps=1)
+    run = Agent(FakeModelClient(answer)).start(max_steps=1)
     observed: list[AgentEvent] = []
     unsubscribe = run.subscribe(observed.append)
     unsubscribe()
@@ -211,21 +195,22 @@ def test_unsubscribe_before_dispatch_and_after_idle_is_safe() -> None:
     assert observed == []
 
 
-def test_observer_backlog_preserves_output_and_cleanup_ownership() -> None:
+def test_observer_backlog_preserves_output_and_cleanup_ownership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.agents.concurrency.AGENT_EVENT_BUFFER_MAX_BYTES", 512)
+    monkeypatch.setattr("onyx.agents.concurrency.CLEANUP_SECONDS", 0.02)
     entered = threading.Event()
     release = threading.Event()
-    received: list[AgentEvent] = []
 
-    def observe(event: AgentEvent) -> None:
+    def observe(_event: AgentEvent) -> None:
         entered.set()
         assert release.wait(3)
-        received.append(event)
 
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="large " * 100)])
-        ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
     )
     run = agent.start(max_steps=1, on_event=observe)
     try:
@@ -243,8 +228,7 @@ def test_observer_backlog_preserves_output_and_cleanup_ownership() -> None:
     following = agent.start(max_steps=1)
     assert following.result(timeout=2).output.text == "large " * 100
     assert following.wait_for_idle(2)
-    assert not run.delivery_failed
-    assert isinstance(received[-1], AgentEndEvent)
+    assert run.delivery_failed
     assert run.snapshot() == frozen
 
 
@@ -259,7 +243,6 @@ def test_binary_tool_details_can_be_delivered() -> None:
                 content=[ToolCall(id="call", name="file", arguments={})]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="file", description="", parameters={}),
@@ -294,7 +277,6 @@ def test_late_tool_completion_cannot_change_a_closed_run() -> None:
                 content=[ToolCall(id="call", name="slow", arguments={})]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="slow", description="", parameters={}),
@@ -335,11 +317,7 @@ def test_selected_tool_definition_and_callback_stay_paired() -> None:
             content=[ToolCall(id="call", name="original", arguments={})]
         )
 
-    run = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[tool],
-    ).start(max_steps=1)
+    run = Agent(FakeModelClient(generate), tools=[tool]).start(max_steps=1)
     run.result()
     assert run.wait_for_idle(2)
     assert run.snapshot().messages[-1].text == "original"
@@ -365,10 +343,7 @@ def test_provider_receives_acceptance_before_reading_next_chunk() -> None:
                 assert run.snapshot().messages[-1].text == text
             yield GenerationDoneEvent()
 
-    run = Agent(
-        StreamingModel(answer),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    ).start(max_steps=1)
+    run = Agent(StreamingModel(answer)).start(max_steps=1)
     started.set()
     assert (run.result()).output.text == "x" * 30
     assert run.wait_for_idle(2)
@@ -376,10 +351,7 @@ def test_provider_receives_acceptance_before_reading_next_chunk() -> None:
 
 def test_prestart_subscription_receives_initial_event() -> None:
     observed: list[AgentEvent] = []
-    run = Agent(
-        FakeModelClient(answer),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    ).start(max_steps=1, on_event=observed.append)
+    run = Agent(FakeModelClient(answer)).start(max_steps=1, on_event=observed.append)
     run.result()
     assert run.wait_for_idle(2)
     assert observed[0].type == "agent_start"
@@ -411,10 +383,7 @@ def test_raw_provider_failure_keeps_safe_ui_classification(
     ) -> AssistantMessage:
         raise error
 
-    run = Agent(
-        FakeModelClient(fail),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    ).start(max_steps=1)
+    run = Agent(FakeModelClient(fail)).start(max_steps=1)
     with pytest.raises(RunFailed) as raised:
         run.result()
     assert run.wait_for_idle(2)
@@ -433,10 +402,7 @@ def test_unsubscribe_skips_listener_not_yet_dispatched() -> None:
         assert ready.wait(2)
         return answer(request, signal)
 
-    run = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    ).start(max_steps=1)
+    run = Agent(FakeModelClient(generate)).start(max_steps=1)
     observed: list[AgentEvent] = []
 
     def unsubscribe_next(_event: AgentEvent) -> None:
@@ -465,7 +431,6 @@ def test_tool_argument_mutation_does_not_change_recorded_model_call() -> None:
                 ]
             )
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="lookup", description="", parameters={}),
@@ -489,10 +454,7 @@ def test_observer_cannot_wait_for_its_own_run_to_become_idle() -> None:
         assert ready.wait(2)
         return answer(request, signal)
 
-    agent = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-    )
+    agent = Agent(FakeModelClient(generate))
     run = agent.start(max_steps=1)
     failures: list[str] = []
 
@@ -510,54 +472,6 @@ def test_observer_cannot_wait_for_its_own_run_to_become_idle() -> None:
     assert run.wait_for_idle(2)
     assert failures
     assert set(failures) == {"An observer cannot wait for its own run to become idle"}
-
-
-def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
-    entered, release = threading.Event(), threading.Event()
-    executed: list[str] = []
-
-    def before(_context: ToolCallContext) -> None:
-        entered.set()
-        assert release.wait(3)
-
-    def execute(_invocation: ToolInvocation) -> ToolResult:
-        executed.append("write")
-        return ToolResult(content="written")
-
-    agent = Agent(
-        FakeModelClient(
-            lambda *_: AssistantMessage(
-                content=[TextContent(text="New answer")]
-                if entered.is_set()
-                else [ToolCall(id="write", name="write", arguments={})]
-            )
-        ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[
-            AgentTool(
-                definition=ToolDefinition(name="write", description="", parameters={}),
-                execute=execute,
-            )
-        ],
-        before_tool_call=before,
-    )
-    old = agent.start(max_steps=1)
-    try:
-        assert entered.wait(2)
-        old.cancel()
-        with pytest.raises(AgentCancelled):
-            old.result(timeout=2)
-        assert not old._reusable.done()
-        with pytest.raises(RuntimeError, match="already running or draining"):
-            agent.start(max_steps=1)
-        assert not old.wait_for_idle(0)
-    finally:
-        release.set()
-    assert old.wait_for_idle(2)
-    new = agent.start(max_steps=1)
-    assert new.result(timeout=2).output.text == "New answer"
-    assert new.wait_for_idle(2)
-    assert executed == []
 
 
 @pytest.mark.parametrize(
@@ -584,7 +498,7 @@ def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
         (None, LLMTimeoutError, "CONNECTION_ERROR", True),
     ],
 )
-def test_provider_failure_preserves_retry_classification(
+def test_provider_failure_preserves_chat_retry_policy(
     cause: Exception | None,
     wrapper: type[LLMRateLimitError] | type[LLMTimeoutError],
     code: str,
@@ -596,13 +510,57 @@ def test_provider_failure_preserves_retry_classification(
         raise wrapper("generation failed") from cause
 
     llm = FakeModelClient(fail)
-    run = Agent(
-        llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
-    ).start(max_steps=1)
+    run = Agent(llm).start(max_steps=1)
     with pytest.raises(RunFailed) as raised:
         run.result(2)
     assert run.wait_for_idle(2)
-    packet = raised.value.failure.llm_error
-    assert packet is not None
+    packet = chat_error(raised.value, llm)
     assert packet.error_code == code
     assert packet.is_retryable is retryable
+
+
+def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
+    entered, release = threading.Event(), threading.Event()
+    executed: list[str] = []
+
+    def before(_context: ToolCallContext) -> None:
+        entered.set()
+        assert release.wait(3)
+
+    def execute(_invocation: ToolInvocation) -> ToolResult:
+        executed.append("write")
+        return ToolResult(content="written")
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[TextContent(text="New answer")]
+                if entered.is_set()
+                else [ToolCall(id="write", name="write", arguments={})]
+            )
+        ),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="write", description="", parameters={}),
+                execute=execute,
+            )
+        ],
+        before_tool_call=before,
+    )
+    old = agent.start(max_steps=1)
+    try:
+        assert entered.wait(2)
+        old.cancel()
+        with pytest.raises(AgentCancelled):
+            old.result(timeout=2)
+        assert not old._reusable.done()
+        with pytest.raises(RuntimeError, match="already running or draining"):
+            agent.start(max_steps=1)
+        assert not old.wait_for_idle(0)
+    finally:
+        release.set()
+    assert old.wait_for_idle(2)
+    new = agent.start(max_steps=1)
+    assert new.result(timeout=2).output.text == "New answer"
+    assert new.wait_for_idle(2)
+    assert executed == []

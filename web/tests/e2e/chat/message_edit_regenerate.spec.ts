@@ -1,9 +1,12 @@
 import { test, expect } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { sendMessage, switchModel } from "@tests/e2e/utils/chatActions";
 import {
   MOCK_LLM_DEFAULT_MODEL,
   MOCK_LLM_MODELS,
+  addMockLlmConversation,
+  mockLlmNonce,
 } from "@tests/e2e/utils/mockLlm";
 
 test.describe("Message Edit and Regenerate Tests", () => {
@@ -18,8 +21,14 @@ test.describe("Message Edit and Regenerate Tests", () => {
   });
 
   test("Complete message editing functionality", async ({ page }) => {
-    // Send initial message
-    await sendMessage(page, "What is 2+2?");
+    const chat = new ChatPage(page);
+    const nonce = mockLlmNonce();
+    await addMockLlmConversation({
+      name: nonce,
+      conditions: { prompt_contains: [nonce] },
+      replies: [{ text: "Four." }, { text: "Six." }, { text: "Eight." }],
+    });
+    await sendMessage(page, `What is 2+2? ${nonce}`);
 
     // Test cancel editing
     let userMessage = page.locator("#onyx-human-message").first();
@@ -36,9 +45,8 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await cancelButton.click();
 
     // Verify original message is preserved
-    let messageContent = await userMessage.textContent();
-    expect(messageContent).toContain("What is 2+2?");
-    expect(messageContent).not.toContain("This edit will be cancelled");
+    await expect(userMessage).toContainText("What is 2+2?");
+    await expect(userMessage).not.toContainText("This edit will be cancelled");
 
     // Edit the message for real
     await userMessage.hover();
@@ -48,26 +56,17 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await editButton.click();
 
     textarea = userMessage.locator("textarea");
-    await textarea.fill("What is 3+3?");
+    await textarea.fill(`What is 3+3? ${nonce}`);
 
     let submitButton = userMessage.locator('button:has-text("Submit")');
     await submitButton.click();
 
-    // Wait for the new AI response to complete
-    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
-      state: "detached",
-    });
-    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
-      state: "visible",
-      timeout: 30000,
-    });
+    await chat.expectCompleteAnswers(1);
+    await expect(chat.aiMessage()).toContainText("Six.");
+    await chat.expectCopyButton();
 
     // Verify edited message is displayed
-    messageContent = await page
-      .locator("#onyx-human-message")
-      .first()
-      .textContent();
-    expect(messageContent).toContain("What is 3+3?");
+    await expect(userMessage).toContainText("What is 3+3?");
 
     // Verify version switcher appears and shows 2/2
     let messageSwitcher = page.getByTestId("MessageSwitcher/container").first();
@@ -83,19 +82,14 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await editButton.click();
 
     textarea = userMessage.locator("textarea");
-    await textarea.fill("What is 4+4?");
+    await textarea.fill(`What is 4+4? ${nonce}`);
 
     submitButton = userMessage.locator('button:has-text("Submit")');
     await submitButton.click();
 
-    // Wait for the new AI response to complete
-    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
-      state: "detached",
-    });
-    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
-      state: "visible",
-      timeout: 30000,
-    });
+    await chat.expectCompleteAnswers(1);
+    await expect(chat.aiMessage()).toContainText("Eight.");
+    await chat.expectCopyButton();
 
     // Verify navigation between versions
     // Find the switcher showing "3 / 3"
@@ -115,6 +109,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();
     await expect(switcherSpan).toBeVisible({ timeout: 5000 });
     await expect(switcherSpan).toContainText("2/3");
+    await expect(chat.aiMessage()).toContainText("Six.");
 
     // Navigate to first version - re-find the button each time
     await switcherSpan
@@ -128,6 +123,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();
     await expect(switcherSpan).toBeVisible({ timeout: 5000 });
     await expect(switcherSpan).toContainText("1/3");
+    await expect(chat.aiMessage()).toContainText("Four.");
 
     // Navigate forward using next button - click the last svg icon's parent (right chevron)
     await switcherSpan
@@ -141,6 +137,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();
     await expect(switcherSpan).toBeVisible({ timeout: 5000 });
     await expect(switcherSpan).toContainText("2/3");
+    await expect(chat.aiMessage()).toContainText("Six.");
   });
 
   test("Message regeneration with model selection", async ({ page }) => {
@@ -148,14 +145,21 @@ test.describe("Message Edit and Regenerate Tests", () => {
     // the below will fail since we need to switch to a different model for the test
     await switchModel(page, MOCK_LLM_MODELS[1].displayName);
 
-    // Send initial message
-    await sendMessage(page, "hi! Respond with no more than a sentence");
+    const nonce = mockLlmNonce();
+    const originalAnswer = "The first model gave the original answer.";
+    const regeneratedAnswer = "The selected model gave a different answer.";
+    await addMockLlmConversation({
+      name: nonce,
+      conditions: { prompt_contains: [nonce] },
+      replies: [{ text: originalAnswer }, { text: regeneratedAnswer }],
+    });
+    await sendMessage(page, `Answer briefly. ${nonce}`);
 
     // Capture the original AI response text (just the message content, not buttons/switcher)
     const aiMessage = page.locator('[data-testid="onyx-ai-message"]').first();
     // Target the actual message content div (the one with select-text class)
     const messageContent = aiMessage.locator(".select-text").first();
-    const originalResponseText = await messageContent.textContent();
+    await expect(messageContent).toHaveText(originalAnswer);
 
     // Hover over AI message to show regenerate button
     await aiMessage.hover();
@@ -187,6 +191,8 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await expect(messageSwitcher).toBeVisible({ timeout: 5000 });
     await expect(messageSwitcher).toContainText("2/2");
 
+    await expect(messageContent).toHaveText(regeneratedAnswer);
+
     // Navigate to previous version
     await messageSwitcher
       .locator("..")
@@ -201,8 +207,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await expect(switcherSpan).toContainText("1/2");
 
     // Verify we're back to the original response
-    const firstVersionText = await messageContent.textContent();
-    expect(firstVersionText).toBe(originalResponseText);
+    await expect(messageContent).toHaveText(originalAnswer);
 
     // Navigate back to regenerated version
     await switcherSpan
@@ -216,6 +221,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();
     await expect(switcherSpan).toBeVisible({ timeout: 5000 });
     await expect(switcherSpan).toContainText("2/2");
+    await expect(messageContent).toHaveText(regeneratedAnswer);
   });
 
   test("Message editing with files", async ({ page }) => {

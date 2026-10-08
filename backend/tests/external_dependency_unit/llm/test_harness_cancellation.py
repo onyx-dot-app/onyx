@@ -462,9 +462,7 @@ def test_agent_reuse_waits_for_cancelled_provider_read(
             api_base=url,
         )
         coordinator = AgentCoordinator()
-        agent = Agent(
-            llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
-        )
+        agent = Agent(llm)
         old = agent.start(
             messages=[UserMessage(content="First")],
             max_steps=1,
@@ -517,9 +515,7 @@ def test_cancelled_provider_read_finishes_at_socket_timeout(send_chunk: bool) ->
         )
         agent = Agent(
             llm,
-            generation_context=GenerationContext(
-                flow=LLMFlow.CHAT_RESPONSE, stall_timeout_s=1
-            ),
+            generation_context=GenerationContext(stall_timeout_s=1),
         )
         yielded = threading.Event()
 
