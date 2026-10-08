@@ -159,7 +159,7 @@ def _normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
     for field in _DICT_FIELDS:
         if entry.get(field) is not None:
             out[field] = entry[field]
-    cost = out.get("cost")
+    cost: Any = out.get("cost")
     if isinstance(cost, dict):
         # Negative rates are upstream "unknown price" sentinels, not prices.
         out["cost"] = {
@@ -396,7 +396,7 @@ def _litellm_cost(entry: dict[str, Any]) -> dict[str, float]:
         value = entry.get(src_key)
         if value is not None:
             # Negative rates are upstream "unknown price" sentinels.
-            amount = float(value)
+            amount: float = float(value)
             if amount >= 0:
                 cost[dst_key] = amount * 1_000_000
     for src_key, dst_key in _LITELLM_UNIT_COST_FIELDS.items():
@@ -556,7 +556,7 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
         try:
             value = pricing.get(src_key)
             if value is not None:
-                amount = float(value)
+                amount: float = float(value)
                 if amount >= 0:
                     cost[dst_key] = amount * 1_000_000
         except (TypeError, ValueError):

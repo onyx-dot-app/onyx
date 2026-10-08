@@ -250,8 +250,8 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
     # fabrication — no chat model emits its whole context on top of input.
     # Upstream vendors these anyway (~250 entries), so treat the claim as
     # untrusted and emit no output limit, same as unbounded.
-    limit_output = limit.get("output")
-    context = limit.get("context")
+    limit_output: Any = limit.get("output")
+    context: Any = limit.get("context")
     if (
         not unbounded
         and (entry.get("mode") or "chat") == "chat"
