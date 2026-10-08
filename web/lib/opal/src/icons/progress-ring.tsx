@@ -5,7 +5,7 @@ import type { IconProps } from "@opal/types";
  * Each count takes its share of the ring, out of the sum of all five. The
  * caller decides what each colour means; negative counts read as 0.
  */
-export interface SvgProgressRingProps extends IconProps {
+export type SvgProgressRingProps = IconProps & {
   /** Green arc, e.g. items that succeeded. */
   success?: number;
   /** Red arc, e.g. items that failed. */
@@ -16,7 +16,7 @@ export interface SvgProgressRingProps extends IconProps {
   neutral?: number;
   /** A gap, e.g. items not started. Counted in the total, but not drawn. */
   rest?: number;
-}
+};
 
 type ProgressRingPart = Exclude<keyof SvgProgressRingProps, keyof IconProps>;
 

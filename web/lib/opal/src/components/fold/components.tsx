@@ -6,11 +6,11 @@ import { useEffect, useState } from "react";
 /** Matches the transition in `styles.css`. */
 const FOLD_DURATION_MS = 200;
 
-interface FoldProps {
+type FoldProps = {
   /** Whether the fold is open. */
   open: boolean;
   children?: React.ReactNode;
-}
+};
 
 /**
  * Content that opens and closes by animating its height, with a fade. A grid

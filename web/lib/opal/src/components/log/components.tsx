@@ -28,7 +28,7 @@ type LogWeight = "heavy" | "light";
  */
 type LogVariant = "default" | `${Exclude<LogStatus, "default">}-${LogWeight}`;
 
-interface LogProps {
+type LogProps = {
   /** Colours the icon; a heavy variant also tints the line. */
   variant?: LogVariant;
   /** Shown at 1rem, in the status colour. */
@@ -42,7 +42,7 @@ interface LogProps {
   centerChildren?: React.ReactNode;
   /** Trailing content, such as a tag or an action. Not padded. */
   rightChildren?: React.ReactNode;
-}
+};
 
 // The title is always text-03; `centerChildren` brings its own colour.
 const VARIANTS: Record<LogVariant, { status: LogStatus; weight: LogWeight }> = {

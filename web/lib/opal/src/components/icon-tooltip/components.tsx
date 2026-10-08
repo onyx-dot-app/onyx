@@ -16,7 +16,7 @@ type IconTooltipStatus = Extract<
   "default" | "info" | "success" | "warning" | "error"
 >;
 
-interface IconTooltipProps {
+type IconTooltipProps = {
   /** Shown at 1rem. Default: `SvgInfo`. */
   icon?: IconFunctionComponent;
   /** Colours the icon's stroke. Default: `"default"`. */
@@ -25,7 +25,7 @@ interface IconTooltipProps {
   tooltip?: string | RichStr;
   /** The icon's name for assistive tech. Default: "More information". */
   "aria-label"?: string;
-}
+};
 
 const STROKES: Record<IconTooltipStatus, string> = {
   default: "stroke-text-03",
