@@ -8899,7 +8899,8 @@
         "skipped": "{count} تم تخطيها",
         "successful": "{count} نجحت"
       },
-      "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى."
+      "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى.",
+      "requiredFailed": "{count, plural, one {فشل فحص مطلوب واحد} other {فشل # فحوصات مطلوبة}}"
     }
   },
   "agents": {

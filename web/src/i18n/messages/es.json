@@ -8899,7 +8899,8 @@
         "skipped": "{count} omitidas",
         "successful": "{count} correctas"
       },
-      "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo."
+      "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo.",
+      "requiredFailed": "{count, plural, one {# comprobación obligatoria fallida} other {# comprobaciones obligatorias fallidas}}"
     }
   },
   "agents": {

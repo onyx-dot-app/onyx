@@ -8899,7 +8899,8 @@
         "skipped": "{count} übersprungen",
         "successful": "{count} erfolgreich"
       },
-      "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut."
+      "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
+      "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}"
     }
   },
   "agents": {

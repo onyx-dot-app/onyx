@@ -8899,7 +8899,8 @@
         "skipped": "건너뜀 {count}개",
         "successful": "성공 {count}개"
       },
-      "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요."
+      "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
+      "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}"
     }
   },
   "agents": {

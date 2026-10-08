@@ -8899,7 +8899,8 @@
         "skipped": "スキップ {count} 件",
         "successful": "成功 {count} 件"
       },
-      "failedToRun": "チェックを実行できませんでした。もう一度お試しください。"
+      "failedToRun": "チェックを実行できませんでした。もう一度お試しください。",
+      "requiredFailed": "{count, plural, one {必須チェック # 件が失敗} other {必須チェック # 件が失敗}}"
     }
   },
   "agents": {

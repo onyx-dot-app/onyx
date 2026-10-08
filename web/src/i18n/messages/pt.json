@@ -8899,7 +8899,8 @@
         "skipped": "{count} ignoradas",
         "successful": "{count} bem-sucedidas"
       },
-      "failedToRun": "Não foi possível executar as verificações. Tente novamente."
+      "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
+      "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}"
     }
   },
   "agents": {

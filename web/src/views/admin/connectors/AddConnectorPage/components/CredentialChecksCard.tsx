@@ -247,22 +247,31 @@ function CheckCardView({
   const format = useFormatter();
   const [collapsed, setCollapsed] = useState(false);
 
-  const groups = useMemo(() => {
-    const lines: CheckLine[] = [
+  const lines: CheckLine[] = useMemo(
+    () => [
       ...results.map((result) => ({ ...result, state: result.status })),
       ...openChecks.flatMap((check) =>
         check.state === "not_applicable"
           ? []
           : [{ ...check, state: check.state }]
       ),
-    ];
-    return GROUPS.map((group) => ({
-      label: group.label,
-      checks: lines.filter((line) =>
-        (group.states as readonly CheckLineState[]).includes(line.state)
-      ),
-    })).filter((group) => group.checks.length > 0);
-  }, [results, openChecks]);
+    ],
+    [results, openChecks]
+  );
+  const groups = useMemo(
+    () =>
+      GROUPS.map((group) => ({
+        label: group.label,
+        checks: lines.filter((line) =>
+          (group.states as readonly CheckLineState[]).includes(line.state)
+        ),
+      })).filter((group) => group.checks.length > 0),
+    [lines]
+  );
+  // Failed required checks block the form or Create.
+  const requiredFailed: number = lines.filter(
+    (line) => line.state === "failed" && line.required
+  ).length;
   const count = useCallback(
     (status: CapabilityCheckStatus): number =>
       results.filter((result) => result.status === status).length,
@@ -330,6 +339,12 @@ function CheckCardView({
                   aria-label={t("rerunButton.label")}
                   disabled={isRunning}
                   onClick={onRerun}
+                />
+              )}
+              {!collapsed && requiredFailed > 0 && (
+                <Tag
+                  title={t("requiredFailed", { count: requiredFailed })}
+                  color="red"
                 />
               )}
               <Button
