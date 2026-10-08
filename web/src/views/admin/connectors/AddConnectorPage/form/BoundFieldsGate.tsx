@@ -12,16 +12,23 @@ import {
   type UseBoundFieldsGateResult,
 } from "@/lib/connectors/hooks";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
-import type { Credential } from "@/lib/credentials/types";
+import type {
+  Credential,
+  CredentialRef,
+  CredentialValues,
+  DraftCredential,
+} from "@/lib/credentials/types";
+import { isDraftCredential } from "@/lib/credentials/utils";
 import type { ValidSources } from "@/lib/connectors/types/source";
 
 type ConnectorField = ConnectionConfiguration["values"][number];
 
 export interface BoundFieldsGateProps<FormValues> {
   source: ValidSources;
-  credentialId: number | null;
+  /** The saved credential or draft the binding is checked against. */
+  credential: CredentialRef | null;
   credentialSelected: boolean;
-  currentCredential: Credential<unknown> | null;
+  currentCredential: Credential<unknown> | DraftCredential | null;
   /** Every credential-bound field of the source. */
   allBoundFields: ConnectorField[];
   /** The bound fields the form shows now. */
@@ -33,7 +40,7 @@ export interface BoundFieldsGateProps<FormValues> {
 
 function labelOf(
   field: ConnectorField,
-  credential: Credential<unknown> | null
+  credential: CredentialValues | null
 ): string {
   return typeof field.label === "function"
     ? field.label(credential)
@@ -46,7 +53,7 @@ function labelOf(
  */
 export function BoundFieldsGate<FormValues extends Record<string, unknown>>({
   source,
-  credentialId,
+  credential,
   credentialSelected,
   currentCredential,
   allBoundFields,
@@ -67,8 +74,14 @@ export function BoundFieldsGate<FormValues extends Record<string, unknown>>({
   });
   const gate = useBoundFieldsGate({
     source,
-    credentialId,
-    credentialUpdatedAt: currentCredential?.time_updated ?? null,
+    credential,
+    // A draft is never edited; a new one is a new draft.
+    credentialUpdatedAt:
+      currentCredential === null
+        ? null
+        : isDraftCredential(currentCredential)
+          ? currentCredential.sealed_at
+          : currentCredential.time_updated,
     credentialSelected,
     boundFieldNames: allBoundFields.map((field) => field.name),
     boundFields,

@@ -3,12 +3,12 @@ import { useTranslations } from "next-intl";
 import { Button, Divider } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { submitCredential } from "@/lib/credentials/svc";
+import { sealDraftCredential, submitCredential } from "@/lib/credentials/svc";
 import { Form, Formik, FormikHelpers } from "formik";
 import { Section, toast } from "@opal/layouts";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
-import type { Credential } from "@/lib/credentials/types";
+import type { Credential, DraftCredential } from "@/lib/credentials/types";
 import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
 import type { CredentialActionType } from "@/lib/credentials/types";
 import {
@@ -59,6 +59,7 @@ export default function CreateCredential({
   close,
   onClose = () => null,
   onSwitch,
+  onDraft,
   onSwap = async () => null,
   swapConnector,
   refresh = () => null,
@@ -74,6 +75,9 @@ export default function CreateCredential({
   onClose?: () => void;
   // Switch currently selected credential
   onSwitch?: (selectedCredential: Credential<any>) => Promise<void>;
+  // Given, the account is not saved: it is sealed as a draft and handed here,
+  // and creating the connector saves it.
+  onDraft?: (draft: DraftCredential) => void;
   // Switch currently selected credential + link with connector
   onSwap?: (
     selectedCredential: Credential<any>,
@@ -121,6 +125,30 @@ export default function CreateCredential({
         return value !== null && value !== "";
       })
     );
+
+    // A file (private key) cannot be sealed yet, so such an account is saved.
+    if (onDraft && privateKey === null) {
+      try {
+        const sealed = await sealDraftCredential(
+          sourceType,
+          filteredCredentialValues
+        );
+        onDraft({
+          draft_credential: sealed,
+          source: sourceType,
+          credential_json: filteredCredentialValues,
+          sharing: shareAccountPayload({ share, groups }),
+          sealed_at: new Date().toISOString(),
+        });
+        if (close) onClose();
+      } catch (error) {
+        console.error("Error sealing draft credential:", error);
+        toast.error(t("credentials.create.submitError.toast"));
+      } finally {
+        formikHelpers.setSubmitting(false);
+      }
+      return;
+    }
 
     try {
       const response = await submitCredential({

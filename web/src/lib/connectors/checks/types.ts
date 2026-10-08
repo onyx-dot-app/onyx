@@ -1,3 +1,4 @@
+import type { CredentialRef } from "@/lib/credentials/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { AccessType } from "@/lib/types";
 
@@ -95,7 +96,8 @@ export interface DraftCheckRunSnapshot {
   run_id: string;
   draft_key: string;
   source: ValidSources;
-  credential_id: number;
+  // null for a draft credential, which has no id.
+  credential_id: number | null;
   access_type: AccessType | null;
   status: DraftRunStatus;
   /** Field name to error message, for the form. */
@@ -124,12 +126,12 @@ export interface DraftCheckPlanRequest {
 }
 
 /** Body of `POST /manage/admin/connector-checks/runs`. */
-export interface DraftCheckRunRequest {
+/** A run on a saved credential (`credential_id`) or a draft. */
+export type DraftCheckRunRequest = CredentialRef & {
   source: ValidSources;
-  credential_id: number;
   access_type: AccessType | null;
   /** One form session. A new run for the same key supersedes the last. */
   draft_key: string;
   form_state: Record<string, unknown>;
   rerun: DraftRerunMode;
-}
+};

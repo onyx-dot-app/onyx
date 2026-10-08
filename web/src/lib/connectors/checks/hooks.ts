@@ -27,6 +27,7 @@ import { useConnectorConfiguration } from "@/lib/connectors/connectors";
 import { splitCredentialBoundFields } from "@/lib/connectors/utils";
 import { toWireAccess } from "@/lib/connectors/accessType";
 import { checksProgress } from "@/lib/connectors/checks/progress";
+import type { CredentialRef } from "@/lib/credentials/types";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
@@ -51,8 +52,8 @@ interface ConnectorChecksSession {
   draftKey: string;
   /** The latest run. */
   runId: string | null;
-  /** The credential the latest run started with. */
-  credentialId: number | null;
+  /** The credential the latest run started with (`credentialKey`). */
+  credentialKey: string | null;
   /** The credential and bound fields the latest run started with. */
   ranWith: string | null;
   /** The access type and form values the latest run started with. */
@@ -154,8 +155,13 @@ function formAccessType(values: Record<string, unknown>): AccessType {
 
 export interface UseConnectorChecksInput {
   source: ConfigurableSources;
-  /** The credential the checks run with; `null` until one is usable. */
-  credentialId: number | null;
+  /** The saved credential or draft the checks run with; `null` until one is usable. */
+  credential: CredentialRef | null;
+}
+
+/** Names a credential for comparisons; `null` for none. */
+function credentialKeyOf(credential: CredentialRef | null): string | null {
+  return credential === null ? null : JSON.stringify(credential);
 }
 
 export interface UseConnectorChecksResult {
@@ -211,8 +217,10 @@ export interface UseConnectorChecksResult {
  */
 export function useConnectorChecks({
   source,
-  credentialId,
+  credential,
 }: UseConnectorChecksInput): UseConnectorChecksResult {
+  // Names the credential; effects follow it rather than the object.
+  const credentialKey: string | null = credentialKeyOf(credential);
   const { values } = useFormikContext<Record<string, unknown>>();
   const configuration = useConnectorConfiguration(source);
   const { mutate } = useSWRConfig();
@@ -230,8 +238,8 @@ export function useConnectorChecks({
       .map((field) => field.name)
       .sort()
       .map((name) => values[name]);
-    return JSON.stringify([credentialId, boundValues]);
-  }, [source, configuration, values, credentialId]);
+    return JSON.stringify([credentialKey, boundValues]);
+  }, [source, configuration, values, credentialKey]);
   const accessType: AccessType = formAccessType(values);
   // The whole form a run checks: what Create's result is valid for.
   const formKey: string = useMemo(
@@ -252,7 +260,7 @@ export function useConnectorChecks({
 
   const start = useCallback(
     async (rerun: DraftRerunMode) => {
-      if (credentialId === null) return;
+      if (credential === null) return;
       const draftKey: string = session?.draftKey ?? crypto.randomUUID();
       const request: number = (session?.request ?? 0) + 1;
       const mode: DraftRerunMode = session?.rerunAll ? "all" : rerun;
@@ -261,7 +269,7 @@ export function useConnectorChecks({
         {
           draftKey,
           runId: session?.runId ?? null,
-          credentialId,
+          credentialKey,
           ranWith: bindingKey,
           ranWithForm: formKey,
           requesting: true,
@@ -284,7 +292,7 @@ export function useConnectorChecks({
       try {
         const accepted: DraftCheckRunSnapshot = await startDraftCheckRun({
           source,
-          credential_id: credentialId,
+          ...credential,
           access_type: accessType,
           draft_key: draftKey,
           form_state: formState,
@@ -308,7 +316,8 @@ export function useConnectorChecks({
       }
     },
     [
-      credentialId,
+      // The key, not the object: callers may build a new one each render.
+      credentialKey,
       session,
       sessionKey,
       bindingKey,
@@ -330,7 +339,7 @@ export function useConnectorChecks({
   const checks: DraftCheckState[] = snapshot?.checks ?? [];
 
   const status: ConnectorChecksStatus = (() => {
-    if (credentialId === null || !session || !current) return "notStarted";
+    if (credential === null || !session || !current) return "notStarted";
     if (session.requesting) return "running";
     if (session.startFailed) return "failedToRun";
     if (!runId) return "notStarted";
@@ -417,12 +426,13 @@ export function useConnectorChecks({
  */
 export function useResetChecksOnCredentialChange({
   source,
-  credentialId,
+  credential,
 }: UseConnectorChecksInput): void {
   const { mutate } = useSWRConfig();
   const sessionKey = SWR_KEYS.connectorCheckSession(source);
   const { data: session } = useSWR<ConnectorChecksSession>(sessionKey, null);
-  const stale: boolean = !!session && session.credentialId !== credentialId;
+  const credentialKey: string | null = credentialKeyOf(credential);
+  const stale: boolean = !!session && session.credentialKey !== credentialKey;
   const staleRunId: string | null = stale ? (session?.runId ?? null) : null;
 
   useEffect(() => {
@@ -436,7 +446,7 @@ export function useResetChecksOnCredentialChange({
       {
         draftKey: crypto.randomUUID(),
         runId: null,
-        credentialId,
+        credentialKey,
         ranWith: null,
         ranWithForm: null,
         requesting: false,
@@ -446,7 +456,7 @@ export function useResetChecksOnCredentialChange({
       },
       { revalidate: false }
     );
-  }, [stale, staleRunId, credentialId, session?.request, sessionKey, mutate]);
+  }, [stale, staleRunId, credentialKey, session?.request, sessionKey, mutate]);
 }
 
 const PLAN_DEBOUNCE_MS = 300;

@@ -150,14 +150,16 @@ describe("decideBindingGate", () => {
 describe("bindingCheckInput", () => {
   it("sends only the bound values and keys on the credential", () => {
     const values = { wiki_base: "https://a", is_cloud: true, space: "ENG" };
-    const first = bindingCheckInput(1, ["wiki_base", "is_cloud"], values);
+    const first = bindingCheckInput("1", ["wiki_base", "is_cloud"], values);
     expect(first.config).toEqual({ is_cloud: true, wiki_base: "https://a" });
     expect(
-      bindingCheckInput(2, ["wiki_base", "is_cloud"], values).key
+      bindingCheckInput("2", ["wiki_base", "is_cloud"], values).key
     ).not.toBe(first.key);
     expect(
-      bindingCheckInput(1, ["is_cloud", "wiki_base"], { ...values, space: "X" })
-        .key
+      bindingCheckInput("1", ["is_cloud", "wiki_base"], {
+        ...values,
+        space: "X",
+      }).key
     ).toBe(first.key);
   });
 });

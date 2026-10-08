@@ -172,7 +172,8 @@ export function decideBindingGate(input: BindingGateInput): BindingGate {
  * credential and those values. A response for another key is stale.
  */
 export function bindingCheckInput(
-  credentialId: number | null,
+  /** Names the credential; `null` when none is selected. */
+  credentialKey: string | null,
   boundFieldNames: string[],
   values: Record<string, unknown>
 ): { key: string; config: Record<string, unknown> } {
@@ -180,5 +181,5 @@ export function bindingCheckInput(
   for (const name of [...boundFieldNames].sort()) {
     if (values[name] !== undefined) config[name] = values[name];
   }
-  return { key: JSON.stringify({ credentialId, config }), config };
+  return { key: JSON.stringify({ credentialKey, config }), config };
 }

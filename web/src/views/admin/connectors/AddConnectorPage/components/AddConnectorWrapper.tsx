@@ -33,15 +33,26 @@ import {
   isValidSource,
 } from "@/lib/sources";
 import { Logo } from "@/lib/app/components";
-import { linkCredential } from "@/lib/credentials/svc";
+import {
+  createConnectorWithCredential,
+  credentialPairMetadata,
+} from "@/lib/credentials/svc";
 import { submitFiles, submitGoogleSite } from "@/lib/connectors/svc";
 import {
   useBindingGateMessage,
   type UseBoundFieldsGateResult,
 } from "@/lib/connectors/hooks";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import { getCredentialSpec } from "@/lib/credentials/utils";
-import type { Credential } from "@/lib/credentials/types";
+import {
+  getCredentialSpec,
+  isDraftCredential,
+  toCredentialRef,
+} from "@/lib/credentials/utils";
+import type {
+  Credential,
+  CredentialRef,
+  DraftCredential,
+} from "@/lib/credentials/types";
 import {
   defaultRefreshFreqMinutes,
   useConnectorConfiguration,
@@ -93,7 +104,7 @@ interface ConnectorChecksGates {
 
 interface ConnectorChecksGateProps {
   source: ConfigurableSources;
-  credentialId: number | null;
+  credential: CredentialRef | null;
   children: (gates: ConnectorChecksGates) => ReactNode;
 }
 
@@ -104,12 +115,12 @@ interface ConnectorChecksGateProps {
  */
 function ConnectorChecksGate({
   source,
-  credentialId,
+  credential,
   children,
 }: ConnectorChecksGateProps) {
   const { formUnlocked, createReady } = useConnectorChecks({
     source,
-    credentialId,
+    credential,
   });
   return children({ formUnlocked, createReady });
 }
@@ -192,8 +203,10 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     : 600; // 25 days fallback until settings load
 
   // State for managing credentials and files
-  const [currentCredential, setCurrentCredential] =
-    useState<Credential<any> | null>(null);
+  // A saved account, or a draft that Create saves.
+  const [currentCredential, setCurrentCredential] = useState<
+    Credential<any> | DraftCredential | null
+  >(null);
 
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -437,30 +450,26 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
             )
           );
 
+          const connectorData: ConnectorBase<any> = {
+            connector_specific_config: transformedConnectorSpecificConfig,
+            input_type: isLoadState(connector) ? "load_state" : "poll", // single case
+            name: name,
+            source: connector,
+            access_type: access_type,
+            refresh_freq: advancedConfiguration.refreshFreq || null,
+            prune_freq: advancedConfiguration.pruneFreq || null,
+            indexing_start: advancedConfiguration.indexingStart || null,
+            groups: groups,
+          };
           const connectorCreationPromise = (async () => {
-            const { errorDetail, isSuccess, response } =
-              await submitConnector<any>(
-                {
-                  connector_specific_config: transformedConnectorSpecificConfig,
-                  input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-                  name: name,
-                  source: connector,
-                  access_type: access_type,
-                  refresh_freq: advancedConfiguration.refreshFreq || null,
-                  prune_freq: advancedConfiguration.pruneFreq || null,
-                  indexing_start: advancedConfiguration.indexingStart || null,
-                  groups: groups,
-                },
-                undefined,
-                credentialActivated ? false : true
-              );
-
-            // Store the connector id immediately for potential timeout
-            if (response?.id) {
-              connectorIdRef.current = response.id;
-            }
-
             if (!credentialActivated) {
+              const { errorDetail, isSuccess, response } =
+                await submitConnector<any>(connectorData, undefined, true);
+
+              // Store the connector id immediately for potential timeout
+              if (response?.id) {
+                connectorIdRef.current = response.id;
+              }
               if (isSuccess) {
                 onSuccess();
               } else {
@@ -472,39 +481,40 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
               return;
             }
 
-            // With credential
-            if (credentialActivated && isSuccess && response) {
-              const credential =
-                currentCredential ||
-                liveGDriveCredential ||
-                liveGmailCredential;
-              const linkCredentialResponse = await linkCredential(
-                response.id,
-                credential!.id,
-                name,
-                access_type,
-                groups,
-                auto_sync_options,
-                undefined,
-                access_type === SYNC_RESTRICTED_ACCESS_TYPE
-                  ? wireAccess.restriction_group_ids
-                  : dataAccess,
-                manageAccess
-              );
-              if (linkCredentialResponse.ok) {
+            // With credential: one request creates the connector and pairs
+            // it, saving a draft account on the way.
+            const credential =
+              currentCredential ||
+              liveGDriveCredential ||
+              liveGmailCredential ||
+              null;
+            const credentialRef = toCredentialRef(credential);
+            if (credential && credentialRef) {
+              const createResponse = await createConnectorWithCredential({
+                connector: connectorData,
+                pairing: credentialPairMetadata(
+                  name,
+                  access_type,
+                  groups,
+                  auto_sync_options,
+                  undefined,
+                  access_type === SYNC_RESTRICTED_ACCESS_TYPE
+                    ? wireAccess.restriction_group_ids
+                    : dataAccess,
+                  manageAccess
+                ),
+                credential: credentialRef,
+                credentialSharing: isDraftCredential(credential)
+                  ? credential.sharing
+                  : undefined,
+              });
+              if (createResponse.ok) {
                 onSuccess();
-              } else {
-                const errorData = await linkCredentialResponse.json();
-
-                if (!timeoutErrorHappenedRef.current) {
-                  // Only show error if timeout didn't happen
-                  toast.error(errorData.detail || errorData.message);
-                }
+              } else if (!timeoutErrorHappenedRef.current) {
+                // Only show error if timeout didn't happen
+                const errorData = await createResponse.json();
+                toast.error(errorData.detail || errorData.message);
               }
-            } else if (isSuccess) {
-              onSuccess();
-            } else {
-              toast.error(t("add.error.toast", { detail: errorDetail ?? "" }));
             }
 
             timeoutErrorHappenedRef.current = false;
@@ -561,7 +571,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
         return (
           <ConnectorChecksGate
             source={connector}
-            credentialId={checkedCredential?.id ?? null}
+            credential={toCredentialRef(checkedCredential)}
           >
             {(checks) => {
               const formUnlocked: boolean =
@@ -661,8 +671,10 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                       <>
                         <BoundFieldsGate
                           source={connector}
-                          credentialId={
-                            noCredentials ? null : (formCredential?.id ?? null)
+                          credential={
+                            noCredentials
+                              ? null
+                              : toCredentialRef(formCredential)
                           }
                           credentialSelected={canCreate}
                           currentCredential={formCredential}

@@ -18,7 +18,7 @@ import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import GroupShareList from "@/lib/connectors/components/GroupShareList";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 import { getCredentialSpec } from "@/lib/credentials/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -32,7 +32,7 @@ function isValidAutoSyncSource(
 
 interface DocumentAccessFieldProps {
   connector: ConfigurableSources;
-  currentCredential?: Credential<any> | null;
+  currentCredential?: CredentialValues | null;
   disabled?: boolean;
 }
 

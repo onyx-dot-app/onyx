@@ -5,14 +5,14 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/components/DocumentAccessField";
 import ManageAccessField from "@/views/admin/connectors/AddConnectorPage/components/ManageAccessField";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 import { getSourceDisplayName } from "@/lib/sources";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 
 interface ConnectorSettingsSectionProps {
   connector: ConfigurableSources;
-  currentCredential: Credential<any> | null;
+  currentCredential: CredentialValues | null;
   /** Freezes the section while the page locks the configuration. */
   disabled?: boolean;
 }

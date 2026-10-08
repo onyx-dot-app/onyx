@@ -1,5 +1,5 @@
 /** The schema a connector's creation form is rendered from. */
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 
 export type InputType =
   | "list"
@@ -17,20 +17,22 @@ export type StringWithDescription = {
 };
 
 export interface Option {
-  label: string | ((currentCredential: Credential<any> | null) => string);
+  label: string | ((currentCredential: CredentialValues | null) => string);
   name: string;
   description?:
     | string
-    | ((currentCredential: Credential<any> | null) => string);
+    | ((currentCredential: CredentialValues | null) => string);
   query?: string;
   optional?: boolean;
   hidden?: boolean;
   visibleCondition?: (
     values: any,
-    currentCredential: Credential<any> | null
+    currentCredential: CredentialValues | null
   ) => boolean;
   wrapInCollapsible?: boolean;
-  disabled?: boolean | ((currentCredential: Credential<any> | null) => boolean);
+  disabled?:
+    | boolean
+    | ((currentCredential: CredentialValues | null) => boolean);
 }
 
 export interface SelectOption extends Option {
@@ -69,7 +71,7 @@ export type TextSubDescriptionKey = "siteUrl";
 export interface TextOption extends Option {
   type: "text";
   default?: string;
-  initial?: string | ((currentCredential: Credential<any> | null) => string);
+  initial?: string | ((currentCredential: CredentialValues | null) => string);
   isTextArea?: boolean;
   /** Example value shown in the empty input. */
   placeholder?: string;
@@ -89,7 +91,7 @@ export interface BooleanOption extends Option {
   type: "checkbox";
   default?: boolean;
   /** The value the credential sets; the form uses it while the field is disabled. */
-  initial?: (currentCredential: Credential<any> | null) => boolean | undefined;
+  initial?: (currentCredential: CredentialValues | null) => boolean | undefined;
   /** Shows the value as two tabs with these labels instead of a checkbox. */
   tabLabels?: { true: CheckboxTabLabelKey; false: CheckboxTabLabelKey };
   /** Shows a checkbox instead of the standard switch. */
@@ -139,6 +141,6 @@ export interface ConnectionConfiguration {
   overrideDefaultFreq?: number;
   advancedValuesVisibleCondition?: (
     values: any,
-    currentCredential: Credential<any> | null
+    currentCredential: CredentialValues | null
   ) => boolean;
 }

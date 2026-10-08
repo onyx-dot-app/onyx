@@ -1,5 +1,6 @@
 "use client";
 
+import type { CredentialRef } from "@/lib/credentials/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { useTranslations } from "next-intl";
@@ -216,8 +217,8 @@ const BINDING_CHECK_CREDENTIAL_DELAY_MS = 50;
 
 export interface UseBoundFieldsGateParams {
   source: ValidSources;
-  /** `null` when no credential is selected. */
-  credentialId: number | null;
+  /** A saved credential or a draft; `null` when none is selected. */
+  credential: CredentialRef | null;
   /** The credential's `time_updated`. An edit makes older results stale. */
   credentialUpdatedAt: string | null;
   /** A credential is selected, or the source needs none. */
@@ -252,7 +253,7 @@ interface BindingCheckResult {
  */
 export function useBoundFieldsGate({
   source,
-  credentialId,
+  credential,
   credentialUpdatedAt,
   credentialSelected,
   boundFieldNames,
@@ -260,8 +261,11 @@ export function useBoundFieldsGate({
   values,
   extra,
 }: UseBoundFieldsGateParams): UseBoundFieldsGateResult {
+  // A string, so effects follow the credential rather than the object.
+  const credentialKey: string | null =
+    credential === null ? null : JSON.stringify(credential);
   const { key: inputKey, config } = bindingCheckInput(
-    credentialId,
+    credentialKey,
     boundFieldNames,
     values
   );
@@ -270,14 +274,14 @@ export function useBoundFieldsGate({
   const key = JSON.stringify({ source, inputKey, credentialUpdatedAt });
   const ready =
     boundFields.length > 0 &&
-    credentialId !== null &&
+    credential !== null &&
     boundFields.every((field) => !field.missing && !field.invalid);
 
   const [result, setResult] = useState<BindingCheckResult | null>(null);
   const resultRef = useRef(result);
-  const latestRef = useRef({ key, config, credentialId, ready });
+  const latestRef = useRef({ key, config, credential, ready });
   useEffect(() => {
-    latestRef.current = { key, config, credentialId, ready };
+    latestRef.current = { key, config, credential, ready };
   });
 
   // Bumped by every scheduled check and on unmount; an older response is
@@ -296,7 +300,7 @@ export function useBoundFieldsGate({
 
   const send = useCallback(() => {
     const latest = latestRef.current;
-    if (!latest.ready || latest.credentialId === null) return;
+    if (!latest.ready || latest.credential === null) return;
     const generation = ++generationRef.current;
     const update = (state: BindingCheckState) => {
       if (generation === generationRef.current) {
@@ -304,7 +308,7 @@ export function useBoundFieldsGate({
       }
     };
     update({ kind: "checking" });
-    checkCredentialBinding(latest.credentialId, {
+    checkCredentialBinding(latest.credential, {
       source,
       connector_specific_config: latest.config,
     }).then(
@@ -333,9 +337,9 @@ export function useBoundFieldsGate({
   );
 
   useEffect(() => {
-    if (credentialId === null) return;
+    if (credentialKey === null) return;
     schedule(BINDING_CHECK_CREDENTIAL_DELAY_MS);
-  }, [credentialId, credentialUpdatedAt, schedule]);
+  }, [credentialKey, credentialUpdatedAt, schedule]);
 
   useEffect(
     () => () => {
@@ -351,7 +355,7 @@ export function useBoundFieldsGate({
   );
 
   const binding: BindingCheckState =
-    credentialId === null
+    credential === null
       ? { kind: credentialSelected ? "unavailable" : "idle" }
       : result !== null && result.key === key
         ? result.state

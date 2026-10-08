@@ -4,7 +4,7 @@ import { Text } from "@opal/components";
 import type { CredentialBindingFieldError } from "@/lib/connectors/bindingGate";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 import { RenderField } from "@/views/admin/connectors/AddConnectorPage/form/FieldRendering";
 
 type ConnectorField = ConnectionConfiguration["values"][number];
@@ -18,7 +18,7 @@ export interface CredentialBoundFieldsProps {
   showAdvancedFields: boolean;
   values: Record<string, unknown>;
   connector: ConfigurableSources;
-  currentCredential: Credential<unknown> | null;
+  currentCredential: CredentialValues | null;
   /** Field name to the error the backend gave for the field and credential. */
   fieldErrors?: Record<string, CredentialBindingFieldError>;
   /** Called when focus leaves a bound field. */

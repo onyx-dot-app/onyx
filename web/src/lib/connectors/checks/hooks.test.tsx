@@ -1,3 +1,4 @@
+import type { CredentialRef } from "@/lib/credentials/types";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { Formik, useFormikContext } from "formik";
@@ -110,12 +111,16 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 
+function refFor(credentialId: number | null): CredentialRef | null {
+  return credentialId === null ? null : { credential_id: credentialId };
+}
+
 function renderChecks(credentialId: number | null = 1) {
   return renderHook(
     (props: { credentialId: number | null }) => ({
       checks: useConnectorChecks({
         source: ValidSources.Confluence,
-        credentialId: props.credentialId,
+        credential: refFor(props.credentialId),
       }),
       form: useFormikContext<Record<string, unknown>>(),
     }),
@@ -257,8 +262,14 @@ it("shares one session between every caller for the source", async () => {
   startMock.mockResolvedValue(run([check({ ...BINDING, state: "passed" })]));
   const { result } = renderHook(
     () => [
-      useConnectorChecks({ source: ValidSources.Confluence, credentialId: 1 }),
-      useConnectorChecks({ source: ValidSources.Confluence, credentialId: 1 }),
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+      }),
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+      }),
     ],
     { wrapper }
   );

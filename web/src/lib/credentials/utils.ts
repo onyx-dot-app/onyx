@@ -1,6 +1,10 @@
 import * as Yup from "yup";
 
-import type { Credential } from "@/lib/credentials/types";
+import type {
+  Credential,
+  CredentialRef,
+  DraftCredential,
+} from "@/lib/credentials/types";
 import type {
   CredentialFieldValues,
   CredentialFormValues,
@@ -415,7 +419,11 @@ export interface CredentialDetails {
  * are left out. Values are as the server returns them, which may be masked.
  */
 export function getCredentialDetails(
-  credential: Credential<Readonly<Record<string, unknown>>>,
+  // A saved credential or a draft: both carry their values and source.
+  credential: {
+    credential_json: Readonly<Record<string, unknown>>;
+    source: ValidSources;
+  },
   sourceType: ValidSources = credential.source
 ): CredentialDetails {
   const credentialJson = credential.credential_json ?? {};
@@ -451,4 +459,20 @@ export function getCredentialDetails(
       return [{ key, field, value }];
     }),
   };
+}
+
+export function isDraftCredential(
+  credential: Credential<unknown> | DraftCredential
+): credential is DraftCredential {
+  return "draft_credential" in credential;
+}
+
+/** The request reference to a saved credential or a draft. */
+export function toCredentialRef(
+  credential: Credential<unknown> | DraftCredential | null
+): CredentialRef | null {
+  if (credential === null) return null;
+  return isDraftCredential(credential)
+    ? { draft_credential: credential.draft_credential }
+    : { credential_id: credential.id };
 }

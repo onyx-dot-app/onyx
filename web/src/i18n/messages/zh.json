@@ -2745,6 +2745,14 @@
           },
           "rerunFailed": {
             "toast": "无法启动检查，请重试。"
+          },
+          "draft": {
+            "description": "尚未保存",
+            "detailsTitle": "尚未保存",
+            "detailsDescription": "此账户会在你创建连接器时保存。离开此页面将丢弃它。",
+            "discardButton": {
+              "label": "丢弃账户"
+            }
           }
         }
       },

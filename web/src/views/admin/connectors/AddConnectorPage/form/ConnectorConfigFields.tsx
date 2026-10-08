@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import CredentialSubText from "@/lib/credentials/components/CredentialFields";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 import { RenderField } from "./FieldRendering";
 import { useFormikContext } from "formik";
 
@@ -12,7 +12,7 @@ export interface ConnectorConfigFieldsProps {
   config: ConnectionConfiguration;
   values: any;
   connector: ConfigurableSources;
-  currentCredential: Credential<any> | null;
+  currentCredential: CredentialValues | null;
 }
 
 export default function ConnectorConfigFields({
