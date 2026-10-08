@@ -35,7 +35,7 @@ class TeamsSession:
         self._directory_lock = threading.Lock()
         # SDK queries queue on their client, so a worker that runs them
         # gets a client of its own.
-        self._thread_clients = threading.local()
+        self._thread_clients: threading.local = threading.local()
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self._azure_environment = resolved_env.environment
@@ -81,7 +81,7 @@ class TeamsSession:
             _acquire_token_func, environment=self._azure_environment
         )
         # Clients built for an earlier credential must not outlive it.
-        self._thread_clients = threading.local()
+        self._thread_clients: threading.local = threading.local()
         # File downloads stream outside the SDK and carry the token themselves.
         self._acquire_token = _acquire_token_func
 

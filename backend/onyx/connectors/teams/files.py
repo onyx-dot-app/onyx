@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 import msal
 import requests
+from office365.graph_client import GraphClient
 from office365.sharepoint.client_context import ClientContext
 from office365.teams.team import Team
 
@@ -106,7 +107,7 @@ class FileSource:
         # One REST context per channel site on each thread, since the SDK's
         # context queues requests on the instance, rebuilt after
         # _REST_CTX_MAX_AGE_S and freed with the thread.
-        self._rest_contexts = threading.local()
+        self._rest_contexts: threading.local = threading.local()
         # Group expansions SharePoint resolves, shared across files.
         self._permission_cache = SharepointPermissionCache()
 
@@ -262,7 +263,7 @@ class FileSource:
         SharePoint documents, so the pair's access type decides on those builds."""
         # The lookup fetches a list item Graph did not name through the drive
         # item's own client, so that client must be this thread's as well.
-        graph_client = self._session.graph_for_thread()
+        graph_client: GraphClient = self._session.graph_for_thread()
         access = get_sharepoint_external_access(
             ctx=self.rest_context(library.site_url),
             graph_client=graph_client,
