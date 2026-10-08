@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
-import { useOverflow } from "@opal/hooks";
 import { ContentAction, Section } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
 import {
@@ -11,6 +10,7 @@ import {
   Divider,
   Log,
   type LogVariant,
+  OverflowText,
   Tag,
   Text,
   Tooltip,
@@ -139,46 +139,6 @@ const GROUPS = [
   states: readonly CheckLineState[];
 }>;
 
-interface CheckDetailsProps {
-  text: string;
-  font: TextFont;
-  color: TextColor;
-}
-/** A check's details on one line; cut off, it shows in full in a tooltip. */
-function CheckDetails({ text, font, color }: CheckDetailsProps) {
-  // `Text` takes no ref, so the wrapper finds it by its marker.
-  const [textElement, setTextElement] = useState<HTMLElement | null>(null);
-  const ref = useCallback((node: HTMLElement | null) => {
-    setTextElement(
-      node?.querySelector<HTMLElement>("[data-check-details]") ?? null
-    );
-  }, []);
-  const clamped = useOverflow(textElement);
-
-  return (
-    <Tooltip tooltip={clamped ? text : undefined} side="top">
-      <Section
-        ref={ref}
-        justifyContent="start"
-        alignItems="stretch"
-        height="fit"
-        className="min-w-0"
-      >
-        <Text
-          as="p"
-          font={font}
-          color={color}
-          textPosition="text-start"
-          maxLines={1}
-          data-check-details=""
-        >
-          {text}
-        </Text>
-      </Section>
-    </Tooltip>
-  );
-}
-
 interface CheckLogProps {
   check: CheckLine;
 }
@@ -199,11 +159,14 @@ function CheckLog({ check }: CheckLogProps) {
       icon={icon}
       title={check.display_name}
       centerChildren={
-        <CheckDetails
-          text={check.message || t(detail)}
+        <OverflowText
+          as="p"
           font={font}
           color={color}
-        />
+          textPosition="text-start"
+        >
+          {check.message || t(detail)}
+        </OverflowText>
       }
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={1}>

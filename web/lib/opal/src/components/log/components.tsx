@@ -1,11 +1,8 @@
 "use client";
 
 import "@opal/components/log/styles.css";
-import { useCallback, useState } from "react";
 import { Section } from "@opal/layouts/general/components";
-import { Text } from "@opal/components/text/components";
-import { Tooltip } from "@opal/components/tooltip/components";
-import useOverflow from "@opal/hooks/useOverflow";
+import { OverflowText } from "@opal/components/overflow-text/components";
 import type {
   IconFunctionComponent,
   RichStr,
@@ -59,22 +56,6 @@ const VARIANTS: Record<LogVariant, { status: LogStatus; weight: LogWeight }> = {
 };
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * A ref for a wrapper of one clamped `Text`, and whether that text is
- * clamped. `Text` takes no ref, so the wrapper finds it by its marker.
- */
-function useClamped(): [(node: HTMLElement | null) => void, boolean] {
-  const [text, setText] = useState<HTMLElement | null>(null);
-  const ref = useCallback((node: HTMLElement | null) => {
-    setText(node?.querySelector<HTMLElement>("[data-opal-log-text]") ?? null);
-  }, []);
-  return [ref, useOverflow(text)];
-}
-
-// ---------------------------------------------------------------------------
 // Log
 // ---------------------------------------------------------------------------
 
@@ -92,7 +73,6 @@ function Log({
   rightChildren,
 }: LogProps) {
   const { status, weight } = VARIANTS[variant];
-  const [titleRef, titleClamped] = useClamped();
 
   return (
     <Section
@@ -118,25 +98,17 @@ function Log({
         gap={4}
         className="min-w-0 flex-1"
       >
-        <Tooltip tooltip={titleClamped ? title : undefined} side="top">
-          <Section
-            ref={titleRef}
-            flexDirection="row"
-            justifyContent="start"
-            width={10}
-            height="fit"
-            className="shrink-0"
-          >
-            <Text
-              font="secondary-action"
-              color="text-03"
-              maxLines={1}
-              data-opal-log-text=""
-            >
-              {title}
-            </Text>
-          </Section>
-        </Tooltip>
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          width={10}
+          height="fit"
+          className="shrink-0"
+        >
+          <OverflowText font="secondary-action" color="text-03">
+            {title}
+          </OverflowText>
+        </Section>
 
         <Section
           flexDirection="row"
