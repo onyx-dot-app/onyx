@@ -10,7 +10,7 @@ import {
   Divider,
   Tooltip,
 } from "@opal/components";
-import { SvgPlusCircle, SvgX } from "@opal/icons";
+import { SvgPlusCircle, SvgSparkle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { buildLlmOptions, llmOptionKey } from "@/lib/languageModels/options";
@@ -58,6 +58,10 @@ export default function MultiModelSelector({
 
   const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
+  const routingEnabled =
+    (settings.model_routing_enabled ?? false) &&
+    settings.model_routing_model_configuration_id != null;
+  const routingModelId = settings.model_routing_model_configuration_id;
 
   const modelDetail = useModelDetailManagers(
     temperatureManager,
@@ -217,10 +221,12 @@ export default function MultiModelSelector({
               )}
               <div className="flex items-center shrink-0">
                 {selectedModels.map((model, index) => {
-                  const ProviderIcon = getModelIcon(
-                    model.provider,
-                    model.modelName
-                  );
+                  const isAutoModel =
+                    routingEnabled &&
+                    model.modelConfigurationId === routingModelId;
+                  const ProviderIcon = isAutoModel
+                    ? SvgSparkle
+                    : getModelIcon(model.provider, model.modelName);
 
                   return (
                     <div
@@ -261,7 +267,7 @@ export default function MultiModelSelector({
                           );
                         }}
                       >
-                        {model.displayName}
+                        {isAutoModel ? t("autoItem.label") : model.displayName}
                       </SelectButton>
                     </div>
                   );
