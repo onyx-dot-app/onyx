@@ -43,6 +43,7 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import {
   useConnectorChecks,
   useConnectorChecksAutoRun,
+  useResetChecksOnCredentialChange,
   useConnectorChecksProgress,
 } from "@/lib/connectors/checks/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -459,6 +460,7 @@ export default function CredentialChecksCard({
 }: CredentialChecksCardProps) {
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
+  useResetChecksOnCredentialChange({ source, credentialId });
   const checks = useConnectorChecks({ source, credentialId });
   useConnectorChecksAutoRun(checks);
   // No check applies to this source and access type: nothing to start.

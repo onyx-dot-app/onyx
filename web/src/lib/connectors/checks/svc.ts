@@ -41,3 +41,19 @@ export async function fetchDraftCheckPlan(
   }
   return response.json();
 }
+
+/**
+ * Stops a draft run. Its running check finishes; the rest never start, and
+ * the run reads as superseded.
+ */
+export async function cancelDraftCheckRun(runId: string): Promise<void> {
+  const response = await fetch(
+    `/api/manage/admin/connector-checks/runs/${runId}/cancel`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      `Capability check cancel request failed: ${response.status}`
+    );
+  }
+}
