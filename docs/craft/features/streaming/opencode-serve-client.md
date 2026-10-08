@@ -123,7 +123,7 @@ class OpencodeServeClient:
 
 `ClientTimeouts` is a small dataclass with three named timeouts:
 - `connect_timeout` (default 5s) — TCP/TLS handshake to serve
-- `request_timeout` (default 30s) — per-request HTTP for non-streaming endpoints
+- `request_timeout` (default 90s) — per-request HTTP for non-streaming endpoints
 - `event_read_timeout` (default 60s) — `/event` SSE idle timeout; client reconnects after this
 
 ## Internal architecture

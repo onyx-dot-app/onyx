@@ -213,8 +213,9 @@ OPENCODE_SERVER_USERNAME = "opencode"
 OPENCODE_SERVE_CONNECT_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_CONNECT_TIMEOUT", "5.0")
 )
+# Allow cold sandbox initialization under concurrent load.
 OPENCODE_SERVE_REQUEST_TIMEOUT = float(
-    os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "30.0")
+    os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "90.0")
 )
 # Idle timeout for the raw /event SSE connection to opencode-serve. The
 # reader reconnects (with backoff) if no bytes arrive for this long. Its
