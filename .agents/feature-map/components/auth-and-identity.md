@@ -391,7 +391,9 @@ resource) through authorization codes with S256 PKCE. It is on whenever
 `WEB_DOMAIN` is HTTPS, or HTTP on a loopback host:
 `oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS` is computed once at import, and
 an unusable `WEB_DOMAIN` logs a warning and leaves it `None`, so `main.py` mounts
-no provider routes. The MCP resource is always `{WEB_DOMAIN}/mcp/`. Routes are
+no provider routes. The MCP resource is always `{WEB_DOMAIN}/mcp/`. Clients that
+omit `resource` during authorization, token exchange, or refresh use this resource.
+Explicit empty or foreign resources are rejected. Routes are
 under `/api/oauth-provider/`:
 
 ```
