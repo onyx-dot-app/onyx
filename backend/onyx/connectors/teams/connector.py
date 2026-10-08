@@ -8,7 +8,6 @@ from typing import Any
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
 from office365.sharepoint.client_context import ClientContext
-from pydantic import BaseModel
 
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -41,7 +40,7 @@ from onyx.connectors.teams.files import FileSource
 from onyx.connectors.teams.meeting_chats import (
     ChatSource,
 )
-from onyx.connectors.teams.models import ChannelCursor, ChannelRef
+from onyx.connectors.teams.models import ChannelAdvance, ChannelCursor, ChannelRef
 from onyx.connectors.teams.organizers import (
     Organizer,
     OrganizerSource,
@@ -139,6 +138,8 @@ class TeamsConnector(
         include_meeting_chats: bool = False,
     ) -> None:
         TeamsSession.__init__(self, graph_api_host, authority_host)
+        if max_workers <= 0:
+            raise ConnectorValidationError("max_workers must be positive.")
         self.max_workers = max_workers
         self.requested_team_list: list[str] = teams or []
         self.include_attachments = include_attachments
@@ -353,7 +354,7 @@ class TeamsConnector(
             checkpoint.active.append(
                 ChannelCursor(channel=checkpoint.todo_channels.pop())
             )
-        advances: list[_ChannelAdvance] = run_functions_tuples_in_parallel(
+        advances: list[ChannelAdvance] = run_functions_tuples_in_parallel(
             [
                 (self._advance_channel, (cursor.model_copy(deep=True), start))
                 for cursor in checkpoint.active
@@ -378,7 +379,7 @@ class TeamsConnector(
 
     def _advance_channel(
         self, cursor: ChannelCursor, start: SecondsSinceUnixEpoch
-    ) -> "_ChannelAdvance":
+    ) -> ChannelAdvance:
         """One page of the cursor's channel: its threads with their replies and
         images. Leaves the channel when the page was its last or is refused."""
         channel = cursor.channel
@@ -387,7 +388,7 @@ class TeamsConnector(
         type_failure = self._threads.type_failure(channel)
         if type_failure is not None:
             items.append(type_failure)
-            return _ChannelAdvance(cursor=cursor, items=items, done=True)
+            return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         # No library means the files grant the admin turned on is missing, so a
         # refusal is one channel failure.
@@ -403,7 +404,7 @@ class TeamsConnector(
             if not is_permanent(e):
                 raise
             items.append(channel_failure(channel, "files", e))
-            return _ChannelAdvance(cursor=cursor, items=items, done=True)
+            return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         try:
             roots, next_url = self._threads.page(
@@ -417,15 +418,15 @@ class TeamsConnector(
                     channel.id,
                 )
                 cursor.next_messages_url = None
-                return _ChannelAdvance(cursor=cursor, items=items, restarted=True)
+                return ChannelAdvance(cursor=cursor, items=items, restarted=True)
             if not is_permanent(e):
                 raise
             items.append(channel_failure(channel, "messages", e))
-            return _ChannelAdvance(cursor=cursor, items=items, done=True)
+            return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         items.extend(self._threads.documents(channel, roots, start))
         cursor.next_messages_url = next_url
-        return _ChannelAdvance(
+        return ChannelAdvance(
             cursor=cursor,
             items=items,
             done=next_url is None,
@@ -588,16 +589,6 @@ class TeamsConnector(
             yield from self._threads.slim(channel, walk)
         if self._files is not None:
             yield from self._files.slim(channel, walk)
-
-
-class _ChannelAdvance(BaseModel):
-    """What one worker brings back from a channel's page."""
-
-    cursor: ChannelCursor
-    items: list[Document | ConnectorFailure]
-    done: bool = False
-    files_due: bool = False
-    restarted: bool = False
 
 
 def _rejects_saved_cursor(

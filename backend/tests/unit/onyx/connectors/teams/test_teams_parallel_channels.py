@@ -7,9 +7,12 @@ from typing import Any
 
 import pytest
 import requests
+from pydantic import ValidationError
 
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import Document
-from onyx.connectors.teams.connector import TeamsCheckpoint
+from onyx.connectors.teams.config import TeamsConnectorConfig
+from onyx.connectors.teams.connector import TeamsCheckpoint, TeamsConnector
 from onyx.connectors.teams.models import ChannelCursor, ChannelRef
 from onyx.connectors.teams.utils import message_delta_url
 from tests.unit.onyx.connectors.teams.helpers import (
@@ -137,3 +140,12 @@ def test_no_more_channels_than_workers_are_active_at_once() -> None:
     more, checkpoint = step(teams_connector, checkpoint)
     assert sorted(_documents(items) + _documents(more)) == ["m1", "o1"]
     assert checkpoint.has_more is False
+
+
+def test_a_non_positive_worker_count_is_rejected() -> None:
+    """Zero workers would take no channel off the queue and repeat empty steps
+    for ever, so the connector refuses it up front, as the config does."""
+    with pytest.raises(ConnectorValidationError):
+        TeamsConnector(max_workers=0)
+    with pytest.raises(ValidationError):
+        TeamsConnectorConfig(max_workers=0)
