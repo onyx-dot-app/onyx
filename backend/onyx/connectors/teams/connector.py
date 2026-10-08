@@ -35,8 +35,12 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.teams import groups, listing, threads
-from onyx.connectors.teams.config import CHANNEL_BATCH_PER_WORKER, MAX_WORKERS
-from onyx.connectors.teams.export import EXPORT_TEAM_WORKERS, ExportSource
+from onyx.connectors.teams.config import (
+    CHANNEL_BATCH_PER_WORKER,
+    EXPORT_TEAM_WORKERS,
+    MAX_WORKERS,
+)
+from onyx.connectors.teams.export import ExportSource
 from onyx.connectors.teams.files import FileSource
 from onyx.connectors.teams.meeting_chats import (
     ChatSource,
@@ -52,7 +56,12 @@ from onyx.connectors.teams.organizers import (
     OrganizerSource,
     OrganizerStage,
 )
-from onyx.connectors.teams.refusals import channel_failure, is_permanent, status
+from onyx.connectors.teams.refusals import (
+    ExportProbe,
+    channel_failure,
+    is_permanent,
+    status,
+)
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.threads import ThreadSource
@@ -64,6 +73,7 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import (
+    drain,
     run_functions_tuples_in_parallel,
     run_with_timeout,
 )
@@ -317,7 +327,11 @@ class TeamsConnector(
             yield from self._channel_step(checkpoint, start)
         elif checkpoint.todo_team_ids:
             if checkpoint.export is None:
-                checkpoint.export = self._export.available(checkpoint.todo_team_ids[-1])
+                probe = self._export.available(checkpoint.todo_team_ids[-1])
+                # A probe team that is gone or locked says nothing about the
+                # app: it walks its channels and the next team probes again.
+                if probe is not ExportProbe.REFUSED_FOR_ITEM:
+                    checkpoint.export = probe is ExportProbe.ANSWERS
             if checkpoint.export:
                 yield from self._export_step(checkpoint, start, end)
             else:
@@ -362,23 +376,28 @@ class TeamsConnector(
         end: SecondsSinceUnixEpoch,
     ) -> Iterator[Document | ConnectorFailure]:
         """The threads of a few teams, each team one export stream, side by
-        side, then the files of their channels. Written back only once every
-        team finished, so a raise in one leaves the step to be retried."""
+        side and yielded as each team finishes, then the files of their
+        channels. The teams leave the queue only once every one finished, so
+        a raise in one leaves the step to be retried."""
         if checkpoint.todo_team_ids is None:
             raise RuntimeError("The teams are listed before any export step")
         team_ids: list[str] = checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
-        exports: list[TeamExport] = run_functions_tuples_in_parallel(
-            [(self._export.team, (team_id, start, end)) for team_id in team_ids],
-            max_workers=EXPORT_TEAM_WORKERS,
-        )
-        del checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
-        for export in exports:
+
+        def one_team(team_id: str) -> Iterator[TeamExport]:
+            yield self._export.team(team_id, start, end)
+
+        for export in drain(team_ids, one_team, EXPORT_TEAM_WORKERS):
             yield from export.items
+            if export.refused_to_app:
+                # A 402 applies to the whole tenant, so the teams left walk
+                # their channels without another stream each.
+                checkpoint.export = False
             if export.fell_back:
                 checkpoint.todo_channels.extend(export.channels)
                 continue
             for channel in export.channels:
                 yield from self._opened_channel_files(channel, start)
+        del checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
 
     def _opened_channel_files(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch

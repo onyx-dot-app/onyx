@@ -14,13 +14,21 @@ from office365.graph_client import GraphClient
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, Document, EntityFailure
 from onyx.connectors.teams import listing
+from onyx.connectors.teams.config import EXPORT_MESSAGES_CAP
 from onyx.connectors.teams.models import (
     ChannelIdentity,
     ChannelRef,
     Message,
     TeamExport,
 )
-from onyx.connectors.teams.refusals import is_export_refusal, is_permanent, status
+from onyx.connectors.teams.refusals import (
+    ExportProbe,
+    export_probe_refusal,
+    is_export_refusal,
+    is_metered_refusal,
+    is_permanent,
+    status,
+)
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.threads import ThreadSource
 from onyx.connectors.teams.utils import (
@@ -33,34 +41,26 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Export pages answer in about a quarter second and the per-tenant cap sits
-# near fifty a second, so four teams at once stay under it.
-EXPORT_TEAM_WORKERS = 4
-# A team's stream is grouped in memory before its threads are built. Past this
-# many messages the team goes to the channel walk instead.
-EXPORT_MESSAGES_CAP = 250_000
-
 
 class ExportSource:
     def __init__(self, session: TeamsSession, threads: ThreadSource) -> None:
         self._session = session
         self._threads = threads
 
-    def available(self, team_id: str) -> bool:
-        """Whether the export API answers for this app. 403 or 402, or a probe
-        team that is gone or locked, means the channel walk; anything else is
-        an outage and raises."""
+    def available(self, team_id: str) -> ExportProbe:
+        """Whether the export API answers for this app, probed on one team. A
+        refusal is for the app (403, 402) or for that team alone (gone,
+        locked); anything else is an outage and raises."""
         try:
             get_json_with_retry(self._session.graph(), team_export_probe_url(team_id))
         except requests.HTTPError as e:
             if not is_export_refusal(e):
                 raise
             logger.info(
-                "The export API is not available to this app (%s); walking channels",
-                status(e),
+                "The export API is not available (%s on team %s)", status(e), team_id
             )
-            return False
-        return True
+            return export_probe_refusal(e)
+        return ExportProbe.ANSWERS
 
     def team(
         self, team_id: str, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
@@ -108,8 +108,24 @@ class ExportSource:
                 team_id,
                 status(e),
             )
-            return TeamExport(items=[], channels=channels, fell_back=True)
+            return TeamExport(
+                items=[],
+                channels=channels,
+                fell_back=True,
+                refused_to_app=is_metered_refusal(e),
+            )
 
+        quiet: list[str] = [
+            channel.id for channel in channels if channel.id not in _streamed(threads)
+        ]
+        if quiet:
+            logger.debug(
+                "Team %s: %s of %s listed channel(s) have no row in the stream: %s",
+                team_id,
+                len(quiet),
+                len(channels),
+                quiet,
+            )
         items: list[Document | ConnectorFailure] = []
         for root_id, messages in threads.items():
             channel: ChannelRef | None = _channel_of(messages, by_id)
@@ -156,6 +172,17 @@ class ExportSource:
             else None
         )
         yield from self._threads.thread(channel, root, replies, start)
+
+
+def _streamed(threads: dict[str, list[Message]]) -> set[str]:
+    """The channels the stream carried rows for."""
+    return {
+        identity.channel_id
+        for messages in threads.values()
+        for message in messages
+        if (identity := message.channel_identity) is not None
+        and identity.channel_id is not None
+    }
 
 
 def _channel_of(

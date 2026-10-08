@@ -352,12 +352,12 @@ of meeting chats.
 - **Teams, then channels.** The first step lists every team
   (`listing.collect_all_teams`). The first team step probes the export API
   once and keeps the answer in `TeamsCheckpoint.export`. With it, a team step
-  streams four teams at a time (`export.py:ExportSource`): every message of
+  streams four teams at a time, the documents of each team yielded as it finishes (`export.py:ExportSource`): every message of
   every channel changed in the window, replies included, grouped into threads;
   a thread whose root was created inside the window is complete in the stream,
   an older one that changed anywhere gets its replies from Graph, and its root
   too when the stream lacks it. A team whose stream Graph refuses, or that
-  streams past 250k messages, goes to the channel walk.
+  streams past 100k messages, goes to the channel walk; a probe team that is gone or locked walks its channels and the next team probes again, and a 402 mid-stream sends every team left to the channel walk.
   An app the export API refuses walks every team the same way: the team's
   channels into `todo_channels`, then a channel
   step walks one delta page of up to `max_workers` channels at once

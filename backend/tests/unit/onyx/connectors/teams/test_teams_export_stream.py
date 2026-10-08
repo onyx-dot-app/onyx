@@ -171,6 +171,80 @@ def test_an_app_without_the_approval_walks_channels(
     assert checkpoint.todo_team_ids == []
 
 
+def test_a_probe_team_that_is_gone_decides_nothing_and_the_next_team_probes_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """404 or 423 on the probe team says nothing about the app: that team walks
+    its channels, and the next step probes the next team."""
+    _team_with_channels(monkeypatch)
+    gone = "team-gone"
+    client: MagicMock = graph_client(
+        {PROBE: {"value": []}, team_export_url(TEAM_ID, 0, 1): {"value": []}},
+        refused={team_export_probe_url(gone): 404},
+    )
+    saved: TeamsCheckpoint = TeamsCheckpoint(
+        has_more=True, todo_team_ids=[TEAM_ID, gone]
+    )
+
+    _, checkpoint = step(connector(client), saved)
+    assert checkpoint.export is None
+    assert checkpoint.todo_team_ids == [TEAM_ID]
+    assert [channel.id for channel in checkpoint.todo_channels] == [
+        CHANNEL.id,
+        OTHER.id,
+    ]
+
+    checkpoint.todo_channels = []
+    _, checkpoint = step(connector(client), checkpoint)
+    assert checkpoint.export is True
+    assert checkpoint.todo_team_ids == []
+
+
+def test_a_metered_refusal_mid_stream_sends_every_team_left_to_the_channel_walk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _team_with_channels(monkeypatch)
+    client: MagicMock = graph_client(
+        {PROBE: {"value": []}}, refused={team_export_url(TEAM_ID, 0, 1): 402}
+    )
+
+    _, checkpoint = step(connector(client), _team_checkpoint())
+
+    assert checkpoint.export is False
+    assert [channel.id for channel in checkpoint.todo_channels] == [
+        CHANNEL.id,
+        OTHER.id,
+    ]
+
+
+def test_a_root_created_at_the_windows_start_is_complete_in_the_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _team_with_channels(monkeypatch)
+    at_start = "2023-11-14T22:13:20Z"  # START as an ISO timestamp
+    client: MagicMock = graph_client(
+        {
+            PROBE: {"value": []},
+            team_export_url(TEAM_ID, START, START + 1): {
+                "value": [
+                    _in_channel(message("m1", "one", created=at_start), CHANNEL),
+                    _in_channel(
+                        message("r1", "reply", reply_to="m1", created=at_start), CHANNEL
+                    ),
+                ]
+            },
+        }
+    )
+
+    items, _ = step(connector(client), _team_checkpoint(), start=START)
+
+    documents: dict[str, Document] = _documents(items)
+    assert [section.text or "" for section in documents["m1"].sections][-1].endswith(
+        "reply"
+    )
+    assert replies_url("m1") not in requested_urls(client)
+
+
 def test_the_export_decision_is_kept_for_the_attempt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -239,16 +313,15 @@ def test_a_worker_lists_its_teams_channels_on_its_own_client(
     assert listing_clients[0] is not teams_connector.graph()
 
 
-@pytest.mark.parametrize("refusal", [403, 402])
 def test_a_team_whose_stream_is_refused_goes_to_the_channel_walk(
-    monkeypatch: pytest.MonkeyPatch, refusal: int
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """One team's refusal, or a metered tenant's 402, must not fail the
-    attempt: the channel walk records what each of its channels refuses, as
-    it does for an app without the approval."""
+    """One team's refusal must not fail the attempt: the channel walk records
+    what each of its channels refuses, as it does for an app without the
+    approval. The other teams still stream."""
     _team_with_channels(monkeypatch)
     client: MagicMock = graph_client(
-        {PROBE: {"value": []}}, refused={team_export_url(TEAM_ID, 0, 1): refusal}
+        {PROBE: {"value": []}}, refused={team_export_url(TEAM_ID, 0, 1): 403}
     )
 
     items, checkpoint = step(connector(client), _team_checkpoint())

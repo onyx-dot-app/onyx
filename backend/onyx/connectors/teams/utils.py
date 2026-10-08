@@ -403,6 +403,8 @@ def fetch_team_export(
 
 
 def team_export_probe_url(team_id: str) -> str:
+    """One row and no filter: whether the API answers at all is known from
+    the first page, before any filter applies."""
     return f"teams/{team_id}/channels/getAllMessages?$top=1"
 
 

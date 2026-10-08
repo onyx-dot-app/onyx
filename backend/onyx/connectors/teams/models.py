@@ -124,6 +124,8 @@ class TeamExport(BaseModel):
     # The stream was refused or too large to hold, so the channels go to the
     # channel walk.
     fell_back: bool = False
+    # The refusal was a 402, which applies to the whole tenant.
+    refused_to_app: bool = False
 
 
 class ChannelLibrary(BaseModel):
