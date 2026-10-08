@@ -365,8 +365,7 @@ class ModelConfigurationView(BaseModel):
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
-    # Virtual entry that delegates model selection to a routing layer
-    # (openrouter/auto, a Portkey config) rather than naming a model.
+    # Virtual entry delegating model selection to a routing layer.
     is_router: bool = False
     # True when this is the provider's recommended default model.
     is_recommended_default: bool = False

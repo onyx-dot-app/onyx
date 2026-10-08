@@ -134,9 +134,11 @@ export default function ModelSelector({
   }, [defaultText, llmProviders]);
 
   const effectiveOption = currentOption ?? defaultModelOption;
-  const isAutoSelected =
-    modelRoutingEnabled && routingModelId != null && value === routingModelId;
-  const currentDisplayName = isAutoSelected
+  const isAutoSelected: boolean =
+    (modelRoutingEnabled ?? false) &&
+    routingModelId != null &&
+    value === routingModelId;
+  const currentDisplayName: string = isAutoSelected
     ? t("autoItem.label")
     : (effectiveOption?.displayName ?? t("trigger.noSelection.label"));
   const globalDefaultDisplayName = useMemo(() => {

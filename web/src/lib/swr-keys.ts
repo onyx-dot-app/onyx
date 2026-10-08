@@ -51,8 +51,6 @@ export const SWR_KEYS = {
   adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
-  // Every router model configuration grouped under its provider — what the
-  // admin model-routing target selector lists.
   llmRouterModels: "/api/admin/llm/router-models",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",

@@ -654,7 +654,6 @@ def sync_model_configurations(
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 
     new_models: list[NewModelConfiguration] = []
-    # Rows touched in place: flow additions plus newly-marked routers.
     upgraded_count: int = 0
     for model in models:
         existing = existing_by_name.get(model.name)
@@ -678,8 +677,7 @@ def sync_model_configurations(
             )
             continue
 
-        # Router status is additive like the capability flags: a later fetch
-        # that newly reports the entry as a router marks the stored row.
+        # Router status is additive like the capability flags.
         if model.is_router and not existing.is_router:
             existing.is_router = True
             upgraded_count += 1

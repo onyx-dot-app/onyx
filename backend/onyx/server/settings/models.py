@@ -68,9 +68,7 @@ class Settings(BaseModel):
     # Model selector shows one flat list instead of per-provider groups.
     hide_provider_grouping: bool = False
 
-    # Model routing: a single "Auto" picker item backed by the chosen router
-    # model configuration (e.g. openrouter/auto). Users see only "Auto"; the
-    # backing router is admin-configured.
+    # "Auto" picker item backed by the chosen router configuration.
     model_routing_enabled: bool = False
     model_routing_model_configuration_id: int | None = None
     auto_scroll: bool | None = False

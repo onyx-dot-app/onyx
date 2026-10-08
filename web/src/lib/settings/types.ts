@@ -36,7 +36,7 @@ export interface Settings {
   // Model selector shows one flat list instead of per-provider groups.
   hide_provider_grouping?: boolean;
 
-  // Model routing: a single "Auto" picker item backed by the admin-chosen
+  // "Auto" picker item backed by the admin-chosen router.
   // router model configuration (e.g. openrouter/auto).
   model_routing_enabled?: boolean;
   model_routing_model_configuration_id?: number | null;

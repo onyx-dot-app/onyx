@@ -390,10 +390,7 @@ export default function LanguageModelsPage() {
     [existingLlmProviders]
   );
 
-  // Router models (openrouter/auto, gateway configs) usable as the model
-  // routing target. The dedicated endpoint returns every router regardless
-  // of visibility or paging, so hidden and persona-restricted routers all
-  // appear.
+  // Includes hidden and persona-restricted routers, unlike the paged listings.
   const {
     data: routerProviders,
     error: routerProvidersError,
@@ -547,8 +544,7 @@ export default function LanguageModelsPage() {
       await updateAdminSettings({
         model_routing_model_configuration_id: modelConfigurationId,
       });
-      // The backend may have flipped the router's visibility; the provider
-      // listings the picker reads must refetch, not just settings.
+      // The backend may have flipped the router's visibility.
       await Promise.all([
         mutate(SWR_KEYS.settings),
         refreshLlmProviderCaches(mutate),

@@ -466,12 +466,10 @@ export default function ModelSelectorContent({
     [llmProviders, currentModelName, includeHiddenModels]
   );
 
-  // Router entries (openrouter/auto, gateway configs) never list as models.
-  // Model routing surfaces a single "Auto" item instead, backed by the router
-  // the admin picked in the LLM settings.
+  // "Auto" selects the admin-configured router; router rows never list.
   const autoOption = useMemo<LLMOption | undefined>(() => {
     if (!modelRoutingEnabled || routingModelId == null) return undefined;
-    const backing = llmOptions.find(
+    const backing: LLMOption | undefined = llmOptions.find(
       (opt) => opt.modelConfigurationId === routingModelId
     );
     if (!backing) return undefined;
@@ -629,7 +627,7 @@ export default function ModelSelectorContent({
     const disabled = isDisabled?.(option) ?? false;
 
     // Skip the model-id description when it would just repeat the display name.
-    const description = option.isAuto
+    const description: string | undefined = option.isAuto
       ? t("autoItem.description")
       : option.modelName !== option.displayName
         ? option.modelName

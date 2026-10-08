@@ -3670,8 +3670,7 @@ class ModelConfiguration(Base):
     )
     temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    # Virtual entry that delegates model selection to a routing layer
-    # (e.g. openrouter/auto, a Portkey config) rather than naming a model.
+    # Virtual entry delegating model selection to a routing layer.
     is_router: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )

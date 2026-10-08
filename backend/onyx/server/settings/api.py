@@ -152,9 +152,7 @@ def admin_patch_settings(
                     OnyxErrorCode.INVALID_INPUT,
                     "Model routing requires a router model configuration.",
                 )
-            # The picker reads the backing model off the provider payload,
-            # which only returns visible models on page one. Provider listings
-            # are cached server-side, so the flip must drop them.
+            # Hidden routers don't reach the picker's provider payload.
             if mark_model_configuration_visible(db_session, routing_model):
                 invalidate_provider_listing_cache()
 
