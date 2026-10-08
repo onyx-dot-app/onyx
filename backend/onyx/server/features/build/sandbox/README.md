@@ -323,6 +323,50 @@ The Python venv (built into the sandbox image at `/workspace/.venv`) includes pa
 - HTTP clients: requests, httpx
 - Utilities: python-dotenv, pydantic
 
+## IPv6-only clusters
+
+Craft keeps IPv4 listeners by default. Use these Helm values for an IPv6-only cluster:
+
+```yaml
+sandboxProxy:
+  listenHost: "::"
+  allowGlobalClients: true
+  egressAllowIPv6: true
+  # Replace these example ranges with all your internal network ranges.
+  internalCIDRs:
+    - "10.0.0.0/8"
+    - "2001:db8:100::/56"
+    - "2001:db8:200::/108"
+sandboxPod:
+  listenHost: "::"
+```
+
+The proxy and daemon listeners serve IPv6 only with these settings. Do not use them for IPv4 sandbox clients.
+
+Enable `allowGlobalClients` only when NetworkPolicy restricts proxy ingress to authorized cluster workloads.
+Global IPv6 pod addresses otherwise trigger mitmproxy's global-client restriction. The proxy still requires a known sandbox identity.
+
+Set `internalCIDRs` to all internal VPC, pod, Service, and node ranges, including globally routable IPv6 ranges.
+The chart requires this list when IPv6 egress, global clients, or an IPv6 proxy listener is enabled.
+The proxy also checks it at startup when global clients or an IPv6 listener is enabled.
+The proxy rejects invalid CIDRs at startup.
+
+HTTP requests and CONNECT tunnels use the same destination policy: only public addresses outside these ranges are allowed.
+The exact `ONYX_SERVER_URL` host and port form the only internal destination exception.
+Standard NAT64 addresses with embedded private IPv4 destinations are also blocked.
+
+Configure these settings through Helm. The chart supplies `SANDBOX_PROXY_LISTEN_HOST`,
+`SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS`, and `SANDBOX_LISTEN_HOST` to the relevant containers.
+`SANDBOX_LISTEN_HOST` controls OpenCode, the sidecar, and generated app previews together.
+All listen hosts default to `0.0.0.0`. Generated Next.js apps use the matching address family for their readiness checks.
+Global clients remain blocked by default. `egressAllowIPv6` controls the proxy's NetworkPolicy; it does not change its listener.
+`SANDBOX_PROXY_INTERNAL_CIDRS` supplies comma-separated internal ranges.
+
+The firewall resolves the proxy before lockdown. It prefers IPv4 and accepts IPv6 when no IPv4 address exists.
+Both OUTPUT chains keep a DROP policy and permit loopback and established connections.
+Only the proxy address family permits new TCP connections to its port.
+IPv6 also permits neighbor solicitations and advertisements with hop limit 255. This lets pods reach the proxy with an empty neighbor cache.
+
 ## References
 
 - [OpenCode Documentation](https://docs.opencode.ai)

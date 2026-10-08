@@ -85,9 +85,9 @@ time.
 | Variable | Where | Effect |
 |---|---|---|
 | `SANDBOX_PROXY_LISTEN_PORT`, `SANDBOX_PROXY_HEALTHZ_PORT` | `server/features/build/configs.py` | Proxy listen and health ports. |
-| `SANDBOX_PROXY_LISTEN_HOST` | `configs.py` | Proxy and health listener; defaults to `0.0.0.0`. Use `::` for IPv6-only clients. |
-| `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS` | `configs.py` | Defaults to `false`. Enable for global IPv6 sandbox addresses only with restricted proxy ingress. Known sandbox identity remains required. |
-| `SANDBOX_PROXY_INTERNAL_CIDRS` | `configs.py` | Comma-separated internal VPC, pod, Service, node, and connected-network ranges, including global IPv6 ranges. The proxy blocks destinations in these ranges. |
+| `SANDBOX_PROXY_LISTEN_HOST` | `configs.py` | Proxy and health listener; defaults to `0.0.0.0`. Helm `sandboxProxy.listenHost: "::"` enables IPv6 listeners. |
+| `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS` | `configs.py` | Defaults to `false`. Enable through `sandboxProxy.allowGlobalClients` for global IPv6 pod addresses, with restricted proxy ingress. Known sandbox identity remains required. |
+| `SANDBOX_PROXY_INTERNAL_CIDRS` | `configs.py` | Comma-separated internal ranges, including global IPv6 VPC, pod, Service, node, and connected-network ranges. The proxy denies destinations in these ranges. |
 | `SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA` | `configs.py` | mitmproxy upstream cert verification mode. |
 | `SANDBOX_BACKEND` (`SandboxBackend.KUBERNETES`/`DOCKER`) | `configs.py` | Selects `K8sSecretCAStore`/`K8sInformerLookup` vs. `FileCAStore`/`DockerEventsLookup` (`sandbox_proxy/backend.py:build_ca_store`, `build_ip_lookup`). |
 | `SANDBOX_PROXY_CA_SECRET`, `SANDBOX_PROXY_CA_CONFIGMAP`, `SANDBOX_PROXY_NAMESPACE` | `configs.py` | K8s CA persistence and cross-namespace projection targets (`ca_k8s.py`). |
@@ -106,6 +106,11 @@ Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
 Use listeners and Services in that address family: IPv4 remains the default;
 IPv6 listeners support IPv6-only deployments. Switching an IPv4-primary
 dual-stack deployment to secondary IPv6 pod addresses is not supported.
+
+Helm `sandboxProxy.egressAllowIPv6` enables public IPv6 egress in the proxy
+NetworkPolicy. It does not change the listener. The chart requires
+`sandboxProxy.internalCIDRs` when IPv6 egress, global clients, or an IPv6
+listener is enabled.
 
 ---
 
