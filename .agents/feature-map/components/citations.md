@@ -11,8 +11,8 @@
 **Owns:**
 `backend/onyx/chat/citation_processor.py`, `citation_utils.py`
 **Contributes to (owned by neighbours):**
-`backend/onyx/chat/llm_loop.py`, `chat_state.py`, `save_chat.py` ([[core-chat-loop]]),
-`backend/onyx/tools/tool_runner.py`, `tool_implementations/utils.py` ([[tools-framework]]),
+`backend/onyx/chat/agent.py:ChatAgent`, `backend/onyx/chat/models.py`, `backend/onyx/db/chat_response.py` ([[core-chat-loop]]),
+`backend/onyx/agents/tool_execution.py:ToolBatch`, `tool_implementations/utils.py` ([[tools-framework]]),
 `backend/onyx/chat/prompt_utils.py`, `backend/onyx/prompts/chat_prompts.py`
 ([[context-assembly]]), `backend/onyx/server/query_and_chat/streaming_models.py`
 ([[streaming-protocol]]), `backend/onyx/server/query_and_chat/session_loading.py`
@@ -53,9 +53,9 @@ Citations have no HTTP endpoints of their own. They ride the same turn described
 
 | Surface | Where | Notes |
 |---|---|---|
-| `include_citations` | `SendMessageRequest.include_citations` (`server/query_and_chat/models.py`), default `True` | Per-request switch. `llm_loop.py:run_llm_loop` maps it to `CitationMode.HYPERLINK` (default) or `CitationMode.REMOVE`. Callers that must not expose links to the end surface (for example a public bot) set it `False`. |
-| `CitationMode` | `chat/citation_processor.py:CitationMode` | `HYPERLINK` (format and emit `CitationInfo`), `KEEP_MARKERS` (preserve `[1]` verbatim, emit no `CitationInfo`, used by the research agent's intermediate reports, `tools/fake_tools/research_agent.py`, ahead of `collapse_citations`), `REMOVE` (strip markers entirely, emit no `CitationInfo`, driven by `include_citations=False`). All three track mapped citations via `get_seen_citations`. A marker with no mapping is skipped. |
-| `CitationInfo` packet | `server/query_and_chat/streaming_models.py:CitationInfo` | The wire-visible surface for ordinary inline citations. Research-agent reports also emit `IntermediateReportCitedDocs` (`tools/fake_tools/research_agent.py`). Carries `citation_number` and `document_id`. See [[streaming-protocol]] §4.1. |
+| `include_citations` | `SendMessageRequest.include_citations` (`server/query_and_chat/models.py`), default `True` | Per-request switch. `backend/onyx/chat/agent.py:ChatAgent` maps it to `CitationMode.HYPERLINK` (default) or `CitationMode.REMOVE`. Callers that must not expose links to the end surface (for example a public bot) set it `False`. |
+| `CitationMode` | `chat/citation_processor.py:CitationMode` | `HYPERLINK` (format and emit `CitationInfo`), `KEEP_MARKERS` (preserve `[1]` verbatim, emit no `CitationInfo`, used by intermediate-report rendering in `backend/onyx/chat/presentation.py`), `REMOVE` (strip markers entirely, emit no `CitationInfo`, driven by `include_citations=False`). All three track mapped citations via `get_seen_citations`. A marker with no mapping is skipped. |
+| `CitationInfo` packet | `server/query_and_chat/streaming_models.py:CitationInfo` | The wire-visible surface for ordinary inline citations. Research-agent reports also produce `IntermediateReportCitedDocs` through `backend/onyx/chat/renderer.py:ToolRenderer`. Carries `citation_number` and `document_id`. See [[streaming-protocol]] §4.1. |
 
 ---
 
@@ -69,7 +69,7 @@ Citations add no tables of their own. They write into columns [[chat-persistence
 - `SearchDoc` (`db/models.py:SearchDoc`): one row per unique retrieved document
   version. A citation-only document (for example a project file cited but never
   shown as a tool-call result) still gets a row here, created on demand in
-  `save_chat.py:save_chat_turn`. Only project-file rows are also linked to the
+  `backend/onyx/db/chat_response.py:save_chat_turn`. Only project-file rows are also linked to the
   message. Other citation-only rows are not in the message's document list.
 - `ChatMessage__SearchDoc` and `ToolCall__SearchDoc` (`db/models.py`): the join
   tables linking a message's full document set, and a specific tool call's result
@@ -103,10 +103,10 @@ DynamicCitationProcessor.process_token (streaming, token by token)   chat/citati
    │  looks up citation_to_doc[num] -> SearchDoc
    │  HYPERLINK mode: rewrites "[1]" to "[[1]](link)", yields CitationInfo(num, doc_id)
    ▼
-Emitter.emit(CitationInfo packet)  +  state_container.set_citation_mapping(...)   llm_step.py, llm_loop.py, chat_state.py
-   │  CitationInfo goes out over the wire; citation_to_doc and _emitted_citations accumulate
+MessageRenderer emits CitationInfo and records displayed citations             chat/renderer.py
+   │  ResponsePresenter publishes packets; project_response prepares saved display
    ▼
-save_chat_turn                                                 chat/save_chat.py
+save_chat_turn                                                 db/chat_response.py
    │  persists ChatMessage.citations = {citation_num: SearchDoc.id}, only for emitted citations
    │  links tool-call SearchDocs and citation-only project-file SearchDocs to the ChatMessage
    ▼
@@ -138,21 +138,20 @@ the model narrating "I should reference citation_id: 5"-style artifacts, and put
 the number first exploits models' stronger local attention even though they have
 full context access.
 
-### 4.3 Range allocation: `tool_runner.py`
+### 4.3 Range allocation
 
-`tools/tool_runner.py:run_tool_calls` allocates a **distinct** `starting_citation_num`
-per tool call in a parallel batch, advancing by 100 after each `SearchTool`,
-`WebSearchTool`, or `OpenURLTool` call (`starting_citation_num += 100`). This is why
-two concurrent searches never collide: `internal_search` might get the range
-starting at 1, a concurrent `web_search` starts at 101, an `open_url` at 201, and so
-on, regardless of how many documents any one call actually returns.
+`backend/onyx/agents/tool_execution.py:ToolBatch` supplies stable call indices.
+SearchTool, WebSearchTool, and OpenURLTool calculate their range as
+`context.next_citation_num + CITATIONS_PER_TOOL_CALL * invocation.call_index`.
+`backend/onyx/tools/interface.py:CITATIONS_PER_TOOL_CALL` is 100. Parallel calls
+therefore use distinct ranges without mutating a shared counter.
 
 ### 4.4 Teaching the format: prompt and reminder
 
 Citation guidance lives only in the trailing reminder, never in the system
 prompt: head prompts are built with `should_cite_documents=False` so the cached
 message prefix stays byte-stable across loop iterations (a `{{CITATION_GUIDANCE}}`
-tag in a system/agent prompt resolves to empty). `llm_loop.py:select_reminder_text`
+tag in a system/agent prompt resolves to empty). `backend/onyx/chat/prompt_utils.py:build_chat_reminder`
 appends `REQUIRE_CITATION_GUIDANCE`, `ANSWER_COVERAGE_GUIDANCE`, and
 `ANSWER_COMPLETENESS_REMINDER` (`prompts/chat_prompts.py`, plus
 `LAST_CYCLE_CITATION_REMINDER` on the final cycle) to the reminder message whenever `should_cite_documents or always_cite_documents` is
@@ -167,16 +166,16 @@ behavior, not a style preference (`backend/onyx/chat/README.md`).
 
 ### 4.5 Parsing the stream: `DynamicCitationProcessor`
 
-`llm_loop.py:run_llm_loop` creates one `DynamicCitationProcessor` per turn (mode
+`backend/onyx/chat/agent.py:ChatAgent` creates a `DynamicCitationProcessor` for prompt sources (mode
 `HYPERLINK` unless `include_citations=False`), seeds it with any project-file
-citation mapping (`_build_context_file_citation_mapping`), and updates it after every
-tool response via `citation_utils.py:update_citation_processor_from_tool_response`,
+citation mapping (`build_context_file_citation_mapping`), and updates it after every
+tool response via `citation_utils.py:update_citation_processor_from_tool_result`,
 which turns a `SearchDocsResponse.citation_mapping` (`dict[int, str]`, number to
 document id) into a `dict[int, SearchDoc]` by matching against
 `search_docs_response.search_docs`.
 
-`llm_step.py:run_llm_step` feeds every answer token to
-`citation_processor.process_token` (`_emit_citation_results`). The processor holds
+`backend/onyx/chat/renderer.py:MessageRenderer._content` feeds answer text to
+`citation_processor.process_token`. The processor holds
 back text that might be a partial citation (`possible_citation_pattern`). It skips
 markers inside fenced code blocks, which `CodeFenceTracker` tracks line by line.
 Once a
@@ -187,30 +186,23 @@ and the unicode bracket variants `【1】`/`［1］`), it looks up each number i
 needs to render the link (`citation_processor.py:_process_citation`, the "Yield
 CitationInfo objects BEFORE the citation text" comment).
 
-`_emit_citation_results` (`llm_step.py`) also calls
-`state_container.add_emitted_citation(result.citation_number)` for every
-`CitationInfo` actually yielded.
+`backend/onyx/chat/renderer.py:MessageRenderer` collects each emitted `CitationInfo`
+in its `citations` list.
 
-### 4.6 State container: two mappings, two purposes
+### 4.6 Known sources and displayed citations
 
-`ChatStateContainer` (`chat_state.py`) tracks:
+`backend/onyx/chat/agent.py:ChatAgent` maintains the known source mapping for prompts.
+The renderer records only citations that appear in displayed text.
+`backend/onyx/chat/presentation.py:project_response` rebuilds the saved display from
+recorded messages with the same renderer. It carries source documents and emitted
+citation information into persistence.
 
-- `citation_to_doc` (`set_citation_mapping` / `get_citation_to_doc`): the **full**
-  citation-number-to-`SearchDoc` mapping known at any point, refreshed after every
-  LLM step (`llm_loop.py`, `state_container.set_citation_mapping(citation_processor.citation_to_doc)`).
-  This includes numbers the model was given the *option* to cite but never did.
-- `_emitted_citations` (`add_emitted_citation` / `get_emitted_citations`): the
-  **subset** of citation numbers that actually appeared in streamed text.
-
-The split matters at save time: `save_chat_turn` persists only citations in
-`emitted_citations`, so `ChatMessage.citations` reflects what the user actually saw
-cited, not the full universe of documents the model could have cited. Passing
-`citation_to_doc` alone would persist unused numbers; passing neither would lose the
-mapping entirely if the turn is stopped mid-stream.
+This distinction prevents unused source numbers from appearing in saved citations.
+It also preserves citations when an answer stops before completion.
 
 ### 4.7 Persistence: `save_chat_turn`
 
-`save_chat.py:save_chat_turn` (see also [[chat-persistence]]):
+`backend/onyx/db/chat_response.py:save_chat_turn` (see also [[chat-persistence]]):
 
 1. Creates a `SearchDoc` DB row for every document in `all_search_docs` (the
    pre-deduplicated set gathered from tool calls).
@@ -279,8 +271,8 @@ and by the time a replayed message's full text is available, its citation map is
 ## 5. Contracts and invariants
 
 1. **Citation numbering ranges must not collide across parallel tool calls.**
-   `tool_runner.py:run_tool_calls` advances `starting_citation_num` by 100 per
-   citeable tool call in one batch. Sharing one counter, or reusing a range across
+   `ToolBatch` supplies a stable `call_index`; each search tool offsets its
+   base citation number by `CITATIONS_PER_TOOL_CALL * call_index`. Sharing one counter, or reusing a range across
    calls, silently merges two documents' citations.
 2. **The number in the LLM-facing document JSON is the number the model is asked to
    emit.** `convert_inference_sections_to_llm_string`'s `citation_id` and the prompt
@@ -298,7 +290,7 @@ and by the time a replayed message's full text is available, its citation map is
    set a live turn would have emitted. Only `emitted_citations` are persisted
    (§4.6); a change to what counts as "emitted" changes what a reload shows.
 5. **The citation reminder must stay last** in the assembled context
-   (`llm_loop.py:select_reminder_text`, `prompt_utils.py:build_reminder_message`).
+   (`backend/onyx/chat/prompt_utils.py:build_chat_reminder`, `prompt_utils.py:build_reminder_message`).
    See [[core-chat-loop]] §5.9.
 6. **The document JSON key name and field order are deliberate and must not be
    "tidied".** The key is `document`, not `citation_id` or `id`
@@ -324,14 +316,14 @@ and by the time a replayed message's full text is available, its citation map is
 **Depends on**
 - [[internal-search]] and [[web-search]]: produce the `InferenceSection`s and
   `SearchDocsResponse.citation_mapping` that citations are built from.
-- [[tools-framework]]: `tool_runner.py` allocates the citation-number range per
+- [[tools-framework]]: `backend/onyx/agents/tool_execution.py:ToolBatch` allocates the citation-number range per
   tool call as part of running the tool batch.
 - [[context-assembly]]: places the system prompt's citation guidance and the
   reminder message that teaches the format.
 - [[streaming-protocol]]: `CitationInfo` is one packet type in that vocabulary,
   subject to the same `Placement`/`Emitter` rules as every other packet.
-- [[core-chat-loop]]: `llm_loop.py` drives the citation processor once per turn;
-  `ChatStateContainer` holds the mapping until save.
+- [[core-chat-loop]]: `backend/onyx/chat/agent.py:ChatAgent` tracks prompt sources;
+  `backend/onyx/chat/presentation.py:project_response` prepares display citations for saving.
 
 **Depended on by**
 - [[chat-persistence]]: `save_chat_turn` writes `ChatMessage.citations` and the
@@ -339,9 +331,9 @@ and by the time a replayed message's full text is available, its citation map is
 - [[chat-frontend]]: `MemoizedAnchor`, `processContent`, and `SourcesTagWrapper` are
   the sole consumers of `CitationInfo` on web; there is no dedicated citation
   renderer, only markdown-link resolution.
-- Research agent intermediate reports (`tools/fake_tools/research_agent.py`) reuse
-  `DynamicCitationProcessor` in `KEEP_MARKERS` mode plus `citation_utils.collapse_citations`
-  to renumber citations when merging sub-agent output.
+- Intermediate-report rendering uses `KEEP_MARKERS` in `backend/onyx/chat/presentation.py`.
+  `backend/onyx/deep_research/agent.py` uses `citation_utils.collapse_citations`
+  to renumber citations when merging child reports.
 
 ---
 
@@ -350,7 +342,7 @@ and by the time a replayed message's full text is available, its citation map is
 | If your change… | Also check |
 |---|---|
 | changes the LLM-facing document JSON format (`convert_inference_sections_to_llm_string`) | the citation guidance text in `prompts/chat_prompts.py`; every citeable tool (`SearchTool`, `WebSearchTool`, `OpenURLTool`); run a citation eval, not just a unit test, since this is a behavior-sensitive prompt surface |
-| adds a new citing tool | `tools/tool_runner.py:MERGEABLE_TOOL_FIELDS` and the `starting_citation_num += 100` block; `citation_utils.py:update_citation_processor_from_tool_response`'s `CITEABLE_TOOLS_NAMES` check (`tools/built_in_tools.py`); [[tools-framework]] |
+| adds a new citing tool | `backend/onyx/tools/interface.py:CITATIONS_PER_TOOL_CALL` and each tool's call-index offset; `citation_utils.py:update_citation_processor_from_tool_result`'s `CITEABLE_TOOLS_NAMES` check (`tools/built_in_tools.py`); [[tools-framework]] |
 | changes `CitationInfo` or adds a citation-adjacent packet type | [[streaming-protocol]] §5 and §7 in full: `StreamingType`, both hand-mirrored frontend enums, `findRenderer` |
 | changes markdown or link rendering (`MemoizedAnchor`, `processContent`, `useMarkdownComponents`) | the `[Q]` sub-question link path shares the same anchor component; verify ordinary numeric citations are unaffected |
 | changes what `save_chat` persists for citations | `session_loading.py:translate_assistant_message_to_packets`; a saved-session reload must still reproduce the live citation set |
@@ -366,8 +358,8 @@ and by the time a replayed message's full text is available, its citation map is
 ```bash
 cd backend && uv run pytest tests/unit/onyx/chat/test_citation_processor.py -v
 cd backend && uv run pytest tests/unit/onyx/chat/test_citation_utils.py -v
-cd backend && uv run pytest tests/unit/onyx/chat/test_llm_loop.py -v
-cd backend && uv run pytest tests/unit/onyx/chat/test_save_chat.py -v
+cd backend && uv run pytest tests/unit/onyx/chat/test_prompt_caching.py -v
+cd backend && uv run pytest tests/unit/onyx/chat/test_response_projection.py -v
 cd backend && uv run pytest tests/unit/onyx/prompts/test_prompt_utils.py -v
 cd backend && uv run pytest tests/unit/onyx/tools/test_search_llm_json.py -v
 ```

@@ -26,6 +26,8 @@ export type ChatState =
   | "input"
   | "loading"
   | "streaming"
+  | "cancelling"
+  | "unconfirmed"
   | "toolBuilding"
   | "uploading";
 export interface RegenerationState {
@@ -205,6 +207,7 @@ export interface BackendChatSession {
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
   current_stream?: { stream_id: number } | null;
+  is_processing?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
 }
@@ -260,7 +263,6 @@ export interface BackendMessage {
 }
 
 export interface MessageResponseIDInfo {
-  type: "message_id_info";
   user_message_id: number | null;
   reserved_assistant_message_id: number; // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
 }
@@ -271,7 +273,6 @@ export interface ModelResponseSlot {
 }
 
 export interface MultiModelMessageResponseIDInfo {
-  type: "multi_model_message_id_info";
   user_message_id: number | null;
   responses: ModelResponseSlot[];
 }

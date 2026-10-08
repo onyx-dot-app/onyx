@@ -1,143 +1,54 @@
+"""Shared LLM messages, generation requests, options, and stream events."""
+
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
-
-
-class LLMErrorInfo(BaseModel):
-    message: str
-    error_code: str
-    is_retryable: bool
-
-
-class ToolChoiceOptions(str, Enum):
-    REQUIRED = "required"
-    AUTO = "auto"
-    NONE = "none"
-
-
-class NamedToolChoice(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    name: str
-
-
-ToolChoice = ToolChoiceOptions | NamedToolChoice
-
-
-class ReasoningEffort(str, Enum):
-    """Reasoning effort levels for models that support extended thinking.
-
-    Different providers map these values differently:
-    - OpenAI: Uses "low", "medium", "high" directly for reasoning_effort. Recently added "none" for 5 series
-              which is like "minimal"
-    - Claude: Uses budget_tokens with different values for each level
-    - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
-    """
-
-    AUTO = "auto"
-    OFF = "off"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    # Supported by OpenAI and Anthropic adaptive-thinking models (Claude >= 4.7).
-    # Other provider mappings clamp it to their highest supported effort.
-    XHIGH = "xhigh"
-
-
-# Reasoning-effort values a user may pin per chat session. AUTO is excluded
-# because a cleared override (NULL) already resolves to AUTO.
-USER_SELECTABLE_REASONING_EFFORTS: frozenset[ReasoningEffort] = frozenset(
-    {
-        ReasoningEffort.OFF,
-        ReasoningEffort.LOW,
-        ReasoningEffort.MEDIUM,
-        ReasoningEffort.HIGH,
-        ReasoningEffort.XHIGH,
-    }
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    SerializeAsAny,
 )
 
 
-def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
-    """Parse a user-supplied override value. Raises ValueError for an unknown
-    value or an explicit "auto", neither of which is user-selectable."""
-    effort = ReasoningEffort(value)
-    if effort not in USER_SELECTABLE_REASONING_EFFORTS:
-        raise ValueError(f"{value!r} is not a selectable reasoning effort")
-    return effort
+class ContentType(str, Enum):
+    TEXT = "text"
+    IMAGE_URL = "image_url"
+    THINKING = "thinking"
+    REDACTED_THINKING = "redacted_thinking"
+    TOOL_CALL = "tool_call"
 
 
-# AUTO has no rank: it defers a choice rather than naming an amount.
-_REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
-    ReasoningEffort.OFF: 0,
-    ReasoningEffort.LOW: 1,
-    ReasoningEffort.MEDIUM: 2,
-    ReasoningEffort.HIGH: 3,
-    ReasoningEffort.XHIGH: 4,
-}
+class MessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_RESULT = "tool_result"
+    TOOL = "tool"
 
 
-def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> bool:
-    """Whether `effort` asks for more thinking than `cap` allows."""
-    return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
-
-
-class UserChatDefaults(BaseModel):
-    """A user's own chat defaults, resolved below any admin per-model
-    setting. See resolve_reasoning_effort for the reasoning chain."""
-
-    temperature_default: float | None = None
-    reasoning_effort_default: ReasoningEffort | None = None
-
-
-def resolve_reasoning_effort(
-    requested: ReasoningEffort,
-    *,
-    default: ReasoningEffort | None,
-    user_default: ReasoningEffort | None,
-    maximum: ReasoningEffort | None,
-) -> ReasoningEffort:
-    """Settle a request against the admin's per-model default, the user's own
-    default, and the cap.
-
-    Ordered chain, first concrete source wins. The cap applies last and
-    unconditionally.
-
-    AUTO is concretized before clamping because it maps to medium downstream,
-    which would quietly exceed a cap of LOW.
-    """
-    if requested != ReasoningEffort.AUTO:
-        effort = requested
-    elif default is not None and default != ReasoningEffort.AUTO:
-        effort = default
-    elif user_default is not None and user_default != ReasoningEffort.AUTO:
-        effort = user_default
-    else:
-        if maximum is None:
-            return ReasoningEffort.AUTO
-        effort = ReasoningEffort.MEDIUM
-
-    if maximum is not None and reasoning_effort_exceeds(effort, maximum):
-        return maximum
-    return effort
+class ImageDetail(str, Enum):
+    AUTO = "auto"
+    LOW = "low"
+    HIGH = "high"
 
 
 # Content part structures for multimodal messages
-# The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM
 class TextContentPart(BaseModel):
-    type: Literal["text"] = "text"
+    type: Literal[ContentType.TEXT] = ContentType.TEXT
     text: str
     # Some providers (e.g. Anthropic/Gemini) support prompt caching controls on content blocks.
-    cache_control: dict | None = None
+    cache_control: dict[str, JsonValue] | None = None
 
 
 class ImageUrlDetail(BaseModel):
     url: str
-    detail: Literal["auto", "low", "high"] | None = None
+    detail: ImageDetail | None = None
 
 
 class ImageContentPart(BaseModel):
-    type: Literal["image_url"] = "image_url"
+    type: Literal[ContentType.IMAGE_URL] = ContentType.IMAGE_URL
     image_url: ImageUrlDetail
 
 
@@ -147,13 +58,13 @@ ContentPart = TextContentPart | ImageContentPart
 # The signature is minted by the provider and must be round-tripped unmodified
 # for replay to be accepted.
 class ThinkingBlock(BaseModel):
-    type: Literal["thinking"] = "thinking"
+    type: Literal[ContentType.THINKING] = ContentType.THINKING
     thinking: str = ""
     signature: str | None = None
 
 
 class RedactedThinkingBlock(BaseModel):
-    type: Literal["redacted_thinking"] = "redacted_thinking"
+    type: Literal[ContentType.REDACTED_THINKING] = ContentType.REDACTED_THINKING
     data: str
 
 
@@ -169,18 +80,18 @@ class Usage(BaseModel):
 
 
 class TextContent(BaseModel):
-    type: Literal["text"] = "text"
+    type: Literal[ContentType.TEXT] = ContentType.TEXT
     text: str
 
 
 class ThinkingContent(BaseModel):
-    type: Literal["thinking"] = "thinking"
+    type: Literal[ContentType.THINKING] = ContentType.THINKING
     text: str
     blocks: list[AnyThinkingBlock] | None = None
 
 
 class ToolCall(BaseModel):
-    type: Literal["tool_call"] = "tool_call"
+    type: Literal[ContentType.TOOL_CALL] = ContentType.TOOL_CALL
     id: str
     name: str
     arguments: dict[str, JsonValue]
@@ -196,18 +107,12 @@ AssistantContent = Annotated[
 
 class BaseMessage(BaseModel):
     id: str | None = None
+    # Request metadata never becomes provider content or durable transcript data.
     metadata: SerializeAsAny[BaseModel] | None = Field(default=None, exclude=True)
-    estimated_tokens: int | None = Field(default=None, exclude=True)
     # Marks a stable prompt prefix for provider prompt caching; never sent as content.
     cacheable: bool = Field(default=False, exclude=True)
-
-
-class MessageRole(str, Enum):
-    SYSTEM = "system"
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL_RESULT = "tool_result"
-    TOOL = "tool"
+    # Estimate for this prepared message; tracing must not reload image content.
+    estimated_tokens: int | None = Field(default=None, exclude=True)
 
 
 class SystemMessage(BaseMessage):
@@ -221,7 +126,7 @@ class SystemMessage(BaseMessage):
 
 class UserMessage(BaseMessage):
     role: Literal[MessageRole.USER] = MessageRole.USER
-    content: str | list[ContentPart]
+    content: str | list[TextContentPart | ImageContentPart]
 
     @property
     def text(self) -> str:
@@ -284,10 +189,114 @@ Message = Annotated[
 ]
 
 
-def content_text(content: str | list[ContentPart]) -> str:
+def content_text(content: str | list[TextContentPart | ImageContentPart]) -> str:
     if isinstance(content, str):
         return content
     return "".join(part.text for part in content if isinstance(part, TextContentPart))
+
+
+class ReasoningEffort(str, Enum):
+    """Reasoning effort levels for models that support extended thinking.
+
+    Different providers map these values differently:
+    - OpenAI: Uses "low", "medium", "high" directly for reasoning_effort. Recently added "none" for 5 series
+              which is like "minimal"
+    - Claude: Uses budget_tokens with different values for each level
+    - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
+    """
+
+    AUTO = "auto"
+    OFF = "off"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    # Supported by OpenAI and Anthropic adaptive-thinking models (Claude >= 4.7).
+    # Other provider mappings clamp it to their highest supported effort.
+    XHIGH = "xhigh"
+
+
+# Reasoning-effort values a user may pin per chat session. AUTO is excluded
+# because a cleared override (NULL) already resolves to AUTO.
+USER_SELECTABLE_REASONING_EFFORTS: frozenset[ReasoningEffort] = frozenset(
+    {
+        ReasoningEffort.OFF,
+        ReasoningEffort.LOW,
+        ReasoningEffort.MEDIUM,
+        ReasoningEffort.HIGH,
+        ReasoningEffort.XHIGH,
+    }
+)
+
+
+def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
+    """Parse a user-supplied override value. Raises ValueError for an unknown
+    value or an explicit "auto", neither of which is user-selectable."""
+    effort = ReasoningEffort(value)
+    if effort not in USER_SELECTABLE_REASONING_EFFORTS:
+        raise ValueError(f"{value!r} is not a selectable reasoning effort")
+    return effort
+
+
+# AUTO has no rank: it defers a choice rather than naming an amount.
+_REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
+    ReasoningEffort.OFF: 0,
+    ReasoningEffort.LOW: 1,
+    ReasoningEffort.MEDIUM: 2,
+    ReasoningEffort.HIGH: 3,
+    ReasoningEffort.XHIGH: 4,
+}
+
+
+def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> bool:
+    """Whether `effort` asks for more thinking than `cap` allows."""
+    return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
+
+
+def resolve_reasoning_effort(
+    requested: ReasoningEffort,
+    *,
+    default: ReasoningEffort | None,
+    user_default: ReasoningEffort | None,
+    maximum: ReasoningEffort | None,
+) -> ReasoningEffort:
+    """Settle a request against the admin's per-model default, the user's own
+    default, and the cap.
+
+    Ordered chain, first concrete source wins. The cap applies last and
+    unconditionally.
+
+    AUTO is concretized before clamping because it maps to medium downstream,
+    which would quietly exceed a cap of LOW.
+    """
+    if requested != ReasoningEffort.AUTO:
+        effort = requested
+    elif default is not None and default != ReasoningEffort.AUTO:
+        effort = default
+    elif user_default is not None and user_default != ReasoningEffort.AUTO:
+        effort = user_default
+    else:
+        if maximum is None:
+            return ReasoningEffort.AUTO
+        effort = ReasoningEffort.MEDIUM
+
+    if maximum is not None and reasoning_effort_exceeds(effort, maximum):
+        return maximum
+    return effort
+
+
+class ToolChoiceOptions(str, Enum):
+    REQUIRED = "required"
+    AUTO = "auto"
+    NONE = "none"
+
+
+class NamedToolChoice(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+
+
+ToolChoice = ToolChoiceOptions | NamedToolChoice
 
 
 class ToolDefinition(BaseModel):
@@ -368,22 +377,20 @@ class ThinkingDeltaEvent(GenerationTextEvent):
 
 class GenerationToolCallEvent(_Event):
     content_index: int = Field(ge=0)
+    tool_call: ToolCall
+    argument_deltas: dict[str, str] = Field(default_factory=dict)
 
 
 class ToolCallStartEvent(GenerationToolCallEvent):
     type: Literal["tool_call_start"] = "tool_call_start"
-    tool_call_id: str
-    tool_name: str
 
 
 class ToolCallDeltaEvent(GenerationToolCallEvent):
     type: Literal["tool_call_delta"] = "tool_call_delta"
-    arguments_delta: str
 
 
 class ToolCallEndEvent(GenerationToolCallEvent):
     type: Literal["tool_call_end"] = "tool_call_end"
-    tool_call: ToolCall
 
 
 GenerationContentEvent = Annotated[
@@ -428,29 +435,16 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
     index = event.content_index
     if index > len(message.content):
         raise ValueError("Generation update skips a content block")
-    if isinstance(event, ToolCallStartEvent):
-        if index != len(message.content):
-            raise ValueError("Tool start targets existing content")
-        message.content.append(
-            ToolCall(
-                id=event.tool_call_id,
-                name=event.tool_name,
-                arguments={},
-                raw_arguments="",
-                arguments_complete=False,
-            )
-        )
-        return
-    if isinstance(event, (ToolCallDeltaEvent, ToolCallEndEvent)):
+    if isinstance(event, GenerationToolCallEvent):
+        block = event.tool_call.model_copy(deep=True)
         if index == len(message.content):
-            raise ValueError("Tool update requires a started call")
-        block = message.content[index]
-        if not isinstance(block, ToolCall):
-            raise ValueError("Tool update targets non-tool content")
-        if isinstance(event, ToolCallDeltaEvent):
-            block.raw_arguments = (block.raw_arguments or "") + event.arguments_delta
+            if not isinstance(event, ToolCallStartEvent):
+                raise ValueError("Tool update requires a started call")
+            message.content.append(block)
         else:
-            message.content[index] = event.tool_call.model_copy(deep=True)
+            if not isinstance(message.content[index], ToolCall):
+                raise ValueError("Tool update targets non-tool content")
+            message.content[index] = block
         return
     if index == len(message.content):
         message.content.append(
@@ -467,16 +461,16 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
             if content.blocks is None:
                 content.blocks = []
             for block in event.blocks:
-                last = content.blocks[-1] if content.blocks else None
+                previous = content.blocks[-1] if content.blocks else None
                 # Providers stream one thinking block as text fragments and then
                 # its signature. Merge them so the block can be replayed.
                 if (
                     isinstance(block, ThinkingBlock)
-                    and isinstance(last, ThinkingBlock)
-                    and not last.signature
+                    and isinstance(previous, ThinkingBlock)
+                    and not previous.signature
                 ):
-                    last.thinking += block.thinking
-                    last.signature = block.signature
+                    previous.thinking += block.thinking
+                    previous.signature = block.signature
                 else:
                     content.blocks.append(block.model_copy(deep=True))
     else:

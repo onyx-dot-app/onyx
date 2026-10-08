@@ -8,7 +8,7 @@ import {
   patchMessageToBeLatest,
   resumeStream,
 } from "@/app/app/services/lib";
-import { Packet } from "@/app/app/services/streamingModels";
+import { Packet, PacketType } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
   setMessageAsLatest,
@@ -33,6 +33,8 @@ import type { ProjectFile } from "@/lib/projects/types";
 import { getProjectFilesForSession } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import { settleChatSession } from "@/lib/chat/settleChatSession";
+import { useTranslations } from "next-intl";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
 // strict mode) can't start a second tail for the same run.
@@ -85,6 +87,7 @@ export default function useChatSessionController({
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
+  const tReadiness = useTranslations("chat.readiness");
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
     useState<SessionFetchError>(null);
@@ -233,11 +236,37 @@ export default function useChatSessionController({
 
       // Initialize session data including personaId
       initializeSession(chatSession.chat_session_id, chatSession);
+      const sessionOwner = useChatSessionStore
+        .getState()
+        .sessions.get(chatSession.chat_session_id)?.abortController;
+      const sessionBusy = Boolean(
+        chatSession.is_processing || chatSession.current_stream
+      );
+      if (sessionBusy) {
+        const store = useChatSessionStore.getState();
+        if (
+          store.sessions.get(chatSession.chat_session_id)?.chatState !==
+          "cancelling"
+        ) {
+          store.updateChatState(chatSession.chat_session_id, "streaming");
+        }
+      }
 
       const newMessageMap = processRawChatHistory(
         chatSession.messages,
         chatSession.packets
       );
+      const currentStream = chatSession.current_stream;
+      const resumedMessage = currentStream
+        ? newMessageMap.get(currentStream.stream_id)
+        : undefined;
+      if (resumedMessage?.type === "assistant") {
+        // Discard the reserved row's placeholder STOP before the renderer tracks
+        // packet positions. Replay starts a new sequence for this same message.
+        resumedMessage.message = "";
+        resumedMessage.packets = [];
+        resumedMessage.packetCount = 0;
+      }
       const newMessageHistory = getLatestMessageChain(newMessageMap);
 
       // Update message history except for edge where where
@@ -250,7 +279,8 @@ export default function useChatSessionController({
         !(
           currentChatState == "toolBuilding" ||
           currentChatState == "streaming" ||
-          currentChatState == "loading"
+          currentChatState == "loading" ||
+          currentChatState == "cancelling"
         )
       ) {
         updateCurrentSelectedNodeForDocDisplay(
@@ -263,11 +293,16 @@ export default function useChatSessionController({
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
 
-      // Re-attach to an in-flight run: replay its buffered stream and tail it
-      // live instead of leaving a stale placeholder. Single-model only — a
-      // multi-model stream_id is the user message, not an assistant node, so it
-      // fails the node-type check and keeps the refresh-after-completion
-      // behavior.
+      async function settleSession(sessionId: string) {
+        if (!sessionOwner) return;
+        await settleChatSession({
+          sessionId,
+          controller: sessionOwner,
+          errorMessage: tReadiness("checkFailed"),
+        });
+      }
+
+      // Replay single-model output; multi-model sessions wait for saved history.
       async function resumeInFlightRun(
         sessionId: string,
         runId: number,
@@ -280,25 +315,28 @@ export default function useChatSessionController({
         // Added and deleted in this function only, so an entry can never
         // outlive its tail.
         resumingRuns.add(runId);
-        // The reserved row's placeholder text would render above the live
-        // timeline.
-        node.message = "";
         const accumulated: Packet[] = [];
         let lastFlush = 0;
         let trailingFlush: ReturnType<typeof setTimeout> | null = null;
-        // updateSessionAndMessageTree re-points currentSessionId at this
-        // session; once the user navigates elsewhere, any further store write
-        // from this tail would hijack their new session's sends.
-        const stillCurrent = () =>
-          useChatSessionStore.getState().currentSessionId === sessionId;
+        // Keep replay attached across navigation without changing the selected chat.
+        const ownsStream = () => {
+          const session = useChatSessionStore
+            .getState()
+            .sessions.get(sessionId);
+          return (
+            session !== undefined &&
+            session.abortController === sessionOwner &&
+            session.chatState !== "input"
+          );
+        };
         const flush = () => {
-          if (!stillCurrent()) {
-            return;
-          }
-          node.packets = [...accumulated];
+          if (!ownsStream()) return;
+          node.packets = node.type === "error" ? [] : [...accumulated];
           // AgentMessage's memo compares packetCount, not the packets array.
-          node.packetCount = accumulated.length;
-          updateSessionAndMessageTree(sessionId, new Map(messageMap));
+          node.packetCount = node.packets.length;
+          useChatSessionStore
+            .getState()
+            .updateSessionMessageTree(sessionId, new Map(messageMap));
         };
         // handleSSEStream only releases the connection via this signal —
         // bailing out of the loop alone leaves the SSE response open.
@@ -309,14 +347,32 @@ export default function useChatSessionController({
             0,
             abortController.signal
           )) {
-            if (!stillCurrent()) {
+            if (!ownsStream()) {
               return;
+            }
+            if ("error" in rawPacket && rawPacket.error) {
+              const store = useChatSessionStore.getState();
+              store.updateSessionData(sessionId, {
+                queuedMessagesPaused: true,
+              });
+              store.setUncaughtError(sessionId, rawPacket.error);
+              // Keep the error on its reserved row through readiness retries.
+              node.type = "error";
+              node.message = rawPacket.error;
+              if (!("message_id" in rawPacket)) {
+                node.errorCode = rawPacket.error_code;
+                node.stackTrace = rawPacket.stack_trace;
+                node.isRetryable = rawPacket.is_retryable ?? true;
+                node.errorDetails = rawPacket.details;
+              }
+              node.is_generating = false;
+              flush();
             }
             if (!Object.hasOwn(rawPacket, "obj")) {
               continue;
             }
             const packet = rawPacket as Packet;
-            // Heartbeats are liveness ticks for the stillCurrent check above,
+            // Heartbeats are liveness ticks for the ownership check above,
             // not run state — never render them.
             if (packet.obj.type === "chat_heartbeat") {
               continue;
@@ -344,30 +400,21 @@ export default function useChatSessionController({
             clearTimeout(trailingFlush);
           }
           resumingRuns.delete(runId);
-          if (stillCurrent()) {
-            flush();
-            // Settle final state (message text, citations, documents) from
-            // the persisted session.
-            try {
-              const settledResponse = await fetch(
-                `/api/chat/get-chat-session/${sessionId}`
-              );
-              if (settledResponse.ok && stillCurrent()) {
-                const settled: BackendChatSession =
-                  await settledResponse.json();
-                updateSessionAndMessageTree(
-                  sessionId,
-                  processRawChatHistory(settled.messages, settled.packets)
-                );
-              }
-            } catch (error) {
-              console.error("Post-resume session refresh failed", { error });
+          if (ownsStream()) {
+            if (
+              !accumulated.some((packet) => packet.obj.type === PacketType.STOP)
+            ) {
+              accumulated.push({
+                placement: { turn_index: 0, tab_index: 0 },
+                obj: { type: PacketType.STOP },
+              });
             }
+            flush();
           }
+          await settleSession(sessionId);
         }
       }
 
-      const currentStream = chatSession.current_stream;
       if (
         currentStream &&
         newMessageMap.get(currentStream.stream_id)?.type === "assistant"
@@ -377,6 +424,12 @@ export default function useChatSessionController({
           currentStream.stream_id,
           newMessageMap
         );
+      } else if (
+        sessionBusy ||
+        useChatSessionStore.getState().sessions.get(chatSession.chat_session_id)
+          ?.chatState !== "input"
+      ) {
+        void settleSession(chatSession.chat_session_id);
       }
 
       // Fetch project files for this chat session (if any)
@@ -436,7 +489,9 @@ export default function useChatSessionController({
 
       if (
         !existingChatSession?.chatState ||
-        existingChatSession.chatState === "input"
+        existingChatSession.chatState === "input" ||
+        existingChatSession.chatState === "unconfirmed" ||
+        existingChatSession.abortController.signal.aborted
       ) {
         initialSessionFetch();
       } else {

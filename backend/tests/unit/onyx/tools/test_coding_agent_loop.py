@@ -1,18 +1,19 @@
-"""Sub-turn placement in the coding agent loop (``run_coding_agent_call``)."""
+"""Coding runtime output retains main's reasoning and narration placement."""
 
 import json
-import queue
 from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from pydantic import JsonValue
+
+from onyx.agents.models import RunResult
 from onyx.chat.emitter import Emitter
-from onyx.coding_agent.models import CodingAgentCallResult
+from onyx.chat.presentation import ResponsePresenter
+from onyx.chat.renderer import ToolRenderer
+from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_NAME,
-    CODING_AGENT_QUERY_KEY,
-    CODING_AGENT_REPO_KEY,
+    CODING_AGENT_TOOL_NAME,
     GENERATE_ANSWER_TOOL_NAME,
 )
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
@@ -29,7 +30,13 @@ from onyx.llm.model_response import (
     ResponseFunctionCall,
     StreamingChoice,
 )
-from onyx.llm.models import ReasoningEffort, ToolChoice
+from onyx.llm.models import (
+    ReasoningEffort,
+    ToolCall,
+    ToolChoice,
+    ToolResult,
+    UserMessage,
+)
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -38,10 +45,9 @@ from onyx.server.query_and_chat.streaming_models import (
     ReasoningDelta,
     ReasoningStart,
 )
-from onyx.tools.fake_tools import coding_agent
-from onyx.tools.models import ToolCallKickoff, ToolResponse
+from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 
-MODULE = "onyx.tools.fake_tools.coding_agent"
+MODULE = "onyx.coding_agent.agent"
 TURN_INDEX = 3
 TAB_INDEX = 1
 
@@ -59,7 +65,7 @@ def reasoning(content: str) -> list[ModelResponseStream]:
 
 
 def tool_call(
-    index: int, call_id: str, name: str, args: dict[str, Any]
+    index: int, call_id: str, name: str, args: dict[str, JsonValue]
 ) -> list[ModelResponseStream]:
     return [
         _chunk(
@@ -124,9 +130,9 @@ class ScriptedLLM(LitellmLLM):
     def stream_raw(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None = None,  # noqa: ARG002
+        tools: list[dict[str, JsonValue]] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
-        structured_response_format: dict | None = None,  # noqa: ARG002
+        structured_response_format: dict[str, JsonValue] | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
@@ -139,28 +145,12 @@ class ScriptedLLM(LitellmLLM):
         return iter(self._steps.pop(0))
 
 
-class FakeBashTool:
-    def __init__(self, tool_id: int, session_id: str, emitter: Emitter) -> None:
-        self.tool_id = tool_id
-        self.session_id = session_id
-        self.emitter = emitter
-
-    def run(
-        self,
-        placement: Placement,  # noqa: ARG002
-        override_kwargs: Any,  # noqa: ARG002
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
-        cmd = llm_kwargs["cmd"]
-        return ToolResponse(rich_response=None, llm_facing_response=f"out:{cmd}")
-
-
 class Run:
     def __init__(
         self,
         llm: ScriptedLLM,
         packets: list[Packet],
-        result: CodingAgentCallResult | None,
+        result: RunResult,
     ) -> None:
         self.llm = llm
         self.packets = packets
@@ -171,42 +161,33 @@ def run_agent(
     steps: list[list[ModelResponseStream]], *, is_reasoning_model: bool
 ) -> Run:
     llm = ScriptedLLM(steps)
-    merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
-
-    @contextmanager
-    def fake_setup_session(
-        repo: str,  # noqa: ARG001
-        github_token: str | None,  # noqa: ARG001
-    ) -> Iterator[str]:
-        yield "session-1"
-
-    with (
-        patch(f"{MODULE}._setup_session", fake_setup_session),
-        patch(f"{MODULE}.BashTool", FakeBashTool),
-        patch(f"{MODULE}.model_is_reasoning_model", return_value=is_reasoning_model),
-    ):
-        result = coding_agent.run_coding_agent_call(
-            coding_agent_call=ToolCallKickoff(
-                tool_call_id="coding-call",
-                tool_name="coding_agent",
-                tool_args={
-                    CODING_AGENT_QUERY_KEY: "How does chat work?",
-                    CODING_AGENT_REPO_KEY: "onyx-dot-app/onyx",
-                },
-                placement=Placement(turn_index=TURN_INDEX, tab_index=TAB_INDEX),
-            ),
-            emitter=Emitter(merged_queue=merged_queue),
-            llm=llm,
-            token_counter=lambda s: len(s) // 4,
-            user_identity=None,
-            github_token="tok",
-        )
-
     packets: list[Packet] = []
-    while not merged_queue.empty():
-        _, item = merged_queue.get_nowait()
-        assert isinstance(item, Packet)
-        packets.append(item)
+    presenter = ResponsePresenter(Emitter(packets.append))
+    presenter.tools[("parent-message", "coding-call")] = ToolRenderer(
+        ToolCall(id="coding-call", name=CODING_AGENT_TOOL_NAME, arguments={}),
+        Placement(turn_index=TURN_INDEX, tab_index=TAB_INDEX),
+        tool_id=1,
+    )
+    bash_tool = MagicMock(spec=BashTool)
+    bash_tool.run.return_value = ToolResult(content="Command output")
+    with patch(f"{MODULE}.model_is_reasoning_model", return_value=is_reasoning_model):
+        feature = CodingAgent(
+            repo="onyx-dot-app/onyx",
+            llm=llm,
+            token_counter=lambda text: len(text) // 4,
+            user_identity=None,
+            bash_tool=bash_tool,
+        )
+        run = feature.start(
+            max_steps=len(steps),
+            messages=[UserMessage(content="How does chat work?")],
+            parent_run_id="parent-run",
+            parent_message_id="parent-message",
+            parent_tool_call_id="coding-call",
+            on_event=presenter.consume,
+        )
+        result = run.result(timeout=5)
+        assert run.wait_for_idle(5)
     return Run(llm, packets, result)
 
 
@@ -254,7 +235,7 @@ class TestThinkPlacement:
         assert [(m.tool_call_id, m.content) for m in tool_msgs] == [
             ("t1", THINK_TOOL_RESPONSE_MESSAGE)
         ]
-        assert run.result == CodingAgentCallResult(answer="The final answer.")
+        assert run.result.output.text == "The final answer."
 
     def test_silent_think_keeps_sub_turn(self) -> None:
         run = run_agent(
@@ -303,3 +284,21 @@ class TestThinkPlacement:
             for p in run.packets
             if isinstance(p.obj, (ReasoningStart, CodingAgentThinkingDelta))
         )
+
+
+def test_final_reasoning_uses_parent_card_without_duplicate_answer_text() -> None:
+    run = run_agent(
+        [generate_answer(), reasoning("Final reasoning") + FINAL_ANSWER],
+        is_reasoning_model=True,
+    )
+    assert reasoning_sub_turns(run.packets) == [None]
+    assert (
+        "".join(
+            packet.obj.reasoning
+            for packet in run.packets
+            if isinstance(packet.obj, ReasoningDelta)
+        )
+        == "Final reasoning"
+    )
+    assert not thinking_sub_turns(run.packets)
+    assert run.result.output.text == "The final answer."

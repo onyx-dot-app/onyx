@@ -23,6 +23,7 @@ import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { effectiveChatForcedToolId } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/position/hooks";
+import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
@@ -53,6 +54,7 @@ import {
   SvgSearch,
   SvgStop,
   SvgX,
+  SvgRefreshCw,
 } from "@opal/icons";
 import {
   Button,
@@ -145,6 +147,13 @@ const AppInputBar = React.memo(
     );
     const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
     const queuedMessages = useCurrentQueuedMessages();
+    const [isCheckingCompletion, setIsCheckingCompletion] = useState(false);
+    const tReadiness = useTranslations("chat.readiness");
+    const queuedMessagesPaused = useChatSessionStore(
+      (state) =>
+        state.sessions.get(state.currentSessionId ?? "")
+          ?.queuedMessagesPaused ?? false
+    );
     const latestMessageRenderComplete = useCurrentLatestMessageRenderComplete();
     const enqueueCurrentMessage = useChatSessionStore(
       (state) => state.enqueueCurrentMessage
@@ -406,7 +415,10 @@ const AppInputBar = React.memo(
       // typewriter is still flushing the prior answer.
       const wasReady =
         prevChatStateRef.current === "input" && prevRenderCompleteRef.current;
-      const isReady = chatState === "input" && latestMessageRenderComplete;
+      const isReady =
+        chatState === "input" &&
+        latestMessageRenderComplete &&
+        !queuedMessagesPaused;
 
       prevChatStateRef.current = chatState;
       prevRenderCompleteRef.current = latestMessageRenderComplete;
@@ -423,6 +435,7 @@ const AppInputBar = React.memo(
       chatState,
       latestMessageRenderComplete,
       queuedMessages,
+      queuedMessagesPaused,
       removeCurrentQueuedMessage,
       stopTTS,
       onSubmit,
@@ -760,6 +773,8 @@ const AppInputBar = React.memo(
 
           <Button
             disabled={
+              chatState === "cancelling" ||
+              isCheckingCompletion ||
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
                 !message) ||
@@ -767,21 +782,42 @@ const AppInputBar = React.memo(
               isClassifying
             }
             tooltip={
-              hasPendingFiles
-                ? t("appInputBar.sendButton.processingFilesTooltip")
-                : undefined
+              chatState === "cancelling"
+                ? t("appInputBar.sendButton.stoppingLabel")
+                : hasPendingFiles
+                  ? t("appInputBar.sendButton.processingFilesTooltip")
+                  : undefined
             }
             id="onyx-chat-input-send-button"
             icon={
-              isClassifying
+              isCheckingCompletion
                 ? IconLoader
-                : chatState !== "input" && message.trim()
-                  ? SvgArrowUp
-                  : chatState === "streaming" || isVoicePlaybackControllable
-                    ? SvgStop
-                    : SvgArrowUp
+                : chatState === "unconfirmed"
+                  ? SvgRefreshCw
+                  : isClassifying || chatState === "cancelling"
+                    ? IconLoader
+                    : chatState !== "input" && message.trim()
+                      ? SvgArrowUp
+                      : chatState === "streaming" || isVoicePlaybackControllable
+                        ? SvgStop
+                        : SvgArrowUp
             }
             onClick={() => {
+              if (chatState === "unconfirmed") {
+                const store = useChatSessionStore.getState();
+                const sessionId = store.currentSessionId;
+                const session = sessionId
+                  ? store.sessions.get(sessionId)
+                  : undefined;
+                if (!sessionId || !session || isCheckingCompletion) return;
+                setIsCheckingCompletion(true);
+                void settleChatSession({
+                  sessionId,
+                  controller: session.abortController,
+                  errorMessage: tReadiness("checkFailed"),
+                }).finally(() => setIsCheckingCompletion(false));
+                return;
+              }
               const canSubmitNormally = chatState === "input";
               if (!canSubmitNormally && message.trim()) {
                 if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
@@ -800,7 +836,13 @@ const AppInputBar = React.memo(
                 submitMessage(message);
               }
             }}
-          />
+          >
+            {chatState === "cancelling"
+              ? t("appInputBar.sendButton.stoppingLabel")
+              : chatState === "unconfirmed"
+                ? t("appInputBar.sendButton.reloadLabel")
+                : undefined}
+          </Button>
         </div>
       </div>
     );
@@ -953,6 +995,8 @@ const AppInputBar = React.memo(
                               submitMessage(message);
                             }
                           } else if (
+                            chatState !== "cancelling" &&
+                            chatState !== "unconfirmed" &&
                             message.trim() &&
                             !disabled &&
                             !isClassifying &&
@@ -1030,7 +1074,12 @@ const AppInputBar = React.memo(
                     prominence="tertiary"
                   />
                   <Button
-                    disabled={!message || isClassifying || hasPendingFiles}
+                    disabled={
+                      !message ||
+                      isClassifying ||
+                      hasPendingFiles ||
+                      chatState === "cancelling"
+                    }
                     id="onyx-chat-input-send-button"
                     icon={isClassifying ? IconLoader : SvgSearch}
                     onClick={() => {

@@ -99,7 +99,10 @@ from onyx.db.users import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
-from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
+from onyx.llm.models import (
+    ReasoningEffort,
+    parse_user_selectable_reasoning_effort,
+)
 from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
