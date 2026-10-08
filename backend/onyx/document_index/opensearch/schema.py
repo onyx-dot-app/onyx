@@ -40,6 +40,8 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 TITLE_FIELD_NAME = "title"
+# No longer written or mapped. Indices created before its removal still store
+# it, so searches keep excluding it from _source.
 TITLE_VECTOR_FIELD_NAME = "title_vector"
 CONTENT_FIELD_NAME = "content"
 CONTENT_VECTOR_FIELD_NAME = "content_vector"
@@ -381,7 +383,6 @@ class DocumentChunk(DocumentChunkWithoutVectors):
 
     model_config = {"frozen": True}
 
-    title_vector: list[float] | None = None
     content_vector: list[float]
 
     def __str__(self) -> str:
@@ -493,13 +494,6 @@ class DocumentSchema:
                     "store": True,
                     "analyzer": OPENSEARCH_TEXT_ANALYZER,
                     "index_options": "offsets",
-                },
-                TITLE_VECTOR_FIELD_NAME: {
-                    "type": "knn_vector",
-                    "dimension": vector_dimension,
-                    "method": DocumentSchema._get_knn_vector_method(
-                        vector_quantization
-                    ),
                 },
                 CONTENT_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",
