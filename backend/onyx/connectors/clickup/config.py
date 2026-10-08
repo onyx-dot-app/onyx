@@ -15,6 +15,8 @@ class ClickupConnectorType(StrEnum):
 
 
 class ClickupConnectorConfig(ConnectorConfig):
+    COMMA_SEPARATED_FIELDS = frozenset({"connector_ids"})
+
     batch_size: int = INDEX_BATCH_SIZE
     connector_type: ClickupConnectorType | None = None
     connector_ids: list[str] | None = None

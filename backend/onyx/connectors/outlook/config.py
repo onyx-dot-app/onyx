@@ -10,6 +10,8 @@ DEFAULT_CALENDAR_FUTURE_DAYS = 180
 
 
 class OutlookConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
+    COMMA_SEPARATED_FIELDS = frozenset({"mailboxes"})
+
     mailboxes: list[str] | None = None
     mailbox_groups: list[str] | None = None
     excluded_folders: list[str] | None = None
