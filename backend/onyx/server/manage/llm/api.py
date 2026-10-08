@@ -634,7 +634,7 @@ def list_router_model_providers(
     """Every router model configuration, grouped under its provider. Unlike
     the paged listings this never truncates: pickers offering a routing
     target must see hidden routers too, so no visibility or page filter."""
-    return [
+    views = [
         LLMProviderView.from_model(
             provider,
             include_api_key=False,
@@ -642,6 +642,9 @@ def list_router_model_providers(
         )
         for provider in fetch_llm_providers_with_router_models(db_session)
     ]
+    for view in views:
+        _mask_provider_credentials(view)
+    return views
 
 
 @admin_router.put("/provider")
