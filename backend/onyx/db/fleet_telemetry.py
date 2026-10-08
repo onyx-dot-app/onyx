@@ -155,6 +155,9 @@ def _safe_configuration_expression() -> str:
     return "jsonb_strip_nulls(jsonb_build_object(" + ",".join(entries) + "))"
 
 
+_SAFE_CONFIGURATION: str = _safe_configuration_expression()
+
+
 def connector_page(
     engine: Engine, schema: str, after_id: int = 0, limit: int = 200
 ) -> list[dict[str, Any]]:
@@ -166,7 +169,7 @@ def connector_page(
           c.time_updated, c.refresh_freq AS refresh_seconds, c.prune_freq AS prune_seconds,
           (p.auto_sync_options IS NOT NULL) AS auto_sync_enabled,
           (p.access_type = 'SYNC') AS permission_sync_enabled,
-          {_safe_configuration_expression()} AS metadata
+          {_SAFE_CONFIGURATION} AS metadata
         FROM {scoped}.connector_credential_pair p
         JOIN {scoped}.connector c ON c.id=p.connector_id
         WHERE p.id > :after_id AND p.id > 0 ORDER BY p.id LIMIT :limit
