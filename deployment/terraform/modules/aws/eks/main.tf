@@ -134,12 +134,32 @@ module "eks" {
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
 
-  vpc_id                                   = var.vpc_id
-  subnet_ids                               = var.subnet_ids
-  cluster_endpoint_public_access           = var.public_cluster_enabled
-  cluster_endpoint_private_access          = var.private_cluster_enabled
-  cluster_endpoint_public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
-  enable_cluster_creator_admin_permissions = true
+  vpc_id                               = var.vpc_id
+  subnet_ids                           = var.subnet_ids
+  cluster_endpoint_public_access       = var.public_cluster_enabled
+  cluster_endpoint_private_access      = var.private_cluster_enabled
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
+  # By default the cluster-admin access entry and the KMS key administrator
+  # are whoever runs Terraform, so an apply by a different principal moves
+  # them. cluster_admin_principal_arn pins both. It reuses the module's own
+  # cluster_creator / admin keys, so pinning the current principal plans no
+  # change.
+  enable_cluster_creator_admin_permissions = var.cluster_admin_principal_arn == null
+  access_entries = var.cluster_admin_principal_arn == null ? {} : {
+    cluster_creator = {
+      principal_arn = var.cluster_admin_principal_arn
+      type          = "STANDARD"
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:${data.aws_partition.current.partition}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
+  kms_key_administrators = var.cluster_admin_principal_arn == null ? [] : [var.cluster_admin_principal_arn]
 
   iam_role_permissions_boundary = var.iam_role_permissions_boundary
   iam_role_path                 = var.iam_role_path
@@ -247,6 +267,8 @@ resource "helm_release" "nvidia_device_plugin" {
 }
 
 # https://aws.amazon.com/blogs/containers/amazon-ebs-csi-driver-is-now-generally-available-in-amazon-eks-add-ons/
+data "aws_partition" "current" {}
+
 data "aws_iam_policy" "ebs_csi_policy" {
   arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
