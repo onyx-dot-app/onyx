@@ -8,14 +8,15 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import AsyncGenerator, Generator, Sequence
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Generator, Iterator, Sequence
+from contextlib import AbstractContextManager, asynccontextmanager
 from contextvars import Token
 from dataclasses import dataclass, field
 from pathlib import Path
 from queue import Empty, Queue
+from types import ModuleType
 from typing import Never, TextIO
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import SplitResult, parse_qs, urlsplit
 from uuid import uuid4
 
 import httpx
@@ -24,12 +25,19 @@ import pytest
 import uvicorn
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
+from redis.asyncio import Redis
 from sqlalchemy import delete
+from sqlalchemy.orm import Session
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import AuthBackend
-from onyx.auth.users import auth_backend, fastapi_users, get_redis_strategy
+from onyx.auth.users import (
+    TenantAwareRedisStrategy,
+    auth_backend,
+    fastapi_users,
+    get_redis_strategy,
+)
 from onyx.configs import app_configs
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.async_sql_engine import reset_sqlalchemy_async_engine
@@ -99,11 +107,13 @@ class NativeOAuthServer:
             ):
                 return
             try:
-                payload = json.loads(event.response_body)
+                payload: object = json.loads(event.response_body)
             except json.JSONDecodeError:
                 return
-            if isinstance(payload, dict) and isinstance(payload.get("client_id"), str):
-                self._registered_client_ids.add(payload["client_id"])
+            if isinstance(payload, dict):
+                client_id: object = payload.get("client_id")
+                if isinstance(client_id, str):
+                    self._registered_client_ids.add(client_id)
 
     def clear_events(self) -> None:
         with self._lock:
@@ -145,8 +155,8 @@ def _skip_or_fail(reason: str) -> Never:
 
 
 def _cli_path() -> str:
-    node = shutil.which("node")
-    entries = [
+    node: str | None = shutil.which("node")
+    entries: list[str] = [
         str(Path(node).parent) if node else "",
         "/usr/local/bin",
         "/opt/homebrew/bin",
@@ -157,7 +167,7 @@ def _cli_path() -> str:
 
 
 def _require_cli(executable: str) -> str:
-    path = shutil.which(executable)
+    path: str | None = shutil.which(executable)
     if path is None:
         _skip_or_fail(
             f"{executable} is not available; native MCP OAuth tests require the "
@@ -167,10 +177,10 @@ def _require_cli(executable: str) -> str:
 
 
 def _require_docker() -> str:
-    docker = shutil.which("docker")
+    docker: str | None = shutil.which("docker")
     if docker is None:
         _skip_or_fail("docker is not available; native MCP OAuth nginx tests need it.")
-    probe = subprocess.run(
+    probe: subprocess.CompletedProcess[str] = subprocess.run(
         [docker, "info"],
         capture_output=True,
         text=True,
@@ -192,11 +202,11 @@ def _free_port() -> int:
 
 
 def _wait_for_http(url: str) -> None:
-    deadline = time.monotonic() + 30
+    deadline: float = time.monotonic() + 30
     last_error: Exception | None = None
     while time.monotonic() < deadline:
         try:
-            response = httpx.get(url, timeout=1)
+            response: httpx.Response = httpx.get(url, timeout=1)
             if response.status_code == 200:
                 return
         except httpx.HTTPError as error:
@@ -268,7 +278,7 @@ def _write_nginx_config(config_dir: Path, upstream_port: int) -> None:
 def _start_nginx_proxy(
     docker: str, config_dir: Path, proxy_port: int
 ) -> subprocess.CompletedProcess[str]:
-    command = [
+    command: list[str] = [
         docker,
         "run",
         "--rm",
@@ -298,11 +308,11 @@ def _start_nginx_proxy(
 
 def _jsonrpc_method(body: bytes) -> str | None:
     try:
-        payload = json.loads(body)
+        payload: object = json.loads(body)
     except json.JSONDecodeError:
         return None
     if isinstance(payload, dict):
-        method = payload.get("method")
+        method: object = payload.get("method")
         return method if isinstance(method, str) else None
     return None
 
@@ -318,10 +328,10 @@ class NativeCaptureMiddleware:
             return
 
         request_messages: list[Message] = []
-        request_body = bytearray()
-        more_body = True
+        request_body: bytearray = bytearray()
+        more_body: bool = True
         while more_body:
-            message = await receive()
+            message: Message = await receive()
             request_messages.append(message)
             if message["type"] == "http.request":
                 request_body.extend(message.get("body", b""))
@@ -329,7 +339,7 @@ class NativeCaptureMiddleware:
             else:
                 more_body = False
 
-        replay = iter(request_messages)
+        replay: Iterator[Message] = iter(request_messages)
 
         async def replay_receive() -> Message:
             try:
@@ -338,7 +348,7 @@ class NativeCaptureMiddleware:
                 return await receive()
 
         status_code: int | None = None
-        response_body = bytearray()
+        response_body: bytearray = bytearray()
 
         async def capture_send(message: Message) -> None:
             nonlocal status_code
@@ -351,7 +361,7 @@ class NativeCaptureMiddleware:
         await self._app(scope, replay_receive, capture_send)
 
         headers: Sequence[tuple[bytes, bytes]] = scope.get("headers", [])
-        authorization = None
+        authorization: str | None = None
         for key, value in headers:
             if key.lower() == b"authorization":
                 authorization = value.decode("latin-1")
@@ -374,21 +384,23 @@ def _approve_consent(server: NativeOAuthServer, authorization_url: str) -> str:
         cookies={server.cookie_name: server.session_token},
         timeout=30,
     ) as client:
-        request_id = parse_qs(urlsplit(authorization_url).query).get("request", [None])[
-            0
-        ]
+        request_id: str | None = parse_qs(urlsplit(authorization_url).query).get(
+            "request", [None]
+        )[0]
         if request_id is None:
-            started = client.get(authorization_url, follow_redirects=False)
+            started: httpx.Response = client.get(
+                authorization_url, follow_redirects=False
+            )
             assert started.status_code == 302, started.text
             request_id = parse_qs(urlsplit(started.headers["location"]).query).get(
                 "request", [None]
             )[0]
         assert request_id is not None, authorization_url
-        details = client.get(
+        details: httpx.Response = client.get(
             "/api/oauth-provider/consent", params={"request": request_id}
         )
         assert details.status_code == 200, details.text
-        approval = client.post(
+        approval: httpx.Response = client.post(
             "/api/oauth-provider/consent",
             headers={"Origin": server.origin},
             json={
@@ -409,7 +421,7 @@ def _cli_text(value: object) -> str:
 def _drive_no_browser_login(
     command: list[str], *, env: dict[str, str], server: NativeOAuthServer
 ) -> str:
-    child = pexpect.spawn(
+    child: pexpect.spawn = pexpect.spawn(
         command[0],
         command[1:],
         env=env,
@@ -427,23 +439,23 @@ def _drive_no_browser_login(
                     f"CLI exited before printing an authorization URL. Output: "
                     f"{output + _cli_text(child.before)!r}. Server events: {server.events!r}"
                 ) from error
-            match = child.match
+            match: object = child.match
             assert isinstance(match, re.Match)
-            candidate = _cli_text(match.group(0))
+            candidate: str = _cli_text(match.group(0))
             output += _cli_text(child.before) + candidate
-            parsed = urlsplit(candidate)
+            parsed: SplitResult = urlsplit(candidate)
             if parse_qs(parsed.query).get("request") or parsed.path.endswith(
                 "/authorize"
             ):
                 authorization_url = candidate
-        callback_url = _approve_consent(server, authorization_url)
+        callback_url: str = _approve_consent(server, authorization_url)
         try:
             with httpx.Client(timeout=10) as client:
                 client.get(callback_url)
         except httpx.HTTPError:
             pass
         try:
-            matched = child.expect([pexpect.EOF, r"Callback URL.*: "], timeout=10)
+            matched: int = child.expect([pexpect.EOF, r"Callback URL.*: "], timeout=10)
             if matched == 1:
                 child.send(callback_url + "\r")
                 child.expect(pexpect.EOF)
@@ -506,28 +518,31 @@ def _collect_codex_output(stream: TextIO, lines: Queue[str | None]) -> None:
 def _read_codex_app_server_response(
     lines: Queue[str | None], request_id: int
 ) -> dict[str, object]:
-    deadline = time.monotonic() + _CLI_TIMEOUT_SECONDS
+    deadline: float = time.monotonic() + _CLI_TIMEOUT_SECONDS
     messages: list[dict[str, object]] = []
     while time.monotonic() < deadline:
         try:
-            line = lines.get(timeout=max(0.0, deadline - time.monotonic()))
+            line: str | None = lines.get(timeout=max(0.0, deadline - time.monotonic()))
         except Empty:
             break
         if line is None:
             break
         try:
-            message = json.loads(line)
+            message: object = json.loads(line)
         except json.JSONDecodeError:
             continue
         if isinstance(message, dict):
-            messages.append(message)
-            if message.get("id") == request_id:
-                if "error" in message:
+            response_message: dict[str, object] = {
+                str(key): value for key, value in message.items()
+            }
+            messages.append(response_message)
+            if response_message.get("id") == request_id:
+                if "error" in response_message:
                     raise AssertionError(
-                        f"Codex app-server request {request_id} failed: {message!r}. "
-                        f"Messages: {messages!r}"
+                        f"Codex app-server request {request_id} failed: "
+                        f"{response_message!r}. Messages: {messages!r}"
                     )
-                return message
+                return response_message
     raise AssertionError(
         f"Codex app-server did not answer request {request_id}. Messages: {messages!r}"
     )
@@ -540,7 +555,7 @@ def _codex_discover_mcp_tools(
     env: dict[str, str],
     server_name: str,
 ) -> dict[str, object]:
-    process = subprocess.Popen(
+    process: subprocess.Popen[str] = subprocess.Popen(
         [codex, "app-server", *config, "--stdio"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -550,7 +565,7 @@ def _codex_discover_mcp_tools(
     )
     assert process.stdout is not None
     lines: Queue[str | None] = Queue()
-    reader = threading.Thread(
+    reader: threading.Thread = threading.Thread(
         target=_collect_codex_output, args=(process.stdout, lines), daemon=True
     )
     reader.start()
@@ -578,7 +593,7 @@ def _codex_discover_mcp_tools(
                 "limit": 1,
             },
         )
-        response = _read_codex_app_server_response(lines, 2)
+        response: dict[str, object] = _read_codex_app_server_response(lines, 2)
     finally:
         process.terminate()
         try:
@@ -594,16 +609,16 @@ def _codex_discover_mcp_tools(
 def native_oauth_server(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Generator[NativeOAuthServer, None, None]:
-    docker = _require_docker()
+    docker: str = _require_docker()
     tenant_token: Token[str | None] = CURRENT_TENANT_ID_CONTEXTVAR.set(
         POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
     )
-    monkeypatch = pytest.MonkeyPatch()
-    event_loop = asyncio.new_event_loop()
-    upstream_port = _free_port()
-    proxy_port = _free_port()
-    upstream_url = f"http://127.0.0.1:{upstream_port}"
-    public_url = f"http://127.0.0.1:{proxy_port}"
+    monkeypatch: pytest.MonkeyPatch = pytest.MonkeyPatch()
+    event_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
+    upstream_port: int = _free_port()
+    proxy_port: int = _free_port()
+    upstream_url: str = f"http://127.0.0.1:{upstream_port}"
+    public_url: str = f"http://127.0.0.1:{proxy_port}"
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", public_url)
     monkeypatch.setattr(app_configs, "AUTH_BACKEND", AuthBackend.REDIS)
     monkeypatch.setattr(
@@ -613,17 +628,21 @@ def native_oauth_server(
     )
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
 
-    db_session_context = get_session_with_current_tenant()
-    db_session = db_session_context.__enter__()
-    user = create_test_user(db_session, "mcp_native_client", assign_default_group=False)
+    db_session_context: AbstractContextManager[Session] = (
+        get_session_with_current_tenant()
+    )
+    db_session: Session = db_session_context.__enter__()
+    user: User = create_test_user(
+        db_session, "mcp_native_client", assign_default_group=False
+    )
     user.effective_permissions = [
         Permission.READ_SEARCH.value,
         Permission.CREATE_USER_API_KEYS.value,
     ]
     db_session.commit()
-    strategy = get_redis_strategy()
-    session_token = event_loop.run_until_complete(strategy.write_token(user))
-    server_state = NativeOAuthServer(
+    strategy: TenantAwareRedisStrategy = get_redis_strategy()
+    session_token: str = event_loop.run_until_complete(strategy.write_token(user))
+    server_state: NativeOAuthServer = NativeOAuthServer(
         base_url=public_url,
         mcp_path="/mcp",
         user_id=str(user.id),
@@ -633,6 +652,9 @@ def native_oauth_server(
 
     from onyx.mcp_server import api as mcp_api
     from onyx.mcp_server import auth as mcp_auth
+
+    mcp_api: ModuleType
+    mcp_auth: ModuleType
 
     def _test_api_server_url(respect_env_override_if_set: bool = False) -> str:
         if respect_env_override_if_set:
@@ -645,7 +667,7 @@ def native_oauth_server(
         _test_api_server_url,
     )
     monkeypatch.setattr(mcp_api.mcp_server, "auth", mcp_auth.build_mcp_server_auth())
-    mcp_child_app = mcp_api.create_mcp_fastapi_app()
+    mcp_child_app: FastAPI = mcp_api.create_mcp_fastapi_app()
 
     @asynccontextmanager
     async def _lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
@@ -655,7 +677,7 @@ def native_oauth_server(
             finally:
                 await reset_sqlalchemy_async_engine()
 
-    app = FastAPI(lifespan=_lifespan)
+    app: FastAPI = FastAPI(lifespan=_lifespan)
     register_onyx_exception_handlers(app)
 
     @app.get("/health")
@@ -678,24 +700,26 @@ def native_oauth_server(
 
     app.mount("/", mcp_child_app)
 
-    config = uvicorn.Config(
+    config: uvicorn.Config = uvicorn.Config(
         NativeCaptureMiddleware(app, server_state),
         host="0.0.0.0",
         port=upstream_port,
         log_level="warning",
         lifespan="on",
     )
-    uvicorn_server = uvicorn.Server(config)
-    thread = threading.Thread(target=uvicorn_server.run, daemon=True)
+    uvicorn_server: uvicorn.Server = uvicorn.Server(config)
+    thread: threading.Thread = threading.Thread(target=uvicorn_server.run, daemon=True)
     thread.start()
-    container_id = ""
+    container_id: str = ""
 
     try:
         _wait_for_http(f"{upstream_url}/health")
 
-        nginx_dir = tmp_path_factory.mktemp("native-nginx")
+        nginx_dir: Path = tmp_path_factory.mktemp("native-nginx")
         _write_nginx_config(nginx_dir, upstream_port)
-        nginx = _start_nginx_proxy(docker, nginx_dir, proxy_port)
+        nginx: subprocess.CompletedProcess[str] = _start_nginx_proxy(
+            docker, nginx_dir, proxy_port
+        )
         container_id = nginx.stdout.strip()
         if nginx.returncode != 0:
             _skip_or_fail(
@@ -716,7 +740,9 @@ def native_oauth_server(
         uvicorn_server.should_exit = True
         thread.join(timeout=10)
         event_loop.run_until_complete(strategy.destroy_token(session_token, user))
-        redis_client = event_loop.run_until_complete(get_async_redis_connection())
+        redis_client: Redis = event_loop.run_until_complete(
+            get_async_redis_connection()
+        )
         try:
             event_loop.run_until_complete(
                 redis_client.delete(f"{strategy.key_prefix}{session_token}")
@@ -731,7 +757,9 @@ def native_oauth_server(
         db_session.commit()
         with get_catalog_session() as catalog:
             for client_id in server_state.registered_client_ids():
-                client = catalog.get(OAuthProviderClient, client_id)
+                client: OAuthProviderClient | None = catalog.get(
+                    OAuthProviderClient, client_id
+                )
                 if client is not None:
                     catalog.delete(client)
             catalog.commit()
@@ -758,9 +786,9 @@ def test_codex_mcp_login_exchanges_tokens_and_reaches_mcp(
     registration: str,
     mcp_path: str,
 ) -> None:
-    codex = _require_cli("codex")
-    server_name = f"onyx_native_{registration}_{uuid4().hex[:8]}"
-    env = {
+    codex: str = _require_cli("codex")
+    server_name: str = f"onyx_native_{registration}_{uuid4().hex[:8]}"
+    env: dict[str, str] = {
         **os.environ,
         "PATH": _cli_path(),
         "NO_COLOR": "1",
@@ -769,10 +797,10 @@ def test_codex_mcp_login_exchanges_tokens_and_reaches_mcp(
         "XDG_STATE_HOME": str(tmp_path / "state"),
     }
     native_oauth_server.mcp_path = mcp_path
-    config = _codex_config(server_name, native_oauth_server)
+    config: list[str] = _codex_config(server_name, native_oauth_server)
     native_oauth_server.clear_events()
     try:
-        output = _drive_no_browser_login(
+        output: str = _drive_no_browser_login(
             [
                 codex,
                 "mcp",
@@ -787,7 +815,7 @@ def test_codex_mcp_login_exchanges_tokens_and_reaches_mcp(
             server=native_oauth_server,
         )
         assert "success" in output.lower() or "logged in" in output.lower()
-        status = _codex_discover_mcp_tools(
+        status: dict[str, object] = _codex_discover_mcp_tools(
             codex,
             config,
             env=env,
@@ -803,16 +831,16 @@ def test_codex_mcp_login_exchanges_tokens_and_reaches_mcp(
 def test_claude_mcp_login_and_get_discovers_tools(
     native_oauth_server: NativeOAuthServer, tmp_path: Path, mcp_path: str
 ) -> None:
-    claude = _require_cli("claude")
-    server_name = f"onyx-native-claude-{uuid4().hex[:8]}"
-    env = {
+    claude: str = _require_cli("claude")
+    server_name: str = f"onyx-native-claude-{uuid4().hex[:8]}"
+    env: dict[str, str] = {
         **os.environ,
         "PATH": _cli_path(),
         "NO_COLOR": "1",
         "CLAUDE_CONFIG_DIR": str(tmp_path / "claude-config"),
     }
     native_oauth_server.mcp_path = mcp_path
-    add = _run_cli(
+    add: subprocess.CompletedProcess[str] = _run_cli(
         [
             claude,
             "mcp",
@@ -834,7 +862,9 @@ def test_claude_mcp_login_and_get_discovers_tools(
             server=native_oauth_server,
         )
         native_oauth_server.clear_events()
-        details = _run_cli([claude, "mcp", "get", server_name], env=env)
+        details: subprocess.CompletedProcess[str] = _run_cli(
+            [claude, "mcp", "get", server_name], env=env
+        )
         assert details.returncode == 0, details.stderr + details.stdout
         assert "Connected" in details.stdout
         assert native_oauth_server.saw_successful_tools_list()

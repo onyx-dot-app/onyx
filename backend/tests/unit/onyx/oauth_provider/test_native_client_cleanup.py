@@ -17,7 +17,7 @@ def _server() -> NativeOAuthServer:
 
 
 def test_registered_clients_survive_event_resets() -> None:
-    server = _server()
+    server: NativeOAuthServer = _server()
     server.record(
         NativeRequestEvent(
             method="POST",
@@ -32,7 +32,7 @@ def test_registered_clients_survive_event_resets() -> None:
 
     assert server.events == []
     assert server.registered_client_ids() == {"owned-client"}
-    returned_ids = server.registered_client_ids()
+    returned_ids: set[str] = server.registered_client_ids()
     returned_ids.clear()
     assert server.registered_client_ids() == {"owned-client"}
 
@@ -52,7 +52,7 @@ def test_registered_clients_survive_event_resets() -> None:
 def test_cleanup_excludes_unowned_registration_responses(
     method: str, path: str, status_code: int | None, response_body: str
 ) -> None:
-    server = _server()
+    server: NativeOAuthServer = _server()
     server.record(
         NativeRequestEvent(
             method=method,

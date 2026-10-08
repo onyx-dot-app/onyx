@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-CONFIG = Path(__file__).resolve().parents[2] / "web/next.config.js"
-SCRIPT = """
+CONFIG: Path = Path(__file__).resolve().parents[2] / "web/next.config.js"
+SCRIPT: str = """
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
@@ -34,7 +34,7 @@ config.rewrites().then(routes => process.stdout.write(JSON.stringify(routes)));
 def test_oauth_discovery_rewrites_exist_only_in_next_dev(
     phase: str, override_upstreams: bool
 ) -> None:
-    environment = (
+    environment: dict[str, str] = (
         {
             "INTERNAL_URL": "http://api.internal:8080",
             "MCP_INTERNAL_URL": "http://mcp.internal:8090",
@@ -49,7 +49,7 @@ def test_oauth_discovery_rewrites_exist_only_in_next_dev(
             timeout=15,
         )
     )
-    discovery = {
+    discovery: dict[str, str] = {
         route["source"]: route["destination"]
         for route in routes
         if route["source"].startswith("/.well-known/")

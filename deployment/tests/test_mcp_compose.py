@@ -4,12 +4,12 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-COMPOSE_FILE = REPO_ROOT / "deployment/docker_compose/docker-compose.mcp-ci.yml"
+REPO_ROOT: Path = Path(__file__).resolve().parents[2]
+COMPOSE_FILE: Path = REPO_ROOT / "deployment/docker_compose/docker-compose.mcp-ci.yml"
 
 
 def test_mcp_canary_uses_isolated_real_compose_services() -> None:
-    result = subprocess.run(
+    result: subprocess.CompletedProcess[str] = subprocess.run(
         ["docker", "compose", "-f", str(COMPOSE_FILE), "config", "--format", "json"],
         check=True,
         capture_output=True,
@@ -28,7 +28,7 @@ def test_mcp_canary_uses_isolated_real_compose_services() -> None:
         "web_server",
         "nginx",
     }
-    api = services["api_server"]
+    api: dict[str, Any] = services["api_server"]
     assert api["build"]["target"] == "runtime"
     assert "onyx.main:app" in api["command"][-1]
     assert services["mcp_server"]["command"] == ["python", "-m", "onyx.mcp_server_main"]
@@ -38,5 +38,7 @@ def test_mcp_canary_uses_isolated_real_compose_services() -> None:
     assert not any(
         service.get("ports") for name, service in services.items() if name != "nginx"
     )
-    mounts = {Path(mount["source"]).name for mount in services["nginx"]["volumes"]}
+    mounts: set[str] = {
+        Path(mount["source"]).name for mount in services["nginx"]["volumes"]
+    }
     assert {"app.conf.template", "mcp.conf.inc.template", "run-nginx.sh"} <= mounts

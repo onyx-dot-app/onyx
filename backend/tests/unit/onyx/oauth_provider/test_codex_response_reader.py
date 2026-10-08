@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 from queue import Queue
+from typing import Any
 
 import pytest
 
@@ -11,7 +12,7 @@ from tests.external_dependency_unit.oauth_provider import test_native_clients as
 def test_codex_replies_coalesced_with_notifications_are_not_lost(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    executable = tmp_path / "codex"
+    executable: Path = tmp_path / "codex"
     executable.write_text(
         f"#!{sys.executable}\n"
         "import json, sys\n"
@@ -25,7 +26,7 @@ def test_codex_replies_coalesced_with_notifications_are_not_lost(
     executable.chmod(0o700)
     monkeypatch.setattr(harness, "_CLI_TIMEOUT_SECONDS", 2)
 
-    reply = harness._codex_discover_mcp_tools(
+    reply: dict[str, Any] = harness._codex_discover_mcp_tools(
         str(executable), [], env=dict(os.environ), server_name="fixture"
     )
 

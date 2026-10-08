@@ -4,13 +4,13 @@ import argparse
 import json
 import re
 import sys
-from http.client import HTTPConnection, HTTPException, HTTPSConnection
+from http.client import HTTPConnection, HTTPException, HTTPResponse, HTTPSConnection
 from typing import cast
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 
 def request(url: str, data: bytes | None = None) -> tuple[int, dict[str, str], bytes]:
-    split = urlsplit(url)
+    split: SplitResult = urlsplit(url)
     if split.scheme not in {"http", "https"} or split.hostname is None:
         raise ValueError("Only HTTP(S) probe requests are supported")
     connection: HTTPConnection = (
@@ -29,7 +29,7 @@ def request(url: str, data: bytes | None = None) -> tuple[int, dict[str, str], b
         connection.request(
             "POST" if data is not None else "GET", path, body=data, headers=headers
         )
-        response = connection.getresponse()
+        response: HTTPResponse = connection.getresponse()
         return response.status, dict(response.getheaders()), response.read(1_000_000)
     finally:
         connection.close()
@@ -47,7 +47,7 @@ def metadata(url: str) -> dict[str, object]:
 
 def check(base_url: str) -> None:
     origin: str = base_url.rstrip("/")
-    split = urlsplit(origin)
+    split: SplitResult = urlsplit(origin)
     if (
         split.scheme not in {"http", "https"}
         or not split.hostname
@@ -63,7 +63,7 @@ def check(base_url: str) -> None:
     issuer: str = origin + "/api/oauth-provider"
     for suffix in ("", "/mcp", "/api/oauth-provider"):
         url: str = origin + "/.well-known/oauth-authorization-server" + suffix
-        document = metadata(url)
+        document: dict[str, object] = metadata(url)
         if document.get("issuer") != issuer:
             raise ValueError(f"{url}: unexpected issuer")
         for field, endpoint in (
@@ -77,7 +77,7 @@ def check(base_url: str) -> None:
             ("token_endpoint_auth_methods_supported", "none"),
             ("code_challenge_methods_supported", "S256"),
         ):
-            supported = document.get(field)
+            supported: object = document.get(field)
             if not isinstance(supported, list) or value not in supported:
                 raise ValueError(f"{url}: missing {field}={value}")
         print(f"PASS authorization discovery {suffix or '/'}")
@@ -89,7 +89,7 @@ def check(base_url: str) -> None:
         ) != [issuer]:
             raise ValueError(f"{url}: resource or authorization server mismatch")
         print(f"PASS protected-resource discovery {suffix}")
-    initialize = json.dumps(
+    initialize: bytes = json.dumps(
         {
             "jsonrpc": "2.0",
             "id": 1,
@@ -111,7 +111,9 @@ def check(base_url: str) -> None:
             ),
             "",
         )
-        match = re.search(r'resource_metadata="([^"]+)"', challenge)
+        match: re.Match[str] | None = re.search(
+            r'resource_metadata="([^"]+)"', challenge
+        )
         if (
             status != 401
             or match is None
@@ -124,7 +126,7 @@ def check(base_url: str) -> None:
             raise ValueError(
                 f"MCP initialize {suffix}: expected JSON HTTP 401 with resource discovery, got {status}"
             )
-        discovered = metadata(match.group(1))
+        discovered: dict[str, object] = metadata(match.group(1))
         if discovered.get("resource") != origin + "/mcp":
             raise ValueError(
                 f"MCP initialize {suffix}: incompatible protected resource"
@@ -138,9 +140,9 @@ def check(base_url: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", required=True)
-    args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
     try:
         check(args.base_url)
     except (ValueError, OSError, HTTPException) as error:

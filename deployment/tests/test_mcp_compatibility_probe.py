@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-PROBE = (
+PROBE: Path = (
     Path(__file__).resolve().parents[2] / ".github/scripts/check-mcp-compatibility.py"
 )
 
@@ -26,7 +26,7 @@ def test_deployed_probe_fails_on_legacy_discovery_regression(
             self.wfile.write(json.dumps(payload).encode())
 
         def do_GET(self) -> None:
-            origin: str = f"http://127.0.0.1:{self.server.server_address[1]}"
+            origin: str = f"http://127.0.0.1:{server.server_port}"
             issuer: str = origin + "/api/oauth-provider"
             if self.path.startswith("/.well-known/oauth-authorization-server"):
                 status: int = (
@@ -59,7 +59,7 @@ def test_deployed_probe_fails_on_legacy_discovery_regression(
         def do_POST(self) -> None:
             self.send_response(bare_status if self.path == "/mcp" else 401)
             self.send_header("Content-Type", "application/json")
-            origin: str = f"http://127.0.0.1:{self.server.server_address[1]}"
+            origin: str = f"http://127.0.0.1:{server.server_port}"
             self.send_header(
                 "WWW-Authenticate",
                 f'Bearer resource_metadata="{origin}/.well-known/oauth-protected-resource/mcp"',
@@ -69,11 +69,13 @@ def test_deployed_probe_fails_on_legacy_discovery_regression(
         def log_message(self, format: str, *args: object) -> None:
             pass
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+    thread: threading.Thread = threading.Thread(
+        target=server.serve_forever, daemon=True
+    )
     thread.start()
     try:
-        result = subprocess.run(
+        result: subprocess.CompletedProcess[str] = subprocess.run(
             [
                 sys.executable,
                 str(PROBE),

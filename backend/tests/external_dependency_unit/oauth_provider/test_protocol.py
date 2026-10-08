@@ -2,7 +2,7 @@ import json
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import SplitResult, parse_qs, urlsplit
 from uuid import UUID, uuid4
 
 import httpx
@@ -229,9 +229,11 @@ async def _exchange(
 async def test_legacy_client_omits_resource_through_authorization_and_refresh(
     protocol_client: httpx.AsyncClient,
 ) -> None:
-    client_id = await _register(protocol_client)
+    client_id: str = await _register(protocol_client)
+    verifier: str
+    challenge: str
     verifier, challenge = generate_pkce_pair()
-    response = await protocol_client.get(
+    response: httpx.Response = await protocol_client.get(
         "/oauth-provider/authorize",
         params={
             "client_id": client_id,
@@ -243,14 +245,14 @@ async def test_legacy_client_omits_resource_through_authorization_and_refresh(
         },
     )
     assert response.status_code == 302, response.text
-    redirect = urlsplit(response.headers["location"])
+    redirect: SplitResult = urlsplit(response.headers["location"])
     assert redirect.path == "/oauth-provider/authorize", response.headers["location"]
-    handle = parse_qs(redirect.query)["request"][0]
-    details = await protocol_client.get(
+    handle: str = parse_qs(redirect.query)["request"][0]
+    details: httpx.Response = await protocol_client.get(
         "/oauth-provider/consent", params={"request": handle}
     )
     assert details.status_code == 200, details.text
-    approval = await protocol_client.post(
+    approval: httpx.Response = await protocol_client.post(
         "/oauth-provider/consent",
         headers={"Origin": _ORIGIN},
         json={
@@ -260,9 +262,11 @@ async def test_legacy_client_omits_resource_through_authorization_and_refresh(
         },
     )
     assert approval.status_code == 200, approval.text
-    callback = parse_qs(urlsplit(approval.json()["redirect_url"]).query)
+    callback: dict[str, list[str]] = parse_qs(
+        urlsplit(approval.json()["redirect_url"]).query
+    )
     assert callback["state"] == ["legacy-client-state"]
-    tokens = await protocol_client.post(
+    tokens: httpx.Response = await protocol_client.post(
         "/oauth-provider/token",
         data={
             "client_id": client_id,
@@ -273,7 +277,7 @@ async def test_legacy_client_omits_resource_through_authorization_and_refresh(
         },
     )
     assert tokens.status_code == 200, tokens.text
-    refreshed = await protocol_client.post(
+    refreshed: httpx.Response = await protocol_client.post(
         "/oauth-provider/token",
         data={
             "client_id": client_id,
@@ -282,7 +286,7 @@ async def test_legacy_client_omits_resource_through_authorization_and_refresh(
         },
     )
     assert refreshed.status_code == 200, refreshed.text
-    introspected = await protocol_client.get(
+    introspected: httpx.Response = await protocol_client.get(
         "/oauth-provider/introspect",
         headers={"Authorization": f"Bearer {refreshed.json()['access_token']}"},
     )
@@ -297,9 +301,10 @@ async def test_authorize_rejects_explicit_invalid_resource(
     protocol_client: httpx.AsyncClient,
     resource: str,
 ) -> None:
-    client_id = await _register(protocol_client)
+    client_id: str = await _register(protocol_client)
+    challenge: str
     _, challenge = generate_pkce_pair()
-    response = await protocol_client.get(
+    response: httpx.Response = await protocol_client.get(
         "/oauth-provider/authorize",
         params={
             "client_id": client_id,
@@ -311,7 +316,9 @@ async def test_authorize_rejects_explicit_invalid_resource(
         },
     )
     assert response.status_code == 302, response.text
-    callback = parse_qs(urlsplit(response.headers["location"]).query)
+    callback: dict[str, list[str]] = parse_qs(
+        urlsplit(response.headers["location"]).query
+    )
     assert callback["error"] == ["invalid_request"]
 
 

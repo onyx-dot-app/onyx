@@ -5,25 +5,25 @@ import subprocess
 import threading
 import time
 from collections.abc import Generator
-from http.client import HTTPConnection
+from http.client import HTTPConnection, HTTPResponse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 from uuid import uuid4
 
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 
 
 def get_json(url: str) -> tuple[int, dict[str, str]]:
-    split = urlsplit(url)
+    split: SplitResult = urlsplit(url)
     assert split.hostname is not None
-    connection = HTTPConnection(split.hostname, split.port, timeout=2)
+    connection: HTTPConnection = HTTPConnection(split.hostname, split.port, timeout=2)
     try:
         connection.request("GET", split.path or "/")
-        response = connection.getresponse()
+        response: HTTPResponse = connection.getresponse()
         body: bytes = response.read()
         return response.status, json.loads(body) if body else {}
     finally:
@@ -47,8 +47,10 @@ class MetadataBackend(BaseHTTPRequestHandler):
 @pytest.fixture(params=["compose", "helm"])
 def oauth_proxy(request: pytest.FixtureRequest, tmp_path: Path) -> Generator[str]:
     # Docker reaches this test-only upstream through host-gateway.
-    backend = ThreadingHTTPServer(("0.0.0.0", 0), MetadataBackend)  # noqa: S104
-    thread = threading.Thread(target=backend.serve_forever, daemon=True)
+    backend: ThreadingHTTPServer = ThreadingHTTPServer(("0.0.0.0", 0), MetadataBackend)  # noqa: S104
+    thread: threading.Thread = threading.Thread(
+        target=backend.serve_forever, daemon=True
+    )
     thread.start()
     container: str = f"mcp-routing-{uuid4().hex}"
     try:
