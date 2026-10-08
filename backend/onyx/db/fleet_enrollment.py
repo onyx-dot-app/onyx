@@ -12,6 +12,7 @@ from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.db.engine.iam_auth import provide_iam_token
 from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
+from onyx.utils.variable_functionality import global_version, is_ee_available
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 
@@ -21,7 +22,19 @@ def source_database_url() -> str:
     )
 
 
+def edition_selected() -> bool:
+    """Whether this process has selected its edition. Spawned indexing children
+    select it after startup, from their parent's arguments."""
+    return global_version.is_ee_version() or not is_ee_available()
+
+
 def installation_seed() -> bytes:
+    if not edition_selected():
+        # Each process caches its secret codec on first use. Decrypting before the
+        # process selects its edition would pin the Community codec for every later
+        # credential decrypt in that process.
+        raise RuntimeError("Process edition is not selected yet")
+
     from onyx.db.models import EncryptedKeyValueStore
 
     # Use the application's encrypted store and credentials only for this one row.

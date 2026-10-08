@@ -23,7 +23,7 @@ from onyx.utils.fleet_telemetry_collector import (
 from onyx.utils.fleet_telemetry_kubernetes import KubernetesCollector, quantity
 
 
-def client(capacity: int = 16) -> fleet.BoundedTelemetry:
+def client(capacity: int = 16, report_process: bool = True) -> fleet.BoundedTelemetry:
     return fleet.BoundedTelemetry(
         fleet.TelemetryConfig(
             "http://localhost:8787",
@@ -32,7 +32,8 @@ def client(capacity: int = 16) -> fleet.BoundedTelemetry:
             "test-deployment",
             b"installation-secret-not-central-token",
             capacity=capacity,
-        )
+        ),
+        report_process=report_process,
     )
 
 
@@ -50,6 +51,13 @@ class Response:
         self.raw.close()
 
 
+def accept_all(*_args: Any, **kwargs: Any) -> Response:
+    events = json.loads(gzip.decompress(kwargs["data"]))["events"]
+    return Response(
+        {"results": [{"index": i, "status": "accepted"} for i in range(len(events))]}
+    )
+
+
 def test_hot_emission_sheds_without_io_threads_or_wait(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -60,16 +68,11 @@ def test_hot_emission_sheds_without_io_threads_or_wait(
     monkeypatch.setattr("threading.Thread.start", fail)
     assert sender.emit("heartbeat", {"dropped_events": 0})
     assert sender.emit("heartbeat", {"dropped_events": 1})
+    started = time.perf_counter()
     assert not sender.emit("heartbeat", {"dropped_events": 2})
-    sender._lock.acquire()
-    try:
-        started = time.perf_counter()
-        assert not sender.emit("heartbeat", {"dropped_events": 3})
-        assert time.perf_counter() - started < 0.01
-    finally:
-        sender._lock.release()
+    assert time.perf_counter() - started < 0.01
     assert len(sender._queue) == 2
-    assert sender.dropped == 2
+    assert sender.dropped == 1
     fail.assert_not_called()
 
 
@@ -151,6 +154,57 @@ def test_partial_ack_retains_only_retry_missing_indices_and_same_ids() -> None:
     assert not sender._pending
 
 
+def test_deferred_events_expire_without_holding_back_newer_events() -> None:
+    sender = client()
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+    requests: list[list[dict[str, Any]]] = []
+
+    def defer_first(*_args: Any, **kwargs: Any) -> Response:
+        events = json.loads(gzip.decompress(kwargs["data"]))["events"]
+        requests.append(events)
+        return Response(
+            {
+                "results": [
+                    {"index": i, "status": "retry" if i == 0 else "accepted"}
+                    for i in range(len(events))
+                ]
+            }
+        )
+
+    for round_number in range(fleet._MAX_EVENT_ATTEMPTS):
+        assert sender.emit("heartbeat", {"dropped_events": round_number + 1})
+        delivered = sender.flush_once(defer_first)
+        assert delivered == (round_number == fleet._MAX_EVENT_ATTEMPTS - 1)
+        # Deferral is not an outage: the next wakeup sends again without backoff.
+        assert sender._blocked_until == 0
+    assert {events[0]["event_id"] for events in requests} == {
+        requests[0][0]["event_id"]
+    }
+    assert [len(events) for events in requests] == [2] * fleet._MAX_EVENT_ATTEMPTS
+    assert sender.sent == fleet._MAX_EVENT_ATTEMPTS
+    assert sender.expired == sender.dropped == 1
+    assert not sender._pending and not sender._attempts
+
+
+def test_outage_keeps_batch_without_spending_event_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(fleet.time, "monotonic", lambda: clock[0])
+    sender = client()
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+    broken = Mock(side_effect=ConnectionError("PRIVATE endpoint"))
+    for _ in range(2 * fleet._MAX_EVENT_ATTEMPTS):
+        clock[0] += 301
+        assert not sender.flush_once(broken)
+    assert broken.call_count == 2 * fleet._MAX_EVENT_ATTEMPTS
+    assert len(sender._pending) == 1 and not sender._attempts
+    assert sender.expired == sender.dropped == 0
+    clock[0] += 301
+    assert sender.flush_once(accept_all)
+    assert sender.sent == 1 and sender.failures == 0
+
+
 def test_outage_breaker_bounds_attempts_and_shutdown_does_not_join() -> None:
     sender = client()
     sender.emit("heartbeat", {"dropped_events": 0})
@@ -208,21 +262,21 @@ def test_stage_coalescing_preserves_counters_and_bypasses_errors(
     }
     for _ in range(3):
         assert sender.emit("attempt", data)
-    assert sender._coalesce_stages(sender._take_batch()) == []
+    assert sender._coalesce_stages(sender._take_batch(), 100) == []
     clock[0] += 30
-    combined = sender._coalesce_stages([])
+    combined = sender._coalesce_stages([], 100)
     assert len(combined) == 1
     assert combined[0]["data"]["counters"]["embed_chunks"] == 90
     assert combined[0]["data"]["duration_ms"] == 15
     assert sender.emit("attempt", data)
-    assert sender._coalesce_stages(sender._take_batch()) == []
+    assert sender._coalesce_stages(sender._take_batch(), 100) == []
     failure: dict[str, Any] = (
         {**data, "error_count": 1}
         if error_counter == "error_count"
         else {**data, "counters": {"embed_chunks": 30, error_counter: 1}}
     )
     assert sender.emit("attempt", failure)
-    failed = sender._coalesce_stages(sender._take_batch())
+    failed = sender._coalesce_stages(sender._take_batch(), 100)
     assert len(failed) == 1
     errors: dict[str, Any] = (
         failed[0]["data"]
@@ -376,6 +430,90 @@ def test_sender_reuses_http_session_and_compresses_in_background(
     assert session.post.call_count == 2 and sender.sent == 2
 
 
+def test_backlog_drains_in_consecutive_batches_per_wakeup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = Mock()
+    session.post.side_effect = accept_all
+    monkeypatch.setattr(fleet.requests, "Session", Mock(return_value=session))
+    sender = client(capacity=1000, report_process=False)
+    for index in range(800):
+        assert sender.emit("heartbeat", {"dropped_events": index})
+    posts_at_first_wakeup: list[int] = []
+
+    def wait(*_args: Any) -> bool:
+        posts_at_first_wakeup.append(session.post.call_count)
+        sender._stop.set()
+        return True
+
+    monkeypatch.setattr(sender._stop, "wait", wait)
+    sender._run()
+    assert posts_at_first_wakeup == [fleet._MAX_BATCHES_PER_WAKEUP]
+    # The final flush after close delivers the remainder.
+    assert sender.sent == 800 and session.post.call_count == 8
+
+
+def test_close_delivers_coalesced_counters_within_a_bounded_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    delivered: list[dict[str, Any]] = []
+
+    def accept(*args: Any, **kwargs: Any) -> Response:
+        delivered.extend(json.loads(gzip.decompress(kwargs["data"]))["events"])
+        return accept_all(*args, **kwargs)
+
+    session = Mock()
+    session.post.side_effect = accept
+    monkeypatch.setattr(fleet.requests, "Session", Mock(return_value=session))
+    sender = client(report_process=False)
+    sender.start()
+    for _ in range(3):
+        assert sender.emit(
+            "attempt",
+            {
+                "attempt_id": 7,
+                "stage": "fetch",
+                "counter_mode": "delta",
+                "counters": {"fetch_docs": 2},
+                "duration_ms": 4,
+            },
+        )
+    started = time.monotonic()
+    sender.close(flush_timeout=2.0)
+    assert time.monotonic() - started < 2.0
+    assert sender._thread is not None and not sender._thread.is_alive()
+    assert len(delivered) == 1
+    assert delivered[0]["data"]["counters"] == {"fetch_docs": 6}
+    assert not sender.emit("heartbeat", {"dropped_events": 0})
+
+
+def test_close_waits_for_nothing_during_an_outage() -> None:
+    sender = client(report_process=False)
+    sender.emit("heartbeat", {"dropped_events": 0})
+    sender._blocked_until = time.monotonic() + 300
+    sender.start()
+    started = time.monotonic()
+    sender.close(flush_timeout=2.0)
+    assert time.monotonic() - started < 0.5
+    assert len(sender._queue) == 1
+
+
+def test_short_lived_sender_only_delivers_hook_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resource = Mock()
+    monkeypatch.setattr(
+        "onyx.utils.fleet_telemetry_resources.collect_process_resource", resource
+    )
+    sender = client(report_process=False)
+    flushed = Mock(return_value=True)
+    monkeypatch.setattr(sender, "flush_once", flushed)
+    monkeypatch.setattr(sender._stop, "wait", Mock(side_effect=sender._stop.set))
+    sender._run()
+    resource.assert_not_called()
+    assert not sender._take_batch()
+
+
 def test_source_configuration_returns_only_structural_metadata() -> None:
     sender = client()
     data = safe_connector_data(
@@ -485,6 +623,32 @@ def test_query_failure_and_disconnect_do_not_replace_application_errors(
     assert sink.call_args.args[1]["outcome"] == "disconnected"
 
 
+def test_stop_button_and_api_origin_map_to_reported_outcome_and_channel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.server.query_and_chat.models import MessageOrigin
+    from onyx.server.query_and_chat.placement import Placement
+    from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+
+    sink = Mock()
+    monkeypatch.setattr(query, "emit_telemetry", sink)
+    stopped = Packet(
+        placement=Placement(turn_index=0),
+        obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+    )
+    assert list(query.observe_chat_packets(iter([stopped]), channel="web")) == [stopped]
+    assert sink.call_args.args[1]["outcome"] == "canceled"
+    for origin, channel in (
+        (MessageOrigin.API, "api"),
+        (MessageOrigin.SLACKBOT, "slack"),
+        (MessageOrigin.DISCORDBOT, "discord"),
+        (MessageOrigin.WEBAPP, "web"),
+        (MessageOrigin.WIDGET, "web"),
+    ):
+        request = SimpleNamespace(origin=origin)
+        assert query._channel({"new_msg_req": request}) == channel
+
+
 def test_kubernetes_events_have_opaque_ids_actual_limits_and_no_names() -> None:
     sender = client()
     kubernetes = KubernetesCollector(sender)
@@ -588,6 +752,46 @@ def test_opensearch_bulk_counts_item_acknowledgments_even_when_helper_raises(
         {"write_chunks": 2, "write_errors": 1, "write_rejected": 1},
     )
     assert "PRIVATE" not in str(sink.call_args)
+
+
+def test_create_only_bulk_conflicts_are_not_write_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from opensearchpy.helpers import bulk
+    from opensearchpy.serializer import JSONSerializer
+
+    from onyx.document_index.opensearch import client as opensearch
+    from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
+
+    sink = Mock()
+    monkeypatch.setattr(opensearch, "emit_stage_counter", sink)
+    original = Mock()
+    original.transport.serializer = JSONSerializer()
+    original.bulk.return_value = {
+        "items": [
+            {"create": {"status": 201}},
+            {
+                "create": {
+                    "status": 409,
+                    "error": {"type": "version_conflict_engine_exception"},
+                }
+            },
+        ]
+    }
+    token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set((2, 1))
+    try:
+        bulk(
+            opensearch._MeasuredBulkClient(original, benign_conflicts=True),
+            [{"_op_type": "create", "_index": "i", "_id": i} for i in range(2)],
+            raise_on_error=False,
+        )
+    finally:
+        INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
+    assert sink.call_args.args[2] == {
+        "write_chunks": 1,
+        "write_errors": 0,
+        "write_rejected": 0,
+    }
 
 
 def test_kubernetes_large_environment_never_enters_telemetry() -> None:
@@ -731,6 +935,11 @@ def test_kubernetes_version_reports_only_safe_tag_digest_once_and_on_change() ->
     container["image"] = "PRIVATE.registry/PRIVATE:v1.2.4"
     watcher.observe_pods({"items": [pod]})
     assert sender._take_batch()[0]["data"]["version"] == "v1.2.4"
+
+
+def test_memory_quantities_are_whole_bytes() -> None:
+    assert quantity("1.1Ki") == 1126 and type(quantity("1.1Ki")) is int
+    assert quantity("250m", cpu=True) == pytest.approx(0.25)
 
 
 def test_collector_schema_partition_covers_large_fleet_without_truncation() -> None:
@@ -966,42 +1175,68 @@ def test_repair_cadence_avoids_idle_reads_and_still_polls_old_active_jobs(
     assert jobs.call_count == 3
 
 
-def test_bounded_http_reads_negotiate_identity_instead_of_gzip(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_live_edge_rereads_a_short_overlap_and_sweeps_after_expiry(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sender = client()
-    watcher = KubernetesCollector(sender)
-    watcher.token_path = tmp_path / "token"
-    watcher.token_path.write_text("test-token")
+    from onyx.utils import fleet_telemetry_collector as source
 
-    def negotiated(result: Any, kwargs: dict[str, Any]) -> Response:
-        response = Response(result)
-        # Reproduce Kubernetes' normal compression negotiation. Raw HTTP reads
-        # do not decode this automatically, so the previous collector failed.
-        if kwargs["headers"].get("Accept-Encoding") != "identity":
-            response.headers["Content-Encoding"] = "gzip"
-            response.raw = io.BytesIO(gzip.compress(response.raw.read()))
-        return response
+    clock = [1000.0]
+    monkeypatch.setattr(
+        source, "time", SimpleNamespace(monotonic=lambda: clock[0], time=time.time)
+    )
+    monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
+    monkeypatch.setattr(
+        source,
+        "license_snapshot",
+        Mock(return_value={"license_present": False, "first_set_at": None}),
+    )
+    monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
+    monkeypatch.setattr(source, "MULTI_TENANT", False)
+    monkeypatch.setattr(source, "connector_page", Mock(return_value=[]))
+    monkeypatch.setattr(source, "job_page", Mock(return_value=[]))
+    source_time = datetime.now(timezone.utc) - timedelta(minutes=3)
+    row = {
+        "attempt_id": 3,
+        "connector_id": 1,
+        "cc_pair_id": 2,
+        "connector_type": "file",
+        "state": "success",
+        "docs_processed": 1,
+        "docs_indexed": 1,
+        "chunks_indexed": 1,
+        "total_batches": 1,
+        "completed_batches": 1,
+        "error_count": 0,
+        "has_error": False,
+        "time_updated": source_time - timedelta(hours=2),
+        "source_time": source_time,
+    }
+    attempts = Mock(return_value=[row])
+    monkeypatch.setattr(source, "attempt_page", attempts)
+    sender = client(capacity=64)
+    collector = FleetCollector(sender, "postgresql://unused", ["public"])
 
-    def get(url: str, **kwargs: Any) -> Response:
-        result = (
-            {"items": [{}] * 25}
-            if "/pods" in url
-            else {"config_revision": 3, "resource_interval_seconds": 60}
-        )
-        return negotiated(result, kwargs)
+    def poll() -> datetime:
+        clock[0] += fleet.CONNECTOR_INTERVAL_SECONDS
+        collector.collect_one_schema()
+        return collector._attempt_cursor["public"][0]
 
-    monkeypatch.setattr("requests.get", get)
-    pod_page = watcher._get("/api/v1/namespaces/default/pods", {"limit": 25})
-    assert pod_page is not None and len(pod_page["items"]) == 25
-    assert watcher.errors == 0
-    sender.emit("heartbeat", {"collector_enabled": True})
-
-    def post(*_args: Any, **kwargs: Any) -> Response:
-        return negotiated({"results": [{"index": 0, "status": "accepted"}]}, kwargs)
-
-    assert sender.flush_once(post)
-    assert sender.sent == 1
+    overlap = source_time - timedelta(minutes=10)
+    assert poll() == overlap
+    assert attempts.call_args.args[2] < datetime.now(timezone.utc) - timedelta(days=183)
+    attempts.return_value = []
+    # Idle reads keep the overlap anchored to the last source read; it never drifts.
+    assert poll() == overlap and poll() == overlap
+    assert attempts.call_args.args[2] == overlap
+    assert len([e for e in sender._take_batch() if e["event_type"] == "attempt"]) == 1
+    sender.expired += 1
+    swept = poll()
+    assert abs(datetime.now(timezone.utc) - timedelta(hours=24) - swept) < timedelta(
+        minutes=1
+    )
+    assert poll() == overlap
+    clock[0] += 6 * 3600
+    assert poll() < overlap - timedelta(hours=12)
 
 
 def test_unexpected_compression_fails_closed_with_bounded_retry(
@@ -1099,7 +1334,7 @@ def test_failed_queue_reads_wait_for_configured_poll_interval(
         collector.tick()
     unavailable.assert_called_once()
     assert collector.queue_errors == 1 and sender.health["queue_errors"] == 1
-    collector._last_queues = uptime - sender.settings["queue_interval_seconds"] - 1
+    collector._last_queues = uptime - fleet.QUEUE_INTERVAL_SECONDS - 1
     collector.tick()
     assert unavailable.call_count == 2 and collector.queue_errors == 2
 
@@ -1155,9 +1390,9 @@ def test_initial_discovery_aws_and_health_run_once_then_follow_intervals(
     monkeypatch.setattr(collector, "collect_one_schema", Mock(return_value=False))
     monkeypatch.setattr(collector, "collect_queues", Mock())
     collector.tick()
-    initial = sender._take_batch()
-    assert len(initial) == 1 and initial[0]["event_type"] == "heartbeat"
-    assert initial[0]["data"]["aws_consecutive_errors"] == 1
+    # The sender thread reports collector health on its own resource cadence.
+    assert not sender._take_batch()
+    assert sender.health["aws_consecutive_errors"] == 1
     collector.tick()
     discovery.assert_called_once()
     managed.assert_called_once()
@@ -1228,7 +1463,8 @@ def test_sender_only_emits_and_samples_resources_at_low_host_uptime(
         "data"
     ] == {"version": "dev", "commit_sha": "a" * 40}
     heartbeat = [event for event in events if event["event_type"] == "heartbeat"]
-    assert len(heartbeat) == 1 and flushed.call_count == 2
+    # Two loop iterations, then one final delivery attempt after close.
+    assert len(heartbeat) == 1 and flushed.call_count == 3
 
 
 def test_delivery_health_retains_recent_loss_for_overlapping_producers(
@@ -1335,9 +1571,8 @@ def test_license_telemetry_excludes_credentials_and_fails_open(monkeypatch) -> N
     telemetry.emit_license_state(False, "removed")
 
 
-def test_delivery_receipts_cannot_change_collection_settings() -> None:
+def test_delivery_receipts_only_settle_events() -> None:
     sender = client()
-    before = dict(sender.settings)
     sender.emit("heartbeat", {"collector_enabled": True})
     response = Response(
         {
@@ -1349,7 +1584,8 @@ def test_delivery_receipts_cannot_change_collection_settings() -> None:
         }
     )
     assert sender.flush_once(lambda *_args, **_kwargs: response)
-    assert sender.settings == before
+    assert sender.sent == 1
+    assert fleet.CONNECTOR_INTERVAL_SECONDS == 300
     assert sender.emit("heartbeat", {"collector_enabled": True})
 
 

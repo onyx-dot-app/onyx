@@ -1884,9 +1884,9 @@ def handle_stream_message_objects(
 ) -> AnswerStream:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
-    Emits a ``latency`` telemetry record for the whole turn once the stream is
-    exhausted or closed. Callers must pass ``user`` as a keyword argument so the
-    record carries the user id.
+    Emits a fleet ``query`` telemetry record for the whole turn once the stream
+    is exhausted or closed. Callers must pass ``user`` as a keyword argument so
+    the record carries the user id.
     """
     yield from _stream_chat_turn(
         new_msg_req=new_msg_req,

@@ -93,9 +93,11 @@ SchemaDocumentModel = TypeVar("SchemaDocumentModel")
 class _MeasuredBulkClient:
     """Observe actual item acknowledgments without changing bulk helper behavior."""
 
-    def __init__(self, client: OpenSearch) -> None:
+    def __init__(self, client: OpenSearch, *, benign_conflicts: bool = False) -> None:
         self.client = client
         self.transport = client.transport
+        # Create-only writers yield to the live writer on a 409; that is not an error.
+        self.benign_conflicts = benign_conflicts
 
     def bulk(self, *args: Any, **kwargs: Any) -> Any:
         started = time.monotonic()
@@ -109,6 +111,8 @@ class _MeasuredBulkClient:
                         status = result.get("status", 500)
                         if 200 <= status < 300:
                             accepted += 1
+                        elif self.benign_conflicts and status == HTTPStatus.CONFLICT:
+                            continue
                         else:
                             errors += 1
                             rejected += int(status == 429)
@@ -1171,7 +1175,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             # a chunk that already exists is owned by a live/forward writer, so
             # the port yields with a benign 409 instead of failing the batch
             successes, errors = bulk(
-                _MeasuredBulkClient(self._client),
+                _MeasuredBulkClient(self._client, benign_conflicts=True),
                 data,
                 max_retries=3,
                 raise_on_error=False,

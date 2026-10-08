@@ -3,13 +3,14 @@
 import os
 import threading
 import time
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
 from onyx.utils import fleet_telemetry as fleet
-from tests.unit.onyx.utils.test_fleet_telemetry import Response
+from tests.unit.onyx.utils.test_fleet_telemetry import Response, accept_all
 
 
 @pytest.mark.parametrize("explicit_url", [False, True])
@@ -19,6 +20,7 @@ def test_database_connections_apply_source_tls_only_to_standard_settings(
     from onyx.db import fleet_enrollment, fleet_telemetry
     from onyx.db.engine import pg_ssl
 
+    monkeypatch.setattr(fleet_enrollment, "is_ee_available", lambda: False)
     monkeypatch.setattr(pg_ssl, "USE_IAM_AUTH", False)
     monkeypatch.setattr(pg_ssl, "POSTGRES_SSLMODE", "verify-full")
     monkeypatch.setattr(pg_ssl, "POSTGRES_SSLROOTCERT", "/test/ca.crt")
@@ -86,6 +88,78 @@ def test_auto_identity_is_stable_and_privacy_key_stays_local(
     assert calls[0][1]["json"] == {"is_cloud": fleet.MULTI_TENANT}
 
 
+def test_enrollment_accepts_additional_receipt_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    config = fleet.automatic_config("api", b"a" * 32)
+    assert config
+    sender = fleet.BoundedTelemetry(config)
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+
+    def transport(url: str, **kwargs: Any) -> Response:
+        if url.endswith("/enroll"):
+            return Response(
+                {
+                    "customer_uuid": config.customer_uuid,
+                    "deployment_id": config.deployment_id,
+                    "reporting_status": "never",
+                }
+            )
+        return accept_all(url, **kwargs)
+
+    assert sender.flush_once(transport)
+    assert sender._enrolled and sender.sent == 1
+
+
+def test_identity_waits_for_the_process_edition_before_reading_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.db import fleet_enrollment
+
+    edition = SimpleNamespace(is_ee_version=lambda: False)
+    monkeypatch.setattr(fleet_enrollment, "global_version", edition)
+    monkeypatch.setattr(fleet_enrollment, "is_ee_available", lambda: True)
+    engine = Mock(side_effect=RuntimeError("connection intercepted"))
+    monkeypatch.setattr(fleet_enrollment, "create_engine", engine)
+    # Decrypting first would pin the Community codec for this process's credentials.
+    with pytest.raises(RuntimeError, match="edition"):
+        fleet_enrollment.installation_seed()
+    engine.assert_not_called()
+    edition.is_ee_version = lambda: True
+    with pytest.raises(RuntimeError, match="connection intercepted"):
+        fleet_enrollment.installation_seed()
+    monkeypatch.setattr(fleet_enrollment, "is_ee_available", lambda: False)
+    edition.is_ee_version = lambda: False
+    with pytest.raises(RuntimeError, match="connection intercepted"):
+        fleet_enrollment.installation_seed()
+
+
+def test_collector_selects_edition_before_enrollment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.utils import fleet_telemetry_collector as source
+
+    calls: list[str] = []
+    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    monkeypatch.setattr("sys.argv", ["collector", "--once"])
+    monkeypatch.setattr(
+        source, "set_is_ee_if_available", lambda: calls.append("edition")
+    )
+
+    def start(service: str) -> None:
+        calls.append(service)
+
+    monkeypatch.setattr(source, "start_telemetry", start)
+    monkeypatch.setattr(source, "stop_telemetry", Mock())
+    monkeypatch.setattr(source.signal, "signal", Mock())
+    stopped = Mock()
+    stopped.wait.return_value = True
+    monkeypatch.setattr(source.threading, "Event", Mock(return_value=stopped))
+    source.main()
+    assert calls == ["edition", "collector"]
+
+
 def test_failed_or_mismatched_enrollment_retains_bounded_batch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -120,6 +194,7 @@ def test_startup_and_shutdown_do_not_wait_for_identity_storage(
         return b"a" * 32
 
     monkeypatch.setattr(fleet_enrollment, "installation_seed", blocked_seed)
+    monkeypatch.setattr(fleet_enrollment, "edition_selected", lambda: True)
     monkeypatch.setattr(fleet, "_client", None)
     monkeypatch.setattr(fleet, "_bootstrap_thread", None)
     monkeypatch.setattr(fleet, "_bootstrap_stop", threading.Event())
@@ -139,6 +214,38 @@ def test_startup_and_shutdown_do_not_wait_for_identity_storage(
         if fleet._bootstrap_thread:
             fleet._bootstrap_thread.join(2)
     assert fleet._client is None
+
+
+def test_bootstrap_waits_for_the_edition_without_reading_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.db import fleet_enrollment
+
+    for key in tuple(os.environ):
+        if key.startswith("ONYX_TELEMETRY_") or key == "DISABLE_TELEMETRY":
+            monkeypatch.delenv(key)
+    selected = threading.Event()
+    seed = Mock(return_value=b"a" * 32)
+    monkeypatch.setattr(fleet_enrollment, "edition_selected", selected.is_set)
+    monkeypatch.setattr(fleet_enrollment, "installation_seed", seed)
+    monkeypatch.setattr(fleet.BoundedTelemetry, "start", Mock())
+    monkeypatch.setattr(fleet, "_client", None)
+    stopped = threading.Event()
+    worker = threading.Thread(
+        target=fleet._bootstrap, args=("indexing", False, stopped)
+    )
+    worker.start()
+    try:
+        time.sleep(0.3)
+        seed.assert_not_called()
+        selected.set()
+        worker.join(2)
+        assert not worker.is_alive()
+        seed.assert_called_once()
+        assert fleet._client is not None and not fleet._client.report_process
+    finally:
+        stopped.set()
+        worker.join(2)
 
 
 def test_partial_override_and_opt_out_do_not_enroll(

@@ -391,6 +391,22 @@ _ENUM_FIELDS: dict[str, frozenset[str]] = {
 }
 
 
+# Source-owned collection schedule. The fleet service cannot change it.
+CONNECTOR_INTERVAL_SECONDS: int = 300
+QUEUE_INTERVAL_SECONDS: int = 600
+RESOURCE_INTERVAL_SECONDS: int = 300
+
+# Delivery bounds. The fleet service accepts up to 500 events per request.
+_MAX_BATCHES_PER_WAKEUP: int = 5
+_MAX_EVENT_ATTEMPTS: int = 5
+_FINAL_FLUSH_SECONDS: float = 5.0
+# Short-lived processes wait at most this long at exit for their final delivery.
+EXIT_FLUSH_SECONDS: float = 2.0
+# Indexing counter deltas combine per attempt and stage for a short window.
+_STAGE_WINDOW_SECONDS: float = 30.0
+_MAX_STAGE_KEYS: int = 256
+
+
 def is_valid_version(value: str) -> bool:
     """Accept only bounded release tags, build hashes, and fixed version labels."""
     return _VERSION.fullmatch(value) is not None
@@ -599,17 +615,19 @@ class TelemetryConfig:
 
 
 class BoundedTelemetry:
-    """One daemon thread per process. Full queues and lock contention shed events."""
+    """One daemon thread per process. A full queue sheds events; emitters never wait."""
 
-    def __init__(self, config: TelemetryConfig) -> None:
+    def __init__(self, config: TelemetryConfig, *, report_process: bool = True) -> None:
         self.config: TelemetryConfig = config
+        # Short-lived processes deliver hook events only; their parent reports the process.
+        self.report_process: bool = report_process
         self.pid: int = os.getpid()
+        # deque append/popleft are thread-safe, so emitters take no lock.
         self._queue: deque[
             tuple[
                 str, dict[str, Any], str | None, str | None, float, str | None, str, int
             ]
         ] = deque()
-        self._lock: threading.Lock = threading.Lock()
         self._flush_lock: threading.Lock = threading.Lock()
         self._stop: threading.Event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -620,9 +638,13 @@ class BoundedTelemetry:
         self._recent_dropped: int = 0
         self._last_loss_at: float = float("-inf")
         self.sent: int = 0
+        # Events dropped after the service deferred them `_MAX_EVENT_ATTEMPTS` times.
+        self.expired: int = 0
         self.failures: int = 0
         self._blocked_until: float = 0.0
         self._pending: list[dict[str, Any]] = []
+        # Sends per retained event ID. Whole-request failures do not count.
+        self._attempts: dict[str, int] = {}
         self._session: requests.Session | None = None
         self._enrolled: bool = not config.auto_enroll
         self._stage_pending: OrderedDict[tuple[str, ...], dict[str, Any]] = (
@@ -630,14 +652,6 @@ class BoundedTelemetry:
         )
         self._last_stage_flush: float = time.monotonic()
         self.health: dict[str, Any] = {}
-        # Source-owned schedule. Delivery receipts never change these settings.
-        self.settings: dict[str, Any] = {
-            "config_revision": 0,
-            "enabled": True,
-            "connector_interval_seconds": 300,
-            "queue_interval_seconds": 600,
-            "resource_interval_seconds": 300,
-        }
 
     def emit(
         self,
@@ -651,12 +665,11 @@ class BoundedTelemetry:
         service: str | None = None,
         revision: int = 0,
     ) -> bool:
-        """No thread creation, serialization, logging, network, disk, or database calls."""
+        """No locks, thread creation, serialization, logging, network, disk, or database calls."""
         try:
             if (
                 self.pid != os.getpid()
                 or self._stop.is_set()
-                or not self.settings["enabled"]
                 or (service is not None and service not in _SERVICES)
                 or type(revision) is not int
                 or not 0 <= revision <= 1_000_000_000
@@ -667,36 +680,29 @@ class BoundedTelemetry:
                 self.invalid += 1
                 self.dropped += 1
                 return False
-            if not self._lock.acquire(blocking=False):
+            # Concurrent emitters can overshoot the capacity by at most one event each.
+            if len(self._queue) >= self.config.capacity:
                 self.dropped += 1
                 return False
-            try:
-                if len(self._queue) >= self.config.capacity:
-                    self.dropped += 1
-                    return False
-                # Only UUID user identifiers are transmitted. Never send email or bot names.
-                if user_id is not None:
-                    try:
-                        user_id = (
-                            str(uuid.UUID(user_id)) if len(user_id) == 36 else None
-                        )
-                    except ValueError:
-                        user_id = None
-                self._queue.append(
-                    (
-                        event_type,
-                        safe,
-                        user_id,
-                        tenant_id,
-                        occurred_at if occurred_at is not None else time.time(),
-                        event_id,
-                        service or self.config.service,
-                        revision,
-                    )
+            # Only UUID user identifiers are transmitted. Never send email or bot names.
+            if user_id is not None:
+                try:
+                    user_id = str(uuid.UUID(user_id)) if len(user_id) == 36 else None
+                except ValueError:
+                    user_id = None
+            self._queue.append(
+                (
+                    event_type,
+                    safe,
+                    user_id,
+                    tenant_id,
+                    occurred_at if occurred_at is not None else time.time(),
+                    event_id,
+                    service or self.config.service,
+                    revision,
                 )
-                return True
-            finally:
-                self._lock.release()
+            )
+            return True
         except Exception:
             self.dropped += 1
             return False
@@ -707,9 +713,17 @@ class BoundedTelemetry:
         )
         self._thread.start()
 
-    def close(self) -> None:
-        # Shutdown must not wait on DNS, TLS, transport, or collectors.
+    def close(self, flush_timeout: float = 0.0) -> None:
+        """Stop accepting events. The sender makes one bounded final delivery attempt;
+        callers wait for it at most `flush_timeout` seconds (default: not at all)."""
         self._stop.set()
+        thread: threading.Thread | None = self._thread
+        if (
+            flush_timeout > 0
+            and thread is not None
+            and thread is not threading.current_thread()
+        ):
+            thread.join(flush_timeout)
 
     @property
     def closed(self) -> bool:
@@ -720,62 +734,88 @@ class BoundedTelemetry:
             self.config.privacy_key, value.encode(), hashlib.sha256
         ).hexdigest()
 
-    def _take_batch(self) -> list[dict[str, Any]]:
-        with self._lock:
-            items = [
-                self._queue.popleft()
-                for _ in range(min(len(self._queue), self.config.batch_size))
-            ]
+    def _take_batch(self, limit: int | None = None) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
-        for (
-            event_type,
-            data,
-            user_id,
-            tenant,
-            occurred_at,
-            event_id,
-            service,
-            revision,
-        ) in items:
-            customer: str = (
-                str(uuid.uuid5(uuid.NAMESPACE_X500, tenant))
-                if MULTI_TENANT and tenant
-                else self.config.customer_uuid
-            )
-            scope: str | None = (
-                customer
-                if MULTI_TENANT and tenant and self.config.auto_enroll
-                else None
-            )
-            if scope:
-                customer = str(uuid.uuid5(uuid.UUID(self.config.customer_uuid), scope))
-            events.append(
-                {
-                    "schema_version": 2,
-                    "revision": revision,
-                    "event_id": event_id or str(uuid.uuid4()),
-                    "event_type": event_type,
-                    "occurred_at": datetime.fromtimestamp(
-                        occurred_at, timezone.utc
-                    ).isoformat(),
-                    "customer_uuid": customer,
-                    "deployment_id": self.config.deployment_id,
-                    **({"installation_scope": scope} if scope else {}),
-                    "service": service,
-                    "user_id": user_id,
-                    "is_cloud": MULTI_TENANT,
-                    **(
-                        {"instance_domain": self.config.instance_domain_hash}
-                        if self.config.instance_domain_hash
-                        else {}
-                    ),
-                    "data": data,
-                }
-            )
+        for _ in range(self.config.batch_size if limit is None else limit):
+            try:
+                (
+                    event_type,
+                    data,
+                    user_id,
+                    tenant,
+                    occurred_at,
+                    event_id,
+                    service,
+                    revision,
+                ) = self._queue.popleft()
+            except IndexError:
+                break
+            try:
+                events.append(
+                    self._envelope(
+                        event_type,
+                        data,
+                        user_id,
+                        tenant,
+                        occurred_at,
+                        event_id,
+                        service,
+                        revision,
+                    )
+                )
+            except Exception:
+                # One malformed entry is dropped without losing the rest of the batch.
+                self.dropped += 1
         return events
 
+    def _envelope(
+        self,
+        event_type: str,
+        data: dict[str, Any],
+        user_id: str | None,
+        tenant: str | None,
+        occurred_at: float,
+        event_id: str | None,
+        service: str,
+        revision: int,
+    ) -> dict[str, Any]:
+        customer: str = (
+            str(uuid.uuid5(uuid.NAMESPACE_X500, tenant))
+            if MULTI_TENANT and tenant
+            else self.config.customer_uuid
+        )
+        scope: str | None = (
+            customer if MULTI_TENANT and tenant and self.config.auto_enroll else None
+        )
+        if scope:
+            customer = str(uuid.uuid5(uuid.UUID(self.config.customer_uuid), scope))
+        return {
+            "schema_version": 2,
+            "revision": revision,
+            "event_id": event_id or str(uuid.uuid4()),
+            "event_type": event_type,
+            "occurred_at": datetime.fromtimestamp(
+                occurred_at, timezone.utc
+            ).isoformat(),
+            "customer_uuid": customer,
+            "deployment_id": self.config.deployment_id,
+            **({"installation_scope": scope} if scope else {}),
+            "service": service,
+            "user_id": user_id,
+            "is_cloud": MULTI_TENANT,
+            **(
+                {"instance_domain": self.config.instance_domain_hash}
+                if self.config.instance_domain_hash
+                else {}
+            ),
+            "data": data,
+        }
+
     def flush_once(self, transport: Any = None) -> bool:
-        """Worker/test entry only. A retained batch has stable IDs across retries."""
+        """Send one batch. True when it was fully delivered or nothing was due.
+
+        Retained events keep stable IDs across retries.
+        """
         if not self._flush_lock.acquire(blocking=False):
             return False
         try:
@@ -786,8 +826,9 @@ class BoundedTelemetry:
     def _flush_once(self, transport: Any = None) -> bool:
         if time.monotonic() < self._blocked_until:
             return False
-        if not self._pending:
-            self._pending = self._coalesce_stages(self._take_batch())
+        room: int = self.config.batch_size - len(self._pending)
+        if room > 0:
+            self._pending.extend(self._coalesce_stages(self._take_batch(room), room))
         if not self._pending:
             return True
         try:
@@ -829,46 +870,56 @@ class BoundedTelemetry:
                         self.rejected += len(self._pending)
                         self.dropped += len(self._pending)
                         self._pending = []
+                        self._attempts = {}
                     raise RuntimeError("telemetry delivery failed")
                 raw: bytes = response.raw.read(65537)
                 if len(raw) > 65536:
                     raise ValueError("Telemetry response exceeds limit")
                 result: Any = json.loads(raw)
-            outcomes: dict[int, str] = {}
-            if isinstance(result, dict) and isinstance(result.get("results"), list):
-                for item in result["results"][: self.config.batch_size]:
-                    if isinstance(item, dict) and type(item.get("index")) is int:
-                        index: int = item["index"]
-                        if 0 <= index < len(self._pending) and item.get("status") in {
-                            "accepted",
-                            "rejected",
-                            "retry",
-                        }:
-                            if item.get("event_id") not in {
-                                None,
-                                self._pending[index]["event_id"],
-                            }:
-                                continue
-                            outcomes[index] = item["status"]
-            retained: list[dict[str, Any]] = []
-            for index, event in enumerate(self._pending):
-                outcome: str | None = outcomes.get(index)
-                if outcome == "accepted":
-                    self.sent += 1
-                elif outcome == "rejected":
-                    self.rejected += 1
-                    self.dropped += 1
-                else:
-                    retained.append(event)
-            self._pending = retained
-            if self._pending:
-                raise RuntimeError("Partial telemetry delivery; retry retained IDs")
-            self.failures = 0
-            return True
         except Exception:
+            # Outages keep the batch and back off; nothing counts against its events.
             self.failures = min(self.failures + 1, 8)
             self._blocked_until = time.monotonic() + min(300, 2**self.failures)
             return False
+        self.failures = 0
+        outcomes: dict[int, str] = {}
+        if isinstance(result, dict) and isinstance(result.get("results"), list):
+            for item in result["results"][: len(self._pending)]:
+                if isinstance(item, dict) and type(item.get("index")) is int:
+                    index: int = item["index"]
+                    if 0 <= index < len(self._pending) and item.get("status") in {
+                        "accepted",
+                        "rejected",
+                        "retry",
+                    }:
+                        if item.get("event_id") not in {
+                            None,
+                            self._pending[index]["event_id"],
+                        }:
+                            continue
+                        outcomes[index] = item["status"]
+        retained: list[dict[str, Any]] = []
+        attempts: dict[str, int] = {}
+        for index, event in enumerate(self._pending):
+            outcome: str | None = outcomes.get(index)
+            if outcome == "accepted":
+                self.sent += 1
+            elif outcome == "rejected":
+                self.rejected += 1
+                self.dropped += 1
+            else:
+                event_id: str = event["event_id"]
+                count: int = self._attempts.get(event_id, 0) + 1
+                # Events the service keeps deferring must not hold back newer events.
+                if count >= _MAX_EVENT_ATTEMPTS:
+                    self.expired += 1
+                    self.dropped += 1
+                else:
+                    attempts[event_id] = count
+                    retained.append(event)
+        self._pending = retained
+        self._attempts = attempts
+        return not retained
 
     def _enroll(self, transport: Any) -> None:
         if self._enrolled:
@@ -893,14 +944,17 @@ class BoundedTelemetry:
             if len(raw) > 4096:
                 raise ValueError("Fleet enrollment receipt too large")
             result: object = json.loads(raw)
-            if result != {
-                "customer_uuid": self.config.customer_uuid,
-                "deployment_id": self.config.deployment_id,
-            }:
+            if (
+                not isinstance(result, dict)
+                or result.get("customer_uuid") != self.config.customer_uuid
+                or result.get("deployment_id") != self.config.deployment_id
+            ):
                 raise ValueError("Fleet enrollment identity mismatch")
         self._enrolled = True
 
-    def _coalesce_stages(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _coalesce_stages(
+        self, events: list[dict[str, Any]], limit: int
+    ) -> list[dict[str, Any]]:
         """Combine batch counters in the sender thread; errors bypass the short window."""
         ready: list[dict[str, Any]] = []
         for event in events:
@@ -912,25 +966,19 @@ class BoundedTelemetry:
             ):
                 ready.append(event)
                 continue
-            key: tuple[str, ...] = tuple(
-                str(event.get(k, ""))
-                for k in (
-                    "customer_uuid",
-                    "deployment_id",
-                    "service",
-                    "installation_epoch",
-                )
-            ) + (
+            key: tuple[str, ...] = (
+                event["customer_uuid"],
+                event["service"],
                 str(data["attempt_id"]),
                 str(data.get("stage", "unknown")),
-                str(data.get("generation", 0)),
             )
             previous: dict[str, Any] | None = self._stage_pending.pop(key, None)
             if previous:
                 old: dict[str, Any] = previous["data"]
-                counters: dict[str, int | float] = dict(old.get("counters", {}))
-                for name, value in data.get("counters", {}).items():
-                    counters[name] = counters.get(name, 0) + value
+                counters: dict[str, int | float] = dict(old.get("counters") or {})
+                for name, value in (data.get("counters") or {}).items():
+                    if value is not None:
+                        counters[name] = (counters.get(name) or 0) + value
                 data["counters"] = counters
                 for name in (
                     "duration_ms",
@@ -942,10 +990,10 @@ class BoundedTelemetry:
                     "write_rejected",
                     "error_count",
                 ):
-                    if name in old:
-                        data[name] = data.get(name, 0) + old[name]
+                    if old.get(name) is not None:
+                        data[name] = (data.get(name) or 0) + old[name]
             if any(
-                data.get(name) or data.get("counters", {}).get(name)
+                data.get(name) or (data.get("counters") or {}).get(name)
                 for name in (
                     "error_count",
                     "fetch_errors",
@@ -957,16 +1005,14 @@ class BoundedTelemetry:
                 ready.append(event)
             else:
                 self._stage_pending[key] = event
-            if len(self._stage_pending) > 256:
+            if len(self._stage_pending) > _MAX_STAGE_KEYS:
                 ready.append(self._stage_pending.popitem(last=False)[1])
-        if time.monotonic() - self._last_stage_flush >= 30:
-            while self._stage_pending and len(ready) < self.config.batch_size:
+        if time.monotonic() - self._last_stage_flush >= _STAGE_WINDOW_SECONDS:
+            while self._stage_pending and len(ready) < limit:
                 ready.append(self._stage_pending.popitem(last=False)[1])
             if not self._stage_pending:
                 self._last_stage_flush = time.monotonic()
-        if len(ready) > self.config.batch_size:
-            self.dropped += len(ready) - self.config.batch_size
-        return ready[: self.config.batch_size]
+        return ready
 
     def delivery_health(self) -> dict[str, int]:
         """Background observations distinguish new loss from historical totals."""
@@ -989,57 +1035,81 @@ class BoundedTelemetry:
             + len(self._stage_pending),
         }
 
+    def _report_start(self) -> None:
+        self.emit(
+            "runtime",
+            {
+                "service_instance_id": self.fingerprint(
+                    str(os.getpid()) + ":" + str(time.time_ns())
+                ),
+                "reason": "started",
+                "restart_count": 0,
+            },
+        )
+        from onyx import __version__
+
+        version: str = "dev" if __version__ == "Development" else __version__
+        version_data: dict[str, Any] = {
+            "version": version if is_valid_version(version) else "unknown"
+        }
+        commit_sha: str = os.environ.get("ONYX_BUILD_SHA", "")
+        if re.fullmatch(r"[a-f0-9]{7,40}", commit_sha):
+            version_data["commit_sha"] = commit_sha
+        self.emit("version", version_data)
+
     def _run(self) -> None:
         last_resource: float | None = None
         try:
-            self.emit(
-                "runtime",
-                {
-                    "service_instance_id": self.fingerprint(
-                        str(os.getpid()) + ":" + str(time.time_ns())
-                    ),
-                    "reason": "started",
-                    "restart_count": 0,
-                },
-            )
-            from onyx import __version__
-
-            version: str = "dev" if __version__ == "Development" else __version__
-            version_data: dict[str, Any] = {
-                "version": version if is_valid_version(version) else "unknown"
-            }
-            commit_sha: str = os.environ.get("ONYX_BUILD_SHA", "")
-            if re.fullmatch(r"[a-f0-9]{7,40}", commit_sha):
-                version_data["commit_sha"] = commit_sha
-            self.emit("version", version_data)
+            if self.report_process:
+                self._report_start()
             while not self._stop.is_set():
-                now: float = time.monotonic()
-                if self.settings["enabled"] and poll_due(
-                    last_resource, now, self.settings["resource_interval_seconds"]
-                ):
-                    from onyx.utils.fleet_telemetry_resources import (
-                        collect_process_resource,
-                    )
+                try:
+                    now: float = time.monotonic()
+                    if self.report_process and poll_due(
+                        last_resource, now, RESOURCE_INTERVAL_SECONDS
+                    ):
+                        from onyx.utils.fleet_telemetry_resources import (
+                            collect_process_resource,
+                        )
 
-                    collect_process_resource(self)
-                    self.emit(
-                        "heartbeat",
-                        {
-                            "config_revision": self.settings["config_revision"],
-                            **self.delivery_health(),
-                            "collector_enabled": True,
-                            **self.health,
-                        },
-                    )
-                    last_resource = now
-                self.flush_once()
+                        collect_process_resource(self)
+                        self.emit(
+                            "heartbeat", {**self.delivery_health(), **self.health}
+                        )
+                        last_resource = now
+                    # A backlog drains in consecutive batches; an idle queue sends nothing.
+                    for _ in range(_MAX_BATCHES_PER_WAKEUP):
+                        if (
+                            not self.flush_once()
+                            or len(self._queue) < self.config.batch_size
+                        ):
+                            break
+                except Exception:
+                    # One failed iteration never ends delivery for the process.
+                    pass
                 self._stop.wait(self.config.flush_seconds)
+            self._final_flush()
         except Exception:
             # Telemetry failure never reaches the application, including initialization.
             pass
         finally:
             if self._session is not None:
                 self._session.close()
+
+    def _final_flush(self) -> None:
+        """Release coalesced counters and send what remains while delivery is healthy.
+
+        Short-lived processes (e.g. spawned indexing children) otherwise exit with
+        their final counters still inside the coalescing window. A failed or
+        backed-off delivery ends the attempt immediately.
+        """
+        deadline: float = time.monotonic() + _FINAL_FLUSH_SECONDS
+        self._last_stage_flush = float("-inf")
+        while (
+            self._queue or self._pending or self._stage_pending
+        ) and time.monotonic() < deadline:
+            if not self.flush_once():
+                return
 
 
 def poll_due(previous: float | None, now: float, interval: float) -> bool:
@@ -1074,19 +1144,27 @@ def automatic_config(service: str, seed: bytes) -> TelemetryConfig | None:
     )
 
 
-def _bootstrap(service: str, stopped: threading.Event) -> None:
+def _bootstrap(service: str, report_process: bool, stopped: threading.Event) -> None:
     global _client
     delay: float = 2.0
+    edition_wait: float = 0.1
     while not stopped.is_set() and not telemetry_disabled():
         try:
-            from onyx.db.fleet_enrollment import installation_seed
+            from onyx.db.fleet_enrollment import edition_selected, installation_seed
 
+            if not edition_selected():
+                # A local check: spawned children select their edition right after start.
+                stopped.wait(edition_wait)
+                edition_wait = min(5.0, edition_wait * 2)
+                continue
             config: TelemetryConfig | None = automatic_config(
                 service, installation_seed()
             )
             if config is None or stopped.is_set() or telemetry_disabled():
                 return
-            client: BoundedTelemetry = BoundedTelemetry(config)
+            client: BoundedTelemetry = BoundedTelemetry(
+                config, report_process=report_process
+            )
             _client = client
             client.start()
             return
@@ -1096,7 +1174,14 @@ def _bootstrap(service: str, stopped: threading.Event) -> None:
             delay = min(300, delay * 2)
 
 
-def start_telemetry(service: str = "api") -> BoundedTelemetry | None:
+def start_telemetry(
+    service: str = "api", *, report_process: bool = True
+) -> BoundedTelemetry | None:
+    """Start this process's sender in the background; never waits for identity or I/O.
+
+    `report_process=False` suits short-lived processes: they deliver hook events
+    without startup, resource, or heartbeat reports of their own.
+    """
     global _client, _bootstrap_thread, _bootstrap_stop, _bootstrap_pid
     if telemetry_disabled():
         return None
@@ -1123,7 +1208,7 @@ def start_telemetry(service: str = "api") -> BoundedTelemetry | None:
                     _bootstrap_pid = os.getpid()
                     _bootstrap_thread = threading.Thread(
                         target=_bootstrap,
-                        args=(service, _bootstrap_stop),
+                        args=(service, report_process, _bootstrap_stop),
                         name="fleet-telemetry-enrollment",
                         daemon=True,
                     )
@@ -1131,17 +1216,18 @@ def start_telemetry(service: str = "api") -> BoundedTelemetry | None:
             finally:
                 _bootstrap_lock.release()
             return None
-        _client = BoundedTelemetry(config)
+        _client = BoundedTelemetry(config, report_process=report_process)
         _client.start()
         return _client
     except Exception:
         return None
 
 
-def stop_telemetry() -> None:
+def stop_telemetry(flush_timeout: float = 0.0) -> None:
+    """Stop enrollment and sending. Waits at most `flush_timeout` for a final delivery."""
     _bootstrap_stop.set()
     if _client is not None:
-        _client.close()
+        _client.close(flush_timeout)
 
 
 def emit_telemetry(

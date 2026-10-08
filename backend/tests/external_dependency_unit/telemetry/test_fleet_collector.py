@@ -321,6 +321,8 @@ def test_automatic_identity_is_persistent_and_race_safe(
         )  # noqa: S608 - Generated schema and fixed table name.
     monkeypatch.setattr(fleet_enrollment, "POSTGRES_DEFAULT_SCHEMA", schema)
     monkeypatch.setattr(fleet_enrollment, "build_connection_string", lambda **_: url)
+    # Application processes select their edition at startup, before enrollment.
+    monkeypatch.setattr(fleet_enrollment, "edition_selected", lambda: True)
     with ThreadPoolExecutor(max_workers=4) as workers:
         seeds = list(
             workers.map(lambda _: fleet_enrollment.installation_seed(), range(4))

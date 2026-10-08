@@ -14,15 +14,22 @@ F = TypeVar("F", bound=Callable[..., Any])
 _QUERY_PREFIX = uuid.uuid4().int & (((1 << 64) - 1) << 64)
 
 
+_ORIGIN_CHANNELS: dict[str, str] = {
+    "api": "api",
+    "discordbot": "discord",
+    "slackbot": "slack",
+}
+# OverallStop.stop_reason values written by the chat loop.
+_STOP_OUTCOMES: dict[str, str] = {"user_cancelled": "canceled"}
+
+
 def _channel(kwargs: dict[str, Any]) -> str:
     request = kwargs.get("new_msg_req")
     if request is not None:
         # The origin enum is part of SendMessageRequest, not user text.
-        origin = request.origin.value
-        if origin.lower() == "discordbot":
-            return "discord"
-        if origin.lower() == "slackbot":
-            return "slack"
+        channel: str | None = _ORIGIN_CHANNELS.get(request.origin.value.lower())
+        if channel is not None:
+            return channel
     return "slack" if kwargs.get("slack_context") is not None else "web"
 
 
@@ -127,18 +134,12 @@ def observe_chat_packets(
                         observation.answer()
                     elif isinstance(packet.obj, PacketException):
                         observation.failed(packet.obj.exception)
-                    elif isinstance(
-                        packet.obj, OverallStop
-                    ) and packet.obj.stop_reason in {
-                        "cancelled",
-                        "canceled",
-                        "disconnected",
-                    }:
-                        observation.outcome = (
-                            "canceled"
-                            if packet.obj.stop_reason != "disconnected"
-                            else "disconnected"
+                    elif isinstance(packet.obj, OverallStop):
+                        stop_outcome: str | None = _STOP_OUTCOMES.get(
+                            packet.obj.stop_reason or ""
                         )
+                        if stop_outcome is not None:
+                            observation.outcome = stop_outcome
                 elif isinstance(packet, StreamingError):
                     # error/error_code fields may contain unrestricted strings.
                     observation.failed()

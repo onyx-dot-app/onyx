@@ -184,7 +184,7 @@ def attempt_page(
           a.total_chunks AS chunks_indexed, a.total_batches, a.completed_batches,
           a.time_started AS started_at, a.time_updated,
           a.last_progress_time AS last_progress_at, a.last_heartbeat_time AS last_heartbeat_at,
-          (a.error_msg IS NOT NULL) AS has_error,
+          (a.error_msg IS NOT NULL) AS has_error, now() AS source_time,
           left(a.error_msg,2048) AS local_error_sample,
           (SELECT left(e.error_type,128) FROM {scoped}.index_attempt_errors e
            WHERE e.index_attempt_id=a.id AND NOT e.is_resolved
@@ -232,7 +232,7 @@ def job_page(
     )
     ordering = "id" if active_only else "revision_at,id"
     statement = f"""
-        SELECT * FROM (
+        SELECT *, now() AS source_time FROM (
           SELECT 'sync:' || id::text AS id, entity_id, lower(sync_type) AS job_type,
             lower(sync_status) AS state, num_docs_synced AS docs_processed,
             0 AS users_processed, 0 AS groups_processed, 0 AS memberships_synced,
@@ -330,7 +330,7 @@ def stage_metric_page(
         JOIN {scoped}.connector_credential_pair p ON p.id=a.connector_credential_pair_id
         JOIN {scoped}.connector c ON c.id=p.connector_id
         WHERE (m.time_last_event,m.id) > (:since,:after_id)
-          AND m.time_last_event > now()-interval '30 days' AND NOT a.is_synthetic_seed
+          AND m.time_last_event > now()-interval '29 days' AND NOT a.is_synthetic_seed
         ORDER BY m.time_last_event,m.id LIMIT :limit
     """  # noqa: S608 - Validated schema; all cursor values are bound.
     with engine.connect() as connection:

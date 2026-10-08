@@ -35,6 +35,10 @@ from onyx.db.fleet_telemetry import (
     tenant_schemas,
 )
 from onyx.utils.fleet_telemetry import (
+    CONNECTOR_INTERVAL_SECONDS,
+    EXIT_FLUSH_SECONDS,
+    QUEUE_INTERVAL_SECONDS,
+    RESOURCE_INTERVAL_SECONDS,
     BoundedTelemetry,
     normalize_email_domain,
     poll_due,
@@ -42,9 +46,19 @@ from onyx.utils.fleet_telemetry import (
     stop_telemetry,
     telemetry_disabled,
 )
+from onyx.utils.variable_functionality import set_is_ee_if_available
 from shared_configs.configs import MULTI_TENANT
 
 SOURCE_EVENT_REVISION: int = 1
+# Attempt and job history stays inside the service's 190-day horizon.
+_HISTORY_HORIZON: timedelta = timedelta(days=184)
+# Stage summaries stay inside the service's 30-day diagnostics horizon.
+_STAGE_HORIZON: timedelta = timedelta(days=29)
+# At the live edge, the next read re-covers a short overlap for rows that commit late.
+_REPAIR_OVERLAP: timedelta = timedelta(minutes=10)
+# A wider sweep resends recent rows every six hours and after deferred events expire.
+_REPAIR_WINDOW: timedelta = timedelta(hours=24)
+_REPAIR_INTERVAL_SECONDS: int = 6 * 3600
 
 
 def _iso(value: Any) -> str | None:
@@ -202,11 +216,12 @@ class FleetCollector:
         self._schema_position: int = 0
         self._last_queues: float | None = None
         self._last_aws: float | None = None
-        self._last_health: float | None = None
         self._metadata: OrderedDict[tuple[str, str, str], tuple[str, float, int]] = (
             OrderedDict()
         )
         self._last_issue_level: int = 0
+        self._scanned_at: dict[tuple[str, str], datetime] = {}
+        self._sweeps: dict[tuple[str, str], tuple[float, int]] = {}
         self._source_success: dict[str, float] = {}
         self.source_errors: int = 0
         self._discovery_failures: int = 0
@@ -284,11 +299,37 @@ class FleetCollector:
                 self._metadata.popitem(last=False)
         return emitted
 
+    def _note_scan(self, schema: str, kind: str, rows: list[dict[str, Any]]) -> None:
+        # Source transaction time of this read; all rows of one read share it.
+        scanned: object = rows[-1].get("source_time") if rows else None
+        if isinstance(scanned, datetime):
+            self._scanned_at[(schema, kind)] = scanned
+
+    def _edge_start(
+        self, schema: str, kind: str, current: datetime, now: float
+    ) -> datetime:
+        """Where the next read starts after a cursor reaches the live edge.
+
+        Normally a short overlap before the last read, on the source clock, so rows
+        that commit late are read again. Every six hours, and after the service
+        deferred events until they expired, a 24-hour sweep resends recent rows;
+        durable event IDs let the service deduplicate them.
+        """
+        expired: int = self.client.expired
+        swept_at, swept_expired = self._sweeps.setdefault(
+            (schema, kind), (now, expired)
+        )
+        if now - swept_at >= _REPAIR_INTERVAL_SECONDS or expired != swept_expired:
+            self._sweeps[(schema, kind)] = (now, expired)
+            return datetime.now(timezone.utc) - _REPAIR_WINDOW
+        scanned: datetime | None = self._scanned_at.get((schema, kind))
+        return scanned - _REPAIR_OVERLAP if scanned is not None else current
+
     def collect_email_domains(self, schema: str, now: float) -> bool:
         if not poll_due(
             self._last_domains.get(schema),
             now,
-            self.client.settings["connector_interval_seconds"],
+            CONNECTOR_INTERVAL_SECONDS,
         ):
             return False
         try:
@@ -325,7 +366,7 @@ class FleetCollector:
         if not poll_due(
             self._last_license.get(schema),
             now,
-            self.client.settings["connector_interval_seconds"],
+            CONNECTOR_INTERVAL_SECONDS,
         ):
             return False
         try:
@@ -354,11 +395,11 @@ class FleetCollector:
         if not poll_due(
             self._last_stages.get(schema),
             now,
-            self.client.settings["connector_interval_seconds"],
+            CONNECTOR_INTERVAL_SECONDS,
         ):
             return
         scan_started: datetime = datetime.now(timezone.utc)
-        oldest: datetime = scan_started - timedelta(days=30)
+        oldest: datetime = scan_started - _STAGE_HORIZON
         since, after_id = self._stage_cursor.get(schema, (oldest, 0))
         try:
             rows: list[dict[str, Any]] = stage_metric_page(
@@ -418,7 +459,7 @@ class FleetCollector:
         if poll_due(
             self._last_connectors.get(schema),
             now,
-            self.client.settings["connector_interval_seconds"],
+            CONNECTOR_INTERVAL_SECONDS,
         ):
             rows: list[dict[str, Any]] | None = connector_page(
                 self.engine, schema, self._connector_cursor.get(schema, 0)
@@ -439,14 +480,15 @@ class FleetCollector:
                 if len(rows) < 200:
                     self._connector_cursor[schema] = 0
                     self._last_connectors[schema] = now
-        oldest: datetime = datetime.now(timezone.utc) - timedelta(days=184)
+        oldest: datetime = datetime.now(timezone.utc) - _HISTORY_HORIZON
         since, after_id = self._attempt_cursor.get(schema, (oldest, 0))
-        interval: int = self.client.settings["connector_interval_seconds"]
+        interval: int = CONNECTOR_INTERVAL_SECONDS
         rows = (
             attempt_page(self.engine, schema, since, after_id)
             if poll_due(self._last_attempts.get(schema), now, interval)
             else None
         )
+        self._note_scan(schema, "attempt", rows or [])
         collected = collected or rows is not None
         for row in rows or []:
             state: str = row["state"]
@@ -493,9 +535,8 @@ class FleetCollector:
             self._attempt_cursor[schema] = (updated, row["attempt_id"])
         else:
             if rows is not None and len(rows) < 200:
-                # Re-read a bounded repair window after reaching the live edge.
                 self._attempt_cursor[schema] = (
-                    datetime.now(timezone.utc) - timedelta(hours=24),
+                    self._edge_start(schema, "attempt", since, now),
                     0,
                 )
                 self._last_attempts[schema] = now
@@ -506,6 +547,7 @@ class FleetCollector:
             if poll_due(self._last_jobs.get(schema), now, interval)
             else None
         )
+        self._note_scan(schema, "job", historical or [])
         active: list[dict[str, Any]] | None = (
             job_page(
                 self.engine,
@@ -567,7 +609,7 @@ class FleetCollector:
         else:
             if historical is not None and len(historical) < 200:
                 self._job_cursor[schema] = (
-                    datetime.now(timezone.utc) - timedelta(hours=24),
+                    self._edge_start(schema, "job", job_since, now),
                     "",
                 )
                 self._last_jobs[schema] = now
@@ -580,7 +622,7 @@ class FleetCollector:
         if not poll_due(
             self._last_queues,
             time.monotonic(),
-            self.client.settings["queue_interval_seconds"],
+            QUEUE_INTERVAL_SECONDS,
         ):
             return
         from redis import Redis
@@ -667,8 +709,6 @@ class FleetCollector:
             redis.close()
 
     def tick(self) -> None:
-        if not self.client.settings["enabled"]:
-            return
         now: float = time.monotonic()
         if self._discover and poll_due(self._last_discovery, now, 60):
             try:
@@ -705,7 +745,7 @@ class FleetCollector:
         if poll_due(
             self._last_aws,
             time.monotonic(),
-            self.client.settings["resource_interval_seconds"],
+            RESOURCE_INTERVAL_SECONDS,
         ):
             try:
                 from onyx.utils.fleet_telemetry_aws import collect_aws_resources
@@ -724,7 +764,7 @@ class FleetCollector:
         if self.shard_index == 0 and poll_due(
             self._last_opensearch,
             time.monotonic(),
-            self.client.settings["resource_interval_seconds"],
+            RESOURCE_INTERVAL_SECONDS,
         ):
             self._last_opensearch = time.monotonic()
             try:
@@ -760,20 +800,13 @@ class FleetCollector:
             "last_aws_success_at": self.last_aws_success_at,
         }
         level: int = self.client.health["source_consecutive_errors"]
-        if poll_due(self._last_health, time.monotonic(), 300) or (
-            level >= 3 and self._last_issue_level < 3
-        ):
+        if level >= 3 and self._last_issue_level < 3:
+            # The sender reports health on its own cadence; failures report at once.
             self.client.emit(
                 "heartbeat",
-                {
-                    "collector_enabled": True,
-                    "config_revision": self.client.settings["config_revision"],
-                    **self.client.delivery_health(),
-                    **self.client.health,
-                },
+                {**self.client.delivery_health(), **self.client.health},
             )
-            self._last_health = time.monotonic()
-            self._last_issue_level = level
+        self._last_issue_level = level
 
 
 def main() -> None:
@@ -788,6 +821,9 @@ def main() -> None:
         if not args.once:
             stopped.wait()
         return
+    # Select the edition before identity storage resolves the secret codec, like
+    # every other Onyx process does at startup.
+    set_is_ee_if_available()
     client: BoundedTelemetry | None = start_telemetry("collector")
     while client is None and not stopped.wait(2):
         client = start_telemetry("collector")
@@ -816,12 +852,13 @@ def main() -> None:
             if kubernetes is not None:
                 kubernetes.tick()
             if args.once:
-                client.flush_once()
+                # One-shot runs report collector health and wait briefly for delivery.
+                client.emit("heartbeat", {**client.delivery_health(), **client.health})
                 break
             stopped.wait(2)
     finally:
         collector.engine.dispose()
-        stop_telemetry()
+        stop_telemetry(flush_timeout=EXIT_FLUSH_SECONDS if args.once else 0.0)
 
 
 if __name__ == "__main__":

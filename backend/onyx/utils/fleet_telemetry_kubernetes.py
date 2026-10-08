@@ -11,7 +11,12 @@ from urllib.parse import quote, urlsplit
 
 import requests
 
-from onyx.utils.fleet_telemetry import BoundedTelemetry, is_valid_version, poll_due
+from onyx.utils.fleet_telemetry import (
+    RESOURCE_INTERVAL_SECONDS,
+    BoundedTelemetry,
+    is_valid_version,
+    poll_due,
+)
 
 _SERVICE_ROLES = {
     "api-server": "api",
@@ -72,7 +77,10 @@ def quantity(value: Any, *, cpu: bool = False) -> float | None:
     if suffix not in multipliers:
         return None
     result = float(match[1]) * multipliers[suffix]
-    return result if math.isfinite(result) and 0 <= result <= 1e18 else None
+    if not math.isfinite(result) or not 0 <= result <= 1e18:
+        return None
+    # Memory is a whole byte count; the service rejects fractional byte values.
+    return result if cpu else round(result)
 
 
 class KubernetesCollector:
@@ -334,8 +342,6 @@ class KubernetesCollector:
                 )
 
     def tick(self) -> None:
-        if not self.client.settings["enabled"]:
-            return
         try:
             now = time.monotonic()
             if poll_due(self._last_poll, now, 30):
@@ -354,11 +360,7 @@ class KubernetesCollector:
                         else None
                     )
                 self._last_poll = now
-            if poll_due(
-                self._last_metrics,
-                now,
-                self.client.settings["resource_interval_seconds"],
-            ):
+            if poll_due(self._last_metrics, now, RESOURCE_INTERVAL_SECONDS):
                 response = self._get(
                     f"/apis/metrics.k8s.io/v1beta1/namespaces/{quote(self.namespace)}/pods"
                 )
