@@ -13,7 +13,10 @@ from onyx.natural_language_processing.embedding_auth import (
     build_embedding_auth,
 )
 from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
-from onyx.natural_language_processing.utils import TiktokenTokenizer, get_tokenizer
+from onyx.natural_language_processing.utils import (
+    TiktokenTokenizer,
+    _try_initialize_tokenizer,
+)
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 _MODULE = "onyx.natural_language_processing.search_nlp_models"
@@ -155,8 +158,16 @@ def test_bifrost_auth_allows_a_missing_key() -> None:
 
 
 def test_tokenizer_strips_the_gateway_provider_prefix() -> None:
-    tokenizer = get_tokenizer(
-        model_name="openai/text-embedding-3-small",
-        provider_type=EmbeddingProvider.BIFROST,
-    )
+    def encoding_for_model(model_name: str) -> object:
+        if "/" in model_name:
+            raise KeyError(model_name)
+        return object()
+
+    model_name = "openai/bifrost-tokenizer-test"
+    with (
+        patch("tiktoken.encoding_for_model", side_effect=encoding_for_model),
+        patch.dict(TiktokenTokenizer._instances, clear=True),
+    ):
+        tokenizer = _try_initialize_tokenizer(model_name, EmbeddingProvider.BIFROST)
+
     assert isinstance(tokenizer, TiktokenTokenizer)
