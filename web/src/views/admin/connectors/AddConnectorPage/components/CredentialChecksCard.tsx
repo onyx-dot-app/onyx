@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   Divider,
+  Fold,
   IconTooltip,
   Log,
   type LogVariant,
@@ -365,57 +366,64 @@ function CheckCardView({
     />
   );
 
-  // Folded, the whole card is one target that opens it.
-  if (collapsed) {
-    return (
-      <SelectCard
-        // Filled rests on white, as the expanded card does.
-        state="filled"
-        border="solid"
-        rounding={4}
-        padding={2}
-        onClick={() => setCollapsed(false)}
-      >
-        {header}
-      </SelectCard>
-    );
-  }
-
+  // One card in both states, so folding animates instead of swapping
+  // elements. Folded, the whole card is a target that opens it; open, it is
+  // passive: no hover, and only its buttons act.
   return (
-    <Card border="solid" rounding={4} padding={2}>
-      <Section justifyContent="start" alignItems="stretch" height="fit" gap={1}>
+    <SelectCard
+      // Filled rests on white.
+      state="filled"
+      border="solid"
+      rounding={4}
+      padding={2}
+      passive={!collapsed}
+      onClick={collapsed ? () => setCollapsed(false) : undefined}
+    >
+      <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
         {header}
 
-        {notice && (
-          <Text font="main-ui-body" color="status-error-05" role="alert">
-            {notice}
-          </Text>
-        )}
-
-        {hasResults || openChecks.length > 0 ? (
+        <Fold open={!collapsed}>
+          {/* The space below the header lives inside the fold, so a closed
+              fold takes none. */}
           <Section
             justifyContent="start"
             alignItems="stretch"
             height="fit"
-            gap={0}
+            gap={1}
+            className="pt-1"
           >
-            {groups.map((group) => (
-              <CheckGroup
-                key={group.label}
-                label={group.label}
-                checks={group.checks}
-              />
-            ))}
+            {notice && (
+              <Text font="main-ui-body" color="status-error-05" role="alert">
+                {notice}
+              </Text>
+            )}
+
+            {hasResults || openChecks.length > 0 ? (
+              <Section
+                justifyContent="start"
+                alignItems="stretch"
+                height="fit"
+                gap={0}
+              >
+                {groups.map((group) => (
+                  <CheckGroup
+                    key={group.label}
+                    label={group.label}
+                    checks={group.checks}
+                  />
+                ))}
+              </Section>
+            ) : (
+              !notice && (
+                <Text font="main-ui-body" color="text-03">
+                  {isRunning ? t("running.label") : t("empty.label")}
+                </Text>
+              )
+            )}
           </Section>
-        ) : (
-          !notice && (
-            <Text font="main-ui-body" color="text-03">
-              {isRunning ? t("running.label") : t("empty.label")}
-            </Text>
-          )
-        )}
+        </Fold>
       </Section>
-    </Card>
+    </SelectCard>
   );
 }
 
