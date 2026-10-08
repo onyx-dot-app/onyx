@@ -18,6 +18,7 @@ import {
   SvgChevronRight,
   SvgCode,
   SvgSliders,
+  SvgSparkle,
   SvgThermometer,
 } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
@@ -642,7 +643,9 @@ export default function ModelSelectorContent({
             description={description}
             onClick={() => onSelect(option)}
             rightChildren={
-              modelDetail && !option.isAuto ? (
+              option.isAuto ? (
+                <SvgSparkle className="h-4 w-4 stroke-status-info-05 fill-status-info-05" />
+              ) : modelDetail ? (
                 <Hoverable.Item group="model-row" variant="appear-on-hover">
                   <Button
                     icon={SvgSliders}
