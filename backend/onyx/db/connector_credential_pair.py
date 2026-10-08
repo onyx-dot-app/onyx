@@ -151,9 +151,7 @@ def build_restricted_acl_guard(
     return or_(~has_cc_pair(hidden_pair), has_cc_pair(visible_acl_pair))
 
 
-def _has_cc_pair_matching(
-    db_session: Session, clause: ColumnElement[bool]
-) -> bool:
+def _has_cc_pair_matching(db_session: Session, clause: ColumnElement[bool]) -> bool:
     return bool(
         db_session.scalar(
             select(select(ConnectorCredentialPair.id).where(clause).exists())
