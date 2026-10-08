@@ -669,6 +669,23 @@ class TestThePermSyncWalk:
 
         assert _synced(connector) == {"ZOOM_MEETING_uuid-1": ExternalAccess.empty()}
 
+    def test_the_walk_ends_with_a_count_of_what_went_private(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(
+            client, settings=recording_settings(share_recording="none")
+        )
+        client.get_user.side_effect = http_error(404, 1001)
+        _listing(client, _recording("uuid-1"), _recording("uuid-2"))
+
+        with caplog.at_level("WARNING"):
+            _synced(connector)
+
+        said = [r for r in caplog.records if "made 2 recording(s)" in r.getMessage()]
+        assert len(said) == 1
+        assert "2 that nobody could be named for" in said[0].getMessage()
+
     def test_a_recording_deleted_mid_walk_is_private(self) -> None:
         connector, client = _connector(host_emails=["jill@example.com"])
         with_recording_access(client)

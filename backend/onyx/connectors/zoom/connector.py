@@ -9,6 +9,7 @@ its document id, with no discovery and no checkpoint.
 """
 
 import copy
+import logging
 from collections.abc import Generator
 from functools import partial
 from typing import Any
@@ -206,6 +207,9 @@ class ZoomConnector(
         # permission-sync probe asks about the same things instead of sampling
         # again. None means it has not run.
         self._probe_sample: ProbeSample | None = None
+        # Recordings the running doc sync made private, by reason.
+        self._unnamed = 0
+        self._gone = 0
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         account_id = credentials.get("zoom_account_id")
@@ -324,8 +328,10 @@ class ZoomConnector(
             return self._resolve_access(recording)
         except ZoomAccessListUnavailable as e:
             logger.warning("%s", e)
+            self._unnamed += 1
         except ZoomRecordingGone as e:
             logger.info("%s", e)
+            self._gone += 1
         return ExternalAccess.empty()
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ZoomConnectorCheckpoint:
@@ -369,7 +375,19 @@ class ZoomConnector(
     ) -> GenerateSlimDocumentOutput:
         """The doc sync makes every indexed document this does not list private,
         so like pruning this ignores the poll window."""
-        return self._slim_documents(resolve_access=self._synced_access)
+        self._unnamed = self._gone = 0
+        yield from self._slim_documents(resolve_access=self._synced_access)
+        if self._unnamed or self._gone:
+            # One line per walk, so a mass revocation is not lost among the
+            # per-recording lines. Deletions alone are routine.
+            logger.log(
+                logging.WARNING if self._unnamed else logging.INFO,
+                "Zoom permission sync made %s recording(s) private: %s that "
+                "nobody could be named for and %s that Zoom deleted during the walk",
+                self._unnamed + self._gone,
+                self._unnamed,
+                self._gone,
+            )
 
     def _slim_documents(
         self, resolve_access: AccessResolver | None
