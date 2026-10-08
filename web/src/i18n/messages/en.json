@@ -6159,6 +6159,8 @@
         "unknownError": "Unknown error"
       },
       "modelRouting": {
+        "title": "Model Routing",
+        "description": "Send each chat through a router model instead of a fixed one. Users see a single Auto item in the model picker.",
         "autoMode": {
           "title": "Auto Mode",
           "description": "Show an Auto item in the model picker that routes each message through the chosen router model."

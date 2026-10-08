@@ -6159,6 +6159,8 @@
         "unknownError": "Error desconocido"
       },
       "modelRouting": {
+        "title": "Enrutamiento de modelos",
+        "description": "Dirige cada chat a través de un modelo enrutador en lugar de uno fijo. Los usuarios ven un único elemento Auto en el selector de modelos.",
         "autoMode": {
           "title": "Modo automático",
           "description": "Muestra una opción Auto en el selector de modelos que enruta cada mensaje a través del modelo de router elegido."

@@ -6159,6 +6159,8 @@
         "unknownError": "Erreur inconnue"
       },
       "modelRouting": {
+        "title": "Routage des modèles",
+        "description": "Acheminez chaque conversation via un modèle routeur au lieu d'un modèle fixe. Les utilisateurs voient un seul élément Auto dans le sélecteur de modèles.",
         "autoMode": {
           "title": "Mode auto",
           "description": "Affiche un élément Auto dans le sélecteur de modèle qui achemine chaque message via le modèle routeur choisi."

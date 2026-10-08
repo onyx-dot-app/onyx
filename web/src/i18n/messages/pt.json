@@ -6159,6 +6159,8 @@
         "unknownError": "Erro desconhecido"
       },
       "modelRouting": {
+        "title": "Roteamento de modelos",
+        "description": "Encaminhe cada conversa por um modelo roteador em vez de um modelo fixo. Os usuários veem um único item Auto no seletor de modelos.",
         "autoMode": {
           "title": "Modo automático",
           "description": "Mostra um item Auto no seletor de modelos que encaminha cada mensagem pelo modelo de roteador escolhido."

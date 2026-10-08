@@ -6159,6 +6159,8 @@
         "unknownError": "未知错误"
       },
       "modelRouting": {
+        "title": "模型路由",
+        "description": "通过路由器模型而不是固定模型处理每个聊天。用户在模型选择器中只会看到一个 Auto 项。",
         "autoMode": {
           "title": "",
           "description": "“”，。"

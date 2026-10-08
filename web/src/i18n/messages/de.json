@@ -6159,6 +6159,8 @@
         "unknownError": "Unbekannter Fehler"
       },
       "modelRouting": {
+        "title": "Modell-Routing",
+        "description": "Leiten Sie jeden Chat über ein Router-Modell statt über ein festes Modell. Benutzer sehen ein einzelnes Auto-Element in der Modellauswahl.",
         "autoMode": {
           "title": "Auto-Modus",
           "description": "Zeigt ein Auto-Element in der Modellauswahl, das jede Nachricht über das gewählte Router-Modell leitet."

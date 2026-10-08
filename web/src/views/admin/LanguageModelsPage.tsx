@@ -620,53 +620,75 @@ export default function LanguageModelsPage() {
                   />
                 </InputHorizontal>
               )}
-              <InputHorizontal
-                title={t("modelRouting.autoMode.title")}
-                description={t("modelRouting.autoMode.description")}
-                withLabel
-              >
-                <InputSwitch
-                  checked={routingEnabled}
-                  disabled={pendingRoutingEnabled !== null}
-                  onCheckedChange={(checked) => {
-                    void handleRoutingEnabledChange(checked);
-                  }}
-                />
-              </InputHorizontal>
-              {routingEnabled && (
-                <InputHorizontal
-                  title={t("modelRouting.target.title")}
-                  description={t("modelRouting.target.description")}
-                  withLabel
-                >
-                  {routerProviders.length > 0 ? (
-                    <SimpleModelSelector
-                      providers={routerProviders}
-                      value={
-                        pendingRoutingTarget ??
-                        settings.model_routing_model_configuration_id ??
-                        null
-                      }
-                      grouped={
-                        !(
-                          pendingHideGrouping ?? settings.hide_provider_grouping
-                        )
-                      }
-                      onChange={(modelConfigurationId) => {
-                        void handleRoutingTargetChange(modelConfigurationId);
-                      }}
-                    />
-                  ) : (
-                    <Text font="secondary-body" color="text-03">
-                      {t("modelRouting.target.empty")}
-                    </Text>
-                  )}
-                </InputHorizontal>
-              )}
             </Section>
           </Card>
         ) : (
           <MessageCard variant="info" title={t("noProviders.title")} />
+        )}
+
+        {/* ── Model Routing — admin-picked router behind the picker's Auto item ── */}
+        {hasProviders && (
+          <GeneralLayouts.Section
+            gap={3}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              title={t("modelRouting.title")}
+              description={t("modelRouting.description")}
+              sizePreset="main-content"
+              variant="section"
+            />
+            <Card border="solid" rounding={4}>
+              <Section alignItems="stretch">
+                <InputHorizontal
+                  title={t("modelRouting.autoMode.title")}
+                  description={t("modelRouting.autoMode.description")}
+                  withLabel
+                >
+                  <InputSwitch
+                    checked={routingEnabled}
+                    disabled={pendingRoutingEnabled !== null}
+                    onCheckedChange={(checked) => {
+                      void handleRoutingEnabledChange(checked);
+                    }}
+                  />
+                </InputHorizontal>
+                {routingEnabled && (
+                  <InputHorizontal
+                    title={t("modelRouting.target.title")}
+                    description={t("modelRouting.target.description")}
+                    withLabel
+                  >
+                    {routerProviders.length > 0 ? (
+                      <SimpleModelSelector
+                        providers={routerProviders}
+                        value={
+                          pendingRoutingTarget ??
+                          settings.model_routing_model_configuration_id ??
+                          null
+                        }
+                        grouped={
+                          !(
+                            pendingHideGrouping ??
+                            settings.hide_provider_grouping
+                          )
+                        }
+                        onChange={(modelConfigurationId) => {
+                          void handleRoutingTargetChange(modelConfigurationId);
+                        }}
+                      />
+                    ) : (
+                      <Text font="secondary-body" color="text-03">
+                        {t("modelRouting.target.empty")}
+                      </Text>
+                    )}
+                  </InputHorizontal>
+                )}
+              </Section>
+            </Card>
+          </GeneralLayouts.Section>
         )}
 
         {/* ── Available Providers (only when providers exist) ── */}
