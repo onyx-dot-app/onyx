@@ -18,7 +18,11 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import KV_REINDEX_KEY, NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import ModelConfiguration, User
+from onyx.db.llm import (
+    fetch_model_configuration_by_id,
+    mark_model_configuration_visible,
+)
+from onyx.db.models import User
 from onyx.db.notification import (
     dismiss_all_notifications,
     get_notifications,
@@ -33,6 +37,7 @@ from onyx.server.features.build.utils import (
     is_craft_enabled_for_user,
 )
 from onyx.server.features.notifications.models import NotificationResponse
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
@@ -140,17 +145,17 @@ def admin_patch_settings(
             "model_routing_model_configuration_id" in settings.model_fields_set
             and routing_id is not None
         ):
-            routing_model = db_session.get(ModelConfiguration, routing_id)
+            routing_model = fetch_model_configuration_by_id(db_session, routing_id)
             if routing_model is None or not routing_model.is_router:
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT,
                     "Model routing requires a router model configuration.",
                 )
             # The picker reads the backing model off the provider payload,
-            # which only returns visible models on page one.
-            if not routing_model.is_visible:
-                routing_model.is_visible = True
-                db_session.commit()
+            # which only returns visible models on page one. Provider listings
+            # are cached server-side, so the flip must drop them.
+            if mark_model_configuration_visible(db_session, routing_model):
+                invalidate_provider_listing_cache()
 
         store_settings(merged)
 

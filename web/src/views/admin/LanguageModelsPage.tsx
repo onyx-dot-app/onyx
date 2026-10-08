@@ -3,7 +3,8 @@
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { useSWRConfig } from "swr";
+import useSWR, { useSWRConfig } from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   useAdminLanguageModel,
   useAdminLanguageModels,
@@ -42,7 +43,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
-import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
+import {
+  LLMProviderName,
+  LLMProviderView,
+  ModelConfigurationPage,
+} from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
@@ -389,19 +394,34 @@ export default function LanguageModelsPage() {
   );
 
   // Router models (openrouter/auto, gateway configs) usable as the model
-  // routing target. Listed whether or not an admin enabled them in the
-  // provider's model set.
-  const routerProviders = useMemo(
-    () =>
-      (existingLlmProviders ?? [])
-        .map((provider) => ({
-          ...provider,
-          model_configurations: provider.model_configurations.filter(
-            (mc) => mc.is_router
-          ),
-        }))
-        .filter((provider) => provider.model_configurations.length > 0),
-    [existingLlmProviders]
+  // routing target. Fetched independently of each provider's first page —
+  // hidden routers sort past it when the visible set fills a page, which
+  // would otherwise leave them unselectable or claim none exist.
+  const providerIdsKey = (existingLlmProviders ?? [])
+    .map((provider) => provider.id)
+    .join(",");
+  const { data: routerProviders } = useSWR<LLMProviderView[]>(
+    providerIdsKey === "" ? null : ["llm-router-models", providerIdsKey],
+    async () => {
+      const pages = await Promise.all(
+        (existingLlmProviders ?? []).map(async (provider) => {
+          const page = await errorHandlingFetcher<ModelConfigurationPage>(
+            `${SWR_KEYS.llmProviderModels(provider.id)}?offset=0&router_only=true`
+          );
+          return {
+            ...provider,
+            model_configurations: page.model_configurations.map((mc) => ({
+              ...mc,
+              effectiveDisplayName:
+                mc.custom_display_name || mc.display_name || mc.name,
+            })),
+          };
+        })
+      );
+      return pages.filter(
+        (provider) => provider.model_configurations.length > 0
+      );
+    }
   );
 
   // Resolve the current default to a model_configuration_id for the select
@@ -532,12 +552,18 @@ export default function LanguageModelsPage() {
   }
 
   async function handleRoutingTargetChange(modelConfigurationId: number) {
+    if (pendingRoutingTarget !== null) return;
     setPendingRoutingTarget(modelConfigurationId);
     try {
       await updateAdminSettings({
         model_routing_model_configuration_id: modelConfigurationId,
       });
-      await mutate(SWR_KEYS.settings);
+      // The backend may have flipped the router's visibility; the provider
+      // listings the picker reads must refetch, not just settings.
+      await Promise.all([
+        mutate(SWR_KEYS.settings),
+        refreshLlmProviderCaches(mutate),
+      ]);
       toast.success(t("toasts.settingsUpdated"));
     } catch (e) {
       toast.error(
@@ -661,7 +687,8 @@ export default function LanguageModelsPage() {
                     description={t("modelRouting.target.description")}
                     withLabel
                   >
-                    {routerProviders.length > 0 ? (
+                    {routerProviders ===
+                    undefined ? null : routerProviders.length > 0 ? (
                       <SimpleModelSelector
                         providers={routerProviders}
                         value={
@@ -669,6 +696,7 @@ export default function LanguageModelsPage() {
                           settings.model_routing_model_configuration_id ??
                           null
                         }
+                        disabled={pendingRoutingTarget !== null}
                         grouped={
                           !(
                             pendingHideGrouping ??

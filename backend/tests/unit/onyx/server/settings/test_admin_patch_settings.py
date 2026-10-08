@@ -129,14 +129,16 @@ def test_llm_gateway_enabled_updates_on_business_tier(
 def test_routing_target_must_be_a_router(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    db_session = MagicMock()
-    db_session.get.return_value = MagicMock(is_router=False)
+    monkeypatch.setattr(
+        settings_api,
+        "fetch_model_configuration_by_id",
+        lambda *_a, **_k: MagicMock(is_router=False),
+    )
     with pytest.raises(OnyxError) as exc_info:
         _patch_settings(
             {"model_routing_model_configuration_id": 3},
             Settings(),
             monkeypatch,
-            db_session=db_session,
         )
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
 
@@ -144,15 +146,28 @@ def test_routing_target_must_be_a_router(
 def test_routing_target_marks_hidden_router_visible(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    routing_model = MagicMock(is_router=True, is_visible=False)
-    db_session = MagicMock()
-    db_session.get.return_value = routing_model
+    marked: list[MagicMock] = []
+    invalidated: list[bool] = []
+    monkeypatch.setattr(
+        settings_api,
+        "fetch_model_configuration_by_id",
+        lambda *_a, **_k: MagicMock(is_router=True),
+    )
+    monkeypatch.setattr(
+        settings_api,
+        "mark_model_configuration_visible",
+        lambda _s, mc: marked.append(mc) or True,
+    )
+    monkeypatch.setattr(
+        settings_api,
+        "invalidate_provider_listing_cache",
+        lambda: invalidated.append(True),
+    )
     result = _patch_settings(
         {"model_routing_model_configuration_id": 3},
         Settings(),
         monkeypatch,
-        db_session=db_session,
     )
     assert result.model_routing_model_configuration_id == 3
-    assert routing_model.is_visible is True
-    db_session.commit.assert_called_once()
+    assert len(marked) == 1
+    assert invalidated == [True]

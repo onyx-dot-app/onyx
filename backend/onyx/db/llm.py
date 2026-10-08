@@ -829,12 +829,15 @@ def fetch_model_configurations_page(
     provider_ids: list[int],
     offset: int = 0,
     name_query: str | None = None,
+    router_only: bool = False,
 ) -> dict[int, ModelConfigurationWindow]:
     """The same LLM_PROVIDER_MODEL_PAGE_SIZE window of every provider's models,
     visible first (routers before other visible models, so a picker's router
     tab sees them all on page one) then by name. `name_query` narrows each
     provider to models whose name or display names contain it, so a picker can
-    search models it has not paged in yet."""
+    search models it has not paged in yet. `router_only` restricts the window
+    to router model configurations regardless of visibility, so an admin
+    picker can list every router even when hidden ones sort past page one."""
     if not provider_ids:
         return {}
 
@@ -854,6 +857,10 @@ def fetch_model_configurations_page(
     ranked_stmt = select(ModelConfiguration.id.label("id"), row_number).where(
         ModelConfiguration.llm_provider_id.in_(provider_ids)
     )
+    if router_only:
+        ranked_stmt = ranked_stmt.where(
+            ModelConfiguration.is_router == True  # noqa: E712
+        )
     if name_query:
         ranked_stmt = ranked_stmt.where(
             or_(
@@ -1206,6 +1213,18 @@ def fetch_model_configuration_by_id(
         .options(selectinload(ModelConfiguration.llm_provider))
         .where(ModelConfiguration.id == model_configuration_id)
     )
+
+
+def mark_model_configuration_visible(
+    db_session: Session, model_configuration: ModelConfiguration
+) -> bool:
+    """Flip `is_visible` on and commit. False when it was already visible, so
+    the caller can skip downstream work like cache invalidation."""
+    if model_configuration.is_visible:
+        return False
+    model_configuration.is_visible = True
+    db_session.commit()
+    return True
 
 
 def fetch_llm_provider_view(
