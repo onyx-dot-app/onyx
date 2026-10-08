@@ -2844,7 +2844,7 @@
           "label": "Cancelar"
         },
         "connectButton": {
-          "label": "Conectar"
+          "label": "Criar conector"
         },
         "description": "Conecte-se ao {source} e configure o conector para {appName}.{hasDocs, select, true { Ver [documentação]({url})} other {}}"
       },
@@ -8907,6 +8907,68 @@
         "settingsUpdated": "Configurações atualizadas",
         "settingsUpdateFailed": "Falha ao atualizar as configurações"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "Execute as verificações do conector acima e resolva quaisquer falhas para continuar.",
+      "prompt": {
+        "title": "Testar conexão",
+        "description": "{appName} executará verificações para validar os escopos necessários antes de continuar.",
+        "startButton": {
+          "label": "Iniciar verificações"
+        }
+      },
+      "title": "Verificações do conector",
+      "groups": {
+        "failed": "{count} com falha",
+        "indeterminate": "{count} não verificadas",
+        "passed": "{count} concluídas",
+        "skipped": "{count} ignoradas",
+        "running": "{count} em execução",
+        "expected": "{count} esperadas"
+      },
+      "status": {
+        "passed": "Aprovada",
+        "failed": "Com falha",
+        "indeterminate": "Não foi possível verificar",
+        "skipped": "Ignorada",
+        "running": "Testando…",
+        "pending": "Na fila",
+        "waiting": "Aguardando configurações"
+      },
+      "required": {
+        "label": "Obrigatória"
+      },
+      "running": {
+        "label": "Executando verificações…"
+      },
+      "empty": {
+        "label": "Nenhuma verificação foi executada ainda."
+      },
+      "docsLink": {
+        "label": "Documentação"
+      },
+      "rerunButton": {
+        "label": "Executar as verificações novamente"
+      },
+      "foldButton": {
+        "fold": "Recolher",
+        "expand": "Expandir"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} com falha",
+        "unverified": "{count} não verificadas",
+        "inProgress": "{count} em andamento",
+        "expected": "{count} a mais previstas",
+        "skipped": "{count} ignoradas",
+        "successful": "{count} bem-sucedidas"
+      },
+      "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
+      "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
+      "state": {
+        "completed": "Verificações concluídas",
+        "inProgress": "Verificações em andamento…"
+      }
     }
   },
   "agents": {
@@ -13420,6 +13482,9 @@
       "oneMonth": "1M",
       "sevenDays": "7D",
       "threeMonths": "3M"
+    },
+    "iconTooltip": {
+      "label": "Mais informações"
     },
     "input": {
       "day": "Dia",

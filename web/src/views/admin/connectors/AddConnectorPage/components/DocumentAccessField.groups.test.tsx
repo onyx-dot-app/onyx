@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import { Formik } from "formik";
-import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/sections/shared/DocumentAccessField";
+import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/components/DocumentAccessField";
 import {
   ConfigurableSources,
   ValidSources,

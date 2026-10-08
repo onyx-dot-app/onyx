@@ -90,7 +90,8 @@ type DividerFoldableProps = Omit<
   children?: React.ReactNode;
   /**
    * Overrides the header's interaction state (a listbox highlights the
-   * title the keyboard stopped on). Unset, an open header reads as hover.
+   * title the keyboard stopped on). Unset, the header follows the pointer,
+   * open or folded.
    */
   interaction?: InteractiveStatelessInteraction;
   /**
@@ -214,7 +215,7 @@ function FoldableDivider({
       <Interactive.Stateless
         variant="default"
         prominence="tertiary"
-        interaction={interaction ?? (isOpen ? "hover" : "rest")}
+        interaction={interaction}
         onClick={toggle}
       >
         <Interactive.Container

@@ -1,0 +1,36 @@
+@reference "#reference.css";
+
+/* ============================================================================
+   Fold — content that opens and closes by animating its height.
+
+     .opal-fold          grid 0fr ↔ 1fr, opacity fade
+       .opal-fold-inner  min-height: 0, clips the grid child
+
+   Pure CSS. Paints nothing, so the content stays part of its surroundings.
+============================================================================ */
+
+.opal-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 200ms ease-out,
+    opacity 200ms ease-out;
+}
+
+.opal-fold[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+/* Clips the grid child so it collapses to zero cleanly. */
+.opal-fold-inner {
+  @apply overflow-hidden;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-fold {
+    transition: none;
+  }
+}

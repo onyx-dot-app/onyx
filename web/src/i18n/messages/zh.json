@@ -2844,7 +2844,7 @@
           "label": "取消"
         },
         "connectButton": {
-          "label": "连接"
+          "label": "创建连接器"
         },
         "description": "连接到 {source} 并为 {appName} 设置连接器。{hasDocs, select, true {查看[文档]({url})} other {}}"
       },
@@ -8907,6 +8907,68 @@
         "settingsUpdated": "设置已更新",
         "settingsUpdateFailed": "更新设置失败"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "请先运行上方的连接器检查，并解决所有失败项，然后继续。",
+      "prompt": {
+        "title": "测试连接",
+        "description": "{appName} 将在继续之前运行检查，以验证所需的权限范围。",
+        "startButton": {
+          "label": "开始检查"
+        }
+      },
+      "title": "连接器检查",
+      "groups": {
+        "failed": "{count} 项失败",
+        "indeterminate": "{count} 项未验证",
+        "passed": "{count} 项完成",
+        "skipped": "{count} 项跳过",
+        "running": "{count} 项运行中",
+        "expected": "{count} 项待运行"
+      },
+      "status": {
+        "passed": "通过",
+        "failed": "失败",
+        "indeterminate": "无法验证",
+        "skipped": "已跳过",
+        "running": "正在测试…",
+        "pending": "排队中",
+        "waiting": "正在等待设置"
+      },
+      "required": {
+        "label": "必需"
+      },
+      "running": {
+        "label": "正在运行检查…"
+      },
+      "empty": {
+        "label": "尚未运行任何检查。"
+      },
+      "docsLink": {
+        "label": "文档"
+      },
+      "rerunButton": {
+        "label": "重新运行检查"
+      },
+      "foldButton": {
+        "fold": "收起",
+        "expand": "展开"
+      },
+      "titleCount": "（{complete}/{total}）",
+      "summary": {
+        "failed": "{count} 项失败",
+        "unverified": "{count} 项未验证",
+        "inProgress": "{count} 项进行中",
+        "expected": "{count} 项待执行",
+        "skipped": "{count} 项跳过",
+        "successful": "{count} 项成功"
+      },
+      "failedToRun": "检查未能运行。请重试。",
+      "requiredFailed": "{count, plural, one {# 项必需检查失败} other {# 项必需检查失败}}",
+      "state": {
+        "completed": "检查已完成",
+        "inProgress": "检查进行中…"
+      }
     }
   },
   "agents": {
@@ -13420,6 +13482,9 @@
       "oneMonth": "1个月",
       "sevenDays": "7天",
       "threeMonths": "3个月"
+    },
+    "iconTooltip": {
+      "label": "更多信息"
     },
     "input": {
       "day": "日",

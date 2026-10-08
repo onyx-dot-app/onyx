@@ -2844,7 +2844,7 @@
           "label": "Cancel"
         },
         "connectButton": {
-          "label": "Connect"
+          "label": "Create Connector"
         },
         "description": "Connect to {source} and set up the connector for {appName}.{hasDocs, select, true { View [docs]({url})} other {}}"
       },
@@ -8907,6 +8907,68 @@
         "settingsUpdated": "Settings updated",
         "settingsUpdateFailed": "Failed to update settings"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "Run the connector checks above, and resolve any failures, to continue.",
+      "prompt": {
+        "title": "Test Connection",
+        "description": "{appName} will run checks to validate required scopes before proceeding.",
+        "startButton": {
+          "label": "Start Checks"
+        }
+      },
+      "title": "Connector Checks",
+      "groups": {
+        "failed": "{count} Failed",
+        "indeterminate": "{count} Unverified",
+        "passed": "{count} Completed",
+        "skipped": "{count} Skipped",
+        "running": "{count} Running",
+        "expected": "{count} Expected"
+      },
+      "status": {
+        "passed": "Passed",
+        "failed": "Failed",
+        "indeterminate": "Could not be verified",
+        "skipped": "Skipped",
+        "running": "Testing…",
+        "pending": "Queued",
+        "waiting": "Waiting for settings"
+      },
+      "required": {
+        "label": "Required"
+      },
+      "running": {
+        "label": "Running checks…"
+      },
+      "empty": {
+        "label": "No checks have run yet."
+      },
+      "docsLink": {
+        "label": "Documentation"
+      },
+      "rerunButton": {
+        "label": "Rerun Checks"
+      },
+      "foldButton": {
+        "fold": "Fold",
+        "expand": "Expand"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} failed",
+        "unverified": "{count} unverified",
+        "inProgress": "{count} in progress",
+        "expected": "{count} more expected",
+        "skipped": "{count} skipped",
+        "successful": "{count} successful"
+      },
+      "failedToRun": "Checks failed to run. Try again.",
+      "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
+      "state": {
+        "completed": "Checks completed",
+        "inProgress": "Checks in progress…"
+      }
     }
   },
   "agents": {
@@ -13420,6 +13482,9 @@
       "oneMonth": "1M",
       "sevenDays": "7D",
       "threeMonths": "3M"
+    },
+    "iconTooltip": {
+      "label": "More information"
     },
     "input": {
       "day": "Day",

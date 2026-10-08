@@ -1,5 +1,15 @@
 "use client";
 
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { Formik } from "formik";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { PageLoader, IconLoader } from "@opal/loaders";
 import {
   IllustrationContent,
@@ -7,11 +17,12 @@ import {
   Section,
   SettingsLayouts,
   toast,
+  useToastFromQuery,
 } from "@opal/layouts";
 import { SvgPlugBroken } from "@opal/illustrations";
 import { escapeMarkdown, markdown } from "@opal/utils";
-import { Divider, MessageCard, Button } from "@opal/components";
-import { SvgArrowExchange } from "@opal/icons";
+import { Button, Divider, MessageCard } from "@opal/components";
+import { SvgAlertCircle, SvgArrowExchange } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
@@ -19,26 +30,16 @@ import {
   getSourceDisplayName,
   getSourceDocLink,
   getSourceMetadata,
+  isValidSource,
 } from "@/lib/sources";
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/lib/app/components";
 import { linkCredential } from "@/lib/credentials/svc";
-import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
-import { submitFiles } from "@/lib/connectors/svc";
-import { submitGoogleSite } from "@/lib/connectors/svc";
-import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
-import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
-import ConnectorContentSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorContentSection";
-import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
-import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
+import { submitFiles, submitGoogleSite } from "@/lib/connectors/svc";
 import {
   useBindingGateMessage,
   type UseBoundFieldsGateResult,
 } from "@/lib/connectors/hooks";
-import {
-  ConfigurableSources,
-  ValidSources,
-} from "@/lib/connectors/types/source";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { getCredentialSpec } from "@/lib/credentials/utils";
 import type { Credential } from "@/lib/credentials/types";
 import {
@@ -62,26 +63,58 @@ import {
   useCredentialLoad,
   useGoogleDriveCredentials,
 } from "@/lib/credentials/hooks";
-import { Formik } from "formik";
-import { useRouter } from "next/navigation";
 import { deleteConnector } from "@/lib/connector";
-import { useTranslations } from "next-intl";
 import {
   SYNC_RESTRICTED_ACCESS_TYPE,
   toManageAccess,
   toWireAccess,
 } from "@/lib/connectors/accessType";
-
-export interface AdvancedConfig {
-  refreshFreq: number;
-  pruneFreq: number;
-  indexingStart: string;
-}
+import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
+import AuthenticationAccountSection from "@/views/admin/connectors/AddConnectorPage/sections/AuthenticationAccountSection";
+import ConnectorContentSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorContentSection";
+import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
+import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
+import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
+import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
+import {
+  useConnectorChecks,
+  useResetConnectorChecks,
+} from "@/lib/connectors/checks/hooks";
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
 
-export async function submitConnector<T>(
+interface ConnectorChecksGates {
+  /** The checks that validate the credential passed: the form may unlock. */
+  formUnlocked: boolean;
+  /** Every required check passed for the current form: Create may run. */
+  createReady: boolean;
+}
+
+interface ConnectorChecksGateProps {
+  source: ConfigurableSources;
+  credentialId: number | null;
+  children: (gates: ConnectorChecksGates) => ReactNode;
+}
+
+/**
+ * Gives the form the capability checks' two gates. The hook needs the Formik
+ * context, which the form's render function sits inside but cannot call hooks
+ * in.
+ */
+function ConnectorChecksGate({
+  source,
+  credentialId,
+  children,
+}: ConnectorChecksGateProps) {
+  const { formUnlocked, createReady } = useConnectorChecks({
+    source,
+    credentialId,
+  });
+  return children({ formUnlocked, createReady });
+}
+
+async function submitConnector<T>(
   connector: ConnectorBase<T>,
   connectorId?: number,
   fakeCredential?: boolean
@@ -139,11 +172,15 @@ export async function submitConnector<T>(
   }
 }
 
-export interface AddConnectorProps {
+interface AddConnectorFormProps {
   connector: ConfigurableSources;
 }
 
-export default function AddConnector({ connector }: AddConnectorProps) {
+/**
+ * The setup form for one valid, non-federated source. It is its own
+ * component so its hooks never run behind the wrapper's early returns.
+ */
+function AddConnectorForm({ connector }: AddConnectorFormProps) {
   const t = useTranslations("admin.connectorsList");
   const oneDriveT = useTranslations("admin.connectorsList.oneDrive");
   // The string-pair editor (InputKeyValue) shows these same messages.
@@ -223,6 +260,10 @@ export default function AddConnector({ connector }: AddConnectorProps) {
   );
   const configUnlocked = gate?.status === "unlocked";
   const gateMessage = useBindingGateMessage(gate?.reason ?? null);
+  // The rest of the form also waits for the capability checks. Each visit
+  // starts without a run. Sources without a credential step have no checks.
+  useResetConnectorChecks(connector);
+  const checksT = useTranslations("admin.connectorChecks");
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
@@ -516,184 +557,275 @@ export default function AddConnector({ connector }: AddConnectorProps) {
             : []),
         ].filter((field) => !field.hidden);
         const hasVisibleBoundFields = visibleBoundFields.length > 0;
+        const checkedCredential = canCreate ? formCredential : null;
         return (
-          <SettingsLayouts.Root width="sm">
-            <SettingsLayouts.Header
-              icon={sourceMetadata.icon}
-              moreIcon1={SvgArrowExchange}
-              moreIcon2={Logo}
-              title={displayName}
-              // Failed, the page offers nothing to set up, so the header drops
-              // its docs pointer; the Connect button stays, disabled.
-              description={
-                credentialsFailed
-                  ? t("header.description", {
-                      source: displayName,
-                      appName: settings.appName,
-                      hasDocs: "false",
-                      url: "",
-                    })
-                  : headerDescription
-              }
-              divider
-              actions={[
-                <Button
-                  key="cancel"
-                  prominence="secondary"
-                  disabled={busy}
-                  onClick={() => router.push("/admin/connectors")}
-                >
-                  {t("header.cancelButton.label")}
-                </Button>,
-                // Always present; disabled while the credentials load or
-                // after they fail, since nothing can be connected then.
-                <Button
-                  key="connect"
-                  disabled={
-                    credentialsLoading ||
-                    credentialsFailed ||
-                    !formikProps.isValid ||
-                    !configUnlocked ||
-                    busy
-                  }
-                  icon={busy ? IconLoader : undefined}
-                  onClick={() => formikProps.handleSubmit()}
-                >
-                  {t("header.connectButton.label")}
-                </Button>,
-              ]}
-            >
-              {hasFederatedOption && (
-                <MessageCard
-                  variant="info"
-                  title={t("add.federated.tooltip.title")}
-                  description={t("add.federated.tooltip.description")}
-                  bottomChildren={
-                    <Button
-                      prominence="secondary"
-                      onClick={() =>
-                        router.push(
-                          `/admin/connectors/${connector}?mode=federated`
-                        )
-                      }
-                    >
-                      {t("add.federated.tooltip.link.label")}
-                    </Button>
-                  }
-                />
-              )}
-            </SettingsLayouts.Header>
-
-            <SettingsLayouts.Body>
-              {credentialsLoading ? (
-                <PageLoader />
-              ) : credentialsFailed ? (
-                // The same frame as PageLoader, so loading and failure sit
-                // in one place.
-                <PageCenter>
-                  <IllustrationContent
-                    illustration={SvgPlugBroken}
-                    title={t("add.credentialsLoadFailed.title")}
-                    description={t("add.credentialsLoadFailed.description")}
-                  />
-                </PageCenter>
-              ) : (
-                <>
-                  <BoundFieldsGate
-                    source={connector}
-                    credentialId={
-                      noCredentials ? null : (formCredential?.id ?? null)
+          <ConnectorChecksGate
+            source={connector}
+            credentialId={checkedCredential?.id ?? null}
+          >
+            {(checks) => {
+              const formUnlocked: boolean =
+                configUnlocked && (noCredentials || checks.formUnlocked);
+              // Non-required checks never block Create.
+              const createReady: boolean =
+                formUnlocked && (noCredentials || checks.createReady);
+              const formLockReason: string | undefined = !configUnlocked
+                ? (gateMessage ?? undefined)
+                : formUnlocked
+                  ? undefined
+                  : checksT("lockReason");
+              return (
+                <SettingsLayouts.Root width="sm">
+                  <SettingsLayouts.Header
+                    icon={sourceMetadata.icon}
+                    moreIcon1={SvgArrowExchange}
+                    moreIcon2={Logo}
+                    title={displayName}
+                    // Failed, the page offers nothing to set up, so the header drops
+                    // its docs pointer; the Connect button stays, disabled.
+                    description={
+                      credentialsFailed
+                        ? t("header.description", {
+                            source: displayName,
+                            appName: settings.appName,
+                            hasDocs: "false",
+                            url: "",
+                          })
+                        : headerDescription
                     }
-                    credentialSelected={canCreate}
-                    currentCredential={formCredential}
-                    allBoundFields={[
-                      ...credentialBoundFields.values,
-                      ...credentialBoundFields.advancedValues,
+                    divider
+                    actions={[
+                      <Button
+                        key="cancel"
+                        prominence="secondary"
+                        disabled={busy}
+                        onClick={() => router.push("/admin/connectors")}
+                      >
+                        {t("header.cancelButton.label")}
+                      </Button>,
+                      // Always present; disabled while the credentials load or
+                      // after they fail, since nothing can be connected then.
+                      <Button
+                        key="connect"
+                        disabled={
+                          credentialsLoading ||
+                          credentialsFailed ||
+                          !formikProps.isValid ||
+                          !createReady ||
+                          busy
+                        }
+                        icon={busy ? IconLoader : undefined}
+                        onClick={() => formikProps.handleSubmit()}
+                      >
+                        {t("header.connectButton.label")}
+                      </Button>,
                     ]}
-                    visibleBoundFields={visibleBoundFields}
-                    onChange={onGateChange}
-                  />
-                  <Section gap={6} alignItems="stretch" width="full">
-                    {hasVisibleBoundFields && (
-                      <>
-                        <CredentialBoundFields
-                          fields={credentialBoundFields.values}
-                          advancedFields={credentialBoundFields.advancedValues}
-                          showAdvancedFields={showAdvancedBoundFields}
-                          values={formikProps.values}
-                          connector={connector}
-                          currentCredential={formCredential}
-                          fieldErrors={gate?.fieldErrors}
-                          onFieldBlur={gate?.requestCheck}
-                        />
-                        {!noCredentials && (
-                          <Divider
-                            paddingParallel={0}
-                            paddingPerpendicular={0}
-                          />
-                        )}
-                      </>
-                    )}
-
-                    {!noCredentials && (
-                      <CredentialsConfigurer
-                        connector={connector}
-                        accessType={formikProps.values.access_type}
-                        currentCredential={currentCredential}
-                        onCredentialChange={setCurrentCredential}
+                  >
+                    {hasFederatedOption && (
+                      <MessageCard
+                        variant="info"
+                        title={t("add.federated.tooltip.title")}
+                        description={t("add.federated.tooltip.description")}
+                        bottomChildren={
+                          <Button
+                            prominence="secondary"
+                            onClick={() =>
+                              router.push(
+                                `/admin/connectors/${connector}?mode=federated`
+                              )
+                            }
+                          >
+                            {t("add.federated.tooltip.link.label")}
+                          </Button>
+                        }
                       />
                     )}
+                  </SettingsLayouts.Header>
 
-                    {(!noCredentials || hasVisibleBoundFields) && (
-                      <Divider paddingParallel={0} paddingPerpendicular={0} />
-                    )}
-
-                    {/* The wizard could not reach these sections without a
-                      valid credential; on one page they stay locked, under one
-                      Disabled that blocks pointer and keyboard, until the
-                      credential and the bound fields are valid. */}
-                    <Disabled
-                      disabled={!configUnlocked}
-                      tooltip={gateMessage ?? undefined}
-                      data-testid="connector-form"
-                    >
-                      <Section gap={6} alignItems="stretch" width="full">
-                        <ConnectorContentSection
-                          config={credentialBoundFields.rest}
-                          values={formikProps.values}
-                          connector={connector}
-                          currentCredential={formCredential}
-                          disabled={!configUnlocked}
+                  <SettingsLayouts.Body>
+                    {credentialsLoading ? (
+                      <PageLoader />
+                    ) : credentialsFailed ? (
+                      // The same frame as PageLoader, so loading and failure sit
+                      // in one place.
+                      <PageCenter>
+                        <IllustrationContent
+                          illustration={SvgPlugBroken}
+                          title={t("add.credentialsLoadFailed.title")}
+                          description={t(
+                            "add.credentialsLoadFailed.description"
+                          )}
                         />
-
-                        <Divider paddingParallel={0} paddingPerpendicular={0} />
-                        <ConnectorSettingsSection
-                          connector={connector}
+                      </PageCenter>
+                    ) : (
+                      <>
+                        <BoundFieldsGate
+                          source={connector}
+                          credentialId={
+                            noCredentials ? null : (formCredential?.id ?? null)
+                          }
+                          credentialSelected={canCreate}
                           currentCredential={formCredential}
-                          disabled={!configUnlocked}
+                          allBoundFields={[
+                            ...credentialBoundFields.values,
+                            ...credentialBoundFields.advancedValues,
+                          ]}
+                          visibleBoundFields={visibleBoundFields}
+                          onChange={onGateChange}
                         />
+                        <Section gap={6} alignItems="stretch" width="full">
+                          {hasVisibleBoundFields && (
+                            <>
+                              <CredentialBoundFields
+                                fields={credentialBoundFields.values}
+                                advancedFields={
+                                  credentialBoundFields.advancedValues
+                                }
+                                showAdvancedFields={showAdvancedBoundFields}
+                                values={formikProps.values}
+                                connector={connector}
+                                currentCredential={formCredential}
+                                fieldErrors={gate?.fieldErrors}
+                                onFieldBlur={gate?.requestCheck}
+                              />
+                              {!noCredentials && (
+                                <Divider
+                                  paddingParallel={0}
+                                  paddingPerpendicular={0}
+                                />
+                              )}
+                            </>
+                          )}
 
-                        {connector !== "file" && (
-                          <>
+                          {!noCredentials && (
+                            <AuthenticationAccountSection
+                              connector={connector}
+                              accessType={formikProps.values.access_type}
+                              currentCredential={currentCredential}
+                              onCredentialChange={setCurrentCredential}
+                              checkedCredential={checkedCredential}
+                              checksLocked={!configUnlocked}
+                            />
+                          )}
+
+                          {(!noCredentials || hasVisibleBoundFields) && (
                             <Divider
                               paddingParallel={0}
                               paddingPerpendicular={0}
                             />
-                            <ScheduleSection
-                              defaultPruneFreqHours={defaultPruneFreqHours}
-                              disabled={!configUnlocked}
-                            />
-                          </>
-                        )}
-                      </Section>
-                    </Disabled>
-                  </Section>
-                </>
-              )}
-            </SettingsLayouts.Body>
-          </SettingsLayouts.Root>
+                          )}
+
+                          {/* The wizard could not reach these sections without a
+                      valid credential; on one page they stay locked, under one
+                      Disabled that blocks pointer and keyboard, until the
+                      credential and the bound fields are valid and the
+                      capability checks pass. */}
+                          <Disabled
+                            disabled={!formUnlocked}
+                            tooltip={formLockReason}
+                            data-testid="connector-form"
+                          >
+                            <Section gap={6} alignItems="stretch" width="full">
+                              <ConnectorContentSection
+                                config={credentialBoundFields.rest}
+                                values={formikProps.values}
+                                connector={connector}
+                                currentCredential={formCredential}
+                                disabled={!formUnlocked}
+                              />
+
+                              <Divider
+                                paddingParallel={0}
+                                paddingPerpendicular={0}
+                              />
+                              <ConnectorSettingsSection
+                                connector={connector}
+                                currentCredential={formCredential}
+                                disabled={!formUnlocked}
+                              />
+
+                              {connector !== "file" && (
+                                <>
+                                  <Divider
+                                    paddingParallel={0}
+                                    paddingPerpendicular={0}
+                                  />
+                                  <ScheduleSection
+                                    defaultPruneFreqHours={
+                                      defaultPruneFreqHours
+                                    }
+                                    disabled={!formUnlocked}
+                                  />
+                                </>
+                              )}
+                            </Section>
+                          </Disabled>
+                        </Section>
+                      </>
+                    )}
+                  </SettingsLayouts.Body>
+                </SettingsLayouts.Root>
+              );
+            }}
+          </ConnectorChecksGate>
         );
       }}
     </Formik>
   );
+}
+
+export interface AddConnectorWrapperProps {
+  connector: ConfigurableSources;
+}
+
+export default function AddConnectorWrapper({
+  connector,
+}: AddConnectorWrapperProps) {
+  const t = useTranslations("admin.connectorsList");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const mode = searchParams?.get("mode"); // 'federated' or 'regular'
+
+  useToastFromQuery({
+    oauth_failed: {
+      message: t("oauthFailed.toast"),
+      type: "error",
+    },
+  });
+
+  if (!isValidSource(connector)) {
+    return (
+      <SettingsLayouts.Root width="sm">
+        <SettingsLayouts.Header
+          icon={SvgAlertCircle}
+          title={t("invalidConnector.title", { connector })}
+        />
+        <SettingsLayouts.Body>
+          <div className="me-auto">
+            <Button onClick={() => router.push("/admin/indexing-status")}>
+              {t("invalidConnector.homeButton.label")}
+            </Button>
+          </div>
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
+    );
+  }
+
+  const sourceMetadata = getSourceMetadata(connector);
+  const supportsFederated = sourceMetadata.federated === true;
+
+  // Only show federated form if explicitly requested via URL parameter
+  const showFederatedForm = mode === "federated" && supportsFederated;
+
+  if (showFederatedForm) {
+    return (
+      <div className="flex justify-center w-full h-full">
+        <div className="mt-12 w-full max-w-4xl mx-auto">
+          <FederatedConnectorForm connector={connector} />
+        </div>
+      </div>
+    );
+  }
+
+  return <AddConnectorForm connector={connector} />;
 }

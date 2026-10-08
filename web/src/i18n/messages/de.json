@@ -2844,7 +2844,7 @@
           "label": "Abbrechen"
         },
         "connectButton": {
-          "label": "Verbinden"
+          "label": "Connector erstellen"
         },
         "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein.{hasDocs, select, true { [Doku]({url}) ansehen} other {}}"
       },
@@ -8907,6 +8907,68 @@
         "settingsUpdated": "Einstellungen aktualisiert",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "Führen Sie oben die Connector-Prüfungen aus und beheben Sie alle Fehler, um fortzufahren.",
+      "prompt": {
+        "title": "Verbindung testen",
+        "description": "{appName} führt Prüfungen durch, um die erforderlichen Berechtigungen zu bestätigen, bevor es weitergeht.",
+        "startButton": {
+          "label": "Prüfungen starten"
+        }
+      },
+      "title": "Connector-Prüfungen",
+      "groups": {
+        "failed": "{count} Fehlgeschlagen",
+        "indeterminate": "{count} Nicht verifiziert",
+        "passed": "{count} Abgeschlossen",
+        "skipped": "{count} Übersprungen",
+        "running": "{count} laufen",
+        "expected": "{count} erwartet"
+      },
+      "status": {
+        "passed": "Bestanden",
+        "failed": "Fehlgeschlagen",
+        "indeterminate": "Konnte nicht verifiziert werden",
+        "skipped": "Übersprungen",
+        "running": "Wird getestet…",
+        "pending": "In der Warteschlange",
+        "waiting": "Wartet auf Einstellungen"
+      },
+      "required": {
+        "label": "Erforderlich"
+      },
+      "running": {
+        "label": "Prüfungen laufen…"
+      },
+      "empty": {
+        "label": "Es wurden noch keine Prüfungen ausgeführt."
+      },
+      "docsLink": {
+        "label": "Dokumentation"
+      },
+      "rerunButton": {
+        "label": "Prüfungen erneut ausführen"
+      },
+      "foldButton": {
+        "fold": "Einklappen",
+        "expand": "Ausklappen"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} fehlgeschlagen",
+        "unverified": "{count} nicht verifiziert",
+        "inProgress": "{count} in Bearbeitung",
+        "expected": "{count} weitere erwartet",
+        "skipped": "{count} übersprungen",
+        "successful": "{count} erfolgreich"
+      },
+      "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
+      "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
+      "state": {
+        "completed": "Prüfungen abgeschlossen",
+        "inProgress": "Prüfungen laufen…"
+      }
     }
   },
   "agents": {
@@ -13420,6 +13482,9 @@
       "oneMonth": "1M",
       "sevenDays": "7T",
       "threeMonths": "3M"
+    },
+    "iconTooltip": {
+      "label": "Weitere Informationen"
     },
     "input": {
       "day": "Tag",

@@ -2844,7 +2844,7 @@
           "label": "Cancelar"
         },
         "connectButton": {
-          "label": "Conectar"
+          "label": "Crear conector"
         },
         "description": "Conéctate a {source} y configura el conector para {appName}.{hasDocs, select, true { Ver [documentación]({url})} other {}}"
       },
@@ -8907,6 +8907,68 @@
         "settingsUpdated": "Configuración actualizada",
         "settingsUpdateFailed": "No se pudo actualizar la configuración"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "Ejecuta las comprobaciones del conector de arriba y resuelve cualquier error para continuar.",
+      "prompt": {
+        "title": "Probar conexión",
+        "description": "{appName} ejecutará comprobaciones para validar los permisos necesarios antes de continuar.",
+        "startButton": {
+          "label": "Iniciar comprobaciones"
+        }
+      },
+      "title": "Comprobaciones del conector",
+      "groups": {
+        "failed": "{count} fallidas",
+        "indeterminate": "{count} sin verificar",
+        "passed": "{count} completadas",
+        "skipped": "{count} omitidas",
+        "running": "{count} en curso",
+        "expected": "{count} pendientes"
+      },
+      "status": {
+        "passed": "Superada",
+        "failed": "Fallida",
+        "indeterminate": "No se pudo verificar",
+        "skipped": "Omitida",
+        "running": "Probando…",
+        "pending": "En cola",
+        "waiting": "Esperando la configuración"
+      },
+      "required": {
+        "label": "Obligatoria"
+      },
+      "running": {
+        "label": "Ejecutando comprobaciones…"
+      },
+      "empty": {
+        "label": "Aún no se han ejecutado comprobaciones."
+      },
+      "docsLink": {
+        "label": "Documentación"
+      },
+      "rerunButton": {
+        "label": "Volver a ejecutar las comprobaciones"
+      },
+      "foldButton": {
+        "fold": "Contraer",
+        "expand": "Expandir"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} fallidas",
+        "unverified": "{count} sin verificar",
+        "inProgress": "{count} en curso",
+        "expected": "{count} más pendientes",
+        "skipped": "{count} omitidas",
+        "successful": "{count} correctas"
+      },
+      "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo.",
+      "requiredFailed": "{count, plural, one {# comprobación obligatoria fallida} other {# comprobaciones obligatorias fallidas}}",
+      "state": {
+        "completed": "Comprobaciones completadas",
+        "inProgress": "Comprobaciones en curso…"
+      }
     }
   },
   "agents": {
@@ -13420,6 +13482,9 @@
       "oneMonth": "1M",
       "sevenDays": "7D",
       "threeMonths": "3M"
+    },
+    "iconTooltip": {
+      "label": "Más información"
     },
     "input": {
       "day": "Día",

@@ -2,11 +2,8 @@
 
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/fold/styles.css";
-import { useEffect, useState } from "react";
+import { Fold } from "@opal/components/fold/components";
 import type { BorderVariants, StatusVariants } from "@opal/types";
-
-/** Matches the fold transition in `styles.css`. */
-const FOLD_DURATION_MS = 200;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -74,45 +71,21 @@ function CardFold({
   contentHeight = 80,
   children,
 }: CardFoldProps) {
-  // True from the moment the fold opens until its closing animation ends,
-  // which is the window where the children must stay mounted even though
-  // `expanded` has already gone false.
-  const [closing, setClosing] = useState(false);
-  const mounted = expanded || closing;
-
-  useEffect(() => {
-    if (expanded) {
-      setClosing(true);
-      return;
-    }
-    const timeout = setTimeout(() => setClosing(false), FOLD_DURATION_MS);
-    return () => clearTimeout(timeout);
-  }, [expanded]);
-
   return (
-    <div
-      className="opal-card-fold"
-      data-expanded={expanded ? "true" : "false"}
-      // The fold itself stays, so the grid row has something to animate.
-      // While it closes it must not be reachable either.
-      aria-hidden={!expanded || undefined}
-      inert={!expanded || undefined}
-    >
-      <div className="opal-card-fold-inner">
-        <div
-          className="opal-card-fold-body"
-          style={{
-            borderBottomLeftRadius: radius,
-            borderBottomRightRadius: radius,
-          }}
-          data-border={border}
-          data-opal-status-border={borderColor}
-          data-content-height={contentHeight}
-        >
-          {mounted ? children : null}
-        </div>
+    <Fold open={expanded}>
+      <div
+        className="opal-card-fold-body"
+        style={{
+          borderBottomLeftRadius: radius,
+          borderBottomRightRadius: radius,
+        }}
+        data-border={border}
+        data-opal-status-border={borderColor}
+        data-content-height={contentHeight}
+      >
+        {children}
       </div>
-    </div>
+    </Fold>
   );
 }
 

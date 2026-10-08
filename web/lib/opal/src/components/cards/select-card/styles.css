@@ -36,7 +36,7 @@
    Structure:
      .opal-select-card-expandable   (flex-col wrapper, no styling)
        .opal-select-card            (the interactive header)
-       .opal-card-fold              (the shared fold; see cards/fold/)
+       .opal-fold                   (the shared fold; see cards/fold/)
 
    Only the header is interactive, so a click or a hover inside the fold
    belongs to whatever the caller put there.
@@ -61,7 +61,7 @@
 
 /* Expanded, the header's bottom border is the separator between the two
    halves, so it keeps the resting colour whatever state the card is in. */
-.opal-select-card:has(+ .opal-card-fold[data-expanded="true"]) {
+.opal-select-card:has(+ .opal-fold[data-open="true"]) {
   @apply border-b-border-01;
 }
 

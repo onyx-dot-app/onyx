@@ -88,6 +88,7 @@ frontend changes a new connector requires.
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
 | POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). |
 | POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`). |
+| POST | `/admin/connector-checks/plan` | The checks a draft run would hold for an unsaved form, each in its state before anything runs (pending, waiting, not applicable). Needs no credential and starts no run. |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
 Every connector run on a cc-pair (index, prune, hierarchy fetch, targeted reindex,
@@ -390,7 +391,9 @@ within the blocking budget blocks the pairing. Indexing and perm-sync attempts k
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
 on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
 retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
-reuse their result at creation when the form is unchanged.
+reuse their result at creation when the form is unchanged. The plan endpoint
+(`/admin/connector-checks/plan`) lists the same checks without a credential or a
+run, so the form can tell which checks exist and which are required first.
 
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`

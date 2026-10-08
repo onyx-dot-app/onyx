@@ -2844,7 +2844,7 @@
           "label": "إلغاء"
         },
         "connectButton": {
-          "label": "اتصال"
+          "label": "إنشاء موصل"
         },
         "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}.{hasDocs, select, true { عرض [الوثائق]({url})} other {}}"
       },
@@ -8907,6 +8907,68 @@
         "settingsUpdated": "تم تحديث الإعدادات",
         "settingsUpdateFailed": "فشل تحديث الإعدادات"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "شغّل فحوصات الموصل أعلاه وعالج أي إخفاقات للمتابعة.",
+      "prompt": {
+        "title": "اختبار الاتصال",
+        "description": "سيُجري {appName} فحوصات للتحقق من النطاقات المطلوبة قبل المتابعة.",
+        "startButton": {
+          "label": "بدء الفحوصات"
+        }
+      },
+      "title": "فحوصات الموصّل",
+      "groups": {
+        "failed": "{count} فشلت",
+        "indeterminate": "{count} لم يتم التحقق منها",
+        "passed": "{count} اكتملت",
+        "skipped": "{count} تم تخطيها",
+        "running": "{count} قيد التشغيل",
+        "expected": "{count} متوقعة"
+      },
+      "status": {
+        "passed": "ناجح",
+        "failed": "فاشل",
+        "indeterminate": "تعذّر التحقق",
+        "skipped": "تم التخطي",
+        "running": "جارٍ الاختبار…",
+        "pending": "في قائمة الانتظار",
+        "waiting": "في انتظار الإعدادات"
+      },
+      "required": {
+        "label": "مطلوب"
+      },
+      "running": {
+        "label": "جارٍ تشغيل الفحوصات…"
+      },
+      "empty": {
+        "label": "لم يتم تشغيل أي فحوصات بعد."
+      },
+      "docsLink": {
+        "label": "التوثيق"
+      },
+      "rerunButton": {
+        "label": "إعادة تشغيل الفحوصات"
+      },
+      "foldButton": {
+        "fold": "طي",
+        "expand": "توسيع"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} فشلت",
+        "unverified": "{count} لم يتم التحقق منها",
+        "inProgress": "{count} قيد التنفيذ",
+        "expected": "{count} أخرى متوقعة",
+        "skipped": "{count} تم تخطيها",
+        "successful": "{count} نجحت"
+      },
+      "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى.",
+      "requiredFailed": "{count, plural, one {فشل فحص مطلوب واحد} other {فشل # فحوصات مطلوبة}}",
+      "state": {
+        "completed": "اكتملت عمليات التحقق",
+        "inProgress": "عمليات التحقق قيد التنفيذ…"
+      }
     }
   },
   "agents": {
@@ -13420,6 +13482,9 @@
       "oneMonth": "شهر",
       "sevenDays": "7 أيام",
       "threeMonths": "3 أشهر"
+    },
+    "iconTooltip": {
+      "label": "مزيد من المعلومات"
     },
     "input": {
       "day": "اليوم",

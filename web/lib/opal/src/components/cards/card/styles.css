@@ -77,7 +77,7 @@
    Structure:
      .opal-card-expandable                 (flex-col wrapper, no styling)
        .opal-card-expandable-header        (bg + border + padding + rounding)
-       .opal-card-fold                     (the shared fold; see cards/fold/)
+       .opal-fold                          (the shared fold; see cards/fold/)
 ============================================================================ */
 
 .opal-card-expandable {
@@ -138,7 +138,7 @@
    header and body. It should always remain the default border color,
    regardless of any status borderColor applied to the card. */
 
-.opal-card-expandable-header:has(+ .opal-card-fold[data-expanded="true"]) {
+.opal-card-expandable-header:has(+ .opal-fold[data-open="true"]) {
   @apply border-b-border-01;
 }
 

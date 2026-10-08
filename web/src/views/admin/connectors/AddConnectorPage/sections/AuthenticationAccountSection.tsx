@@ -16,8 +16,9 @@ import { shouldRedirectToOAuth } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 
-export interface CredentialsConfigurerProps {
+interface AuthenticationAccountSectionProps {
   /** The source being set up. */
   connector: ConfigurableSources;
   /** Access type from the connector form; a new credential inherits it. */
@@ -26,18 +27,26 @@ export interface CredentialsConfigurerProps {
   currentCredential: Credential<any> | null;
   /** Called when the user picks or creates a credential. */
   onCredentialChange: (credential: Credential<any>) => void;
+  /** The credential the capability checks run with; `null` locks them. */
+  checkedCredential: Credential<any> | null;
+  /** Locks the Start Checks prompt, as the configuration below is locked. */
+  checksLocked: boolean;
 }
 
 /**
  * The credential step of the connector setup page: pick a saved credential,
- * create one, or authorize the source through OAuth.
+ * create one, or authorize the source through OAuth. Once the credential
+ * section is valid, the user can run the capability checks against the
+ * unsaved form; the rest of the form unlocks when they pass.
  */
-export function CredentialsConfigurer({
+export default function AuthenticationAccountSection({
   connector,
   accessType,
   currentCredential,
   onCredentialChange,
-}: CredentialsConfigurerProps) {
+  checkedCredential,
+  checksLocked,
+}: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
   const settings = useSettings();
   const {
@@ -178,105 +187,117 @@ export function CredentialsConfigurer({
       and shows its own loader and error until then; the guard only keeps
       the types honest. */}
       {!credentials ? null : (
-        <Section gap={4} alignItems="stretch" width="full">
-          <Card border="solid" rounding={4} padding={6}>
-            <Section gap={4} alignItems="start" width="full">
-              <ModifyCredential
-                showIfEmpty
-                accessType={accessType}
-                defaultedCredential={currentCredential!}
-                credentials={credentials}
-                onDeleteCredential={onDeleteCredential}
-                onSwitch={onSwap}
-              />
+        <Section gap={6} alignItems="stretch" width="full">
+          <Section gap={4} alignItems="stretch" width="full">
+            <Card border="solid" rounding={4} padding={6}>
+              <Section gap={4} alignItems="start" width="full">
+                <ModifyCredential
+                  showIfEmpty
+                  accessType={accessType}
+                  defaultedCredential={currentCredential!}
+                  credentials={credentials}
+                  onDeleteCredential={onDeleteCredential}
+                  onSwitch={onSwap}
+                />
 
-              {canAuthorize && (
-                <Section
-                  flexDirection="row"
-                  justifyContent="start"
-                  gap={1}
-                  className="mt-6"
-                >
-                  <Button
-                    disabled={isAuthorizing}
-                    variant="action"
-                    onClick={handleAuthorize}
+                {canAuthorize && (
+                  <Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    gap={1}
+                    className="mt-6"
                   >
-                    {isAuthorizing
-                      ? t("add.authorizeButton.pendingLabel")
-                      : t("add.authorizeButton.label", {
-                          source: displayName,
-                        })}
-                  </Button>
-                </Section>
-              )}
-            </Section>
-          </Card>
+                    <Button
+                      disabled={isAuthorizing}
+                      variant="action"
+                      onClick={handleAuthorize}
+                    >
+                      {isAuthorizing
+                        ? t("add.authorizeButton.pendingLabel")
+                        : t("add.authorizeButton.label", {
+                            source: displayName,
+                          })}
+                    </Button>
+                  </Section>
+                )}
+              </Section>
+            </Card>
 
-          {/* One card creates a credential. Its header toggles it; the fold
+            {/* One card creates a credential. Its header toggles it; the fold
           below is a plain container, so a click in the open form cannot fold
           it away. The routes into the source are tabs inside the fold. */}
-          <SelectCard
-            expandable
-            expanded={isCreating}
-            expandableContentHeight="full"
-            border="solid"
-            state={isCreating ? "filled" : "empty"}
-            rounding={4}
-            padding={2}
-            // The card is one action, so it names itself. Nothing inside the
-            // interactive half is focusable, so a role here folds no other
-            // control into that name.
-            role="button"
-            aria-label={newAccountLabel}
-            tabIndex={0}
-            expandedContent={
-              <div className="p-4" data-testid="credential-form">
-                {namesMethods ? (
-                  <Tabs
-                    gap={4}
-                    value={openMethod ?? defaultMethod}
-                    onValueChange={(value) => {
-                      // Matched against the real methods rather than cast:
-                      // the tab strip hands back a plain string.
-                      const picked = methods.find((method) => method === value);
-                      if (picked) selectMethod(picked);
-                    }}
-                  >
-                    <Tabs.List>
-                      {orderedMethods.map((method) => (
-                        <Tabs.Trigger key={method} value={method}>
-                          {method === CredentialCreationMethod.OAuth
-                            ? t("add.connectWithTab.label")
-                            : t("add.manualTab.label")}
-                        </Tabs.Trigger>
-                      ))}
-                    </Tabs.List>
-                    {/* A tab switch keeps what the user typed in the other
+            <SelectCard
+              expandable
+              expanded={isCreating}
+              expandableContentHeight="full"
+              border="solid"
+              state={isCreating ? "filled" : "empty"}
+              rounding={4}
+              padding={2}
+              // The card is one action, so it names itself. Nothing inside the
+              // interactive half is focusable, so a role here folds no other
+              // control into that name.
+              role="button"
+              aria-label={newAccountLabel}
+              tabIndex={0}
+              expandedContent={
+                <div className="p-4" data-testid="credential-form">
+                  {namesMethods ? (
+                    <Tabs
+                      gap={4}
+                      value={openMethod ?? defaultMethod}
+                      onValueChange={(value) => {
+                        // Matched against the real methods rather than cast:
+                        // the tab strip hands back a plain string.
+                        const picked = methods.find(
+                          (method) => method === value
+                        );
+                        if (picked) selectMethod(picked);
+                      }}
+                    >
+                      <Tabs.List>
+                        {orderedMethods.map((method) => (
+                          <Tabs.Trigger key={method} value={method}>
+                            {method === CredentialCreationMethod.OAuth
+                              ? t("add.connectWithTab.label")
+                              : t("add.manualTab.label")}
+                          </Tabs.Trigger>
+                        ))}
+                      </Tabs.List>
+                      {/* A tab switch keeps what the user typed in the other
                       route. */}
-                    {orderedMethods.map((method) => (
-                      <Tabs.Content key={method} value={method} keepMounted>
-                        {renderCredentialForm(method)}
-                      </Tabs.Content>
-                    ))}
-                  </Tabs>
-                ) : (
-                  renderCredentialForm(defaultMethod)
-                )}
-              </div>
-            }
-            onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
-          >
-            <Section padding={2} width="full">
-              <Content
-                icon={SvgPlusCircle}
-                title={newAccountLabel}
-                sizePreset="main-ui"
-                variant="body"
-                color={isCreating ? "interactive" : "muted"}
-              />
-            </Section>
-          </SelectCard>
+                      {orderedMethods.map((method) => (
+                        <Tabs.Content key={method} value={method} keepMounted>
+                          {renderCredentialForm(method)}
+                        </Tabs.Content>
+                      ))}
+                    </Tabs>
+                  ) : (
+                    renderCredentialForm(defaultMethod)
+                  )}
+                </div>
+              }
+              onClick={() =>
+                isCreating ? close() : selectMethod(defaultMethod)
+              }
+            >
+              <Section padding={2} width="full">
+                <Content
+                  icon={SvgPlusCircle}
+                  title={newAccountLabel}
+                  sizePreset="main-ui"
+                  variant="body"
+                  color={isCreating ? "interactive" : "muted"}
+                />
+              </Section>
+            </SelectCard>
+          </Section>
+
+          <CredentialChecksCard
+            source={connector}
+            credentialId={checkedCredential?.id ?? null}
+            locked={checksLocked || !checkedCredential}
+          />
         </Section>
       )}
     </Section>

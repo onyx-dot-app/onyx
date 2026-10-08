@@ -2844,7 +2844,7 @@
           "label": "취소"
         },
         "connectButton": {
-          "label": "연결"
+          "label": "커넥터 만들기"
         },
         "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다.{hasDocs, select, true { [문서]({url}) 보기} other {}}"
       },
@@ -8907,6 +8907,68 @@
         "settingsUpdated": "설정을 업데이트했습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다"
       }
+    },
+    "connectorChecks": {
+      "lockReason": "계속하려면 위의 커넥터 검사를 실행하고 실패한 항목을 해결하세요.",
+      "prompt": {
+        "title": "연결 테스트",
+        "description": "{appName}이(가) 계속하기 전에 필요한 범위를 확인하는 검사를 실행합니다.",
+        "startButton": {
+          "label": "검사 시작"
+        }
+      },
+      "title": "커넥터 검사",
+      "groups": {
+        "failed": "실패 {count}개",
+        "indeterminate": "미확인 {count}개",
+        "passed": "완료 {count}개",
+        "skipped": "건너뜀 {count}개",
+        "running": "실행 중 {count}개",
+        "expected": "예정 {count}개"
+      },
+      "status": {
+        "passed": "통과",
+        "failed": "실패",
+        "indeterminate": "확인할 수 없음",
+        "skipped": "건너뜀",
+        "running": "테스트 중…",
+        "pending": "대기 중",
+        "waiting": "설정을 기다리는 중"
+      },
+      "required": {
+        "label": "필수"
+      },
+      "running": {
+        "label": "검사 실행 중…"
+      },
+      "empty": {
+        "label": "아직 실행된 검사가 없습니다."
+      },
+      "docsLink": {
+        "label": "문서"
+      },
+      "rerunButton": {
+        "label": "검사 다시 실행"
+      },
+      "foldButton": {
+        "fold": "접기",
+        "expand": "펼치기"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "실패 {count}개",
+        "unverified": "미확인 {count}개",
+        "inProgress": "진행 중 {count}개",
+        "expected": "예정 {count}개",
+        "skipped": "건너뜀 {count}개",
+        "successful": "성공 {count}개"
+      },
+      "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
+      "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
+      "state": {
+        "completed": "검사가 완료되었습니다",
+        "inProgress": "검사 진행 중…"
+      }
     }
   },
   "agents": {
@@ -13420,6 +13482,9 @@
       "oneMonth": "1개월",
       "sevenDays": "7일",
       "threeMonths": "3개월"
+    },
+    "iconTooltip": {
+      "label": "자세한 정보"
     },
     "input": {
       "day": "일",

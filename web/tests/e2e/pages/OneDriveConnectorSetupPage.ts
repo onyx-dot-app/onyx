@@ -1,4 +1,8 @@
 import { expect, type Page, type Request } from "@playwright/test";
+import {
+  mockPassingConnectorChecks,
+  runConnectorChecks,
+} from "@tests/e2e/utils/connectorChecks";
 
 export interface OneDriveConfigRequest {
   connector_specific_config: {
@@ -127,6 +131,7 @@ export class OneDriveConnectorSetupPage {
     await this.page.route("**/api/manage/connector/*/credential/*", (route) =>
       route.fulfill({ json: {} })
     );
+    await mockPassingConnectorChecks(this.page);
   }
 
   async goto() {
@@ -158,8 +163,9 @@ export class OneDriveConnectorSetupPage {
     await this.submitCredential();
   }
 
-  async expectConfigurationEnabled() {
-    await expect(this.page.getByTestId("connector-name")).toBeEnabled();
+  /** Run the connector checks and wait for the configuration to unlock. */
+  async runChecks() {
+    await runConnectorChecks(this.page);
   }
 
   async selectSpecificScope(user?: string) {
@@ -184,7 +190,7 @@ export class OneDriveConnectorSetupPage {
         new URL(response.url()).pathname === "/api/manage/admin/connector"
     );
     await this.page
-      .getByRole("button", { name: "Connect", exact: true })
+      .getByRole("button", { name: "Create Connector", exact: true })
       .click();
     const response = await responsePromise;
     expect(response.status()).toBe(200);
@@ -193,7 +199,7 @@ export class OneDriveConnectorSetupPage {
   async submitInvalidConnector(name: string, message: string) {
     await this.page.getByTestId("connector-name").fill(name);
     await expect(
-      this.page.getByRole("button", { name: "Connect", exact: true })
+      this.page.getByRole("button", { name: "Create Connector", exact: true })
     ).toBeDisabled();
     await expect(this.page.getByText(message)).toBeVisible();
   }

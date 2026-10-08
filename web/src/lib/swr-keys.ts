@@ -78,6 +78,21 @@ export const SWR_KEYS = {
   adminConnectorStatus: "/api/manage/admin/connector/status",
   federatedConnectors: "/api/federated",
   connectorGroupRestrictions: "/api/manage/connector-group-restrictions",
+  // The add-connector form's check session, client state shared by the
+  // checks card, the configuration lock and the Connect button.
+  connectorCheckSession: (source: string) => [
+    "connector-check-session",
+    source,
+  ],
+  // The checks a run would hold for an unsaved connector form (a POST).
+  connectorCheckPlan: (
+    source: string,
+    accessType: string | null,
+    form: string
+  ) => ["connector-check-plan", source, accessType, form],
+  // One capability-check run for an unsaved connector form.
+  connectorCheckRun: (runId: string) =>
+    `/api/manage/admin/connector-checks/runs/${runId}`,
 
   // ── Google Connectors ─────────────────────────────────────────────────────
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
