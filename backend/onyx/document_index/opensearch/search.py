@@ -78,10 +78,10 @@ def _get_enforced_cc_pair_access(
 def _get_hybrid_search_normalization_weights() -> list[float]:
     # NOTE: It is critical that the order of these weights matches the order
     # of the sub-queries in the hybrid search.
-    search_content_vector_weight = 0.5
+    search_content_vector_weight: float = 0.5
     # Single keyword weight for both title and content.
-    search_keyword_weight = 0.5
-    hybrid_search_normalization_weights = [
+    search_keyword_weight: float = 0.5
+    hybrid_search_normalization_weights: list[float] = [
         search_content_vector_weight,
         search_keyword_weight,
     ]

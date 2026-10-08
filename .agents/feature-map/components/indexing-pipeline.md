@@ -333,8 +333,9 @@ enrichment (`_partition_documents_blocked_by_llm_spend_limit`).
 `indexing_pipeline.py`). Chunks are split into sub-batches of at most
 `MAX_CHUNKS_PER_DOC_BATCH` (1000) and each sub-batch is embedded in one call to
 `EmbeddingModel.encode` (`natural_language_processing/search_nlp_models.py`), which
-reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`. Chunk
-titles are deduplicated and embedded once per unique title, not once per chunk.
+reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`. Titles
+get no separate embedding: the title reaches the vector only through the chunk's
+`title_prefix`.
 Each successfully embedded sub-batch is immediately pickled to disk via
 `ChunkBatchStore.save` (`chunk_batch_store.py`) so the full embedded batch never
 sits entirely in process memory; `store.stream()` re-reads it lazily for the write
