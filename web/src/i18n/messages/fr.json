@@ -11041,11 +11041,6 @@
       "adminLimitedSetting": {
         "tooltip": "Votre administrateur limite ce modèle à un niveau de raisonnement plus bas."
       },
-      "autoMode": {
-        "caption": {
-          "text": "La passerelle choisit un modèle pour chaque message."
-        }
-      },
       "contextWindow": {
         "row": {
           "caption": "Limite de jetons pour chaque session",

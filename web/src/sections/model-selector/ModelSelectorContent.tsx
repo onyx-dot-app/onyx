@@ -695,7 +695,7 @@ export default function ModelSelectorContent({
     <Section gap={2}>
       {hasRouters && (
         <Tabs
-          variant="contained"
+          variant="pill"
           value={selectorMode}
           onValueChange={(value) =>
             setSelectorMode(value === "routers" ? "routers" : "models")
@@ -710,12 +710,6 @@ export default function ModelSelectorContent({
             </Tabs.Trigger>
           </Tabs.List>
         </Tabs>
-      )}
-
-      {hasRouters && selectorMode === "routers" && (
-        <Text font="secondary-body" color="text-03">
-          {t("autoMode.caption.text")}
-        </Text>
       )}
 
       <InputTypeIn

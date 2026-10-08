@@ -11041,11 +11041,6 @@
       "adminLimitedSetting": {
         "tooltip": "관리자가 이 모델의 추론 수준을 더 낮게 제한했습니다."
       },
-      "autoMode": {
-        "caption": {
-          "text": "게이트웨이가 메시지마다 모델을 선택합니다."
-        }
-      },
       "contextWindow": {
         "row": {
           "caption": "각 세션의 token 한도",
