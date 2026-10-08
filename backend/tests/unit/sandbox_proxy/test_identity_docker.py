@@ -79,6 +79,18 @@ def test_identity_from_container_happy_path() -> None:
     assert identity.sandbox_name == "sandbox-aaaa1111"
 
 
+@pytest.mark.parametrize("ipv4", ["", "172.18.0.5"])
+def test_identity_from_container_ipv6_fallback(ipv4: str) -> None:
+    container = _make_container()
+    container.attrs["NetworkSettings"]["Networks"][_DEFAULT_NETWORK] = {
+        "IPAddress": ipv4,
+        "GlobalIPv6Address": "fd42:6f6e:7978::5",
+    }
+    identity = _identity_from_container(container, _DEFAULT_NETWORK)
+    assert identity is not None
+    assert identity.sandbox_ip == (ipv4 or "fd42:6f6e:7978::5")
+
+
 def test_identity_from_container_rejects_wrong_component_label() -> None:
     # Belt-and-braces against a future filter loosen that lets a non-sandbox
     # labelled container through. Identity must come from the right kind of

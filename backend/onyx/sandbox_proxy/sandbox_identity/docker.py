@@ -85,7 +85,7 @@ def _identity_from_container(
         "Networks"
     ) or {}
     bridge = networks.get(network) or {}
-    ip = bridge.get("IPAddress")
+    ip = bridge.get("IPAddress") or bridge.get("GlobalIPv6Address")
     if not ip:
         return None
 
