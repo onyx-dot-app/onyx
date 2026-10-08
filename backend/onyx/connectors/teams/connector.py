@@ -1,6 +1,6 @@
 import copy
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
 from itertools import chain
 from typing import Any, cast
@@ -63,7 +63,7 @@ from onyx.connectors.teams.refusals import (
     status,
 )
 from onyx.connectors.teams.session import TeamsSession
-from onyx.connectors.teams.sources import SlimWalk
+from onyx.connectors.teams.sources import SlimWalk, drain
 from onyx.connectors.teams.threads import ThreadSource
 from onyx.connectors.teams.transcripts import (
     TranscriptSource,
@@ -400,45 +400,40 @@ class TeamsConnector(
                 continue
             if self._files is None:
                 continue
-            # A channel's files on a worker each, the way the channel walk reads
-            # them: the SharePoint REST context is per thread.
-            per_channel: list[list[Document | ConnectorFailure]] = (
-                run_functions_tuples_in_parallel(
-                    [
-                        (self._opened_channel_file_items, (channel, start))
-                        for channel in export.channels
-                    ],
-                    max_workers=self.max_workers,
-                )
-            )
-            for items in per_channel:
-                yield from items
+            yield from self._channel_files_side_by_side(export.channels, start)
         del checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
 
-    def _opened_channel_file_items(
-        self, channel: ChannelRef, start: SecondsSinceUnixEpoch
-    ) -> list[Document | ConnectorFailure]:
-        return list(self._opened_channel_files(channel, start))
+    def _channel_files_side_by_side(
+        self, channels: Sequence[ChannelRef], start: SecondsSinceUnixEpoch
+    ) -> Iterator[Document | ConnectorFailure]:
+        """The files of these channels, a worker per channel, each file
+        yielded as it is read so no worker holds a library. The SharePoint
+        REST context behind the readers is per thread."""
+        yield from drain(
+            channels,
+            lambda channel: self._opened_channel_files(channel, start),
+            self.max_workers,
+        )
 
     def _opened_channel_files(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
-        """A channel's files, library opened and left here. A channel Graph
-        describes without a library, or refuses, is one recorded failure.
-        Anything else fails the attempt."""
+        """A channel's files, library opened and left within this call. A
+        channel Graph describes without a library, or refuses, is one recorded
+        failure. Anything else fails the attempt."""
         if self._files is None:
             return
         try:
-            self._files.open(channel)
-        except ChannelFilesUnavailable as e:
-            yield channel_failure(channel, "files", e)
-            return
-        except requests.HTTPError as e:
-            if not is_permanent(e):
-                raise
-            yield channel_failure(channel, "files", e)
-            return
-        try:
+            try:
+                self._files.open(channel)
+            except ChannelFilesUnavailable as e:
+                yield channel_failure(channel, "files", e)
+                return
+            except requests.HTTPError as e:
+                if not is_permanent(e):
+                    raise
+                yield channel_failure(channel, "files", e)
+                return
             yield from self._channel_files(channel, start)
         finally:
             self._files.leave(channel)
@@ -447,9 +442,9 @@ class TeamsConnector(
         self, checkpoint: TeamsCheckpoint, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
         """One page of every active channel, side by side, then the files of
-        each channel whose last page this was. Cursors are advanced on copies
-        and written back only once every channel finished its page, so a raise
-        in one leaves the whole step to be retried."""
+        the channels whose last page this was, side by side too. Cursors are
+        advanced on copies and written back only once every channel finished
+        its page, so a raise in one leaves the whole step to be retried."""
         while len(checkpoint.active) < self.max_workers and checkpoint.todo_channels:
             checkpoint.active.append(
                 ChannelCursor(channel=checkpoint.todo_channels.pop())
@@ -468,27 +463,33 @@ class TeamsConnector(
             ),
         )
         active: list[ChannelCursor] = []
+        files_due: list[ChannelRef] = []
         for advance in advances:
             yield from advance.items
             if advance.restarted:
                 self._restarted_channel_ids.add(advance.cursor.channel.id)
             if not advance.done:
                 active.append(advance.cursor)
+            elif advance.files_due:
+                files_due.append(advance.cursor.channel)
+            elif self._files is not None:
+                self._files.leave(advance.cursor.channel)
         checkpoint.active = active
+        if self._files is not None:
+            yield from self._channel_files_side_by_side(files_due, start)
 
     def _advance_channel(
         self, cursor: ChannelCursor, start: SecondsSinceUnixEpoch
     ) -> ChannelAdvance:
         """One page of the cursor's channel: its threads with their replies and
-        images, and after the last page its files. Leaves the channel when the
-        page was its last or is refused."""
+        images. Done when the page was its last or is refused; the files of a
+        channel read to its last page follow, off this worker."""
         channel = cursor.channel
         items: list[Document | ConnectorFailure] = []
 
         type_failure = self._threads.type_failure(channel)
         if type_failure is not None:
             items.append(type_failure)
-            self._leave_files(channel)
             return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         # No library means the files grant the admin turned on is missing, so a
@@ -505,7 +506,6 @@ class TeamsConnector(
             if not is_permanent(e):
                 raise
             items.append(channel_failure(channel, "files", e))
-            self._leave_files(channel)
             return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         try:
@@ -524,27 +524,21 @@ class TeamsConnector(
             if not is_permanent(e):
                 raise
             items.append(channel_failure(channel, "messages", e))
-            self._leave_files(channel)
             return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         items.extend(self._threads.documents(channel, roots, start))
         cursor.next_messages_url = next_url
-        if next_url is not None:
-            return ChannelAdvance(cursor=cursor, items=items)
-        # The files follow the last page, on this worker: the SharePoint REST
-        # context behind their readers is per thread.
-        items.extend(self._channel_files(channel, start))
-        self._leave_files(channel)
-        return ChannelAdvance(cursor=cursor, items=items, done=True)
-
-    def _leave_files(self, channel: ChannelRef) -> None:
-        if self._files is not None:
-            self._files.leave(channel)
+        return ChannelAdvance(
+            cursor=cursor,
+            items=items,
+            done=next_url is None,
+            files_due=next_url is None,
+        )
 
     def _channel_files(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
-        """The files follow the last page of messages. A refused folder listing
+        """A channel's files once its library is open. A refused folder listing
         on Graph or a refused site on SharePoint REST (the SDK's own exception)
         is one recorded failure for the channel, anything else fails the attempt."""
         if self._files is None:

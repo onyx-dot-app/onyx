@@ -125,6 +125,8 @@ class ChannelAdvance(BaseModel):
     cursor: ChannelCursor
     items: list[Document | ConnectorFailure]
     done: bool = False
+    # The page was the channel's last, so its files are read next.
+    files_due: bool = False
     restarted: bool = False
 
 
