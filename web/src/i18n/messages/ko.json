@@ -5121,6 +5121,15 @@
           "title": "대상 URL"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "Bifrost 게이트웨이의 기본 URL입니다. {appName}은(는) 임베딩 요청을 /v1/embeddings 엔드포인트로 보냅니다.",
+          "title": "기본 URL"
+        },
+        "modelName": {
+          "description": "Bifrost 모델 ID입니다(예: openai/text-embedding-3-large). 저장할 때 {appName}이(가) 테스트 문자열을 임베딩하여 임베딩 모델인지 확인하고 차원을 가져옵니다."
+        }
+      },
       "cancelReindexModal": {
         "description": "취소하면 이전 embedding 모델로 되돌아가며 재인덱싱 진행 상황은 모두 사라집니다.",
         "submit": {

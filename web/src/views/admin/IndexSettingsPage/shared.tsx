@@ -27,14 +27,16 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 
 interface ApiKeyFieldProps {
   provider: EmbeddingProvider;
+  optional?: boolean;
 }
 
-export function ApiKeyField({ provider }: ApiKeyFieldProps) {
+export function ApiKeyField({ provider, optional = false }: ApiKeyFieldProps) {
   const t = useTranslations("admin.indexSettings");
 
   return (
     <InputVertical
       title={t("fields.apiKey.title")}
+      suffix={optional ? t("fields.optional.suffix") : undefined}
       withLabel="apiKey"
       subDescription={markdown(
         t("fields.apiKey.description", {

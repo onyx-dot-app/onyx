@@ -12,6 +12,11 @@ import {
 } from "@/lib/searchSettings/types";
 import { isCloudBased } from "@/lib/searchSettings";
 
+/** Mirrors backend `TestEmbeddingResponse`. */
+interface TestEmbeddingResponse {
+  dimension: number;
+}
+
 interface TestEmbeddingArgs {
   provider_type: string;
   modelName: string;
@@ -57,6 +62,10 @@ export async function testEmbedding({
  * `apiVersion` and `deploymentName` are Azure-specific — backend's
  * `CloudEmbeddingProviderCreationRequest` accepts them as optional, and
  * non-Azure providers should pass `null`.
+ *
+ * Returns the vector length of the test embedding, or `null` when no test ran.
+ * `alwaysTest` runs the test even when the stored key is kept, for providers
+ * where the model can change on edit.
  */
 export async function connectEmbeddingProvider({
   providerType,
@@ -66,6 +75,7 @@ export async function connectEmbeddingProvider({
   apiVersion,
   deploymentName,
   vertexConfig,
+  alwaysTest = false,
 }: {
   providerType: string;
   apiKey: string | null;
@@ -74,9 +84,11 @@ export async function connectEmbeddingProvider({
   apiVersion: string | null;
   deploymentName: string | null;
   vertexConfig?: VertexEmbeddingConfig | null;
-}): Promise<void> {
+  alwaysTest?: boolean;
+}): Promise<number | null> {
   const useWorkloadIdentity = vertexConfig?.auth_method === "workload_identity";
-  if (apiKey !== null || vertexConfig != null) {
+  let dimension: number | null = null;
+  if (alwaysTest || apiKey !== null || vertexConfig != null) {
     const testResponse = await testEmbedding({
       provider_type: providerType,
       modelName,
@@ -91,6 +103,8 @@ export async function connectEmbeddingProvider({
       const err: ErrorResponseBody = await testResponse.json();
       throw new Error(err.detail ?? "Embedding test failed");
     }
+    const result: TestEmbeddingResponse = await testResponse.json();
+    dimension = result.dimension;
   }
 
   // A null input preserves the stored key, except when switching to Workload
@@ -119,6 +133,7 @@ export async function connectEmbeddingProvider({
     const err: ErrorResponseBody = await saveResponse.json();
     throw new Error(err.detail ?? "Failed to save provider");
   }
+  return dimension;
 }
 
 /**

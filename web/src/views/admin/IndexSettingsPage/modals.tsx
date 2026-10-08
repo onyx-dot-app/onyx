@@ -97,13 +97,18 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
 
 // ---------------------------------------------------------------------------
 // Tests credentials against the backend then persists them if the test passes.
-// Returns `true` on success so callers can chain their own follow-up
-// (e.g. staging a freshly-defined LiteLLM model). On failure, toasts the
-// error and returns `false`.
+// Returns the test result on success so callers can chain their own follow-up
+// (e.g. staging a freshly-defined LiteLLM model). `dimension` is the test
+// vector length, or null when no test ran. On failure, toasts the error and
+// returns `null`.
 //
 // `apiUrl`, `apiVersion`, `deploymentName` default to "" / null so simple
 // providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`.
 // ---------------------------------------------------------------------------
+
+interface ProviderTestResult {
+  dimension: number | null;
+}
 
 async function testAndSaveProviderCredentials({
   provider,
@@ -114,6 +119,7 @@ async function testAndSaveProviderCredentials({
   apiVersion = null,
   deploymentName = null,
   vertexConfig,
+  alwaysTest = false,
 }: {
   provider: EmbeddingProvider;
   apiKey: string | null;
@@ -124,9 +130,10 @@ async function testAndSaveProviderCredentials({
   apiVersion?: string | null;
   deploymentName?: string | null;
   vertexConfig?: VertexEmbeddingConfig | null;
-}): Promise<boolean> {
+  alwaysTest?: boolean;
+}): Promise<ProviderTestResult | null> {
   try {
-    await connectEmbeddingProvider({
+    const dimension = await connectEmbeddingProvider({
       providerType: provider.providerName,
       apiKey,
       apiUrl,
@@ -134,11 +141,12 @@ async function testAndSaveProviderCredentials({
       apiVersion,
       deploymentName,
       vertexConfig,
+      alwaysTest,
     });
-    return true;
+    return { dimension };
   } catch (error: unknown) {
     toast.error(error instanceof Error ? error.message : unknownErrorMessage);
-    return false;
+    return null;
   }
 }
 
@@ -575,6 +583,90 @@ function LiteLLMProviderModal({
 }
 
 // ---------------------------------------------------------------------------
+// Bifrost — the model is free text. Every save embeds a test string, which
+// rejects non-embedding models and gives the dimension.
+// ---------------------------------------------------------------------------
+
+interface BifrostFormValues {
+  apiUrl: string;
+  apiKey: string;
+  modelName: string;
+}
+function BifrostProviderModal({
+  provider,
+  existingCredentials,
+  existingModel,
+  onSubmit,
+}: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
+  const isEditing = !!existingCredentials;
+  const maskedApiKey = existingCredentials?.api_key ?? "";
+
+  const schema = Yup.object({
+    apiUrl: Yup.string()
+      .trim()
+      .required(t("validation.apiBaseUrlRequired"))
+      .url(t("validation.urlInvalid")),
+    apiKey: Yup.string().trim(),
+    modelName: Yup.string().trim().required(t("validation.modelNameRequired")),
+  });
+
+  const initialValues: BifrostFormValues = {
+    apiUrl: existingCredentials?.api_url ?? "",
+    apiKey: maskedApiKey,
+    modelName: existingModel?.modelName ?? "",
+  };
+
+  return (
+    <Formik<BifrostFormValues>
+      initialValues={initialValues}
+      validationSchema={schema}
+      validateOnMount
+      onSubmit={async (values) => {
+        const apiKey =
+          values.apiKey === maskedApiKey ? null : values.apiKey || null;
+        const modelName = values.modelName.trim();
+        const result = await testAndSaveProviderCredentials({
+          provider,
+          apiKey,
+          apiUrl: values.apiUrl.trim(),
+          modelName,
+          alwaysTest: true,
+          unknownErrorMessage: t("toasts.unknownError"),
+        });
+        if (result?.dimension) {
+          onSubmit({
+            modelName,
+            modelDim: result.dimension,
+            normalize: false,
+            queryPrefix: null,
+            passagePrefix: null,
+          });
+        }
+      }}
+    >
+      <ModalShell provider={provider} isEditing={isEditing}>
+        <ApiUrlField
+          title={t("bifrost.apiUrl.title")}
+          placeholder="https://bifrost.example.com"
+          subDescription={t("bifrost.apiUrl.description", { appName })}
+        />
+
+        <ApiKeyField provider={provider} optional />
+
+        <TextField
+          name="modelName"
+          title={t("fields.modelName.title")}
+          placeholder="openai/text-embedding-3-large"
+          subDescription={t("bifrost.modelName.description", { appName })}
+        />
+      </ModalShell>
+    </Formik>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Custom Self-Hosted
 // ---------------------------------------------------------------------------
 
@@ -629,6 +721,8 @@ export function ProviderCredentialsModal(props: ProviderModalProps) {
       return <AzureProviderModal {...props} />;
     case EmbeddingProviderName.LITELLM:
       return <LiteLLMProviderModal {...props} />;
+    case EmbeddingProviderName.BIFROST:
+      return <BifrostProviderModal {...props} />;
     case EmbeddingProviderName.CUSTOM:
       return <CustomSelfHostedModal {...props} />;
     default:
