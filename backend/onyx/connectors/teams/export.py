@@ -14,7 +14,12 @@ from office365.graph_client import GraphClient
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, Document, EntityFailure
 from onyx.connectors.teams import listing
-from onyx.connectors.teams.models import ChannelRef, Message, TeamExport
+from onyx.connectors.teams.models import (
+    ChannelIdentity,
+    ChannelRef,
+    Message,
+    TeamExport,
+)
 from onyx.connectors.teams.refusals import is_export_refusal, is_permanent, status
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.threads import ThreadSource
@@ -78,7 +83,7 @@ class ExportSource:
         threads: dict[str, list[Message]] = defaultdict(list)
         roots: dict[str, Message] = {}
         try:
-            stream = fetch_team_export(
+            stream: Iterator[Message] = fetch_team_export(
                 graph_client, team_id, start, max(end, time.time())
             )
             for seen, message in enumerate(stream, start=1):
@@ -157,7 +162,7 @@ def _channel_of(
     messages: list[Message], by_id: dict[str, ChannelRef]
 ) -> ChannelRef | None:
     for message in messages:
-        identity = message.channel_identity
+        identity: ChannelIdentity | None = message.channel_identity
         if identity is not None and identity.channel_id in by_id:
             return by_id[identity.channel_id]
     return None
