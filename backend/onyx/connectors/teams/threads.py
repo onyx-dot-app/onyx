@@ -224,6 +224,7 @@ class ThreadSource:
             team_id=channel.team_id,
             channel_id=channel.id,
             start=walk.start,
+            before_page=walk.page_signals,
         )
         return (
             SlimDocument(

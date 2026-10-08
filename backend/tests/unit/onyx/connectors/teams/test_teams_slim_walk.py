@@ -237,6 +237,27 @@ def test_a_walk_with_readers_gives_each_channel_its_own_rest_context_and_client(
     assert seen[0][2] is not seen[1][2]
 
 
+def test_quiet_channels_report_progress_from_their_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A batch of channels with nothing to list yields no document, so the
+    runner's lock is renewed from the pages the workers read."""
+    _team_with_channels(monkeypatch)
+    client = graph_client(
+        {_delta_url(CHANNELS[0]): {"value": []}, _delta_url(CHANNELS[1]): {"value": []}}
+    )
+    callback: MagicMock = MagicMock()
+    callback.should_stop.return_value = False
+
+    assert (
+        list(connector(client).retrieve_all_slim_docs_perm_sync(callback=callback))
+        == []
+    )
+    reports = [c.args[1] for c in callback.progress.call_args_list]
+    # One report per page of every channel, besides the batch reports.
+    assert reports.count(0) == 2
+
+
 def test_a_refused_channel_fails_the_pruning_walk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

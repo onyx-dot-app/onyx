@@ -676,6 +676,7 @@ def iter_drive_items_paged(
     end: datetime | None = None,
     page_size: int = 200,
     folder_id: str | None = None,
+    before_page: Callable[[], None] | None = None,
 ) -> Generator[DriveItemData, None, None]:
     """Yield DriveItemData for every file in a drive via the Graph API.
 
@@ -703,6 +704,8 @@ def iter_drive_items_paged(
         }
 
         while page_url:
+            if before_page is not None:
+                before_page()
             data = client.get_json(page_url, params)
             params = None  # nextLink already embeds query params
 
