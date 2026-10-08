@@ -564,6 +564,12 @@ lack of a key, ask instead. The shared helper
 
 ## 9. Footguns
 
+- **IMAP searches have day-level precision.**
+  `backend/onyx/connectors/imap/connector.py:_fetch_email_ids_in_mailbox` uses
+  UTC dates for `SINCE` and rounds non-midnight poll ends up for exclusive `BEFORE`.
+  An end at UTC midnight keeps that date as the exclusive bound.
+  The server compares `INTERNALDATE` calendar dates, ignoring time and timezone.
+  Polls can fetch the same day's messages again. The sender's `Date` header does not filter this search.
 - **`DocumentFailure.document_id` must equal the `Document.id` the connector
   indexes, not a source-native id.** The internal producer
   (`indexing/indexing_pipeline.py`, `DocumentFailure(document_id=document.id)`)
