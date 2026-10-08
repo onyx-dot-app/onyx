@@ -87,7 +87,19 @@
 /* ── Header ──────────────────────────────────────────────────────────── */
 
 .opal-card-expandable-header {
-  @apply w-full overflow-clip transition-[border-radius] duration-200 ease-out;
+  @apply w-full overflow-clip;
+  border-radius: var(--opal-card-radius);
+  transition: border-radius 150ms ease-out 100ms;
+}
+
+/* While the fold is open, the header's bottom corners are square so it
+   joins the fold. The corners move with the fold's height (see
+   `components/fold/styles.css`): they square as it expands, and round as it
+   collapses, after the content fades out. */
+.opal-card-expandable-header:has(+ .opal-fold[data-open="true"]) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  transition: border-radius 150ms ease-out;
 }
 
 .opal-card-expandable-header[data-color="transparent"] {
@@ -138,7 +150,7 @@
    header and body. It should always remain the default border color,
    regardless of any status borderColor applied to the card. */
 
-.opal-card-expandable-header:has(+ .opal-fold[data-open="true"]) {
+.opal-card-expandable-header:has(+ .opal-fold[data-mounted="true"]) {
   @apply border-b-border-01;
 }
 
