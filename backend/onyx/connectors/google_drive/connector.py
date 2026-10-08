@@ -42,6 +42,7 @@ from onyx.connectors.google_drive.drive_access import (
     select_drive_organizer,
 )
 from onyx.connectors.google_drive.file_retrieval import (
+    RESOLVED_FROM_SHORTCUT_KEY,
     DriveFileFieldType,
     crawl_folders_for_files,
     get_all_files_for_oauth,
@@ -71,6 +72,7 @@ from onyx.connectors.google_utils.google_utils import (
     GoogleFields,
     execute_paginated_retrieval,
     get_file_owners,
+    is_access_denied,
 )
 from onyx.connectors.google_utils.resources import (
     GoogleDriveService,
@@ -994,6 +996,24 @@ class GoogleDriveConnector(
         )
 
     def _finish_phase(self, checkpoint: GoogleDriveCheckpoint) -> None:
+        progress = checkpoint.phase_progress
+        if (
+            progress is not None
+            and progress.phase is DriveRetrievalPhase.REQUESTED_TARGETS
+        ):
+            # A target whose every planned principal failed was never listed,
+            # so pruning must not read its absence as deletion.
+            planned = {
+                split_target_partition_key(key)[0] for key in progress.partition_keys
+            }
+            missed = planned - checkpoint.crawled_target_ids
+            if missed:
+                logger.warning(
+                    "Requested targets %s were not crawled by any principal.",
+                    sorted(missed),
+                )
+            checkpoint.unreachable_target_ids.update(missed)
+
         # The orphan-folder cache is per impersonated email; the next phase
         # impersonates a different set. Keep the admin's, which every phase uses.
         for email in list(checkpoint.failed_folder_ids_by_email.keys()):
@@ -1025,7 +1045,7 @@ class GoogleDriveConnector(
             )
         if progress.phase is DriveRetrievalPhase.REQUESTED_TARGETS:
             yield from self._crawl_requested_target(
-                progress, partition, field_type, checkpoint, start, end
+                partition, field_type, checkpoint, start, end
             )
             return False
         if progress.phase is DriveRetrievalPhase.EXTERNAL_SHARES:
@@ -1060,6 +1080,8 @@ class GoogleDriveConnector(
                 checkpoint.incomplete_drive_ids.add(drive_id)
 
         complete = drive_id not in checkpoint.incomplete_drive_ids
+        # Drives an organizer already listed in full earlier in this phase.
+        finished_drive_ids = self._covered_drive_ids(checkpoint) - {drive_id}
         logger.info("Listing shared drive %s as %s", drive_id, email)
         try:
             for item in get_files_in_shared_drive(
@@ -1075,9 +1097,17 @@ class GoogleDriveConnector(
                 if isinstance(item, str):
                     progress.next_page_token = item
                     return True
+                in_this_drive = item.get("driveId") == drive_id
+                via_shortcut = RESOLVED_FROM_SHORTCUT_KEY in item
+                # A shortcut to a file in this drive: the listing reaches the
+                # file itself.
+                if via_shortcut and in_this_drive:
+                    continue
                 # Only an organizer listing is a complete record of the drive;
                 # anything else may also arrive through another partition.
-                exact = complete and item.get("driveId") == drive_id
+                exact = complete and in_this_drive and not via_shortcut
+                if not exact and item.get("driveId") in finished_drive_ids:
+                    continue
                 if not self._admit_file(checkpoint, item, exact):
                     continue
                 _note_modified_time(progress, item)
@@ -1104,6 +1134,10 @@ class GoogleDriveConnector(
         try:
             members = list_drive_members(admin_drive_service, drive_id)
         except HttpError as error:
+            # Only a denial means "fall back"; a server error must fail the
+            # run, or a prune would delete the drive's documents.
+            if not is_access_denied(error):
+                raise
             logger.warning("Cannot read members of drive %s: %s", drive_id, error)
             members = []
 
@@ -1179,8 +1213,13 @@ class GoogleDriveConnector(
                     progress.next_page_token = item
                     return True
                 owner = _owner_email(item)
-                exact = owner == email.lower() and not item.get("driveId")
-                # A non-exact file is a shortcut target owned by someone else.
+                owned_here = owner == email.lower() and not item.get("driveId")
+                via_shortcut = RESOLVED_FROM_SHORTCUT_KEY in item
+                # A shortcut to this user's own file: the listing reaches the
+                # file itself.
+                if via_shortcut and owned_here:
+                    continue
+                exact = owned_here and not via_shortcut
                 if not exact and (
                     item.get("driveId") in covered_drive_ids or owner in finished_owners
                 ):
@@ -1353,7 +1392,6 @@ class GoogleDriveConnector(
 
     def _crawl_requested_target(
         self,
-        progress: PhaseProgress,
         partition: str,
         field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
@@ -1361,20 +1399,8 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None,
     ) -> Generator[RetrievedDriveFile, None, None]:
         target_id, email = split_target_partition_key(partition)
-        # Losing one principal of a best-effort union leaves the others; losing
-        # the only principal leaves the target unlisted, so it must not prune.
-        sole_principal = (
-            sum(
-                1
-                for key in progress.partition_keys
-                if split_target_partition_key(key)[0] == target_id
-            )
-            == 1
-        )
         usable: bool = yield from self._impersonation_gate(email, checkpoint)
         if not usable:
-            if sole_principal:
-                checkpoint.unreachable_target_ids.add(target_id)
             return
 
         logger.info("Crawling requested target %s as %s", target_id, email)
@@ -1400,8 +1426,8 @@ class GoogleDriveConnector(
                 yield retrieved
         except RefreshError as error:
             yield from self._impersonation_failed(email, error, checkpoint)
-            if sole_principal:
-                checkpoint.unreachable_target_ids.add(target_id)
+            return
+        checkpoint.crawled_target_ids.add(target_id)
 
     def _impersonation_gate(
         self, email: str, checkpoint: GoogleDriveCheckpoint

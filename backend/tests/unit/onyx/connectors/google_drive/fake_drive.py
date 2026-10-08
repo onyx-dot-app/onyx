@@ -12,8 +12,10 @@ from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import httplib2
 from google.auth.exceptions import RefreshError
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from googleapiclient.errors import HttpError
 
 from onyx.connectors.google_drive import connector as connector_mod
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -22,6 +24,7 @@ from onyx.connectors.google_drive.drive_access import (
     DriveRole,
     PrincipalType,
 )
+from onyx.connectors.google_drive.file_retrieval import RESOLVED_FROM_SHORTCUT_KEY
 from onyx.connectors.google_drive.models import (
     DriveRetrievalStage,
     GoogleDriveCheckpoint,
@@ -34,8 +37,13 @@ PAGE_SIZE = 2
 
 
 def drive_file(
-    file_id: str, owner: str | None = None, drive_id: str | None = None
+    file_id: str,
+    owner: str | None = None,
+    drive_id: str | None = None,
+    shortcut_id: str | None = None,
 ) -> dict[str, Any]:
+    """A listed file. `shortcut_id` makes it a shortcut's resolved target, as
+    the real resolver returns it."""
     file: dict[str, Any] = {
         "id": file_id,
         "name": file_id,
@@ -47,6 +55,8 @@ def drive_file(
         file["owners"] = [{"emailAddress": owner}]
     if drive_id is not None:
         file["driveId"] = drive_id
+    if shortcut_id is not None:
+        file[RESOLVED_FROM_SHORTCUT_KEY] = shortcut_id
     return file
 
 
@@ -56,6 +66,8 @@ class SharedDrive:
     # File ids every member sees, and file ids only an organizer sees.
     files: list[str]
     restricted_files: list[str] = field(default_factory=list)
+    # Resolved shortcut targets that appear in this drive's listing.
+    shortcuts: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -78,6 +90,8 @@ class FakeTenant:
     folders: dict[str, Folder] = field(default_factory=dict)
     groups: dict[str, list[str]] = field(default_factory=dict)
     broken_users: set[str] = field(default_factory=set)
+    # Drives whose membership read fails with a server error.
+    failing_member_reads: set[str] = field(default_factory=set)
 
     @property
     def admin(self) -> str:
@@ -98,6 +112,8 @@ class FakeTenant:
     def list_drive_members(
         self, _admin_service: MagicMock, drive_id: str
     ) -> list[DriveMember]:
+        if drive_id in self.failing_member_reads:
+            raise HttpError(httplib2.Response({"status": 500}), b"backend error")
         drive = self.shared_drives.get(drive_id)
         return list(drive.members) if drive else []
 
@@ -145,6 +161,7 @@ class FakeTenant:
         if role is DriveRole.ORGANIZER:
             ids += drive.restricted_files
         files = [drive_file(file_id, drive_id=drive_id) for file_id in ids]
+        files += drive.shortcuts
         yield from _paged(files, f"drive:{drive_id}:{email}", max_num_pages, page_token)
 
     def get_all_files_in_my_drive_and_shared(

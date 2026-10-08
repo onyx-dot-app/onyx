@@ -254,6 +254,10 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # an owner pass, so other users' listings must not drop them.
     failed_impersonation_emails: set[str] = set()
 
+    # Requested targets at least one principal crawled. At the end of the
+    # requested-target phase, every planned target missing here is unreachable.
+    crawled_target_ids: set[str] = set()
+
     # Requested drives and folders that no impersonable user could reach.
     # Pruning refuses to run while this is non-empty, because absence from the
     # listing would delete every document indexed from them.

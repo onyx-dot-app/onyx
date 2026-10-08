@@ -17,7 +17,10 @@ from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_utils.google_utils import (
+    execute_access_probe,
+    execute_paginated_retrieval,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -160,21 +163,35 @@ def list_group_member_emails(admin_service: object, group_email: str) -> list[st
 
 
 def can_list_drive(drive_service: object, drive_id: str) -> bool:
-    """One-item listing as the impersonated user. False on any auth or access
-    failure, so the caller moves to the next candidate."""
+    """Whether the impersonated user is a member who can list the drive.
+
+    drives.get comes first: for a non-member, files.list can succeed with zero
+    items, which would make the drive look empty rather than out of reach.
+    Only access denial or a failed impersonation rejects the candidate; any
+    other error raises so the run fails instead of picking a weaker principal.
+    """
     try:
-        drive_service.files().list(  # ty: ignore[unresolved-attribute]
-            corpora="drive",
-            driveId=drive_id,
-            includeItemsFromAllDrives=True,
-            supportsAllDrives=True,
-            pageSize=1,
-            fields="files(id)",
-        ).execute()
-    except (HttpError, RefreshError) as error:
-        logger.info("Listing drive %s failed: %s", drive_id, error)
+        drive = execute_access_probe(
+            drive_service.drives().get(  # ty: ignore[unresolved-attribute]
+                driveId=drive_id, fields="id"
+            )
+        )
+        if drive is None:
+            return False
+        listing = execute_access_probe(
+            drive_service.files().list(  # ty: ignore[unresolved-attribute]
+                corpora="drive",
+                driveId=drive_id,
+                includeItemsFromAllDrives=True,
+                supportsAllDrives=True,
+                pageSize=1,
+                fields="files(id)",
+            )
+        )
+    except RefreshError as error:
+        logger.info("Cannot impersonate a candidate for drive %s: %s", drive_id, error)
         return False
-    return True
+    return listing is not None
 
 
 def probe_target(drive_service: object, target_id: str) -> dict[str, object] | None:
@@ -187,11 +204,7 @@ def probe_target(drive_service: object, target_id: str) -> dict[str, object] | N
             supportsAllDrives=True,
             fields=TARGET_PROBE_FIELDS,
         )
-        return request.execute()
-    except HttpError as error:
-        if error.resp.status in (403, 404):
-            return None
-        raise
+        return execute_access_probe(request)
     except RefreshError:
         return None
 

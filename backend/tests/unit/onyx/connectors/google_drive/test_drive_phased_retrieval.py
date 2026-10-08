@@ -10,6 +10,7 @@ from collections import Counter
 from unittest.mock import patch
 
 import pytest
+from googleapiclient.errors import HttpError
 
 from onyx.connectors.google_drive import connector as connector_mod
 from onyx.connectors.google_drive.connector import (
@@ -68,11 +69,15 @@ def _org_tenant() -> FakeTenant:
                 ],
                 files=["d1f1", "d1f2", "d1f3", "d1f4", "d1f5"],
                 restricted_files=["r1"],
+                # A shortcut to a file in the same drive.
+                shortcuts=[drive_file("d1f3", drive_id="d1", shortcut_id="s1")],
             ),
             # Organizer is a group; bob is its only member.
             "d2": SharedDrive(
                 members=[_member(GROUP, DriveRole.ORGANIZER, PrincipalType.GROUP)],
                 files=["d2f1", "d2f2", "d2f3"],
+                # A shortcut into d1, which was listed in full before d2.
+                shortcuts=[drive_file("d1f4", drive_id="d1", shortcut_id="s2")],
             ),
             # No organizer: listed by a reader, so it stays incomplete.
             "d3": SharedDrive(
@@ -91,9 +96,11 @@ def _org_tenant() -> FakeTenant:
                 drive_file("a1", owner=ALICE),
                 drive_file("a2", owner=ALICE),
                 drive_file("a3", owner=ALICE),
-                # Shortcut targets: one into a covered drive, one to bob's file.
-                drive_file("d1f1", drive_id="d1"),
-                drive_file("b1", owner=BOB),
+                # Shortcut targets: into a covered drive, to bob's file, and
+                # to alice's own file.
+                drive_file("d1f1", drive_id="d1", shortcut_id="s3"),
+                drive_file("b1", owner=BOB, shortcut_id="s4"),
+                drive_file("a1", owner=ALICE, shortcut_id="s5"),
                 drive_file("a4", owner=ALICE),
             ],
             BOB: [drive_file("b1", owner=BOB), drive_file("b2", owner=BOB)],
@@ -402,3 +409,27 @@ def test_specific_user_emails_limit_who_is_impersonated() -> None:
     assert final.organizer_email_by_drive_id["d1"] == BOB
     assert final.incomplete_drive_ids == {"d1"}
     assert final.unreachable_target_ids == {"fadmin"}
+
+
+def test_server_error_on_member_read_fails_the_run() -> None:
+    """A 500 is not evidence the drive has no members. Skipping the drive would
+    let a prune delete everything indexed from it, so the run must fail."""
+    tenant = _org_tenant()
+    tenant.failing_member_reads = {"d1"}
+    connector = _full_org_connector()
+
+    with tenant.patch(connector), pytest.raises(HttpError):
+        run_to_completion(connector)
+
+
+def test_target_whose_principals_all_fail_blocks_pruning() -> None:
+    tenant = _folder_tenant()
+    # fext is planned for alice and bob; both fail at the impersonation gate.
+    tenant.broken_users = {ALICE, BOB}
+    connector = make_service_account_connector(shared_folder_urls=_folder_url("fext"))
+
+    with tenant.patch(connector):
+        result = run_to_completion(connector)
+
+    assert result.file_ids == []
+    assert result.checkpoints[-1].unreachable_target_ids == {"fext"}
