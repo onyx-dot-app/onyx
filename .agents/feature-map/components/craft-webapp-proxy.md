@@ -202,6 +202,9 @@ provisioning entirely, since nothing will view them live.
 
 ### Artifact preview refresh
 
+The converter reuses cached slides only when they are newer than the source modification and change times.
+This detects same-size replacements that preserve modification time without hashing file contents.
+
 PowerPoint and PDF previews key cached data by file path, optional file revision,
 and explicit reload counter. When a revision is supplied, unchanged previews reuse
 cached data across tab switches. Without a revision, previews revalidate on mount.

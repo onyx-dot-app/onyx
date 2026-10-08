@@ -43,12 +43,13 @@ def main() -> None:
         print("ERROR_NOT_FOUND")
         return
 
-    # Check cache: if slides exist and are at least as new as the PPTX, reuse them
+    # Change time also detects copies that preserve the source modification time.
     cached_slides = _find_slides(cache_dir)
     if cached_slides:
-        pptx_mtime = os.path.getmtime(pptx_path)
-        oldest_slide_mtime = min(os.path.getmtime(s) for s in cached_slides)
-        if oldest_slide_mtime >= pptx_mtime:
+        source_stat = pptx_path.stat()
+        source_changed_ns = max(source_stat.st_mtime_ns, source_stat.st_ctime_ns)
+        oldest_slide_mtime_ns = min(Path(s).stat().st_mtime_ns for s in cached_slides)
+        if oldest_slide_mtime_ns >= source_changed_ns:
             print("CACHED")
             for slide in cached_slides:
                 print(slide)
