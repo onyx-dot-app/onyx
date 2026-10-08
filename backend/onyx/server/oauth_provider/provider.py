@@ -284,7 +284,12 @@ class OnyxOAuthProvider(OAuthProvider):
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
         try:
-            resource = canonical_mcp_resource(params.resource or "", self.settings)
+            resource = canonical_mcp_resource(
+                params.resource
+                if params.resource is not None
+                else self.settings.mcp_resource_url,
+                self.settings,
+            )
         except ValueError as error:
             raise AuthorizeError("invalid_request", "Invalid resource") from error
         scopes = params.scopes or [OAUTH_PROVIDER_SCOPE]

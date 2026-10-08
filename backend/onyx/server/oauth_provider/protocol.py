@@ -274,7 +274,9 @@ async def token(request: Request) -> Response:
         return Response(status_code=HTTPStatus.NO_CONTENT, headers=_CORS)
     try:
         values = await _form(request)
-        canonical_mcp_resource(values.get("resource", ""), settings)
+        values["resource"] = canonical_mcp_resource(
+            values.get("resource", settings.mcp_resource_url), settings
+        )
         grant_type = values.get("grant_type")
         if grant_type == "authorization_code":
             if _PKCE_VERIFIER.fullmatch(values.get("code_verifier", "")) is None:
