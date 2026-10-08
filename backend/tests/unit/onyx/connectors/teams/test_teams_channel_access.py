@@ -4,6 +4,7 @@ the group sync names the people in it."""
 import threading
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -278,20 +279,19 @@ def test_a_name_graph_gave_survives_a_racing_lookup_that_omits_it(
             assert first_written.wait(timeout=5)
         return answer
 
-    workers = [
-        threading.Thread(target=lambda: directory.principal_names(["u1"]))
-        for _ in range(2)
-    ]
-    with patch.object(directory, "_lookup", side_effect=lookup):
-        for worker in workers:
-            worker.start()
+    with (
+        patch.object(directory, "_lookup", side_effect=lookup),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        workers = [pool.submit(directory.principal_names, ["u1"]) for _ in range(2)]
         deadline = time.monotonic() + 5
         while "u1" not in directory._principal_names:
             assert time.monotonic() < deadline
             time.sleep(0.01)
         first_written.set()
+        # Both finished, their raises included, before the cache is read.
         for worker in workers:
-            worker.join(timeout=5)
+            worker.result(timeout=5)
 
     assert directory.principal_names(["u1"]) == {"u1": "ada@example.com"}
 
