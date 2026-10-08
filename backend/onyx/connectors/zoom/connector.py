@@ -53,7 +53,6 @@ from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     RecordingsState,
     ZoomSessionType,
-    definitely_absent,
     fails_the_whole_run,
 )
 from onyx.connectors.zoom.recordings.processing import (
@@ -64,6 +63,7 @@ from onyx.connectors.zoom.recordings.recording_access import (
     AccessResolver,
     RuleGrant,
     ZoomAccessListUnavailable,
+    ZoomRecordingGone,
     load_rule_grants,
     look_up_owner_email,
     resolve_recording_access,
@@ -324,10 +324,8 @@ class ZoomConnector(
             return self._resolve_access(recording)
         except ZoomAccessListUnavailable as e:
             logger.warning("%s", e)
-        except Exception as e:
-            if not definitely_absent(e):
-                raise
-            logger.info("Zoom recording %s is gone since it was listed", recording.uuid)
+        except ZoomRecordingGone as e:
+            logger.info("%s", e)
         return ExternalAccess.empty()
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ZoomConnectorCheckpoint:

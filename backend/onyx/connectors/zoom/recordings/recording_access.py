@@ -13,6 +13,7 @@ catalogue is only asked for when a recording names a rule.
 from collections.abc import Callable, Sequence
 from typing import NamedTuple
 
+import requests
 from pydantic import ValidationError
 
 from onyx.access.models import ExternalAccess
@@ -27,7 +28,10 @@ from onyx.connectors.zoom.models import (
     ZoomRecordingSettings,
     ZoomShareRecording,
 )
-from onyx.connectors.zoom.recordings.models import user_does_not_exist
+from onyx.connectors.zoom.recordings.models import (
+    definitely_absent,
+    user_does_not_exist,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -101,6 +105,12 @@ class ZoomAccessListUnavailable(Exception):
     the whole attempt."""
 
 
+class ZoomRecordingGone(Exception):
+    """The recording's own settings answered not found, so it was deleted after
+    it was listed. A not-found from any other call says nothing about the
+    recording, so it is not turned into this."""
+
+
 def approved_registrant_emails(
     registrants: Sequence[ZoomRecordingRegistrant],
 ) -> list[str]:
@@ -149,7 +159,7 @@ def resolve_recording_access(
     """Raises ZoomAccessListUnavailable rather than answering with an empty
     list, which would read as nobody having access."""
     try:
-        settings = client.get_recording_settings(recording.uuid)
+        settings = _recording_settings(client, recording.uuid)
         grant = _link_access(
             settings, recording.uuid, treat_link_access_as_public, rule_grant
         )
@@ -205,6 +215,17 @@ def resolve_recording_access(
             ExternalAccess.MAX_NUM_ENTRIES,
         )
     return access
+
+
+def _recording_settings(client: ZoomClient, uuid: str) -> ZoomRecordingSettings:
+    try:
+        return client.get_recording_settings(uuid)
+    except requests.HTTPError as e:
+        if definitely_absent(e):
+            raise ZoomRecordingGone(
+                f"Zoom recording {uuid} is gone since it was listed"
+            ) from e
+        raise
 
 
 def _link_access(

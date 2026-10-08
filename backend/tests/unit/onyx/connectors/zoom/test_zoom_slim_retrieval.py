@@ -6,6 +6,7 @@ does it raise rather than answer short.
 """
 
 import itertools
+from collections.abc import Callable
 from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -671,6 +672,26 @@ class TestThePermSyncWalk:
         with_recording_access(client)
         client.get_recording_settings.side_effect = http_error(400, 1234)
         _listing(client, _recording("uuid-1"))
+
+        with pytest.raises(requests.HTTPError):
+            _synced(connector)
+
+    @pytest.mark.parametrize(
+        "refuse",
+        [
+            lambda client: client.get_recording_authentication_rules,
+            lambda client: client.get_user,
+        ],
+        ids=["rule-catalogue", "owner-lookup"],
+    )
+    def test_a_404_from_any_other_call_fails_the_sync(
+        self, refuse: Callable[[MagicMock], MagicMock]
+    ) -> None:
+        # Only the recording's own settings answering 404 means it was deleted.
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        refuse(client).side_effect = http_error(404)
+        _listing(client, _recording("uuid-1"), _recording("uuid-2"))
 
         with pytest.raises(requests.HTTPError):
             _synced(connector)
