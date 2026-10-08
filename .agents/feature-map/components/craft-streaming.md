@@ -288,12 +288,16 @@ helper scripts must not reveal an empty Artifacts view before the deliverable ex
 refresh their previews without selecting a tab. Deleted files invalidate their
 previews. Each mounted viewer caches one payload for its file path, inventory
 revision, and explicit reload counter. Reload counters are per file and change only
-when the user requests a reload. Unmounting releases the viewer cache; selecting a
-different tab unmounts the previous body. Files without inventory revisions still
-revalidate when their preview mounts. Each successful PowerPoint conversion response
-gives slide images a fresh browser cache token. PDF previews release each viewer's
-object URL and payload on unmount. Presentation keyboard navigation stays inside
-the viewer.
+when the user requests a reload. The panel retains up to five recently visited tab
+bodies, preserving scroll, slide selection, and unchanged preview bytes across
+switches. Retained iframes stay in stable DOM order. Closed tabs, evicted tabs, and
+prior sessions release their viewer caches. Closing the panel releases its bodies
+after the animation. Hidden file viewers retain their displayed revision and load
+the latest revision on activation. Files without inventory revisions revalidate
+when their preview mounts. Each successful PowerPoint conversion response gives
+slide images a fresh browser cache token; unchanged retained viewers reuse it.
+PDF previews release their object URL on replacement or unmount. Presentation
+keyboard navigation stays inside the active viewer.
 
 The first automatic output selection, manual tab selection, closing a tab or the panel, and
 history navigation suppress further automatic selection for the current turn.
