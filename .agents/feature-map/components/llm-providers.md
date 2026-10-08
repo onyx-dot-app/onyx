@@ -62,6 +62,7 @@ Admin router, prefix `/admin/llm`:
 | GET | `/admin/llm/built-in/options`, `/built-in/options/{provider_name}` | `fetch_llm_options`, `fetch_llm_provider_options` | The well-known-provider catalogue. |
 | GET | `/admin/llm/custom-provider-names` | `fetch_custom_provider_names` | Names for the custom provider option. |
 | GET | `/admin/llm/auto-config` | `get_auto_config` | |
+| GET | `/admin/llm/router-models` | `list_router_model_providers` | Providers that own `is_router` model configurations. Options for the admin "Router Model" selector; hidden and persona-restricted routers included. |
 | GET | `/admin/llm/vision-providers` | `get_vision_capable_providers` | |
 | GET | `/admin/llm/provider-contextual-cost` | `get_provider_contextual_cost` | |
 | POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
@@ -124,6 +125,11 @@ edit surface. It is a thin client over the endpoints above.
   `is_visible` gates end-user selectability, `max_input_tokens` is an optional
   override, `display_name` / `custom_display_name` control the UI label, and
   `reasoning_effort_default` / `reasoning_effort_max` bound reasoning requests.
+  `is_router` marks a virtual router entry (e.g. `openrouter/auto`) instead of
+  a real upstream model. Router rows are hidden from the normal model list and
+  can back the picker's synthesized "Auto" item when the admin enables model
+  routing (`Settings.model_routing_enabled` plus
+  `model_routing_model_configuration_id`).
   `supports_image_input` is **deprecated in favour of `LLMModelFlow` with the
   `VISION` flow type**; see §9.
 - **`LLMModelFlow`** (`db/models.py`): joins a `model_configuration_id` to an
