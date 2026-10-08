@@ -863,7 +863,7 @@ def sweep_orphan_tags(r: TenantRedisClient, db_session: Session) -> None:
         OnyxRedisLocks.ORPHAN_TAG_SWEEP_LOCK,
         timeout=CELERY_PRUNING_LOCK_TIMEOUT,
     )
-    pending = OnyxRedisSignals.ORPHAN_TAG_SWEEP_PENDING
+    pending: str = OnyxRedisSignals.ORPHAN_TAG_SWEEP_PENDING
     if not lock.acquire(blocking=False):
         # The running sweep drains again before it releases the lock, so
         # orphans created after its last query are not left for the next prune.

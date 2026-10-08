@@ -54,7 +54,7 @@ def test_is_lock_timeout_matches_both_driver_shapes(migration: ModuleType) -> No
 
 
 def test_build_retries_after_dropping_invalid_index(migration: ModuleType) -> None:
-    conn = MagicMock()
+    conn: MagicMock = MagicMock()
     conn.exec_driver_sql.side_effect = [
         None,  # SET lock_timeout
         _asyncpg_lock_timeout(),  # first CREATE times out
@@ -67,7 +67,9 @@ def test_build_retries_after_dropping_invalid_index(migration: ModuleType) -> No
     ):
         migration._build_index(conn, "tenant_a")
 
-    statements = [call.args[0] for call in conn.exec_driver_sql.call_args_list]
+    statements: list[str] = [
+        call.args[0] for call in conn.exec_driver_sql.call_args_list
+    ]
     assert statements[0] == f"SET lock_timeout = '{migration.LOCK_TIMEOUT}'"
     assert statements[1].startswith("CREATE INDEX CONCURRENTLY")
     assert statements[2].startswith("DROP INDEX CONCURRENTLY")
@@ -76,7 +78,7 @@ def test_build_retries_after_dropping_invalid_index(migration: ModuleType) -> No
 
 
 def test_build_raises_other_errors_at_once(migration: ModuleType) -> None:
-    conn = MagicMock()
+    conn: MagicMock = MagicMock()
     conn.exec_driver_sql.side_effect = [None, _other_error()]
     with (
         patch.object(migration, "_index_state", return_value=None),
@@ -88,7 +90,7 @@ def test_build_raises_other_errors_at_once(migration: ModuleType) -> None:
 
 
 def test_build_gives_up_after_max_attempts(migration: ModuleType) -> None:
-    conn = MagicMock()
+    conn: MagicMock = MagicMock()
     conn.exec_driver_sql.side_effect = [None] + [
         _psycopg2_lock_timeout()
     ] * migration.MAX_BUILD_ATTEMPTS
