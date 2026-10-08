@@ -1,5 +1,6 @@
 import hashlib
 import tempfile
+import threading
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -368,6 +369,9 @@ class S3BackedFileStore(FileStore):
     ) -> None:
         self._s3_client: "S3Client | None" = None
         self._legacy_s3_client: "S3Client | None" = None
+        # The store is shared across threads and its clients are built lazily,
+        # so the first operations of several threads build each client once.
+        self._client_lock = threading.Lock()
         self._bucket_name = bucket_name
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
@@ -380,29 +384,31 @@ class S3BackedFileStore(FileStore):
         self._legacy_secret_access_key = legacy_secret_access_key
 
     def _get_s3_client(self) -> "S3Client":
-        if self._s3_client is None:
-            self._s3_client = build_s3_client(
-                self._s3_endpoint_url,
-                self._aws_access_key_id,
-                self._aws_secret_access_key,
-                self._aws_region_name,
-                self._s3_verify_ssl,
-            )
-        return self._s3_client
+        with self._client_lock:
+            if self._s3_client is None:
+                self._s3_client = build_s3_client(
+                    self._s3_endpoint_url,
+                    self._aws_access_key_id,
+                    self._aws_secret_access_key,
+                    self._aws_region_name,
+                    self._s3_verify_ssl,
+                )
+            return self._s3_client
 
     def _get_legacy_s3_client(self) -> "S3Client | None":
         if self._legacy_endpoint_url is None:
             return None
-        if self._legacy_s3_client is None:
-            self._legacy_s3_client = build_s3_client(
-                self._legacy_endpoint_url,
-                self._legacy_access_key_id,
-                self._legacy_secret_access_key,
-                self._aws_region_name,
-                self._s3_verify_ssl,
-                fail_fast=True,
-            )
-        return self._legacy_s3_client
+        with self._client_lock:
+            if self._legacy_s3_client is None:
+                self._legacy_s3_client = build_s3_client(
+                    self._legacy_endpoint_url,
+                    self._legacy_access_key_id,
+                    self._legacy_secret_access_key,
+                    self._aws_region_name,
+                    self._s3_verify_ssl,
+                    fail_fast=True,
+                )
+            return self._legacy_s3_client
 
     # Writes and deletes skip a retired legacy store. Reads still fall back to
     # it while MinIO runs, so a late write of an older release stays readable.
@@ -897,7 +903,22 @@ def get_azure_file_store() -> "AzureBlobBackedFileStore":
     )
 
 
+# Built once per process: a store carries no tenant or request state (keys take
+# the tenant from the context at call time) and its client is safe to share,
+# while building one costs tens of milliseconds, mostly the S3 client.
+_DEFAULT_FILE_STORE: FileStore | None = None
+_DEFAULT_FILE_STORE_LOCK: threading.Lock = threading.Lock()
+
+
 def get_default_file_store() -> FileStore:
+    global _DEFAULT_FILE_STORE
+    with _DEFAULT_FILE_STORE_LOCK:
+        if _DEFAULT_FILE_STORE is None:
+            _DEFAULT_FILE_STORE = _build_default_file_store()
+        return _DEFAULT_FILE_STORE
+
+
+def _build_default_file_store() -> FileStore:
     """
     Returns the configured file store implementation based on FILE_STORE_BACKEND.
 
