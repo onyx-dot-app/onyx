@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.5
+version: 0.9.6
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,13 +20,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: MCP OAuth discovery routes for nginx, ingress, and the web server.
-    - kind: changed
-      description: Expose MCP and its frontend OAuth callback on both API and web hosts.
     - kind: fixed
-      description: Route web-host OAuth provider API requests to the backend in
-        split-host deployments.
+      description: Serve OAuth discovery at the root and MCP compatibility paths
+        without build-time frontend proxy destinations.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

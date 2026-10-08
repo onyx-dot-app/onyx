@@ -46,7 +46,9 @@ The reverse proxy must expose these discovery URLs without requiring a session:
 - `/.well-known/oauth-authorization-server/api/oauth-provider`
 - `/.well-known/oauth-protected-resource/mcp/`
 
-The provided nginx, Helm, and Next.js routes handle these paths. PostgreSQL stores hashed credentials and grants. The cache backend (Redis, or PostgreSQL with `CACHE_BACKEND=postgres`) stores short-lived consent requests and authorization codes. All API replicas must use the same database and cache.
+The provided nginx and Helm routes handle these paths. Authorization metadata is also available at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-authorization-server/mcp` for older clients. These aliases return the same canonical issuer. Strict clients should use the issuer-specific discovery URL. The built Next.js server does not proxy discovery.
+
+PostgreSQL stores hashed credentials and grants. The cache backend (Redis, or PostgreSQL with `CACHE_BACKEND=postgres`) stores short-lived consent requests and authorization codes. All API replicas must use the same database and cache.
 
 Each refresh deletes the grant's expired access tokens. The primary worker deletes expired grants, with their tokens, once a day. The default cloud multiplier makes it eight days. Catalog cleanup removes client registrations idle for 90 days. Lite deployments run both cleanups from the API server. Authentication enforces expiry immediately and does not wait for cleanup. Refresh history remains until the grant expires.
 

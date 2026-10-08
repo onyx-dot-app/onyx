@@ -73,18 +73,6 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: "/.well-known/oauth-authorization-server/:path*",
-        destination: `${
-          process.env.INTERNAL_URL || "http://localhost:8080"
-        }/oauth-provider/metadata`,
-      },
-      {
-        source: "/.well-known/oauth-protected-resource/:path*",
-        destination: `${
-          process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090"
-        }/.well-known/oauth-protected-resource/:path*`,
-      },
-      {
         source: "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr",
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"

@@ -214,6 +214,9 @@ On Helm deployments, `/mcp/` also routes on the web host so the endpoint and
 protected-resource metadata match the resource derived from `WEB_DOMAIN`.
 The API ingress also routes `/api/oauth-provider` on the web host in split-host
 deployments, removing `/api` before forwarding to the backend.
+Nginx serves authorization metadata at the RFC 8414 issuer path and the root
+and `/mcp` compatibility aliases. All aliases retain the canonical issuer.
+Discovery is handled by the public proxy, without Next.js rewrite destinations.
 
 ### 4.3 A search call, end to end
 
