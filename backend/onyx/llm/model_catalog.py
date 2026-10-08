@@ -246,12 +246,28 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
     # endpoint then rejects.
     unbounded: bool = bool(entry.get("unbounded"))
 
+    # An output limit at or above the context window is a pool-max
+    # fabrication — no chat model emits its whole context on top of input.
+    # Upstream vendors these anyway (~250 entries), so treat the claim as
+    # untrusted and emit no output limit, same as unbounded.
+    limit_output: Any = limit.get("output")
+    context: Any = limit.get("context")
+    if (
+        not unbounded
+        and (entry.get("mode") or "chat") == "chat"
+        and isinstance(limit_output, (int, float))
+        and isinstance(context, (int, float))
+        and context > 0
+        and limit_output >= context
+    ):
+        limit_output = None
+
     return {
         "litellm_provider": provider,
         "mode": entry.get("mode") or "chat",
         "max_input_tokens": limit.get("input") or limit.get("context"),
         "max_tokens": limit.get("context"),
-        "max_output_tokens": None if unbounded else limit.get("output"),
+        "max_output_tokens": None if unbounded else limit_output,
         "unbounded": unbounded or None,
         "supports_vision": "image" in inputs,
         "supports_reasoning": entry.get("reasoning"),
