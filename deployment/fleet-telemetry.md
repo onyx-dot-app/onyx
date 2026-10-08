@@ -58,6 +58,8 @@ On a backend image older than the collector, the Compose and Helm collector wait
 does not restart. Thus a chart or Compose file that is newer than its image does not cause a
 crash loop or a failed `--wait`.
 The collector uses standard Onyx PostgreSQL, Redis, and OpenSearch settings by default.
+With `DISABLE_VECTOR_DB=true` (Onyx Lite), it does not read OpenSearch or Celery queues.
+The Lite Compose overlay sets this value on the collector too.
 All collection transactions are read-only, with short statement and lock limits.
 The startup identity write uses a separate connection that is closed before collection begins.
 For stricter database permissions, supply a dedicated read-only collector URL as described below.

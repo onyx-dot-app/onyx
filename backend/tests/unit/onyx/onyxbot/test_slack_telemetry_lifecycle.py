@@ -13,7 +13,7 @@ from onyx.utils.fleet_query_telemetry import QueryObservation
 def test_listener_starts_sender_before_handlers_and_closes_on_exit(
     monkeypatch: pytest.MonkeyPatch, exit_mode: str
 ) -> None:
-    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     monkeypatch.setattr(fleet, "_client", None)
     config: fleet.TelemetryConfig = fleet.TelemetryConfig(
         "http://localhost:8787",

@@ -8,6 +8,16 @@ from typing import Any
 from sqlalchemy import Connection, Engine, create_engine, event, text
 
 from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
+from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
+
+# Separate read-only collector credentials. Without them, the collector uses the
+# application's PostgreSQL settings, TLS, and IAM authentication.
+TELEMETRY_DATABASE_URL: str | None = (
+    os.environ.get("ONYX_TELEMETRY_DATABASE_URL") or None
+)
+SOURCE_DATABASE_URL: str = TELEMETRY_DATABASE_URL or build_connection_string(
+    db_api=SYNC_DB_API
+)
 
 SAFE_BOOLEAN_SETTINGS = (
     "include_shared_drives",
@@ -83,16 +93,14 @@ def collector_engine(database_url: str) -> Engine:
         pool_pre_ping=False,
         connect_args={
             **(
-                pg_ssl_psycopg2_connect_args()
-                if not os.environ.get("ONYX_TELEMETRY_DATABASE_URL")
-                else {}
+                pg_ssl_psycopg2_connect_args() if TELEMETRY_DATABASE_URL is None else {}
             ),
             "connect_timeout": 2,
             "application_name": "onyx_fleet_collector",
         },
     )
 
-    if not os.environ.get("ONYX_TELEMETRY_DATABASE_URL"):
+    if TELEMETRY_DATABASE_URL is None:
         from onyx.configs.app_configs import USE_IAM_AUTH
         from onyx.db.engine.iam_auth import provide_iam_token
 

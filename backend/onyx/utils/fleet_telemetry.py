@@ -18,6 +18,7 @@ from urllib.parse import SplitResult, urlsplit
 
 import requests
 
+from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.constants import DocumentSource, OnyxCeleryQueues
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from shared_configs.configs import MULTI_TENANT
@@ -519,11 +520,6 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
     return safe
 
 
-def telemetry_disabled() -> bool:
-    """Deployment-owned kill switch, shared with legacy callhome telemetry."""
-    return os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
-
-
 @dataclass(frozen=True)
 class TelemetryConfig:
     endpoint: str
@@ -543,7 +539,7 @@ class TelemetryConfig:
         cls, service: str, identity: dict[str, str] | None = None
     ) -> "TelemetryConfig | None":
         try:
-            if telemetry_disabled():
+            if DISABLE_TELEMETRY:
                 return None
             values: dict[str, str] = {**os.environ, **(identity or {})}
             endpoint: str = (
@@ -1151,7 +1147,7 @@ def _bootstrap(service: str, report_process: bool, stopped: threading.Event) -> 
     global _client
     delay: float = 2.0
     edition_wait: float = 0.1
-    while not stopped.is_set() and not telemetry_disabled():
+    while not stopped.is_set() and not DISABLE_TELEMETRY:
         try:
             from onyx.db.fleet_enrollment import edition_selected, installation_seed
 
@@ -1163,7 +1159,7 @@ def _bootstrap(service: str, report_process: bool, stopped: threading.Event) -> 
             config: TelemetryConfig | None = automatic_config(
                 service, installation_seed()
             )
-            if config is None or stopped.is_set() or telemetry_disabled():
+            if config is None or stopped.is_set() or DISABLE_TELEMETRY:
                 return
             client: BoundedTelemetry = BoundedTelemetry(
                 config, report_process=report_process
@@ -1186,7 +1182,7 @@ def start_telemetry(
     without startup, resource, or heartbeat reports of their own.
     """
     global _client, _bootstrap_thread, _bootstrap_stop, _bootstrap_pid
-    if telemetry_disabled():
+    if DISABLE_TELEMETRY:
         return None
     try:
         if _client is not None and _client.pid == os.getpid() and not _client.closed:

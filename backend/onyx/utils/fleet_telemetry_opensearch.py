@@ -5,14 +5,9 @@ from typing import Any
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.document_index.opensearch.client import OpenSearchClient
-from onyx.document_index.opensearch.models import ResourceIssue, ResourceSnapshot
-from onyx.document_index.opensearch.resource_health import (
-    RESOURCE_SNAPSHOT_KEY,
-    RESOURCE_STALE_SECONDS,
-)
-from onyx.redis.redis_pool import redis_pool
+from onyx.document_index.opensearch.models import ResourceHealth, ResourceIssue
+from onyx.document_index.opensearch.resource_health import get_resource_health
 from onyx.utils.fleet_telemetry import BoundedTelemetry
-from shared_configs.configs import DEFAULT_REDIS_PREFIX
 
 
 def collect_opensearch_health(client: BoundedTelemetry) -> None:
@@ -48,18 +43,15 @@ def collect_opensearch_health(client: BoundedTelemetry) -> None:
         # No endpoint, credentials, cluster names, or raw exceptions leave this collector.
         pass
     try:
-        redis = redis_pool.get_client(DEFAULT_REDIS_PREFIX, operation_timeout_s=0.2)
-        raw = redis.get(RESOURCE_SNAPSHOT_KEY)
-        if raw:
-            snapshot = ResourceSnapshot.model_validate_json(raw)
-            stale = (now - snapshot.checked_at).total_seconds() > RESOURCE_STALE_SECONDS
+        resources: ResourceHealth = get_resource_health(operation_timeout_s=0.2)
+        if resources.checked_at is not None:
             data.update(
-                opensearch_resource_checked_at=snapshot.checked_at.isoformat(),
-                opensearch_resource_stale=stale,
-                opensearch_disk_pressure=ResourceIssue.DISK in snapshot.issues,
-                opensearch_heap_pressure=ResourceIssue.JVM_MEMORY in snapshot.issues,
+                opensearch_resource_checked_at=resources.checked_at.isoformat(),
+                opensearch_resource_stale=resources.stale,
+                opensearch_disk_pressure=ResourceIssue.DISK in resources.issues,
+                opensearch_heap_pressure=ResourceIssue.JVM_MEMORY in resources.issues,
                 opensearch_vector_pressure=ResourceIssue.VECTOR_MEMORY
-                in snapshot.issues,
+                in resources.issues,
             )
     except Exception:
         pass

@@ -370,6 +370,28 @@ def test_queue_collection_inherits_tls_without_overriding_explicit_url(
         assert options["ssl_keyfile"] == "/test/redis-client.key"
 
 
+def test_no_vector_db_deployments_do_not_read_queues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+
+    from onyx.utils import fleet_telemetry_collector as source
+
+    # Lite deployments replace Celery with an in-process runner and have no broker.
+    monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
+    monkeypatch.setattr(source, "DISABLE_VECTOR_DB", True)
+    monkeypatch.setenv("ONYX_TELEMETRY_REDIS_URL", "redis://localhost:1/0")
+    factory: Mock = Mock(side_effect=AssertionError("read a missing broker"))
+    monkeypatch.setattr("redis.Redis.from_url", factory)
+    sender: fleet.BoundedTelemetry = client()
+    sender.config = replace(sender.config, auto_enroll=True)
+    collector: FleetCollector = FleetCollector(sender, "postgresql://test", ["public"])
+    collector.collect_queues()
+    factory.assert_not_called()
+    assert collector.queue_errors == 0
+    assert not sender._take_batch()
+
+
 def test_unchanged_metadata_reconciles_after_loss_and_six_hours(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1039,7 +1061,7 @@ def test_schema_names_allow_real_cloud_hyphens_and_reject_sql() -> None:
 def test_instance_domain_is_startup_hmac_of_canonical_host_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("DISABLE_TELEMETRY", "false")
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     monkeypatch.setenv("ONYX_TELEMETRY_ENDPOINT", "http://localhost:8787")
     monkeypatch.setenv(
         "ONYX_TELEMETRY_CUSTOMER_UUID", "11111111-1111-4111-8111-111111111111"
@@ -1643,11 +1665,10 @@ def test_delivery_receipts_only_settle_events() -> None:
 @pytest.mark.parametrize(
     "service", ["api", "collector", "docfetching", "docprocessing", "slack", "discord"]
 )
-@pytest.mark.parametrize("value", ["true", "TRUE"])
 def test_deployment_kill_switch_prevents_sender_startup(
-    monkeypatch: pytest.MonkeyPatch, service: str, value: str
+    monkeypatch: pytest.MonkeyPatch, service: str
 ) -> None:
-    monkeypatch.setenv("DISABLE_TELEMETRY", value)
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", True)
     monkeypatch.setenv("ONYX_TELEMETRY_ENDPOINT", "https://telemetry.onyx.app")
     monkeypatch.setenv("ONYX_TELEMETRY_TOKEN", "test-token")
     monkeypatch.setenv(
@@ -1674,7 +1695,7 @@ def test_disabled_collector_does_not_start_or_open_sources(
 ) -> None:
     from onyx.utils import fleet_telemetry_collector as source
 
-    monkeypatch.setenv("DISABLE_TELEMETRY", "true")
+    monkeypatch.setattr(source, "DISABLE_TELEMETRY", True)
     monkeypatch.setattr("sys.argv", ["collector"] + (["--once"] if once else []))
     blocked = Mock(
         side_effect=AssertionError("Disabled collector must do no collection")

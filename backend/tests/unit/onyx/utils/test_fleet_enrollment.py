@@ -26,10 +26,11 @@ def test_database_connections_apply_source_tls_only_to_standard_settings(
     monkeypatch.setattr(pg_ssl, "POSTGRES_SSLROOTCERT", "/test/ca.crt")
     monkeypatch.setattr(pg_ssl, "POSTGRES_SSLCERT", "/test/client.crt")
     monkeypatch.setattr(pg_ssl, "POSTGRES_SSLKEY", "/test/client.key")
-    if explicit_url:
-        monkeypatch.setenv("ONYX_TELEMETRY_DATABASE_URL", "postgresql://explicit")
-    else:
-        monkeypatch.delenv("ONYX_TELEMETRY_DATABASE_URL", raising=False)
+    monkeypatch.setattr(
+        fleet_telemetry,
+        "TELEMETRY_DATABASE_URL",
+        "postgresql://explicit" if explicit_url else None,
+    )
     for module, operation in (
         (fleet_enrollment, fleet_enrollment.installation_seed),
         (
@@ -55,7 +56,7 @@ def test_database_connections_apply_source_tls_only_to_standard_settings(
 def test_auto_identity_is_stable_and_privacy_key_stays_local(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     monkeypatch.delenv("ONYX_TELEMETRY_ENDPOINT", raising=False)
     first = fleet.automatic_config("api", b"a" * 32)
     second = fleet.automatic_config("collector", b"a" * 32)
@@ -91,7 +92,7 @@ def test_auto_identity_is_stable_and_privacy_key_stays_local(
 def test_enrollment_accepts_additional_receipt_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     config = fleet.automatic_config("api", b"a" * 32)
     assert config
     sender = fleet.BoundedTelemetry(config)
@@ -141,7 +142,7 @@ def test_collector_selects_edition_before_enrollment(
     from onyx.utils import fleet_telemetry_collector as source
 
     calls: list[str] = []
-    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    monkeypatch.setattr(source, "DISABLE_TELEMETRY", False)
     monkeypatch.setattr("sys.argv", ["collector", "--once"])
     monkeypatch.setattr(
         source, "set_is_ee_if_available", lambda: calls.append("edition")
@@ -163,7 +164,7 @@ def test_collector_selects_edition_before_enrollment(
 def test_failed_or_mismatched_enrollment_retains_bounded_batch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     config = fleet.automatic_config("api", b"a" * 32)
     assert config
     sender = fleet.BoundedTelemetry(config)
@@ -183,8 +184,9 @@ def test_startup_and_shutdown_do_not_wait_for_identity_storage(
     from onyx.db import fleet_enrollment
 
     for key in tuple(os.environ):
-        if key.startswith("ONYX_TELEMETRY_") or key == "DISABLE_TELEMETRY":
+        if key.startswith("ONYX_TELEMETRY_"):
             monkeypatch.delenv(key)
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     entered = threading.Event()
     release = threading.Event()
 
@@ -222,8 +224,9 @@ def test_bootstrap_waits_for_the_edition_without_reading_identity(
     from onyx.db import fleet_enrollment
 
     for key in tuple(os.environ):
-        if key.startswith("ONYX_TELEMETRY_") or key == "DISABLE_TELEMETRY":
+        if key.startswith("ONYX_TELEMETRY_"):
             monkeypatch.delenv(key)
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     selected = threading.Event()
     seed = Mock(return_value=b"a" * 32)
     monkeypatch.setattr(fleet_enrollment, "edition_selected", selected.is_set)
@@ -254,9 +257,9 @@ def test_partial_override_and_opt_out_do_not_enroll(
     monkeypatch.setattr(fleet, "_client", None)
     start = Mock(side_effect=AssertionError("started background work"))
     monkeypatch.setattr(threading.Thread, "start", start)
-    monkeypatch.setenv("DISABLE_TELEMETRY", "true")
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", True)
     assert fleet.start_telemetry() is None
-    monkeypatch.delenv("DISABLE_TELEMETRY")
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     monkeypatch.setenv("ONYX_TELEMETRY_TOKEN", "partial")
     assert fleet.start_telemetry() is None
     start.assert_not_called()
@@ -267,7 +270,7 @@ def test_automatic_cloud_scopes_cannot_collide_with_explicit_identity(
 ) -> None:
     import uuid
 
-    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     monkeypatch.setattr(fleet, "MULTI_TENANT", True)
     config = fleet.automatic_config("api", b"c" * 32)
     assert config

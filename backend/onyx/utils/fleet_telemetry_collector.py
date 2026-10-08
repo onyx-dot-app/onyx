@@ -21,10 +21,11 @@ from typing import Any
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from onyx.db.fleet_enrollment import source_database_url
+from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB
 from onyx.db.fleet_telemetry import (
     SAFE_BOOLEAN_SETTINGS,
     SAFE_NUMBER_SETTINGS,
+    SOURCE_DATABASE_URL,
     attempt_page,
     collector_engine,
     connector_page,
@@ -44,7 +45,6 @@ from onyx.utils.fleet_telemetry import (
     poll_due,
     start_telemetry,
     stop_telemetry,
-    telemetry_disabled,
 )
 from onyx.utils.variable_functionality import set_is_ee_if_available
 from shared_configs.configs import MULTI_TENANT
@@ -619,7 +619,8 @@ class FleetCollector:
         return collected
 
     def collect_queues(self) -> None:
-        if not poll_due(
+        # Without a vector DB, Onyx runs no Celery workers or broker.
+        if DISABLE_VECTOR_DB or not poll_due(
             self._last_queues,
             time.monotonic(),
             QUEUE_INTERVAL_SECONDS,
@@ -816,7 +817,7 @@ def main() -> None:
     stopped: threading.Event = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stopped.set())
     signal.signal(signal.SIGINT, lambda *_: stopped.set())
-    if telemetry_disabled():
+    if DISABLE_TELEMETRY:
         # Keep long-running containers idle instead of entering a restart loop.
         if not args.once:
             stopped.wait()
@@ -830,7 +831,6 @@ def main() -> None:
     if client is None:
         stop_telemetry()
         return
-    database_url: str = source_database_url()
     schemas: list[str] = [
         value
         for value in os.environ.get(
@@ -838,7 +838,7 @@ def main() -> None:
         ).split(",")
         if value
     ]
-    collector: FleetCollector = FleetCollector(client, database_url, schemas)
+    collector: FleetCollector = FleetCollector(client, SOURCE_DATABASE_URL, schemas)
     from onyx.utils.fleet_telemetry_kubernetes import KubernetesCollector
 
     kubernetes: KubernetesCollector | None = (

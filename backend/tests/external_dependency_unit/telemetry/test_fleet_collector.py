@@ -308,6 +308,7 @@ def test_automatic_identity_is_persistent_and_race_safe(
     from concurrent.futures import ThreadPoolExecutor
 
     from onyx.db import fleet_enrollment
+    from onyx.utils import fleet_telemetry
     from onyx.utils.fleet_telemetry import automatic_config
 
     url, schema = source_schema
@@ -329,7 +330,7 @@ def test_automatic_identity_is_persistent_and_race_safe(
         )
     assert len(set(seeds)) == 1
     assert fleet_enrollment.installation_seed() == seeds[0]
-    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    monkeypatch.setattr(fleet_telemetry, "DISABLE_TELEMETRY", False)
     first = automatic_config("api", seeds[0])
     restarted = automatic_config("collector", seeds[0])
     assert first and restarted

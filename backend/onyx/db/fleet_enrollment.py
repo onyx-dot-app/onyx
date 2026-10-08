@@ -1,6 +1,5 @@
 """Background-only installation identity, independent of application DB pools."""
 
-import os
 import re
 import secrets
 
@@ -14,12 +13,6 @@ from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from onyx.utils.variable_functionality import global_version, is_ee_available
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-
-
-def source_database_url() -> str:
-    return os.environ.get("ONYX_TELEMETRY_DATABASE_URL") or build_connection_string(
-        db_api=SYNC_DB_API
-    )
 
 
 def edition_selected() -> bool:
