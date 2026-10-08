@@ -341,7 +341,7 @@ function CheckCardView({
                   onClick={onRerun}
                 />
               )}
-              {!collapsed && requiredFailed > 0 && (
+              {collapsed && requiredFailed > 0 && (
                 <Tag
                   title={t("requiredFailed", { count: requiredFailed })}
                   color="red"
