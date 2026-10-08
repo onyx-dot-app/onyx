@@ -57,7 +57,8 @@ export async function mockPassingConnectorChecks(page: Page): Promise<void> {
         run_id: RUN_ID,
         draft_key: request.draft_key,
         source: request.source,
-        credential_id: request.credential_id,
+        credential_id:
+          "credential_id" in request ? request.credential_id : null,
         access_type: request.access_type,
         status: "completed",
         form_errors: {},

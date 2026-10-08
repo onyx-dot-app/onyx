@@ -1,5 +1,6 @@
 "use client";
 
+import type { CredentialRef } from "@/lib/credentials/types";
 import { useCallback, useMemo, useState } from "react";
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import { ContentAction, Section } from "@opal/layouts";
@@ -448,20 +449,20 @@ function CheckCardView({
  */
 export interface CredentialChecksCardProps {
   source: ConfigurableSources;
-  /** The credential the checks run with; `null` until one is usable. */
-  credentialId: number | null;
+  /** The saved credential or draft the checks run with; `null` until one is usable. */
+  credential: CredentialRef | null;
   /** Locks the Start Checks prompt until the credential section is valid. */
   locked: boolean;
 }
 export default function CredentialChecksCard({
   source,
-  credentialId,
+  credential,
   locked,
 }: CredentialChecksCardProps) {
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
-  useResetChecksOnCredentialChange({ source, credentialId });
-  const checks = useConnectorChecks({ source, credentialId });
+  useResetChecksOnCredentialChange({ source, credential });
+  const checks = useConnectorChecks({ source, credential });
   useConnectorChecksAutoRun(checks);
   // No check applies to this source and access type: nothing to start.
   if (checks.plan?.checks.every((check) => check.state === "not_applicable")) {

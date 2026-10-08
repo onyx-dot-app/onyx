@@ -31,7 +31,7 @@ function params(
 ): UseBoundFieldsGateParams {
   return {
     source: ValidSources.Confluence,
-    credentialId: 1,
+    credential: { credential_id: 1 },
     credentialUpdatedAt: "2026-01-01T00:00:00Z",
     credentialSelected: true,
     boundFieldNames: ["wiki_base"],
@@ -133,7 +133,7 @@ describe("useBoundFieldsGate", () => {
     );
     await flush();
 
-    rerender(params({ credentialId: 2 }));
+    rerender(params({ credential: { credential_id: 2 } }));
     await flush();
     expect(mockedCheck).toHaveBeenCalledTimes(2);
 

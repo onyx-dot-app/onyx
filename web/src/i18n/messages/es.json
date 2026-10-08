@@ -2745,6 +2745,14 @@
           },
           "rerunFailed": {
             "toast": "No se pudieron iniciar las comprobaciones. Inténtalo de nuevo."
+          },
+          "draft": {
+            "description": "Aún no guardada",
+            "detailsTitle": "Aún no guardada",
+            "detailsDescription": "Esta cuenta se guarda al crear el conector. Si sales de esta página, se descarta.",
+            "discardButton": {
+              "label": "Descartar cuenta"
+            }
           }
         }
       },

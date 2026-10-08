@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Button, Fold, SelectButton, SelectCard, Tabs } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgListTree, SvgPlusCircle } from "@opal/icons";
-import type { Credential } from "@/lib/credentials/types";
+import type { Credential, DraftCredential } from "@/lib/credentials/types";
 import {
   useCredentialCheckReports,
   useCredentialSetup,
@@ -14,7 +14,11 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
-import { shouldRedirectToOAuth } from "@/lib/credentials/utils";
+import {
+  isDraftCredential,
+  shouldRedirectToOAuth,
+  toCredentialRef,
+} from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
@@ -26,12 +30,17 @@ interface AuthenticationAccountSectionProps {
   connector: ConfigurableSources;
   /** Access type from the connector form; a new credential inherits it. */
   accessType: AccessType;
-  /** The credential the page links once the connector is created. */
-  currentCredential: Credential<any> | null;
-  /** Called when the user picks or creates a credential, or drops it. */
-  onCredentialChange: (credential: Credential<any> | null) => void;
-  /** The credential the capability checks run with; `null` locks them. */
-  checkedCredential: Credential<any> | null;
+  /**
+   * The account the page pairs once the connector is created: saved, or a
+   * draft that Create saves.
+   */
+  currentCredential: Credential<any> | DraftCredential | null;
+  /** Called when the user picks or adds an account, or drops it. */
+  onCredentialChange: (
+    credential: Credential<any> | DraftCredential | null
+  ) => void;
+  /** The account the capability checks run with; `null` locks them. */
+  checkedCredential: Credential<any> | DraftCredential | null;
   /** Locks the Start Checks prompt, as the configuration below is locked. */
   checksLocked: boolean;
 }
@@ -76,11 +85,29 @@ export default function AuthenticationAccountSection({
   const newAccountLabel = t("add.newAccountButton.label", {
     source: displayName,
   });
+  // A new account added here: a draft, held only on this page until Create
+  // saves it. A newer one replaces it.
+  const [draft, setDraft] = useState<DraftCredential | null>(null);
+  const selectedSavedId: number | null =
+    currentCredential && !isDraftCredential(currentCredential)
+      ? currentCredential.id
+      : null;
+
+  function onDraft(next: DraftCredential) {
+    setDraft(next);
+    onCredentialChange(next);
+  }
+
+  function discardDraft() {
+    if (currentCredential === draft) onCredentialChange(null);
+    setDraft(null);
+  }
+
   async function onDeleteCredential(credential: Credential<any | null>) {
     const error = await remove(credential, t("add.unknownError.toast"));
     if (error === null) {
       // A deleted account cannot stay picked.
-      if (credential.id === currentCredential?.id) onCredentialChange(null);
+      if (credential.id === selectedSavedId) onCredentialChange(null);
     } else {
       toast.error(error);
     }
@@ -114,6 +141,7 @@ export default function AuthenticationAccountSection({
         sourceType={connector}
         accessType={accessType}
         onSwitch={onSwap}
+        onDraft={onDraft}
         onClose={close}
       />
     );
@@ -171,7 +199,7 @@ export default function AuthenticationAccountSection({
             // Blue while an account is picked; held in its hover look
             // while the list is open.
             state={
-              !currentCredential
+              selectedSavedId === null
                 ? "empty"
                 : showSavedAccounts
                   ? "selected"
@@ -197,6 +225,21 @@ export default function AuthenticationAccountSection({
             {/* Hidden accounts animate away, then leave the page. The fold
             holds the cards' gap, so a closed one leaves no space behind. A
             div, as Section's own padding would override the bottom one. */}
+            {draft && (
+              // Not a saved account, so it stays out of the saved list.
+              <div className="pb-2">
+                <AuthenticationAccountCard
+                  credential={draft}
+                  source={connector}
+                  sourceName={displayName}
+                  selected={currentCredential === draft}
+                  onSelect={() => onCredentialChange(draft)}
+                  onDeselect={() => onCredentialChange(null)}
+                  onDelete={discardDraft}
+                  checkReport={null}
+                />
+              </div>
+            )}
             <Fold open={showSavedAccounts && credentials.length > 0}>
               <div className="flex flex-col gap-2 pb-2">
                 {credentials.map((credential) => (
@@ -205,12 +248,12 @@ export default function AuthenticationAccountSection({
                     credential={credential}
                     source={connector}
                     sourceName={displayName}
-                    selected={credential.id === currentCredential?.id}
-                    onSelect={onSwap}
+                    selected={credential.id === selectedSavedId}
+                    onSelect={() => onSwap(credential)}
                     onDeselect={() => onCredentialChange(null)}
-                    onDelete={onDeleteCredential}
+                    onDelete={() => onDeleteCredential(credential)}
                     checkReport={checkReports.reportFor(credential.id)}
-                    onRerunChecks={(picked) => checkReports.rerun(picked.id)}
+                    onRerunChecks={() => checkReports.rerun(credential.id)}
                   />
                 ))}
               </div>
@@ -305,7 +348,7 @@ export default function AuthenticationAccountSection({
 
           <CredentialChecksCard
             source={connector}
-            credentialId={checkedCredential?.id ?? null}
+            credential={toCredentialRef(checkedCredential)}
             locked={checksLocked || !checkedCredential}
           />
         </Section>

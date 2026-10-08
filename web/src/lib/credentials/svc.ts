@@ -2,11 +2,16 @@ import type {
   Credential,
   CredentialBase,
   CredentialCheckReport,
+  CredentialRef,
+  CredentialSharing,
   CredentialWithPrivateKey,
 } from "@/lib/credentials/types";
 import { AccessType, ProcessingMode } from "@/lib/types";
 import { TypedFile } from "@/lib/connectors/fileTypes";
+import type { ValidSources } from "@/lib/connectors/types/source";
+import { parseErrorDetail } from "@/lib/fetcher";
 import type { ManageAccessEntry } from "@/lib/connectors/accessType";
+import type { ConnectorBase } from "@/lib/connectors/types";
 import {
   CREDENTIAL_NAME,
   CREDENTIAL_SOURCE,
@@ -89,6 +94,31 @@ export async function forceDeleteCredential<T>(credentialId: number) {
   });
 }
 
+/** The settings of a new connector-credential pair, as the backend reads them. */
+export function credentialPairMetadata(
+  name: string,
+  accessType?: AccessType,
+  groups?: number[],
+  autoSyncOptions?: Record<string, any>,
+  processingMode?: ProcessingMode,
+  dataAccess?: number[],
+  /** The manage groups with their roles. Given, it replaces `groups`. */
+  manageAccess?: ManageAccessEntry[]
+): Record<string, unknown> {
+  return {
+    name,
+    access_type: accessType !== undefined ? accessType : "public",
+    // The backend takes one or the other: plain `groups` are Editors.
+    ...(manageAccess !== undefined
+      ? { groups: [], manage_access: manageAccess }
+      : { groups: groups || null }),
+    auto_sync_options: autoSyncOptions || null,
+    processing_mode: processingMode || "REGULAR",
+    // Left out, a private connector gives data access to its groups.
+    ...(dataAccess !== undefined && { data_access: dataAccess }),
+  };
+}
+
 export function linkCredential(
   connectorId: number,
   credentialId: number,
@@ -108,18 +138,17 @@ export function linkCredential(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        name,
-        access_type: accessType !== undefined ? accessType : "public",
-        // The backend takes one or the other: plain `groups` are Editors.
-        ...(manageAccess !== undefined
-          ? { groups: [], manage_access: manageAccess }
-          : { groups: groups || null }),
-        auto_sync_options: autoSyncOptions || null,
-        processing_mode: processingMode || "REGULAR",
-        // Left out, a private connector gives data access to its groups.
-        ...(dataAccess !== undefined && { data_access: dataAccess }),
-      }),
+      body: JSON.stringify(
+        credentialPairMetadata(
+          name,
+          accessType,
+          groups,
+          autoSyncOptions,
+          processingMode,
+          dataAccess,
+          manageAccess
+        )
+      ),
     }
   );
 }
@@ -253,4 +282,59 @@ export async function startCredentialCheckRun(
     throw new Error(`Credential check run request failed: ${response.status}`);
   }
   return response.json();
+}
+
+const SEAL_DRAFT_ERROR = "Unable to add the account";
+
+/**
+ * Seals a new account's values as a draft. Nothing is saved: Create saves it
+ * with the connector.
+ */
+export async function sealDraftCredential(
+  source: ValidSources,
+  credentialJson: Record<string, unknown>
+): Promise<string> {
+  const response = await fetch("/api/manage/admin/draft-credential", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, credential_json: credentialJson }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseErrorDetail(response, SEAL_DRAFT_ERROR));
+  }
+  const body: { draft_credential: string } = await response.json();
+  return body.draft_credential;
+}
+
+export interface ConnectorWithCredentialRequest {
+  connector: ConnectorBase<unknown>;
+  pairing: Record<string, unknown>;
+  credential: CredentialRef;
+  /** How a draft's new credential is shared. */
+  credentialSharing?: CredentialSharing;
+}
+
+/**
+ * Creates a connector and pairs it with a saved credential or a draft, which
+ * this saves. A failure leaves nothing behind. The response's `data` is the
+ * new pair's id.
+ */
+export async function createConnectorWithCredential({
+  connector,
+  pairing,
+  credential,
+  credentialSharing,
+}: ConnectorWithCredentialRequest): Promise<Response> {
+  return fetch("/api/manage/admin/connector-with-credential", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      connector,
+      pairing,
+      ...credential,
+      ...(credentialSharing !== undefined && {
+        credential_sharing: credentialSharing,
+      }),
+    }),
+  });
 }

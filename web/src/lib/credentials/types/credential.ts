@@ -174,3 +174,41 @@ export interface CredentialCheckReport {
   report: { checked_at: string } | null;
   time_updated: string;
 }
+
+/** Who may reuse a new credential, applied when Create saves a draft. */
+export interface CredentialSharing {
+  admin_public: boolean;
+  curator_public?: boolean;
+  groups: number[];
+  name?: string | null;
+}
+
+/**
+ * A new account that is not saved until its connector is created. The server
+ * sealed its values: the page holds the sealed string but cannot read it, and
+ * a reload loses it.
+ */
+export interface DraftCredential {
+  /** Sealed by the server. Checks and Create send it back. */
+  draft_credential: string;
+  source: ValidSources;
+  /** The values as typed, for display and the form's own conditions. */
+  credential_json: Record<string, unknown>;
+  sharing: CredentialSharing;
+  /** When it was sealed. */
+  sealed_at: string;
+}
+
+/**
+ * The credential a request runs on: a saved one by id, or a draft by its
+ * sealed string. Spread into a request body.
+ */
+export type CredentialRef =
+  | { credential_id: number }
+  | { draft_credential: string };
+
+/**
+ * What the connector form's field callbacks read from the selected account:
+ * its values. A saved credential and a draft both have them.
+ */
+export type CredentialValues = Pick<Credential<any>, "credential_json">;

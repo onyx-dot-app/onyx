@@ -23,12 +23,15 @@ import {
   SvgUserKey,
 } from "@opal/icons";
 import type {
-  Credential,
   CredentialCheckReport,
+  DraftCredential,
   SimilarCredential,
 } from "@/lib/credentials/types";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
-import { getCredentialDetails } from "@/lib/credentials/utils";
+import {
+  getCredentialDetails,
+  isDraftCredential,
+} from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { IconLoader } from "@opal/loaders";
 import { getSourceMetadata } from "@/lib/sources";
@@ -64,8 +67,8 @@ function DetailRow({ label, value, mono = false }: DetailRowProps) {
 }
 
 interface AuthenticationAccountCardProps {
-  /** The saved account this card shows. */
-  credential: SimilarCredential;
+  /** The account this card shows: saved, or a draft that Create saves. */
+  credential: SimilarCredential | DraftCredential;
   /** The source being set up; it gives the card its icon. */
   source: ConfigurableSources;
   /** The source's display name, shown beside the account's name. */
@@ -73,16 +76,25 @@ interface AuthenticationAccountCardProps {
   /** Whether the connector will use this account. */
   selected: boolean;
   /** Called when the user picks this account. */
-  onSelect: (credential: Credential<any>) => void;
+  onSelect: () => void;
   /** Called when the user picks the selected account again, to drop it. */
   onDeselect: () => void;
-  /** Called once the user confirms the deletion. */
-  onDelete: (credential: Credential<any>) => void;
+  /**
+   * Deletes a saved account, once the user confirms, or discards a draft at
+   * once: a draft was never saved.
+   */
+  onDelete: () => void;
   /** The account's stored check report, or null if it was never checked. */
   checkReport: CredentialCheckReport | null;
-  /** Starts the checks on this account; resolves once the run is queued. */
-  onRerunChecks: (credential: Credential<any>) => Promise<void>;
+  /**
+   * Starts the checks on a saved account; resolves once the run is queued. A
+   * draft has no stored report, so it has no re-run.
+   */
+  onRerunChecks?: () => Promise<void>;
 }
+
+/** Stands in for a secret a draft holds as typed, which the card never shows. */
+const MASKED_SECRET = "••••••••";
 /**
  * One saved account in the Authentication Account section. The whole card
  * picks the account, or drops it when it is already picked; the chevron
@@ -103,6 +115,12 @@ export default function AuthenticationAccountCard({
   const tCredentials = useTranslations("admin.credentials.delete");
   const tCredentialCopy = useTranslations("admin.credentials");
   const fieldCopy = useCredentialFieldCopy(source);
+  const draft: DraftCredential | null = isDraftCredential(credential)
+    ? credential
+    : null;
+  const saved: SimilarCredential | null = isDraftCredential(credential)
+    ? null
+    : credential;
   const details = getCredentialDetails(credential, source);
   const format = useFormatter();
   const { user } = useUser();
@@ -121,9 +139,10 @@ export default function AuthenticationAccountCard({
     : null;
 
   async function rerunChecks() {
+    if (!onRerunChecks) return;
     setStarting(true);
     try {
-      await onRerunChecks(credential);
+      await onRerunChecks();
     } catch {
       toast.error(t("rerunFailed.toast"));
     } finally {
@@ -133,20 +152,24 @@ export default function AuthenticationAccountCard({
   const [expanded, setExpanded] = useState<boolean>(false);
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
-  const addedOn: string = format.dateTime(new Date(credential.time_created), {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  const addedOn: string | null = saved
+    ? format.dateTime(new Date(saved.time_created), {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+    : null;
 
   // The creator, by display name where they set one. An account with no
-  // creator shows no owner.
-  const ownerName: string | null =
-    credential.user_id === null
+  // creator shows no owner. A draft is the viewer's own.
+  const ownerName: string | null = saved
+    ? saved.user_id === null
       ? null
-      : (credential.user_personal_name ?? credential.user_email);
-  const inUse: boolean = credential.usages.length > 0;
-  const isOwnAccount: boolean = user !== null && credential.user_id === user.id;
+      : (saved.user_personal_name ?? saved.user_email)
+    : user?.personalization?.name || user?.email || null;
+  const inUse: boolean = (saved?.usages.length ?? 0) > 0;
+  const isOwnAccount: boolean =
+    draft !== null || (user !== null && saved?.user_id === user.id);
 
   return (
     <>
@@ -168,7 +191,7 @@ export default function AuthenticationAccountCard({
                 variant="danger"
                 onClick={() => {
                   setConfirmingDelete(false);
-                  onDelete(credential);
+                  onDelete();
                 }}
               >
                 {tCredentials("confirmButton.label")}
@@ -193,18 +216,24 @@ export default function AuthenticationAccountCard({
         rounding={4}
         padding={2}
         data-testid="authentication-account"
-        onClick={() => (selected ? onDeselect() : onSelect(credential))}
+        onClick={() => (selected ? onDeselect() : onSelect())}
         expandedContent={
           <Section padding={2} width="full">
             <Card border="none" padding={2} rounding={3}>
               <Section gap={3} alignItems="stretch" width="full">
                 <ContentAction
                   title={
-                    checkedAt
-                      ? t("lastTested.title", { date: checkedAt })
-                      : t("notTested.title")
+                    draft
+                      ? t("draft.detailsTitle")
+                      : checkedAt
+                        ? t("lastTested.title", { date: checkedAt })
+                        : t("notTested.title")
                   }
-                  description={t("details.description")}
+                  description={
+                    draft
+                      ? t("draft.detailsDescription")
+                      : t("details.description")
+                  }
                   sizePreset="main-ui"
                   variant="section"
                   padding={0}
@@ -219,25 +248,33 @@ export default function AuthenticationAccountCard({
                         variant="danger"
                         prominence="tertiary"
                         icon={SvgTrash}
-                        aria-label={t("deleteButton.label")}
+                        aria-label={
+                          draft
+                            ? t("draft.discardButton.label")
+                            : t("deleteButton.label")
+                        }
                         // The server refuses to delete an account that
                         // connectors still use.
                         disabled={inUse}
                         tooltip={
                           inUse ? t("deleteButton.inUseTooltip") : undefined
                         }
-                        onClick={() => setConfirmingDelete(true)}
+                        onClick={() =>
+                          draft ? onDelete() : setConfirmingDelete(true)
+                        }
                       />
-                      <Button
-                        prominence="secondary"
-                        // The label holds still while the checks run; only
-                        // the icon turns into a spinner.
-                        icon={running ? IconLoader : SvgPlay}
-                        disabled={running}
-                        onClick={rerunChecks}
-                      >
-                        {t("rerunButton.label")}
-                      </Button>
+                      {onRerunChecks && (
+                        <Button
+                          prominence="secondary"
+                          // The label holds still while the checks run; only
+                          // the icon turns into a spinner.
+                          icon={running ? IconLoader : SvgPlay}
+                          disabled={running}
+                          onClick={rerunChecks}
+                        >
+                          {t("rerunButton.label")}
+                        </Button>
+                      )}
                     </Section>
                   }
                 />
@@ -253,7 +290,11 @@ export default function AuthenticationAccountCard({
                   <DetailRow
                     key={key}
                     label={fieldCopy(key).title}
-                    value={value}
+                    // A draft's values are as typed, so its secrets stay
+                    // hidden; a saved one's come masked by the server.
+                    value={
+                      draft && field.kind === "secret" ? MASKED_SECRET : value
+                    }
                     mono={field.kind === "secret"}
                   />
                 ))}
@@ -269,23 +310,31 @@ export default function AuthenticationAccountCard({
               // Named by who created it; the account's own name stands in
               // for one with no creator.
               title={
-                credential.user_email ?? credential.name ?? t("untitled.label")
+                saved
+                  ? (saved.user_email ?? saved.name ?? t("untitled.label"))
+                  : (user?.email ?? t("untitled.label"))
               }
               suffix={t("sourceSuffix", { source: sourceName })}
-              description={t("addedOn.label", { date: addedOn })}
+              description={
+                addedOn
+                  ? t("addedOn.label", { date: addedOn })
+                  : t("draft.description")
+              }
               sizePreset="main-ui"
               variant="section"
             />
             {/* One-sided padding, which Section's own padding overrides. */}
             <div className="flex flex-row gap-4 ps-5.5 pt-2">
-              <Content
-                icon={SvgLinkedDots}
-                title={t("usedBy.label", { count: credential.usages.length })}
-                sizePreset="secondary"
-                variant="body"
-                color="muted"
-                width="fit"
-              />
+              {saved && (
+                <Content
+                  icon={SvgLinkedDots}
+                  title={t("usedBy.label", { count: saved.usages.length })}
+                  sizePreset="secondary"
+                  variant="body"
+                  color="muted"
+                  width="fit"
+                />
+              )}
               {ownerName !== null && (
                 <Content
                   icon={SvgUserKey}

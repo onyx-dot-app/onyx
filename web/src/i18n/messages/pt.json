@@ -2745,6 +2745,14 @@
           },
           "rerunFailed": {
             "toast": "Não foi possível iniciar as verificações. Tente novamente."
+          },
+          "draft": {
+            "description": "Ainda não salva",
+            "detailsTitle": "Ainda não salva",
+            "detailsDescription": "Esta conta é salva quando você cria o conector. Sair desta página a descarta.",
+            "discardButton": {
+              "label": "Descartar conta"
+            }
           }
         }
       },
