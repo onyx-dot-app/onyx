@@ -86,6 +86,7 @@ protects.
 | POST | `/build/sessions/{id}/restore` | `restore_session` (`session/api.py`) | Wakes a sleeping sandbox and rebuilds the workspace; 409s under concurrent restore. |
 | POST | `/build/sessions/{id}/snapshot` | `create_session_snapshot` (`session/api.py`) | Per-session workspace snapshot. |
 | POST | `/build/sessions/{id}/opencode-history-snapshot` | `create_session_opencode_history_snapshot` (`session/api.py`) | Sandbox-global opencode history capture; see §4.5. Manual capture hook for tests and operators; no frontend caller (see §9). |
+| GET | `/build/sessions/{id}/outputs` | `get_output_inventory` (`session/api.py`) | Flat file paths, sizes, and metadata revisions; no persistent index. |
 | GET | `/build/sessions/{id}/artifacts` | `list_artifacts` (`session/api.py`) | |
 | GET | `/build/sessions/{id}/artifacts/{path}` | `download_artifact` (`session/api.py`) | |
 | GET | `/build/sessions/{id}/export-docx/{path}` | `export_docx` (`session/api.py`) | Uses `session/md_to_docx.py`. |
@@ -559,6 +560,16 @@ owner-checked artifact routes. Rendering the message does not open or fetch arti
 separators, control characters, and query or fragment syntax. Invalid output links
 render as text. Other links retain the existing Markdown behavior.
 These frontend files live under `web/src/app/craft/`.
+
+### Output inventory
+
+`GET /build/sessions/{id}/outputs` checks session ownership before reading the sandbox.
+It returns visible output file paths, byte sizes, and string revisions built from modification time, change time, and size.
+The scan excludes hidden entries and the root `web` source tree. It reads metadata without hashing file contents.
+The response sets `complete=False` when scan limits, unreadable entries, or an unrestored workspace prevent a full inventory.
+An existing workspace with no outputs directory returns a complete empty inventory.
+Callers must preserve unseen files when the response is incomplete.
+The endpoint does not store an index or create artifact records.
 
 ## 5. Contracts and invariants
 

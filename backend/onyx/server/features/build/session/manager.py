@@ -61,10 +61,14 @@ from onyx.server.features.build.db.sandbox import (
     update_sandbox_heartbeat,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
+    OutputsManifestResponse,
+    is_hidden_workspace_name,
+)
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     DirectoryListing,
-    FilesystemEntry,
     PromptAttachment,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
@@ -94,6 +98,10 @@ from onyx.server.features.build.session.llm_config import (
     parse_agent_selection,
 )
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
+from onyx.server.features.build.session.models import (
+    OutputFileResponse,
+    OutputInventoryResponse,
+)
 from onyx.server.features.build.session.naming import generate_session_name
 from onyx.server.features.build.session.sandbox_lifecycle import (
     ProvisioningPolicy,
@@ -137,21 +145,6 @@ def mark_opencode_dispose_pending(session_id: UUID) -> None:
 _WEBAPP_PROBE_TIMEOUT_SECONDS = 2.0
 
 
-# Hidden directories/files to filter from listings
-HIDDEN_PATTERNS = {
-    ".venv",
-    ".git",
-    ".next",
-    "__pycache__",
-    "node_modules",
-    ".DS_Store",
-    "opencode.json",
-    ".env",
-    ".gitignore",
-    "nextjs.log",
-    "nextjs.pid",
-}
-
 _WEBAPP_DIRECTORY = str(Path(WEBAPP_PACKAGE_JSON_PATH).parent)
 _WEBAPP_PACKAGE_FILENAME = Path(WEBAPP_PACKAGE_JSON_PATH).name
 
@@ -161,10 +154,6 @@ def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
     keeps version-suffixed directory names like ``my.lib`` intact."""
     safe = {"-", "_", "."} if allow_dots else {"-", "_"}
     return "".join(c if c.isalnum() or c in safe else "_" for c in name)
-
-
-def _is_hidden_workspace_entry(entry: FilesystemEntry) -> bool:
-    return entry.name in HIDDEN_PATTERNS or entry.name.startswith(".")
 
 
 class SessionManager:
@@ -1260,7 +1249,7 @@ class SessionManager:
             except ValueError:
                 return
             for entry in entries:
-                if _is_hidden_workspace_entry(entry):
+                if is_hidden_workspace_name(entry.name):
                     continue
                 if entry.is_directory:
                     _walk(entry.path)
@@ -1685,6 +1674,31 @@ class SessionManager:
     # File System Operations
     # =========================================================================
 
+    def get_output_inventory(
+        self, session_id: UUID, user_id: UUID
+    ) -> OutputInventoryResponse:
+        resolved: tuple[BuildSession, Sandbox] | None = (
+            self._resolve_owned_session_and_sandbox(session_id, user_id)
+        )
+        if resolved is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+        _, sandbox = resolved
+        manifest: OutputsManifestResponse = self._sandbox_manager.get_outputs_manifest(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+        )
+        return OutputInventoryResponse(
+            files=[
+                OutputFileResponse(
+                    path=f"outputs/{entry.path}",
+                    revision=f"{entry.mtime_ns}:{entry.ctime_ns}:{entry.size}",
+                    size=entry.size,
+                )
+                for entry in manifest.entries
+            ],
+            complete=manifest.complete,
+        )
+
     def list_directory(
         self,
         session_id: UUID,
@@ -1726,7 +1740,7 @@ class SessionManager:
 
         # Filter hidden files and directories
         entries: list[FilesystemEntry] = [
-            entry for entry in raw_entries if not _is_hidden_workspace_entry(entry)
+            entry for entry in raw_entries if not is_hidden_workspace_name(entry.name)
         ]
 
         # Sort: directories first, then files, both alphabetically
