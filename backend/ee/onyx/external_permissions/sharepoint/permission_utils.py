@@ -1,12 +1,15 @@
 from collections import deque
 from collections.abc import Iterable
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.client_request import ClientRequestException
+from office365.runtime.http.request_options import RequestOptions
+from office365.runtime.paths.resource_path import ResourcePath
 from office365.sharepoint.client_context import ClientContext
+from office365.sharepoint.folders.folder import Folder
 from office365.sharepoint.permissions.roles.definitions.definition import RoleDefinition
 from office365.sharepoint.permissions.securable_object import (
     RoleAssignmentCollection,
@@ -508,6 +511,45 @@ def get_external_access_from_sharepoint(
     )
 
 
+def _get_folder_unique_id(
+    client_context: ClientContext, folder_server_relative_path: str
+) -> str:
+    """Look up a folder by path and return its GUID.
+
+    The path goes in an OData parameter alias in the query string. SharePoint
+    answers 401 when an inline path makes the URL path too long, which happens
+    for folder paths of about 290 characters. The by-path lookup also accepts
+    "%" and "#", which the by-URL lookup rejects.
+    """
+    odata_literal = "'" + folder_server_relative_path.replace("'", "''") + "'"
+    alias_param = f"@a={quote(odata_literal, safe='')}"
+
+    def add_alias(request: RequestOptions) -> None:
+        separator = "&" if "?" in request.url else "?"
+        request.url = f"{request.url}{separator}{alias_param}"
+
+    # Returns the SDK's untyped query object, like the other sleep_and_retry callers.
+    def build_query() -> Any:
+        folder = Folder(
+            client_context,
+            ResourcePath(
+                "getFolderByServerRelativePath(DecodedUrl=@a)",
+                client_context.web.resource_path,
+            ),
+        )
+        client_context.before_execute(add_alias)
+        return folder.select(["UniqueId"]).get()
+
+    folder: Folder = sleep_and_retry(
+        build_query(), "get_folder_unique_id", rebuild=build_query
+    )
+    if not folder.unique_id:
+        raise RuntimeError(
+            f"Failed to get SharePoint folder ID for {folder_server_relative_path}"
+        )
+    return folder.unique_id
+
+
 def get_hierarchy_node_external_access_from_sharepoint(
     client_context: ClientContext,
     graph_client: GraphClient,
@@ -516,18 +558,16 @@ def get_hierarchy_node_external_access_from_sharepoint(
     folder_server_relative_path: str | None,
     permission_cache: SharepointPermissionCache | None = None,
 ) -> ExternalAccess:
-    """``folder_server_relative_path`` is decoded, e.g. "/sites/eng/RD Docs/API".
-
-    The by-path lookup is used because the by-URL one rejects "%" and "#".
-    """
+    """``folder_server_relative_path`` is decoded, e.g. "/sites/eng/RD Docs/API"."""
     permission_cache = permission_cache or SharepointPermissionCache()
     if node_type == HierarchyNodeType.SITE:
         securable_object = client_context.web
     elif node_type == HierarchyNodeType.DRIVE and list_id:
         securable_object = client_context.web.lists.get_by_id(list_id)
     elif node_type == HierarchyNodeType.FOLDER and folder_server_relative_path:
-        securable_object = client_context.web.get_folder_by_server_relative_path(
-            folder_server_relative_path
+        folder_id = _get_folder_unique_id(client_context, folder_server_relative_path)
+        securable_object = client_context.web.get_folder_by_id(
+            folder_id
         ).list_item_all_fields
     else:
         raise ValueError(f"Unsupported SharePoint hierarchy node: {node_type}")
