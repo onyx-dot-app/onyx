@@ -6157,6 +6157,17 @@
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "settingsUpdated": "Einstellungen aktualisiert",
         "unknownError": "Unbekannter Fehler"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Auto-Modus",
+          "description": "Zeigt ein Auto-Element in der Modellauswahl, das jede Nachricht über das gewählte Router-Modell leitet."
+        },
+        "target": {
+          "title": "Routing-Ziel",
+          "description": "Das Router-Modell, auf das Auto verweist (zum Beispiel openrouter/auto).",
+          "empty": "Keine Router-Modelle gefunden. Aktivieren Sie zuerst ein Router-Modell bei einem Gateway-Anbieter."
+        }
       }
     },
     "mcpActions": {
@@ -11041,11 +11052,6 @@
       "adminLimitedSetting": {
         "tooltip": "Ihr Administrator beschränkt dieses Modell auf eine niedrigere Reasoning-Stufe."
       },
-      "autoMode": {
-        "tooltip": {
-          "text": "Das Gateway wählt für jede Nachricht ein Modell."
-        }
-      },
       "contextWindow": {
         "row": {
           "caption": "Token-Limit für jede Sitzung",
@@ -11064,14 +11070,6 @@
         },
         "loadingMore": {
           "text": "Weitere Modelle werden geladen..."
-        }
-      },
-      "modeToggle": {
-        "models": {
-          "label": "Modelle"
-        },
-        "routers": {
-          "label": "Router"
         }
       },
       "modelSettingsButton": {
@@ -11107,9 +11105,6 @@
           "label": "Sehr hoch"
         }
       },
-      "routerBadge": {
-        "label": "Router"
-      },
       "searchInput": {
         "placeholder": "Modelle suchen..."
       },
@@ -11135,6 +11130,9 @@
       },
       "unsupportedSetting": {
         "tooltip": "Das Ändern dieser Einstellung wird für dieses Modell nicht unterstützt."
+      },
+      "autoItem": {
+        "label": "Auto"
       }
     },
     "nrf": {

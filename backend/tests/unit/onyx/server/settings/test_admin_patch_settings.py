@@ -28,6 +28,7 @@ def _patch_settings(
     *,
     ee: bool = False,
     tier: Tier = Tier.COMMUNITY,
+    db_session: Any = None,
 ) -> Settings:
     stored: list[Settings] = []
     monkeypatch.setattr(
@@ -44,7 +45,9 @@ def _patch_settings(
 
         monkeypatch.setattr(tier_module, "get_tier", lambda: tier)
     settings_api.admin_patch_settings(
-        Settings.model_validate(payload), current_user=MagicMock()
+        Settings.model_validate(payload),
+        current_user=MagicMock(),
+        db_session=db_session or MagicMock(),
     )
     assert len(stored) == 1
     return stored[0]
@@ -121,3 +124,35 @@ def test_llm_gateway_enabled_updates_on_business_tier(
         tier=Tier.BUSINESS,
     )
     assert result.llm_gateway_enabled is False
+
+
+def test_routing_target_must_be_a_router(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_session = MagicMock()
+    db_session.get.return_value = MagicMock(is_router=False)
+    with pytest.raises(OnyxError) as exc_info:
+        _patch_settings(
+            {"model_routing_model_configuration_id": 3},
+            Settings(),
+            monkeypatch,
+            db_session=db_session,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_routing_target_marks_hidden_router_visible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    routing_model = MagicMock(is_router=True, is_visible=False)
+    db_session = MagicMock()
+    db_session.get.return_value = routing_model
+    result = _patch_settings(
+        {"model_routing_model_configuration_id": 3},
+        Settings(),
+        monkeypatch,
+        db_session=db_session,
+    )
+    assert result.model_routing_model_configuration_id == 3
+    assert routing_model.is_visible is True
+    db_session.commit.assert_called_once()

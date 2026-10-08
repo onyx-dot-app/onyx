@@ -6157,6 +6157,17 @@
         "settingsUpdateFailed": "No se pudo actualizar la configuración",
         "settingsUpdated": "Configuración actualizada",
         "unknownError": "Error desconocido"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Modo automático",
+          "description": "Muestra una opción Auto en el selector de modelos que enruta cada mensaje a través del modelo de router elegido."
+        },
+        "target": {
+          "title": "Destino del enrutamiento",
+          "description": "El modelo de router al que se resuelve Auto (por ejemplo, openrouter/auto).",
+          "empty": "No se encontraron modelos de router. Primero habilite un modelo de router en un proveedor de puerta de enlace."
+        }
       }
     },
     "mcpActions": {
@@ -11041,11 +11052,6 @@
       "adminLimitedSetting": {
         "tooltip": "Tu administrador limita este modelo a un nivel de razonamiento más bajo."
       },
-      "autoMode": {
-        "tooltip": {
-          "text": "La puerta de enlace elige un modelo para cada mensaje."
-        }
-      },
       "contextWindow": {
         "row": {
           "caption": "Límite de tokens para cada sesión",
@@ -11064,14 +11070,6 @@
         },
         "loadingMore": {
           "text": "Cargando más modelos..."
-        }
-      },
-      "modeToggle": {
-        "models": {
-          "label": "Modelos"
-        },
-        "routers": {
-          "label": "Enrutadores"
         }
       },
       "modelSettingsButton": {
@@ -11107,9 +11105,6 @@
           "label": "Muy alto"
         }
       },
-      "routerBadge": {
-        "label": "Enrutador"
-      },
       "searchInput": {
         "placeholder": "Buscar modelos..."
       },
@@ -11135,6 +11130,9 @@
       },
       "unsupportedSetting": {
         "tooltip": "Modificar esta configuración no es compatible con este modelo."
+      },
+      "autoItem": {
+        "label": "Auto"
       }
     },
     "nrf": {

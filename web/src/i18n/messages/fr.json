@@ -6157,6 +6157,17 @@
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "settingsUpdated": "Paramètres mis à jour",
         "unknownError": "Erreur inconnue"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Mode auto",
+          "description": "Affiche un élément Auto dans le sélecteur de modèle qui achemine chaque message via le modèle routeur choisi."
+        },
+        "target": {
+          "title": "Cible de routage",
+          "description": "Le modèle routeur auquel Auto renvoie (par exemple openrouter/auto).",
+          "empty": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle."
+        }
       }
     },
     "mcpActions": {
@@ -11041,11 +11052,6 @@
       "adminLimitedSetting": {
         "tooltip": "Votre administrateur limite ce modèle à un niveau de raisonnement plus bas."
       },
-      "autoMode": {
-        "tooltip": {
-          "text": "La passerelle choisit un modèle pour chaque message."
-        }
-      },
       "contextWindow": {
         "row": {
           "caption": "Limite de jetons pour chaque session",
@@ -11064,14 +11070,6 @@
         },
         "loadingMore": {
           "text": "Chargement d'autres modèles..."
-        }
-      },
-      "modeToggle": {
-        "models": {
-          "label": "Modèles"
-        },
-        "routers": {
-          "label": "Routeurs"
         }
       },
       "modelSettingsButton": {
@@ -11107,9 +11105,6 @@
           "label": "Très élevé"
         }
       },
-      "routerBadge": {
-        "label": "Routeur"
-      },
       "searchInput": {
         "placeholder": "Rechercher des modèles..."
       },
@@ -11135,6 +11130,9 @@
       },
       "unsupportedSetting": {
         "tooltip": "La modification de ce paramètre n'est pas prise en charge pour ce modèle."
+      },
+      "autoItem": {
+        "label": "Auto"
       }
     },
     "nrf": {

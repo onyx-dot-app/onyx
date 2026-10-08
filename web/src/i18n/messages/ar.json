@@ -6157,6 +6157,17 @@
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "settingsUpdated": "تم تحديث الإعدادات",
         "unknownError": "خطأ غير معروف"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "الوضع التلقائي",
+          "description": "يعرض عنصرًا تلقائيًا في منتقي النموذج يوجه كل رسالة عبر نموذج التوجيه المختار."
+        },
+        "target": {
+          "title": "وجهة التوجيه",
+          "description": "نموذج التوجيه الذي يحل إليه الخيار التلقائي (على سبيل المثال openrouter/auto).",
+          "empty": "لم يتم العثور على نماذج توجيه. قم بتمكين نموذج توجيه على موفر بوابة أولاً."
+        }
       }
     },
     "mcpActions": {
@@ -11041,11 +11052,6 @@
       "adminLimitedSetting": {
         "tooltip": "يقصر المسؤول هذا النموذج على مستوى استدلال أدنى."
       },
-      "autoMode": {
-        "tooltip": {
-          "text": "تختار البوابة نموذجًا لكل رسالة."
-        }
-      },
       "contextWindow": {
         "row": {
           "caption": "حد الرموز لكل جلسة",
@@ -11064,14 +11070,6 @@
         },
         "loadingMore": {
           "text": "جارٍ تحميل المزيد من النماذج..."
-        }
-      },
-      "modeToggle": {
-        "models": {
-          "label": "النماذج"
-        },
-        "routers": {
-          "label": "الموجّهات"
         }
       },
       "modelSettingsButton": {
@@ -11107,9 +11105,6 @@
           "label": "مرتفع جدًا"
         }
       },
-      "routerBadge": {
-        "label": "موجّه"
-      },
       "searchInput": {
         "placeholder": "البحث في النماذج..."
       },
@@ -11135,6 +11130,9 @@
       },
       "unsupportedSetting": {
         "tooltip": "تعديل هذا الإعداد غير مدعوم لهذا النموذج."
+      },
+      "autoItem": {
+        "label": "تلقائي"
       }
     },
     "nrf": {

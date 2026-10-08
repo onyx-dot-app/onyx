@@ -18,7 +18,7 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import KV_REINDEX_KEY, NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import User
+from onyx.db.models import ModelConfiguration, User
 from onyx.db.notification import (
     dismiss_all_notifications,
     get_notifications,
@@ -72,6 +72,7 @@ def admin_patch_settings(
     current_user: User = Depends(
         require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
     ),
+    db_session: Session = Depends(get_session),
 ) -> Settings:
     if global_version.is_ee_version():
         from ee.onyx.utils.tier import get_tier
@@ -133,6 +134,23 @@ def admin_patch_settings(
                 OnyxErrorCode.FEATURE_NOT_AVAILABLE,
                 "The LLM gateway requires the Business or Enterprise plan.",
             )
+
+        routing_id = merged.model_routing_model_configuration_id
+        if (
+            "model_routing_model_configuration_id" in settings.model_fields_set
+            and routing_id is not None
+        ):
+            routing_model = db_session.get(ModelConfiguration, routing_id)
+            if routing_model is None or not routing_model.is_router:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "Model routing requires a router model configuration.",
+                )
+            # The picker reads the backing model off the provider payload,
+            # which only returns visible models on page one.
+            if not routing_model.is_visible:
+                routing_model.is_visible = True
+                db_session.commit()
 
         store_settings(merged)
 

@@ -6157,6 +6157,17 @@
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Auto Mode",
+          "description": "Show an Auto item in the model picker that routes each message through the chosen router model."
+        },
+        "target": {
+          "title": "Routing Target",
+          "description": "The router model Auto resolves to (for example openrouter/auto).",
+          "empty": "No router models found. Enable a router model on a gateway provider first."
+        }
       }
     },
     "mcpActions": {
@@ -11041,11 +11052,6 @@
       "adminLimitedSetting": {
         "tooltip": "Your admin limits this model to a lower reasoning level."
       },
-      "autoMode": {
-        "tooltip": {
-          "text": "The gateway picks a model for each message."
-        }
-      },
       "contextWindow": {
         "row": {
           "caption": "Tokens limit for each session",
@@ -11064,14 +11070,6 @@
         },
         "loadingMore": {
           "text": "Loading more models..."
-        }
-      },
-      "modeToggle": {
-        "models": {
-          "label": "Models"
-        },
-        "routers": {
-          "label": "Routers"
         }
       },
       "modelSettingsButton": {
@@ -11107,9 +11105,6 @@
           "label": "XHigh"
         }
       },
-      "routerBadge": {
-        "label": "Router"
-      },
       "searchInput": {
         "placeholder": "Search models..."
       },
@@ -11135,6 +11130,9 @@
       },
       "unsupportedSetting": {
         "tooltip": "Modifying this setting is not supported for this model."
+      },
+      "autoItem": {
+        "label": "Auto"
       }
     },
     "nrf": {

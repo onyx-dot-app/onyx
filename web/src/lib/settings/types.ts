@@ -35,6 +35,11 @@ export interface Settings {
   reasoning_override_enabled?: boolean;
   // Model selector shows one flat list instead of per-provider groups.
   hide_provider_grouping?: boolean;
+
+  // Model routing: a single "Auto" picker item backed by the admin-chosen
+  // router model configuration (e.g. openrouter/auto).
+  model_routing_enabled?: boolean;
+  model_routing_model_configuration_id?: number | null;
   query_history_type: QueryHistoryType;
 
   // Visibility-only: hides the sidebar page; query-history APIs + recording stay on.

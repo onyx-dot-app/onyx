@@ -366,6 +366,12 @@ export default function LanguageModelsPage() {
   const [pendingHideGrouping, setPendingHideGrouping] = useState<
     boolean | null
   >(null);
+  const [pendingRoutingEnabled, setPendingRoutingEnabled] = useState<
+    boolean | null
+  >(null);
+  const [pendingRoutingTarget, setPendingRoutingTarget] = useState<
+    number | null
+  >(null);
   const {
     llmProviders: existingLlmProviders,
     defaultText,
@@ -379,6 +385,22 @@ export default function LanguageModelsPage() {
   // one aggregator provider whose models span several vendors.
   const hasProviderGrouping = useMemo(
     () => groupLlmOptions(buildLlmOptions(existingLlmProviders)).length > 1,
+    [existingLlmProviders]
+  );
+
+  // Router models (openrouter/auto, gateway configs) usable as the model
+  // routing target. Listed whether or not an admin enabled them in the
+  // provider's model set.
+  const routerProviders = useMemo(
+    () =>
+      (existingLlmProviders ?? [])
+        .map((provider) => ({
+          ...provider,
+          model_configurations: provider.model_configurations.filter(
+            (mc) => mc.is_router
+          ),
+        }))
+        .filter((provider) => provider.model_configurations.length > 0),
     [existingLlmProviders]
   );
 
@@ -490,6 +512,42 @@ export default function LanguageModelsPage() {
     }
   }
 
+  const routingEnabled =
+    pendingRoutingEnabled ?? settings.model_routing_enabled ?? false;
+
+  async function handleRoutingEnabledChange(checked: boolean) {
+    if (pendingRoutingEnabled !== null) return;
+    setPendingRoutingEnabled(checked);
+    try {
+      await updateAdminSettings({ model_routing_enabled: checked });
+      await mutate(SWR_KEYS.settings);
+      toast.success(t("toasts.settingsUpdated"));
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
+      );
+    } finally {
+      setPendingRoutingEnabled(null);
+    }
+  }
+
+  async function handleRoutingTargetChange(modelConfigurationId: number) {
+    setPendingRoutingTarget(modelConfigurationId);
+    try {
+      await updateAdminSettings({
+        model_routing_model_configuration_id: modelConfigurationId,
+      });
+      await mutate(SWR_KEYS.settings);
+      toast.success(t("toasts.settingsUpdated"));
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
+      );
+    } finally {
+      setPendingRoutingTarget(null);
+    }
+  }
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -560,6 +618,49 @@ export default function LanguageModelsPage() {
                       void handleHideProviderGroupingChange(checked);
                     }}
                   />
+                </InputHorizontal>
+              )}
+              <InputHorizontal
+                title={t("modelRouting.autoMode.title")}
+                description={t("modelRouting.autoMode.description")}
+                withLabel
+              >
+                <InputSwitch
+                  checked={routingEnabled}
+                  disabled={pendingRoutingEnabled !== null}
+                  onCheckedChange={(checked) => {
+                    void handleRoutingEnabledChange(checked);
+                  }}
+                />
+              </InputHorizontal>
+              {routingEnabled && (
+                <InputHorizontal
+                  title={t("modelRouting.target.title")}
+                  description={t("modelRouting.target.description")}
+                  withLabel
+                >
+                  {routerProviders.length > 0 ? (
+                    <SimpleModelSelector
+                      providers={routerProviders}
+                      value={
+                        pendingRoutingTarget ??
+                        settings.model_routing_model_configuration_id ??
+                        null
+                      }
+                      grouped={
+                        !(
+                          pendingHideGrouping ?? settings.hide_provider_grouping
+                        )
+                      }
+                      onChange={(modelConfigurationId) => {
+                        void handleRoutingTargetChange(modelConfigurationId);
+                      }}
+                    />
+                  ) : (
+                    <Text font="secondary-body" color="text-03">
+                      {t("modelRouting.target.empty")}
+                    </Text>
+                  )}
                 </InputHorizontal>
               )}
             </Section>

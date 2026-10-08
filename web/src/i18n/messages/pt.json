@@ -6157,6 +6157,17 @@
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "settingsUpdated": "Configurações atualizadas",
         "unknownError": "Erro desconhecido"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Modo automático",
+          "description": "Mostra um item Auto no seletor de modelos que encaminha cada mensagem pelo modelo de roteador escolhido."
+        },
+        "target": {
+          "title": "Destino do roteamento",
+          "description": "O modelo de roteador para o qual o Auto resolve (por exemplo, openrouter/auto).",
+          "empty": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway."
+        }
       }
     },
     "mcpActions": {
@@ -11041,11 +11052,6 @@
       "adminLimitedSetting": {
         "tooltip": "Seu administrador limita este modelo a um nível de raciocínio mais baixo."
       },
-      "autoMode": {
-        "tooltip": {
-          "text": "O gateway escolhe um modelo para cada mensagem."
-        }
-      },
       "contextWindow": {
         "row": {
           "caption": "Limite de tokens para cada sessão",
@@ -11064,14 +11070,6 @@
         },
         "loadingMore": {
           "text": "Carregando mais modelos..."
-        }
-      },
-      "modeToggle": {
-        "models": {
-          "label": "Modelos"
-        },
-        "routers": {
-          "label": "Roteadores"
         }
       },
       "modelSettingsButton": {
@@ -11107,9 +11105,6 @@
           "label": "Muito alto"
         }
       },
-      "routerBadge": {
-        "label": "Roteador"
-      },
       "searchInput": {
         "placeholder": "Pesquisar modelos..."
       },
@@ -11135,6 +11130,9 @@
       },
       "unsupportedSetting": {
         "tooltip": "Modificar esta configuração não é compatível com este modelo."
+      },
+      "autoItem": {
+        "label": "Auto"
       }
     },
     "nrf": {

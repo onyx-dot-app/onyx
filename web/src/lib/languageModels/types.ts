@@ -387,6 +387,8 @@ export interface LLMOption {
   supportsImageInput?: boolean;
   /** See ModelConfiguration.is_router. */
   isRouter?: boolean;
+  /** Synthesized picker item for model routing; selects the backing router. */
+  isAuto?: boolean;
 }
 
 export interface LLMOptionGroup {

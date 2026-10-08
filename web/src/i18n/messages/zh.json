@@ -6157,6 +6157,17 @@
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "",
+          "description": "“”，。"
+        },
+        "target": {
+          "title": "",
+          "description": "“”（ openrouter/auto）。",
+          "empty": "。。"
+        }
       }
     },
     "mcpActions": {
@@ -11041,11 +11052,6 @@
       "adminLimitedSetting": {
         "tooltip": "管理员将此模型限制为较低的推理级别。"
       },
-      "autoMode": {
-        "tooltip": {
-          "text": "网关为每条消息选择一个模型。"
-        }
-      },
       "contextWindow": {
         "row": {
           "caption": "每个会话的 token 上限",
@@ -11064,14 +11070,6 @@
         },
         "loadingMore": {
           "text": "正在加载更多模型..."
-        }
-      },
-      "modeToggle": {
-        "models": {
-          "label": "模型"
-        },
-        "routers": {
-          "label": "路由器"
         }
       },
       "modelSettingsButton": {
@@ -11107,9 +11105,6 @@
           "label": "极高"
         }
       },
-      "routerBadge": {
-        "label": "路由器"
-      },
       "searchInput": {
         "placeholder": "搜索模型..."
       },
@@ -11135,6 +11130,9 @@
       },
       "unsupportedSetting": {
         "tooltip": "此模型不支持修改该设置。"
+      },
+      "autoItem": {
+        "label": ""
       }
     },
     "nrf": {

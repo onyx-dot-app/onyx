@@ -6,8 +6,6 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
   Button,
   LineItemButton,
-  Tabs,
-  Tag,
   Text,
   InputTypeIn,
   PopoverMenu,
@@ -19,7 +17,6 @@ import {
   SvgChevronLeft,
   SvgChevronRight,
   SvgCode,
-  SvgInfoSmall,
   SvgSliders,
   SvgThermometer,
 } from "@opal/icons";
@@ -442,7 +439,11 @@ export default function ModelSelectorContent({
   onDetailSelect,
 }: ModelSelectorContentProps) {
   const t = useTranslations("chat.modelSelector");
-  const { hide_provider_grouping: hideProviderGrouping } = useSettings();
+  const {
+    hide_provider_grouping: hideProviderGrouping,
+    model_routing_enabled: modelRoutingEnabled,
+    model_routing_model_configuration_id: routingModelId,
+  } = useSettings();
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
   const {
     llmProviders: currentAgentProviderOptions,
@@ -464,29 +465,20 @@ export default function ModelSelectorContent({
     [llmProviders, currentModelName, includeHiddenModels]
   );
 
-  // Router entries (openrouter/auto, gateway configs) live behind the "Auto"
-  // tab so the model list stays a list of concrete models. The toggle only
-  // renders when at least one router is enabled by the admin.
-  const hasRouters = useMemo<boolean>(
-    () => llmOptions.some((opt) => opt.isRouter),
-    [llmOptions]
-  );
-  const initialMode = useMemo<"models" | "routers">(
-    () =>
-      llmOptions.some((opt) => opt.isRouter && isSelected(opt))
-        ? "routers"
-        : "models",
-    [llmOptions, isSelected]
-  );
-  const [selectorMode, setSelectorMode] = useState<"models" | "routers">(
-    initialMode
-  );
-  useEffect(() => setSelectorMode(initialMode), [initialMode]);
+  // Router entries (openrouter/auto, gateway configs) never list as models.
+  // Model routing surfaces a single "Auto" item instead, backed by the router
+  // the admin picked in the LLM settings.
+  const autoOption = useMemo<LLMOption | undefined>(() => {
+    if (!modelRoutingEnabled || routingModelId == null) return undefined;
+    const backing = llmOptions.find(
+      (opt) => opt.modelConfigurationId === routingModelId
+    );
+    if (!backing) return undefined;
+    return { ...backing, displayName: t("autoItem.label"), isAuto: true };
+  }, [llmOptions, modelRoutingEnabled, routingModelId, t]);
 
   const filteredOptions = useMemo(() => {
-    let result = llmOptions.filter((opt) =>
-      selectorMode === "routers" ? opt.isRouter : !opt.isRouter
-    );
+    let result = llmOptions.filter((opt) => !opt.isRouter);
     if (requiresImageInput) {
       result = result.filter((opt) => opt.supportsImageInput);
     }
@@ -500,7 +492,7 @@ export default function ModelSelectorContent({
       );
     }
     return result;
-  }, [llmOptions, searchQuery, requiresImageInput, selectorMode]);
+  }, [llmOptions, searchQuery, requiresImageInput]);
 
   const groupedOptions = useMemo(
     () => groupLlmOptions(filteredOptions),
@@ -650,28 +642,23 @@ export default function ModelSelectorContent({
             description={description}
             onClick={() => onSelect(option)}
             rightChildren={
-              option.isRouter || modelDetail ? (
-                <div className="flex flex-row items-center gap-1">
-                  {option.isRouter && <Tag title={t("routerBadge.label")} />}
-                  {modelDetail && (
-                    <Hoverable.Item group="model-row" variant="appear-on-hover">
-                      <Button
-                        icon={SvgSliders}
-                        prominence="tertiary"
-                        size="sm"
-                        aria-label={t("modelSettingsButton.ariaLabel", {
-                          model: option.displayName,
-                        })}
-                        tooltip={t("modelSettingsButton.tooltip")}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDetailSelect?.(option);
-                          setDetailOption(option);
-                        }}
-                      />
-                    </Hoverable.Item>
-                  )}
-                </div>
+              modelDetail && !option.isAuto ? (
+                <Hoverable.Item group="model-row" variant="appear-on-hover">
+                  <Button
+                    icon={SvgSliders}
+                    prominence="tertiary"
+                    size="sm"
+                    aria-label={t("modelSettingsButton.ariaLabel", {
+                      model: option.displayName,
+                    })}
+                    tooltip={t("modelSettingsButton.tooltip")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDetailSelect?.(option);
+                      setDetailOption(option);
+                    }}
+                  />
+                </Hoverable.Item>
               ) : null
             }
             sizePreset="main-ui"
@@ -694,33 +681,6 @@ export default function ModelSelectorContent({
 
   return (
     <Section gap={2}>
-      {hasRouters && (
-        <Tabs
-          variant="pill"
-          value={selectorMode}
-          onValueChange={(value) =>
-            setSelectorMode(value === "routers" ? "routers" : "models")
-          }
-        >
-          <Tabs.List>
-            <Tabs.Trigger value="models">
-              {t("modeToggle.models.label")}
-            </Tabs.Trigger>
-            <Tabs.Trigger value="routers" tooltip={t("autoMode.tooltip.text")}>
-              <span className="flex items-center gap-1">
-                <Text color="inherit" font="secondary-body">
-                  {t("modeToggle.routers.label")}
-                </Text>
-                <SvgInfoSmall
-                  size={12}
-                  className="interactive-foreground-icon"
-                />
-              </span>
-            </Tabs.Trigger>
-          </Tabs.List>
-        </Tabs>
-      )}
-
       <InputTypeIn
         searchIcon
         variant="internal"
@@ -747,6 +707,9 @@ export default function ModelSelectorContent({
                   rounding={2}
                 />,
               ]
+            : []),
+          ...(autoOption && !requiresImageInput && !isLoading
+            ? [renderModelItem(autoOption)]
             : []),
           null,
           ...(isLoading
