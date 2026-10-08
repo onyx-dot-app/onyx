@@ -155,7 +155,7 @@ export default function AuthenticationAccountSection({
   }
 
   return (
-    <Section gap={4} alignItems="stretch" width="full">
+    <Section gap={2} alignItems="stretch" width="full">
       <ContentAction
         title={t("add.credentialStep.title")}
         description={t("add.credentialStep.description", {
