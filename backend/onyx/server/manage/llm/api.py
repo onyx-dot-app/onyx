@@ -665,14 +665,14 @@ def update_model_routing(
     """Same write path as PATCH /admin/settings for the routing fields, but
     scoped to MANAGE_LLMS so delegated model managers can save them."""
     with settings_write_lock():
-        settings = load_settings(raise_on_error=True)
+        settings: Settings = load_settings(raise_on_error=True)
         if update.model_routing_enabled is not None:
             settings.model_routing_enabled = update.model_routing_enabled
         if "model_routing_model_configuration_id" in update.model_fields_set:
-            routing_id = update.model_routing_model_configuration_id
+            routing_id: int | None = update.model_routing_model_configuration_id
             settings.model_routing_model_configuration_id = routing_id
             if routing_id is not None:
-                routing_model = require_router_model_configuration(
+                routing_model: ModelConfiguration = require_router_model_configuration(
                     db_session, routing_id
                 )
                 # Hidden routers don't reach the picker's provider payload.

@@ -854,7 +854,7 @@ export async function updateModelRouting(update: {
   model_routing_enabled?: boolean;
   model_routing_model_configuration_id?: number | null;
 }): Promise<void> {
-  const response = await fetch("/api/admin/llm/model-routing", {
+  const response: Response = await fetch("/api/admin/llm/model-routing", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(update),

@@ -1248,7 +1248,7 @@ def mark_model_configuration_visible(
 def require_router_model_configuration(
     db_session: Session, model_configuration_id: int
 ) -> ModelConfiguration:
-    model_configuration = fetch_model_configuration_by_id(
+    model_configuration: ModelConfiguration | None = fetch_model_configuration_by_id(
         db_session, model_configuration_id
     )
     if model_configuration is None or not model_configuration.is_router:

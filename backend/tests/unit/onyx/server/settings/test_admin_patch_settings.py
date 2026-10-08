@@ -130,8 +130,7 @@ def test_routing_target_must_be_a_router(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        settings_api,
-        "fetch_model_configuration_by_id",
+        "onyx.db.llm.fetch_model_configuration_by_id",
         lambda *_a, **_k: MagicMock(is_router=False),
     )
     with pytest.raises(OnyxError) as exc_info:
@@ -149,8 +148,7 @@ def test_routing_target_marks_hidden_router_visible(
     marked: list[MagicMock] = []
     invalidated: list[bool] = []
     monkeypatch.setattr(
-        settings_api,
-        "fetch_model_configuration_by_id",
+        "onyx.db.llm.fetch_model_configuration_by_id",
         lambda *_a, **_k: MagicMock(is_router=True),
     )
     monkeypatch.setattr(
