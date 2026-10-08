@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona, Project__UserFile, User, UserFile
+from onyx.file_store.models import UserFileMetadata
 
 
 def fetch_chunk_counts_for_user_files(
@@ -113,6 +114,21 @@ def get_user_file_by_id(
     """Fetch a UserFile row by id. Accepts str for callers whose input may not
     even be a UserFile id (e.g. a storage file_id) — those resolve to None."""
     return db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+
+
+def capture_user_file_metadata(
+    user_files: Sequence[UserFile],
+) -> list[UserFileMetadata]:
+    """Copy loaded fields while the caller owns the database session."""
+    return [UserFileMetadata.model_validate(user_file) for user_file in user_files]
+
+
+def get_user_file_metadata(user_file_id: UUID, db_session: Session) -> UserFileMetadata:
+    """Capture one file for content loading after the session closes."""
+    user_file: UserFile | None = get_user_file_by_id(user_file_id, db_session)
+    if user_file is None:
+        raise ValueError(f"User file with id {user_file_id} not found")
+    return UserFileMetadata.model_validate(user_file)
 
 
 def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str | None:

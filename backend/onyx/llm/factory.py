@@ -291,7 +291,7 @@ def llm_from_provider(
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
     user_defaults: UserChatDefaults | None = None,
-) -> LLM:
+) -> LitellmLLM:
     model_configuration = _get_model_configuration(
         llm_provider=llm_provider, model_name=model_name
     )
@@ -331,6 +331,11 @@ def llm_from_provider(
         model_kwargs=model_kwargs,
         policy_headers=policy.headers if policy else None,
         policy_model_kwargs=policy.model_kwargs if policy else None,
+        supports_images=(
+            True
+            if model_configuration and model_configuration.supports_image_input
+            else None
+        ),
         reasoning_effort_default=(
             model_configuration.reasoning_effort_default
             if model_configuration
@@ -341,6 +346,9 @@ def llm_from_provider(
         ),
         reasoning_effort_max=(
             model_configuration.reasoning_effort_max if model_configuration else None
+        ),
+        supports_reasoning=(
+            model_configuration.supports_reasoning if model_configuration else False
         ),
     )
 
@@ -412,7 +420,9 @@ def get_llm(
     reasoning_effort_default: ReasoningEffort | None = None,
     reasoning_effort_user_default: ReasoningEffort | None = None,
     reasoning_effort_max: ReasoningEffort | None = None,
-) -> LLM:
+    supports_reasoning: bool = False,
+    supports_images: bool | None = None,
+) -> LitellmLLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
 
@@ -449,6 +459,8 @@ def get_llm(
         reasoning_effort_default=reasoning_effort_default,
         reasoning_effort_user_default=reasoning_effort_user_default,
         reasoning_effort_max=reasoning_effort_max,
+        supports_reasoning=supports_reasoning,
+        supports_images=supports_images,
     )
 
 

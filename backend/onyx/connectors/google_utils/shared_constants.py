@@ -18,6 +18,13 @@ GOOGLE_SCOPES = {
     ],
 }
 
+# A credential shared by Gmail and Drive (a Google family credential) consents to
+# both sources' scopes, so re-authorizing it for one source keeps the other
+# working.
+GOOGLE_FAMILY_SCOPES = sorted(
+    {scope for source_scopes in GOOGLE_SCOPES.values() for scope in source_scopes}
+)
+
 # This is the Oauth token
 DB_CREDENTIALS_DICT_TOKEN_KEY = "google_tokens"
 # This is the service account key

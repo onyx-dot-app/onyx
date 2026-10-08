@@ -6,11 +6,13 @@ import type {
   Spacing,
   Rounding,
   ShadowVariants,
-  SizeVariants,
   StatusVariants,
 } from "@opal/types";
 import { roundingToRem, spacingToRem } from "@opal/shared";
-import { cn } from "@opal/utils";
+import {
+  CardFold,
+  type CardFoldHeight,
+} from "@opal/components/cards/fold/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -155,13 +157,14 @@ type CardExpandableProps = CardBaseProps & {
   expandedContent?: React.ReactNode;
 
   /**
-   * Max-height constraint on the expandable content area.
-   * - `"md"` (default): caps at 20rem with vertical scroll.
-   * - `"fit"`: no max-height — content takes its natural height.
+   * Max-height constraint on the expandable content area, on Tailwind's
+   * spacing scale: `N` is `N / 4` rem.
+   * - `80` (default): caps at 20rem with vertical scroll.
+   * - `"full"`: no max-height — content takes its natural height.
    *
-   * @default "md"
+   * @default 80
    */
-  expandableContentHeight?: Extract<SizeVariants, "md" | "fit">;
+  expandableContentHeight?: CardFoldHeight;
 };
 
 type CardProps = CardPlainProps | CardExpandableProps;
@@ -240,17 +243,6 @@ function Card(props: CardProps) {
 
   const paddingStyle = { padding: spacingToRem(paddingProp) };
   const radius = roundingToRem(roundingProp);
-  // Expanded, the header rounds only at the top and the body only at the
-  // bottom, so the two halves read as one card rather than two.
-  const topRadius = {
-    borderTopLeftRadius: radius,
-    borderTopRightRadius: radius,
-  };
-  const bottomRadius = {
-    borderBottomLeftRadius: radius,
-    borderBottomRightRadius: radius,
-  };
-
   // Plain mode — unchanged behavior
   if (!props.expandable) {
     return (
@@ -274,10 +266,16 @@ function Card(props: CardProps) {
   const {
     expanded = false,
     expandedContent,
-    expandableContentHeight = "md",
+    expandableContentHeight = 80,
   } = props;
   const showContent = expanded && expandedContent !== undefined;
-  const headerRadius = showContent ? topRadius : { borderRadius: radius };
+  // The stylesheet rounds the header, and squares its bottom corners while
+  // the fold has any height, so the two halves stay joined as it closes.
+  const headerStyle: React.CSSProperties &
+    Record<"--opal-card-radius", string> = {
+    ...paddingStyle,
+    "--opal-card-radius": radius,
+  };
 
   return (
     <div
@@ -289,7 +287,7 @@ function Card(props: CardProps) {
     >
       <div
         className="opal-card-expandable-header"
-        style={{ ...paddingStyle, ...headerRadius }}
+        style={headerStyle}
         data-color={color}
         data-border={border}
         data-opal-status-border={borderColor}
@@ -297,22 +295,15 @@ function Card(props: CardProps) {
         {children}
       </div>
       {expandedContent !== undefined && (
-        <div
-          className="opal-card-expandable-wrapper"
-          data-expanded={showContent ? "true" : "false"}
+        <CardFold
+          expanded={showContent}
+          border={border}
+          radius={radius}
+          borderColor={borderColor}
+          contentHeight={expandableContentHeight}
         >
-          <div className="opal-card-expandable-inner">
-            <div
-              className="opal-card-expandable-body"
-              style={bottomRadius}
-              data-border={border}
-              data-opal-status-border={borderColor}
-              data-content-height={expandableContentHeight}
-            >
-              {expandedContent}
-            </div>
-          </div>
-        </div>
+          {expandedContent}
+        </CardFold>
       )}
     </div>
   );

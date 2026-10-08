@@ -1,5 +1,5 @@
 import { SourceCategory } from "@/lib/search/types";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 /**
  * Message key, inside the `admin.addConnector` namespace, for each category
@@ -88,4 +88,5 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.CraftFile]: "sources.craftFile.description",
   [ValidSources.FederatedSlack]: "sources.federatedSlack.description",
   [ValidSources.OneDrive]: "sources.onedrive.description",
+  [ValidSources.Zoom]: "sources.zoom.description",
 } as const satisfies Record<ValidSources, string>;

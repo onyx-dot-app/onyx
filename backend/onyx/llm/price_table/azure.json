@@ -479,6 +479,37 @@
       "temperature": false,
       "tool_call": true
     },
+    "claude-sonnet-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Sonnet 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "codestral-2501": {
       "attachment": false,
       "cost": {
@@ -805,7 +836,7 @@
         "output": 22.0
       },
       "limit": {
-        "context": 128000,
+        "context": 16000,
         "output": 4096
       },
       "mode": "realtime",
@@ -841,7 +872,7 @@
       "family": "gpt",
       "limit": {
         "context": 16384,
-        "output": 16384
+        "output": 4096
       },
       "modalities": {
         "input": [
@@ -868,7 +899,7 @@
       "family": "gpt",
       "limit": {
         "context": 16384,
-        "output": 16384
+        "output": 4096
       },
       "modalities": {
         "input": [
@@ -1147,7 +1178,7 @@
     },
     "gpt-4o-mini-tts": {
       "cost": {
-        "input": 2.5,
+        "input": 0.6,
         "output": 10.0,
         "second": 0.00025
       },
@@ -1174,7 +1205,7 @@
         "output": 20.0
       },
       "limit": {
-        "context": 128000,
+        "context": 16000,
         "output": 4096
       },
       "mode": "realtime",
@@ -1333,7 +1364,8 @@
       "family": "gpt-pro",
       "limit": {
         "context": 400000,
-        "output": 272000
+        "input": 272000,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -1432,6 +1464,7 @@
       "family": "gpt-codex",
       "limit": {
         "context": 400000,
+        "input": 272000,
         "output": 128000
       },
       "modalities": {
@@ -2097,6 +2130,58 @@
       "temperature": false,
       "tool_call": true
     },
+    "gpt-6.1-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT-6.1 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-29",
+      "structured_output": true,
+      "supports_none_reasoning_effort": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "gpt-chat-latest": {
       "attachment": true,
       "cost": {
@@ -2105,9 +2190,9 @@
         "output": 30
       },
       "limit": {
-        "context": 128000,
-        "input": 111616,
-        "output": 16384
+        "context": 400000,
+        "input": 272000,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -2299,6 +2384,50 @@
       "temperature": false,
       "tool_call": false
     },
+    "gpt-live-1": {
+      "cost": {
+        "second_input": 0.000833333333333
+      },
+      "mode": "realtime",
+      "name": "gpt-live-1"
+    },
+    "gpt-live-transcribe": {
+      "cost": {
+        "second_input": 0.000283333333333
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "audio_transcription",
+      "name": "gpt-live-transcribe"
+    },
+    "gpt-realtime": {
+      "cost": {
+        "cache_read": 0.39999999999999997,
+        "input": 4.0,
+        "output": 16.0
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime"
+    },
+    "gpt-realtime-1.5": {
+      "cost": {
+        "cache_read": 0.39999999999999997,
+        "input": 4.0,
+        "output": 16.0
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-1.5"
+    },
     "gpt-realtime-1.5-2026-02-23": {
       "cost": {
         "cache_read": 0.39999999999999997,
@@ -2311,6 +2440,19 @@
       },
       "mode": "realtime",
       "name": "gpt-realtime-1.5-2026-02-23"
+    },
+    "gpt-realtime-2": {
+      "cost": {
+        "cache_read": 0.39999999999999997,
+        "input": 4.0,
+        "output": 24.0
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-2"
     },
     "gpt-realtime-2.1": {
       "cost": {
@@ -2377,12 +2519,34 @@
       "mode": "realtime",
       "name": "gpt-realtime-mini-2025-10-06"
     },
+    "gpt-realtime-translate": {
+      "cost": {
+        "second_input": 0.000566666666667
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-translate"
+    },
     "gpt-realtime-whisper": {
       "cost": {
         "second_input": 0.0002833333333333333
       },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
       "mode": "audio_transcription",
       "name": "gpt-realtime-whisper"
+    },
+    "gpt-transcribe": {
+      "cost": {
+        "second_input": 7.5e-05
+      },
+      "mode": "audio_transcription",
+      "name": "gpt-transcribe"
     },
     "grok-4-1-fast-non-reasoning": {
       "attachment": true,
@@ -2498,6 +2662,11 @@
     },
     "grok-4.6": {
       "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "input": 1.25,
+        "output": 6
+      },
       "family": "grok",
       "limit": {
         "context": 200000,
@@ -2879,6 +3048,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Model Router",
       "open_weights": false,
       "reasoning": false,
@@ -3226,7 +3396,7 @@
       },
       "family": "text-embedding",
       "limit": {
-        "context": 8191,
+        "context": 8192,
         "output": 3072
       },
       "modalities": {
@@ -3252,7 +3422,7 @@
       },
       "family": "text-embedding",
       "limit": {
-        "context": 8191,
+        "context": 8192,
         "output": 1536
       },
       "modalities": {
@@ -3359,7 +3529,7 @@
         "output": 22.0
       },
       "limit": {
-        "context": 128000,
+        "context": 16000,
         "output": 4096
       },
       "mode": "realtime",
@@ -3385,6 +3555,14 @@
       },
       "mode": "embedding",
       "name": "us/text-embedding-ada-002"
+    },
+    "whisper": {
+      "cost": {
+        "second": 0.0001,
+        "second_input": 0.0001
+      },
+      "mode": "audio_transcription",
+      "name": "whisper"
     },
     "whisper-1": {
       "cost": {

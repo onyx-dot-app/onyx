@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from onyx.context.search.models import TimeRange
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import ASSUMED_DOCUMENT_AGE_DAYS
 from onyx.document_index.opensearch.schema import (
     CREATED_AT_FIELD_NAME,
@@ -29,6 +29,7 @@ def _build_filters(
         tenant_state=TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False),
         include_hidden=True,
         access_control_list=None,
+        cc_pair_access=None,
         source_types=[],
         tags=[],
         document_sets=[],

@@ -43,7 +43,7 @@ from kubernetes import client
 import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 import onyx.server.features.build.sandbox.kubernetes.sidecar_client as sidecar
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
     SIDECAR_HEALTH_PATH,
     SIDECAR_READY_PATH,

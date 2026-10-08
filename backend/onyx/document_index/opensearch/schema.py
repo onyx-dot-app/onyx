@@ -20,11 +20,13 @@ from onyx.configs.app_configs import (
     OPENSEARCH_TEXT_ANALYZER,
     USING_AWS_MANAGED_OPENSEARCH,
 )
-from onyx.document_index.interfaces_new import TenantState
+from onyx.db.enums import VectorQuantization
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     EF_CONSTRUCTION,
     EF_SEARCH,
+    LUCENE_SCALAR_QUANTIZATION,
     M,
 )
 from onyx.document_index.opensearch.string_filtering import (
@@ -47,6 +49,7 @@ LAST_UPDATED_FIELD_NAME = "last_updated"
 CREATED_AT_FIELD_NAME = "created_at"
 PUBLIC_FIELD_NAME = "public"
 ACCESS_CONTROL_LIST_FIELD_NAME = "access_control_list"
+CC_PAIR_IDS_FIELD_NAME = "cc_pair_ids"
 HIDDEN_FIELD_NAME = "hidden"
 WRITTEN_BY_PORT_FIELD_NAME = "written_by_port"
 GLOBAL_BOOST_FIELD_NAME = "global_boost"
@@ -174,6 +177,10 @@ class DocumentChunkWithoutVectors(BaseModel):
 
     public: bool
     access_control_list: list[str]
+    # IDs of the cc-pairs whose DocumentByConnectorCredentialPair rows grant
+    # access to the doc. None (field absent) for chunks with no cc-pair, e.g.
+    # user files. OpenSearch treats an empty list the same as an absent field.
+    cc_pair_ids: list[int] | None = None
     # Defaults to False, currently gets written during update not index.
     hidden: bool = False
     # None on all normal writes (omitted via exclude_none, so old indices whose mapping
@@ -402,7 +409,34 @@ class DocumentSchema:
     """
 
     @staticmethod
-    def get_document_schema(vector_dimension: int, multitenant: bool) -> dict[str, Any]:
+    def _get_knn_vector_method(
+        vector_quantization: VectorQuantization,
+    ) -> dict[str, Any]:
+        """Returns the HNSW method of the vector fields.
+
+        With quantization, Lucene keeps the full-precision vectors on disk next
+        to the quantized ones. Query-time rescoring reads them.
+        """
+        parameters: dict[str, Any] = {"ef_construction": EF_CONSTRUCTION, "m": M}
+        lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
+        if lucene_scalar_quantization is not None:
+            parameters["encoder"] = {
+                "name": "sq",
+                "parameters": {"bits": lucene_scalar_quantization.bits},
+            }
+        return {
+            "name": "hnsw",
+            "space_type": "cosinesimil",
+            "engine": OPENSEARCH_KNN_ENGINE,
+            "parameters": parameters,
+        }
+
+    @staticmethod
+    def get_document_schema(
+        vector_dimension: int,
+        multitenant: bool,
+        vector_quantization: VectorQuantization = VectorQuantization.NONE,
+    ) -> dict[str, Any]:
         """Returns the document schema for the OpenSearch index.
 
         WARNING: Changes / additions to field names here require changes to the
@@ -430,6 +464,8 @@ class DocumentSchema:
             vector_dimension: The dimension of vector embeddings. Must be a
                 positive integer.
             multitenant: Whether the index is multitenant.
+            vector_quantization: Scalar quantization of the vector fields.
+                OpenSearch cannot change it on an existing index.
 
         Returns:
             A dictionary representing the document schema, to be supplied to the
@@ -470,24 +506,16 @@ class DocumentSchema:
                 TITLE_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",
                     "dimension": vector_dimension,
-                    "method": {
-                        "name": "hnsw",
-                        "space_type": "cosinesimil",
-                        "engine": OPENSEARCH_KNN_ENGINE,
-                        "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
-                    },
+                    "method": DocumentSchema._get_knn_vector_method(
+                        vector_quantization
+                    ),
                 },
-                # TODO(andrei): This is a tensor in Vespa. Also look at feature
-                # parity for these other method fields.
                 CONTENT_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",
                     "dimension": vector_dimension,
-                    "method": {
-                        "name": "hnsw",
-                        "space_type": "cosinesimil",
-                        "engine": OPENSEARCH_KNN_ENGINE,
-                        "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
-                    },
+                    "method": DocumentSchema._get_knn_vector_method(
+                        vector_quantization
+                    ),
                 },
                 SOURCE_TYPE_FIELD_NAME: {"type": "keyword"},
                 METADATA_LIST_FIELD_NAME: {"type": "keyword"},
@@ -518,6 +546,10 @@ class DocumentSchema:
                 # documents are always visible to anyone in a given tenancy
                 # regardless of this field.
                 ACCESS_CONTROL_LIST_FIELD_NAME: {"type": "keyword"},
+                # IDs of the cc-pairs the doc belongs to, for query-time access
+                # filtering. Integer (not keyword) so a large allowed set can be
+                # sent as a terms query with value_type "bitmap".
+                CC_PAIR_IDS_FIELD_NAME: {"type": "integer"},
                 # Whether the doc is hidden from search results.
                 # Should clobber all other access search filters, namely
                 # PUBLIC_FIELD_NAME and ACCESS_CONTROL_LIST_FIELD_NAME; up to

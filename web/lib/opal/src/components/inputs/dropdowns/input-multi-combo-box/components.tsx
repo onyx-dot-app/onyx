@@ -1,6 +1,6 @@
 "use client";
 
-import { MultiDropdown } from "@opal/components/inputs/dropdowns/multi/components";
+import { MultiSelectField } from "@opal/components/inputs/dropdowns/multi/components";
 import type { InputMultiComboBoxProps } from "@opal/components/inputs/dropdowns/types";
 
 /**
@@ -10,7 +10,7 @@ import type { InputMultiComboBoxProps } from "@opal/components/inputs/dropdowns/
  * `InputMultiSelect`.
  */
 function InputMultiComboBox(props: InputMultiComboBoxProps) {
-  return <MultiDropdown {...props} trigger="type-in" />;
+  return <MultiSelectField {...props} trigger="type-in" />;
 }
 
 export { InputMultiComboBox };

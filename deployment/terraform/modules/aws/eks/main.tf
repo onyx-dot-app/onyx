@@ -17,6 +17,21 @@ locals {
     (var.enable_rds_iam_for_service_account && var.rds_db_connect_arn != null)
   )
 
+  # Settings for every IAM role the upstream modules create. Only keys that are
+  # set, so leaving both inputs unset renders exactly the previous config.
+  node_group_iam_role_settings = {
+    for k, v in {
+      iam_role_permissions_boundary = var.iam_role_permissions_boundary
+      iam_role_path                 = var.iam_role_path
+    } : k => v if v != null
+  }
+  addon_iam_role_settings = {
+    for k, v in {
+      role_permissions_boundary_arn = var.iam_role_permissions_boundary
+      role_path                     = var.iam_role_path
+    } : k => v if v != null
+  }
+
   workload_irsa_service_account_subjects = [
     for service_account_name in distinct(concat(
       [var.irsa_service_account_name],
@@ -126,6 +141,9 @@ module "eks" {
   cluster_endpoint_public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
   enable_cluster_creator_admin_permissions = true
 
+  iam_role_permissions_boundary = var.iam_role_permissions_boundary
+  iam_role_path                 = var.iam_role_path
+
   # Control plane logging
   cluster_enabled_log_types              = var.cluster_enabled_log_types
   cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
@@ -147,9 +165,10 @@ module "eks" {
     }
   } : {}
 
-  eks_managed_node_group_defaults = {
-    ami_type = "AL2023_x86_64_STANDARD"
-  }
+  eks_managed_node_group_defaults = merge(
+    { ami_type = "AL2023_x86_64_STANDARD" },
+    local.node_group_iam_role_settings,
+  )
 
   eks_managed_node_groups = {
     for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups) : k => merge(v,
@@ -160,7 +179,7 @@ module "eks" {
           v.instance_types
         )
       },
-      # Only add subnet_ids override for vespa node group if specified
+      # Only add subnet_ids override for the document-index node group if specified
       k == "vespa" && length(var.vespa_node_subnet_ids) > 0 ? {
         subnet_ids = var.vespa_node_subnet_ids
       } : {},
@@ -178,7 +197,7 @@ module "eks" {
         max_size     = coalesce(var.main_node_max_size, v.max_size)
         desired_size = try(v.desired_size, coalesce(var.main_node_min_size, v.min_size))
       } : {},
-      # Disk override for the Vespa/document-index node; null keeps the map
+      # Disk override for the document-index node; null keeps the map
       # default. Merge preserves any other device mappings on the group.
       k == "vespa" && var.vespa_node_disk_size_gb != null ? {
         block_device_mappings = merge(try(v.block_device_mappings, {}), {
@@ -238,6 +257,8 @@ module "irsa-ebs-csi" {
 
   create_role                   = true
   role_name                     = "AmazonEKSTFEBSCSIRole-${module.eks.cluster_name}"
+  role_path                     = coalesce(var.iam_role_path, "/")
+  role_permissions_boundary_arn = var.iam_role_permissions_boundary != null ? var.iam_role_permissions_boundary : ""
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = [data.aws_iam_policy.ebs_csi_policy.arn]
   oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
@@ -291,6 +312,10 @@ module "eks_blueprints_addons" {
   enable_karpenter                    = false
   enable_metrics_server               = true
   enable_cluster_autoscaler           = true
+
+  # The two add-ons above that create IRSA roles.
+  aws_load_balancer_controller = local.addon_iam_role_settings
+  cluster_autoscaler           = local.addon_iam_role_settings
 
   depends_on = [module.eks]
 }
@@ -373,6 +398,8 @@ module "irsa-workload-access" {
 
   create_role                   = true
   role_name                     = "AmazonEKSTFWorkloadAccessRole-${module.eks.cluster_name}"
+  role_path                     = coalesce(var.iam_role_path, "/")
+  role_permissions_boundary_arn = var.iam_role_permissions_boundary != null ? var.iam_role_permissions_boundary : ""
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = aws_iam_policy.s3_access_policy[*].arn
   oidc_fully_qualified_subjects = local.workload_irsa_service_account_subjects

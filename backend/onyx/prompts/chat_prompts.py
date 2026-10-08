@@ -54,11 +54,6 @@ DO NOT provide any links following the citations. Cite inline as opposed to leav
 """
 
 
-# Reminder message if any search tool has been run anytime in the chat turn
-CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [2], [3], etc. based on the "document" field of the documents.
-""".strip()
-
 # Pushes answers to cover every part of the question with the exact values the
 # sources state. Validated on EnterpriseRAG-Bench (500 questions, paired runs).
 ANSWER_COMPLETENESS_REMINDER = """
@@ -96,9 +91,6 @@ IMAGE_DROP_REMINDER = """
 {dropped_count} earlier image(s) attached to this conversation were omitted to fit the model's per-request image limit.
 """.strip()
 
-
-# Specifically for OpenAI models, this prefix needs to be in place for the model to output markdown and correct styling
-CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
 # This is just for Slack context today
 ADDITIONAL_CONTEXT_PROMPT = """

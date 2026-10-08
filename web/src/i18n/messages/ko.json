@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Onyx에 연결",
+      "request": "{clientName}에게 Onyx 검색을 허용할까요?",
+      "account": "로그인 계정: {email}",
+      "workspace": "워크스페이스: {workspaceName}",
+      "appAddress": "앱 주소: {origin}",
+      "access": "접근 권한이 있는 문서의 검색 결과를 읽습니다. 웹 검색을 사용하고 웹 페이지를 엽니다.",
+      "allow": "접근 허용",
+      "deny": "거부",
+      "pending": "선택을 저장하는 중...",
+      "loading": "인증 요청을 불러오는 중...",
+      "unavailable": "이 요청이 만료되었거나 변경되었습니다. 앱에서 다시 시작하세요.",
+      "failed": "인증을 완료하지 못했습니다. 앱에서 다시 시작하세요.",
+      "signInRequired": "이 앱을 승인하려면 로그인하세요.",
+      "signIn": "로그인",
+      "forbidden": "이 앱을 승인할 수 없습니다. 워크스페이스 관리자에게 문의하세요.",
+      "loadFailed": "Onyx에서 이 요청을 불러오지 못했습니다. 다시 시도하세요.",
+      "retry": "다시 시도"
+    },
+    "connections": {
+      "cancel": "취소",
+      "title": "연결된 앱",
+      "description": "Onyx 검색을 허용한 앱입니다.",
+      "empty": "연결된 앱이 없습니다.",
+      "loading": "연결된 앱을 불러오는 중...",
+      "expires": "만료일: {date}",
+      "disconnect": "연결 해제",
+      "disconnectAriaLabel": "{clientName} 연결 해제",
+      "pending": "연결 해제 중...",
+      "failed": "앱 연결을 해제하지 못했습니다. 다시 시도하세요.",
+      "loadFailed": "연결된 앱을 불러오지 못했습니다.",
+      "confirmTitle": "{clientName}의 연결을 해제할까요?",
+      "confirmDescription": "이 앱은 Onyx에 접근할 수 없게 됩니다. 나중에 다시 연결할 수 있습니다."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "계정"
@@ -808,13 +844,7 @@
         "description": "{appName}을(를) 데이터 소스에 연결하세요."
       },
       "search": {
-        "placeholder": "커넥터 검색..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>페더레이션 커넥터가 이미 구성되어 있습니다.</strong> 클릭하여 기존 커넥터를 편집하세요.",
-          "slackCredentialsFound": "<strong>기존 Slack 자격 증명을 찾았습니다.</strong> 클릭하여 Slack 커넥터를 관리하세요."
-        }
+        "placeholder": "커넥터를 검색하거나 \"/\"를 눌러 포커스..."
       },
       "sourceCard": {
         "connectButton": {
@@ -911,6 +941,9 @@
         },
         "onedrive": {
           "description": "Microsoft 클라우드 저장소"
+        },
+        "zoom": {
+          "description": "회의 및 웨비나 녹화"
         },
         "teams": {
           "description": "Microsoft 팀 채팅"
@@ -1386,6 +1419,34 @@
         },
         "trialBilling": {
           "text": "1개월 무료 체험이 끝나면 <value>{date}</value>에 결제됩니다."
+        }
+      },
+      "downgrade": {
+        "failed": {
+          "text": "다운그레이드에 실패했습니다"
+        },
+        "link": {
+          "label": "Community로 다운그레이드"
+        },
+        "modal": {
+          "confirmButton": {
+            "label": "다운그레이드",
+            "loading": "다운그레이드 중..."
+          },
+          "connectors": {
+            "text": "모든 커넥터가 공개됩니다. 동기화된 권한이나 그룹으로 비공개였던 문서가 모든 사용자에게 표시됩니다. 검색 결과는 인덱스가 다시 작성된 후 반영되며, 인덱스가 크면 시간이 걸릴 수 있습니다."
+          },
+          "description": "라이선스와 모든 유료 기능이 제거됩니다. 이 작업은 되돌릴 수 없습니다.",
+          "features": {
+            "text": "서비스 계정 API 키, Token 사용량 제한, 훅이 삭제됩니다. 표준 답변과 SCIM 토큰이 비활성화됩니다. 사용자 지정 브랜딩과 채팅 보존 기간이 초기화됩니다."
+          },
+          "groups": {
+            "text": "사용자 그룹이 제거됩니다. 그룹과 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬은 공개됩니다."
+          },
+          "license": {
+            "text": "이 배포에서 라이선스가 제거됩니다."
+          },
+          "title": "Community Edition으로 다운그레이드"
         }
       },
       "footer": {
@@ -1966,25 +2027,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "소스에서 권한을 자동으로 동기화합니다. 검색을 수행하는 사용자가 소스에서 해당 문서에 액세스할 권한이 있는 경우에만 {appName}에서 문서를 검색할 수 있습니다.",
-          "disabledReason": "현재 자격 증명의 인증 방식은 권한 자동 동기화를 지원하지 않습니다. 지원되는 인증 방식으로 변경해 주세요.",
-          "name": "권한 자동 동기화"
-        },
-        "heading": {
-          "description": "이 커넥터가 색인한 문서에 대한 액세스 권한을 관리합니다.",
-          "title": "문서 액세스"
-        },
-        "privateOption": {
-          "description": "(사용자 그룹 페이지를 통해) 이 커넥터에 대한 액세스 권한을 명시적으로 부여받은 사용자만 이 커넥터가 가져온 문서에 액세스할 수 있습니다",
-          "name": "비공개"
-        },
-        "publicOption": {
-          "description": "{appName} 계정이 있는 모든 사용자가 이 커넥터가 가져온 문서에 액세스할 수 있습니다",
-          "name": "공개"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {#일} other {#일}}",
@@ -2160,6 +2202,7 @@
           "description": "모든 사용자가 소스에서 동기화된 접근 권한을 유지합니다.",
           "title": "그룹을 추가하기 전까지 제한 없음"
         },
+        "loadError": "그룹을 불러오지 못했습니다. 페이지를 새로고침한 후 다시 시도하세요.",
         "memberCount": "{count, plural, other {멤버 #명}}",
         "picker": {
           "placeholder": "이 커넥터에 대한 접근을 제한할 그룹 추가"
@@ -2167,26 +2210,12 @@
         "remove": {
           "tooltip": "{name} 제거"
         },
+        "table": {
+          "group": "그룹"
+        },
         "toggle": {
           "description": "선택한 그룹의 멤버로 접근을 제한합니다. 동기화된 권한은 계속 적용됩니다.",
           "title": "그룹으로 접근 제한"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "이 커넥터에 대한 그룹 액세스 할당"
-        },
-        "assignToGroup": {
-          "title": "이 커넥터를 관리할 수 있는 그룹"
-        },
-        "scopedManagerGroups": {
-          "description": "이 커넥터에 대한 액세스 권한을 부여하려면 관리 중인 그룹을 하나 이상 선택하세요"
-        },
-        "syncGroups": {
-          "description": "아래 그룹은 이 커넥터를 관리할 수 있는 사용자를 제어합니다. 문서에 대한 액세스는 소스 자체의 권한에서 상속됩니다."
-        },
-        "visibleToGroups": {
-          "description": "이 커넥터는 아래에서 선택한 그룹에 표시되고 액세스할 수 있습니다"
         }
       },
       "indexAttemptsTable": {
@@ -2565,7 +2594,7 @@
       "oneDrive": {
         "description": "OneDrive 커넥터 구성",
         "indexingScope": {
-          "label": "Onyx가 인덱싱할 OneDrive 파일의 소유자를 선택하세요",
+          "label": "인덱싱할 OneDrive 파일",
           "general": {
             "label": "일반",
             "description": "Microsoft 애플리케이션이 액세스할 수 있는 모든 적격 사용자를 인덱싱합니다."
@@ -2581,7 +2610,7 @@
         },
         "excludedPaths": {
           "label": "제외 경로",
-          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: '*.tmp' 또는 'Archive/*')."
+          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: `*.tmp` 또는 `Archive/*`)."
         },
         "organizationLinks": {
           "label": "조직 링크를 공개로 처리",
@@ -2601,6 +2630,12 @@
           "label": "{source}(으)로 인증",
           "pendingLabel": "인증하는 중..."
         },
+        "collapseButton": {
+          "ariaLabel": "접기"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "새로 만들기"
         },
@@ -2610,8 +2645,13 @@
         "credentialModal": {
           "title": "{source} 자격 증명 만들기"
         },
+        "credentialsLoadFailed": {
+          "description": "지금은 자격 증명을 설정할 수 없습니다. 페이지를 새로고침하거나 나중에 다시 시도하세요.",
+          "title": "자격 증명을 불러오지 못했습니다"
+        },
         "credentialStep": {
-          "title": "자격 증명 선택"
+          "description": "공유 서비스 계정을 사용합니다. {appName}이(가) 이 계정으로 콘텐츠를 인덱싱합니다.",
+          "title": "인증 계정"
         },
         "credentialSwapped": {
           "toast": "자격 증명을 교체했습니다!"
@@ -2619,16 +2659,26 @@
         "error": {
           "toast": "오류: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "펼치기"
+        },
         "federated": {
           "tooltip": {
-            "description": "이 커넥터에는 페더레이션 검색 옵션이 있습니다. 지연 시간이 늘어나고 검색 품질이 낮아집니다.",
+            "description": "지연 시간이 늘어나고 검색 품질이 낮아집니다.",
             "link": {
               "label": "대신 페더레이션 버전 사용 →"
-            }
+            },
+            "title": "이 커넥터에는 페더레이션 검색 옵션이 있습니다."
           }
         },
         "fileUploadFailed": {
           "toast": "파일 업로드 중 오류가 발생했습니다"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "새 {source} 계정"
         },
         "oauthRedirectFailed": {
           "message": "{source} 로그인 페이지로 이동하지 못했습니다. 다시 시도하세요."
@@ -2642,6 +2692,9 @@
         "retryButton": {
           "label": "다시 시도"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {저장된 계정 #개} other {저장된 계정 #개}}"
+        },
         "timeout": {
           "toast": "{seconds}초 후 작업 시간이 초과되었습니다. 설정에 오류가 있는지 확인하세요."
         },
@@ -2649,38 +2702,21 @@
           "toast": "알 수 없는 오류가 발생했습니다"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "인덱싱 시작 날짜",
-          "subtext": "이 날짜 이전의 문서는 가져오지 않습니다"
-        },
-        "pruneFrequency": {
-          "description": "모든 문서를 소스와 대조하여 더 이상 존재하지 않는 문서를 삭제합니다. 참고: 이 과정은 모든 문서를 확인하므로 실행 빈도를 높일 때는 주의하세요. 기본값은 {hours}시간({days}일)입니다. 소수점 시간도 지원합니다(예: 0.1시간 = 6분). 이 커넥터의 정리를 사용하지 않으려면 0을 입력하세요.",
-          "label": "정리 주기(시간)"
-        },
-        "refreshFrequency": {
-          "description": "소스에서 새 문서를 가져오는 주기입니다(분 단위). 0을 입력하면 이 커넥터의 새 문서를 가져오지 않습니다.",
-          "label": "새로 고침 주기(분)"
-        },
-        "resetButton": {
-          "label": "초기화"
-        },
-        "title": "고급 설정"
-      },
-      "connectorName": {
-        "label": "커넥터 이름",
-        "subtext": "커넥터를 설명하는 이름입니다."
-      },
       "credentialRequired": {
         "tooltip": "먼저 자격 증명을 선택하세요."
+      },
+      "bindingGate": {
+        "enterField": "‘{field}’을(를) 입력하세요.",
+        "fixField": "‘{field}’을(를) 확인하세요.",
+        "awaitingCheck": "필드를 벗어나면 자격 증명으로 확인합니다.",
+        "checking": "자격 증명을 확인하는 중…",
+        "fieldInvalid": "‘{field}’을(를) 확인하세요: {detail}",
+        "rejected": "이 자격 증명은 이 설정으로 사용할 수 없습니다. {detail}"
       },
       "credentialsLoadError": {
         "title": "자격 증명을 불러오지 못했습니다."
       },
       "field": {
-        "optional": {
-          "label": "(선택 사항)"
-        },
         "optionalSuffix": {
           "label": "선택 사항"
         }
@@ -2715,7 +2751,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console에서 OAuth 앱 JSON을 업로드한 다음([설정 방법]({docsUrl})), 인덱싱할 Drive의 Google 계정으로 인증하세요.",
-          "title": "옵션 1: OAuth 앱"
+          "title": "옵션 1: OAuth 앱",
+          "sharedScopesNote": "하나의 계정으로 두 커넥터를 모두 사용할 수 있도록 Google은 Google Drive와 Gmail 액세스를 함께 요청합니다. 이 계정을 Google Drive에만 사용하려면 동의 화면에서 Gmail 범위의 선택을 해제하세요([요청하는 이유]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "OAuth 앱 JSON을 업로드하거나 붙여 넣으세요"
@@ -2773,7 +2810,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console에서 OAuth 앱 JSON을 업로드한 다음([설정 방법]({docsUrl})), 인덱싱할 Gmail의 Google 계정으로 인증하세요.",
-          "title": "옵션 1: OAuth 앱"
+          "title": "옵션 1: OAuth 앱",
+          "sharedScopesNote": "하나의 계정으로 두 커넥터를 모두 사용할 수 있도록 Google은 Gmail과 Google Drive 액세스를 함께 요청합니다. 이 계정을 Gmail에만 사용하려면 동의 화면에서 Google Drive 범위의 선택을 해제하세요([요청하는 이유]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "OAuth 앱 JSON을 업로드하거나 붙여 넣으세요"
@@ -2806,9 +2844,9 @@
           "label": "취소"
         },
         "connectButton": {
-          "label": "연결"
+          "label": "커넥터 만들기"
         },
-        "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다."
+        "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다.{hasDocs, select, true { [문서]({url}) 보기} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -2911,28 +2949,104 @@
           "title": "제출 중 오류가 발생했습니다."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "구성"
-        }
+      "content": {
+        "title": "커넥터 콘텐츠",
+        "description": "이 커넥터에서 인덱싱할 콘텐츠를 선택하세요."
       },
       "selectInput": {
         "emptyOption": {
           "label": "옵션 선택"
         }
       },
-      "stringPairList": {
-        "addButton": {
-          "label": "새로 추가"
-        },
-        "removeButton": {
-          "tooltip": "제거"
-        }
-      },
       "tabs": {
         "empty": {
           "label": "표시할 탭이 없습니다."
         }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "subDescriptions": {
+        "siteUrl": "사이트 URL을 붙여 넣으세요. 해당 위치에서 {connectorName} REST API에 액세스할 수 있어야 합니다."
+      },
+      "boundFields": {
+        "errors": {
+          "missing": "값을 입력하세요.",
+          "invalid": "이 값은 올바르지 않습니다: {detail}"
+        }
+      },
+      "scheduled": {
+        "description": "커넥터가 인덱싱을 수행하는 방식을 지정합니다. 운영자가 이 섹션을 편집할 수 있습니다.",
+        "indexingStart": {
+          "description": "마지막 업데이트 날짜가 이보다 이전인 문서는 무시됩니다.",
+          "placeholder": "전체 기간",
+          "title": "다음 날짜 이후 문서 색인"
+        },
+        "pruneFrequency": {
+          "description": "소스를 확인하고 더 이상 존재하지 않는 문서를 삭제합니다.",
+          "title": "정리 주기"
+        },
+        "refreshFrequency": {
+          "description": "소스에서 새 문서를 가져옵니다.",
+          "title": "새로 고침 주기"
+        },
+        "title": "일정",
+        "units": {
+          "hours": "시간",
+          "minutes": "분"
+        }
+      },
+      "settings": {
+        "description": "커넥터 정보 및 액세스.",
+        "displayName": {
+          "title": "커넥터 표시 이름"
+        },
+        "documentAccess": {
+          "description": "이 커넥터가 색인한 문서에 액세스할 수 있는 사용자를 관리합니다.",
+          "everyone": {
+            "description": "이 커넥터가 색인한 문서는 조직의 모든 사용자에게 공개됩니다.",
+            "title": "조직의 모든 사용자"
+          },
+          "specificGroups": {
+            "description": "이 커넥터의 문서에 액세스할 수 있는 그룹을 지정합니다.",
+            "required": "그룹을 하나 이상 선택하세요.",
+            "title": "특정 그룹"
+          },
+          "sync": {
+            "description": "{appName}이(가) 소스와 권한을 동기화합니다. 사용자는 소스에서 볼 수 있는 항목만 검색할 수 있습니다.",
+            "disabledReason": "현재 자격 증명의 인증 방식은 권한 자동 동기화를 지원하지 않습니다. 지원되는 인증 방식으로 변경해 주세요.",
+            "title": "{source}와(과) 동기화"
+          },
+          "title": "문서 액세스"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "항상 공유됨",
+            "title": "관리자"
+          },
+          "description": "커넥터를 운영(색인 예약 및 모니터링)하거나 커넥터 구성을 편집할 수 있는 사용자를 관리합니다.",
+          "note": "“커넥터 관리” 권한(그룹 관리자 역할 또는 그룹 권한)이 있는 사용자만 커넥터를 운영하거나 편집할 수 있습니다.",
+          "placeholder": "그룹을 추가하여 이 커넥터 공유",
+          "role": {
+            "editor": {
+              "description": "구성을 업데이트/삭제합니다.",
+              "label": "편집자"
+            },
+            "menu": {
+              "ariaLabel": "{name}의 역할"
+            },
+            "operator": {
+              "description": "인덱싱을 예약/모니터링합니다.",
+              "label": "운영자"
+            },
+            "removeAccess": {
+              "label": "액세스 제거"
+            }
+          },
+          "title": "커넥터 관리 액세스"
+        },
+        "title": "커넥터 설정"
       }
     },
     "costOverrides": {
@@ -3195,15 +3309,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "API 토큰을 소유한 계정의 이메일을 사용하세요."
+        },
+        "apiTokenField": {
+          "subDescription": "{source}에 액세스하려면 API 토큰을 붙여 넣으세요."
+        },
         "createButton": {
           "label": "생성"
         },
         "created": {
           "toast": "새 자격 증명을 생성했습니다!"
         },
-        "name": {
-          "label": "이름:",
-          "placeholder": "(선택 사항) 자격 증명 이름..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "관리자",
+            "description": "모든 관리자가 이 계정을 재사용하여 커넥터를 만들 수 있습니다.",
+            "suffix": "(기본값)"
+          },
+          "adminsAndGroups": {
+            "description": "관리자와 지정한 그룹이 이 계정을 재사용할 수 있습니다.",
+            "label": "관리자 및 그룹"
+          },
+          "onlyMe": {
+            "label": "나만"
+          },
+          "description": "그룹이 이 계정을 재사용하여 커넥터를 만들 수 있도록 허용합니다.",
+          "title": "이 계정 공유"
         },
         "submitError": {
           "toast": "자격 증명 제출 중 오류가 발생했습니다"
@@ -3238,6 +3373,80 @@
           "toast": "자격 증명 업데이트 중 오류가 발생했습니다"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source} 액세스 키 ID",
+        "secretAccessKey": "{source} 시크릿 액세스 키",
+        "accountId": "{source} 계정 ID",
+        "apiToken": "API 토큰",
+        "clientId": "{source} 클라이언트 ID",
+        "clientSecret": "{source} 클라이언트 시크릿",
+        "clientToken": "{source} 클라이언트 토큰",
+        "directoryId": "{source} 디렉터리 ID",
+        "certificatePassword": "{source} 인증서 비밀번호",
+        "privateKey": "{source} 프라이빗 키",
+        "certificate": "{source} 인증서",
+        "baseUrl": "{source} 기본 URL",
+        "apiBaseUrl": "{source} API 기본 URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} 봇 토큰",
+        "username": "{source} 사용자 이름",
+        "apiUsername": "{source} API 사용자 이름",
+        "userEmail": "{source} 사용자 이메일",
+        "accountEmail": "{source} 계정 이메일",
+        "password": "{source} 비밀번호",
+        "subdomain": "{source} 서브도메인",
+        "domain": "{source} 도메인",
+        "enterpriseId": "{source} 엔터프라이즈 ID",
+        "teamId": "{source} 팀 ID",
+        "applicationId": "{source} 애플리케이션 ID",
+        "apiTokenId": "{source} API 토큰 ID",
+        "apiTokenSecret": "{source} API 토큰 시크릿",
+        "securityToken": "{source} 보안 토큰",
+        "integrationToken": "{source} 통합 토큰",
+        "accessKey": "{source} 액세스 키",
+        "accessKeySecret": "{source} 액세스 키 시크릿",
+        "key": "{source} 키",
+        "secret": "{source} 시크릿",
+        "roleArn": "{source} 역할 ARN",
+        "namespace": "{source} 네임스페이스",
+        "region": "{source} 리전",
+        "portalId": "{source} 포털 ID",
+        "oauthTokens": "{source} OAuth 토큰",
+        "isSandbox": "샌드박스 환경 여부",
+        "serviceUserEmail": "서비스 사용자 이메일",
+        "zuliprcContent": "Zuliprc 내용",
+        "authenticationMethod": "인증 방법"
+      },
+      "hints": {
+        "boxUserEmail": "선택 사항입니다. 대신 접근할 Box 사용자입니다.",
+        "githubBaseUrl": "선택 사항입니다. 서버 호스트를 입력하세요(예: https://github.example.com). github.com을 사용하려면 비워 두세요.",
+        "gongBaseUrl": "선택 사항입니다. 미국 외 지역의 데이터는 해당 리전의 호스트를 입력하세요(예: https://[region].api.gong.io).",
+        "jiraUserEmail": "Jira Cloud에 필요합니다.",
+        "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
+        "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
+        "pfxFile": "PFX 파일입니다.",
+        "testrailBaseUrl": "예: https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "클라이언트 시크릿",
+          "certificateAuthentication": "인증서 인증",
+          "certificate": "인증서",
+          "accessKeyAndSecret": "액세스 키 및 시크릿",
+          "iamRole": "IAM 역할",
+          "assumeRole": "역할 수임"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "이 모드를 선택하면 SharePoint 커넥터가 클라이언트 시크릿으로 인증합니다. 클라이언트 ID와 클라이언트 시크릿을 입력해야 합니다.",
+          "sharepointCertificate": "이 모드를 선택하면 SharePoint 커넥터가 인증서로 인증합니다. 클라이언트 ID, 디렉터리 ID, 인증서 비밀번호, PFX 데이터를 입력해야 합니다.",
+          "teamsClientSecret": "커넥터가 앱 등록의 클라이언트 시크릿으로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 시크릿을 입력하세요. 채널 메시지와 멤버만 해당됩니다. SharePoint는 시크릿을 거부하므로 첨부 파일 포함에는 인증서 옵션이 필요합니다.",
+          "teamsCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요. 첨부 파일 포함에 필요하며, 이 기능은 SharePoint에서 채널 파일과 해당 열람자를 읽습니다.",
+          "outlookClientSecret": "커넥터가 앱 등록의 클라이언트 시크릿으로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 시크릿을 입력하세요.",
+          "outlookCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요.",
+          "s3AssumeRole": "이 모드를 선택하면 Amazon EC2 인스턴스가 기존 역할을 수임하여 S3에 액세스합니다. 추가 자격 증명은 필요하지 않습니다."
+        }
+      },
       "modal": {
         "createTitle": "{source} 자격 증명 생성",
         "editTitle": "자격 증명 편집",
@@ -3266,6 +3475,10 @@
         },
         "retryButton": {
           "label": "다시 시도"
+        },
+        "signIn": {
+          "description": "{appName}에는 읽기 전용 범위가 필요합니다.",
+          "title": "{source}(으)로 로그인"
         },
         "startError": {
           "message": "OAuth를 시작할 수 없습니다"
@@ -3318,6 +3531,13 @@
         "success": {
           "toast": "자격 증명을 업데이트했습니다"
         }
+      },
+      "validation": {
+        "authMethodRequired": "인증 방식을 선택하세요",
+        "empty": "{field}은(는) 비워 둘 수 없습니다",
+        "fileRequired": "{field} 파일을 선택하세요",
+        "invalidEmail": "{field}에 올바른 이메일 주소를 입력하세요",
+        "required": "{field}을(를) 입력하세요"
       }
     },
     "customAnalytics": {
@@ -4816,6 +5036,12 @@
         "azureGptImage2": {
           "description": "Microsoft Azure에서 호스팅되는 GPT Image 2 이미지 생성 모델입니다."
         },
+        "azureGptImage25Flare": {
+          "description": "Microsoft Azure에서 호스팅되는 GPT Image 2.5 Flare 이미지 생성 모델입니다."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Microsoft Azure에서 호스팅되는 GPT Image 2.5 Sunburst 이미지 생성 모델입니다."
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) 모델은 속도와 효율성에 중점을 둡니다."
         },
@@ -4832,7 +5058,13 @@
           "description": "OpenAI의 이전 대표 이미지 생성 모델입니다."
         },
         "openaiGptImage2": {
-          "description": "프롬프트 재현도가 가장 높은 OpenAI의 최신 이미지 생성 모델입니다."
+          "description": "프롬프트 재현도가 높은 OpenAI의 이전 세대 이미지 생성 모델입니다."
+        },
+        "openaiGptImage25Flare": {
+          "description": "높은 품질과 빠른 생성 속도를 갖춘 OpenAI의 최신 이미지 생성 모델입니다."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "가장 정밀한 편집을 위한 OpenAI의 프리미엄 이미지 생성 모델입니다."
         }
       },
       "setDefaultError": {
@@ -4851,6 +5083,9 @@
           "label": "적용 및 재인덱싱",
           "statusesLoading": "커넥터 상태를 불러오는 중…",
           "statusesFailed": "커넥터 상태를 불러오지 못했습니다. 재인덱싱하기 전에 다시 시도하세요."
+        },
+        "applyWithoutReindex": {
+          "label": "재인덱싱 없이 적용"
         },
         "rebuildAll": {
           "label": "기존 문서 전체 다시 구축"
@@ -4885,10 +5120,14 @@
         "title": "재인덱싱 취소"
       },
       "captioningModel": {
-        "description": "인덱싱 중에 이미지를 분석하는 데 이 모델을 사용합니다. 비전 기능이 있는 모델만 선택할 수 있습니다. 변경 사항은 이후에 인덱싱되는 문서에만 적용됩니다. 기존 캡션은 이전 embedding에 이미 포함되어 있습니다.",
+        "description": "이 모델은 인덱싱 중 이미지를 분석하는 데 사용됩니다.",
         "title": "캡션 생성 LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "새 문서와 업데이트된 문서에 대한 컨텍스트 생성을 지금 중지하거나, 모든 문서를 다시 구축하여 이미 생성된 컨텍스트도 제거하세요.",
+          "title": "컨텍스트 검색을 끄는 방식을 선택하세요"
+        },
         "contextualModelMissing": {
           "description": "컨텍스트 검색이 활성화되어 있지만 선택된 모델이 없습니다. 재인덱싱 전에 아래에서 컨텍스트 검색 LLM을 선택하세요. 모델이 없으면 재인덱싱을 실행할 수 없습니다.",
           "title": "컨텍스트 검색 LLM 선택"
@@ -4901,8 +5140,16 @@
           "description": "embedding 또는 검색 설정을 변경하면 적용을 위해 모든 문서를 전체 재인덱싱해야 하며, 문서 규모에 따라 **몇 시간에서 며칠**이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "변경 사항을 적용하려면 전체 재인덱싱이 필요합니다."
         },
+        "doNotReindex": {
+          "description": "이미지 처리 설정은 지금부터 인덱싱되는 문서에만 적용됩니다. 전체 재인덱싱을 실행하지 않는 한 기존 문서는 업데이트되지 않습니다.\n\n재인덱싱은 코퍼스 크기에 따라 *몇 시간에서 며칠*이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows).",
+          "title": "변경 사항은 새로 인덱싱된 콘텐츠에만 적용됩니다."
+        },
         "orSeparator": {
           "label": "또는"
+        },
+        "reindex": {
+          "description": "재인덱싱은 코퍼스 크기에 따라 *몇 시간에서 며칠*이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "전체 재인덱싱이 실행됩니다."
         }
       },
       "cloudDisabled": {
@@ -4989,22 +5236,30 @@
           "description": "embedding 모델에서 필요로 하는 경우, 검색 쿼리를 모델에 전달하기 전에 앞에 붙이는 문자열입니다. 접두사가 잘못되었거나 없으면 embedding 품질이 떨어집니다.",
           "placeholder": "예: 'query: '",
           "title": "쿼리 접두사"
+        },
+        "googleWorkloadIdentity": {
+          "description": "API 서버와 임베딩 작업자의 GKE 인증 정보를 사용합니다. JSON 키가 필요하지 않습니다."
         }
       },
       "forwardOnlyModal": {
         "description": "기존 문서는 이전 모델이 생성한 컨텍스트를 그대로 유지합니다. 새 모델은 문서가 추가되거나 업데이트될 때만 적용됩니다. 문서마다 컨텍스트 보강 결과가 다를 수 있습니다.",
         "title": "컨텍스트 검색 LLM을 이후 문서에만 적용"
       },
+      "disableForwardModal": {
+        "description": "지금부터 추가되거나 업데이트되는 문서에는 컨텍스트 검색이 적용되지 않습니다. 기존 문서는 업데이트되거나 다시 인덱싱할 때까지 이미 생성된 컨텍스트를 유지합니다.",
+        "title": "이후 문서부터 컨텍스트 검색 끄기"
+      },
       "header": {
         "description": "문서를 인덱싱하고 embedding하여 검색과 조회에 사용할 방식을 설정합니다."
       },
       "imageExtraction": {
-        "description": "업로드된 파일(PDF, DOCX 등)에 포함된 이미지를 추출하고 비전 기능이 있는 LLM으로 요약하여, 이미지만 있는 문서도 검색하고 답변에 활용할 수 있게 합니다. 비전 기능이 있는 기본 LLM이 필요합니다.",
+        "description": "문서 인덱싱 중 이미지를 추출하고 검색 가능한 설명을 생성합니다.",
         "title": "이미지 추출 및 캡션 생성"
       },
       "imageProcessing": {
         "description": "인덱싱 중에 LLM으로 이미지를 분석하고 설명을 추가합니다.",
         "enableFirstTooltip": "이 항목을 설정하려면 이미지 추출 및 캡션 생성을 활성화하세요.",
+        "noModelSelected": "선택된 모델이 없습니다",
         "noVisionModelsTooltip": "비전 기능이 있는 모델이 설정되어 있지 않아 이미지 처리를 사용할 수 없습니다. 먼저 비전 기능이 있는 [언어 모델]({link})을 설정하세요.",
         "title": "이미지 처리"
       },
@@ -5018,7 +5273,7 @@
         }
       },
       "maxImageSize": {
-        "description": "리소스 사용을 제한하기 위해 이 크기를 넘는 이미지는 건너뜁니다.",
+        "description": "이 크기를 초과하는 이미지는 리소스 사용을 제한하기 위해 건너뜁니다.",
         "suffix": "(MB)",
         "title": "분석할 최대 이미지 크기"
       },
@@ -5131,9 +5386,6 @@
           },
           "title": "{provider} embedding 제공업체의 구성을 추가하세요."
         },
-        "deprecated": {
-          "suffix": "(지원 중단됨)"
-        },
         "disconnect": {
           "errorToast": "{provider} 연결 해제에 실패했습니다",
           "successToast": "{provider} 연결을 해제했습니다"
@@ -5185,27 +5437,35 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "일시 중지 또는 삭제 중이 아닌 모든 활성 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정의 현재 문서 인덱스를 계속 사용합니다.",
+          "description": "모든 **활성** (일시 중지/삭제 중이 아닌) 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정으로 현재 문서 인덱스를 계속 사용합니다.",
           "label": "활성 커넥터 재인덱싱 후 전환"
         },
+        "doNotReindex": {
+          "description": "**가장 안전한 옵션.** 새로 인덱싱된 콘텐츠에만 변경 사항을 적용합니다.",
+          "label": "재인덱싱 안 함"
+        },
         "instant": {
-          "description": "현재 문서 인덱스를 즉시 비우고 새 설정으로 전환합니다. 검색용 인덱스를 다시 채우려면 모든 커넥터를 재인덱싱해야 합니다.",
+          "description": "즉시 **현재 문서 인덱스를 비우고** 새 설정으로 전환합니다. 검색용 인덱스가 다시 채워지기 전에 모든 커넥터를 재인덱싱해야 합니다.",
           "label": "재인덱싱 전에 전환"
         },
         "placeholder": "전환 방식을 선택하세요",
         "reindexAll": {
-          "description": "가장 안전한 방식입니다. 모든 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정의 현재 문서 인덱스를 계속 사용합니다.",
+          "description": "모든 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정으로 현재 문서 인덱스를 계속 사용합니다.",
           "label": "모든 커넥터 재인덱싱 후 전환"
+        },
+        "reindexOptions": {
+          "label": "재인덱싱 옵션"
         }
       },
       "toasts": {
         "applyFailed": "설정 적용에 실패했습니다",
         "cancelReindexFailed": "재인덱싱 취소에 실패했습니다",
-        "captioningUpdateFailed": "캡션 생성 LLM 업데이트에 실패했습니다",
-        "captioningUpdated": "캡션 생성 LLM을 업데이트했습니다",
+        "captioningModelRequired": "적용하기 전에 캡션 LLM을 선택하세요.",
         "contextualModelRequired": "재인덱싱 전에 컨텍스트 검색 LLM을 선택하세요.",
         "contextualModelUpdateFailed": "컨텍스트 검색 LLM 업데이트에 실패했습니다",
         "contextualModelUpdated": "컨텍스트 검색 LLM을 업데이트했습니다",
+        "contextualRetrievalDisableFailed": "컨텍스트 검색을 끄지 못했습니다",
+        "contextualRetrievalDisabled": "컨텍스트 검색을 껐습니다",
         "modelNotFound": "선택한 모델을 찾을 수 없습니다",
         "providerResolveFailed": "제공업체를 확인할 수 없습니다",
         "reindexCanceled": "재인덱싱을 취소했습니다",
@@ -5225,7 +5485,24 @@
         "serviceAccountJsonInvalid": "유효한 Google 서비스 계정 JSON 파일이어야 합니다",
         "serviceAccountJsonRequired": "서비스 계정 JSON은 필수입니다",
         "targetUrlRequired": "대상 URL은 필수입니다",
-        "urlInvalid": "유효한 URL이어야 합니다"
+        "urlInvalid": "유효한 URL이어야 합니다",
+        "googleProjectRequired": "GCP 프로젝트 ID가 필요합니다"
+      },
+      "vectorQuantization": {
+        "description": "문서 벡터를 더 적은 비트로 저장하여 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다.",
+        "none": {
+          "description": "32비트 전체 정밀도.",
+          "label": "없음"
+        },
+        "scalar1Bit": {
+          "description": "메모리 사용량 32배 감소. OpenSearch 3.6 이상이 필요합니다.",
+          "label": "1비트"
+        },
+        "scalar7Bit": {
+          "description": "메모리 사용량 4배 감소. 검색 품질 저하가 거의 없습니다.",
+          "label": "7비트"
+        },
+        "title": "벡터 양자화"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {이 커넥터는 삭제됩니다} other {이 # 개의 커넥터는 삭제됩니다}}",
@@ -5247,6 +5524,9 @@
         "googleGeminiEmbedding2": "Google의 최신 멀티모달 임베딩 모델(GA)입니다. 3072차원 출력으로 최고 품질의 검색을 제공합니다.",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2의 프리뷰 버전입니다. 새 설정에서는 gemini-embedding-2로 대체되었습니다.",
         "voyageLarge2Instruct": "Voyage의 대형 임베딩 모델입니다. 지시 미세 조정으로 높은 성능을 제공합니다.",
+        "voyage4Large": "Voyage 4 시리즈의 가장 큰 임베딩 모델입니다. Voyage 최고의 검색 품질과 다국어를 지원합니다.",
+        "voyage4": "Voyage 4 시리즈의 범용 임베딩 모델입니다. 적당한 비용으로 높은 검색 품질을 제공합니다.",
+        "voyage4Lite": "Voyage 4 시리즈의 경량 임베딩 모델입니다. 비용이 가장 낮고 속도 제한이 가장 높습니다.",
         "voyageLight2Instruct": "Voyage의 경량 임베딩 모델입니다. 성능과 효율의 균형이 좋습니다.",
         "nomicEmbedTextV1": "검색, 유사도, 클러스터링, 분류에 특화된 Nomic의 임베딩 모델입니다.",
         "e5BaseV2": "기본 모델보다 더 작고 빠른 모델입니다. 검색 품질은 낮아지지만 기본 모델보다 약 2배 빠릅니다.",
@@ -5813,6 +6093,9 @@
           "optionalSuffix": {
             "label": "선택 사항"
           },
+          "slowSave": {
+            "text": "평소보다 오래 걸리고 있습니다. 모델 목록이 크면 1분 정도 걸릴 수 있습니다."
+          },
           "submitButton": {
             "invalidTooltip": "필수 항목을 모두 입력하세요.",
             "pristineTooltip": "저장할 변경 사항이 없습니다."
@@ -5859,10 +6142,12 @@
             "title": "API 키"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Google Vertex AI 모델이 호스팅되는 리전입니다. 지원되는 리전 전체 목록은 Google Cloud에서 확인하세요.",
             "title": "Google Cloud 리전 이름"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "Vertex AI가 활성화된 GCP 프로젝트입니다. 서비스 계정 가장 환경에서는 ADC가 대상 프로젝트를 정확히 추론할 수 없으므로 필수입니다.",
             "title": "GCP 프로젝트 ID"
           },
@@ -5904,6 +6189,7 @@
       "toasts": {
         "providerDeleteFailed": "제공자를 삭제하지 못했습니다: {message}",
         "providerDeleted": "제공자를 삭제했습니다!",
+        "providerLoadFailed": "제공자를 불러올 수 없습니다: {message}",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "settingsUpdated": "설정을 업데이트했습니다",
         "unknownError": "알 수 없는 오류"
@@ -6061,12 +6347,6 @@
         "imageSummarization": {
           "label": "이미지 요약"
         },
-        "kgDeepExtraction": {
-          "label": "지식 그래프 추출"
-        },
-        "kgDocumentClassification": {
-          "label": "지식 그래프 분류"
-        },
         "other": {
           "label": "기타"
         },
@@ -6083,8 +6363,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · 시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리, 지식 그래프 추출 등이 포함됩니다.",
-        "emptyDescription": "시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리, 지식 그래프 추출 등이 포함됩니다.",
+        "description": "{start} – {end} · 시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리 등이 포함됩니다.",
+        "emptyDescription": "시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리 등이 포함됩니다.",
         "error": {
           "title": "이 기간의 시스템 사용량을 불러오지 못했습니다."
         },
@@ -8243,6 +8523,9 @@
         "makeAdmin": {
           "label": "관리자로 지정"
         },
+        "menuButton": {
+          "ariaLabel": "사용자 작업"
+        },
         "removeAdmin": {
           "label": "관리자 권한 해제"
         },
@@ -8598,6 +8881,93 @@
           "label": "API 기본 URL",
           "description": "Firecrawl API 기본 URL입니다."
         }
+      }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM 게이트웨이",
+        "description": "외부 도구에서 워크스페이스 언어 모델에 대한 직접 API 액세스를 제어합니다."
+      },
+      "access": {
+        "title": "모델 직접 API 액세스",
+        "description": "워크스페이스의 언어 모델을 Claude Code나 Cursor 같은 외부 도구에서 범위 지정 액세스 토큰으로 호출할 수 있게 합니다. 호출은 구성된 제공업체에 청구됩니다.",
+        "toggle": {
+          "title": "LLM 게이트웨이 활성화",
+          "description": "끄면 모든 게이트웨이 엔드포인트가 요청을 거부하고, 기존 토큰이 작동을 멈추며, 토큰 선택기에서 게이트웨이 범위가 숨겨집니다. Craft 샌드박스 트래픽은 Craft 설정에서 별도로 제어됩니다."
+        }
+      },
+      "businessPlanTag": {
+        "label": "Business 플랜"
+      },
+      "tierTooltip": "LLM 게이트웨이는 Business 또는 Enterprise 플랜이 필요합니다.",
+      "scopeNote": {
+        "title": "각 사용자는 설정 → LLM 게이트웨이에서 자체 토큰과 연결 정보를 구성합니다."
+      },
+      "toasts": {
+        "settingsUpdated": "설정을 업데이트했습니다",
+        "settingsUpdateFailed": "설정을 업데이트하지 못했습니다"
+      }
+    },
+    "connectorChecks": {
+      "lockReason": "계속하려면 위의 커넥터 검사를 실행하고 실패한 항목을 해결하세요.",
+      "prompt": {
+        "title": "연결 테스트",
+        "description": "{appName}이(가) 계속하기 전에 필요한 범위를 확인하는 검사를 실행합니다.",
+        "startButton": {
+          "label": "검사 시작"
+        }
+      },
+      "title": "커넥터 검사",
+      "groups": {
+        "failed": "실패 {count}개",
+        "indeterminate": "미확인 {count}개",
+        "passed": "완료 {count}개",
+        "skipped": "건너뜀 {count}개",
+        "running": "실행 중 {count}개",
+        "expected": "예정 {count}개"
+      },
+      "status": {
+        "passed": "통과",
+        "failed": "실패",
+        "indeterminate": "확인할 수 없음",
+        "skipped": "건너뜀",
+        "running": "테스트 중…",
+        "pending": "대기 중",
+        "waiting": "설정을 기다리는 중"
+      },
+      "required": {
+        "label": "필수"
+      },
+      "running": {
+        "label": "검사 실행 중…"
+      },
+      "empty": {
+        "label": "아직 실행된 검사가 없습니다."
+      },
+      "docsLink": {
+        "label": "문서"
+      },
+      "rerunButton": {
+        "label": "검사 다시 실행"
+      },
+      "foldButton": {
+        "fold": "접기",
+        "expand": "펼치기"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "실패 {count}개",
+        "unverified": "미확인 {count}개",
+        "inProgress": "진행 중 {count}개",
+        "expected": "예정 {count}개",
+        "skipped": "건너뜀 {count}개",
+        "successful": "성공 {count}개"
+      },
+      "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
+      "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
+      "state": {
+        "completed": "검사가 완료되었습니다",
+        "inProgress": "검사 진행 중…"
       }
     }
   },
@@ -9153,6 +9523,7 @@
         "loginRequired": "먼저 ID 공급자로 로그인해야 합니다.",
         "oauthUserAlreadyExists": "이 이메일로 다른 로그인 방식의 계정이 이미 있습니다. 처음 사용한 방식으로 로그인하거나, 관리자에게 이 공급자의 연결을 요청하세요.",
         "serverError": "ID 공급자에서 오류가 발생했습니다. 다시 시도하세요.",
+        "staleSignIn": "이 로그인 링크가 만료되었거나 더 이상 유효하지 않습니다. 다시 로그인하세요.",
         "temporarilyUnavailable": "ID 공급자를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하세요."
       },
       "credentialsIssue": {
@@ -10783,6 +11154,9 @@
         },
         "loading": {
           "text": "모델 불러오는 중..."
+        },
+        "loadingMore": {
+          "text": "모델 더 불러오는 중..."
         }
       },
       "modelSettingsButton": {
@@ -11029,6 +11403,9 @@
         "expand": {
           "ariaLabel": "프로젝트 펼치기"
         },
+        "options": {
+          "label": "프로젝트 옵션"
+        },
         "rename": {
           "label": "프로젝트 이름 바꾸기"
         }
@@ -11087,6 +11464,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {파일 선택} other {파일 선택}}"
+      },
+      "prompt": "{multiple, select, true {또는 파일을 여기로 끌어다 놓으세요.} other {또는 파일을 여기로 끌어다 놓으세요.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "새로 추가"
+      },
+      "removeButton": {
+        "tooltip": "제거"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "사이드바 열기"
@@ -11250,6 +11641,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "관리자라면 <billingLink>관리자 결제</billingLink> 페이지에서 라이선스를 {hadLicense, select, true {갱신} other {활성화}}하거나 Stripe를 통해 가입하거나 결제 관련 지원은 <supportLink>support@onyx.app</supportLink>으로 문의하세요."
+        },
+        "downgradeButton": {
+          "label": "Community로 다운그레이드"
         },
         "heading": {
           "title": "액세스 제한됨"
@@ -11668,7 +12062,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "{name} 연결",
         "associateButton": "기존 스킬 연결",
         "create": {
           "github": {
@@ -12380,6 +12773,9 @@
       "newSession": {
         "label": "크래프트 시작"
       },
+      "options": {
+        "label": "세션 옵션"
+      },
       "rename": {
         "label": "이름 바꾸기"
       },
@@ -13042,6 +13438,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "펼치기",
+      "expandSection": "{title} 펼치기",
+      "fold": "접기",
+      "foldSection": "{title} 접기"
+    },
     "comboBox": {
       "close": "드롭다운 닫기",
       "create": "만들기",
@@ -13062,6 +13464,7 @@
       "loading": "로딩 중",
       "loadingPage": "로딩 중…",
       "openCalendar": "캘린더 열기",
+      "optional": "(선택 사항)",
       "progress": "진행률",
       "remove": "제거",
       "removeItem": "{title} 제거",
@@ -13079,6 +13482,9 @@
       "oneMonth": "1개월",
       "sevenDays": "7일",
       "threeMonths": "3개월"
+    },
+    "iconTooltip": {
+      "label": "자세한 정보"
     },
     "input": {
       "day": "일",
@@ -13370,6 +13776,10 @@
       "title": "위험 구역"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "관리자가 이 워크스페이스의 LLM 게이트웨이를 껐습니다. 다시 켜려면 관리자에게 문의하세요.",
+        "title": "LLM 게이트웨이가 꺼져 있습니다"
+      },
       "accessToken": {
         "button": "새 token",
         "description": "애플리케이션을 연결하기 전에 범위를 지정한 token을 생성하세요.",
@@ -13681,6 +14091,9 @@
         "languageModels": {
           "label": "언어 모델"
         },
+        "llmGateway": {
+          "label": "LLM 게이트웨이"
+        },
         "mcpActions": {
           "label": "MCP 액션"
         },
@@ -13829,6 +14242,9 @@
       },
       "moveToProject": {
         "label": "프로젝트로 이동"
+      },
+      "options": {
+        "label": "채팅 옵션"
       },
       "projectSearchInput": {
         "placeholder": "프로젝트 검색"
@@ -14391,5 +14807,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch에 더 많은 리소스가 필요합니다",
+    "disk": "OpenSearch 데이터 노드의 디스크 사용률이 85% 이상입니다. 디스크가 가득 차면 인덱싱이 중단될 수 있습니다.",
+    "jvmMemory": "반복 검사에서 OpenSearch JVM 메모리 사용률이 85%를 초과했습니다. 검색 및 인덱싱이 실패할 수 있습니다.",
+    "vectorMemory": "OpenSearch 벡터 메모리가 거의 가득 찼거나 한도에 도달했습니다. 검색 및 인덱싱이 실패할 수 있습니다.",
+    "contact": "시스템 관리자 또는 Onyx 팀([support@onyx.app](mailto:support@onyx.app))에 문의하세요.",
+    "stale": "최신 검사를 사용할 수 없습니다. 이 경고는 마지막으로 성공한 검사를 반영하며 복구는 확인되지 않았습니다.",
+    "dismiss": "닫기",
+    "diskTitle": "디스크 공간",
+    "jvmMemoryTitle": "JVM 메모리",
+    "vectorMemoryTitle": "벡터 메모리",
+    "viewDetails": "세부 정보 보기"
   }
 }

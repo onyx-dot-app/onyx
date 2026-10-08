@@ -56,19 +56,33 @@ class OutlookRecipient(BaseModel):
     name: str | None = None
 
 
-class OutlookMessage(BaseModel):
+class OutlookMessageIdentity(BaseModel):
+    """What the delta listing and a conversation outline know of a message."""
+
     id: str
+    # The RFC 5322 Message-ID. The same in every mailbox a message was
+    # delivered to, which the Graph id is not.
+    internet_message_id: str | None = None
     conversation_id: str | None = None
     parent_folder_id: str | None = None
+    received_at: datetime | None = None
+    is_draft: bool = False
+
+    @property
+    def match_id(self) -> str:
+        """The id a copy is matched by across mailboxes. A message without a
+        Message-ID keeps its Graph id, so it never matches another copy."""
+        return self.internet_message_id or self.id
+
+
+class OutlookMessage(OutlookMessageIdentity):
     subject: str | None = None
     body_text: str = ""
     sender: OutlookRecipient | None = None
     to_recipients: list[OutlookRecipient] = []
     cc_recipients: list[OutlookRecipient] = []
-    received_at: datetime | None = None
     sent_at: datetime | None = None
     web_link: str | None = None
-    is_draft: bool = False
     has_attachments: bool = False
 
 
@@ -91,14 +105,12 @@ class OutlookMessagePage(BaseModel):
     next_link: str | None = None
 
 
-class OutlookMessageChange(BaseModel):
+class OutlookMessageChange(OutlookMessageIdentity):
     """One delta entry: a message that appeared in the folder, one that left
     it, or a read-state change that Graph reports whatever the change type."""
 
-    id: str
     removed: bool = False
-    conversation_id: str | None = None
-    received_at: datetime | None = None
+    conversation_index: str | None = None
 
 
 class OutlookDeltaPage(BaseModel):
@@ -142,3 +154,66 @@ class OutlookEvent(BaseModel):
 class OutlookEventPage(BaseModel):
     events: list[OutlookEvent]
     next_link: str | None = None
+
+
+class MailboxCursor(BaseModel):
+    """Where the walk stands in one mailbox."""
+
+    mailbox: OutlookMailbox
+    # False until the mailbox is probed and its folder tree listed.
+    opened: bool = False
+    # Set when nothing is left to read. The step drops the cursor.
+    finished: bool = False
+    # Folders left to walk, popped from the end.
+    folders: list[OutlookFolder] = []
+    # Every folder id under an excluded root, so a conversation message filed
+    # deep inside Deleted Items is dropped like one at its top.
+    excluded_folder_ids: list[str] = []
+    current_folder: OutlookFolder | None = None
+    delta_next_link: str | None = None
+    # Entries seen in the current folder's delta round, to detect the cap.
+    folder_change_count: int = 0
+    # True once the current folder is being re-read without the server filter.
+    folder_unfiltered: bool = False
+    # The calendar view round, one page per step after the folders.
+    calendar_next_link: str | None = None
+    calendar_done: bool = False
+    # Recurring series already resolved for this mailbox in this attempt,
+    # written or not. The connector caps it per mailbox.
+    seen_series_ids: set[str] = set()
+
+
+class ThreadListing(BaseModel):
+    """One mailbox's copy of one message, as the delta listing saw it."""
+
+    key: str
+    mailbox: OutlookMailbox
+    conversation_id: str
+    # The Internet Message-ID, or the Graph id when Outlook set none, so a
+    # message without one is never matched across mailboxes.
+    message_id: str
+    received_at: datetime | None = None
+
+
+class ThreadCopy(BaseModel):
+    """One mailbox's copy of a thread: when it received each message."""
+
+    mailbox: OutlookMailbox
+    conversation_id: str
+    received: dict[str, datetime | None] = {}
+
+
+class ThreadGroup(BaseModel):
+    """A thread as listed across mailboxes."""
+
+    key: str
+    newest_message_id: str
+    copies: list[ThreadCopy]
+
+
+class BucketManifest(BaseModel):
+    """How far the listing is cut into buckets: the pages done and the chunk
+    files written per bucket."""
+
+    next_page: int
+    chunks: list[int]

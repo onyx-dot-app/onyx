@@ -109,8 +109,6 @@ class SendMessageRequest(BaseModel):
     # For multi-model mode: up to 3 LLM overrides to run in parallel.
     # When provided with >1 entry, triggers multi-model streaming.
     llm_overrides: list[LLMOverride] | None = None
-    # Test-only override for deterministic LiteLLM mock responses.
-    mock_llm_response: str | None = None
 
     allowed_tool_ids: list[int] | None = None
     forced_tool_id: int | None = None
@@ -189,6 +187,10 @@ class RenameChatSessionResponse(BaseModel):
     new_name: str  # This is only really useful if the name is generated
 
 
+class StopChatResponse(BaseModel):
+    message: str
+
+
 class ChatSessionDetails(BaseModel):
     id: UUID
     name: str | None
@@ -258,10 +260,10 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
-class CurrentRunInfo(BaseModel):
-    """In-flight run whose stream buffer can be replayed/tailed."""
+class CurrentStreamInfo(BaseModel):
+    """Unfinished response available for stream reconnection."""
 
-    run_id: int
+    stream_id: int
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -279,9 +281,9 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
-    # Set while a run is in flight and resumable: cursor-0 replay+tail is
+    # Set while a stream is in flight and resumable: cursor-0 replay+tail is
     # available at /chat-session/{id}/resume-stream.
-    current_run: CurrentRunInfo | None = None
+    current_stream: CurrentStreamInfo | None = None
     # True for sessions pinned to an incognito record mode, so a reload can
     # restore the incognito UI state.
     incognito: bool = False

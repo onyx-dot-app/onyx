@@ -1158,7 +1158,7 @@
       "family": "minimax",
       "limit": {
         "context": 204800,
-        "output": 131100
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -1186,7 +1186,7 @@
       "family": "minimax-m2.5",
       "limit": {
         "context": 204800,
-        "output": 131100
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -1323,7 +1323,7 @@
       "family": "kimi-k2",
       "limit": {
         "context": 262144,
-        "output": 262144
+        "output": 98304
       },
       "modalities": {
         "input": [
@@ -1376,7 +1376,7 @@
       "family": "kimi-thinking",
       "limit": {
         "context": 262144,
-        "output": 262144
+        "output": 98304
       },
       "modalities": {
         "input": [

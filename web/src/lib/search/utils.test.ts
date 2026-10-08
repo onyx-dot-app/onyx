@@ -1,4 +1,4 @@
-import { ValidSources } from "../types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { OnyxDocument } from "@/lib/search/types";
 import {
   countDocumentsBySource,

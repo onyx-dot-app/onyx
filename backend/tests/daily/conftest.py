@@ -1,43 +1,37 @@
-import os
+from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager
+from unittest.mock import MagicMock, patch
 
-# Daily tests run without a live backend; EE code paths that depend on
-# Redis/Vespa/etc are not available, so disable enforcement before any
-# module-level imports below pull in EE versioned implementations.
-os.environ["LICENSE_ENFORCEMENT_ENABLED"] = "false"
+import pytest
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from collections.abc import (
-    AsyncGenerator,  # noqa: E402
-    Generator,  # noqa: E402
+from onyx.auth.users import current_user
+from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
+from onyx.main import get_application
+from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
 )
-from contextlib import asynccontextmanager  # noqa: E402
-from unittest.mock import (
-    MagicMock,  # noqa: E402
-    patch,  # noqa: E402
-)
-
-import pytest  # noqa: E402
-from dotenv import load_dotenv  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-
-from onyx.auth.users import current_user  # noqa: E402
-from onyx.db.engine.sql_engine import get_session  # noqa: E402
-from onyx.db.enums import Permission  # noqa: E402
-from onyx.main import get_application  # noqa: E402
-from onyx.utils.logger import setup_logger  # noqa: E402
 
 # Opt into the shared @pytest.mark.secrets / test_secrets infrastructure.
-from tests.utils.pytest_secrets import (  # noqa: E402
+from tests.utils.pytest_secrets import (
     pytest_collection_modifyitems as pytest_collection_modifyitems,
 )
-from tests.utils.pytest_secrets import (
-    pytest_configure as pytest_configure,  # noqa: E402
-)
-from tests.utils.pytest_secrets import test_secrets as test_secrets  # noqa: E402
+from tests.utils.pytest_secrets import pytest_configure as pytest_configure
+from tests.utils.pytest_secrets import test_secrets as test_secrets
 
 logger = setup_logger()
 
 load_dotenv()
+
+# Daily tests run without a live backend, so the EE implementations that need
+# Redis or the document index must not resolve. Importing onyx.main loads EE.
+global_version.unset_ee()
+fetch_versioned_implementation.cache_clear()
 
 
 @asynccontextmanager

@@ -41,9 +41,11 @@ export enum SwitchoverType {
   INSTANT = "instant",
 }
 
-export enum EmbeddingPrecision {
-  FLOAT = "float",
-  BFLOAT16 = "bfloat16",
+/** Mirrors backend `VectorQuantization`. Changing it needs a re-index. */
+export enum VectorQuantization {
+  NONE = "none",
+  SCALAR_7_BIT = "scalar_7_bit",
+  SCALAR_1_BIT = "scalar_1_bit",
 }
 
 // ---------------------------------------------------------------------------
@@ -60,13 +62,6 @@ export interface EmbeddingProvider {
   costslink?: string;
   apiLink?: string;
   embeddingModels: EmbeddingModel[];
-
-  /**
-   * When true, this provider is no longer recommended for new deployments.
-   * Existing usage is allowed, but selecting it as a new embedding model is
-   * blocked in the UI.
-   */
-  deprecated?: boolean;
 }
 
 export interface EmbeddingModel {
@@ -77,9 +72,18 @@ export interface EmbeddingModel {
   passagePrefix?: string | null;
   // Absent for custom models, which have no registry description.
   descriptionKey?: IndexSettingsMessageKey;
+
+  /**
+   * When true, existing usage is allowed, but selecting it as a new embedding
+   * model is blocked.
+   */
+  deprecated?: boolean;
 }
 
-export type EmbeddingModelSpec = Omit<EmbeddingModel, "descriptionKey">;
+export type EmbeddingModelSpec = Omit<
+  EmbeddingModel,
+  "descriptionKey" | "deprecated"
+>;
 
 /**
  * Always write all three fields together. A name without its spec and provider forces
@@ -146,12 +150,19 @@ export interface EmbeddingModelRequest {
 }
 
 /** Shape returned by `GET /api/admin/embedding/embedding-provider`. */
+export interface VertexEmbeddingConfig {
+  auth_method: "service_account_json" | "workload_identity";
+  project_id: string | null;
+  location: string | null;
+}
+
 export interface ConfiguredEmbeddingProvider {
   provider_type: EmbeddingProviderName;
   api_key: string | null;
   api_url: string | null;
   api_version: string | null;
   deployment_name: string | null;
+  vertex_config?: VertexEmbeddingConfig | null;
 }
 
 export interface RerankingDetails {
@@ -170,8 +181,8 @@ export interface AdvancedSearchConfiguration {
   disable_rerank_for_streaming: boolean;
   api_url: string | null;
   num_rerank: number;
-  embedding_precision: EmbeddingPrecision;
   reduced_dimension: number | null;
+  vector_quantization: VectorQuantization;
 }
 
 export interface SavedSearchSettings
@@ -215,13 +226,3 @@ export interface ReindexErrorRow {
 
 // ---------------------------------------------------------------------------
 // Image processing
-// ---------------------------------------------------------------------------
-
-/**
- * The tenant's image processing (captioning) configuration. `null` from the
- * API means the feature is off; a value means it is on with that model.
- */
-export interface ImageProcessingSettings {
-  model_configuration_id: number;
-  max_size_mb: number;
-}

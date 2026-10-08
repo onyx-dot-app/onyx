@@ -3,7 +3,8 @@
 **Import:** `import { InputNumber, type InputNumberProps } from "@opal/components";`
 
 A number field with chevron stepper buttons and an optional reset-to-default action.
-Free typing is validated on blur; stepping clamps to `min`/`max`.
+Typing clamps to `max` at once and to `min` on blur, so a partial value below `min` can be typed; stepping clamps to both.
+With a negative `min`, the value can be typed with a leading minus sign.
 
 ## Props
 
@@ -18,3 +19,6 @@ Free typing is validated on blur; stepping clamps to `min`/`max`.
 | `showReset`     | `boolean`                         | `false`     | Shows the reset button              |
 | `variant`       | input variant union               | `"primary"` | Chrome variant (`data-variant` CSS) |
 | `disabled`      | `boolean`                         | `false`     | Disables input and steppers         |
+| `placeholder`   | `string`                          | —           | Shown while the field is empty      |
+| `suffix`        | `string`                          | —           | Unit text after the value           |
+| `id`            | `string`                          | —           | Input id, for `<label htmlFor>`     |

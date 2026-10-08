@@ -32,7 +32,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallProgress,
     ToolCallStart,
 )
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.models import (

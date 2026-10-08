@@ -4,7 +4,7 @@ from typing import cast
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_permission, require_permission
+from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
@@ -16,15 +16,14 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_connector_credential_pair_for_user,
     update_connector_credential_pair_from_id,
-    user_owns_groupless_cc_pair,
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     Permission,
-    PermissionAuthority,
 )
 from onyx.db.feedback import (
     fetch_docs_ranked_by_boost_for_user,
@@ -164,42 +163,17 @@ def create_deletion_attempt_for_connector_id(
         connector_id=connector_id,
         credential_id=credential_id,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.EDIT,
     )
     if cc_pair is None:
         error = f"Connector with ID '{connector_id}' and credential ID '{credential_id}' does not exist. Has it already been deleted?"
         logger.error(error)
         raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, error)
 
-    # GATE 2: the fetch admits every pair in a managed group; delete is admin-only
-    # (index cleanup) except a groupless pair its creator made
-    is_admin = (
-        has_permission(user, Permission.MANAGE_CONNECTORS) is PermissionAuthority.GLOBAL
-    )
-    if not is_admin and not user_owns_groupless_cc_pair(cc_pair, db_session, user):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Deleting a shared connector is restricted to administrators.",
-        )
-
     # Cancel any scheduled indexing attempts
     cancel_indexing_attempts_for_ccpair(
         cc_pair_id=cc_pair.id, db_session=db_session, include_secondary_index=True
     )
-
-    # TODO(rkuo): 2024-10-24 - check_deletion_attempt_is_allowed shouldn't be necessary
-    # any more due to background locking improvements.
-    # Remove the below permanently if everything is behaving for 30 days.
-
-    # Check if the deletion attempt should be allowed
-    # deletion_attempt_disallowed_reason = check_deletion_attempt_is_allowed(
-    #     connector_credential_pair=cc_pair, db_session=db_session
-    # )
-    # if deletion_attempt_disallowed_reason:
-    #     raise HTTPException(
-    #         status_code=400,
-    #         detail=deletion_attempt_disallowed_reason,
-    #     )
 
     # mark as deleting
     update_connector_credential_pair_from_id(

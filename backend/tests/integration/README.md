@@ -23,10 +23,12 @@ The tests call the API through the manager classes in `common_utils/managers`, s
 the generated OpenAPI client is not needed. Use `ods openapi all` only if you want
 the schema or client for other work.
 
-1. Launch onyx (using Docker or running with a debugger), ensuring the API server is running on port 8080.
+1. Start the services Onyx depends on (for example with Docker). The test session runs the api_server in-process through
+   `TestClient` and starts the Celery workers itself, so do not start those.
    - If you'd like to set environment variables, you can do so by creating a `.env` file in the onyx/backend/tests/integration/ directory.
-   - Onyx MUST be launched with AUTH_TYPE=basic and ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-   - Tests that use `mock_llm_response` (e.g. llm workflow tool call tests) also require `INTEGRATION_TESTS_MODE=true` on the API server process.
+   - Onyx MUST be configured with AUTH_TYPE=basic.
+   - Enterprise tests run only with `RUN_EE_TESTS=true`. They also need a license: put it in `ONYX_DEV_LICENSE`
+     and the session seeds it.
 2. Navigate to `onyx/backend`.
 3. Run the following command in the terminal:
    ```sh
@@ -60,6 +62,72 @@ onyx services with a name different from the default `onyx`.
 - Be careful for scope creep!
   - No need to overcomplicate every test by verifying after every single API call so long as the case you would be verifying is covered elsewhere (ideally in a test focused on covering that case).
   - An example of this is: Creating an admin user is done at the beginning of nearly every test, but we only need to verify that the user is actually an admin in the test focused on checking admin permissions. For every other test, we can just create the admin user and assume that the permissions are working as expected.
+
+## Scripting the LLM with `mock_llm`
+
+The `mock_llm` fixture (from `tests/integration/conftest.py`) fakes the LLM provider. The session starts a scripted
+OpenAI-compatible server (`tests/integration/mock_services/mock_llm_server/server.py`) in a thread. For each test,
+the fixture makes a new script and an `openai_compatible` provider (model `mock-model`) that points at it, and sets
+that provider as the default. Requests go through the real provider layer (LiteLLM, streaming, retries).
+
+The fixture yields a `MockLLMScript`. Tell the model what to say with conversations of replies:
+
+```python
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.mock_services.mock_llm_server.models import (
+    Reply,
+    RequestConditions,
+    ToolCall,
+)
+
+
+def test_search_then_answer(admin_user: DATestUser, mock_llm: MockLLMScript) -> None:
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="call_1", name="internal_search", arguments={"queries": ["pto"]}
+                )
+            ],
+            conditions=RequestConditions(offers=["internal_search"]),
+        ),
+        Reply(
+            text="Twenty days.",
+            conditions=RequestConditions(has_results_for=["call_1"]),
+        ),
+    )
+    response = ChatSessionManager.send_message(...)
+    first, second = mock_llm.requests_in("chat")
+    assert second.tool_result("call_1") is not None
+```
+
+- **Reply**: one response with optional `reasoning`, `text`, and `tool_calls`. The finish reason is `tool_calls` when
+  there are tool calls, else `stop`. `required=False` lets the reply stay unused.
+- **Conversation**: a name, `conditions`, and ordered replies. A request goes to the next unused reply of each
+  conversation whose request conditions (and the reply's own) it meets. Use one conversation per independent flow, for
+  example one per parallel Deep Research agent. Put an optional reply in its own conversation.
+- **RequestConditions**: every set field must hold: `has_tools`, `offers`, `does_not_offer`, `has_results_for` (tool call ids with
+  a result in the history), `tool_choice` (`auto`, `required`, or `none`), and `prompt_contains` (system and user text
+  only; use it as a last resort).
+- **Tool-free requests**: a request with no tools and no tool results (for example query rephrase, section selection,
+  or session naming) goes only to a reply whose conversation or reply conditions set `has_tools=False`.
+- **Default reply**: a request that no reply accepts gets `Script.default_reply` (default text
+  `This is a mock LLM response.`). The default reply is never used up. With `Script(default_reply=None)` such a
+  request gets HTTP 400, and Onyx does not retry it.
+- When replies from two conversations accept a request with different responses, the server rejects it as ambiguous.
+- **Recorded requests**: `mock_llm.requests` lists every request (`messages`, `tools`, `tool_choice`, `body`) and what
+  served it (`conversation`, `reply_index`, `used_default_reply`, `error`). Use `requests_in(name)` and
+  `tool_result(call_id)`.
+- At teardown the fixture restores the previous default provider, deletes the mock provider, and fails the test if a
+  request got an error or a required reply was not used.
+- `StreamedResponse.packets` holds every placed packet as `{"placement": {...}, "obj": {...}}`.
+
+See `tests/llm_workflows/test_mock_llm_server.py`. Tests that must patch Onyx or control the stream very finely
+belong in `tests/external_dependency_unit/` with `MockLLM`.
+
+The Playwright stack runs the same server as a compose service
+(`deployment/docker_compose/docker-compose.mock-llm-test.yml`). See `web/tests/e2e/README.md`.
 
 ## Current Testing Limitations
 
@@ -100,7 +168,7 @@ The current testing coverage should be checked by reading the comments at the to
 
 This could make test writing a bit cleaner by preventing test writers from having to pass around objects into functions that the objects have a 1:1 relationship with.
 
-### Rework VespaClient
+### Rework DocumentIndexClient
 
 Right now, its used a fixture and has to be passed around between manager classes.
 Could just be built where its used

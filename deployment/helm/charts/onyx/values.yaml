@@ -117,6 +117,11 @@ postgresql:
     enableSuperuserAccess: true
     superuserSecret:
       name: onyx-postgresql  # keep in sync with auth.postgresql
+    # Keep the CNPG Cluster and its PVCs on `helm uninstall`. The bundled operator is still
+    # removed; reinstall with the same release name to adopt the Cluster again. To delete it
+    # without the operator, `kubectl delete` it, then clear its finalizers with
+    # `kubectl patch clusters.postgresql.cnpg.io <release>-pg -n <ns> --type merge -p '{"metadata":{"finalizers":null}}'`.
+    retainOnUninstall: false
 
 # -- Master toggle for vector database support. When false:
 #   - Sets DISABLE_VECTOR_DB=true on all backend pods
@@ -148,7 +153,7 @@ opensearch:
 
   image:
     repository: "opensearchproject/opensearch"
-    tag: ""  # Empty uses chart's appVersion (3.4.0).
+    tag: ""  # Empty uses chart's appVersion (3.6.0).
 
   # The security plugin requires OPENSEARCH_INITIAL_ADMIN_PASSWORD for
   # OpenSearch 2.12+.
@@ -242,6 +247,8 @@ inferenceCapability:
     runAsNonRoot: true
     runAsUser: 1001
     fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     capabilities:
       drop:
@@ -321,6 +328,8 @@ indexCapability:
     runAsNonRoot: true
     runAsUser: 1001
     fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     capabilities:
       drop:
@@ -403,7 +412,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "7"
+      onyx.app/nginx-config-version: "9"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -452,12 +461,14 @@ webserver:
   podAnnotations: {}
   podLabels:
     scope: onyx-frontend
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
     # fsGroup: 2000
 
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
     # capabilities:
     #   drop:
     #   - ALL
@@ -569,12 +580,14 @@ api:
   # real, so size against CPU/memory.
   threadpoolSize: 0
 
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
     # fsGroup: 2000
 
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
     # capabilities:
     #   drop:
     #   - ALL
@@ -722,13 +735,18 @@ celery_shared:
     periodSeconds: 60
     failureThreshold: 5
     timeoutSeconds: 3
-  podSecurityContext: {}
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  # allowPrivilegeEscalation is dropped automatically if you set privileged.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     # `privileged` is not needed by this workload and is intentionally omitted.
     # root is kept only so the optional customCACerts feature can run
     # update-ca-certificates; to run non-root, override this and
     # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
+    allowPrivilegeEscalation: false
 
 celery_beat:
   extraEnv: []
@@ -1086,10 +1104,12 @@ discordbot:
     scope: onyx-backend
   deploymentLabels:
     app: discord-bot
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "500m"
@@ -1115,10 +1135,12 @@ slackbot:
     scope: onyx-backend
   deploymentLabels:
     app: slack-bot
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "500m"
@@ -1154,8 +1176,12 @@ mcpServer:
     servicePort: 8090
     targetPort: mcp-server-port
     portName: mcp-server-port
-  podSecurityContext: {}
-  securityContext: {}
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "250m"
@@ -1230,6 +1256,14 @@ celery_worker_docfetching:
 #
 ######################################################################
 
+# Pre-delete hook that deletes this release's CNPG Cluster and Redis CRs while
+# their operators still run.
+preDeleteCleanup:
+  image:
+    repository: registry.k8s.io/kubectl
+    tag: v1.34.12
+    pullPolicy: IfNotPresent
+
 # Uncomment to skip the bundled redis-operator and let an existing cluster-wide
 # operator reconcile the Redis CR below (keep redis.enabled: true). Your operator
 # must provide the redis.redis.opstreelabs.in/v1beta2 CRDs. Unset = follow redis.enabled.
@@ -1272,6 +1306,52 @@ redis:
           requests:
             storage: 1Gi
 
+# In-cluster S3 object store (SeaweedFS), which replaces the bundled MinIO. While
+# minio.enabled is also true, writes reach both stores, reads fall back to MinIO,
+# and a Job copies MinIO's files. See MIGRATION.md.
+objectStore:
+  # Unset follows minio.enabled, so installs on external storage stay as they are.
+  enabled: null
+  # The defaults live in the chart templates, since `helm upgrade --reuse-values`
+  # keeps an older release's values, which have no objectStore. Unset, these
+  # take chrislusf/seaweedfs 4.47 by digest, S3 on port 8333, 100m CPU and 256Mi
+  # requested, a 2Gi limit, UID 1000, a read-only root file system and no
+  # capabilities. A value set here replaces the default whole. On OpenShift, set
+  # podSecurityContext: {} so the cluster assigns the UID.
+  # image: {}
+  # service: {}
+  # resources: {}
+  # podSecurityContext: {}
+  # securityContext: {}
+  # The PVC survives upgrade, rollback and uninstall, and must hold MinIO's data.
+  # Size and storage class follow minio.persistence unless set here.
+  persistence:
+    # size: 30Gi
+    # storageClass: ""
+    annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  # Copies the bundled MinIO's files into the object store while the app serves.
+  # Scheduling defaults to api's. The Job reruns when its spec changes. Unset, it
+  # is enabled, finishes only after a pass copies nothing and 600 seconds have
+  # passed (so writes from pods still on the old release are included), runs 16
+  # workers, retries 20 times, and takes 100m CPU and 256Mi with a 1Gi limit.
+  legacyCopy:
+    # enabled: true
+    # settleSeconds: 600
+    # workers: 16
+    # backoffLimit: 20
+    # resources: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+# Bundled MinIO, the legacy store the copy reads from. Keep it enabled until the
+# copy completes. New installs set enabled: false and objectStore.enabled: true.
 minio:
   enabled: true
   mode: standalone
@@ -1292,6 +1372,10 @@ minio:
     enabled: true
     size: 30Gi
     storageClass: ""
+    # Retiring MinIO disables this subchart, which must not delete its data.
+    annotations:
+      helm.sh/resource-policy: keep
+      argocd.argoproj.io/sync-options: Prune=false
   service:
     type: ClusterIP
     port: 9000
@@ -1377,17 +1461,6 @@ externalSecret:
 # SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET, BRAINTRUST_API_KEY).
 # Typically set to the same value as externalSecret.secretName.
 extraEnvFromSecret: ""
-
-# -- Safeguards against destructive upgrades from chart 0.4.x. Chart 0.5.0
-# removed the bundled Vespa subchart; the check below fails `helm upgrade`
-# if the legacy `da-vespa` StatefulSet is still in the namespace, so
-# the StatefulSet and its Vespa data volume are not silently deleted.
-# Set `acknowledged: true` once you've migrated to external Vespa, or
-# `enabled: false` to disable the check entirely.
-# See deployment/helm/MIGRATION.md.
-legacyVespaCheck:
-  enabled: true
-  acknowledged: false
 
 # -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:
@@ -1633,8 +1706,8 @@ configMap:
   EMAIL_FROM: ""
   # Optional comma-separated BCC archive recipients for all emails
   EMAIL_ARCHIVE_BCC_ADDRESSES: ""
-  # MinIO/S3 Configuration override
-  S3_ENDPOINT_URL: ""  # only used if minio is not enabled
+  # External S3 configuration
+  S3_ENDPOINT_URL: ""  # ignored while objectStore or minio is enabled
   S3_FILE_STORE_BUCKET_NAME: ""
   # Azure Blob Storage file store (set FILE_STORE_BACKEND: "azure" and
   # minio.enabled: false). Auth priority: AZURE_STORAGE_CONNECTION_STRING,
@@ -1707,6 +1780,8 @@ configMap:
   BOX_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
   ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS: ""
+  ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  ZOOM_PERMISSION_DOC_SYNC_FREQUENCY: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
   # HTTP endpoint (failures never fail indexing). Intended for non-EE

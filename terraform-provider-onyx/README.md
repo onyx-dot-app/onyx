@@ -329,16 +329,16 @@ container name follows your compose project, so adjust it if yours differs):
 ```bash
 docker exec onyx-relational_db-1 psql -U postgres -c "CREATE DATABASE onyx_tf_acc;"
 cd backend && POSTGRES_DB=onyx_tf_acc uv run alembic upgrade head
-POSTGRES_DB=onyx_tf_acc AUTH_TYPE=basic LICENSE_ENFORCEMENT_ENABLED=false \
-  ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+POSTGRES_DB=onyx_tf_acc uv run python -m scripts.seed_dev_license
+POSTGRES_DB=onyx_tf_acc AUTH_TYPE=basic \
   USER_AUTH_SECRET="$(openssl rand -hex 32)" \
   uv run uvicorn onyx.main:app --port 8081
 ```
 
-Each variable earns its place. `AUTH_TYPE=basic` gives the harness a login to bootstrap
-its key with. License enforcement must be off or API key creation answers 402. The
-enterprise features flag registers the user-group routes, which the harness reads to find
-the Admin group its key needs.
+Each step earns its place. `AUTH_TYPE=basic` gives the harness a login to bootstrap its
+key with. The seed step installs the license in `ONYX_DEV_LICENSE`: without one, API key
+creation answers 402 and so do the user-group routes, which the harness reads to find the
+Admin group its key needs.
 
 The `onyx_cc_pair`, `onyx_document_set` and `onyx_user_group` tests also need Celery,
 because those objects are synced and deleted in the background. Without a worker the rows
@@ -354,7 +354,7 @@ celery -A onyx.background.celery.versioned_apps.primary worker \
   --pool=threads --concurrency=4 --loglevel=INFO --hostname=tfacc-primary@%n -Q celery &
 celery -A onyx.background.celery.versioned_apps.light worker \
   --pool=threads --concurrency=8 --loglevel=INFO --hostname=tfacc-light@%n \
-  -Q vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration &
+  -Q vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup &
 ```
 
 The primary worker picks up the deletion checks the API server dispatches; the light

@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React from "react";
 import { LineItemButton } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -10,7 +11,6 @@ import {
   SvgKey,
   SvgLock,
   SvgServer,
-  SvgSimpleLoader,
 } from "@opal/icons";
 
 import { Section } from "@/layouts/general-layouts";
@@ -63,7 +63,7 @@ export default function MCPLineItem({
   const showReauthButton = showAuthTrigger && !showInlineReauth;
 
   function getServerIcon(): React.FunctionComponent<IconProps> {
-    if (isLoading) return SvgSimpleLoader;
+    if (isLoading) return IconLoader;
     if (isAuthenticated) {
       return (({ className }) => (
         <SvgCheck className={cn(className, "stroke-status-success-05")} />

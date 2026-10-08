@@ -23,10 +23,11 @@ import hashlib
 import json
 import time
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import cast
 
 from mcp.shared.auth import OAuthClientInformationFull
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, SkipValidation
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType
@@ -130,28 +131,50 @@ def get_mcp_auth_template(mcp_server: MCPServer) -> MCPAuthTemplate | None:
 
 
 class ResolvedMCPCredentials(BaseModel):
-    """Effective connection state for one MCP server and user."""
+    """Effective credential values captured for one MCP server and user."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+    model_config = ConfigDict(frozen=True)
 
-    connection_config: MCPConnectionConfig | None
+    connection_config_id: int | None
+    # Stored JSON is read as-is, without validation, as before capture.
+    connection_data: SkipValidation[MCPConnectionData]
     user_oauth_token: str | None
     auth_type: MCPAuthenticationType | None = None
     auth_template: MCPAuthTemplate | None = None
     user_email: str = ""
 
-    def _config_data(self) -> MCPConnectionData:
-        return extract_connection_data(self.connection_config, apply_mask=False)
+    @classmethod
+    def from_connection_config(
+        cls,
+        connection_config: MCPConnectionConfig | None,
+        user_oauth_token: str | None,
+        auth_type: MCPAuthenticationType | None = None,
+        auth_template: MCPAuthTemplate | None = None,
+        user_email: str = "",
+    ) -> "ResolvedMCPCredentials":
+        """Copy the connection row's values so no ORM object outlives the session."""
+        return cls(
+            connection_config_id=connection_config.id if connection_config else None,
+            connection_data=deepcopy(
+                extract_connection_data(connection_config, apply_mask=False)
+            ),
+            user_oauth_token=user_oauth_token,
+            auth_type=auth_type,
+            auth_template=(
+                auth_template.model_copy(deep=True) if auth_template else None
+            ),
+            user_email=user_email,
+        )
 
     def _template_substitutions(self) -> dict[str, str]:
-        data = self._config_data()
+        data = self.connection_data
         substitutions = dict(data.get("header_substitutions", {}))
         if api_token := data.get("api_token"):
             substitutions["api_key"] = api_token
         return substitutions
 
     def _configured_headers(self) -> dict[str, str]:
-        data = self._config_data()
+        data = self.connection_data
         template_headers: dict[str, str] = {}
         if self.auth_template is not None and self._has_required_substitutions():
             template_headers = self.auth_template.render(
@@ -164,7 +187,7 @@ class ResolvedMCPCredentials(BaseModel):
             return {"Authorization": f"Bearer {self.user_oauth_token}"}
         if self.auth_type != MCPAuthenticationType.OAUTH:
             return {}
-        tokens = self._config_data().get(MCPOAuthKeys.TOKENS.value)
+        tokens = self.connection_data.get(MCPOAuthKeys.TOKENS.value)
         if not tokens:
             return {}
         token_type = tokens.get("token_type")
@@ -205,7 +228,7 @@ class ResolvedMCPCredentials(BaseModel):
         ``build_headers``, so no caller-supplied header can work around it."""
         if self.auth_type != MCPAuthenticationType.OAUTH:
             return False
-        config_data = self._config_data()
+        config_data = self.connection_data
         if not mcp_token_expired(config_data):
             return False
         tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
@@ -253,7 +276,7 @@ def resolve_mcp_credentials(
             raise MCPCredentialsError(
                 f"Anonymous user cannot use PT_OAUTH MCP server {mcp_server.id}"
             )
-        return ResolvedMCPCredentials(
+        return ResolvedMCPCredentials.from_connection_config(
             connection_config=user_connection_config,
             user_oauth_token=user.live_oauth_token,
             auth_type=mcp_server.auth_type,
@@ -269,7 +292,7 @@ def resolve_mcp_credentials(
             connection_config = user_connection_config
         else:
             connection_config = mcp_server.admin_connection_config
-        return ResolvedMCPCredentials(
+        return ResolvedMCPCredentials.from_connection_config(
             connection_config=connection_config,
             user_oauth_token=None,
             auth_type=mcp_server.auth_type,
@@ -277,7 +300,7 @@ def resolve_mcp_credentials(
             user_email=user.email,
         )
 
-    return ResolvedMCPCredentials(
+    return ResolvedMCPCredentials.from_connection_config(
         connection_config=user_connection_config,
         user_oauth_token=None,
         auth_type=mcp_server.auth_type,

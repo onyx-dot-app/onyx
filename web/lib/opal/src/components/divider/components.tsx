@@ -2,6 +2,7 @@
 
 import "@opal/components/divider/styles.css";
 import { useState, useCallback } from "react";
+import { Fold } from "@opal/components/fold/components";
 import type { OrientationVariants, RichStr } from "@opal/types";
 import { Button, Text } from "@opal/components";
 import { SvgChevronRight } from "@opal/icons";
@@ -26,6 +27,7 @@ interface DividerSharedProps {
   onOpenChange?: never;
   children?: never;
   interaction?: never;
+  headerProps?: never;
 }
 
 /**
@@ -35,7 +37,7 @@ interface DividerSharedProps {
  * across the surfaces it separates, so an arbitrary step would only ever put one
  * divider out of step with the rest.
  */
-type DividerSpacing = 0 | 0.5 | 1 | 2 | 4 | 6;
+type DividerSpacing = 0 | 0.5 | 1 | 2 | 3 | 4 | 6;
 
 /** Plain line — no title, no description. */
 type DividerBareProps = Omit<
@@ -44,9 +46,9 @@ type DividerBareProps = Omit<
 > & {
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: OrientationVariants;
-  /** Padding along the line direction, as a spacing step. Default: `2` (0.5rem). */
+  /** Padding along the line direction, as a spacing step. Default: 0.375rem. */
   paddingParallel?: DividerSpacing;
-  /** Padding perpendicular to the line, as a spacing step. Default: `1` (0.25rem). */
+  /** Padding perpendicular to the line, as a spacing step. Default: 0.25rem. */
   paddingPerpendicular?: DividerSpacing;
 };
 
@@ -71,6 +73,7 @@ type DividerFoldableProps = Omit<
   | "onOpenChange"
   | "children"
   | "interaction"
+  | "headerProps"
 > & {
   /** Title is required when foldable. */
   title: string | RichStr;
@@ -81,13 +84,24 @@ type DividerFoldableProps = Omit<
   defaultOpen?: boolean;
   /** Callback when open state changes. */
   onOpenChange?: (open: boolean) => void;
-  /** Content revealed when open. */
+  /**
+   * Content revealed when open. Stays mounted while closed, inert and
+   * hidden from assistive tech, so the fold animates both ways.
+   */
   children?: React.ReactNode;
   /**
    * Overrides the header's interaction state (a listbox highlights the
-   * title the keyboard stopped on). Unset, an open header reads as hover.
+   * title the keyboard stopped on). Unset, the header follows the pointer,
+   * open or folded.
    */
   interaction?: InteractiveStatelessInteraction;
+  /**
+   * Attributes for the header element, for an owner that addresses it
+   * (a dropdown gives it an id, a role and `aria-expanded`, so the
+   * keyboard stop on the title reads as a control).
+   */
+  headerProps?: Omit<React.HTMLAttributes<HTMLDivElement>, "onClick"> &
+    Record<`data-${string}`, string | number | undefined>;
 };
 
 type DividerProps =
@@ -110,9 +124,20 @@ function Divider(props: DividerProps) {
     title,
     description,
     orientation = "horizontal",
-    paddingParallel = 2,
-    paddingPerpendicular = 1,
+    paddingParallel,
+    paddingPerpendicular,
   } = props;
+
+  // The stylesheet carries the default inset (0.375rem along the line, 0.25rem
+  // across, the same for every variant); a bare line's steps override it.
+  const inset = {
+    ...(paddingParallel !== undefined && {
+      parallel: spacingToRem(paddingParallel),
+    }),
+    ...(paddingPerpendicular !== undefined && {
+      perpendicular: spacingToRem(paddingPerpendicular),
+    }),
+  };
 
   if (orientation === "vertical") {
     return (
@@ -120,8 +145,8 @@ function Divider(props: DividerProps) {
         ref={ref}
         className="opal-divider-vertical"
         style={{
-          paddingInline: spacingToRem(paddingPerpendicular),
-          paddingBlock: spacingToRem(paddingParallel),
+          paddingInline: inset.perpendicular,
+          paddingBlock: inset.parallel,
         }}
       >
         <div className="opal-divider-line-vertical" />
@@ -134,8 +159,8 @@ function Divider(props: DividerProps) {
       ref={ref}
       className="opal-divider"
       style={{
-        paddingInline: spacingToRem(paddingParallel),
-        paddingBlock: spacingToRem(paddingPerpendicular),
+        paddingInline: inset.parallel,
+        paddingBlock: inset.perpendicular,
       }}
     >
       <div className="opal-divider-row">
@@ -174,6 +199,7 @@ function FoldableDivider({
   onOpenChange,
   children,
   interaction,
+  headerProps,
 }: DividerFoldableProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const isControlled = controlledOpen !== undefined;
@@ -190,10 +216,15 @@ function FoldableDivider({
       <Interactive.Stateless
         variant="default"
         prominence="tertiary"
-        interaction={interaction ?? (isOpen ? "hover" : "rest")}
+        interaction={interaction}
         onClick={toggle}
       >
-        <Interactive.Container rounding={2} size="fit" width="full">
+        <Interactive.Container
+          rounding={2}
+          size="fit"
+          width="full"
+          {...headerProps}
+        >
           <div className="opal-divider">
             <div className="opal-divider-row">
               <div className="opal-divider-title">
@@ -217,7 +248,11 @@ function FoldableDivider({
           </div>
         </Interactive.Container>
       </Interactive.Stateless>
-      {isOpen && children}
+      {/* The content stays mounted, so the fold closes as smoothly as it
+          opens; closed, it is inert and hidden from assistive tech. */}
+      <Fold open={isOpen} keepMounted>
+        {children}
+      </Fold>
     </>
   );
 }

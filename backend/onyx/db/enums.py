@@ -286,6 +286,14 @@ class ConnectorCredentialPairStatus(str, PyEnum):
         return self in self.active_statuses()
 
 
+class ConnectorManageRole(str, PyEnum):
+    """A group's role on a cc-pair it manages. Editors change and delete the
+    configuration; Operators schedule and monitor indexing."""
+
+    EDITOR = "editor"
+    OPERATOR = "operator"
+
+
 class AccessType(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
@@ -300,13 +308,31 @@ class AccessType(str, PyEnum):
     def perm_synced_types(cls) -> list["AccessType"]:
         return [cls.SYNC, cls.SYNC_RESTRICTED]
 
+    @classmethod
+    def data_access_types(cls) -> list["AccessType"]:
+        """Types whose data-access groups decide who may read the documents."""
+        return [cls.PRIVATE, cls.SYNC_RESTRICTED]
+
 
 class EmbeddingPrecision(str, PyEnum):
-    # matches vespa tensor type
-    # only support float / bfloat16 for now, since there's not a
-    # good reason to specify anything else
+    """Unused. Kept only because old Alembic migrations import it."""
+
     BFLOAT16 = "bfloat16"
     FLOAT = "float"
+
+
+class VectorQuantization(str, PyEnum):
+    """Scalar quantization of the stored vectors in the OpenSearch index.
+
+    Fewer bits per dimension use less memory but lower recall. It is part of
+    the index mapping, so a change needs a reindex into a new index.
+    """
+
+    NONE = "none"
+    # 4x less vector memory.
+    SCALAR_7_BIT = "scalar_7_bit"
+    # 32x less vector memory. Needs OpenSearch 3.6 or later.
+    SCALAR_1_BIT = "scalar_1_bit"
 
 
 class UserFileStatus(str, PyEnum):
@@ -361,22 +387,6 @@ class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
     INSTANT = "instant"
-
-
-class OpenSearchDocumentMigrationStatus(str, PyEnum):
-    """Status for Vespa to OpenSearch migration per document."""
-
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    PERMANENTLY_FAILED = "permanently_failed"
-
-
-class OpenSearchTenantMigrationStatus(str, PyEnum):
-    """Status for tenant-level OpenSearch migration."""
-
-    PENDING = "pending"
-    COMPLETED = "completed"
 
 
 # Onyx Build Mode Enums

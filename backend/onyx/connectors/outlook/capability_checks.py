@@ -9,6 +9,8 @@ to every check, so they also run at credential-creation time.
 Permission-to-capability mapping (application permissions):
 
 - ``Mail.Read``     -> INDEXING (folders, message delta, message bodies, attachments)
+- ``GroupMember.Read.All`` -> INDEXING (group resolution and member listing, when
+  mailboxes are chosen by group)
 - ``User.Read.All`` -> INDEXING (mailbox enumeration and address resolution) and
   DOC_PERMISSION_SYNC (the owner address every access list is built from)
 - ``Calendars.Read`` -> INDEXING (calendar view and series masters, only when the
@@ -19,9 +21,9 @@ mailboxes those grants reach. A mailbox outside that scope answers 403 exactly
 like a missing grant, so the remediation text names both causes.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -33,6 +35,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError as OutlookAuthError,
 )
@@ -40,16 +43,24 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OutlookGraphError,
 )
 from onyx.connectors.microsoft_utils.graph_errors import raise_for_auth_error
+from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.errors import (
     CALENDAR_READ_REMEDIATION,
     EXCHANGE_SCOPE_REMEDIATION,
+    GROUP_LISTING_DENIED,
+    GROUP_LISTING_REMEDIATION,
+    GROUP_UNAVAILABLE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     USER_LISTING_DENIED,
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
     configured_addresses,
+    configured_groups,
+    describe_group_mismatch,
+    describe_unavailable_groups,
     describe_unavailable_mailboxes,
+    raise_if_groups_unavailable,
     raise_if_unavailable,
     resolve_mailbox_for_validation,
 )
@@ -58,6 +69,7 @@ from onyx.connectors.outlook.models import (
     OutlookEventPage,
     OutlookFolder,
     OutlookMailbox,
+    OutlookMailboxPage,
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 
@@ -122,15 +134,70 @@ _NO_MAILBOX_TO_PROBE = (
 )
 
 
+class _Candidates:
+    """The mailboxes the checks may probe, as pages: the members of every
+    configured group, or the tenant's users when no group is configured. The
+    checks must not read a mailbox outside the configured scope."""
+
+    def __init__(
+        self, gateway: OutlookSourceOperations, config: OutlookConnectorConfig
+    ) -> None:
+        self._gateway = gateway
+        self._group_names: list[str] = configured_groups(config)
+
+    @property
+    def from_groups(self) -> bool:
+        return bool(self._group_names)
+
+    def _group_ids(self) -> list[str]:
+        group_ids: list[str] = []
+        for name in self._group_names:
+            matches: list[EntraGroup] = self._gateway.resolve_groups(identifier=name)
+            if len(matches) != 1:
+                raise ConnectorValidationError(
+                    f"{describe_group_mismatch(name, len(matches))}. "
+                    f"{GROUP_UNAVAILABLE_REMEDIATION}"
+                )
+            group_ids.append(matches[0].id)
+        return group_ids
+
+    def pages(self) -> Generator[OutlookMailboxPage, None, None]:
+        """At most _CANDIDATE_PAGES pages in all, so a huge scope stays bounded."""
+        budget = _CANDIDATE_PAGES
+        if not self.from_groups:
+            next_link: str | None = None
+            while budget > 0:
+                budget -= 1
+                page = self._gateway.list_mailbox_users(
+                    page_size=_PROBE_PAGE_SIZE, next_link=next_link
+                )
+                yield page
+                next_link = page.next_link
+                if next_link is None:
+                    return
+            return
+        for group_id in self._group_ids():
+            next_link = None
+            while budget > 0:
+                budget -= 1
+                page = self._gateway.list_group_mailbox_users(
+                    group_id=group_id, page_size=_PROBE_PAGE_SIZE, next_link=next_link
+                )
+                yield page
+                next_link = page.next_link
+                if next_link is None:
+                    break
+
+
 def _first_mailbox_that(
-    gateway: OutlookSourceOperations,
+    candidates: _Candidates,
     opens: Callable[[OutlookMailbox], T | None],
     denied_one: Callable[[OutlookMailbox], str],
     denied_all: str,
     remediation: str = EXCHANGE_SCOPE_REMEDIATION,
     nothing_to_probe: str = _NO_MAILBOX_TO_PROBE,
 ) -> tuple[OutlookMailbox, T]:
-    """Walk the user listing one user at a time until ``opens`` returns
+    """Walk the candidates one user at a time until ``opens`` returns
     something on a mailbox, and return that mailbox with what it opened.
     ``opens`` returning None means the mailbox proves nothing, keep walking.
 
@@ -141,54 +208,50 @@ def _first_mailbox_that(
     the likelier cause.
     """
     denied: OutlookGraphError | None = None
-    next_link: str | None = None
-    for _ in range(_CANDIDATE_PAGES):
+    pages = candidates.pages()
+    while True:
         try:
-            page = gateway.list_mailbox_users(
-                page_size=_PROBE_PAGE_SIZE, next_link=next_link
-            )
+            page = next(pages, None)
         except OutlookGraphError as e:
+            if candidates.from_groups:
+                raise_for_graph_error(
+                    e, GROUP_LISTING_DENIED, GROUP_LISTING_REMEDIATION
+                )
             raise_for_graph_error(e, USER_LISTING_DENIED)
-        if page.mailboxes:
-            mailbox = page.mailboxes[0]
-            try:
-                opened = opens(mailbox)
-            except OutlookGraphError as e:
-                if not e.is_permanent_refusal:
-                    raise_for_graph_error(e, denied_one(mailbox), remediation)
-                if e.status == 403:
-                    denied = e
-            else:
-                if opened is not None:
-                    return mailbox, opened
-        next_link = page.next_link
-        if next_link is None:
+        if page is None:
             break
+        if not page.mailboxes:
+            continue
+        mailbox = page.mailboxes[0]
+        try:
+            opened = opens(mailbox)
+        except OutlookGraphError as e:
+            if not e.is_permanent_refusal:
+                raise_for_graph_error(e, denied_one(mailbox), remediation)
+            if e.status == 403:
+                denied = e
+            continue
+        if opened is not None:
+            return mailbox, opened
     if denied is not None:
         raise_for_graph_error(denied, denied_all, remediation)
     raise UnexpectedValidationError(nothing_to_probe)
 
 
-def _open_first_readable_mailbox(
-    gateway: OutlookSourceOperations,
-) -> tuple[OutlookMailbox, OutlookFolder]:
-    return _first_mailbox_that(
-        gateway,
-        lambda mailbox: gateway.probe_mailbox(mailbox_id=mailbox.id),
-        _denied,
-        "The app cannot read mail in the tenant's first mailboxes.",
-    )
-
-
 def _open_sample_mailbox(
-    gateway: OutlookSourceOperations, config: dict[str, Any] | None
+    gateway: OutlookSourceOperations, config: OutlookConnectorConfig
 ) -> tuple[OutlookMailbox, OutlookFolder]:
-    """The first configured mailbox, or the first readable one when the
-    connector indexes every mailbox."""
+    """The first configured mailbox, else the first readable one of the
+    configured groups, else of the whole tenant."""
     addresses = configured_addresses(config)
     if addresses:
         return _open_configured_mailbox(gateway, addresses[0])
-    return _open_first_readable_mailbox(gateway)
+    return _first_mailbox_that(
+        _Candidates(gateway, config),
+        lambda mailbox: gateway.probe_mailbox(mailbox_id=mailbox.id),
+        _denied,
+        "The app cannot read mail in the first mailboxes it would index.",
+    )
 
 
 class _TokenAuthCheck(CapabilityCheck):
@@ -243,10 +306,12 @@ class _MailboxListingCheck(CapabilityCheck):
             raise_for_graph_error(e, USER_LISTING_DENIED)
 
 
-class _MailReadCheck(CapabilityCheck):
+class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
     """Reads folders, one delta page, one message body and, when that message
     has any, its attachment records. Proves ``Mail.Read`` and that the mailbox
-    is inside the app's Exchange scope."""
+    is inside the app's Exchange scope. A config-less run reads any mailbox."""
+
+    config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -260,9 +325,7 @@ class _MailReadCheck(CapabilityCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway = _gateway(context)
-        mailbox, inbox = _open_sample_mailbox(
-            gateway, context.connector_specific_config
-        )
+        mailbox, inbox = _open_sample_mailbox(gateway, self.config(context))
         try:
             gateway.get_well_known_folder(
                 mailbox_id=mailbox.id, name=_PROBE_WELL_KNOWN_FOLDER
@@ -300,8 +363,6 @@ class _MailReadCheck(CapabilityCheck):
             raise_for_graph_error(e, _denied(mailbox))
 
 
-_CONFIG_INCLUDE_CALENDAR = "include_calendar"
-
 # Calendars.ReadBasic.All lists events but withholds their bodies, so the
 # calendar probe must read one body to tell the two grants apart.
 _EVENT_BODY_DENIED = (
@@ -327,13 +388,15 @@ def _event_with_body(
     return sample
 
 
-class _CalendarReadCheck(CapabilityCheck):
+class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
     """Reads one page of one mailbox's calendar view, the call indexing makes,
     then one event with its body, which ``Calendars.ReadBasic.All`` withholds.
     Together they prove ``Calendars.Read``. An empty calendar proves the
     listing only, so in every-mailbox mode the walk moves on to one with
     events. A connector that does not index calendars needs no such grant, so
     the check passes without a call for it."""
+
+    config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -347,7 +410,8 @@ class _CalendarReadCheck(CapabilityCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        if not (context.connector_specific_config or {}).get(_CONFIG_INCLUDE_CALENDAR):
+        config = self.config(context)
+        if not config.include_calendar:
             return
         gateway = _gateway(context)
         now = datetime.now(timezone.utc)
@@ -364,7 +428,7 @@ class _CalendarReadCheck(CapabilityCheck):
             view(mailbox)
             return _event_with_body(gateway, mailbox)
 
-        addresses = configured_addresses(context.connector_specific_config)
+        addresses = configured_addresses(config)
         if addresses:
             mailbox, _ = _open_configured_mailbox(gateway, addresses[0])
             try:
@@ -381,24 +445,26 @@ class _CalendarReadCheck(CapabilityCheck):
                 )
             return
         _first_mailbox_that(
-            gateway,
+            _Candidates(gateway, config),
             calendar_with_event,
             _calendar_denied,
-            "The app cannot read the calendar of the tenant's first mailboxes.",
+            "The app cannot read the calendar of the first mailboxes it would index.",
             CALENDAR_READ_REMEDIATION,
             nothing_to_probe=(
-                "None of the tenant's first mailboxes holds an event to probe. "
-                "List a mailbox that has events to verify it."
+                "None of the first mailboxes it would index holds an event to "
+                "probe. List a mailbox that has events to verify it."
             ),
         )
 
 
-class _ConfiguredMailboxesCheck(CapabilityCheck):
+class _ConfiguredMailboxesCheck(CapabilityCheck[OutlookConnectorConfig]):
     """Resolves and probes every explicitly configured mailbox.
 
     With no configured list the check passes without a call: every-mailbox
     mode logs and skips denied mailboxes at index time instead.
     """
+
+    config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -412,11 +478,36 @@ class _ConfiguredMailboxesCheck(CapabilityCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        addresses = configured_addresses(context.connector_specific_config)
+        addresses = configured_addresses(self.config(context))
         if not addresses:
             return
         raise_if_unavailable(
             describe_unavailable_mailboxes(_gateway(context), addresses)
+        )
+
+
+class _ConfiguredGroupsCheck(CapabilityCheck):
+    """Each configured group names exactly one Entra group the app can read."""
+
+    config_class = OutlookConnectorConfig
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="outlook_configured_groups",
+            display_name="Configured mailbox groups resolve",
+            requires_connector_instance=False,
+            requires_connector_config=True,
+            remediation=f"{GROUP_UNAVAILABLE_REMEDIATION} {GROUP_LISTING_REMEDIATION}",
+            docs_link=_OUTLOOK_DOCS_LINK,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        groups = configured_groups(self.config(context))
+        if not groups:
+            return
+        raise_if_groups_unavailable(
+            describe_unavailable_groups(_gateway(context), groups)
         )
 
 
@@ -427,6 +518,7 @@ def build_outlook_indexing_checks() -> list[CapabilityCheck]:
         _MailReadCheck(),
         _CalendarReadCheck(),
         _ConfiguredMailboxesCheck(),
+        _ConfiguredGroupsCheck(),
     ]
 
 

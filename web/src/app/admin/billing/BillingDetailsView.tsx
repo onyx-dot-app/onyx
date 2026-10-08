@@ -25,7 +25,7 @@ import {
   LicenseStatus,
   PaymentMethodRequiredError,
   StripePortalFlowType,
-} from "@/lib/billing/interfaces";
+} from "@/lib/billing/types";
 import {
   createCustomerPortalSession,
   endTrial,

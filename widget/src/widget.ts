@@ -35,9 +35,12 @@ export class OnyxChatWidget extends LitElement {
   @property({ attribute: "text-color" }) textColor?: string;
   @property({ attribute: "agent-name" }) agentName?: string;
   @property({ attribute: "logo" }) logo?: string;
-  @property() mode?: "launcher" | "inline";
+  // Reflected so `:host([mode="inline"])` also matches when set as a property.
+  @property({ reflect: true }) mode?: "launcher" | "inline";
   @property({ attribute: "include-citations", type: Boolean })
   includeCitations?: boolean;
+  @property({ attribute: "start-expanded", type: Boolean })
+  startExpanded?: boolean;
 
   // Assigned as a JS property, since a function cannot ride an HTML attribute.
   // Takes precedence over `api-key` and keeps the credential out of the markup.
@@ -113,6 +116,7 @@ export class OnyxChatWidget extends LitElement {
       logo: this.logo,
       mode: this.mode,
       includeCitations: this.includeCitations,
+      startExpanded: this.startExpanded,
     });
 
     // Apply custom colors
@@ -358,6 +362,13 @@ export class OnyxChatWidget extends LitElement {
   }
 
   private handleKeyDown(e: KeyboardEvent) {
+    // Shadow DOM retargets `e.target` to the host element, so page-level
+    // handlers that let keys through only for text fields (e.g. ones that
+    // block Backspace navigation) would cancel typing here. Escape still
+    // propagates so the host page can close its overlays.
+    if (e.key !== "Escape") {
+      e.stopPropagation();
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       this.sendMessage();
@@ -538,7 +549,10 @@ export class OnyxChatWidget extends LitElement {
   render() {
     const showContainer = this.config.mode === "inline" || this.isOpen;
     const hasMessages = this.messages.length > 0 || this.isStreaming;
-    const isCompactInline = this.config.mode === "inline" && !hasMessages;
+    const isCompactInline =
+      this.config.mode === "inline" &&
+      !this.config.startExpanded &&
+      !hasMessages;
 
     return html`
       ${this.config.mode === "launcher"

@@ -1,4 +1,4 @@
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { transformLinkUri } from "@/lib/utils";
 

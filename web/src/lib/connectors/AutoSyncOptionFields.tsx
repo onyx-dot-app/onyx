@@ -1,16 +1,21 @@
-import { JSX } from "react";
-import { ValidAutoSyncSource } from "@/lib/types";
+import type { ValidAutoSyncSource } from "@/lib/connectors/types/source";
 
-// The first key is the connector type, and the second key is the field name
-export const autoSyncConfigBySource: Record<
-  ValidAutoSyncSource,
-  Record<
+interface AutoSyncConfig {
+  notice?: string;
+  // Each key is posted as auto_sync_options.<key>, so it has to match the name
+  // the backend reads.
+  fields?: Record<
     string,
     {
       label: string;
-      subtext: JSX.Element;
+      subtext: string;
     }
-  >
+  >;
+}
+
+export const autoSyncConfigBySource: Record<
+  ValidAutoSyncSource,
+  AutoSyncConfig
 > = {
   box: {},
   confluence: {},
@@ -25,4 +30,5 @@ export const autoSyncConfigBySource: Record<
   outlook: {},
   canvas: {},
   onedrive: {},
+  zoom: {},
 };

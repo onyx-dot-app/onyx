@@ -1,11 +1,14 @@
 "use client";
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
-import { PageLoader } from "@opal/layouts";
+import {
+  useAdminLanguageModel,
+  useAdminLanguageModels,
+} from "@/lib/languageModels/hooks";
+import { PageLoader } from "@opal/loaders";
 import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
   Button,
@@ -29,10 +32,14 @@ import {
 import { deleteLlmProvider } from "@/lib/languageModels/svc";
 import { buildLlmOptions, groupLlmOptions } from "@/lib/languageModels/options";
 import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
+import {
+  filterModelConfigurations,
+  findLlmOptionById,
+} from "@/lib/languageModels/options";
 import { useSettings } from "@/lib/settings/hooks";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
@@ -85,6 +92,29 @@ function ExistingProviderCard({
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
+  // The listing holds one page of models and the edit modal needs them all,
+  // so a provider with more is loaded whole before the modal opens.
+  const isPaged = provider.next_model_configuration_offset != null;
+  const { llmProvider: fetchedProvider, error: fullProviderError } =
+    useAdminLanguageModel(isOpen && isPaged ? provider.id : null);
+  const fullProvider = isPaged ? fetchedProvider : provider;
+  useEffect(() => {
+    if (!fullProviderError) return;
+    toast.error(
+      t("toasts.providerLoadFailed", {
+        message:
+          fullProviderError instanceof Error
+            ? fullProviderError.message
+            : t("toasts.unknownError"),
+      })
+    );
+    setIsOpen(false);
+    // Drop the cached failure so the next open fetches again instead of
+    // replaying it.
+    void mutate(SWR_KEYS.adminLlmProvider(provider.id), undefined, {
+      revalidate: false,
+    });
+  }, [fullProviderError, provider.id, mutate, t]);
 
   const handleDelete = async () => {
     try {
@@ -102,8 +132,8 @@ function ExistingProviderCard({
 
   return (
     <>
-      {isOpen && (
-        <Modal existingLlmProvider={provider} onOpenChange={setIsOpen} />
+      {isOpen && fullProvider && (
+        <Modal existingLlmProvider={fullProvider} onOpenChange={setIsOpen} />
       )}
 
       {deleteModal.isOpen && (
@@ -336,8 +366,11 @@ export default function LanguageModelsPage() {
   const [pendingHideGrouping, setPendingHideGrouping] = useState<
     boolean | null
   >(null);
-  const { llmProviders: existingLlmProviders, defaultText } =
-    useAdminLanguageModels();
+  const {
+    llmProviders: existingLlmProviders,
+    defaultText,
+    modelPaging,
+  } = useAdminLanguageModels();
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );
@@ -349,7 +382,7 @@ export default function LanguageModelsPage() {
     [existingLlmProviders]
   );
 
-  // Resolve the current default to a model_configuration_id for ModelSelector
+  // Resolve the current default to a model_configuration_id for the select
   const defaultModelConfigId = useMemo(() => {
     if (!defaultText || !existingLlmProviders) return null;
     const provider = existingLlmProviders.find(
@@ -477,9 +510,21 @@ export default function LanguageModelsPage() {
                 center
                 withLabel
               >
-                <ModelSelector
+                <SimpleModelSelector
+                  providers={filterModelConfigurations(
+                    existingLlmProviders ?? [],
+                    { keep: defaultModelConfigId }
+                  )}
                   value={defaultModelConfigId}
-                  onChange={(opt) => {
+                  grouped={
+                    !(pendingHideGrouping ?? settings.hide_provider_grouping)
+                  }
+                  modelPaging={modelPaging}
+                  onChange={(modelConfigurationId) => {
+                    const opt = findLlmOptionById(
+                      existingLlmProviders,
+                      modelConfigurationId
+                    );
                     // Keyed on the model configuration id. Matching on provider
                     // type plus display name picks the first of several
                     // same-named providers — and nameless providers are the
@@ -488,15 +533,14 @@ export default function LanguageModelsPage() {
                     // also hosts a model of that name, so this failed silently.
                     const provider = findProviderOwningModelConfig(
                       existingLlmProviders,
-                      opt.modelConfigurationId
+                      modelConfigurationId
                     );
-                    if (provider) {
+                    if (provider && opt) {
                       void handleDefaultModelChange(
                         `${provider.id}:${opt.modelName}`
                       );
                     }
                   }}
-                  side="bottom"
                 />
               </InputHorizontal>
               {hasProviderGrouping && (
@@ -560,7 +604,6 @@ export default function LanguageModelsPage() {
           <MessageCard
             title={t("configurationDisabled.title")}
             description={t("configurationDisabled.description")}
-            headerPadding={1}
           />
         )}
 

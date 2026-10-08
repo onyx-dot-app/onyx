@@ -1,10 +1,23 @@
 {{- /*
-Pre-delete hook: delete operator-managed CRs while the operators are still
-running so their finalizers are processed cleanly. Without this, helm
+Pre-delete hook: delete this release's operator-managed CRs while the operators
+are still running so their finalizers are processed cleanly. Without this, helm
 uninstall tears down the operators and CRs simultaneously — the operators
 die before finishing finalizer processing, and namespace cleanup hangs.
+Deletes by name so other releases' and user-managed CRs in the namespace survive.
 */}}
-{{- if or .Values.postgresql.enabled .Values.redis.enabled }}
+{{- $pgClusterName := printf "%s-pg" .Release.Name }}
+{{- $redisName := .Values.redis.redisStandalone.name | default .Release.Name }}
+{{- $deletePostgres := and .Values.postgresql.enabled (not .Values.postgresql.cluster.retainOnUninstall) }}
+{{- $deleteRedis := .Values.redis.enabled }}
+{{- $targets := list }}
+{{- if $deletePostgres }}
+{{- $targets = append $targets (dict "container" "delete-postgres-cluster" "resource" (printf "clusters.postgresql.cnpg.io/%s" $pgClusterName)) }}
+{{- end }}
+{{- if $deleteRedis }}
+{{- $targets = append $targets (dict "container" "delete-redis" "resource" (printf "redis.redis.redis.opstreelabs.in/%s" $redisName)) }}
+{{- end }}
+{{- if $targets }}
+{{- $image := .Values.preDeleteCleanup.image }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -28,15 +41,17 @@ metadata:
     "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 rules:
-  {{- if .Values.postgresql.enabled }}
+  {{- if $deletePostgres }}
   - apiGroups: ["postgresql.cnpg.io"]
     resources: ["clusters"]
-    verbs: ["get", "list", "delete"]
+    resourceNames: [{{ $pgClusterName | quote }}]
+    verbs: ["get", "list", "watch", "delete"]
   {{- end }}
-  {{- if .Values.redis.enabled }}
+  {{- if $deleteRedis }}
   - apiGroups: ["redis.redis.opstreelabs.in"]
     resources: ["redis"]
-    verbs: ["get", "list", "delete"]
+    resourceNames: [{{ $redisName | quote }}]
+    verbs: ["get", "list", "watch", "delete"]
   {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -77,20 +92,38 @@ spec:
     spec:
       serviceAccountName: {{ include "onyx.resourceName" (list . "pre-delete") }}
       restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-        - name: cleanup
-          image: bitnami/kubectl:latest
-          command:
-            - sh
-            - -c
-            - |
-              {{- if .Values.postgresql.enabled }}
-              echo "Deleting CNPG Clusters..."
-              kubectl delete clusters.postgresql.cnpg.io --all -n {{ .Release.Namespace }} --wait --timeout=120s 2>/dev/null || true
-              {{- end }}
-              {{- if .Values.redis.enabled }}
-              echo "Deleting Redis instances..."
-              kubectl delete redis.redis.redis.opstreelabs.in --all -n {{ .Release.Namespace }} --wait --timeout=120s 2>/dev/null || true
-              {{- end }}
-              echo "Pre-delete cleanup complete"
+        {{- range $targets }}
+        - name: {{ .container }}
+          image: "{{ $image.repository }}:{{ $image.tag }}"
+          imagePullPolicy: {{ $image.pullPolicy }}
+          args:
+            - delete
+            - {{ .resource }}
+            - --namespace={{ $.Release.Namespace }}
+            - --ignore-not-found
+            - --wait
+            - --timeout=120s
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: kube-cache
+              mountPath: /home/nonroot/.kube
+        {{- end }}
+      volumes:
+        - name: kube-cache
+          emptyDir: {}
 {{- end }}

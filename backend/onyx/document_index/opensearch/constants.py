@@ -1,8 +1,12 @@
-# Default value for the maximum number of tokens a chunk can hold, if none is
-# specified when creating an index.
 import os
 from enum import Enum
 
+from pydantic import BaseModel
+
+from onyx.db.enums import VectorQuantization
+
+# Default value for the maximum number of tokens a chunk can hold, if none is
+# specified when creating an index.
 DEFAULT_MAX_CHUNK_SIZE = 512
 
 
@@ -52,6 +56,38 @@ DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES = int(
 EF_SEARCH = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
 
 
+class LuceneScalarQuantization(BaseModel):
+    """Lucene "sq" encoder settings for one VectorQuantization level.
+
+    See https://docs.opensearch.org/latest/vector-search/optimizing-storage/lucene-scalar-quantization/
+    """
+
+    model_config = {"frozen": True}
+
+    # Bits per vector dimension. Always set this explicitly: on OpenSearch 3.6+
+    # an "sq" encoder without bits defaults to 1 bit.
+    bits: int
+    # A k-NN query on a quantized field gets oversample_factor * k candidates
+    # with the quantized vectors, then rescores them with the full-precision
+    # vectors. OpenSearch rescores by default only in on_disk mode, so our
+    # queries must ask for it. The values are the OpenSearch defaults for 4x
+    # (7-bit) and Lucene 32x (1-bit) compression.
+    rescore_oversample_factor: float
+    # The first (major, minor) OpenSearch version that accepts these bits.
+    min_opensearch_version: tuple[int, int]
+
+
+# VectorQuantization.NONE has no entry.
+LUCENE_SCALAR_QUANTIZATION: dict[VectorQuantization, LuceneScalarQuantization] = {
+    VectorQuantization.SCALAR_7_BIT: LuceneScalarQuantization(
+        bits=7, rescore_oversample_factor=1.0, min_opensearch_version=(2, 16)
+    ),
+    VectorQuantization.SCALAR_1_BIT: LuceneScalarQuantization(
+        bits=1, rescore_oversample_factor=2.0, min_opensearch_version=(3, 6)
+    ),
+}
+
+
 class OpenSearchAuthMethod(str, Enum):
     """Authentication method for connecting to OpenSearch.
 
@@ -73,6 +109,7 @@ class OpenSearchSearchType(str, Enum):
     SEMANTIC = "semantic"
     RANDOM = "random"
     DOC_ID_RETRIEVAL = "doc_id_retrieval"
+    CC_PAIR_ACCESS_SHADOW = "cc_pair_access_shadow"
     UNKNOWN = "unknown"
 
 
@@ -113,3 +150,6 @@ HYBRID_SEARCH_NORMALIZATION_PIPELINE: HybridSearchNormalizationPipeline = (
     if os.environ.get("HYBRID_SEARCH_NORMALIZATION_PIPELINE", None) is not None
     else HybridSearchNormalizationPipeline.MIN_MAX
 )
+
+RESOURCE_CHECK_INTERVAL_SECONDS = 5 * 60
+RESOURCE_CHECK_TIMEOUT_SECONDS = 3

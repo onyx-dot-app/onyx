@@ -30,7 +30,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
 
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
@@ -60,7 +60,7 @@ def _load_sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
     """
     if (
         "sandbox_daemon.server" in sys.modules
-        and "sandbox_daemon.contract" in sys.modules
+        and "sandbox_daemon.models" in sys.modules
         and "sandbox_daemon.extract" in sys.modules
         and "sandbox_daemon.filesystem" in sys.modules
     ):
@@ -72,7 +72,7 @@ def _load_sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
         sys.modules["sandbox_daemon"] = types.ModuleType("sandbox_daemon")
 
     for name in (
-        "contract",
+        "models",
         "extract",
         "snapshot",
         "opencode_history",

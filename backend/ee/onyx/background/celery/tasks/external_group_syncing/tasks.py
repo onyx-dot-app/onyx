@@ -195,7 +195,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
                 cc_pairs_to_dedupe = get_cc_pairs_by_source(
                     db_session,
                     source,
-                    access_type=AccessType.SYNC,
+                    access_types=AccessType.perm_synced_types(),
                     status=ConnectorCredentialPairStatus.ACTIVE,
                 )
                 # dedupe cc_pairs to only keep the first one

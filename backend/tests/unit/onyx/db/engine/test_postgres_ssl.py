@@ -2,6 +2,7 @@ import datetime as dt
 import importlib
 import os
 import ssl
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
@@ -193,6 +194,107 @@ def test_asyncpg_not_none_with_explicit_ssl_regression_guard() -> None:
         os.environ["POSTGRES_SSLROOTCERT"] = _CA_BUNDLE
         module = _reload_pg_ssl()
         assert module.create_pg_ssl_context() is not None
+
+
+# --- server certificates without an Authority Key Identifier ---------------
+
+
+def _write_pem(path: str, cert: x509.Certificate) -> None:
+    with open(path, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+
+def _issue_legacy_chain(out: str, prefix: str) -> tuple[str, str, str]:
+    """A CA and server cert shaped like Cloud SQL GOOGLE_MANAGED_INTERNAL_CA:
+    critical basicConstraints only, no keyUsage / SKI / AKI."""
+    ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"{prefix} CA")])
+    ca = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(dt.datetime(2020, 1, 1, tzinfo=dt.timezone.utc))
+        .not_valid_after(dt.datetime(2040, 1, 1, tzinfo=dt.timezone.utc))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .sign(ca_key, hashes.SHA256())
+    )
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    server = (
+        x509.CertificateBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "db")]))
+        .issuer_name(ca_name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(dt.datetime(2020, 1, 1, tzinfo=dt.timezone.utc))
+        .not_valid_after(dt.datetime(2040, 1, 1, tzinfo=dt.timezone.utc))
+        .sign(ca_key, hashes.SHA256())
+    )
+    ca_path, cert_path, key_path = (
+        os.path.join(out, f"{prefix}-{n}") for n in ("ca.crt", "server.crt", "key")
+    )
+    _write_pem(ca_path, ca)
+    _write_pem(cert_path, server)
+    with open(key_path, "wb") as f:
+        f.write(
+            key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.TraditionalOpenSSL,
+                serialization.NoEncryption(),
+            )
+        )
+    return ca_path, cert_path, key_path
+
+
+def _handshake(client_ctx: ssl.SSLContext, cert_path: str, key_path: str) -> None:
+    """Run a TLS handshake in memory; raises ssl.SSLError on failure."""
+    server_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    server_ctx.load_cert_chain(cert_path, key_path)
+    c_in, c_out, s_in, s_out = (ssl.MemoryBIO() for _ in range(4))
+    client = client_ctx.wrap_bio(c_in, c_out, server_hostname="db")
+    server = server_ctx.wrap_bio(s_in, s_out, server_side=True)
+    done = {"client": False, "server": False}
+    for _ in range(10):
+        for name, sock in (("client", client), ("server", server)):
+            if done[name]:
+                continue
+            try:
+                sock.do_handshake()
+                done[name] = True
+            except ssl.SSLWantReadError:
+                pass
+        s_in.write(c_out.read())
+        c_in.write(s_out.read())
+        if all(done.values()):
+            return
+    raise AssertionError("handshake did not finish")
+
+
+def test_asyncpg_verify_ca_accepts_server_cert_without_aki(
+    tmp_path: Path,
+) -> None:
+    """libpq accepts these certs; the asyncpg context must too, and must still
+    reject a cert from a different CA."""
+    ca, cert, key = _issue_legacy_chain(str(tmp_path), "trusted")
+    _, other_cert, other_key = _issue_legacy_chain(str(tmp_path), "other")
+
+    strict = ssl.create_default_context(cafile=ca)
+    strict.check_hostname = False
+    if strict.verify_flags & ssl.VERIFY_X509_STRICT:
+        with pytest.raises(ssl.SSLCertVerificationError, match="Authority Key"):
+            _handshake(strict, cert, key)
+
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLMODE"] = "verify-ca"
+        os.environ["POSTGRES_SSLROOTCERT"] = ca
+        module = _reload_pg_ssl()
+        ctx = module.create_pg_ssl_context()
+        assert isinstance(ctx, ssl.SSLContext)
+        _handshake(ctx, cert, key)
+        with pytest.raises(ssl.SSLCertVerificationError):
+            _handshake(ctx, other_cert, other_key)
 
 
 # --- mutual TLS (client certificate) --------------------------------------

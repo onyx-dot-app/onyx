@@ -45,6 +45,9 @@ class OnyxErrorCode(Enum):
     ENV_VAR_GATED = ("ENV_VAR_GATED", 403)
     # The deployment cannot support the feature at all, so no grant helps.
     DEPLOYMENT_UNSUPPORTED = ("DEPLOYMENT_UNSUPPORTED", 403)
+    # An admin turned the feature off for this workspace; no credential
+    # change re-enables it.
+    FEATURE_DISABLED = ("FEATURE_DISABLED", 403)
 
     # --------------------------------------------------------------------------
     # Validation / Bad Request (400)

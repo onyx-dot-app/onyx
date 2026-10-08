@@ -96,7 +96,7 @@ from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
-    set_is_ee_based_on_env_variable,
+    set_is_ee_if_available,
 )
 from shared_configs.configs import (
     DISALLOWED_SLACK_BOT_TENANT_LIST,
@@ -1392,7 +1392,7 @@ if __name__ == "__main__":
     logger.info("Starting SlackbotHandler")
     tenant_handler = SlackbotHandler()
 
-    set_is_ee_based_on_env_variable()
+    set_is_ee_if_available()
     setup_tracing()
 
     try:

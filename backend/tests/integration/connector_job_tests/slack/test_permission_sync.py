@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -22,7 +23,6 @@ from tests.integration.common_utils.test_models import (
     DATestCredential,
     DATestUser,
 )
-from tests.integration.common_utils.vespa import vespa_fixture
 from tests.integration.connector_job_tests.slack.conftest import (
     SLACK_ADMIN_EMAIL,
     SLACK_TEST_USER_1_EMAIL,
@@ -34,12 +34,11 @@ from tests.integration.connector_job_tests.slack.slack_api_utils import SlackMan
 # NOTE(rkuo): it isn't yet clear if the reason these were previously xfail'd
 # still exists. May need to xfail again if flaky (DAN-789)
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission tests are enterprise only",
 )
 def test_slack_permission_sync(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,  # noqa: ARG001
     slack_perm_sync_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     public_channel, private_channel = slack_perm_sync_test_setup
@@ -104,8 +103,11 @@ def test_slack_permission_sync(
         user_ids=[email_id_map[user.email] for user in desired_channel_members],
     )
 
-    public_message = "Steve's favorite number is 809752"
-    private_message = "Sara's favorite number is 346794"
+    # Unique per run: the index is not reset between runs, and a retry must not
+    # match chunks an earlier run left behind.
+    run_tag = uuid4().hex[:8]
+    public_message = f"Steve's favorite number is 809752 ({run_tag})"
+    private_message = f"Sara's favorite number is 346794 ({run_tag})"
 
     SlackManager.add_message_to_channel(
         slack_client=slack_client,
@@ -142,7 +144,7 @@ def test_slack_permission_sync(
         number_of_updated_docs=0,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     # Verify admin can see messages from both channels
@@ -204,12 +206,11 @@ def test_slack_permission_sync(
 # NOTE(rkuo): it isn't yet clear if the reason these were previously xfail'd
 # still exists. May need to xfail again if flaky (DAN-789)
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission tests are enterprise only",
 )
 def test_slack_group_permission_sync(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,  # noqa: ARG001
     slack_perm_sync_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     """
@@ -284,7 +285,10 @@ def test_slack_group_permission_sync(
     )
 
     # Add a test message to the private channel
-    private_message = "This is a secret message: 987654"
+    # Unique per run: the index is not reset between runs, and a retry must not
+    # match chunks an earlier run left behind.
+    run_tag = uuid4().hex[:8]
+    private_message = f"This is a secret message: 987654 ({run_tag})"
     SlackManager.add_message_to_channel(
         slack_client=slack_client,
         channel=private_channel,
@@ -313,7 +317,7 @@ def test_slack_group_permission_sync(
         number_of_updated_docs=0,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     # Verify admin can see the message

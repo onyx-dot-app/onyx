@@ -45,19 +45,19 @@ variable "main_node_instance_types" {
 
 variable "vespa_node_enabled" {
   type        = bool
-  description = "Whether to create the dedicated Vespa/document-index node group. Disable when the index runs off-cluster (managed OpenSearch) or fits on the main node group."
+  description = "Whether to create the dedicated document-index node group (legacy `vespa` name). Disable when the index runs off-cluster (managed OpenSearch) or fits on the main node group."
   default     = true
 }
 
 variable "vespa_node_instance_types" {
   type        = list(string)
-  description = "Instance types for the Vespa node group"
+  description = "Instance types for the dedicated document-index node group"
   default     = ["m6i.2xlarge"]
 }
 
 variable "vespa_node_subnet_ids" {
   type        = list(string)
-  description = "Subnet IDs for the Vespa node group (must be in same AZ as Vespa PV). If not specified, uses all cluster subnets."
+  description = "Subnet IDs for the dedicated document-index node group (must be in same AZ as the index PV). If not specified, uses all cluster subnets."
   default     = []
 }
 
@@ -75,7 +75,7 @@ variable "main_node_min_size" {
 
 variable "vespa_node_disk_size_gb" {
   type        = number
-  description = "Root EBS volume (GiB) for the Vespa/document-index node. Null keeps the node-group default."
+  description = "Root EBS volume (GiB) for the dedicated document-index node. Null keeps the node-group default."
   default     = null
 }
 
@@ -152,7 +152,7 @@ variable "eks_managed_node_groups" {
   type        = map(any)
   description = "EKS managed node groups with EBS volume configuration"
   default = {
-    # Main node group for all pods except Vespa
+    # Main node group for all pods except the in-cluster document index
     main = {
       name           = "main-node-group"
       instance_types = null # Will be set from var.main_node_instance_types
@@ -175,13 +175,14 @@ variable "eks_managed_node_groups" {
       # No taints for main node group
       taints = []
     }
-    # Vespa dedicated node group
+    # Dedicated document-index (OpenSearch) node group. The key, name, and taint
+    # keep their legacy `vespa` names so existing node groups are not replaced.
     vespa = {
       name           = "vespa-node-group"
       instance_types = null # Will be set from var.vespa_node_instance_types
       min_size       = 1
       max_size       = 1
-      # Larger EBS volume for Vespa storage
+      # Larger EBS volume for document index storage
       block_device_mappings = {
         xvda = {
           device_name = "/dev/xvda"
@@ -195,7 +196,7 @@ variable "eks_managed_node_groups" {
           }
         }
       }
-      # Taint to ensure only Vespa pods can schedule here
+      # Taint to ensure only document index pods can schedule here
       taints = [
         {
           key    = "vespa-dedicated"
@@ -293,4 +294,16 @@ variable "vpc_cni_addon_version" {
   type        = string
   description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (set CLUSTER_NAME, then: aws eks describe-addon --cluster-name \"$CLUSTER_NAME\" --addon-name vpc-cni --query 'addon.addonVersion') to avoid an unintended CNI upgrade on adoption."
   default     = "v1.20.4-eksbuild.2"
+}
+
+variable "iam_role_permissions_boundary" {
+  type        = string
+  description = "ARN of a permissions boundary to attach to every IAM role this module creates. Null attaches none. Needed when the caller may only create bounded roles."
+  default     = null
+}
+
+variable "iam_role_path" {
+  type        = string
+  description = "IAM path for every role this module creates. Null keeps the default path (/). Changing it on an existing stack replaces the roles."
+  default     = null
 }

@@ -23,6 +23,7 @@ from onyx.access.models import (
 )
 from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_utils.resources import GoogleDriveService
@@ -385,7 +386,9 @@ def gdrive_doc_sync(
     already populated.
     """
     google_drive_connector = GoogleDriveConnector(
-        **cc_pair.connector.connector_specific_config
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
     )
     google_drive_connector.load_credentials(credential_json(cc_pair))
 

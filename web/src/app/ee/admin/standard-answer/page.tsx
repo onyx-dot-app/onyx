@@ -4,7 +4,7 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Divider } from "@opal/components";
 import {

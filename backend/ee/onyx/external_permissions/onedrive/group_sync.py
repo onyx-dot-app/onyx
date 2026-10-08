@@ -3,6 +3,7 @@ from collections.abc import Generator
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import normalize_email
 from ee.onyx.external_permissions.utils import credential_json
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.microsoft_utils.entra import (
     EntraDirectoryObject,
     EntraDirectoryObjectType,
@@ -74,7 +75,11 @@ def onedrive_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
-    connector = OneDriveConnector(**cc_pair.connector.connector_specific_config)
+    connector = OneDriveConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
+    )
     connector.load_credentials(credential_json(cc_pair))
 
     groups = iter_entra_items(

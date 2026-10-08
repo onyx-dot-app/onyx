@@ -15,6 +15,7 @@ from onyx.connectors.onedrive.capability_checks import (
 )
 from onyx.connectors.onedrive.connector import OneDriveConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.zoom.connector import ZoomConnector
 
 
 def validate_canvas_perm_sync(connector: CanvasConnector) -> None:
@@ -88,6 +89,17 @@ def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
         check.run(context)
 
 
+def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
+    """
+    Permission sync reads each recording's share settings, its registered
+    viewers and the account's sign-in rules, three scopes the indexing path
+    never touches, and its group sync lists the account's users. Probe them
+    here so an app missing one fails at connector creation instead of indexing
+    every transcript as readable by its owner alone.
+    """
+    connector.probe_recording_access_permissions()
+
+
 # The single source of truth for which connectors carry a real perm-sync probe:
 # ``validate_perm_sync`` dispatches through it, and the capability check
 # framework derives probe-bearing sources from it via
@@ -100,6 +112,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     GoogleDriveConnector: validate_drive_perm_sync,
     OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
+    ZoomConnector: validate_zoom_perm_sync,
 }
 
 

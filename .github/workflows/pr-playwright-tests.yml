@@ -25,7 +25,6 @@ env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-  GEN_AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
   FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
   GOOGLE_PSE_API_KEY: ${{ secrets.GOOGLE_PSE_API_KEY }}
@@ -65,7 +64,6 @@ env:
   MCP_PER_USER_KEY_SERVER_HOST: 0.0.0.0
   MCP_PER_USER_KEY_SERVER_PUBLIC_HOST: host.docker.internal
 
-  MOCK_LLM_RESPONSE: true
   MCP_TEST_SERVER_PORT: 8004
   MCP_TEST_SERVER_URL: http://host.docker.internal:8004/mcp
   MCP_TEST_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
@@ -212,6 +210,8 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
+          # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+          labels: ci.run-id=${{ github.run_id }}
           push: true
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
@@ -284,6 +284,8 @@ jobs:
           target: runtime
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
+          # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+          labels: ci.run-id=${{ github.run_id }}
           push: true
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
@@ -373,10 +375,13 @@ jobs:
         run: |
           docker pull "${ONYX_BACKEND_IMAGE}"
           docker pull "${ONYX_MODEL_SERVER_IMAGE}"
-          docker compose -f docker-compose.yml pull relational_db opensearch cache minio
+          docker compose -f docker-compose.yml pull relational_db opensearch cache object-store minio
 
       - name: Verify deployment without external network
         working-directory: deployment/docker_compose
+        env:
+          S3_ENDPOINT_URL: http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL: http://minio:9000
         run: |
           compose=(
             docker compose
@@ -399,7 +404,7 @@ jobs:
                 < ../../backend/tests/airgap/test_default_model_server_embeddings_are_finite.py
           }
           if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
-            api_server inference_model_server minio ||
+            api_server inference_model_server object-store ||
             ! api_server_is_healthy ||
             ! default_model_embeddings_are_finite; then
             "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap.log"
@@ -412,6 +417,8 @@ jobs:
         working-directory: deployment/docker_compose
         env:
           AIRGAP_HF_ENDPOINT: https://tls_failure:4443
+          S3_ENDPOINT_URL: http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL: http://minio:9000
         run: |
           compose=(
             docker compose
@@ -428,7 +435,7 @@ jobs:
               [[ "$(docker inspect --format '{{.State.Health.Status}}' "${container_id}")" == "healthy" ]]
           }
           if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
-            api_server inference_model_server minio ||
+            api_server inference_model_server object-store ||
             ! api_server_is_healthy; then
             "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap-tls.log"
             exit 1
@@ -528,17 +535,16 @@ jobs:
 
       - name: Create .env file for Docker Compose
         env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
           EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          S3_ENDPOINT_URL=http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL=http://minio:9000
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
@@ -588,7 +594,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml up -d --wait --wait-timeout 300
         id: start_docker
 
       - name: Seed dev license
@@ -635,7 +641,7 @@ jobs:
           cd deployment/docker_compose
           # Pass the same -f overrides as `up` so the mock MCP/IdP services
           # (defined only in the override files) are included in the logs.
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
@@ -709,17 +715,16 @@ jobs:
 
       - name: Create .env file for Docker Compose
         env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
           EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          S3_ENDPOINT_URL=http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL=http://minio:9000
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
@@ -775,7 +780,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml up -d --wait --wait-timeout 300
         id: start_docker
 
       - name: Seed dev license
@@ -808,7 +813,7 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
@@ -867,16 +872,12 @@ jobs:
 
       - name: Create .env file for Docker Compose
         env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
-          MOCK_LLM_RESPONSE=true
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
           # MCP E2E tests register mock servers on host.docker.internal (a private
@@ -895,7 +896,7 @@ jobs:
       - name: Start Docker containers (lite)
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d --wait
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml -f docker-compose.mock-llm-test.yml up -d --wait
         id: start_docker
 
       - name: Seed dev license
@@ -920,7 +921,7 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
-          docker compose logs > docker-compose.log
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml -f docker-compose.mock-llm-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs

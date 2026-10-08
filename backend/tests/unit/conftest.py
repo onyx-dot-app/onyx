@@ -18,9 +18,9 @@ from onyx.utils.variable_functionality import (
 def _reset_leaked_ee_state() -> Generator[None, None, None]:
     """Undoes EE state leaked into the process by import side effects.
 
-    ``set_is_ee_based_on_env_variable()`` runs at module level in ``onyx.main``
+    ``set_is_ee_if_available()`` runs at module level in ``onyx.main``
     and every ``background/celery/versioned_apps`` module, and flips the
-    process-global EE flag whenever license enforcement is on (its default). A
+    process-global EE flag whenever the build ships the EE code. A
     unit test whose import chain reaches one of those modules therefore silently
     switches every later test in the worker to EE resolution, breaking
     OSS-asserting tests order-dependently. Runs before ``enable_ee`` (autouse

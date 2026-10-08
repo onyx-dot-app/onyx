@@ -25,13 +25,21 @@ from onyx.chat.models import (
     LlmStepResult,
     ToolCallSimple,
 )
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ChatFileType
-from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
-from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import ToolChoiceOptions
+from onyx.prompts.chat_prompts import (
+    ANSWER_COMPLETENESS_REMINDER,
+    ANSWER_COVERAGE_GUIDANCE,
+    IMAGE_GEN_REMINDER,
+    OPEN_URL_REMINDER,
+    REQUIRE_CITATION_GUIDANCE,
+)
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import FILE_READER_TOOL_NAME
-from onyx.tools.models import ToolCallKickoff
+from onyx.tools.models import ParallelToolCallResponse, ToolCallKickoff, ToolResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
@@ -289,6 +297,73 @@ class TestConstructMessageHistory:
         assert "documents" in result[3].message
         assert result[4] == user_msg2  # Last user message
         assert result[5] == assistant_with_tool  # After last user message
+
+    def test_cacheable_flags_cover_stable_prefix(self) -> None:
+        """System, kept history, custom agent, project files, last user
+        message, and tool rounds after it are all byte-stable within a turn
+        and must carry should_cache. The trailing reminder is rebuilt per
+        turn and stays uncached."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        old_user = create_message("Previous turn", MessageType.USER, 5)
+        old_answer = create_message("Previous answer", MessageType.ASSISTANT, 5)
+        custom_agent = create_message("Custom agent task", MessageType.USER, 10)
+        user_msg = create_message("Search for X", MessageType.USER, 5)
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "search", 5)
+        tool_response = create_tool_response("tc_1", "Search results...", 10)
+        reminder = create_message("Remember to cite", MessageType.USER, 5)
+
+        simple_chat_history = [
+            old_user,
+            old_answer,
+            user_msg,
+            assistant_with_tool,
+            tool_response,
+        ]
+        context_files = create_context_files(num_files=1, tokens_per_file=50)
+
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=custom_agent,
+            simple_chat_history=simple_chat_history,
+            reminder_message=reminder,
+            context_files=context_files,
+            available_tokens=1000,
+        )
+
+        assert all(msg.should_cache for msg in result[:-1])
+        assert result[-1] is reminder
+        assert not result[-1].should_cache
+
+    def test_cacheable_flags_exclude_truncated_history(self) -> None:
+        """History messages evicted by the token budget must not be marked
+        cacheable; kept history and the tail segments still are."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        dropped_user = create_message("Ancient turn", MessageType.USER, 100)
+        kept_user = create_message("Recent turn", MessageType.USER, 5)
+        kept_answer = create_message("Recent answer", MessageType.ASSISTANT, 5)
+        user_msg = create_message("Latest question", MessageType.USER, 5)
+
+        simple_chat_history = [
+            dropped_user,
+            kept_user,
+            kept_answer,
+            user_msg,
+        ]
+        context_files = create_context_files()
+
+        # Budget fits system + last user + one kept pair, not the ancient turn.
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=None,
+            simple_chat_history=simple_chat_history,
+            reminder_message=None,
+            context_files=context_files,
+            available_tokens=35,
+        )
+
+        assert dropped_user not in result
+        assert not dropped_user.should_cache
+        assert all(msg.should_cache for msg in result)
 
     def test_construct_message_history_does_not_duplicate_project_images(
         self,
@@ -675,13 +750,16 @@ class TestConstructMessageHistory:
             available_tool_names={"read_file"},
         )
 
-        # Should have: system, tool_metadata_message, user
+        # Should have: system, user, tool_metadata_message — the notice names
+        # the tools offered this cycle, so it lives in the uncached tail.
         assert len(result) == 3
-        metadata_msg = result[1]
+        metadata_msg = result[2]
         assert metadata_msg.message_type == MessageType.USER
         assert "report.xlsx" in metadata_msg.message
         # read_file is offered, so the listing carries the id it consumes.
         assert "xlsx-1" in metadata_msg.message
+        assert user_msg.should_cache
+        assert not metadata_msg.should_cache
 
     def test_metadata_only_and_text_files_both_present(self) -> None:
         """When both text content and tool metadata are present, both messages
@@ -721,14 +799,16 @@ class TestConstructMessageHistory:
             token_counter=_simple_token_counter,
         )
 
-        # Should have: system, context_files_message, tool_metadata_message, user
+        # Should have: system, context_files_message, user,
+        # tool_metadata_message — the tool-dependent notice sits in the tail.
         assert len(result) == 4
         # Context files message (text content)
         assert "documents" in result[1].message
         assert "Text file content here" in result[1].message
         # Tool metadata message
-        assert "data.xlsx" in result[2].message
-        assert result[3] == user_msg
+        assert result[2] == user_msg
+        assert "data.xlsx" in result[3].message
+        assert not result[3].should_cache
 
 
 def _simple_token_counter(text: str) -> int:
@@ -814,7 +894,7 @@ class TestNonVisionImageBudgeting:
         image_msg.token_count = stored_image_tokens + 5
         image_msg.image_token_count = stored_image_tokens
         monkeypatch.setattr(
-            "onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05
+            "onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05
         )
         llm = Mock()
         llm.config = LLMConfig(
@@ -836,7 +916,7 @@ class TestNonVisionImageBudgeting:
             patch("onyx.chat.llm_loop.select_reminder_text", return_value=""),
             patch("onyx.chat.llm_loop.model_supports_image_input", return_value=False),
             patch(
-                "onyx.chat.token_budget.get_model_map",
+                "onyx.llm.token_budget.get_model_map",
                 return_value={
                     "openai/text-only-model": {
                         "max_input_tokens": 24000,
@@ -1017,6 +1097,47 @@ class TestForgottenFileMetadata:
             for m in result
             if m is not forgotten
         )
+
+    def test_forgotten_message_stays_out_of_cacheable_prefix(self) -> None:
+        """The forgotten-files message is rebuilt whenever eviction grows the
+        dropped set, so it must sit outside the cacheable prefix — after the
+        tool rounds and before the reminder — instead of breaking contiguity
+        before the last user message.
+        """
+        file_meta = _make_file_metadata("file-abc", "moby_dick.txt")
+        file_msg = create_message("x" * 2000, MessageType.USER, 500)
+        file_msg.file_id = "file-abc"
+
+        history = [
+            file_msg,
+            create_message("Got it", MessageType.ASSISTANT, 10),
+            create_message("Tell me about ch1", MessageType.USER, 10),
+        ]
+        reminder = create_message("Remember to cite", MessageType.USER, 5)
+
+        result = construct_message_history(
+            system_prompt=create_message("system", MessageType.SYSTEM, 5),
+            custom_agent_prompt=None,
+            simple_chat_history=history,
+            reminder_message=reminder,
+            context_files=create_context_files(),
+            available_tokens=100,
+            token_counter=_simple_token_counter,
+            all_injected_file_metadata={"file-abc": file_meta},
+            available_tool_names={FILE_READER_TOOL_NAME},
+        )
+
+        forgotten = self._find_forgotten_message(result)
+        assert forgotten is not None
+
+        forgotten_idx = result.index(forgotten)
+        # Everything before the forgotten message is the stable cacheable
+        # prefix; the forgotten message and the trailing reminder are not.
+        assert all(msg.should_cache for msg in result[:forgotten_idx])
+        assert not forgotten.should_cache
+        assert result[-1] is reminder
+        assert not result[-1].should_cache
+        assert result.index(reminder) == forgotten_idx + 1
 
     # ------------------------------------------------------------------
     # Case 3: file message removed by summary truncation ("orphaned" metadata)
@@ -1723,3 +1844,234 @@ class TestSelectReminderText:
             ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
         )
         assert result == IMAGE_GEN_REMINDER
+
+    def test_citation_reminder_carries_relocated_guidance(self) -> None:
+        """The citation guidance that used to be appended to the system prompt
+        must arrive via the reminder instead, so head prompts stay byte-stable
+        for prompt caching."""
+        result = self._select(include_citation_reminder=True)
+        assert result is not None
+        assert REQUIRE_CITATION_GUIDANCE.strip() in result
+        assert ANSWER_COVERAGE_GUIDANCE.strip() in result
+        assert ANSWER_COMPLETENESS_REMINDER in result
+
+    def test_image_gen_reminder_still_carries_citation_guidance(self) -> None:
+        """A turn mixing a citeable tool with generate_image must not lose the
+        citation instructions to the image-gen short-circuit."""
+        result = self._select(ran_image_gen=True, include_citation_reminder=True)
+        assert result is not None
+        assert IMAGE_GEN_REMINDER in result
+        assert REQUIRE_CITATION_GUIDANCE.strip() in result
+
+    def test_open_url_reminder_still_carries_citation_guidance(self) -> None:
+        result = self._select(
+            just_ran_web_search=True,
+            has_open_url_tool=True,
+            include_citation_reminder=True,
+        )
+        assert result is not None
+        assert OPEN_URL_REMINDER in result
+        assert REQUIRE_CITATION_GUIDANCE.strip() in result
+
+    def test_authored_citation_tag_is_not_duplicated(self) -> None:
+        """When the task prompt's {{CITATION_GUIDANCE}} already resolved to the
+        guidance inside reminder_text, it must not be appended a second time."""
+        result = self._select(
+            persona_task_prompt="Task." + REQUIRE_CITATION_GUIDANCE,
+            include_citation_reminder=True,
+        )
+        assert result is not None
+        assert result.count(REQUIRE_CITATION_GUIDANCE.strip()) == 1
+        # COVERAGE is only added by the reminder, so it still appears once.
+        assert ANSWER_COVERAGE_GUIDANCE.strip() in result
+
+
+@pytest.mark.parametrize("select_none", [False, True])
+def test_saved_search_docs_follow_the_search_selection(select_none: bool) -> None:
+    doc = SearchDoc(
+        document_id="retrieved",
+        chunk_ind=0,
+        semantic_identifier="Retrieved document",
+        blurb="content",
+        source_type=DocumentSource.FILE,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    tool_call = ToolCallKickoff(
+        tool_call_id="search-1",
+        tool_name=SearchTool.NAME,
+        tool_args={"queries": ["ticket"]},
+        placement=Placement(turn_index=0),
+    )
+    search_tool = Mock()
+    search_tool.name = SearchTool.NAME
+    search_tool.id = 1
+    llm = Mock()
+    llm.config = LLMConfig(
+        model_provider="openai",
+        model_name="gpt-5.2",
+        temperature=0,
+        max_input_tokens=100000,
+    )
+    state_container = Mock()
+    with (
+        patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
+        patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
+        patch(
+            "onyx.chat.llm_loop.get_session_with_current_tenant",
+            return_value=nullcontext(),
+        ),
+        patch("onyx.chat.llm_loop.get_default_base_system_prompt", return_value=""),
+        patch("onyx.chat.llm_loop.select_reminder_text", return_value=""),
+        patch("onyx.chat.llm_loop.compute_all_tool_tokens", return_value=0),
+        patch(
+            "onyx.chat.llm_loop.run_llm_step",
+            side_effect=[
+                (
+                    LlmStepResult(answer=None, tool_calls=[tool_call], reasoning=None),
+                    False,
+                ),
+                (
+                    LlmStepResult(answer="Done", tool_calls=None, reasoning=None),
+                    False,
+                ),
+            ],
+        ),
+        patch(
+            "onyx.chat.llm_loop.run_tool_calls",
+            side_effect=[
+                ParallelToolCallResponse(
+                    tool_responses=[
+                        ToolResponse(
+                            rich_response=SearchDocsResponse(
+                                search_docs=[doc],
+                                citation_mapping={},
+                                displayed_docs=[] if select_none else None,
+                            ),
+                            llm_facing_response="",
+                            tool_call=tool_call,
+                        )
+                    ],
+                    updated_citation_mapping={},
+                ),
+                ParallelToolCallResponse(
+                    tool_responses=[], updated_citation_mapping={}
+                ),
+            ],
+        ),
+    ):
+        run_llm_loop(
+            emitter=Mock(),
+            state_container=state_container,
+            simple_chat_history=[create_message("Find it", MessageType.USER, 5)],
+            tools=[search_tool],
+            custom_agent_prompt=None,
+            context_files=create_context_files(),
+            persona=None,
+            user_memory_context=None,
+            llm=llm,
+            token_counter=lambda _: 10,
+        )
+
+    state_container.add_tool_call.assert_called_once()
+    saved_call = state_container.add_tool_call.call_args.args[0]
+    assert saved_call.search_docs == ([] if select_none else [doc])
+
+
+def test_head_prompts_byte_stable_across_citeable_tool_round() -> None:
+    """Regression for prompt caching: an internal_search call flips
+    should_cite_documents mid-turn. The system prompt and custom agent prompt
+    rebuilt on the next loop iteration must be byte-identical — any
+    cite-dependent bytes in the head would bust the cached prefix. Citation
+    guidance arrives via the trailing reminder instead."""
+    doc = SearchDoc(
+        document_id="retrieved",
+        chunk_ind=0,
+        semantic_identifier="Retrieved document",
+        blurb="content",
+        source_type=DocumentSource.FILE,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    tool_call = ToolCallKickoff(
+        tool_call_id="search-1",
+        tool_name=SearchTool.NAME,
+        tool_args={"queries": ["ticket"]},
+        placement=Placement(turn_index=0),
+    )
+    search_tool = Mock()
+    search_tool.name = SearchTool.NAME
+    search_tool.id = 1
+    llm = Mock()
+    llm.config = LLMConfig(
+        model_provider="openai",
+        model_name="gpt-5.2",
+        temperature=0,
+        max_input_tokens=100000,
+    )
+    with (
+        patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
+        patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
+        patch(
+            "onyx.chat.llm_loop.get_session_with_current_tenant",
+            return_value=nullcontext(),
+        ),
+        patch(
+            "onyx.chat.llm_loop.get_default_base_system_prompt",
+            return_value="Base system prompt. {{CITATION_GUIDANCE}}",
+        ),
+        patch("onyx.chat.llm_loop.compute_all_tool_tokens", return_value=0),
+        patch(
+            "onyx.chat.llm_loop.run_llm_step",
+            side_effect=[
+                (
+                    LlmStepResult(answer=None, tool_calls=[tool_call], reasoning=None),
+                    False,
+                ),
+                (
+                    LlmStepResult(answer="Done", tool_calls=None, reasoning=None),
+                    False,
+                ),
+            ],
+        ) as step,
+        patch(
+            "onyx.chat.llm_loop.run_tool_calls",
+            return_value=ParallelToolCallResponse(
+                tool_responses=[
+                    ToolResponse(
+                        rich_response=SearchDocsResponse(
+                            search_docs=[doc],
+                            citation_mapping={},
+                            displayed_docs=None,
+                        ),
+                        llm_facing_response="",
+                        tool_call=tool_call,
+                    )
+                ],
+                updated_citation_mapping={},
+            ),
+        ),
+    ):
+        run_llm_loop(
+            emitter=Mock(),
+            state_container=Mock(),
+            simple_chat_history=[create_message("Find it", MessageType.USER, 5)],
+            tools=[search_tool],
+            custom_agent_prompt="Be terse. {{CITATION_GUIDANCE}}",
+            context_files=create_context_files(),
+            persona=None,
+            user_memory_context=None,
+            llm=llm,
+            token_counter=lambda _: 10,
+        )
+
+    assert step.call_count == 2
+    first_head = step.call_args_list[0].kwargs["history"][:2]
+    second_head = step.call_args_list[1].kwargs["history"][:2]
+    assert [m.message for m in first_head] == [m.message for m in second_head]
+    for msg in first_head:
+        assert REQUIRE_CITATION_GUIDANCE.strip() not in msg.message
