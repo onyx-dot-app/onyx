@@ -19,21 +19,21 @@ a column of `Log`s.
 
 ## Variants
 
-| Variant   | Icon stroke                | Hover background     |
+| Variant   | Icon stroke         | Hover background     |
 | --------- | ------------------- | -------------------- |
-| `default` | `text-03`           | `background-tint-00` |
-| `pending` | `text-03`           | `background-tint-00` |
-| `info`    | `status-info-05`    | `status-info-00`     |
-| `success` | `status-success-05` | `status-success-00`  |
+| `default` | `text-03`           | `background-tint-02` |
+| `pending` | `text-03`           | `background-tint-02` |
+| `info`    | `status-info-05`    | `status-info-01`     |
+| `success` | `status-success-05` | `status-success-01`  |
 | `warning` | `theme-amber-05`    | `theme-amber-01`     |
-| `error`   | `status-error-05`   | `status-error-00`    |
+| `error`   | `status-error-05`   | `status-error-01`    |
 
 The variant sets colours only; pass the icon that fits the state (for example
 a spinner, a clock or an hourglass for `pending`).
 
 ## Layout
 
-- `Interactive.Stateless` (`default`, `internal`) wraps an
+- `Interactive.Stateless` (`default`, `tertiary`) wraps an
   `Interactive.Container` of size `lg`: 2.25rem tall with 0.5rem padding, so
   tall trailing content cannot stretch the line.
 - The contents sit in one row with a 0.25rem gap, centred.

@@ -76,7 +76,7 @@ function Log({
   return (
     <Interactive.Stateless
       variant="default"
-      prominence="internal"
+      prominence="tertiary"
       interaction={interaction}
     >
       <Interactive.Container

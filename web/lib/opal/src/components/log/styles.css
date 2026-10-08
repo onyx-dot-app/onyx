@@ -1,10 +1,10 @@
 @reference "#reference.css";
 
 /* ── Log ─────────────────────────────────────────────────────────────────────
-   A Log sits on `Interactive.Stateless` (default, internal). Its variant
+   A Log sits on `Interactive.Stateless` (default, tertiary). Its variant
    sets the icon's stroke colour (icons stroke with `currentColor`, so a
-   `text-*` colour sets it) and replaces the internal grey hover with a status tint.
-   Each rule names one more attribute than the internal rules it overrides, so
+   `text-*` colour sets it) and replaces the tertiary grey hover with a status tint.
+   Each rule names one more attribute than the tertiary rules it overrides, so
    it wins without !important. */
 
 .interactive[data-opal-log-variant] .opal-log-icon {
@@ -23,23 +23,23 @@
   @apply text-status-error-05;
 }
 
-.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-opal-log-variant="info"]:is(
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-opal-log-variant="info"]:is(
   :hover,
   :active,
   [data-interaction="hover"],
   [data-interaction="active"]
 ):not([data-disabled]) {
-  @apply bg-status-info-00;
+  @apply bg-status-info-01;
 }
-.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-opal-log-variant="success"]:is(
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-opal-log-variant="success"]:is(
   :hover,
   :active,
   [data-interaction="hover"],
   [data-interaction="active"]
 ):not([data-disabled]) {
-  @apply bg-status-success-00;
+  @apply bg-status-success-01;
 }
-.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-opal-log-variant="warning"]:is(
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-opal-log-variant="warning"]:is(
   :hover,
   :active,
   [data-interaction="hover"],
@@ -47,11 +47,11 @@
 ):not([data-disabled]) {
   @apply bg-theme-amber-01;
 }
-.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-opal-log-variant="error"]:is(
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-opal-log-variant="error"]:is(
   :hover,
   :active,
   [data-interaction="hover"],
   [data-interaction="active"]
 ):not([data-disabled]) {
-  @apply bg-status-error-00;
+  @apply bg-status-error-01;
 }
