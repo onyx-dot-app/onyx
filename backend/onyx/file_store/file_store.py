@@ -902,7 +902,7 @@ def get_azure_file_store() -> "AzureBlobBackedFileStore":
 # the tenant from the context at call time) and its client is safe to share,
 # while building one costs tens of milliseconds, mostly the S3 client.
 _DEFAULT_FILE_STORE: FileStore | None = None
-_DEFAULT_FILE_STORE_LOCK = threading.Lock()
+_DEFAULT_FILE_STORE_LOCK: threading.Lock = threading.Lock()
 
 
 def get_default_file_store() -> FileStore:
