@@ -139,11 +139,11 @@ it("refreshes an open PDF through inventory updates and reuses unchanged bytes",
     originalUrl
   );
   expect(URL.revokeObjectURL).toHaveBeenCalledWith(originalUrl);
-  const updatedFrame = screen.getByTitle("report.pdf");
+  const updatedFrame = screen.getByTitle(isReportFrame);
   const updatedBlob = jest.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0];
   act(() => store().setActiveOutputTab(sessionId, "artifacts"));
   act(() => store().setActivePanelTabId(sessionId, `file:${path}`));
-  expect(screen.getByTitle("report.pdf")).toBe(updatedFrame);
+  expect(screen.getByTitle(isReportFrame)).toBe(updatedFrame);
   expect(fetch).toHaveBeenCalledTimes(2);
 
   act(() => store().closePanelTab(sessionId, `file:${path}`));
