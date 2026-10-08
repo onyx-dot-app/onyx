@@ -524,6 +524,12 @@ def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
                     is None
                 )
                 assert model_catalog.is_embedding_model_name(embed_name) is True
+                assert embed_name not in model_catalog.iter_models(
+                    "vercel_ai_gateway", mode="chat"
+                )
+                assert embed_name in model_catalog.iter_models(
+                    "vercel_ai_gateway", mode="embedding"
+                )
 
             chat = find_model_obj(model_map, "vercel_ai_gateway", "cohere/command-a")
             assert chat is not None
