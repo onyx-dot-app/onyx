@@ -24,29 +24,40 @@ def test_the_default_file_store_is_built_once() -> None:
 def test_overlapping_first_calls_build_one_store() -> None:
     """Two threads asking before the store exists must wait on one build, or
     each would hold a different store."""
-    started = threading.Event()
-    release = threading.Event()
-    store = MagicMock(spec=FileStore)
+    started: threading.Event = threading.Event()
+    second_asked: threading.Event = threading.Event()
+    release: threading.Event = threading.Event()
+    store: FileStore = MagicMock(spec=FileStore)
+    stores: list[FileStore] = []
 
     def slow_build() -> FileStore:
         started.set()
         release.wait(timeout=5)
         return store
 
-    stores: list[FileStore] = []
+    def ask_second() -> None:
+        second_asked.set()
+        stores.append(get_default_file_store())
+
     with (
         patch.object(file_store_module, "_DEFAULT_FILE_STORE", None),
         patch.object(
             file_store_module, "_build_default_file_store", side_effect=slow_build
         ) as build,
     ):
-        first = threading.Thread(target=lambda: stores.append(get_default_file_store()))
-        second = threading.Thread(
+        first: threading.Thread = threading.Thread(
             target=lambda: stores.append(get_default_file_store())
         )
+        second: threading.Thread = threading.Thread(target=ask_second)
         first.start()
         assert started.wait(timeout=5)
         second.start()
+        assert second_asked.wait(timeout=5)
+        # The first build is still held open, so the second caller must be
+        # parked behind it rather than building a store of its own.
+        second.join(timeout=0.5)
+        assert second.is_alive()
+        assert build.call_count == 1
         release.set()
         first.join(timeout=5)
         second.join(timeout=5)
