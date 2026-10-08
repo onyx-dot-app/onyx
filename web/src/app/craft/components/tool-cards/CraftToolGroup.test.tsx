@@ -16,15 +16,17 @@ const failedCall: ToolCallState = {
 
 describe("CraftToolGroup", () => {
   it("keeps failed details collapsed until the user expands them", async () => {
-    const user = setupUser();
+    const user: ReturnType<typeof setupUser> = setupUser();
     render(<CraftToolGroup toolCalls={[failedCall]} />);
 
-    const group = screen.getByRole("button", { name: /Working/ });
+    const group: HTMLElement = screen.getByRole("button", { name: /Working/ });
     expect(group).toHaveTextContent("1 call");
     expect(group).not.toHaveTextContent(/failed/i);
     await user.click(group);
 
-    const call = screen.getByRole("button", { name: failedCall.title });
+    const call: HTMLElement = screen.getByRole("button", {
+      name: failedCall.title,
+    });
     expect(call).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText(failedCall.rawOutput)).not.toBeInTheDocument();
 
@@ -40,7 +42,9 @@ describe("CraftToolGroup", () => {
       status: "in_progress",
       rawOutput: "",
     };
-    const { rerender } = render(<CraftToolGroup toolCalls={[activeCall]} />);
+    const { rerender }: ReturnType<typeof render> = render(
+      <CraftToolGroup toolCalls={[activeCall]} />
+    );
 
     rerender(<CraftToolGroup toolCalls={[activeCall, failedCall]} />);
 
