@@ -4,12 +4,17 @@ import importlib.util
 import os
 import subprocess
 import sys
+from collections.abc import Callable
+from importlib.machinery import ModuleSpec
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
 
-_SCRIPT = Path(__file__).parents[4] / "onyx/skills/builtin/pptx/scripts/preview.py"
+_SCRIPT: Path = (
+    Path(__file__).parents[4] / "onyx/skills/builtin/pptx/scripts/preview.py"
+)
 
 
 def test_preserved_mtime_edit_replaces_cached_slides(
@@ -18,27 +23,29 @@ def test_preserved_mtime_edit_replaces_cached_slides(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.syspath_prepend(str(_SCRIPT.parent))
-    spec = importlib.util.spec_from_file_location("pptx_preview", _SCRIPT)
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
+        "pptx_preview", _SCRIPT
+    )
     assert spec is not None and spec.loader is not None
-    preview = importlib.util.module_from_spec(spec)
+    preview: ModuleType = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(preview)
 
-    source = tmp_path / "report.pptx"
+    source: Path = tmp_path / "report.pptx"
     source.write_bytes(b"first")
     os.utime(source, ns=(10_000_000_000, 10_000_000_000))
-    original = source.stat()
-    cache = tmp_path / "cache"
+    original: os.stat_result = source.stat()
+    cache: Path = tmp_path / "cache"
     cache.mkdir()
-    slide = cache / "slide-1.jpg"
+    slide: Path = cache / "slide-1.jpg"
     slide.write_bytes(b"old preview")
     os.utime(slide, ns=(20_000_000_000, 20_000_000_000))
 
     # Filesystems set ctime themselves; control it without waiting for the clock.
-    source_ctime_ns = 10_000_000_000
-    real_stat = Path.stat
+    source_ctime_ns: int = 10_000_000_000
+    real_stat: Callable[..., os.stat_result] = Path.stat
 
     def controlled_stat(path: Path, *, follow_symlinks: bool = True) -> os.stat_result:
-        result = real_stat(path, follow_symlinks=follow_symlinks)
+        result: os.stat_result = real_stat(path, follow_symlinks=follow_symlinks)
         if path == source:
             return os.stat_result(
                 result,
@@ -64,8 +71,8 @@ def test_preserved_mtime_edit_replaces_cached_slides(
         os.utime(slide, ns=(40_000_000_000, 40_000_000_000))
         return subprocess.CompletedProcess([], 0)
 
-    convert_mock = MagicMock(side_effect=convert)
-    rasterize_mock = MagicMock(side_effect=rasterize)
+    convert_mock: MagicMock = MagicMock(side_effect=convert)
+    rasterize_mock: MagicMock = MagicMock(side_effect=rasterize)
     monkeypatch.setattr(preview, "run_soffice", convert_mock)
     monkeypatch.setattr(preview.subprocess, "run", rasterize_mock)
 
