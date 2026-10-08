@@ -16,7 +16,8 @@ they are dropped, so they cannot hold back newer events. Outages do not count ag
 Batch indexing counters are combined by attempt and stage for up to 30 seconds (at most 256
 active keys). Error counters bypass this window. No aggregation or compression runs on
 application request or indexing threads.
-At shutdown, the sender makes one bounded final delivery attempt in its own thread.
+At shutdown, the sender releases all combined counters. Its thread then sends the remaining
+batches for at most five seconds and stops at the first incomplete delivery.
 Long-running services do not wait for it. Spawned docfetching processes wait at most two
 seconds, so their final counters are not lost when they exit. Query events can be lost during outages.
 Attempt and job state comes from authoritative source rows that a separate collector reads.

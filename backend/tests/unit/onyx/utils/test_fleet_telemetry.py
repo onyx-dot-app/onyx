@@ -487,6 +487,44 @@ def test_close_delivers_coalesced_counters_within_a_bounded_wait(
     assert not sender.emit("heartbeat", {"dropped_events": 0})
 
 
+def test_final_flush_sends_every_batch_of_stage_counters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    delivered: list[dict[str, Any]] = []
+
+    def accept(*args: Any, **kwargs: Any) -> Response:
+        delivered.extend(json.loads(gzip.decompress(kwargs["data"]))["events"])
+        return accept_all(*args, **kwargs)
+
+    session = Mock()
+    session.post.side_effect = accept
+    monkeypatch.setattr(fleet.requests, "Session", Mock(return_value=session))
+    sender = client(capacity=512, report_process=False)
+    stages: dict[str, str] = {"fetch": "fetch_docs", "embed": "embed_chunks"}
+    for index in range(250):
+        stage: str = ("fetch", "embed")[index % 2]
+        assert sender.emit(
+            "attempt",
+            {
+                "attempt_id": 7,
+                "stage": stage,
+                "counter_mode": "delta",
+                "counters": {stages[stage]: 1},
+            },
+        )
+    # Three batches are queued when the sender stops.
+    sender.close()
+    started = time.monotonic()
+    sender._run()
+    assert time.monotonic() - started < 1.0
+    totals: dict[str, int] = {}
+    for event in delivered:
+        stage = event["data"]["stage"]
+        totals[stage] = totals.get(stage, 0) + event["data"]["counters"][stages[stage]]
+    assert totals == {"fetch": 125, "embed": 125}
+    assert not sender._queue and not sender._pending and not sender._stage_pending
+
+
 def test_close_waits_for_nothing_during_an_outage() -> None:
     sender = client(report_process=False)
     sender.emit("heartbeat", {"dropped_events": 0})

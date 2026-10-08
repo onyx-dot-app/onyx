@@ -1007,7 +1007,11 @@ class BoundedTelemetry:
                 self._stage_pending[key] = event
             if len(self._stage_pending) > _MAX_STAGE_KEYS:
                 ready.append(self._stage_pending.popitem(last=False)[1])
-        if time.monotonic() - self._last_stage_flush >= _STAGE_WINDOW_SECONDS:
+        # A closed sender has no later window, so it releases every counter now.
+        if (
+            self._stop.is_set()
+            or time.monotonic() - self._last_stage_flush >= _STAGE_WINDOW_SECONDS
+        ):
             while self._stage_pending and len(ready) < limit:
                 ready.append(self._stage_pending.popitem(last=False)[1])
             if not self._stage_pending:
@@ -1104,7 +1108,6 @@ class BoundedTelemetry:
         backed-off delivery ends the attempt immediately.
         """
         deadline: float = time.monotonic() + _FINAL_FLUSH_SECONDS
-        self._last_stage_flush = float("-inf")
         while (
             self._queue or self._pending or self._stage_pending
         ) and time.monotonic() < deadline:
