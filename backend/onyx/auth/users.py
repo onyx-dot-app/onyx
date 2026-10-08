@@ -1,7 +1,6 @@
 import contextvars
 import hashlib
 import os
-import random
 import secrets
 import string
 import uuid
@@ -265,27 +264,32 @@ def get_display_email(email: str | None, space_less: bool = False) -> str:
     return email or ""
 
 
+_GENERATED_PASSWORD_DEFAULT_LENGTH = 12
+
+
 def generate_password() -> str:
-    lowercase_letters = string.ascii_lowercase
-    uppercase_letters = string.ascii_uppercase
-    digits = string.digits
-    special_characters = string.punctuation
-
-    # Ensure at least one of each required character type
-    password = [
-        secrets.choice(uppercase_letters),
-        secrets.choice(digits),
-        secrets.choice(special_characters),
-    ]
-
-    # Fill the rest with a mix of characters
-    remaining_length = 12 - len(password)
-    all_characters = lowercase_letters + uppercase_letters + digits + special_characters
-    password.extend(secrets.choice(all_characters) for _ in range(remaining_length))
-
-    # Shuffle the password to randomize the position of the required characters
-    random.shuffle(password)
-
+    """Random password that satisfies the configured password policy, so
+    `validate_password` accepts it (admin reset, JWT user provisioning)."""
+    settings = get_security_settings()
+    length = min(
+        max(_GENERATED_PASSWORD_DEFAULT_LENGTH, settings.password_min_length),
+        settings.password_max_length,
+    )
+    # One of each class satisfies every require_* flag. The policy floors
+    # password_max_length at 4, so all four always fit. Specials come only from
+    # PASSWORD_SPECIAL_CHARS, the set validate_password accepts.
+    character_classes = (
+        string.ascii_lowercase,
+        string.ascii_uppercase,
+        string.digits,
+        PASSWORD_SPECIAL_CHARS,
+    )
+    password = [secrets.choice(chars) for chars in character_classes]
+    all_characters = "".join(character_classes)
+    password.extend(
+        secrets.choice(all_characters) for _ in range(length - len(password))
+    )
+    secrets.SystemRandom().shuffle(password)
     return "".join(password)
 
 

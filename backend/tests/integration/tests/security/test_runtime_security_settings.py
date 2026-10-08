@@ -11,10 +11,12 @@ import pytest
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 SECURITY_URL = f"{API_SERVER_URL}/admin/security"
 USERS_URL = f"{API_SERVER_URL}/users"
+ADMIN_PASSWORD_RESET_URL = f"{API_SERVER_URL}/password/reset_password"
 
 
 def _put_security(payload: dict, user: DATestUser) -> dict:
@@ -147,3 +149,38 @@ def test_get_security_settings_round_trip_persists(
         assert after[key] == baseline[key], (
             f"Field {key!r} unexpectedly changed: {baseline[key]!r} -> {after[key]!r}"
         )
+
+
+def test_admin_password_reset_follows_password_policy(
+    admin_user: DATestUser,
+    reset_security_settings: None,  # noqa: ARG001
+) -> None:
+    """The generated password must satisfy a policy stricter than its default
+    length, and the user must be able to log in with it."""
+    # A dedicated user, created before the stricter policy applies: resetting the
+    # shared basic_user would break later logins with the default test password.
+    target_user = UserManager.create()
+    _put_security(
+        {
+            "password_min_length": 20,
+            "password_require_uppercase": True,
+            "password_require_lowercase": True,
+            "password_require_digit": True,
+            "password_require_special_char": True,
+        },
+        admin_user,
+    )
+
+    response = client.post(
+        ADMIN_PASSWORD_RESET_URL,
+        json={"user_email": target_user.email},
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+        timeout=30,
+    )
+    assert response.status_code == 200, response.text
+    new_password = response.json()["new_password"]
+    assert len(new_password) >= 20
+
+    target_user.password = new_password
+    UserManager.login_as_user(target_user)
