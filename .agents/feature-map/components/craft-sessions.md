@@ -267,7 +267,7 @@ itself the streaming response; Craft's send endpoint returns immediately and
 the actual work happens in a detached thread that any API replica can pick
 up (see §4.3, locking).
 
-**The turn is not a bounded cycle loop.** Chat's `llm_loop.py` runs up to
+**The turn is not a bounded cycle loop.** Chat's `backend/onyx/chat/agent.py:ChatAgent` runs up to
 `MAX_LLM_CYCLES` inference-plus-tool-call rounds itself. Craft's executor
 does not run an agentic loop at all: `drive_one_prompt`
 (`interactive_turns/executor.py:_drive_interactive_turn.drive_one_prompt`)

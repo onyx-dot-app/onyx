@@ -655,7 +655,9 @@ def _non_streaming_run(
             ),
         ),
         patch.object(
-            openai_passthrough, "llm_from_provider", return_value=llm or _openai_llm()
+            openai_passthrough,
+            "llm_from_provider",
+            return_value=llm or _openai_llm(),
         ),
         patch.object(openai_passthrough, "llm_generation_span", span_patch),
     ):

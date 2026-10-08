@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from litellm.types.utils import ModelResponse as LiteLLMModelResponse
+from pydantic import JsonValue
 
 from onyx.chat.incognito import (
     BIFROST_DISABLE_CONTENT_LOGGING_HEADER,
@@ -98,7 +99,7 @@ def _build_provider_view(
 
 def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
     with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
-        get_llm(
+        model = get_llm(
             provider=LlmProviderNames.OLLAMA_CHAT,
             model="test-model",
             deployment_name=None,
@@ -106,6 +107,7 @@ def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
             model_kwargs={"num_ctx": 8192},
         )
 
+        assert model is mock_litellm_llm.return_value
         kwargs = mock_litellm_llm.call_args.kwargs
         assert kwargs["model_kwargs"] == {"num_ctx": 8192}
 
@@ -466,8 +468,10 @@ def test_client_resolves_image_capability_from_deployment_name() -> None:
 
 
 def test_factory_captures_nested_request_and_policy_settings() -> None:
-    kwargs: dict[str, dict[str, str]] = {"metadata": {"source": "caller"}}
-    policy_kwargs: dict[str, dict[str, bool]] = {"extra_body": {"store": False}}
+    metadata: dict[str, JsonValue] = {"source": "caller"}
+    kwargs: dict[str, JsonValue] = {"metadata": metadata}
+    policy_body: dict[str, JsonValue] = {"store": False}
+    policy_kwargs: dict[str, JsonValue] = {"extra_body": policy_body}
     client: LitellmLLM = get_llm(
         provider="openai",
         model="gpt-5-mini",
@@ -476,8 +480,8 @@ def test_factory_captures_nested_request_and_policy_settings() -> None:
         model_kwargs=kwargs,
         policy_model_kwargs=policy_kwargs,
     )
-    kwargs["metadata"]["source"] = "changed"
-    policy_kwargs["extra_body"]["store"] = True
+    metadata["source"] = "changed"
+    policy_body["store"] = True
     response: LiteLLMModelResponse = LiteLLMModelResponse(
         id="captured-settings",
         created=1,
@@ -505,7 +509,8 @@ def test_factory_captures_nested_request_and_policy_settings() -> None:
 
 
 def test_client_does_not_modify_caller_model_kwargs() -> None:
-    kwargs: dict[str, dict[str, str]] = {"metadata": {"source": "caller"}}
+    metadata: dict[str, JsonValue] = {"source": "caller"}
+    kwargs: dict[str, JsonValue] = {"metadata": metadata}
     LitellmLLM(
         api_key=None,
         model_provider="ollama_chat",
@@ -517,14 +522,14 @@ def test_client_does_not_modify_caller_model_kwargs() -> None:
 
 
 def test_client_captures_nested_deployment_settings_after_merging() -> None:
-    deployment: list[str] = ["original"]
-    defaults: dict[str, bool] = {"enabled": True}
-    deployment_body: dict[str, object] = {
+    deployment: list[JsonValue] = ["original"]
+    defaults: dict[str, JsonValue] = {"enabled": True}
+    deployment_body: dict[str, JsonValue] = {
         "metadata": {"deployment": deployment, "source": "deployment"},
         "default_only": defaults,
     }
-    request_metadata: dict[str, str] = {"source": "request"}
-    kwargs: dict[str, object] = {
+    request_metadata: dict[str, JsonValue] = {"source": "request"}
+    kwargs: dict[str, JsonValue] = {
         "extra_body": {"metadata": request_metadata},
     }
     client: LitellmLLM = LitellmLLM(

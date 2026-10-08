@@ -134,6 +134,10 @@ this document.
 
 ### Beat schedules
 
+The incognito file cleanup task also retries pending Redis context teardown
+before deleting generated files. Busy session locks leave requests pending for
+the next attempt. See [[context-assembly]] §4.10.
+
 `onyx/background/celery/tasks/beat_schedule.py` defines three lists, resolved
 through `fetch_versioned_implementation` so EE can extend them
 (`ee/onyx/background/celery/tasks/beat_schedule.py` imports and re-exports the CE

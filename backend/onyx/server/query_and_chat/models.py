@@ -10,6 +10,7 @@ from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, T
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
+from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import Packet
 
@@ -241,7 +242,7 @@ class ChatMessageDetail(BaseModel):
     preferred_response_id: int | None = None
     model_display_name: str | None = None
     # Absent on messages written before this was captured.
-    request_params: dict[str, Any] | None = None
+    request_params: GenerationRequestParams | None = None
 
     def model_dump(  # ty: ignore[invalid-method-override]
         self, *args: list, **kwargs: dict[str, Any]
@@ -266,6 +267,10 @@ class CurrentStreamInfo(BaseModel):
     stream_id: int
 
 
+class ChatSessionProcessingStatus(BaseModel):
+    is_processing: bool
+
+
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: UUID
     description: str | None
@@ -281,9 +286,9 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
-    # Set while a stream is in flight and resumable: cursor-0 replay+tail is
-    # available at /chat-session/{id}/resume-stream.
+    # The buffer also retains interrupted work until its cache TTL expires.
     current_stream: CurrentStreamInfo | None = None
+    is_processing: bool = False
     # True for sessions pinned to an incognito record mode, so a reload can
     # restore the incognito UI state.
     incognito: bool = False

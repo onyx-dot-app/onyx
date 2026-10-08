@@ -287,8 +287,8 @@ the LLM, assigning one citation number per unique `document_id` starting at
    `rich_response` fields back into the prompt, and do not trim
    `llm_facing_response` content out of `rich_response`.
 4. **Citation numbering ranges are per tool call, not per turn.**
-   `tool_runner.py` advances `starting_citation_num` by 100 for every tool call
-   in a parallel batch specifically to avoid collisions between concurrent
+   `ToolBatch` supplies each call index. Search tools add
+   `CITATIONS_PER_TOOL_CALL * invocation.call_index` to the base to avoid collisions between concurrent
    `SearchTool`/`WebSearchTool`/`OpenURLTool` calls. A change that shares one
    counter across calls will silently collide citations.
 5. **The tool must keep working with `DISABLE_VECTOR_DB=true` meaning
@@ -325,7 +325,7 @@ the LLM, assigning one citation number per unique `document_id` starting at
   rather than through that mechanism.
 - [[citations]]: `convert_inference_sections_to_llm_string` produces the
   citation-tagged string and mapping this component hands back.
-- [[tools-framework]]: `SearchTool` implements `Tool`; `tool_runner.py` merges
+- [[tools-framework]]: `SearchTool` implements `Tool`; `backend/onyx/agents/tool_execution.py:ToolBatch` merges
   repeated calls and allocates the citation range.
 - [[llm-providers]]: every secondary flow (`query_expansion`, `source_filter`,
   `time_filter`, `document_filter`) and the selection/expansion stages make
@@ -335,7 +335,7 @@ the LLM, assigning one citation number per unique `document_id` starting at
 - [[core-chat-loop]]: `construct_tools` attaches `SearchTool` per turn; the loop
   executes it like any other tool and folds its `ToolResponse` into history.
 - [[web-search]]: a separate tool (`WebSearchTool`), not part of this component,
-  but merged alongside it by the same `tool_runner.py` citation-range logic.
+  but merged alongside it by the same `backend/onyx/agents/tool_execution.py:ToolBatch` citation-range logic.
 - The onyx-cli/programmatic `/search` endpoint (`server/features/search/api.py`)
   and the EE Search UI backend both reuse pieces of this pipeline outside the
   chat loop; see §2.

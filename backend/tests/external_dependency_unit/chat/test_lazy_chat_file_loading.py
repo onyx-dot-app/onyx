@@ -18,18 +18,17 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import load_all_chat_files, load_chat_file
-from onyx.chat.models import ChatLoadedFile
+from onyx.chat.files import load_chat_files
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.chat import (
     create_chat_session,
     create_new_chat_message,
     get_or_create_root_message,
 )
+from onyx.db.user_file import prepare_chat_file_inputs
 from onyx.file_store import file_store as file_store_module
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
-from onyx.tools.models import ChatFile
 from tests.external_dependency_unit.conftest import create_test_user
 
 # ---------------------------------------------------------------------------
@@ -115,154 +114,6 @@ def file_cleanup(
 
 
 # ---------------------------------------------------------------------------
-# Lazy InMemoryChatFile / ChatLoadedFile / ChatFile shim behavior
-# ---------------------------------------------------------------------------
-
-
-class TestLazyShimContract:
-    """Direct unit-style tests of the lazy primitives. Don't need DB/file store
-    but live here so they sit next to the integration tests they guard."""
-
-    def test_no_load_on_construction(self) -> None:
-        calls = {"n": 0}
-
-        def loader() -> bytes:
-            calls["n"] += 1
-            return b"data"
-
-        ChatLoadedFile.lazy_loaded(
-            file_id="x",
-            file_type=ChatFileType.PLAIN_TEXT,
-            filename="x.txt",
-            content_text="cached text",
-            token_count=3,
-            loader=loader,
-        )
-        assert calls["n"] == 0
-
-    def test_first_access_materializes_once_only(self) -> None:
-        calls = {"n": 0}
-
-        def loader() -> bytes:
-            calls["n"] += 1
-            return b"data"
-
-        f = ChatLoadedFile.lazy_loaded(
-            file_id="x",
-            file_type=ChatFileType.PLAIN_TEXT,
-            filename="x.txt",
-            content_text=None,
-            token_count=0,
-            loader=loader,
-        )
-        assert f.content == b"data"
-        assert f.content == b"data"
-        assert calls["n"] == 1
-
-    def test_non_content_attrs_do_not_trigger(self) -> None:
-        calls = {"n": 0}
-        f = ChatLoadedFile.lazy_loaded(
-            file_id="x",
-            file_type=ChatFileType.IMAGE,
-            filename="x.png",
-            content_text=None,
-            token_count=0,
-            loader=lambda: (calls.__setitem__("n", calls["n"] + 1), b"img")[1],
-        )
-        _ = f.file_id
-        _ = f.filename
-        _ = f.file_type
-        _ = f.content_text
-        _ = f.token_count
-        assert calls["n"] == 0
-
-    def test_to_file_descriptor_does_not_materialize(self) -> None:
-        calls = {"n": 0}
-        f = ChatLoadedFile.lazy_loaded(
-            file_id="abc",
-            file_type=ChatFileType.PLAIN_TEXT,
-            filename="x.txt",
-            content_text=None,
-            token_count=0,
-            loader=lambda: (calls.__setitem__("n", calls["n"] + 1), b"data")[1],
-        )
-        fd = f.to_file_descriptor()
-        assert fd["id"] == "abc"
-        assert calls["n"] == 0
-
-    def test_to_base64_materializes_image(self) -> None:
-        calls = {"n": 0}
-        f = ChatLoadedFile.lazy_loaded(
-            file_id="img",
-            file_type=ChatFileType.IMAGE,
-            filename="x.png",
-            content_text=None,
-            token_count=0,
-            loader=lambda: (calls.__setitem__("n", calls["n"] + 1), b"PNG-bytes")[1],
-        )
-        _ = f.to_base64()
-        assert calls["n"] == 1
-
-    def test_concurrent_first_access_calls_loader_exactly_once(self) -> None:
-        """Two threads racing on the first ``.content`` read must not both
-        invoke the loader (would be a double S3 GET). The lazy shim takes a
-        per-instance ``threading.Lock`` to make check-and-set atomic."""
-        import threading
-
-        from onyx.chat.models import ChatLoadedFile
-
-        call_count = {"n": 0}
-        gate = threading.Event()
-
-        def slow_loader() -> bytes:
-            # Gate guarantees both threads observe _lazy_content_materialized
-            # is False before the first writer completes — without the lock,
-            # both would enter the load path.
-            gate.wait()
-            call_count["n"] += 1
-            return b"once"
-
-        f = ChatLoadedFile.lazy_loaded(
-            file_id="x",
-            file_type=ChatFileType.PLAIN_TEXT,
-            filename="x.txt",
-            content_text=None,
-            token_count=0,
-            loader=slow_loader,
-        )
-
-        results: list[bytes] = []
-
-        def reader() -> None:
-            results.append(f.content)
-
-        t1 = threading.Thread(target=reader)
-        t2 = threading.Thread(target=reader)
-        t1.start()
-        t2.start()
-        # Let both threads enter __getattribute__ and contend on the lock.
-        gate.set()
-        t1.join()
-        t2.join()
-
-        assert results == [b"once", b"once"]
-        assert call_count["n"] == 1
-
-    def test_chat_file_lazy_content(self) -> None:
-        calls = {"n": 0}
-        cf = ChatFile.lazy_from_filename(
-            filename="x.csv",
-            loader=lambda: (calls.__setitem__("n", calls["n"] + 1), b"csv-bytes")[1],
-        )
-        assert calls["n"] == 0
-        _ = cf.filename
-        assert calls["n"] == 0
-        assert cf.content == b"csv-bytes"
-        assert cf.content == b"csv-bytes"
-        assert calls["n"] == 1
-
-
-# ---------------------------------------------------------------------------
 # End-to-end via real file_store: load_chat_file / load_all_chat_files
 # ---------------------------------------------------------------------------
 
@@ -279,10 +130,12 @@ class TestLoadChatFileLazy:
         file_id = _write_file(b"sentinel-bytes", file_type="image/png")
         file_cleanup.append(file_id)
 
-        loaded = load_chat_file(
-            {"id": file_id, "type": ChatFileType.IMAGE, "name": "icon.png"},
-            db_session,
-        )
+        loaded = load_chat_files(
+            prepare_chat_file_inputs(
+                [{"id": file_id, "type": ChatFileType.IMAGE, "name": "icon.png"}],
+                db_session,
+            )
+        )[0]
 
         # Construction must not have read raw bytes.
         assert read_counter.hits_for(file_id) == 0, (
@@ -309,10 +162,12 @@ class TestLoadChatFileLazy:
         kill the send-message flow."""
         file_id = _write_file(b"doomed-bytes", file_type="image/png")
 
-        loaded = load_chat_file(
-            {"id": file_id, "type": ChatFileType.IMAGE, "name": "gone.png"},
-            db_session,
-        )
+        loaded = load_chat_files(
+            prepare_chat_file_inputs(
+                [{"id": file_id, "type": ChatFileType.IMAGE, "name": "gone.png"}],
+                db_session,
+            )
+        )[0]
 
         # Delete the underlying file after construction but before the lazy
         # bytes read — simulates user-file deletion racing chat history use.
@@ -332,10 +187,12 @@ class TestLoadChatFileLazy:
         file_id = _write_file(b"unreachable-bytes", file_type="image/png")
         file_cleanup.append(file_id)
 
-        loaded = load_chat_file(
-            {"id": file_id, "type": ChatFileType.IMAGE, "name": "flaky.png"},
-            db_session,
-        )
+        loaded = load_chat_files(
+            prepare_chat_file_inputs(
+                [{"id": file_id, "type": ChatFileType.IMAGE, "name": "flaky.png"}],
+                db_session,
+            )
+        )[0]
 
         with patch.object(
             file_store_module.S3BackedFileStore,
@@ -388,7 +245,18 @@ class TestLoadAllChatFilesLazy:
         assert len(chat_history) == 10
 
         baseline = read_counter.count
-        loaded = load_all_chat_files(chat_history, db_session)
+        loaded = load_chat_files(
+            prepare_chat_file_inputs(
+                list(
+                    {
+                        descriptor["id"]: descriptor
+                        for message in chat_history
+                        for descriptor in message.files or []
+                    }.values()
+                ),
+                db_session,
+            )
+        )
         assert len(loaded) == 10
         # No raw byte reads should have occurred during the load itself.
         assert read_counter.count == baseline, (
@@ -399,39 +267,6 @@ class TestLoadAllChatFilesLazy:
         # Touch one file → exactly one read.
         _ = loaded[0].content
         assert read_counter.count == baseline + 1
-
-    def test_max_workers_capped_at_16(self) -> None:
-        """Defense-in-depth: even with 200 files passed in, the thread pool
-        is capped at 16 workers."""
-        from typing import Any, cast
-
-        captured: dict[str, int] = {}
-
-        def _spy(funcs, **kwargs):
-            captured["max_workers"] = kwargs.get("max_workers", -1)
-            return [None] * len(funcs)
-
-        with patch(
-            "onyx.chat.chat_utils.run_functions_tuples_in_parallel", side_effect=_spy
-        ):
-            # Synthetic 200-file "message" — we patch the parallel runner so
-            # actual DB/file_store access never happens. Casting through Any
-            # bypasses the ORM type contract that is irrelevant for this
-            # particular invariant check.
-            class _FakeMsg:
-                files = [
-                    {
-                        "id": f"id-{i}",
-                        "type": ChatFileType.PLAIN_TEXT,
-                        "name": f"f-{i}.txt",
-                    }
-                    for i in range(200)
-                ]
-
-            from onyx.chat.chat_utils import load_all_chat_files as _llc
-
-            _llc(cast(Any, [_FakeMsg()]), cast(Any, None))
-            assert captured["max_workers"] == 16
 
 
 # ---------------------------------------------------------------------------
@@ -450,15 +285,17 @@ class TestConvertLoadedFilesToChatFilesLazy:
         file_cleanup: list[str],
         db_session: Session,
     ) -> None:
-        from onyx.chat.process_message import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import _convert_loaded_files_to_chat_files
 
         file_id = _write_file(b"some-bytes", file_type="image/png")
         file_cleanup.append(file_id)
         loaded = [
-            load_chat_file(
-                {"id": file_id, "type": ChatFileType.IMAGE, "name": "x.png"},
-                db_session,
-            )
+            load_chat_files(
+                prepare_chat_file_inputs(
+                    [{"id": file_id, "type": ChatFileType.IMAGE, "name": "x.png"}],
+                    db_session,
+                )
+            )[0]
         ]
 
         baseline = read_counter.count

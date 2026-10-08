@@ -1,0 +1,334 @@
+import time
+from collections.abc import Callable
+from functools import partial
+
+from pydantic import BaseModel
+
+from onyx.agents.execution_records import CompactionCheckpoint
+from onyx.agents.models import (
+    AgentState,
+    PreparedStep,
+    StepInput,
+    StepResult,
+    ToolCallContext,
+)
+from onyx.agents.runtime import Agent, RestorableFeature
+from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_utils import (
+    build_context_file_citation_mapping,
+    update_citation_processor_from_tool_result,
+)
+from onyx.chat.errors import _build_empty_llm_response_error
+from onyx.chat.files import build_python_chat_files_from_search_docs
+from onyx.chat.models import (
+    ChatFeatureState,
+    ChatMessageMetadata,
+    ChatSearchResult,
+    CitationMode,
+    PersonaPromptConfig,
+)
+from onyx.chat.prompt_utils import (
+    build_chat_prompt,
+    prepare_prompt,
+)
+from onyx.configs.chat_configs import MAX_LLM_CYCLES
+from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
+from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
+from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationOptions,
+    Message,
+    NamedToolChoice,
+    ReasoningEffort,
+    ToolChoiceOptions,
+    ToolResult,
+    ToolResultMessage,
+)
+from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
+from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
+from onyx.tools.interface import Tool, ToolContext
+from onyx.tools.models import ChatFile
+from onyx.tools.restoration import (
+    capture_search_state,
+    restore_search_state,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
+from onyx.tracing.flows import LLMFlow
+
+
+class ChatAgent(Agent, RestorableFeature):
+    """Chat step preparation and result handling for the shared runtime."""
+
+    def __init__(
+        self,
+        messages: list[Message],
+        tools: list[Tool],
+        custom_agent_prompt: str | None,
+        base_system_prompt: str,
+        context_files: ExtractedContextFiles,
+        persona: PersonaPromptConfig | None,
+        user_memory_context: UserMemoryContext | None,
+        llm: LLM,
+        token_counter: Callable[[str], int],
+        forced_tool_id: int | None = None,
+        user_identity: LLMUserIdentity | None = None,
+        chat_files: list[ChatFile] | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        include_citations: bool = True,
+        all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+        inject_memories_in_prompt: bool = True,
+        reminders_enabled: bool = True,
+        checkpoint: CompactionCheckpoint | None = None,
+        previous_run_id: str | None = None,
+        agent_id: str | None = None,
+    ) -> None:
+        self.max_steps = MAX_LLM_CYCLES
+        self.custom_agent_prompt = custom_agent_prompt
+        self.context_files = context_files
+        self.token_counter = token_counter
+        self.file_metadata = all_injected_file_metadata
+        self.application_tools = [tool.for_agent() for tool in tools]
+        self.include_citations = include_citations
+        self.reasoning_effort = reasoning_effort
+        self.memory = user_memory_context
+        self.inject_memories = inject_memories_in_prompt
+        self.started = time.monotonic()
+        self.forced_tool_id = forced_tool_id
+        self.chat_files = list(chat_files or [])
+        self.citation_processor = DynamicCitationProcessor(
+            citation_mode=CitationMode.HYPERLINK
+            if include_citations
+            else CitationMode.REMOVE
+        )
+        self.initial_citations = (
+            build_context_file_citation_mapping(context_files.file_metadata)
+            if context_files.file_metadata
+            else {}
+        )
+        self.citation_processor.update_citation_mapping(self.initial_citations)
+        self.gathered_documents = list(self.initial_citations.values())
+        self.citation_mapping: dict[int, str] = {}
+        self.has_called_search_tool = False
+        self.ran_image_gen = False
+        self.persona = persona
+        self.base_system_prompt = base_system_prompt
+        self.reminders_enabled = reminders_enabled
+        super().__init__(
+            llm,
+            tools=[tool.bind(self._tool_context) for tool in self.application_tools],
+            agent_id=agent_id,
+            previous_run_id=previous_run_id,
+            state=AgentState(
+                messages=messages,
+                checkpoint=checkpoint,
+            ),
+            restoration=self,
+            prepare_step=self._prepare_step,
+            after_step=self._after_step,
+            generation_context=GenerationContext(
+                flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
+            ),
+            after_tool_call=self._finalize_tool,
+        )
+
+    def capture_state(self) -> ChatFeatureState:
+        return ChatFeatureState(
+            persona=self.persona,
+            context_files=SavedContextFiles.capture(self.context_files),
+            file_metadata=self.file_metadata,
+            memory=self.memory,
+            reasoning_effort=self.reasoning_effort,
+            include_citations=self.include_citations,
+            inject_memories=self.inject_memories,
+            forced_tool_id=self.forced_tool_id,
+            base_prompt=self.base_system_prompt,
+            custom_prompt=self.custom_agent_prompt,
+            reminders_enabled=self.reminders_enabled,
+            elapsed_seconds=max(0.0, time.monotonic() - self.started),
+            citation_sources=self.citation_processor.citation_to_doc,
+            citation_mapping=self.citation_mapping,
+            gathered_documents=self.gathered_documents,
+            chat_files=[SavedChatFile.capture(file) for file in self.chat_files],
+            has_called_search_tool=self.has_called_search_tool,
+            ran_image_gen=self.ran_image_gen,
+            search_tools=capture_search_state(self.application_tools),
+        ).model_copy(deep=True)
+
+    def restore_state(self, state: BaseModel) -> None:
+        if not isinstance(state, ChatFeatureState):
+            raise ValueError("Chat restoration requires ChatFeatureState")
+        saved = state.model_copy(deep=True)
+        if (
+            saved.persona != self.persona
+            or saved.context_files != SavedContextFiles.capture(self.context_files)
+            or saved.file_metadata != self.file_metadata
+            or saved.memory != self.memory
+            or saved.reasoning_effort != self.reasoning_effort
+            or saved.include_citations != self.include_citations
+            or saved.inject_memories != self.inject_memories
+            or saved.forced_tool_id != self.forced_tool_id
+            or saved.base_prompt != self.base_system_prompt
+            or saved.custom_prompt != self.custom_agent_prompt
+            or saved.reminders_enabled != self.reminders_enabled
+        ):
+            raise ValueError("Chat restoration configuration does not match")
+        restore_search_state(self.application_tools, saved.search_tools)
+        self.started = time.monotonic() - saved.elapsed_seconds
+        self.citation_processor.citation_to_doc = saved.citation_sources
+        self.citation_mapping = saved.citation_mapping
+        self.gathered_documents = saved.gathered_documents
+        self.chat_files = [file.restore() for file in saved.chat_files]
+        self.has_called_search_tool = saved.has_called_search_tool
+        self.ran_image_gen = saved.ran_image_gen
+
+    def _update_tool_context(
+        self,
+        message: AssistantMessage,
+        responses: list[ToolResultMessage],
+    ) -> None:
+        """Apply accepted tool results to the next request's context policy."""
+        for response in responses:
+            data = response.details
+            if response.tool_name == SearchTool.NAME:
+                self.has_called_search_tool = True
+            if isinstance(data, SearchDocsResponse):
+                self.citation_mapping.update(data.citation_mapping)
+                self.gathered_documents.extend(data.search_docs)
+            if isinstance(data, ChatSearchResult):
+                existing = {file.filename for file in self.chat_files}
+                self.chat_files.extend(
+                    file for file in data.staged_files if file.filename not in existing
+                )
+            update_citation_processor_from_tool_result(
+                response, self.citation_processor
+            )
+        self.ran_image_gen = self.ran_image_gen or any(
+            call.name in STOPPING_TOOLS_NAMES for call in message.tool_calls
+        )
+
+    def _tool_context(self) -> ToolContext:
+        """Read feature state that advances only after a completed step."""
+        return ToolContext(
+            user_memory_context=self.memory,
+            citation_mapping=dict(self.citation_mapping),
+            next_citation_num=self.citation_processor.get_next_citation_number(),
+            skip_search_query_expansion=self.has_called_search_tool,
+            chat_files=list(self.chat_files),
+            url_snippet_map=extract_url_snippet_map(self.gathered_documents),
+            inject_memories_in_prompt=self.inject_memories,
+        )
+
+    def _prepare_step(self, state: StepInput) -> PreparedStep:
+        previous = state.previous
+        if previous is None:
+            self.started = time.monotonic()
+            self.gathered_documents = list(self.initial_citations.values())
+            assistant = None
+            for message in state.history:
+                if isinstance(message, AssistantMessage):
+                    assistant = message
+                elif isinstance(message, ToolResultMessage) and assistant is not None:
+                    self._update_tool_context(assistant, [message])
+            self.ran_image_gen = False
+        results = [
+            message
+            for message in state.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        tools = self.application_tools
+        tool_choice = ToolChoiceOptions.AUTO
+        if self.forced_tool_id is not None and state.step.index == 0:
+            tools = [tool for tool in tools if tool.id == self.forced_tool_id]
+            if not tools:
+                raise ValueError(f"Tool {self.forced_tool_id} not found")
+            tool_choice = ToolChoiceOptions.REQUIRED
+        elif state.step.is_last or self.ran_image_gen:
+            tools = []
+            tool_choice = ToolChoiceOptions.NONE
+        prompt = build_chat_prompt(
+            tools=self.application_tools,
+            persona=self.persona,
+            custom_prompt=self.custom_agent_prompt,
+            base_prompt=self.base_system_prompt,
+            files=self.context_files,
+            memory=self.memory,
+            inject_memories=self.inject_memories,
+            reminders_enabled=self.reminders_enabled,
+            results=results,
+            previous_results=previous.tool_results if previous else [],
+            is_last_step=state.step.is_last,
+            ran_image_gen=self.ran_image_gen,
+        )
+        available_tool_names = {tool.name for tool in tools}
+        return PreparedStep(
+            tools=[tool for tool in self.tools if tool.name in available_tool_names],
+            options=GenerationOptions(
+                tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
+            ),
+            output_metadata=ChatMessageMetadata(
+                sources=dict(self.citation_processor.citation_to_doc),
+                documents=list(self.gathered_documents),
+                include_citations=self.include_citations,
+                elapsed_seconds=time.monotonic() - self.started,
+            ),
+            assemble_messages=partial(
+                prepare_prompt,
+                system_prompt=prompt.system_prompt,
+                custom_agent_prompt=prompt.custom_prompt,
+                reminder_message=prompt.reminder,
+                context_files=self.context_files.model_copy(deep=True),
+                token_counter=self.token_counter,
+                all_injected_file_metadata=dict(self.file_metadata)
+                if self.file_metadata
+                else None,
+                llm_config=self.llm.config,
+                available_tool_names=available_tool_names,
+            ),
+        )
+
+    def _after_step(self, result: StepResult) -> bool:
+        self._update_tool_context(result.message, result.tool_results)
+        if not result.message.tool_calls or result.step.is_last:
+            self._validate_answer(result)
+        return bool(result.message.tool_calls) and not (
+            result.tool_results and all(item.terminate for item in result.tool_results)
+        )
+
+    def _finalize_tool(
+        self, _context: ToolCallContext, result: ToolResult
+    ) -> ToolResult:
+        if isinstance(result.details, SearchDocsResponse):
+            search = result.details
+            result.details = ChatSearchResult(
+                queries=search.queries,
+                sources=search.sources,
+                time_filter_start=search.time_filter_start,
+                time_filter_end=search.time_filter_end,
+                search_docs=search.search_docs,
+                citation_mapping=search.citation_mapping,
+                displayed_docs=search.displayed_docs,
+                staged_files=build_python_chat_files_from_search_docs(
+                    search.search_docs
+                ),
+            )
+        return result
+
+    def _validate_answer(self, result: StepResult) -> None:
+        if not result.message.text and not result.message.tool_calls:
+            raise _build_empty_llm_response_error(
+                llm=self.llm,
+                message=result.message,
+                tool_choice=(
+                    ToolChoiceOptions.REQUIRED
+                    if isinstance(result.options.tool_choice, NamedToolChoice)
+                    else result.options.tool_choice
+                ),
+            )
+        if not result.message.text:
+            raise RuntimeError(
+                "The model did not return a final answer after tool execution."
+            )
+        return None

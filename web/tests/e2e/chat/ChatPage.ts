@@ -40,8 +40,8 @@ export class ChatPage {
     return this.aiMessages.nth(index);
   }
 
-  async goto(): Promise<void> {
-    await this.page.goto("/app");
+  async goto(sessionId?: string): Promise<void> {
+    await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
     await this.page.waitForLoadState("networkidle");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
   }
@@ -80,6 +80,104 @@ export class ChatPage {
   // ---------------------------------------------------------------------------
   // Message assertions
   // ---------------------------------------------------------------------------
+
+  async expectAnswerParagraph(text: string): Promise<void> {
+    await expect(
+      this.scrollContainer.getByText(text, { exact: true })
+    ).toHaveCount(1);
+  }
+
+  async expectAnswerHeading(text: string): Promise<void> {
+    await expect(
+      this.scrollContainer.getByRole("heading", { name: text, exact: true })
+    ).toHaveCount(1);
+  }
+
+  async expectAnswerTable(headers: string[], rows: number): Promise<void> {
+    const table = this.aiMessage().getByRole("table");
+    await expect(table.getByRole("columnheader")).toHaveText(headers);
+    await expect(table.getByRole("row")).toHaveCount(rows);
+  }
+
+  async expectAnswerListItem(text: string): Promise<void> {
+    await expect(
+      this.aiMessage().getByRole("listitem").filter({ hasText: text })
+    ).toHaveCount(1);
+  }
+
+  async expectCopyButton(): Promise<void> {
+    await expect(
+      this.aiMessage().getByTestId("AgentMessage/copy-button")
+    ).toBeVisible();
+  }
+
+  async expectAnswerCode(text: string): Promise<void> {
+    await expect(this.aiMessage().getByRole("code")).toContainText(text);
+  }
+
+  async expectAnswerAbsent(text: string): Promise<void> {
+    await expect(this.scrollContainer).not.toContainText(text);
+  }
+
+  async expectCompleteAnswers(count: number): Promise<void> {
+    await expect(this.aiMessages).toHaveCount(count);
+    await expect(this.inputBar.sendButton).toBeDisabled();
+  }
+
+  async expectCustomToolResult(name: string, json: string): Promise<void> {
+    await this.page
+      .getByRole("button", { name: "Expand timeline", exact: true })
+      .click();
+    const status = this.scrollContainer.getByText(`${name} completed`, {
+      exact: true,
+    });
+    await expect(status).toBeVisible();
+    await status.click();
+    await expect(
+      this.scrollContainer.getByRole("code").filter({ hasText: json })
+    ).toBeVisible();
+  }
+
+  async startIncognito(): Promise<void> {
+    await this.page
+      .getByRole("button", { name: "Start incognito chat" })
+      .click();
+    await expect(this.page.getByTestId("incognito-intro")).toBeVisible();
+  }
+
+  async expectIncognito(): Promise<void> {
+    await expect(this.page.getByTestId("incognito-chat-pill")).toBeVisible();
+    await expect(
+      this.page.getByRole("button", { name: "share-chat-button" })
+    ).toHaveCount(0);
+    await expect(this.page.getByTestId("AgentMessage/like-button")).toHaveCount(
+      0
+    );
+  }
+
+  async exitIncognito(): Promise<void> {
+    await this.page
+      .getByRole("button", { name: "Exit incognito chat" })
+      .click();
+    await expect(this.page.getByTestId("incognito-chat-pill")).toHaveCount(0);
+    await this.expectNoHumanMessages();
+  }
+
+  async expectNoSessionLink(sessionId: string): Promise<void> {
+    await expect(
+      this.page.locator(`a[href="/app?chatId=${sessionId}"]`)
+    ).toHaveCount(0);
+  }
+
+  async expectStopping(): Promise<void> {
+    await expect(this.inputBar.sendButton).toBeDisabled();
+    await expect(this.inputBar.sendButton).toHaveText("Stopping…");
+  }
+
+  async stop(): Promise<void> {
+    await this.inputBar.expectEmpty();
+    await this.inputBar.sendButton.click();
+  }
 
   async expectHumanMessage(text: string, index = 0): Promise<void> {
     await expect(this.humanMessage(index)).toContainText(text);

@@ -33,10 +33,11 @@ Agent. These are the traps.
 - The `Tool` table is one row per configured tool. Which of three kinds it is depends
   on which column is set: `in_code_tool_id` (a built-in), `openapi_schema` (a custom
   OpenAPI action), or `mcp_server_id` (an MCP tool).
-- `backend/onyx/tools/fake_tools/` holds neither. Those are sub-agent loops that feed
-  the LLM synthetic function schemas. They have no table row, and the outer fake-tool call does not run through
-  `tool_runner`. The research agent loop does send its child tools through
-  `tool_runner:run_tool_calls`. See [[tools-framework]].
+- `backend/onyx/coding_agent/` and `backend/onyx/deep_research/` define SDK agents.
+  Their control tools use `AgentTool` definitions without DB tool rows.
+  Shared execution lives in `backend/onyx/agents/tool_execution.py:ToolBatch`.
+  See [[tools-framework]].
+
 
 **"Turn"** means two different things.
 - Backend: one user message plus everything the assistant does before it finishes.

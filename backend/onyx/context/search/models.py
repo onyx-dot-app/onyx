@@ -1,14 +1,16 @@
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk, IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
+
+if TYPE_CHECKING:
+    from onyx.db.models import SearchSettings
 
 
 class QueryExpansions(BaseModel):
@@ -28,7 +30,7 @@ class SearchSettingsCreationRequest(IndexingSetting):
 
     @classmethod
     def from_db_model(
-        cls, search_settings: SearchSettings
+        cls, search_settings: "SearchSettings"
     ) -> "SearchSettingsCreationRequest":
         indexing_setting = IndexingSetting.from_db_model(search_settings)
         return cls(**indexing_setting.model_dump())
@@ -40,7 +42,7 @@ class SavedSearchSettings(IndexingSetting):
     use_port_flow: bool | None = None
 
     @classmethod
-    def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
+    def from_db_model(cls, search_settings: "SearchSettings") -> "SavedSearchSettings":
         return cls(
             # Indexing Setting
             model_name=search_settings.model_name,
@@ -441,6 +443,11 @@ class SearchDoc(BaseModel):
 
 
 class SearchDocsResponse(BaseModel):
+    type: Literal["search_result"] = "search_result"
+    queries: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    time_filter_start: datetime | None = None
+    time_filter_end: datetime | None = None
     search_docs: list[SearchDoc]
     # Maps the citation number to the document id
     # Since these are no longer just links on the frontend but instead document cards, mapping it to the

@@ -1,6 +1,6 @@
 from collections.abc import Callable
-from typing import Any
 
+from pydantic import BaseModel, JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
@@ -17,10 +17,10 @@ from onyx.db.llm import (
     fetch_user_group_ids,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Persona, SearchSettings, User
+from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
-from onyx.llm.models import ReasoningEffort, UserChatDefaults
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import (
@@ -36,6 +36,13 @@ from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class UserChatDefaults(BaseModel):
+    """User generation preferences used when selecting an LLM."""
+
+    temperature_default: float | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
 
 
 def _build_provider_extra_headers(
@@ -77,8 +84,8 @@ def _get_model_configuration(
 def _build_model_kwargs(
     provider: str,
     configured_max_input_tokens: int | None,
-) -> dict[str, Any]:
-    model_kwargs: dict[str, Any] = {}
+) -> dict[str, JsonValue]:
+    model_kwargs: dict[str, JsonValue] = {}
     if (
         provider == LlmProviderNames.OLLAMA_CHAT
         and configured_max_input_tokens
@@ -354,8 +361,6 @@ def llm_from_provider(
 
 
 def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
-    from onyx.db.models import ModelConfiguration
-
     with get_session_with_current_tenant() as db_session:
         mc = db_session.get(ModelConfiguration, model_configuration_id)
         if not mc:
@@ -414,9 +419,9 @@ def get_llm(
     custom_config: dict[str, str] | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
-    model_kwargs: dict[str, Any] | None = None,
+    model_kwargs: dict[str, JsonValue] | None = None,
     policy_headers: dict[str, str] | None = None,
-    policy_model_kwargs: dict[str, Any] | None = None,
+    policy_model_kwargs: dict[str, JsonValue] | None = None,
     reasoning_effort_default: ReasoningEffort | None = None,
     reasoning_effort_user_default: ReasoningEffort | None = None,
     reasoning_effort_max: ReasoningEffort | None = None,

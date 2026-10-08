@@ -10157,7 +10157,9 @@
           "speakingPlaceholder": "{appName}가 말하는 중..."
         },
         "sendButton": {
-          "processingFilesTooltip": "첨부 파일 처리가 끝나기를 기다리는 중"
+          "processingFilesTooltip": "첨부 파일 처리가 끝나기를 기다리는 중",
+          "stoppingLabel": "중지 중…",
+          "reloadLabel": "다시 확인"
         },
         "tabReadingButton": {
           "readLabel": "이 탭 읽기",
@@ -11461,6 +11463,10 @@
       "incognito": {
         "title": "시크릿 모드입니다"
       }
+    },
+    "readiness": {
+      "stopFailed": "응답을 중지하지 못했습니다. 다시 시도하세요.",
+      "checkFailed": "응답이 완료되었는지 확인하지 못했습니다. 다른 메시지를 보내기 전에 다시 확인하세요."
     }
   },
   "common": {

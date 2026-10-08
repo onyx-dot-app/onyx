@@ -112,6 +112,11 @@ whole session. Every session starts from `createInitialSessionData`
 (`useChatSessionStore.ts`), which seeds `messageTree` as an empty `Map` and `chatState`
 as `"input"`.
 
+Queued messages wait for backend readiness and `latestMessageRenderComplete`.
+The text renderer checks request ownership and the latest message before releasing
+that flag. Fast answers can finish before their first render; animation state
+alone cannot distinguish them from historical messages.
+
 ### The message tree (`services/messageTree.ts`)
 
 `MessageTreeState = Map<number, Message>`, keyed by `nodeId` (`messageTree.ts`). Each
@@ -187,6 +192,10 @@ nested object from such a line, and it can drop or mis-parse the line. See §9.
 which replays the durable buffer from `cursor` and then tails the live stream (owned by
 [[core-chat-loop]], §4.6 of that document). A 404 means nothing to resume; the caller
 falls back to the persisted session state instead of throwing.
+
+Before publishing the loaded message tree, the controller clears the active
+assistant row's placeholder text and packets. Its saved `stop` packet must not
+advance the renderer's packet cursor before replay starts.
 
 ### 4.4 Rendering: packets to components
 
@@ -449,6 +458,7 @@ cd web && bun run playwright queued_messages
 cd web && bun run playwright sidebar_chat_rename
 cd web && bun run playwright chat-search-command-menu
 cd web && bun run playwright chat_session_not_found
+cd web && bun run playwright stream_recovery
 ```
 
 Do not use `bunx` or `npx` for Playwright; they can fetch an unpinned version
@@ -497,6 +507,12 @@ hoc for a one-off check.
 ---
 
 ## 9. Footguns
+
+- **Replay replaces the reserved row's packet sequence.** The renderer tracks packet
+  positions and memoizes packet counts. Keeping a placeholder `stop` can hide the
+  replayed `message_start` when both sequences initially contain one packet.
+  `web/tests/e2e/chat/stream_recovery.spec.ts` checks that the answer prefix appears
+  after reload while the provider is still paused.
 
 - **`web/src/app/api/[...path]/route.ts` is dev-only.** It 404s outside
   `NODE_ENV=development` unless `OVERRIDE_API_PRODUCTION=true`. Do not assume `/api/...`

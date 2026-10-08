@@ -1,28 +1,198 @@
+"""Shared LLM messages, generation requests, options, and stream events."""
+
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    SerializeAsAny,
+)
 
 
-class LLMErrorInfo(BaseModel):
-    message: str
-    error_code: str
-    is_retryable: bool
+class ContentType(str, Enum):
+    TEXT = "text"
+    IMAGE_URL = "image_url"
+    THINKING = "thinking"
+    REDACTED_THINKING = "redacted_thinking"
+    TOOL_CALL = "tool_call"
 
 
-class ToolChoiceOptions(str, Enum):
-    REQUIRED = "required"
+class MessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_RESULT = "tool_result"
+    TOOL = "tool"
+
+
+class ImageDetail(str, Enum):
     AUTO = "auto"
-    NONE = "none"
+    LOW = "low"
+    HIGH = "high"
 
 
-class NamedToolChoice(BaseModel):
-    model_config = ConfigDict(frozen=True)
+# Content part structures for multimodal messages
+class TextContentPart(BaseModel):
+    type: Literal[ContentType.TEXT] = ContentType.TEXT
+    text: str
+    # Some providers (e.g. Anthropic/Gemini) support prompt caching controls on content blocks.
+    cache_control: dict[str, JsonValue] | None = None
 
+
+class ImageUrlDetail(BaseModel):
+    url: str
+    detail: ImageDetail | None = None
+
+
+class ImageContentPart(BaseModel):
+    type: Literal[ContentType.IMAGE_URL] = ContentType.IMAGE_URL
+    image_url: ImageUrlDetail
+
+
+ContentPart = TextContentPart | ImageContentPart
+
+
+# The signature is minted by the provider and must be round-tripped unmodified
+# for replay to be accepted.
+class ThinkingBlock(BaseModel):
+    type: Literal[ContentType.THINKING] = ContentType.THINKING
+    thinking: str = ""
+    signature: str | None = None
+
+
+class RedactedThinkingBlock(BaseModel):
+    type: Literal[ContentType.REDACTED_THINKING] = ContentType.REDACTED_THINKING
+    data: str
+
+
+AnyThinkingBlock = ThinkingBlock | RedactedThinkingBlock
+
+
+class Usage(BaseModel):
+    completion_tokens: int
+    prompt_tokens: int
+    total_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+
+
+class TextContent(BaseModel):
+    type: Literal[ContentType.TEXT] = ContentType.TEXT
+    text: str
+
+
+class ThinkingContent(BaseModel):
+    type: Literal[ContentType.THINKING] = ContentType.THINKING
+    text: str
+    blocks: list[AnyThinkingBlock] | None = None
+
+
+class ToolCall(BaseModel):
+    type: Literal[ContentType.TOOL_CALL] = ContentType.TOOL_CALL
+    id: str
     name: str
+    arguments: dict[str, JsonValue]
+    argument_error: str | None = None
+    raw_arguments: str | None = None
+    arguments_complete: bool = True
 
 
-ToolChoice = ToolChoiceOptions | NamedToolChoice
+AssistantContent = Annotated[
+    TextContent | ThinkingContent | ToolCall, Field(discriminator="type")
+]
+
+
+class BaseMessage(BaseModel):
+    id: str | None = None
+    # Request metadata never becomes provider content or durable transcript data.
+    metadata: SerializeAsAny[BaseModel] | None = Field(default=None, exclude=True)
+    # Marks a stable prompt prefix for provider prompt caching; never sent as content.
+    cacheable: bool = Field(default=False, exclude=True)
+    # Estimate for this prepared message; tracing must not reload image content.
+    estimated_tokens: int | None = Field(default=None, exclude=True)
+
+
+class SystemMessage(BaseMessage):
+    role: Literal[MessageRole.SYSTEM] = MessageRole.SYSTEM
+    content: str
+
+    @property
+    def text(self) -> str:
+        return self.content
+
+
+class UserMessage(BaseMessage):
+    role: Literal[MessageRole.USER] = MessageRole.USER
+    content: str | list[TextContentPart | ImageContentPart]
+
+    @property
+    def text(self) -> str:
+        return content_text(self.content)
+
+
+class AssistantMessage(BaseMessage):
+    role: Literal[MessageRole.ASSISTANT] = MessageRole.ASSISTANT
+    content: list[AssistantContent] = Field(default_factory=list)
+    stop_reason: str | None = None
+    error_message: str | None = None
+    usage: Usage | None = None
+
+    @property
+    def text(self) -> str:
+        return "".join(
+            block.text for block in self.content if isinstance(block, TextContent)
+        )
+
+    @property
+    def thinking(self) -> str:
+        return "".join(
+            block.text for block in self.content if isinstance(block, ThinkingContent)
+        )
+
+    @property
+    def thinking_blocks(self) -> list[AnyThinkingBlock] | None:
+        return [
+            block
+            for content in self.content
+            if isinstance(content, ThinkingContent)
+            for block in content.blocks or []
+        ] or None
+
+    @property
+    def tool_calls(self) -> list[ToolCall]:
+        return [block for block in self.content if isinstance(block, ToolCall)]
+
+
+class ToolResult(BaseMessage):
+    content: str
+    details: SerializeAsAny[BaseModel] | None = None
+    is_error: bool = False
+    terminate: bool = False
+
+    @property
+    def text(self) -> str:
+        return self.content
+
+
+class ToolResultMessage(ToolResult):
+    role: Literal[MessageRole.TOOL_RESULT] = MessageRole.TOOL_RESULT
+    tool_call_id: str
+    tool_name: str
+
+
+Message = Annotated[
+    SystemMessage | UserMessage | AssistantMessage | ToolResultMessage,
+    Field(discriminator="role"),
+]
+
+
+def content_text(content: str | list[TextContentPart | ImageContentPart]) -> str:
+    if isinstance(content, str):
+        return content
+    return "".join(part.text for part in content if isinstance(part, TextContentPart))
 
 
 class ReasoningEffort(str, Enum):
@@ -82,14 +252,6 @@ def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> b
     return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
 
 
-class UserChatDefaults(BaseModel):
-    """A user's own chat defaults, resolved below any admin per-model
-    setting. See resolve_reasoning_effort for the reasoning chain."""
-
-    temperature_default: float | None = None
-    reasoning_effort_default: ReasoningEffort | None = None
-
-
 def resolve_reasoning_effort(
     requested: ReasoningEffort,
     *,
@@ -122,156 +284,19 @@ def resolve_reasoning_effort(
     return effort
 
 
-# Content part structures for multimodal messages
-# The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM
-class TextContentPart(BaseModel):
-    type: Literal["text"] = "text"
-    text: str
-    # Some providers (e.g. Anthropic/Gemini) support prompt caching controls on content blocks.
-    cache_control: dict | None = None
+class ToolChoiceOptions(str, Enum):
+    REQUIRED = "required"
+    AUTO = "auto"
+    NONE = "none"
 
 
-class ImageUrlDetail(BaseModel):
-    url: str
-    detail: Literal["auto", "low", "high"] | None = None
+class NamedToolChoice(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
-
-class ImageContentPart(BaseModel):
-    type: Literal["image_url"] = "image_url"
-    image_url: ImageUrlDetail
-
-
-ContentPart = TextContentPart | ImageContentPart
-
-
-# The signature is minted by the provider and must be round-tripped unmodified
-# for replay to be accepted.
-class ThinkingBlock(BaseModel):
-    type: Literal["thinking"] = "thinking"
-    thinking: str = ""
-    signature: str | None = None
-
-
-class RedactedThinkingBlock(BaseModel):
-    type: Literal["redacted_thinking"] = "redacted_thinking"
-    data: str
-
-
-AnyThinkingBlock = ThinkingBlock | RedactedThinkingBlock
-
-
-class Usage(BaseModel):
-    completion_tokens: int
-    prompt_tokens: int
-    total_tokens: int
-    cache_creation_input_tokens: int
-    cache_read_input_tokens: int
-
-
-class TextContent(BaseModel):
-    type: Literal["text"] = "text"
-    text: str
-
-
-class ThinkingContent(BaseModel):
-    type: Literal["thinking"] = "thinking"
-    text: str
-    blocks: list[AnyThinkingBlock] | None = None
-
-
-class ToolCall(BaseModel):
-    type: Literal["tool_call"] = "tool_call"
-    id: str
     name: str
-    arguments: dict[str, JsonValue]
-    argument_error: str | None = None
-    raw_arguments: str | None = None
-    arguments_complete: bool = True
 
 
-AssistantContent = Annotated[
-    TextContent | ThinkingContent | ToolCall, Field(discriminator="type")
-]
-
-
-class BaseMessage(BaseModel):
-    # Marks a stable prompt prefix for provider prompt caching; never sent as content.
-    cacheable: bool = Field(default=False, exclude=True)
-
-
-class SystemMessage(BaseMessage):
-    role: Literal["system"] = "system"
-    content: str
-
-    @property
-    def text(self) -> str:
-        return self.content
-
-
-class UserMessage(BaseMessage):
-    role: Literal["user"] = "user"
-    content: str | list[ContentPart]
-
-    @property
-    def text(self) -> str:
-        return content_text(self.content)
-
-
-class AssistantMessage(BaseMessage):
-    role: Literal["assistant"] = "assistant"
-    content: list[AssistantContent] = Field(default_factory=list)
-    stop_reason: str | None = None
-    error_message: str | None = None
-    usage: Usage | None = None
-
-    @property
-    def text(self) -> str:
-        return "".join(
-            block.text for block in self.content if isinstance(block, TextContent)
-        )
-
-    @property
-    def thinking(self) -> str:
-        return "".join(
-            block.text for block in self.content if isinstance(block, ThinkingContent)
-        )
-
-    @property
-    def thinking_blocks(self) -> list[AnyThinkingBlock] | None:
-        return [
-            block
-            for content in self.content
-            if isinstance(content, ThinkingContent)
-            for block in content.blocks or []
-        ] or None
-
-    @property
-    def tool_calls(self) -> list[ToolCall]:
-        return [block for block in self.content if isinstance(block, ToolCall)]
-
-
-class ToolResultMessage(BaseMessage):
-    role: Literal["tool_result"] = "tool_result"
-    # Provider tool messages carry text only.
-    content: str
-    tool_call_id: str
-    tool_name: str
-
-    @property
-    def text(self) -> str:
-        return self.content
-
-
-Message = Annotated[
-    SystemMessage | UserMessage | AssistantMessage | ToolResultMessage,
-    Field(discriminator="role"),
-]
-
-
-def content_text(content: str | list[ContentPart]) -> str:
-    if isinstance(content, str):
-        return content
-    return "".join(part.text for part in content if isinstance(part, TextContentPart))
+ToolChoice = ToolChoiceOptions | NamedToolChoice
 
 
 class ToolDefinition(BaseModel):
@@ -332,7 +357,7 @@ class GenerationDoneEvent(GenerationLifecycleEvent):
 class GenerationErrorEvent(GenerationLifecycleEvent):
     type: Literal["error"] = "error"
     usage: Usage | None = None
-    stop_reason: Literal["error"] = "error"
+    stop_reason: Literal["error", "aborted"] = "error"
     error_message: str
 
 
@@ -366,6 +391,16 @@ class ToolCallDeltaEvent(GenerationToolCallEvent):
 
 class ToolCallEndEvent(GenerationToolCallEvent):
     type: Literal["tool_call_end"] = "tool_call_end"
+
+
+GenerationContentEvent = Annotated[
+    TextDeltaEvent
+    | ThinkingDeltaEvent
+    | ToolCallStartEvent
+    | ToolCallDeltaEvent
+    | ToolCallEndEvent,
+    Field(discriminator="type"),
+]
 
 
 GenerationEvent = Annotated[
@@ -426,16 +461,16 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
             if content.blocks is None:
                 content.blocks = []
             for block in event.blocks:
-                last = content.blocks[-1] if content.blocks else None
+                previous = content.blocks[-1] if content.blocks else None
                 # Providers stream one thinking block as text fragments and then
                 # its signature. Merge them so the block can be replayed.
                 if (
                     isinstance(block, ThinkingBlock)
-                    and isinstance(last, ThinkingBlock)
-                    and not last.signature
+                    and isinstance(previous, ThinkingBlock)
+                    and not previous.signature
                 ):
-                    last.thinking += block.thinking
-                    last.signature = block.signature
+                    previous.thinking += block.thinking
+                    previous.signature = block.signature
                 else:
                     content.blocks.append(block.model_copy(deep=True))
     else:

@@ -6,11 +6,12 @@ stripping, and the storage caps, all against a real Redis. Each test runs
 under a unique tenant so runs cannot collide, mirroring test_tenant_redis.py.
 """
 
+import contextvars
 import time
 from collections.abc import Callable, Generator
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
-from threading import Event
+from threading import Barrier, Event
 from typing import cast
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
@@ -18,6 +19,8 @@ from uuid import UUID, uuid4
 import pytest
 from redis.lock import Lock as RedisLock
 
+from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.models import StepRecord
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.incognito_context import (
     _PENDING_TEARDOWNS_KEY,
@@ -34,10 +37,19 @@ from onyx.chat.incognito_context import (
     save_incognito_context,
     teardown_incognito_session,
 )
-from onyx.chat.models import ChatLoadedFile, ChatMessageSimple, ToolCallSimple
+from onyx.chat.models import ResponseRecord
+from onyx.chat.prompt_formatting import PromptMetadata, prompt_metadata
 from onyx.chat.stream_buffer import _chunk_key
 from onyx.configs.constants import MessageType
-from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import ChatFileType, ChatLoadedFile
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    TextContent,
+    ToolResultMessage,
+    UserMessage,
+)
+from onyx.llm.models import ToolCall as AgentToolCall
 from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -55,17 +67,14 @@ def isolated_tenant() -> Generator[str, None, None]:
         raw.delete(*keys)
 
 
-def _message(
-    text: str, message_type: MessageType = MessageType.USER
-) -> ChatMessageSimple:
-    return ChatMessageSimple(
-        message=text, token_count=len(text), message_type=message_type
-    )
+def _message(text: str, message_type: MessageType = MessageType.USER) -> Message:
+    metadata = PromptMetadata(token_count=len(text))
+    if message_type == MessageType.ASSISTANT:
+        return AssistantMessage(content=[TextContent(text=text)], metadata=metadata)
+    return UserMessage(content=text, metadata=metadata)
 
 
-def _save(
-    chat_session_id: UUID, messages: list[ChatMessageSimple], version: int = 0
-) -> bool:
+def _save(chat_session_id: UUID, messages: list[Message], version: int = 0) -> bool:
     return save_incognito_context(
         chat_session_id, IncognitoContext(version=version, messages=messages)
     )
@@ -88,7 +97,7 @@ def test_stale_version_save_is_discarded() -> None:
 
     loaded = load_incognito_context(session_id)
     assert loaded.version == 1
-    assert loaded.messages[0].message == "turn one"
+    assert loaded.messages[0].text == "turn one"
 
 
 def test_sequential_turns_chain_versions() -> None:
@@ -100,7 +109,7 @@ def test_sequential_turns_chain_versions() -> None:
 
     second = load_incognito_context(session_id)
     assert second.version == 2
-    assert [m.message for m in second.messages] == ["one", "two"]
+    assert [m.text for m in second.messages] == ["one", "two"]
 
 
 def test_corrupt_value_degrades_and_is_overwritable() -> None:
@@ -113,7 +122,7 @@ def test_corrupt_value_degrades_and_is_overwritable() -> None:
 
     # The load/save pair recovers: expecting version 0 overwrites the garbage.
     assert _save(session_id, [_message("fresh start")], version=0)
-    assert load_incognito_context(session_id).messages[0].message == "fresh start"
+    assert load_incognito_context(session_id).messages[0].text == "fresh start"
 
 
 def test_ttl_is_set_and_slides_on_save() -> None:
@@ -158,44 +167,46 @@ def test_images_are_stripped_before_storage() -> None:
         content_text=None,
         token_count=0,
     )
-    message = ChatMessageSimple(
-        message="see attached",
-        token_count=100,
-        message_type=MessageType.USER,
-        image_files=[image],
-        image_token_count=85,
+    message = UserMessage(
+        content="see attached",
+        metadata=PromptMetadata(
+            token_count=100, image_files=[image], image_token_count=85
+        ),
     )
 
     assert _save(session_id, [message])
     (loaded,) = load_incognito_context(session_id).messages
 
-    assert loaded.image_files is None
-    assert loaded.image_token_count == 0
-    assert loaded.message == "see attached"
+    assert prompt_metadata(loaded).image_files is None
+    assert prompt_metadata(loaded).image_token_count == 0
+    assert loaded.text == "see attached"
 
 
 def test_tool_calls_round_trip() -> None:
     """Assistant tool calls and tool responses are part of history and must
     survive storage intact."""
     session_id = uuid4()
-    call = ChatMessageSimple(
-        message="",
-        token_count=12,
-        message_type=MessageType.ASSISTANT,
-        tool_calls=[
-            ToolCallSimple(
-                tool_call_id="call_1",
-                tool_name="run_search",
-                tool_arguments={"query": "churn", "limit": 5, "nested": {"a": [1]}},
-                token_count=12,
-            )
+    call = AssistantMessage(
+        content=[
+            TextContent(text=""),
+            *(
+                [
+                    AgentToolCall(
+                        id="call_1",
+                        name="run_search",
+                        arguments={"query": "churn", "limit": 5, "nested": {"a": [1]}},
+                    )
+                ]
+                or []
+            ),
         ],
+        metadata=PromptMetadata(token_count=12),
     )
-    response = ChatMessageSimple(
-        message="3 documents found",
-        token_count=4,
-        message_type=MessageType.TOOL_CALL_RESPONSE,
+    response = ToolResultMessage(
+        content="3 documents found",
         tool_call_id="call_1",
+        tool_name="",
+        metadata=PromptMetadata(token_count=4),
     )
 
     assert _save(session_id, [call, response])
@@ -212,11 +223,11 @@ def test_message_count_cap_keeps_the_newest() -> None:
     loaded = load_incognito_context(session_id).messages
 
     assert len(loaded) == 200
-    assert loaded[0].message == "m5"
-    assert loaded[-1].message == "m204"
+    assert loaded[0].text == "m5"
+    assert loaded[-1].text == "m204"
 
 
-def test_byte_cap_drops_oldest_but_keeps_an_oversized_singleton() -> None:
+def test_byte_cap_drops_oldest_and_rejects_an_oversized_singleton() -> None:
     session_id = uuid4()
     big = "x" * 600_000
     oversized = "y" * 1_200_000
@@ -224,13 +235,12 @@ def test_byte_cap_drops_oldest_but_keeps_an_oversized_singleton() -> None:
     assert _save(session_id, [_message(big), _message(big + "newer")])
     loaded = load_incognito_context(session_id).messages
     assert len(loaded) == 1
-    assert loaded[0].message.endswith("newer")
+    assert loaded[0].text.endswith("newer")
 
-    # One message alone over the cap is stored anyway: an empty save would
-    # read as session-ended on the next turn.
     singleton_session = uuid4()
-    assert _save(singleton_session, [_message(oversized)])
-    assert len(load_incognito_context(singleton_session).messages) == 1
+    with pytest.raises(ValueError, match="storage limit"):
+        _save(singleton_session, [_message(oversized)])
+    assert load_incognito_context(singleton_session).messages == []
 
 
 def test_availability_follows_the_cache_backend() -> None:
@@ -241,6 +251,291 @@ def test_availability_follows_the_cache_backend() -> None:
         assert incognito_context_available()
         mock_configs.CACHE_BACKEND = CacheBackendType.POSTGRES
         assert not incognito_context_available()
+
+
+def test_previous_context_shape_remains_readable() -> None:
+    import json
+
+    session_id = uuid4()
+    legacy = [
+        {"message": "question", "message_type": "user", "token_count": 1},
+        {
+            "message": "checking",
+            "message_type": "assistant",
+            "token_count": 2,
+            "tool_calls": [
+                {
+                    "tool_call_id": "call",
+                    "tool_name": "lookup",
+                    "tool_arguments": {"query": "value"},
+                    "token_count": 1,
+                }
+            ],
+        },
+        {
+            "message": "result",
+            "message_type": "tool_call_response",
+            "tool_call_id": "call",
+            "token_count": 1,
+        },
+    ]
+    get_redis_client().set(_context_key(session_id), "3:" + json.dumps(legacy))
+    context = load_incognito_context(session_id)
+    assert context.version == 3
+    assert [item.text for item in context.messages] == [
+        "question",
+        "checking",
+        "result",
+    ]
+    assert isinstance(context.messages[1], AssistantMessage)
+    assert context.messages[1].tool_calls[0].id == "call"
+    assert context.messages[1].tool_calls[0].arguments == {"query": "value"}
+    assert save_incognito_context(session_id, context)
+    assert load_incognito_context(session_id).messages == context.messages
+
+
+def _archive(key: str) -> dict[bytes, bytes]:
+    with get_redis_client().pipeline() as pipeline:
+        pipeline.hgetall(key)
+        return cast(dict[bytes, bytes], pipeline.execute()[0])
+
+
+def _terminal_record(
+    agent_id: str, text: str, previous_run_id: str | None = None
+) -> ResponseRecord:
+    return ResponseRecord(
+        agent_id=agent_id,
+        run_id=str(uuid4()),
+        status=RunStatus.COMPLETE,
+        previous_run_id=previous_run_id,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text=text)]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
+            )
+        ],
+    )
+
+
+def test_response_retention_keeps_root_usable_and_reports_expired_child_history() -> (
+    None
+):
+    from onyx.chat.incognito_context import (
+        append_incognito_message,
+        get_or_create_incognito_root_id,
+        load_incognito_agent_history,
+        save_incognito_response,
+    )
+
+    session_id = uuid4()
+    root_id, child_id = str(uuid4()), str(uuid4())
+    append_incognito_message(session_id, UserMessage(content="question"))
+    get_or_create_incognito_root_id(session_id, root_id)
+    first_child = _terminal_record(child_id, "child result " + "x" * 250)
+    first_child.agent_path = "/root/research"
+    first = _terminal_record(root_id, "root result " + "a" * 250)
+    first.child_runs = [first_child]
+    second_child = _terminal_record(child_id, "continued result", first_child.run_id)
+    second_child.agent_path = first_child.agent_path
+    second = _terminal_record(root_id, "next answer", first.run_id)
+    second.child_runs = [second_child]
+    with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 3000):
+        save_incognito_response(
+            session_id,
+            first,
+            {},
+            message_id=1,
+            messages=first.messages,
+        )
+        save_incognito_response(
+            session_id,
+            second,
+            {},
+            message_id=2,
+            messages=second.messages,
+        )
+        with pytest.raises(ValueError, match="expired"):
+            load_incognito_agent_history(session_id, [2, 1], child_id)
+        for message_id in range(3, 15):
+            reply = _terminal_record(root_id, f"answer {message_id}")
+            save_incognito_response(
+                session_id,
+                reply,
+                {},
+                message_id=message_id,
+                messages=reply.messages,
+            )
+        assert load_incognito_context(session_id).messages[-1].text == "answer 14"
+        client = get_redis_client()
+        context = client.get(_context_key(session_id))
+        archive = _archive(f"incognito_ctx:{session_id}:agents")
+        assert context is not None
+        assert (
+            len(context) + sum(len(key) + len(value) for key, value in archive.items())
+            <= 3000
+        )
+
+
+def test_terminal_write_rejects_oversize_without_changing_either_store() -> None:
+    from onyx.chat.incognito_context import (
+        append_incognito_message,
+        save_incognito_response,
+    )
+
+    session_id = uuid4()
+    append_incognito_message(session_id, UserMessage(content="question"))
+    client = get_redis_client()
+    before = client.get(_context_key(session_id))
+    archive_key = f"incognito_ctx:{session_id}:agents"
+    archive_before = _archive(archive_key)
+    reply = _terminal_record(str(uuid4()), "x" * 4000)
+    with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 1000):
+        with pytest.raises(ValueError, match="storage limit"):
+            save_incognito_response(
+                session_id,
+                reply,
+                {},
+                message_id=1,
+                messages=reply.messages,
+            )
+    assert client.get(_context_key(session_id)) == before
+    assert _archive(archive_key) == archive_before
+
+
+def test_concurrent_terminal_writes_preserve_root_and_child_records() -> None:
+    from onyx.chat import incognito_context
+
+    session_id = uuid4()
+    root_id = str(uuid4())
+    incognito_context.append_incognito_message(
+        session_id, UserMessage(content="question")
+    )
+    barrier = Barrier(2)
+    replies = [_terminal_record(root_id, "first"), _terminal_record(root_id, "second")]
+    for reply in replies:
+        reply.child_runs = [_terminal_record(str(uuid4()), f"child of {reply.run_id}")]
+
+    def save(index: int, reply: ResponseRecord) -> None:
+        barrier.wait(timeout=5)
+        incognito_context.save_incognito_response(
+            session_id, reply, {}, message_id=index, messages=reply.messages
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        tasks = [
+            executor.submit(contextvars.copy_context().run, save, index, reply)
+            for index, reply in enumerate(replies, 1)
+        ]
+        for task in tasks:
+            task.result(timeout=10)
+    assert {
+        message.text for message in load_incognito_context(session_id).messages
+    } == {"question", "first", "second"}
+    assert len(incognito_context._incognito_records(session_id, [2, 1])) == 2
+
+
+def test_terminal_write_waiting_on_teardown_cannot_restore_replay_state() -> None:
+    from onyx.chat import incognito_context
+
+    session_id = uuid4()
+    incognito_context.append_incognito_message(
+        session_id, UserMessage(content="question")
+    )
+    reply = _terminal_record(str(uuid4()), "answer")
+    acquire_started = Event()
+    acquire = RedisLock.acquire
+
+    def acquire_with_signal(
+        lock: RedisLock, blocking: bool = True, blocking_timeout: float | None = None
+    ) -> bool:
+        acquire_started.set()
+        return bool(acquire(lock, blocking=blocking, blocking_timeout=blocking_timeout))
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with _locked_incognito_state(session_id):
+            with patch.object(RedisLock, "acquire", acquire_with_signal):
+                future = executor.submit(
+                    copy_context().run,
+                    lambda: incognito_context.save_incognito_response(
+                        session_id, reply, {}, message_id=1, messages=reply.messages
+                    ),
+                )
+                assert acquire_started.wait(timeout=2)
+                assert not future.done()
+                # Commit teardown while the writer waits for the same session lock.
+                with get_redis_client().pipeline() as pipeline:
+                    pipeline.set(_context_key(session_id), b"tombstone")
+                    pipeline.delete(_agents_key(session_id))
+                    pipeline.execute()
+        with pytest.raises(RuntimeError, match="session ended"):
+            future.result(timeout=10)
+    assert get_redis_client().get(_context_key(session_id)) == b"tombstone"
+    assert _archive(_agents_key(session_id)) == {}
+
+
+def test_concurrent_root_registration_returns_one_identity() -> None:
+    from onyx.chat.incognito_context import get_or_create_incognito_root_id
+
+    session_id = uuid4()
+    assert _save(session_id, [_message("question")])
+    barrier = Barrier(2)
+
+    def register(proposed: str) -> str:
+        barrier.wait(timeout=5)
+        return get_or_create_incognito_root_id(session_id, proposed)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(copy_context().run, register, proposed)
+            for proposed in ("one", "two")
+        ]
+        roots = [future.result(timeout=10) for future in futures]
+    assert roots[0] == roots[1]
+    assert roots[0] in {"one", "two"}
+    assert _archive(_agents_key(session_id))[b"root_id"].decode() == roots[0]
+
+
+def test_root_replay_is_stored_once_and_conflicting_retries_are_rejected() -> None:
+    from onyx.chat.incognito_context import (
+        append_incognito_message,
+        get_or_create_incognito_root_id,
+        load_incognito_agent_metadata,
+        save_incognito_response,
+    )
+
+    session_id = uuid4()
+    root_id = str(uuid4())
+    append_incognito_message(session_id, UserMessage(content="question"))
+    get_or_create_incognito_root_id(session_id, root_id)
+    reply = _terminal_record(root_id, "accepted output " + "x" * 3000)
+    messages = reply.messages
+    with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 4096):
+        save_incognito_response(session_id, reply, {}, message_id=1, messages=messages)
+        before = get_redis_client().get(_context_key(session_id))
+        archive = _archive(f"incognito_ctx:{session_id}:agents")
+        save_incognito_response(session_id, reply, {}, message_id=1, messages=messages)
+        assert get_redis_client().get(_context_key(session_id)) == before
+        with pytest.raises(ValueError, match="different content"):
+            save_incognito_response(
+                session_id,
+                reply,
+                {},
+                message_id=1,
+                messages=[AssistantMessage(content=[TextContent(text="different")])],
+            )
+        assert get_redis_client().get(_context_key(session_id)) == before
+        assert _archive(f"incognito_ctx:{session_id}:agents") == archive
+        assert b"accepted output" not in archive[b"1"]
+        assert load_incognito_agent_metadata(session_id, [1]) == []
+        context = load_incognito_context(session_id)
+        assert context.previous_run_id == reply.run_id
+        assert [message.text for message in context.messages] == [
+            "question",
+            messages[0].text,
+        ]
+        append_incognito_message(session_id, UserMessage(content="followup"))
+        assert load_incognito_context(session_id).messages[-2].text == messages[0].text
 
 
 @pytest.mark.parametrize("operation", ["save", "teardown"])

@@ -99,6 +99,12 @@ class UserFileMetadata(BaseModel):
     token_count: int | None
 
 
+class ChatFileInput(BaseModel):
+    descriptor: FileDescriptor
+    token_count: int
+    content_pending: bool
+
+
 class InMemoryChatFile(BaseModel):
     file_id: str
     content: bytes
@@ -151,3 +157,76 @@ class InMemoryChatFile(BaseModel):
             "name": self.filename,
             "user_file_id": str(self.file_id) if self.file_id else None,
         }
+
+
+class ChatLoadedFile(InMemoryChatFile):
+    content_text: str | None
+    token_count: int
+    # True while the user-file worker is still processing the file — its
+    # canonical plaintext (e.g. including image captions) doesn't exist yet.
+    content_pending: bool = False
+
+    @classmethod
+    def lazy_loaded(
+        cls,
+        *,
+        file_id: str,
+        file_type: ChatFileType,
+        filename: str | None,
+        content_text: str | None,
+        token_count: int,
+        loader: Callable[[], bytes],
+        content_pending: bool = False,
+    ) -> "ChatLoadedFile":
+        """Keep supplied text and token counts; load bytes on first content access."""
+        inst = cls(
+            file_id=file_id,
+            content=b"",
+            file_type=file_type,
+            filename=filename,
+            content_text=content_text,
+            token_count=token_count,
+            content_pending=content_pending,
+        )
+        install_lazy_content_loader(inst, loader)
+        return inst
+
+
+class ContextFileMetadata(BaseModel):
+    """Metadata for a context-injected file to enable citation support."""
+
+    file_id: str
+    filename: str
+    file_content: str
+
+
+class FileToolMetadata(BaseModel):
+    """Lightweight metadata for exposing files to the FileReaderTool.
+
+    Used when files cannot be loaded directly into context (project too large
+    or persona-attached user_files without direct-load path). The LLM receives
+    a listing of these so it knows which files it can read via ``read_file``.
+    """
+
+    file_id: str
+    filename: str
+    approx_char_count: int
+
+    # Whether the bytes are available to tools that receive files (PythonTool).
+    # Summary-truncated attachments are listed for the LLM but never staged;
+    # listing them must not promise Python access to bytes it does not have.
+    staged_for_tools: bool = True
+
+
+class ExtractedContextFiles(BaseModel):
+    """Result of attempting to load user files (from a project or persona) into context."""
+
+    file_texts: list[str]
+    image_files: list[ChatLoadedFile]
+    use_as_search_filter: bool
+    total_token_count: int
+    # Full text and titles used to construct citations for injected files.
+    file_metadata: list[ContextFileMetadata]
+    uncapped_token_count: int | None
+    # File listings supplied to the model for retrieval through FileReaderTool.
+    file_metadata_for_tool: list[FileToolMetadata] = []

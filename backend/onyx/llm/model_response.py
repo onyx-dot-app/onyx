@@ -1,10 +1,17 @@
-from __future__ import annotations
+"""Provider responses, normalization, and application message accumulation."""
 
 from collections.abc import Generator, Iterator, Sequence
-from typing import TYPE_CHECKING, Any, List, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
+from pydantic import (
+    BaseModel,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+)
 
 from onyx.llm.models import (
     AnyThinkingBlock,
@@ -12,10 +19,9 @@ from onyx.llm.models import (
     GenerationDoneEvent,
     GenerationEvent,
     GenerationRequest,
-    RedactedThinkingBlock,
+    MessageRole,
     TextContent,
     TextDeltaEvent,
-    ThinkingBlock,
     ThinkingContent,
     ThinkingDeltaEvent,
     ToolCall,
@@ -38,30 +44,36 @@ from onyx.utils.streaming_json import appended_text, parse_partial_object
 
 logger = setup_logger()
 
+if TYPE_CHECKING:
+    from litellm.types.utils import ModelResponse as LiteLLMModelResponse
+    from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
+
 
 class ResponseFunctionCall(BaseModel):
+    """Function fields received from the provider; streaming fields may be absent."""
+
     arguments: str | None = None
     name: str | None = None
 
 
 class ChatCompletionMessageToolCall(BaseModel):
     id: str
-    type: str = "function"
+    type: Literal["function"] = "function"
     function: ResponseFunctionCall
 
 
 class ChatCompletionDeltaToolCall(BaseModel):
     id: str | None = None
     index: int = 0
-    type: str = "function"
+    type: Literal["function"] = "function"
     function: ResponseFunctionCall | None = None
 
 
 class Delta(BaseModel):
     content: str | None = None
     reasoning_content: str | None = None
-    thinking_blocks: List[AnyThinkingBlock] | None = None
-    tool_calls: List[ChatCompletionDeltaToolCall] = Field(default_factory=list)
+    thinking_blocks: list[AnyThinkingBlock] | None = None
+    tool_calls: list[ChatCompletionDeltaToolCall] = Field(default_factory=list)
 
 
 class StreamingChoice(BaseModel):
@@ -77,16 +89,12 @@ class ModelResponseStream(BaseModel):
     usage: Usage | None = None
 
 
-if TYPE_CHECKING:
-    from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
-
-
 class Message(BaseModel):
     content: str | None = None
-    role: str = "assistant"
-    tool_calls: List[ChatCompletionMessageToolCall] | None = None
+    role: Literal[MessageRole.ASSISTANT] = MessageRole.ASSISTANT
+    tool_calls: list[ChatCompletionMessageToolCall] | None = None
     reasoning_content: str | None = None
-    thinking_blocks: List[AnyThinkingBlock] | None = None
+    thinking_blocks: list[AnyThinkingBlock] | None = None
 
 
 class Choice(BaseModel):
@@ -102,103 +110,117 @@ class ModelResponse(BaseModel):
     usage: Usage | None = None
 
 
-if TYPE_CHECKING:
-    from litellm.types.utils import ModelResponse as LiteLLMModelResponse
-    from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
+class _CachedTokens(BaseModel):
+    cached_tokens: int | None = None
 
 
-def _parse_function_call(
-    function_payload: dict[str, Any] | None,
-) -> ResponseFunctionCall | None:
-    """Parse a function call payload into a ResponseFunctionCall object."""
-    if not function_payload or not isinstance(function_payload, dict):
-        return None
-    return ResponseFunctionCall(
-        arguments=function_payload.get("arguments"),
-        name=function_payload.get("name"),
+class _ProviderUsage(BaseModel):
+    completion_tokens: int | None = None
+    prompt_tokens: int | None = None
+    total_tokens: int | None = None
+    cache_creation_input_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+    prompt_tokens_details: _CachedTokens | None = None
+
+    def to_usage(self) -> Usage:
+        cached = self.cache_read_input_tokens
+        if cached is None and self.prompt_tokens_details is not None:
+            cached = self.prompt_tokens_details.cached_tokens
+        # NOTE: sometimes the usage data dictionary has these keys and the values are None
+        # hence the "or 0" instead of just using default values
+        return Usage(
+            completion_tokens=self.completion_tokens or 0,
+            prompt_tokens=self.prompt_tokens or 0,
+            total_tokens=self.total_tokens or 0,
+            cache_creation_input_tokens=self.cache_creation_input_tokens or 0,
+            cache_read_input_tokens=cached or 0,
+        )
+
+
+class _ProviderDelta(BaseModel):
+    content: str | None = None
+    reasoning_content: str | None = None
+    thinking_blocks: list[AnyThinkingBlock] | None = None
+    tool_calls: list[ChatCompletionDeltaToolCall] | None = None
+
+    def to_delta(self) -> Delta:
+        return Delta(
+            content=self.content,
+            reasoning_content=self.reasoning_content,
+            thinking_blocks=self.thinking_blocks,
+            tool_calls=self.tool_calls or [],
+        )
+
+
+class _ProviderChoice(BaseModel):
+    finish_reason: str | None = None
+    index: int = 0
+    delta: _ProviderDelta = Field(default_factory=_ProviderDelta)
+    message: Message = Field(default_factory=Message)
+
+    @field_validator("delta", "message", mode="before")
+    @classmethod
+    def normalize_payload(cls, value: object) -> object:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            return value
+        thinking_blocks = value.get("thinking_blocks")
+        if not isinstance(thinking_blocks, list) or not thinking_blocks:
+            return value
+        # Providers can return incomplete thinking blocks.
+        blocks: list[dict[str, object]] = []
+        for block in thinking_blocks:
+            if not isinstance(block, dict):
+                logger.warning(
+                    "Dropping malformed thinking block of type %s", type(block).__name__
+                )
+                continue
+            if block.get("type") == "redacted_thinking":
+                blocks.append(
+                    {"type": "redacted_thinking", "data": block.get("data") or ""}
+                )
+            else:
+                blocks.append(
+                    {
+                        "type": "thinking",
+                        "thinking": block.get("thinking") or "",
+                        "signature": block.get("signature"),
+                    }
+                )
+        return {**value, "thinking_blocks": blocks or None}
+
+
+class _ProviderResponse(BaseModel):
+    id: str | int
+    created: str | int
+    choices: list[_ProviderChoice] = Field(default_factory=list)
+    usage: _ProviderUsage | None = None
+
+
+def from_litellm_model_response_stream(
+    response: "LiteLLMModelResponseStream",
+) -> ModelResponseStream:
+    data = _ProviderResponse.model_validate(response.model_dump())
+    # OpenAI (and other providers) emit a final usage-only chunk with an empty
+    # `choices` array when stream_options.include_usage is set. Treat it as an
+    # empty-delta chunk that still carries usage rather than failing the stream.
+    choice = data.choices[0] if data.choices else _ProviderChoice()
+    return ModelResponseStream(
+        id=str(data.id),
+        created=str(data.created),
+        choice=StreamingChoice(
+            finish_reason=choice.finish_reason,
+            index=choice.index,
+            delta=choice.delta.to_delta(),
+        ),
+        usage=data.usage.to_usage() if data.usage is not None else None,
     )
 
 
-def _parse_delta_tool_calls(
-    tool_calls: list[dict[str, Any]] | None,
-) -> list[ChatCompletionDeltaToolCall]:
-    """Parse tool calls for streaming responses (delta format)."""
-    if not tool_calls:
-        return []
-
-    parsed_tool_calls: list[ChatCompletionDeltaToolCall] = [
-        ChatCompletionDeltaToolCall(
-            id=tool_call.get("id"),
-            index=tool_call.get("index", 0),
-            type=tool_call.get("type", "function"),
-            function=_parse_function_call(tool_call.get("function")),
-        )
-        for tool_call in tool_calls
-    ]
-    return parsed_tool_calls
-
-
-def _parse_thinking_blocks(
-    thinking_blocks: list[dict[str, Any]] | None,
-) -> list[AnyThinkingBlock] | None:
-    if not thinking_blocks:
-        return None
-
-    parsed: list[AnyThinkingBlock] = []
-    for block in thinking_blocks:
-        if not isinstance(block, dict):
-            logger.warning(
-                "Dropping malformed thinking block of type %s", type(block).__name__
-            )
-            continue
-        if block.get("type") == "redacted_thinking":
-            parsed.append(RedactedThinkingBlock(data=block.get("data") or ""))
-        else:
-            parsed.append(
-                ThinkingBlock(
-                    thinking=block.get("thinking") or "",
-                    signature=block.get("signature"),
-                )
-            )
-    return parsed or None
-
-
-def _parse_message_tool_calls(
-    tool_calls: list[dict[str, Any]] | None,
-) -> list[ChatCompletionMessageToolCall]:
-    """Parse tool calls for non-streaming responses (message format)."""
-    if not tool_calls:
-        return []
-
-    parsed_tool_calls: list[ChatCompletionMessageToolCall] = []
-    for tool_call in tool_calls:
-        function_call = _parse_function_call(tool_call.get("function"))
-        if not function_call:
-            continue
-
-        parsed_tool_calls.append(
-            ChatCompletionMessageToolCall(
-                id=tool_call.get("id", ""),
-                type=tool_call.get("type", "function"),
-                function=function_call,
-            )
-        )
-    return parsed_tool_calls
-
-
-def _extract_id_and_created(
-    response_data: dict[str, Any], error_prefix: str
-) -> tuple[str, str]:
-    response_id = response_data.get("id")
-    created = response_data.get("created")
-    if response_id is None or created is None:
-        raise ValueError(f"{error_prefix} must include 'id' and 'created'.")
-    return str(response_id), str(created)
-
-
-def _merge_choices_into_one(
-    response_data: dict[str, Any], error_prefix: str
-) -> dict[str, Any]:
+def from_litellm_model_response(
+    response: "LiteLLMModelResponse",
+) -> ModelResponse:
     """Collapse a response's ``choices`` into the single answer they describe.
 
     ``choices`` normally holds one entry per requested completion, and Onyx only
@@ -213,148 +235,57 @@ def _merge_choices_into_one(
     Merging is safe because Onyx never sets ``n``: more than one choice always
     means a split answer, never alternative answers.
     """
-    choices: list[dict[str, Any]] = response_data.get("choices") or []
-    if not choices:
-        raise ValueError(f"{error_prefix} must include at least one choice.")
-    if len(choices) == 1:
-        return choices[0] or {}
-
-    messages = [(choice or {}).get("message") or {} for choice in choices]
-    reasonings = [message.get("reasoning_content") for message in messages]
-    # Kept as sent, repeats included. gpt-5.4+ sometimes re-sends a message
-    # item, but a choice carries no item id, so a resend cannot be told apart
-    # from text that really repeats. The streamed path keeps resends too
-    # (litellm#41117 is open), so both transports return the same text.
-    merged_text = "".join(
-        message["content"] for message in messages if message.get("content")
-    )
-    # The bridge appends the tool-call choice after the text ones, so the last
-    # stated finish_reason is the one describing how the answer ended.
-    finish_reasons = [
-        (choice or {}).get("finish_reason")
-        for choice in choices
-        if (choice or {}).get("finish_reason")
-    ]
-
-    merged_message: dict[str, Any] = {
-        "role": next(
-            (message["role"] for message in messages if message.get("role")),
-            "assistant",
-        ),
-        "content": merged_text or None,
-        "tool_calls": [
-            tool_call
-            for message in messages
-            for tool_call in (message.get("tool_calls") or [])
+    data = _ProviderResponse.model_validate(response.model_dump())
+    if not data.choices:
+        raise ValueError("LiteLLM response must include at least one choice.")
+    choice = data.choices[0]
+    if len(data.choices) > 1:
+        # Kept as sent, repeats included. gpt-5.4+ sometimes re-sends a message
+        # item, but a choice carries no item id, so a resend cannot be told apart
+        # from text that really repeats. The streamed path keeps resends too
+        # (litellm#41117 is open), so both transports return the same text.
+        messages = [item.message for item in data.choices]
+        # The bridge appends the tool-call choice after the text ones, so the last
+        # stated finish_reason is the one describing how the answer ended.
+        finish_reasons = [
+            item.finish_reason for item in data.choices if item.finish_reason
         ]
-        or None,
-        "reasoning_content": "\n\n".join(
-            reasoning for reasoning in reasonings if reasoning
+        choice = _ProviderChoice(
+            index=0,
+            finish_reason=finish_reasons[-1] if finish_reasons else None,
+            message=Message(
+                role=messages[0].role,
+                content="".join(
+                    message.content for message in messages if message.content
+                )
+                or None,
+                reasoning_content="\n\n".join(
+                    message.reasoning_content
+                    for message in messages
+                    if message.reasoning_content
+                )
+                or None,
+                tool_calls=[
+                    call for message in messages for call in message.tool_calls or []
+                ]
+                or None,
+                thinking_blocks=[
+                    block
+                    for message in messages
+                    for block in message.thinking_blocks or []
+                ]
+                or None,
+            ),
         )
-        or None,
-        "thinking_blocks": [
-            block
-            for message in messages
-            for block in (message.get("thinking_blocks") or [])
-        ]
-        or None,
-    }
-    return {
-        "index": 0,
-        "finish_reason": finish_reasons[-1] if finish_reasons else None,
-        "message": merged_message,
-    }
-
-
-def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
-    # NOTE: sometimes the usage data dictionary has these keys and the values are None
-    # hence the "or 0" instead of just using default values
-    return Usage(
-        completion_tokens=usage_data.get("completion_tokens") or 0,
-        prompt_tokens=usage_data.get("prompt_tokens") or 0,
-        total_tokens=usage_data.get("total_tokens") or 0,
-        cache_creation_input_tokens=usage_data.get("cache_creation_input_tokens") or 0,
-        cache_read_input_tokens=usage_data.get(
-            "cache_read_input_tokens",
-            (usage_data.get("prompt_tokens_details") or {}).get("cached_tokens"),
-        )
-        or 0,
-    )
-
-
-def from_litellm_model_response_stream(
-    response: "LiteLLMModelResponseStream",
-) -> ModelResponseStream:
-    """
-    Convert a LiteLLM ModelResponseStream into the simplified Onyx representation.
-    """
-    response_data = response.model_dump()
-    response_id, created = _extract_id_and_created(
-        response_data, "LiteLLM response stream"
-    )
-
-    # OpenAI (and other providers) emit a final usage-only chunk with an empty
-    # `choices` array when stream_options.include_usage is set. Treat it as an
-    # empty-delta chunk that still carries usage rather than failing the stream.
-    choices: list[dict[str, Any]] = response_data.get("choices") or []
-    choice_data: dict[str, Any] = (choices[0] or {}) if choices else {}
-
-    delta_data: dict[str, Any] = choice_data.get("delta") or {}
-    parsed_delta = Delta(
-        content=delta_data.get("content"),
-        reasoning_content=delta_data.get("reasoning_content"),
-        thinking_blocks=_parse_thinking_blocks(delta_data.get("thinking_blocks")),
-        tool_calls=_parse_delta_tool_calls(delta_data.get("tool_calls")),
-    )
-
-    streaming_choice = StreamingChoice(
-        finish_reason=choice_data.get("finish_reason"),
-        index=choice_data.get("index", 0),
-        delta=parsed_delta,
-    )
-
-    usage_data = response_data.get("usage")
-    return ModelResponseStream(
-        id=response_id,
-        created=created,
-        choice=streaming_choice,
-        usage=(_usage_from_usage_data(usage_data) if usage_data else None),
-    )
-
-
-def from_litellm_model_response(
-    response: "LiteLLMModelResponse",
-) -> ModelResponse:
-    """
-    Convert a LiteLLM ModelResponse into the simplified Onyx representation.
-    """
-    response_data = response.model_dump()
-    response_id, created = _extract_id_and_created(response_data, "LiteLLM response")
-    choice_data = _merge_choices_into_one(response_data, "LiteLLM response")
-
-    message_data: dict[str, Any] = choice_data.get("message") or {}
-    parsed_tool_calls = _parse_message_tool_calls(message_data.get("tool_calls"))
-
-    message = Message(
-        content=message_data.get("content"),
-        role=message_data.get("role", "assistant"),
-        tool_calls=parsed_tool_calls or None,
-        reasoning_content=message_data.get("reasoning_content"),
-        thinking_blocks=_parse_thinking_blocks(message_data.get("thinking_blocks")),
-    )
-
-    choice = Choice(
-        finish_reason=choice_data.get("finish_reason"),
-        index=choice_data.get("index", 0),
-        message=message,
-    )
-
-    usage_data = response_data.get("usage")
     return ModelResponse(
-        id=response_id,
-        created=created,
-        choice=choice,
-        usage=(_usage_from_usage_data(usage_data) if usage_data else None),
+        id=str(data.id),
+        created=str(data.created),
+        choice=Choice(
+            finish_reason=choice.finish_reason,
+            index=choice.index,
+            message=choice.message,
+        ),
+        usage=data.usage.to_usage() if data.usage is not None else None,
     )
 
 
@@ -436,9 +367,6 @@ def to_assistant_message(
 ) -> AssistantMessage:
     """Convert a complete provider response without creating stream events."""
     source = response.choice.message
-    # Pydantic stores model instances passed to a constructor without copying
-    # them. Copy the usage and thinking blocks so that changes to the returned
-    # message cannot alter the provider response or its thinking signatures.
     message = AssistantMessage(
         stop_reason=response.choice.finish_reason,
         usage=response.usage.model_copy() if response.usage else None,
@@ -758,8 +686,7 @@ def recover_tool_calls(
     tools = {tool.name: tool for tool in request.tools}
     for call in calls:
         call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
-    # Keep answer text and signed thinking beside the recovered calls; strip
-    # only XML call payloads, which are not meant for the reader.
+    # Preserve signed thinking for provider replay; hide only XML call payloads.
     content: list[TextContent | ThinkingContent | ToolCall] = []
     for block in message.content:
         if isinstance(block, TextContent) and looks_like_xml_tool_call_payload(
@@ -769,7 +696,7 @@ def recover_tool_calls(
             visible_text = content_filter.process(block.text) + content_filter.flush()
             if visible_text:
                 content.append(TextContent(text=visible_text))
-        elif isinstance(block, (TextContent, ThinkingContent)):
+        else:
             content.append(block)
     content.extend(calls)
     return message.model_copy(update={"content": content})

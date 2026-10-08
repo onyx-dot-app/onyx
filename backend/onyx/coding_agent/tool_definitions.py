@@ -99,13 +99,3 @@ CODING_AGENT_THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
         "required": ["reasoning"],
     },
 )
-
-
-def get_coding_agent_tool_definitions(include_think_tool: bool) -> list[ToolDefinition]:
-    tools = [
-        BASH_TOOL_DESCRIPTION,
-        GENERATE_ANSWER_TOOL_DESCRIPTION,
-    ]
-    if include_think_tool:
-        tools.append(CODING_AGENT_THINK_TOOL_DESCRIPTION)
-    return tools

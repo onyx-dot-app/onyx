@@ -10157,7 +10157,9 @@
           "speakingPlaceholder": "{appName} está hablando..."
         },
         "sendButton": {
-          "processingFilesTooltip": "Esperando a que terminen de procesarse los archivos adjuntos"
+          "processingFilesTooltip": "Esperando a que terminen de procesarse los archivos adjuntos",
+          "stoppingLabel": "Deteniendo…",
+          "reloadLabel": "Comprobar de nuevo"
         },
         "tabReadingButton": {
           "readLabel": "Leer esta pestaña",
@@ -11461,6 +11463,10 @@
       "incognito": {
         "title": "Estás en modo incógnito"
       }
+    },
+    "readiness": {
+      "stopFailed": "No se pudo detener la respuesta. Inténtalo de nuevo.",
+      "checkFailed": "No se pudo confirmar que la respuesta haya terminado. Comprueba de nuevo antes de enviar otro mensaje."
     }
   },
   "common": {

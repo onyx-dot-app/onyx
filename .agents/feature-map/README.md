@@ -68,8 +68,8 @@ it needs.
 - **Write what is true now**, not what is planned. No changelogs, no history.
 - **Do not duplicate the code.** Describe intent, contracts, and connections.
   Line-by-line restatement goes stale in a week.
-- **Prefer symbol references over line numbers.** `chat/llm_loop.py:run_llm_loop`
-  survives edits; `llm_loop.py:412` does not.
+- **Prefer symbol references over line numbers.** `backend/onyx/chat/agent.py:ChatAgent`
+  survives line shifts; a numeric line reference does not.
 - **If you change a component, update its doc in the same PR.** A stale map is a
   liability.
 - **Every component records the commit it was last checked against**, on its

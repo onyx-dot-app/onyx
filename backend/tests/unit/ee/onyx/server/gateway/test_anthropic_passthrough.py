@@ -734,7 +734,9 @@ def _run_non_streaming_passthrough(
             ),
         ),
         patch.object(
-            anthropic_passthrough, "llm_from_provider", return_value=_anthropic_llm()
+            anthropic_passthrough,
+            "llm_from_provider",
+            return_value=_anthropic_llm(),
         ),
         patch.object(anthropic_passthrough, "llm_generation_span", span_patch),
     ):

@@ -16,6 +16,7 @@ from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
+from starlette.concurrency import run_in_threadpool
 from starlette.types import Lifespan
 
 from onyx import __version__
@@ -29,6 +30,7 @@ from onyx.auth.users import (
     verify_user_auth_secret,
 )
 from onyx.cache.interface import CacheBackendType
+from onyx.chat.execution import ActiveChatTurns
 from onyx.configs.app_configs import (
     API_SERVER_THREADPOOL_SIZE,
     APP_API_PREFIX,
@@ -448,11 +450,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA)
         start_periodic_poller(POSTGRES_DEFAULT_SCHEMA)
 
+    active_chat_turns = ActiveChatTurns()
+    app.state.active_chat_turns = active_chat_turns
     # Shutdown runs even when the app exits with an error. Each step has its
     # own try so one failure cannot skip the steps after it.
     try:
         yield
     finally:
+        try:
+            if not await run_in_threadpool(active_chat_turns.close):
+                logger.error("Chat turns did not drain before API shutdown")
+        except Exception:
+            logger.exception("Failed to drain chat turns on shutdown")
+
         # Flush buffered per-user usage before disposing the DB engines its drain
         # thread writes through.
         from onyx.tracing.setup import shutdown_tracing

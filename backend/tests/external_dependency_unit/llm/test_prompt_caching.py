@@ -191,13 +191,13 @@ def test_openai_prompt_caching_reduces_costs(
 
         # Split into cacheable prefix (the long context) and suffix (the question)
         cacheable_prefix: list[ChatCompletionMessage] = [
-            UserMessage(role="user", content=long_context)
+            UserMessage(content=long_context)
         ]
 
         # First call - creates cache
         print("\n=== First call (cache creation) ===")
         question1: list[ChatCompletionMessage] = [
-            UserMessage(role="user", content="What are the main topics discussed?")
+            UserMessage(content="What are the main topics discussed?")
         ]
 
         # Apply prompt caching (for OpenAI, this is mostly a no-op but should still work)
@@ -230,7 +230,7 @@ def test_openai_prompt_caching_reduces_costs(
         # Second call with same context - should use cache
         print("\n=== Second call (cache read) ===")
         question2: list[ChatCompletionMessage] = [
-            UserMessage(role="user", content="Can you elaborate on neural networks?")
+            UserMessage(content="Can you elaborate on neural networks?")
         ]
 
         # Apply prompt caching (same cacheable prefix)
@@ -317,9 +317,7 @@ def test_anthropic_prompt_caching_reduces_costs(
         )
     )
 
-    base_messages: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content=long_context)
-    ]
+    base_messages: list[ChatCompletionMessage] = [UserMessage(content=long_context)]
 
     unavailable_models: list[str] = []
     non_caching_models: list[str] = []
@@ -336,7 +334,6 @@ def test_anthropic_prompt_caching_reduces_costs(
         print(f"\n=== First call (cache creation) model={model_name} ===")
         question1: list[ChatCompletionMessage] = [
             UserMessage(
-                role="user",
                 content="Reply with exactly one lowercase word: topics",
             )
         ]
@@ -377,7 +374,6 @@ def test_anthropic_prompt_caching_reduces_costs(
         print(f"\n=== Second call (cache read) model={model_name} ===")
         question2: list[ChatCompletionMessage] = [
             UserMessage(
-                role="user",
                 content="Reply with exactly one lowercase word: neural",
             )
         ]
@@ -494,12 +490,12 @@ def test_google_genai_prompt_caching_reduces_costs(
             )
 
             cacheable_prefix: list[ChatCompletionMessage] = [
-                SystemMessage(role="system", content=long_context)
+                SystemMessage(content=long_context)
             ]
 
             print(f"\n=== Vertex attempt {attempt + 1} (cache creation) ===")
             question1: list[ChatCompletionMessage] = [
-                UserMessage(role="user", content="What are the main topics discussed?")
+                UserMessage(content="What are the main topics discussed?")
             ]
 
             processed_messages1, _ = process_with_prompt_cache(
@@ -535,9 +531,7 @@ def test_google_genai_prompt_caching_reduces_costs(
 
             print(f"\n=== Vertex attempt {attempt + 1} (cache read) ===")
             question2: list[ChatCompletionMessage] = [
-                UserMessage(
-                    role="user", content="Can you elaborate on neural networks?"
-                )
+                UserMessage(content="Can you elaborate on neural networks?")
             ]
 
             processed_messages2, _ = process_with_prompt_cache(
@@ -624,7 +618,6 @@ def test_prompt_caching_with_conversation_history(
 
     # Create a long system message and context
     system_message: SystemMessage = SystemMessage(
-        role="system",
         content=(
             "You are an AI assistant specialized in technology. "
             + " ".join(
@@ -644,7 +637,7 @@ def test_prompt_caching_with_conversation_history(
     print("\n=== Turn 1 ===")
     messages_turn1: list[ChatCompletionMessage] = [
         system_message,
-        UserMessage(role="user", content=long_context + "\n\nWhat is this about?"),
+        UserMessage(content=long_context + "\n\nWhat is this about?"),
     ]
 
     response1 = llm.invoke_raw(prompt=messages_turn1)
@@ -663,10 +656,8 @@ def test_prompt_caching_with_conversation_history(
     # Turn 2 - add assistant response and new user message
     print("\n=== Turn 2 (with cached history) ===")
     messages_turn2: list[ChatCompletionMessage] = messages_turn1 + [
-        AssistantMessage(
-            role="assistant", content="This document discusses various topics."
-        ),
-        UserMessage(role="user", content="Tell me about the first topic."),
+        AssistantMessage(content="This document discusses various topics."),
+        UserMessage(content="Tell me about the first topic."),
     ]
 
     response2 = llm.invoke_raw(prompt=messages_turn2)
@@ -682,8 +673,8 @@ def test_prompt_caching_with_conversation_history(
     # Turn 3 - continue conversation
     print("\n=== Turn 3 (with even more cached history) ===")
     messages_turn3: list[ChatCompletionMessage] = messages_turn2 + [
-        AssistantMessage(role="assistant", content="The first topic covers..."),
-        UserMessage(role="user", content="What about the second topic?"),
+        AssistantMessage(content="The first topic covers..."),
+        UserMessage(content="What about the second topic?"),
     ]
 
     response3 = llm.invoke_raw(prompt=messages_turn3)
@@ -745,7 +736,7 @@ def test_no_caching_without_process_with_prompt_cache(
     # First call - no explicit caching
     print("\n=== First call (no explicit caching) ===")
     messages1: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content=long_context + "\n\nSummarize this.")
+        UserMessage(content=long_context + "\n\nSummarize this.")
     ]
 
     response1 = llm.invoke_raw(prompt=messages1)

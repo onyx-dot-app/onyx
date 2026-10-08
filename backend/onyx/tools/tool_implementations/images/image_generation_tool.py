@@ -1,13 +1,15 @@
+import contextvars
 import json
-import threading
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Any, cast
 from uuid import UUID
 
 import requests
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation
 from onyx.configs.app_configs import IMAGE_MODEL_NAME, IMAGE_MODEL_PROVIDER
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.utils import (
@@ -26,35 +28,32 @@ from onyx.image_gen.interfaces import (
     ImageShape,
     ReferenceImage,
 )
-from onyx.llm.models import ToolDefinition
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    GeneratedImage,
-    ImageGenerationFinal,
-    ImageGenerationToolHeartbeat,
-    ImageGenerationToolStart,
-    Packet,
-)
-from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException, ToolExecutionException, ToolResponse
+from onyx.llm.cancellation import AgentCancelled
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import Tool, ToolContext, parse_tool_arguments
+from onyx.tools.models import GeneratedImage, ToolCallException, ToolExecutionException
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
     ImageGenerationResponse,
 )
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
-# Heartbeat interval in seconds to prevent timeouts
-HEARTBEAT_INTERVAL = 5.0
+# Check cancellation while provider requests are in progress.
+CANCELLATION_POLL_INTERVAL = 5.0
 
 PROMPT_FIELD = "prompt"
 REFERENCE_IMAGE_FILE_IDS_FIELD = "reference_image_file_ids"
 
 
-class ImageGenerationTool(Tool[None]):
+class ImageGenerationArguments(BaseModel):
+    prompt: str
+    shape: ImageShape = ImageShape.SQUARE
+
+
+class ImageGenerationTool(Tool):
     NAME = "generate_image"
     DESCRIPTION = "Generate an image based on a prompt. Do not use unless the user specifically requests an image."
     DISPLAY_NAME = "Image Generation"
@@ -63,13 +62,11 @@ class ImageGenerationTool(Tool[None]):
         self,
         image_generation_credentials: ImageGenerationProviderCredentials,
         tool_id: int,
-        emitter: Emitter,
         chat_session_id: UUID,
         model: str = IMAGE_MODEL_NAME,
         provider: str = IMAGE_MODEL_PROVIDER,
         num_imgs: int = 1,
     ) -> None:
-        super().__init__(emitter=emitter)
         self.model = model
         self._chat_session_id = chat_session_id
         self.provider = provider
@@ -138,14 +135,6 @@ class ImageGenerationTool(Tool[None]):
                 },
                 "required": [PROMPT_FIELD],
             },
-        )
-
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=ImageGenerationToolStart(),
-            )
         )
 
     def _generate_image(
@@ -302,13 +291,8 @@ class ImageGenerationTool(Tool[None]):
 
         return reference_images
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: None = None,  # noqa: ARG002
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
-        if PROMPT_FIELD not in llm_kwargs:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        if PROMPT_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{PROMPT_FIELD}' parameter in generate_image tool call",
                 llm_facing_message=(
@@ -316,79 +300,50 @@ class ImageGenerationTool(Tool[None]):
                     f'the image to generate. Please provide like: {{"prompt": "a sunset over mountains"}}'
                 ),
             )
-        prompt = cast(str, llm_kwargs[PROMPT_FIELD])
-        shape = ImageShape(llm_kwargs.get("shape", ImageShape.SQUARE.value))
+        arguments = parse_tool_arguments(ImageGenerationArguments, invocation.arguments)
+        prompt = arguments.prompt
+        shape = arguments.shape
         reference_image_file_ids = self._resolve_reference_image_file_ids(
-            llm_kwargs=llm_kwargs,
+            llm_kwargs=invocation.arguments,
         )
         reference_images = self._load_reference_images(reference_image_file_ids)
 
-        # Use threading to generate images in parallel while emitting heartbeats
-        results: list[ImageGenerationResponse | None] = [None] * self.num_imgs
-        completed = threading.Event()
-        error_holder: list[Exception | None] = [None]
-
-        # TODO allow the LLM to determine number of images
-        def generate_all_images() -> None:
-            try:
-                generated_results = cast(
-                    list[ImageGenerationResponse],
-                    run_functions_tuples_in_parallel(
-                        [
-                            (
-                                self._generate_image,
-                                (
-                                    prompt,
-                                    shape,
-                                    reference_images or None,
-                                ),
-                            )
-                            for _ in range(self.num_imgs)
-                        ]
+        executor = ThreadPoolExecutor(max_workers=self.num_imgs)
+        futures: list[Future[ImageGenerationResponse]] = []
+        try:
+            futures.extend(
+                cast(
+                    Future[ImageGenerationResponse],
+                    executor.submit(
+                        contextvars.copy_context().run,
+                        self._generate_image,
+                        prompt,
+                        shape,
+                        reference_images or None,
                     ),
                 )
-                for i, result in enumerate(generated_results):
-                    results[i] = result
-            except Exception as e:
-                error_holder[0] = e
-            finally:
-                completed.set()
-
-        # Start image generation in background thread
-        generation_thread = threading.Thread(target=generate_all_images)
-        generation_thread.start()
-
-        # Emit heartbeat packets while waiting for completion
-        heartbeat_count = 0
-        while not completed.is_set():
-            # Emit a heartbeat packet to prevent timeout
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=ImageGenerationToolHeartbeat(),
-                )
+                for _ in range(self.num_imgs)
             )
-            heartbeat_count += 1
+            pending = set(futures)
+            while pending:
+                invocation.cancellation.check()
+                _, pending = wait(pending, timeout=CANCELLATION_POLL_INTERVAL)
+            image_generation_responses = [future.result() for future in futures]
+        finally:
+            # The runtime retains this tool worker until its provider jobs finish.
+            executor.shutdown(wait=True, cancel_futures=True)
+            if invocation.cancellation.cancelled:
+                for future in futures:
+                    if future.cancelled():
+                        continue
+                    error = future.exception()
+                    if error is not None and not isinstance(error, AgentCancelled):
+                        logger.error(
+                            "Image provider failed after cancellation",
+                            exc_info=(type(error), error, error.__traceback__),
+                        )
 
-            # Wait for a short time before next heartbeat
-            if completed.wait(timeout=HEARTBEAT_INTERVAL):
-                break
-
-        # Ensure thread has completed
-        generation_thread.join()
-
-        # Check for errors
-        if error_holder[0] is not None:
-            raise error_holder[0]
-
-        # Filter out None values (shouldn't happen, but safety check)
-        valid_results = [r for r in results if r is not None]
-
-        if not valid_results:
-            raise ValueError("No images were generated")
-
-        image_generation_responses = valid_results
-
+        invocation.cancellation.check()
         # Save files and create GeneratedImage objects
         file_ids = save_files(
             urls=[],
@@ -405,20 +360,11 @@ class ImageGenerationTool(Tool[None]):
             for img, file_id in zip(image_generation_responses, file_ids, strict=True)
         ]
 
-        # Emit final packet with generated images
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=ImageGenerationFinal(images=generated_images_metadata),
-            )
-        )
-
         final_image_generation_response = FinalImageGenerationResponse(
             generated_images=generated_images_metadata
         )
 
-        # Create llm_facing_response
-        llm_facing_response = json.dumps(
+        content = json.dumps(
             [
                 {
                     "file_id": img.file_id,
@@ -428,7 +374,7 @@ class ImageGenerationTool(Tool[None]):
             ]
         )
 
-        return ToolResponse(
-            rich_response=final_image_generation_response,
-            llm_facing_response=llm_facing_response,
+        return ToolResult(
+            details=final_image_generation_response,
+            content=content,
         )

@@ -59,6 +59,12 @@ Full stack including web server. Use for frontend-backend coordination.
 cd web && bun run playwright <TEST_NAME>
 ```
 
+FastAPI TestClient buffers streaming responses. Use a real HTTP connection to test
+output before completion. Browser packet fixtures test rendering, not backend persistence.
+
+Before removing duplicate tests, compare their inputs, failure cases, and assertions.
+Check expected results, not only equality between two implementation paths.
+
 ## Shared Fixtures
 
 Shared fixtures live in `backend/tests/conftest.py`. Test subdirectories can define

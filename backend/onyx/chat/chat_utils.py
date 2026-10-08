@@ -1,183 +1,60 @@
+"""Chat session policy and conversion of saved history into model input."""
+
 import json
 from collections.abc import Callable
-from typing import cast
-from uuid import UUID
+from itertools import groupby
+from typing import TypedDict
 
-from pydantic import BaseModel
+from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
+from onyx.agents.execution_records import CompactionCheckpoint, messages_for_model
+from onyx.agents.models import messages_from_steps
+from onyx.chat.files import build_file_context
 from onyx.chat.incognito import (
     incognito_allowed_for_user,
     resolve_incognito_record_mode,
 )
 from onyx.chat.incognito_context import incognito_context_available
-from onyx.chat.models import (
-    ChatHistoryResult,
-    ChatLoadedFile,
-    ChatMessageSimple,
-    FileToolMetadata,
-    ToolCallSimple,
-)
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import (
-    DEFAULT_PERSONA_ID,
-    FileOrigin,
-    MessageType,
-)
-from onyx.context.search.models import SearchDoc
-from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult
+from onyx.chat.prompt_formatting import PromptMetadata, count_message_tokens
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
     create_chat_session,
 )
-from onyx.db.enums import (
-    IncognitoRecordMode,
-    UserFileStatus,
-    record_mode_persists_content,
-)
-from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
+from onyx.db.chat_response import read_response_steps
+from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
+from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
-from onyx.db.user_file import get_user_file_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType, FileDescriptor
-from onyx.file_store.utils import plaintext_file_name_for_id, store_plaintext
+from onyx.file_store.models import (
+    ChatFileType,
+    ChatLoadedFile,
+    FileDescriptor,
+    FileToolMetadata,
+)
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    TextContent,
+    ToolResultMessage,
+    UserMessage,
+)
+from onyx.llm.models import ToolCall as AgentToolCall
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
-    NON_VISION_IMAGE_MARKER,
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
-from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.tools.models import ChatFile, ToolCallKickoff
+from onyx.server.query_and_chat.models import (
+    ChatSessionCreationRequest,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
+
 IMAGE_GENERATION_TOOL_NAME = "generate_image"
-
-
-class FileContextResult(BaseModel):
-    """Result of building a file's LLM context representation."""
-
-    message: ChatMessageSimple
-    tool_metadata: FileToolMetadata
-
-
-CONTENT_PENDING_NOTICE = (
-    "[This file is still being processed and its contents are not yet "
-    "available. Do not guess what it contains — tell the user the file is "
-    "still processing and to ask again in a moment.]"
-)
-
-CONTENT_UNAVAILABLE_NOTICE = (
-    "[No machine-readable text could be extracted from this file. It is "
-    "likely image-only (e.g. a scanned document) or in an unsupported "
-    "format. Its contents are not available to you — do not guess them. If "
-    "needed, ask the user for a text-based copy.]"
-)
-
-# Used when no token_counter is available to measure the non-vision image
-# marker; intentionally generous so budgeting stays conservative.
-_NON_VISION_MARKER_TOKEN_FALLBACK = 40
-
-
-def count_message_replay_tokens(
-    msg: ChatMessageSimple,
-    *,
-    image_files_replayed_as_markers: bool = False,
-    token_counter: Callable[[str], int] | None = None,
-) -> int:
-    if not image_files_replayed_as_markers:
-        return msg.token_count
-    # Include images whose stored cost is zero, such as project images.
-    num_images: int = sum(
-        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-    )
-    if not num_images:
-        return msg.token_count
-    sample_marker: str = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-    marker_tokens: int = (
-        token_counter(sample_marker)
-        if token_counter
-        else _NON_VISION_MARKER_TOKEN_FALLBACK
-    )
-    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
-
-
-def build_file_context(
-    tool_file_id: str,
-    filename: str,
-    file_type: ChatFileType,
-    content_text: str | None = None,
-    token_count: int = 0,
-    approx_char_count: int | None = None,
-    content_pending: bool = False,
-) -> FileContextResult:
-    """Build the LLM context representation for a single file.
-
-    Centralises how files should appear in the LLM prompt
-    — the ID that FileReaderTool accepts (``UserFile.id`` for user files).
-    """
-    if file_type.use_metadata_only():
-        # Name read_file only where it is attached (FileReaderTool.is_available),
-        # and drop the id with it: read_file is that UUID's only consumer, since
-        # the python tool addresses files by filename. Tools are constructed
-        # after this runs, so the other branch cannot know what is available and
-        # names nothing rather than promising a tool the model may not have.
-        message_text: str = (
-            f"File: {filename} (id={tool_file_id})\n"
-            "Use the read_file or python tools to access this file's contents."
-            if DISABLE_VECTOR_DB
-            else f"File: {filename}\n"
-            "This file's contents are not included here. Use your available "
-            "tools to read it. Do not guess the contents and do not search "
-            "the web for this file."
-        )
-        message = ChatMessageSimple(
-            message=message_text,
-            token_count=max(1, len(message_text) // 4),
-            message_type=MessageType.USER,
-            file_id=tool_file_id,
-        )
-    elif not (content_text or "").strip():
-        # An empty file block gives the model nothing to go on, and it tends
-        # to invent workarounds (search the web for the document, guess its
-        # contents). Say explicitly why there is no content.
-        notice = (
-            CONTENT_PENDING_NOTICE if content_pending else CONTENT_UNAVAILABLE_NOTICE
-        )
-        message_text = f"File: {filename}\n{notice}\nEnd of File"
-        message = ChatMessageSimple(
-            message=message_text,
-            token_count=max(1, len(message_text) // 4),
-            message_type=MessageType.USER,
-            file_id=tool_file_id,
-        )
-    else:
-        message_text = f"File: {filename}\n{content_text or ''}\nEnd of File"
-        message = ChatMessageSimple(
-            message=message_text,
-            token_count=token_count,
-            message_type=MessageType.USER,
-            file_id=tool_file_id,
-        )
-
-    metadata = FileToolMetadata(
-        file_id=tool_file_id,
-        filename=filename,
-        approx_char_count=(
-            approx_char_count
-            if approx_char_count is not None
-            else len(content_text or "")
-        ),
-    )
-
-    return FileContextResult(message=message, tool_metadata=metadata)
 
 
 def create_chat_session_from_request(
@@ -261,213 +138,25 @@ def create_chat_session_from_request(
     return chat_session
 
 
-def _get_or_extract_plaintext(
-    file_id: str,
-    extract_fn: Callable[[], str],
-    store_on_miss: bool = True,
-) -> str:
-    """Load cached plaintext for a file, or extract and store it.
-
-    Tries to read pre-stored plaintext from the file store.  On a miss,
-    calls extract_fn to produce the text, then stores the result so
-    future calls skip the expensive extraction.
-    """
-    file_store = get_default_file_store()
-    plaintext_key = plaintext_file_name_for_id(file_id)
-
-    # Try cached plaintext first.
-    try:
-        plaintext_io = file_store.read_file(plaintext_key, mode="b")
-        return plaintext_io.read().decode("utf-8")
-    except Exception:
-        logger.info("Cache miss for file with id=%s", file_id)
-
-    # Cache miss — extract and store.  We cache the result unconditionally
-    # (including the empty string) so that files we cannot extract text from
-    # (e.g. .zip, or any extension without a handler in extract_file_text)
-    # don't get re-fetched from object storage and re-attempted on every
-    # subsequent chat turn.  Transient extraction errors surface as raised
-    # exceptions, not empty returns, so they propagate without poisoning the
-    # cache.  Callers pass store_on_miss=False when another writer owns the
-    # canonical plaintext for this key (e.g. the user-file worker, whose
-    # result may include image captions this inline extraction can't produce).
-    content_text = extract_fn()
-    if store_on_miss:
-        store_plaintext(file_id, content_text)
-    return content_text
-
-
-@log_function_time(print_only=True)
-def load_chat_file(
-    file_descriptor: FileDescriptor, db_session: Session
-) -> ChatLoadedFile:
-    """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
-
-    Chat sessions accumulate hundreds of files over time, and a new message
-    sent in such a session previously triggered an unbounded parallel fan-out
-    of full-bytes-into-memory reads, the vast majority of which were
-    immediately discarded by chat-history truncation. We now defer the raw
-    bytes read until something downstream actually accesses ``.content`` —
-    typically only a handful of files survive truncation per turn.
-
-    ``content_text`` (used for LLM context injection) and ``token_count``
-    remain eager because they're cheap: the cached-plaintext store hit avoids
-    reading the original bytes entirely on the common path, and token_count
-    is a single DB lookup.
-    """
-    file_id = file_descriptor["id"]
-    # `FileDescriptor` is often JSON-roundtripped (e.g. JSONB / API), so `type`
-    # may arrive as a raw string value instead of a `ChatFileType`.
-    file_type = ChatFileType(file_descriptor["type"])
-    filename = file_descriptor.get("name")
-
-    # Look up the UserFile row first (when one exists) — it supplies the token
-    # count and tells us whether the user-file worker is still processing.
-    user_file_id_str = file_descriptor.get("user_file_id", "")
-    user_file: UserFile | None = None
-    if user_file_id_str:
-        try:
-            user_file = get_user_file_by_id(UUID(user_file_id_str), db_session)
-        except (ValueError, TypeError) as e:
-            logger.warning("Failed to look up user file for %s: %s", file_id, e)
-    token_count = user_file.token_count if user_file and user_file.token_count else 0
-    content_pending = user_file is not None and user_file.status in (
-        UserFileStatus.PROCESSING,
-        UserFileStatus.INDEXING,
-    )
-
-    # Extract text content if it's a text file type (not an image). The
-    # cached-plaintext path avoids reading the original bytes on the steady
-    # state; only the cache miss branch opens the binary stream.
-    content_text: str | None = None
-    if file_type.is_text_file():
-
-        def _extract() -> str:
-            # Only invoked on cache miss; bytes-read happens here, not upfront.
-            file_io = get_default_file_store().read_file(file_id, mode="b")
-            return extract_file_text(
-                file=file_io,
-                file_name=filename or "",
-                break_on_unprocessable=False,
-            )
-
-        # Use the user_file_id as cache key when available (matches what
-        # the celery indexing worker stores), otherwise fall back to the
-        # file store id (covers code-interpreter-generated files, etc.).
-        cache_key = user_file_id_str or file_id
-
-        try:
-            # While the worker is still processing, don't store the inline
-            # extraction under its key: the worker's canonical plaintext (which
-            # may include image captions) should be what later turns read.
-            content_text = _get_or_extract_plaintext(
-                cache_key, _extract, store_on_miss=not content_pending
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to retrieve content for file %s: %s",
-                file_id,
-                str(e),
-            )
-
-    def _load_content() -> bytes:
-        # Chat messages keep file references in their JSONB `files` column, but
-        # user-file deletion does not scrub those references — a file in the
-        # history may no longer exist in the file store. Since this loader runs
-        # lazily (on first `.content` access, often mid-LLM-flow), a raised
-        # exception here would kill the whole send-message request, so degrade
-        # to empty content instead. Deletion is expected and logs at warning;
-        # anything else (e.g. transient object-store failure) logs at error so
-        # outages remain distinguishable in alerting.
-        try:
-            return get_default_file_store().read_file(file_id, mode="b").read()
-        except FileRecordNotFoundError:
-            logger.warning(
-                "Chat file %s no longer exists (deleted after being referenced "
-                "in chat history); substituting empty content",
-                file_id,
-            )
-            return b""
-        except Exception:
-            logger.error(
-                "Unexpected error loading content for chat file %s; "
-                "substituting empty content",
-                file_id,
-                exc_info=True,
-            )
-            return b""
-
-    return ChatLoadedFile.lazy_loaded(
-        file_id=file_id,
-        file_type=file_type,
-        filename=filename,
-        content_text=content_text,
-        token_count=token_count,
-        loader=_load_content,
-        content_pending=content_pending,
-    )
-
-
-_MAX_PARALLEL_CHAT_FILE_LOADS = 16
-
-
-def load_all_chat_files(
-    chat_messages: list[ChatMessage],
-    db_session: Session,
-) -> list[ChatLoadedFile]:
-    # Returns lazy ChatLoadedFile instances — raw bytes are not read here.
-    # Defense-in-depth: even though per-file work is now cheap (DB lookup +
-    # optional cached-plaintext fetch), cap fan-out so no future regression
-    # can re-introduce a 500-thread storm.
-    file_descriptors_for_history: list[FileDescriptor] = []
-    for chat_message in chat_messages:
-        if chat_message.files:
-            file_descriptors_for_history.extend(chat_message.files)
-
-    files = cast(
-        list[ChatLoadedFile],
-        run_functions_tuples_in_parallel(
-            [
-                (load_chat_file, (file, db_session))
-                for file in file_descriptors_for_history
-            ],
-            max_workers=_MAX_PARALLEL_CHAT_FILE_LOADS,
-        ),
-    )
-    return files
-
-
 def convert_chat_history_basic(
     chat_history: list[ChatMessage],
     token_counter: Callable[[str], int],
     max_individual_message_tokens: int | None = None,
     max_total_tokens: int | None = None,
-) -> list[ChatMessageSimple]:
-    """Convert ChatMessage history to ChatMessageSimple format with no tool calls or files included.
-
-    Args:
-        chat_history: List of ChatMessage objects to convert
-        token_counter: Function to count tokens in a message string
-        max_individual_message_tokens: If set, messages exceeding this number of tokens are dropped.
-            If None, no messages are dropped based on individual token count.
-        max_total_tokens: If set, maximum number of tokens allowed for the entire history.
-            If None, the history is not trimmed based on total token count.
-
-    Returns:
-        List of ChatMessageSimple objects
-    """
+) -> list[Message]:
+    """Read user and assistant text, keeping the latest messages within the token budget."""
     # Defensive: treat a non-positive total budget as "no history".
     if max_total_tokens is not None and max_total_tokens <= 0:
         return []
 
     # Convert only the core USER/ASSISTANT messages; omit files and tool calls.
-    converted: list[ChatMessageSimple] = []
+    converted: list[Message] = []
     for chat_message in chat_history:
         if chat_message.message_type not in (MessageType.USER, MessageType.ASSISTANT):
             continue
 
-        message = chat_message.message or ""
-        token_count = getattr(chat_message, "token_count", None)  # ods: ignore[getattr]
+        message = chat_message.message
+        token_count = chat_message.token_count
         if token_count is None:
             token_count = token_counter(message)
 
@@ -479,11 +168,13 @@ def convert_chat_history_basic(
             continue
 
         converted.append(
-            ChatMessageSimple(
-                message=message,
-                token_count=token_count,
-                message_type=chat_message.message_type,
-                image_files=None,
+            UserMessage(
+                content=message, metadata=PromptMetadata(token_count=token_count)
+            )
+            if chat_message.message_type == MessageType.USER
+            else AssistantMessage(
+                content=[TextContent(text=message)],
+                metadata=PromptMetadata(token_count=token_count),
             )
         )
 
@@ -491,31 +182,37 @@ def convert_chat_history_basic(
         return converted
 
     # Enforce a max total budget by keeping a contiguous suffix of the conversation.
-    trimmed_reversed: list[ChatMessageSimple] = []
+    trimmed_reversed: list[Message] = []
     total_tokens = 0
     for msg in reversed(converted):
-        if total_tokens + msg.token_count > max_total_tokens:
+        if total_tokens + count_message_tokens(msg, token_counter) > max_total_tokens:
             break
         trimmed_reversed.append(msg)
-        total_tokens += msg.token_count
+        total_tokens += count_message_tokens(msg, token_counter)
 
     return list(reversed(trimmed_reversed))
 
 
+class _ImageReplay(TypedDict):
+    file_id: str
+    revised_prompt: str
+
+
 def _build_tool_call_response_history_message(
     tool_name: str,
-    generated_images: list[dict] | None,
+    generated_images: list[dict[str, JsonValue]] | None,
     tool_call_response: str | None,
 ) -> str:
     if tool_name != IMAGE_GENERATION_TOOL_NAME:
         return TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
     if generated_images:
-        llm_image_context: list[dict[str, str]] = []
+        llm_image_context: list[_ImageReplay] = []
         for image in generated_images:
             file_id = image.get("file_id")
             revised_prompt = image.get("revised_prompt")
             if not isinstance(file_id, str):
+                logger.warning("Skipping stored generated image without a file ID")
                 continue
 
             llm_image_context.append(
@@ -536,39 +233,135 @@ def _build_tool_call_response_history_message(
     return TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
+def _legacy_tool_messages(
+    message: ChatMessage,
+    tool_names: dict[int, str],
+    token_counter: Callable[[str], int],
+) -> list[Message]:
+    """Reconstruct tool steps for responses saved without response items."""
+    messages: list[Message] = []
+    calls = sorted(
+        message.tool_calls or [], key=lambda call: (call.turn_number, call.tool_id)
+    )
+    for turn_number, turn in groupby(calls, key=lambda call: call.turn_number):
+        records = list(turn)
+        tool_calls = [
+            AgentToolCall(
+                id=call.tool_call_id,
+                name=tool_names.get(call.tool_id, "unknown"),
+                arguments=call.tool_call_arguments or {},
+            )
+            for call in records
+        ]
+        messages.append(
+            AssistantMessage(
+                id=f"chat:{message.id}:step:{turn_number}",
+                content=[TextContent(text=""), *tool_calls],
+                metadata=PromptMetadata(
+                    token_count=sum(
+                        token_counter(json.dumps(call.arguments)) for call in tool_calls
+                    )
+                ),
+            )
+        )
+        for call in records:
+            text = _build_tool_call_response_history_message(
+                tool_name=tool_names.get(call.tool_id, "unknown"),
+                generated_images=call.generated_images,
+                tool_call_response=call.tool_call_response,
+            )
+            messages.append(
+                ToolResultMessage(
+                    id=f"chat:{message.id}:step:{turn_number}:result:{call.tool_call_id}",
+                    content=text,
+                    tool_call_id=call.tool_call_id,
+                    tool_name="",
+                    metadata=PromptMetadata(token_count=token_counter(text)),
+                )
+            )
+    return messages
+
+
+def capture_chat_history(
+    messages: list[ChatMessage],
+    tool_names: dict[int, str],
+    token_counter: Callable[[str], int],
+    checkpoint: CompactionCheckpoint | None = None,
+) -> list[ChatHistoryMessage]:
+    """Copy replay data while ORM relationships are available; the caller owns the session."""
+    history: list[ChatHistoryMessage] = []
+    for message in messages:
+        response_messages: list[Message] = []
+        agent_run_id = None
+        if message.message_type == MessageType.ASSISTANT:
+            if message.response_status is not None and record_mode_persists_content(
+                message.chat_session.incognito_record_mode
+            ):
+                response_messages = messages_for_model(
+                    messages_from_steps(read_response_steps(message)),
+                    copy_messages=False,
+                )
+                for response_message in response_messages:
+                    if isinstance(response_message, ToolResultMessage):
+                        response_message.metadata = PromptMetadata(
+                            omit_tool_result_content=response_message.tool_name
+                            != IMAGE_GENERATION_TOOL_NAME
+                        )
+                agent_run_id = str(message.id)
+            else:
+                response_messages = _legacy_tool_messages(
+                    message, tool_names, token_counter
+                )
+                response_messages.append(
+                    AssistantMessage(
+                        id=f"chat:{message.id}",
+                        content=[TextContent(text=message.message)],
+                        metadata=PromptMetadata(token_count=message.token_count),
+                    )
+                )
+        history.append(
+            ChatHistoryMessage(
+                id=message.id,
+                message_type=message.message_type,
+                message=message.message,
+                token_count=message.token_count,
+                files=message.files or [],
+                is_clarification=message.is_clarification,
+                response_messages=response_messages,
+                agent_run_id=agent_run_id,
+            )
+        )
+    if checkpoint is not None:
+        for message in reversed(history):
+            if message.message_type == MessageType.ASSISTANT:
+                message.checkpoint = checkpoint
+                break
+    return history
+
+
 def convert_chat_history(
-    chat_history: list[ChatMessage],
+    chat_history: list[ChatHistoryMessage],
     files: list[ChatLoadedFile],
     context_image_files: list[ChatLoadedFile],
     additional_context: str | None,
     token_counter: Callable[[str], int],
-    tool_id_to_name_map: dict[int, str],
 ) -> ChatHistoryResult:
-    """Convert ChatMessage history to ChatMessageSimple format.
-
-    For user messages: includes attached files (images attached to message, text files as separate messages)
-    For assistant messages with tool calls: creates ONE ASSISTANT message with tool_calls array,
-        followed by N TOOL_CALL_RESPONSE messages (OpenAI parallel tool calling format)
-    For assistant messages without tool calls: creates a simple ASSISTANT message
-
-    Every injected text-file message is tagged with ``file_id`` and its
-    metadata is collected in ``ChatHistoryResult.all_injected_file_metadata``.
-    After context-window truncation, callers compare surviving ``file_id`` tags
-    against this map to discover "forgotten" files and provide their metadata
-    to the FileReaderTool.
-    """
-    simple_messages: list[ChatMessageSimple] = []
+    """Load canonical assistant output and attach user files to message history."""
+    messages: list[Message] = []
     all_injected_file_metadata: dict[str, FileToolMetadata] = {}
 
     # Create a mapping of file IDs to loaded files for quick lookup
     file_map = {str(f.file_id): f for f in files}
 
     # Find the index of the last USER message
-    last_user_message_idx = None
-    for i in range(len(chat_history) - 1, -1, -1):
-        if chat_history[i].message_type == MessageType.USER:
-            last_user_message_idx = i
-            break
+    last_user_message_idx = next(
+        (
+            index
+            for index in range(len(chat_history) - 1, -1, -1)
+            if chat_history[index].message_type == MessageType.USER
+        ),
+        None,
+    )
 
     for idx, chat_message in enumerate(chat_history):
         if chat_message.message_type == MessageType.USER:
@@ -603,7 +396,8 @@ def convert_chat_history(
                     token_count=text_file.token_count,
                     content_pending=text_file.content_pending,
                 )
-                simple_messages.append(ctx.message)
+                ctx.message.id = f"chat:{chat_message.id}:file:{fd['id']}"
+                messages.append(ctx.message)
                 all_injected_file_metadata[tool_id] = ctx.tool_metadata
 
             # Sum token counts from image files (excluding project image files)
@@ -619,277 +413,48 @@ def convert_chat_history(
                     image_files.extend(context_image_files)
 
                 if additional_context:
-                    simple_messages.append(
-                        ChatMessageSimple(
-                            message=ADDITIONAL_CONTEXT_PROMPT.format(
+                    messages.append(
+                        UserMessage(
+                            id=f"chat:{chat_message.id}:context",
+                            content=ADDITIONAL_CONTEXT_PROMPT.format(
                                 additional_context=additional_context
                             ),
-                            token_count=token_counter(additional_context),
-                            message_type=MessageType.USER,
-                            image_files=None,
+                            metadata=PromptMetadata(
+                                token_count=token_counter(additional_context),
+                                image_files=None,
+                                allow_compaction_cutoff=False,
+                            ),
                         )
                     )
 
-            simple_messages.append(
-                ChatMessageSimple(
-                    message=chat_message.message,
-                    token_count=chat_message.token_count + image_token_count,
-                    message_type=MessageType.USER,
-                    image_files=image_files or None,
-                    image_token_count=image_token_count,
+            messages.append(
+                UserMessage(
+                    id=f"chat:{chat_message.id}",
+                    content=chat_message.message,
+                    metadata=PromptMetadata(
+                        token_count=chat_message.token_count + image_token_count,
+                        image_files=image_files or None,
+                        image_token_count=image_token_count,
+                    ),
                 )
             )
 
         elif chat_message.message_type == MessageType.ASSISTANT:
-            # Handle tool calls if present using OpenAI parallel tool calling format:
-            # 1. Group tool calls by turn_number
-            # 2. For each turn: ONE ASSISTANT message with tool_calls array
-            # 3. Followed by N TOOL_CALL_RESPONSE messages (one per tool call)
-            if chat_message.tool_calls:
-                # Group tool calls by turn number
-                tool_calls_by_turn: dict[int, list] = {}
-                for tool_call in chat_message.tool_calls:
-                    if tool_call.turn_number not in tool_calls_by_turn:
-                        tool_calls_by_turn[tool_call.turn_number] = []
-                    tool_calls_by_turn[tool_call.turn_number].append(tool_call)
-
-                # Sort turns and process each turn
-                for turn_number in sorted(tool_calls_by_turn.keys()):
-                    turn_tool_calls = tool_calls_by_turn[turn_number]
-                    # Sort by tool_id within the turn for consistent ordering
-                    turn_tool_calls.sort(key=lambda tc: tc.tool_id)
-
-                    # Build ToolCallSimple list for this turn
-                    tool_calls_simple: list[ToolCallSimple] = []
-                    for tool_call in turn_tool_calls:
-                        tool_name = tool_id_to_name_map.get(
-                            tool_call.tool_id, "unknown"
-                        )
-                        tool_calls_simple.append(
-                            ToolCallSimple(
-                                tool_call_id=tool_call.tool_call_id,
-                                tool_name=tool_name,
-                                tool_arguments=tool_call.tool_call_arguments or {},
-                                token_count=tool_call.tool_call_tokens,
-                            )
-                        )
-
-                    # Create ONE ASSISTANT message with all tool calls for this turn
-                    total_tool_call_tokens = sum(
-                        tc.token_count for tc in tool_calls_simple
-                    )
-                    simple_messages.append(
-                        ChatMessageSimple(
-                            message="",  # No text content when making tool calls
-                            token_count=total_tool_call_tokens,
-                            message_type=MessageType.ASSISTANT,
-                            tool_calls=tool_calls_simple,
-                            image_files=None,
-                        )
-                    )
-
-                    # Add TOOL_CALL_RESPONSE messages for each tool call in this turn
-                    for tool_call in turn_tool_calls:
-                        tool_name = tool_id_to_name_map.get(
-                            tool_call.tool_id, "unknown"
-                        )
-                        tool_response_message = (
-                            _build_tool_call_response_history_message(
-                                tool_name=tool_name,
-                                generated_images=tool_call.generated_images,
-                                tool_call_response=tool_call.tool_call_response,
-                            )
-                        )
-                        simple_messages.append(
-                            ChatMessageSimple(
-                                message=tool_response_message,
-                                token_count=token_counter(tool_response_message),
-                                message_type=MessageType.TOOL_CALL_RESPONSE,
-                                tool_call_id=tool_call.tool_call_id,
-                                image_files=None,
-                            )
-                        )
-
-            # Add the assistant message itself (the final answer)
-            simple_messages.append(
-                ChatMessageSimple(
-                    message=chat_message.message,
-                    token_count=chat_message.token_count,
-                    message_type=MessageType.ASSISTANT,
-                    image_files=None,
-                )
-            )
+            messages.extend(chat_message.response_messages)
         else:
             raise ValueError(
                 f"Invalid message type when constructing simple history: {chat_message.message_type}"
             )
 
     return ChatHistoryResult(
-        simple_messages=simple_messages,
+        messages=messages,
         all_injected_file_metadata=all_injected_file_metadata,
     )
 
 
-def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:
-    """Get the custom agent prompt from persona or project instructions. If it's replacing the base system prompt,
-    it does not count as a custom agent prompt (logic exists later also to drop it in this case).
-
-    Chat Sessions in Projects that are using a custom agent will retain the custom agent prompt.
-    Priority: persona.system_prompt (if not default Agent) > chat_session.project.instructions
-
-    # NOTE: Logic elsewhere allows saving empty strings for potentially other purposes but for constructing the prompts
-    # we never want to return an empty string for a prompt so it's translated into an explicit None.
-
-    Args:
-        persona: The Persona object
-        chat_session: The ChatSession object
-
-    Returns:
-        The prompt to use for the custom Agent part of the prompt.
-    """
-    # If using a custom Agent, always respect its prompt, even if in a Project, and even if it's an empty custom prompt.
-    if persona.id != DEFAULT_PERSONA_ID:
-        # Logic exists later also to drop it in this case but this is strictly correct anyhow.
-        if persona.replace_base_system_prompt:
-            return None
-        return persona.system_prompt or None
-
-    # If in a project and using the default Agent, respect the project instructions.
-    if chat_session.project and chat_session.project.instructions:
-        return chat_session.project.instructions
-
-    return None
-
-
 def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> bool:
-    """Check if the last assistant message in chat history was a clarification question.
-
-    This is used in the deep research flow to determine whether to skip the
-    clarification step when the user has already responded to a clarification.
-
-    Args:
-        chat_history: List of ChatMessage objects in chronological order
-
-    Returns:
-        True if the last assistant message has is_clarification=True, False otherwise
-    """
+    """Return whether the last assistant response requested clarification."""
     for message in reversed(chat_history):
         if message.message_type == MessageType.ASSISTANT:
             return message.is_clarification
     return False
-
-
-def create_tool_call_failure_messages(
-    tool_calls: list[ToolCallKickoff], token_counter: Callable[[str], int]
-) -> list[ChatMessageSimple]:
-    """Create ChatMessageSimple objects for failed tool calls.
-
-    Creates messages using OpenAI parallel tool calling format:
-    1. An ASSISTANT message with tool_calls field containing all failed tool calls
-    2. A TOOL_CALL_RESPONSE failure message for each tool call
-
-    Args:
-        tool_calls: List of ToolCallKickoff objects representing the failed tool calls
-        token_counter: Function to count tokens in a message string
-
-    Returns:
-        List containing ChatMessageSimple objects: one assistant message with all tool calls
-        followed by a failure response for each tool call
-    """
-    if not tool_calls:
-        return []
-
-    # Create ToolCallSimple for each failed tool call
-    tool_calls_simple: list[ToolCallSimple] = []
-    for tool_call in tool_calls:
-        tool_call_token_count = token_counter(tool_call.to_msg_str())
-        tool_calls_simple.append(
-            ToolCallSimple(
-                tool_call_id=tool_call.tool_call_id,
-                tool_name=tool_call.tool_name,
-                tool_arguments=tool_call.tool_args,
-                token_count=tool_call_token_count,
-            )
-        )
-
-    total_token_count = sum(tc.token_count for tc in tool_calls_simple)
-
-    # Create ONE ASSISTANT message with all tool_calls (OpenAI format)
-    assistant_msg = ChatMessageSimple(
-        message="",  # No text content when making tool calls
-        token_count=total_token_count,
-        message_type=MessageType.ASSISTANT,
-        tool_calls=tool_calls_simple,
-        image_files=None,
-    )
-
-    messages: list[ChatMessageSimple] = [assistant_msg]
-
-    messages.extend(
-        create_tool_call_failure_response(tool_call.tool_call_id)
-        for tool_call in tool_calls
-    )
-
-    return messages
-
-
-def create_tool_call_failure_response(tool_call_id: str) -> ChatMessageSimple:
-    return ChatMessageSimple(
-        message=TOOL_CALL_FAILURE_PROMPT,
-        token_count=50,  # Tiny overestimate
-        message_type=MessageType.TOOL_CALL_RESPONSE,
-        tool_call_id=tool_call_id,
-        image_files=None,
-    )
-
-
-def build_python_chat_files_from_search_docs(
-    search_docs: list[SearchDoc],
-) -> list[ChatFile]:
-    """Turn each eligible search hit into a ready-to-upload `ChatFile`.
-    The associated file needs to have been uploaded to the file store
-    by a Connector.
-    """
-    if not search_docs:
-        return []
-
-    file_store = get_default_file_store()
-
-    chat_files: list[ChatFile] = []
-    seen_file_ids: set[str] = set()
-    for doc in search_docs:
-        if not doc.file_id or doc.file_id in seen_file_ids:
-            continue
-        seen_file_ids.add(doc.file_id)
-
-        try:
-            record = file_store.read_file_record(doc.file_id)
-        except Exception as e:
-            logger.warning(
-                "file_id=%r not found in file store (%s); skipping.", doc.file_id, e
-            )
-            continue
-
-        if record.file_origin not in (
-            FileOrigin.CONNECTOR,
-            FileOrigin.CONNECTOR_FILE_UPLOAD,
-        ):
-            logger.warning(
-                "file_id=%r has origin=%r, not eligible for code-interpreter staging; skipping.",
-                doc.file_id,
-                record.file_origin,
-            )
-            continue
-
-        try:
-            content = file_store.read_file(doc.file_id, mode="b").read()
-        except Exception as e:
-            logger.warning(
-                "Failed to read bytes for file_id=%r: %s; skipping.", doc.file_id, e
-            )
-            continue
-
-        filename = sandbox_filename_for_document(doc.semantic_identifier, doc.file_id)
-        chat_files.append(ChatFile(filename=filename, content=content))
-
-    return chat_files

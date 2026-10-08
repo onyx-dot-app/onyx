@@ -292,6 +292,11 @@ propagates immediately; the stream is not restarted mid-answer.
 adds spans on its own. `invoke_raw` and `stream_raw` open no span, so a caller of those
 methods owns the span.
 
+Prompt-cache tracing reuses prepared token estimates. If a cached message has
+unestimated images, reasoning, or tool calls, `cacheable_prefix_tokens` is omitted.
+`history_msgs` counts prepared messages, including generated image-drop notices;
+main's legacy chat loop counted messages before image preparation.
+
 **This is the single most important verification signal for this component.**
 `UNTAGGED_INVOKE` / `UNTAGGED_STREAM` appearing in a tracing dashboard means a
 call site invoked an `LLM` without setting `GenerationContext.flow`. Any new call
@@ -387,7 +392,7 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 |---|---|
 | adds a new `LLMModelFlowType` value | No database migration is required (the column is a plain `VARCHAR` with no `CHECK` constraint); but you must seed or backfill an `LLMModelFlow` row for it, add a `fetch_default_*` wrapper if callers need one, and decide the fallback behavior when no row exists yet (see §9) |
 | adds a provider | `llm/well_known_providers/`, `_build_provider_extra_headers` if it needs special header handling, `PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING` if it needs a synthesized Authorization header, the admin UI catalogue, and a `/admin/llm/{provider}/available-models` endpoint if it supports live model discovery |
-| changes the streaming shape (`ModelResponseStream`, `Delta`) | every consumer in [[core-chat-loop]] (`llm_step.py`), `model_response.py:MessageAccumulator`, the gateway's `stream_bridge.py:merge_tool_call_delta`, and any code that assumes tool-call deltas arrive fully formed |
+| changes the streaming shape (`ModelResponseStream`, `Delta`) | every consumer in [[core-chat-loop]] (`backend/onyx/chat/renderer.py:MessageRenderer`), `model_response.py:MessageAccumulator`, the gateway's `stream_bridge.py:merge_tool_call_delta`, and any code that assumes tool-call deltas arrive fully formed |
 | changes default resolution (`fetch_default_model`, `_update_default_model`) | the partial unique index still holds after a migration or backfill; `get_default_llm` and every `get_default_*` wrapper still returns a model, not `None`, where callers assume one exists |
 | adds a new LLM call site | tag it with an `LLMFlow` via `llm_generation_span` or `traced_llm_call`; verify in a Braintrust/Langfuse trace that it does not show up as `UNTAGGED_INVOKE`/`UNTAGGED_STREAM` |
 | changes retry behavior in `LitellmLLM.stream_raw` | the `yielded_any` gate must still prevent post-first-chunk retries; confirm against the retryable exception tuple, which is intentionally narrow |

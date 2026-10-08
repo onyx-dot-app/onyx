@@ -9,7 +9,11 @@ import json
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-from onyx.tools.models import ChatFile, PythonToolOverrideKwargs, ToolResponse
+from onyx.agents.tools import ToolInvocation
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import ToolResult
+from onyx.tools.interface import ToolContext
+from onyx.tools.models import ChatFile
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
@@ -33,12 +37,7 @@ def _make_stream_result() -> StreamResultEvent:
 
 
 def _make_tool() -> PythonTool:
-    emitter = MagicMock()
-    return PythonTool(tool_id=1, emitter=emitter, chat_session_id=uuid4())
-
-
-def _make_override(files: list[ChatFile]) -> PythonToolOverrideKwargs:
-    return PythonToolOverrideKwargs(chat_files=files)
+    return PythonTool(tool_id=1, chat_session_id=uuid4())
 
 
 def _run_tool(
@@ -46,9 +45,8 @@ def _run_tool(
     mock_client: MagicMock,
     files: list[ChatFile],
     code: str = "print('hi')",
-) -> ToolResponse:
+) -> ToolResult:
     """Call tool.run() with a mocked CodeInterpreterClient context manager."""
-    from onyx.server.query_and_chat.placement import Placement
 
     mock_client.execute_streaming.return_value = iter([_make_stream_result()])
 
@@ -56,11 +54,18 @@ def _run_tool(
     ctx.__enter__ = MagicMock(return_value=mock_client)
     ctx.__exit__ = MagicMock(return_value=False)
 
-    placement = Placement(turn_index=0, tab_index=0)
-    override = _make_override(files)
-
     with patch(f"{TOOL_MODULE}.CodeInterpreterClient", return_value=ctx):
-        return tool.run(placement=placement, override_kwargs=override, code=code)
+        result = tool.run(
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"code": code},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(chat_files=files),
+        )
+    assert isinstance(result, ToolResult)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -100,14 +105,15 @@ def test_cached_file_id_is_staged_on_second_run() -> None:
     ctx.__enter__ = MagicMock(return_value=client)
     ctx.__exit__ = MagicMock(return_value=False)
 
-    from onyx.server.query_and_chat.placement import Placement
-
-    placement = Placement(turn_index=1, tab_index=0)
     with patch(f"{TOOL_MODULE}.CodeInterpreterClient", return_value=ctx):
         tool.run(
-            placement=placement,
-            override_kwargs=_make_override(files),
-            code="print('hi')",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"code": "print('hi')"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(chat_files=files),
         )
 
     # The second execute_streaming call should include the file
@@ -262,8 +268,8 @@ def test_upload_failure_not_cached() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _result_of(resp: ToolResponse) -> dict:
-    return json.loads(resp.llm_facing_response)
+def _result_of(resp: ToolResult) -> dict:
+    return json.loads(resp.text)
 
 
 @patch(f"{TOOL_MODULE}.CODE_INTERPRETER_MAX_STAGED_FILES", 2)

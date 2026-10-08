@@ -42,10 +42,10 @@ processed_prompt, cache_metadata = process_with_prompt_cache(
     suffix=suffix,
     continuation=False,
 )
-
-# Make the provider call with the processed prompt
-response = llm.invoke_raw(processed_prompt)
 ```
+
+`processed_prompt` contains provider messages for the raw client interface.
+Application generation uses shared messages; see [Language model client](../README.md).
 
 ### Continuation Flag
 

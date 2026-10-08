@@ -7,11 +7,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
-from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
+from onyx.db.image_generation import get_default_image_generation_config
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
@@ -91,9 +91,7 @@ class CustomToolConfig(BaseModel):
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
-    """Get image generation LLM config from the default image generation configuration."""
-    from onyx.db.image_generation import get_default_image_generation_config
-
+    """Load the default image generation provider and credentials."""
     default_config = get_default_image_generation_config(db_session)
     if (
         not default_config
@@ -155,7 +153,6 @@ def should_disable_open_url_web_fetch(
 
 def construct_tools(
     configuration: PersonaToolConfiguration,
-    emitter: Emitter,
     user: User,
     llm: LLM,
     db_session: Session | None = None,
@@ -170,7 +167,6 @@ def construct_tools(
         return _construct_tools_impl(
             configuration=configuration,
             db_session=db_session,
-            emitter=emitter,
             user=user,
             llm=llm,
             search_tool_config=search_tool_config,
@@ -184,7 +180,6 @@ def construct_tools(
 def _construct_tools_impl(
     configuration: PersonaToolConfiguration,
     db_session: Session,
-    emitter: Emitter,
     user: User,
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
@@ -212,7 +207,6 @@ def _construct_tools_impl(
     def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
         return SearchTool(
             tool_id=tool_id,
-            emitter=emitter,
             user=user,
             persona_search_info=configuration.search,
             llm=llm,
@@ -294,7 +288,6 @@ def _construct_tools_impl(
                         provider=img_generation_llm_config.model_provider,
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         chat_session_id=_require_chat_session_id(
                             custom_tool_config, ImageGenerationTool.__name__
                         ),
@@ -305,13 +298,13 @@ def _construct_tools_impl(
             elif tool_cls.__name__ == WebSearchTool.__name__:
                 try:
                     tool_dict[db_tool_model.id] = [
-                        WebSearchTool(tool_id=db_tool_model.id, emitter=emitter)
+                        WebSearchTool(tool_id=db_tool_model.id)
                     ]
                 except ValueError as e:
                     logger.error("Failed to initialize Internet Search Tool: %s", e)
                     raise ValueError(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
-                    )
+                    ) from e
 
             # Handle Open URL Tool
             elif tool_cls.__name__ == OpenURLTool.__name__:
@@ -327,7 +320,6 @@ def _construct_tools_impl(
                     tool_dict[db_tool_model.id] = [
                         OpenURLTool(
                             tool_id=db_tool_model.id,
-                            emitter=emitter,
                             document_index=document_index,
                             user=user,
                             web_fetch_disabled=open_url_web_fetch_disabled,
@@ -337,14 +329,13 @@ def _construct_tools_impl(
                     logger.error("Failed to initialize Open URL Tool: %s", e)
                     raise ValueError(
                         "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
-                    )
+                    ) from e
 
             # Handle Python/Code Interpreter Tool
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
                     PythonTool(
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         chat_session_id=_require_chat_session_id(
                             custom_tool_config, PythonTool.__name__
                         ),
@@ -356,7 +347,6 @@ def _construct_tools_impl(
                 tool_dict[db_tool_model.id] = [
                     CodingAgentTool(
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         llm=llm,
                     )
                 ]
@@ -367,30 +357,10 @@ def _construct_tools_impl(
                 tool_dict[db_tool_model.id] = [
                     FileReaderTool(
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         user_file_ids=cfg.user_file_ids,
                         chat_file_ids=cfg.chat_file_ids,
                     )
                 ]
-
-            # Handle KG Tool
-            # TODO: disabling for now because it's broken in the refactor
-            # elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
-
-            #     # skip the knowledge graph tool if KG is not enabled/exposed
-            #     kg_config = get_kg_config_settings()
-            #     if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
-            #         logger.debug("Knowledge Graph Tool is not enabled/exposed")
-            #         continue
-
-            #     if persona.name != TMP_DRALPHA_PERSONA_NAME:
-            #         # TODO: remove this after the beta period
-            #         raise ValueError(
-            #             f"The Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
-            #         )
-            #     tool_dict[db_tool_model.id] = [
-            #         KnowledgeGraphTool(tool_id=db_tool_model.id)
-            #     ]
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:
@@ -435,7 +405,6 @@ def _construct_tools_impl(
                 build_custom_tools_from_openapi_schema_and_headers(
                     tool_id=db_tool_model.id,
                     openapi_schema=db_tool_model.openapi_schema,
-                    emitter=emitter,
                     dynamic_schema_info=DynamicSchemaInfo(
                         chat_session_id=custom_tool_config.chat_session_id,
                         message_id=custom_tool_config.message_id,
@@ -489,7 +458,6 @@ def _construct_tools_impl(
                 # Create MCPTool instance for this specific tool
                 mcp_tool = MCPTool(
                     tool_id=saved_tool.id,
-                    emitter=emitter,
                     mcp_server=mcp_server,
                     tool_name=saved_tool.name,
                     tool_description=saved_tool.description or "",
@@ -533,7 +501,6 @@ def _construct_tools_impl(
             memory_tool_db_model = get_builtin_tool(db_session, MemoryTool)
             memory_tool = MemoryTool(
                 tool_id=memory_tool_db_model.id,
-                emitter=emitter,
                 llm=llm,
             )
             tool_dict[memory_tool_db_model.id] = [memory_tool]

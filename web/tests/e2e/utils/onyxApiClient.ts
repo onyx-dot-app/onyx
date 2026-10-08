@@ -1130,7 +1130,12 @@ export class OnyxApiClient {
 
   async createCustomTool(
     name: string,
-    description: string = "E2E test tool"
+    description: string = "E2E test tool",
+    endpoint: { baseUrl: string; path: string; operationId: string } = {
+      baseUrl: "https://example.com",
+      path: "/test",
+      operationId: "testOp",
+    }
   ): Promise<number> {
     const response = await this.post("/admin/tool/custom", {
       name,
@@ -1139,15 +1144,15 @@ export class OnyxApiClient {
         openapi: "3.0.0",
         info: { title: name, description: description, version: "1.0.0" },
         paths: {
-          "/test": {
+          [endpoint.path]: {
             get: {
-              operationId: "testOp",
+              operationId: endpoint.operationId,
               summary: "Test endpoint",
               responses: { "200": { description: "OK" } },
             },
           },
         },
-        servers: [{ url: "https://example.com" }],
+        servers: [{ url: endpoint.baseUrl }],
       },
       passthrough_auth: false,
     });

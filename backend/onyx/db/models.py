@@ -9,7 +9,7 @@ from fastapi_users_db_sqlalchemy import (
 )
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -51,6 +51,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
+from onyx.agents.execution_records import ExecutionStatus, RunFailure, RunStatus
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
@@ -124,10 +125,15 @@ from onyx.db.enums import (
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import (
+    AssistantMessage,
+    ReasoningEffort,
+    ToolResultMessage,
+)
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
@@ -3137,6 +3143,14 @@ class ChatSession(Base):
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
+    # The immediate parent's response that created this child session.
+    spawned_by_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    agent_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    restoration_config: Mapped[ResearchConfiguration | None] = mapped_column(
+        PydanticType(ResearchConfiguration), nullable=True
+    )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
     )
@@ -3224,14 +3238,20 @@ class ChatSession(Base):
     persona: Mapped["Persona"] = relationship("Persona")
 
 
-class ChatMessage(Base):
-    """Note, the first message in a chain has no contents, it's a workaround to allow edits
-    on the first message of a session, an empty root node basically
+class ChatResponseCheckpoint(Base):
+    """Saved execution state for resuming an intentionally paused response."""
 
-    Since every user message is followed by a LLM response, chat messages generally come in pairs.
-    Keeping them as separate messages however for future Agentification extensions
-    Fields will be largely duplicated in the pair.
-    """
+    __tablename__ = "chat_response_checkpoint"
+
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), primary_key=True
+    )
+    revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    state: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB)
+
+
+class ChatMessage(Base):
+    """Questions, complete responses, and context summaries in a conversation tree."""
 
     __tablename__ = "chat_message"
     __table_args__ = (
@@ -3243,9 +3263,37 @@ class ChatMessage(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
+    # Correlate live SDK output with its response before and after archival.
+    run_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+
+    response_status: Mapped[RunStatus | None] = mapped_column(
+        Enum(
+            RunStatus,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        ),
+        nullable=True,
+    )
+    response_failure: Mapped[RunFailure | None] = mapped_column(
+        PydanticType(RunFailure), nullable=True
+    )
+    invoking_tool_call_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    invoking_tool_call: Mapped["ToolCall | None"] = relationship(
+        "ToolCall", foreign_keys=[invoking_tool_call_id]
+    )
+    response_messages: Mapped[list["ChatResponseMessage"]] = relationship(
+        "ChatResponseMessage",
+        back_populates="response",
+        order_by="ChatResponseMessage.position",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
     # Where is this message located
     chat_session_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id", ondelete="CASCADE")
     )
 
     # Parent message pointer for the tree structure, nullable because the first message is
@@ -3275,11 +3323,11 @@ class ChatMessage(Base):
     model_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Requested reasoning effort plus the kwargs actually sent to the provider.
-    request_params: Mapped[dict[str, Any] | None] = mapped_column(
+    request_params: Mapped[dict[str, JsonValue] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
 
-    # What does this message contain
+    # Current clients and search read the formatted final answer.
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer)
@@ -3357,6 +3405,7 @@ class ChatMessage(Base):
     tool_calls: Mapped[list["ToolCall"] | None] = relationship(
         "ToolCall",
         back_populates="chat_message",
+        foreign_keys="ToolCall.parent_chat_message_id",
     )
 
     standard_answers: Mapped[list["StandardAnswer"]] = relationship(
@@ -3366,13 +3415,90 @@ class ChatMessage(Base):
     )
 
 
+class ChatResponseMessage(Base):
+    __tablename__ = "chat_response_message"
+    __table_args__ = (
+        UniqueConstraint("chat_message_id", "position"),
+        UniqueConstraint("tool_call_id"),
+        CheckConstraint("position >= 0 AND step_index >= 0"),
+        CheckConstraint(
+            "(content IS NOT NULL AND tool_call_id IS NULL AND operation_status IS NOT NULL) OR "
+            "(content IS NULL AND tool_call_id IS NOT NULL AND operation_status IS NULL AND NOT is_answer)"
+        ),
+        Index(
+            "uq_response_message_step",
+            "chat_message_id",
+            "step_index",
+            unique=True,
+            postgresql_where=text("content IS NOT NULL"),
+        ),
+        Index(
+            "uq_response_message_answer",
+            "chat_message_id",
+            unique=True,
+            postgresql_where=text("is_answer"),
+        ),
+    )
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer)
+    step_index: Mapped[int] = mapped_column(Integer)
+    content: Mapped[AssistantMessage | None] = mapped_column(
+        PydanticType(AssistantMessage, none_as_null=True), nullable=True
+    )
+    operation_status: Mapped[ExecutionStatus | None] = mapped_column(
+        Enum(
+            ExecutionStatus,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        ),
+        nullable=True,
+    )
+    is_answer: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    tool_call_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True
+    )
+    rendering: Mapped[dict[str, JsonValue] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    response: Mapped["ChatMessage"] = relationship(
+        "ChatMessage",
+        back_populates="response_messages",
+        foreign_keys=[chat_message_id],
+    )
+    tool_call: Mapped["ToolCall | None"] = relationship(
+        "ToolCall", foreign_keys=[tool_call_id], lazy="selectin"
+    )
+
+
 class ToolCall(Base):
-    """Represents a Tool Call and Tool Response"""
+    """Invocation arguments and artifacts, linked to their model-facing result."""
 
     __tablename__ = "tool_call"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
+    tool_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    argument_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_arguments: Mapped[str | None] = mapped_column(Text, nullable=True)
+    arguments_complete: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true"
+    )
+    operation_status: Mapped[ExecutionStatus | None] = mapped_column(
+        Enum(
+            ExecutionStatus,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        ),
+        nullable=True,
+    )
+    result: Mapped[ToolResultMessage | None] = mapped_column(
+        PydanticType(ToolResultMessage), nullable=True
+    )
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id", ondelete="CASCADE")
     )
@@ -3394,7 +3520,7 @@ class ToolCall(Base):
 
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
-    tool_id: Mapped[int] = mapped_column(Integer())
+    tool_id: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     # This is needed because LLMs expect the tool call and the response to have matching IDs
     # This is better than just regenerating one randomly
     tool_call_id: Mapped[str] = mapped_column(String())
@@ -3402,8 +3528,19 @@ class ToolCall(Base):
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     # For "Agents" like the Research Agent for Deep Research -
     # the argument and final report are stored as the argument and response.
-    tool_call_arguments: Mapped[dict[str, JSON_ro]] = mapped_column(postgresql.JSONB())
-    tool_call_response: Mapped[str] = mapped_column(Text)
+    tool_call_arguments: Mapped[dict[str, JsonValue]] = mapped_column(
+        postgresql.JSONB()
+    )
+    legacy_response: Mapped[str] = mapped_column("tool_call_response", Text, default="")
+
+    @property
+    def tool_call_response(self) -> str:
+        return self.result.text if self.result is not None else self.legacy_response
+
+    @tool_call_response.setter
+    def tool_call_response(self, value: str) -> None:
+        self.legacy_response = value
+
     # This just counts the number of tokens in the arg because it's all that's kept for the history
     # Only the top level tools (the ones with a parent_chat_message_id) have token counts that are counted
     # towards the session total.
@@ -3414,7 +3551,9 @@ class ToolCall(Base):
     )
 
     # Relationships
-    chat_session: Mapped[ChatSession] = relationship("ChatSession")
+    chat_session: Mapped[ChatSession] = relationship(
+        "ChatSession", foreign_keys=[chat_session_id]
+    )
 
     chat_message: Mapped["ChatMessage | None"] = relationship(
         "ChatMessage",

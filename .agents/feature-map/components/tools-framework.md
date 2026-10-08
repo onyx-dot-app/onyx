@@ -8,9 +8,9 @@
 **Domain:** core-loop
 **Edition:** CE, with EE additions in MCP credential resolution
 **Owns:**
-`backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `tool_runner.py`,
+`backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `backend/onyx/agents/tool_execution.py:ToolBatch`,
 `built_in_tools.py`, `tool_name.py`, `constants.py`, `utils.py`,
-`backend/onyx/tools/fake_tools/`, `backend/onyx/server/features/tool/api.py`,
+`backend/onyx/coding_agent/`, `backend/onyx/deep_research/`, `backend/onyx/server/features/tool/api.py`,
 `backend/onyx/db/tools.py`
 
 **Read first:** `[[core-chat-loop]]`. This component supplies the tool set that
@@ -201,49 +201,25 @@ this is the only way to turn off its live-web behavior.
 Finally, `_disambiguate_mcp_tool_names` renames any `MCPTool` whose `name` collides
 with another tool's name across MCP servers.
 
-### 4.5 Execution: `tool_runner.py:run_tool_calls`
+### 4.5 Execution: SDK tool batches
 
-Called once per LLM cycle from `[[core-chat-loop]]`'s `run_llm_loop`, given the
-tool calls the LLM just made and the constructed `Tool` instances.
+`backend/onyx/agents/tool_execution.py:ToolBatch` executes the calls from one SDK step.
+`backend/onyx/tools/interface.py:Tool.bind` adapts application tools to that interface.
 
-1. **Merge.** `_merge_tool_calls` collapses repeated calls to the same tool using
-   `MERGEABLE_TOOL_FIELDS`: `SearchTool.NAME` and `WebSearchTool.NAME` merge their
-   `queries` list; `OpenURLTool.NAME` merges its `urls` list. A merged call keeps
-   the first call's `tool_call_id` and `placement`.
-2. **Filter.** Calls naming a tool not in `tools_by_name` are dropped with a
-   warning; they do not count against `max_concurrent_tools`. `run_llm_loop` then
-   records each dropped call in history with a failure response
-   (`chat_utils.py:create_tool_call_failure_response`), so every call keeps its pair.
-3. **Cap.** If `max_concurrent_tools` is set, calls beyond the cap are dropped
-   outright (not queued for a later cycle).
-4. **Prepare overrides.** For each surviving call, `tool.emit_start(placement)`
-   fires first, then the type-specific `TOverride` is built: `SearchTool` gets
-   `original_query` (the last user message), `message_history`, memory context, and
-   `skip_query_expansion`; `WebSearchTool` and `OpenURLTool` get their own citation
-   ranges; `PythonTool` gets `chat_files`; `MemoryTool` gets user identity fields and
-   history. `SearchTool`, `WebSearchTool`, and `OpenURLTool` each consume
-   `starting_citation_num` and then advance it by 100
-   (`tool_runner.py:run_tool_calls`), so parallel citation-producing tools cannot
-   collide on citation numbers.
-5. **Run.** All prepared calls run concurrently via
-   `run_functions_tuples_in_parallel(_safe_run_single_tool, ..., allow_failures=True,
-   timeout=TOOL_EXECUTION_TIMEOUT_SECONDS)`, where
-   `TOOL_EXECUTION_TIMEOUT_SECONDS = 10 * 60`.
-6. **Per-tool wrapper.** `_safe_run_single_tool` wraps the call in a tracing
-   `function_span(tool.name)`, calls `tool.run(...)`, and converts any exception
-   into a `ToolResponse` whose `llm_facing_response` is
-   `GENERIC_TOOL_ERROR_MESSAGE.format(error=...)`:
-   - `ToolCallException`: expected (bad args, provider 4xx). Uses
-     `e.llm_facing_message`.
-   - `ToolExecutionException`: unexpected; if `e.emit_error_packet` is set, also
-     emits a `PacketException` to the stream.
-   - Bare `Exception`: unexpected, generic message, always emits a `SpanError` for
-     tracing.
-   A `SectionEnd` packet is emitted after every tool call, success or failure, so
-   the frontend always closes the tool's UI block.
-7. **Citation merge.** Results whose `rich_response` is a `SearchDocsResponse` have
-   their `citation_mapping` merged into the shared `citation_mapping` dict
-   (mutated in place and also returned).
+- Compatible calls merge through each tool's `merge_arguments` callback. Application
+  tools declare a `merge_list_argument`; search tools merge queries and OpenURL merges URLs.
+- The batch retains call indices, enforces tool execution modes, and records results.
+  `Tool.run` converts ordinary application errors into results the model can read.
+  Cancellation remains a control signal.
+- Search tools derive their citation range from `ToolContext.next_citation_num` plus
+  `CITATIONS_PER_TOOL_CALL * invocation.call_index`. The constant is 100.
+- `backend/onyx/chat/agent.py:ChatAgent` updates prompt context from completed tool results.
+- `backend/onyx/chat/renderer.py:ToolRenderer` turns tool events into browser packets,
+  including start, debug, progress, errors, and section completion.
+
+Child-agent waits can suspend the parent step. The SDK resumes it when child results
+are available; application tools do not manage browser packet placement.
+
 
 ---
 
@@ -394,17 +370,13 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   the class is in the map, and do not delete it as dead code.
 - **`BashTool` is never persisted and uses a sentinel id.** The coding agent
   constructs it directly with `BASH_TOOL_SENTINEL_ID = 0`
-  (`fake_tools/coding_agent.py`), not through `tool_constructor.py`, and it cannot
+  (`backend/onyx/coding_agent/agent.py`), not through `tool_constructor.py`, and it cannot
   be attached to a persona.
-- **`fake_tools/` are not `Tool` subclasses.** `run_coding_agent_call` and
-  `run_research_agent_call` (`fake_tools/coding_agent.py`, `fake_tools/research_agent.py`)
-  are hand-rolled sub-agent loops that hand the LLM synthetic function schemas for
-  internal control signals (`think_tool`, `generate_answer`, `generate_report`
-  defined in `onyx/deep_research/tool_definitions.py` and `onyx/coding_agent/tool_definitions.py`).
-  These signals have no DB `Tool` row, never appear in `BUILT_IN_TOOL_MAP`, and
-  never go through `run_tool_calls`; the coding agent dispatches its bash calls
-  directly via `_run_bash_call`. The directory name suggests these are real tools;
-  they are not.
+- **Control tools do not need DB tool rows.** `backend/onyx/coding_agent/agent.py:CodingAgent`
+  and `backend/onyx/deep_research/agent.py:DeepResearchAgent` use the shared SDK runtime.
+  Their internal control signals use definitions from the corresponding
+  `tool_definitions.py` modules. They are not persona-attachable built-in tools.
+
 - **Tool responses are dropped from saved chat history.** Only the tool-call
   *arguments* survive into the next turn's context; the `llm_facing_response` is
   replaced with a placeholder by `[[core-chat-loop]]`'s history construction. A

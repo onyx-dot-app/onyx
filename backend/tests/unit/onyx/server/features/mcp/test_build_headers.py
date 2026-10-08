@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
@@ -35,6 +36,29 @@ def test_build_headers_strips_denylisted_stored_headers(wrap) -> None:
     )
 
     assert creds.build_headers() == {"Authorization": "Bearer stored"}
+
+
+def test_credentials_keep_captured_headers_after_source_changes() -> None:
+    headers = {"Authorization": "Bearer accepted"}
+    config = MCPConnectionConfig(id=7, config={"headers": headers})
+    credentials = ResolvedMCPCredentials.from_connection_config(
+        connection_config=config, user_oauth_token=None
+    )
+    headers["Authorization"] = "Bearer changed"
+
+    assert credentials.connection_config_id == 7
+    assert credentials.build_headers() == {"Authorization": "Bearer accepted"}
+
+
+def test_credentials_fields_are_frozen() -> None:
+    credentials = ResolvedMCPCredentials.from_connection_config(
+        connection_config=None, user_oauth_token="accepted"
+    )
+
+    with pytest.raises(ValidationError, match="frozen"):
+        credentials.user_oauth_token = "changed"  # ty: ignore[invalid-assignment]
+
+    assert credentials.user_oauth_token == "accepted"
 
 
 def test_build_headers_pt_oauth_token_takes_precedence() -> None:

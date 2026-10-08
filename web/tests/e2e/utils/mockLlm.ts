@@ -71,6 +71,7 @@ export interface MockLlmRequestConditions {
 }
 
 export interface MockLlmReply {
+  pause_after_first_chunk?: string;
   reasoning?: string;
   text?: string;
   tool_calls?: MockLlmToolCall[];
@@ -169,4 +170,35 @@ export async function addMockLlmConversation(
     conversation,
     `add mock LLM conversation ${conversation.name}`
   );
+}
+
+/** Release a paused reply after the browser has reached the state under test. */
+export async function releaseMockLlmGate(gateId: string): Promise<void> {
+  const response = await fetch(
+    `${MOCK_LLM_SERVER_URL}/scripts/${MOCK_LLM_DEFAULT_SCRIPT_ID}/gates/${encodeURIComponent(gateId)}/release`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      `Failed to release mock LLM gate: ${response.status} ${await response.text()}`
+    );
+  }
+}
+
+interface MockLlmRecordedRequest {
+  conversation: string | null;
+  messages: { role: string; content: string; tool_call_id: string | null }[];
+}
+
+/** Read actual model inputs for one scripted conversation. */
+export async function getMockLlmConversationRequests(
+  name: string
+): Promise<MockLlmRecordedRequest[]> {
+  const response = await fetch(
+    `${MOCK_LLM_SERVER_URL}/scripts/${MOCK_LLM_DEFAULT_SCRIPT_ID}`
+  );
+  if (!response.ok)
+    throw new Error(`Failed to read mock LLM requests: ${response.status}`);
+  const state: { requests: MockLlmRecordedRequest[] } = await response.json();
+  return state.requests.filter((request) => request.conversation === name);
 }

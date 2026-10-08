@@ -1,22 +1,53 @@
+"""Build chat instructions, reminders, and prompts from conversation history."""
+
+import json
 from collections.abc import Callable, Sequence
 from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.chat.models import ChatPrompt, ChatReminderContext, PersonaPromptConfig
+from onyx.chat.prompt_formatting import (
+    PromptMetadata,
+    count_message_tokens,
+    prepare_model_messages,
+    prompt_metadata,
+)
+from onyx.context.search.models import SearchDocsResponse
 from onyx.db.enums import SUPPORTED_LANGUAGE_ENGLISH_NAMES, SupportedLanguage
 from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
-from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import (
+    ExtractedContextFiles,
+    FileDescriptor,
+    FileToolMetadata,
+)
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    SystemMessage,
+    ToolResultMessage,
+    UserMessage,
+)
 from onyx.prompts.chat_prompts import (
     ANSWER_COMPLETENESS_REMINDER,
     ANSWER_COVERAGE_GUIDANCE,
     DEFAULT_SYSTEM_PROMPT,
     FILE_REMINDER,
+    IMAGE_GEN_REMINDER,
     LAST_CYCLE_CITATION_REMINDER,
+    OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
+    TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
-from onyx.prompts.prompt_utils import apply_prompt_placeholders, get_company_context
+from onyx.prompts.prompt_utils import (
+    apply_prompt_placeholders,
+    get_company_context,
+    substitute_user_placeholders,
+)
 from onyx.prompts.tool_prompts import (
     GENERATE_IMAGE_GUIDANCE,
     INTERNAL_SEARCH_GUIDANCE,
@@ -39,7 +70,9 @@ from onyx.prompts.user_info import (
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
 )
+from onyx.tools.constants import CITEABLE_TOOLS_NAMES, FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
+from onyx.tools.models import LlmPythonExecutionResult
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -48,7 +81,157 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
+
+logger = setup_logger()
+
+
+def build_chat_reminder(
+    context: ChatReminderContext,
+    results: Sequence[ToolResultMessage],
+    previous_results: Sequence[ToolResultMessage],
+    *,
+    enabled: bool,
+) -> str | None:
+    if not enabled:
+        return context.persona_task_prompt
+    reminder_text = context.persona_task_prompt
+    if context.ran_image_gen:
+        reminder_text = IMAGE_GEN_REMINDER
+    # Only suggest opening URLs when this agent has the tool.
+    elif (
+        context.has_open_url_tool
+        and not context.out_of_cycles
+        and any(
+            result.tool_name == WebSearchTool.NAME
+            and isinstance(result.details, SearchDocsResponse)
+            and result.details.search_docs
+            for result in previous_results
+        )
+    ):
+        reminder_text = OPEN_URL_REMINDER
+    return build_reminder_message(
+        reminder_text=reminder_text,
+        include_citation_reminder=any(
+            result.tool_name in CITEABLE_TOOLS_NAMES for result in results
+        )
+        or context.has_context_documents,
+        include_file_reminder=any(
+            result.tool_name == PythonTool.NAME
+            and isinstance(result.details, LlmPythonExecutionResult)
+            and result.details.generated_files
+            for result in results
+        ),
+        is_last_cycle=context.out_of_cycles,
+    )
+
+
+def build_chat_prompt(
+    *,
+    tools: list[Tool],
+    persona: PersonaPromptConfig | None,
+    custom_prompt: str | None,
+    base_prompt: str,
+    files: ExtractedContextFiles,
+    memory: UserMemoryContext | None,
+    inject_memories: bool,
+    reminders_enabled: bool,
+    results: Sequence[ToolResultMessage],
+    previous_results: Sequence[ToolResultMessage],
+    is_last_step: bool,
+    ran_image_gen: bool,
+) -> ChatPrompt:
+    """Select instructions and reminders before assembling conversation history."""
+    values = memory.user_info.placeholder_values if memory else {}
+
+    def substitute(text: str | None) -> str | None:
+        return substitute_user_placeholders(text, values) if text else None
+
+    custom_prompt = substitute(custom_prompt)
+    persona_system = substitute(persona.system_prompt if persona else None)
+    persona_task = substitute(persona.task_prompt if persona else None)
+    context_documents = bool(files.use_as_search_filter or files.file_texts)
+    cite = (
+        reminders_enabled
+        and any(result.tool_name in CITEABLE_TOOLS_NAMES for result in results)
+    ) or context_documents
+    datetime_aware = persona.datetime_aware if persona else True
+
+    def render(
+        text: str | None, append_datetime: bool = False, *, citations: bool = False
+    ) -> str | None:
+        return (
+            process_prompt_template(
+                text,
+                datetime_aware=datetime_aware,
+                append_datetime_if_aware=append_datetime,
+                should_cite_documents=citations,
+            )
+            if text
+            else None
+        )
+
+    custom = None
+    if persona and persona.replace_base_system_prompt:
+        system = render(persona_system, True)
+    elif base_prompt:
+        memory = (
+            memory if inject_memories else memory.without_memories() if memory else None
+        )
+        system = build_system_prompt(
+            base_system_prompt=base_prompt,
+            datetime_aware=datetime_aware,
+            user_memory_context=memory,
+            tools=tools,
+        )
+        custom = render(custom_prompt)
+    else:
+        system = render(custom_prompt, True)
+    reminder = build_chat_reminder(
+        ChatReminderContext(
+            ran_image_gen=ran_image_gen,
+            has_open_url_tool=any(isinstance(tool, OpenURLTool) for tool in tools),
+            out_of_cycles=is_last_step,
+            persona_task_prompt=render(persona_task, citations=cite),
+            has_context_documents=context_documents,
+        ),
+        results,
+        previous_results,
+        enabled=reminders_enabled,
+    )
+    return ChatPrompt(
+        system_prompt=SystemMessage(content=system) if system else None,
+        custom_prompt=UserMessage(content=custom) if custom else None,
+        reminder=UserMessage(
+            content=reminder, metadata=PromptMetadata(is_reminder=True)
+        )
+        if reminder
+        else None,
+    )
+
+
+class _ContextDocument(BaseModel):
+    document: int
+    title: str | None = None
+    contents: str
+
+
+class _ContextDocuments(BaseModel):
+    documents: list[_ContextDocument] = Field(default_factory=list)
+
+
+class _SearchPassage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+    document: int
+    content: str
+
+
+class _SearchPassages(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+    results: list[_SearchPassage]
 
 
 def get_default_base_system_prompt(db_session: Session) -> str:
@@ -64,6 +247,7 @@ def get_default_base_system_prompt(db_session: Session) -> str:
 def calculate_reserved_tokens(
     db_session: Session,
     persona_system_prompt: str,
+    base_system_prompt: str,
     token_counter: Callable[[str], int],
     files: list[FileDescriptor] | None = None,
     user_memory_context: UserMemoryContext | None = None,
@@ -85,8 +269,6 @@ def calculate_reserved_tokens(
     Returns:
         Total reserved token count
     """
-    base_system_prompt = get_default_base_system_prompt(db_session)
-
     # This is for token estimation purposes
     fake_system_prompt = build_system_prompt(
         base_system_prompt=base_system_prompt,
@@ -286,7 +468,6 @@ def build_system_prompt(
     system_prompt += user_info_section
 
     # Append citation guidance after company context if placeholder was not present
-    # This maintains backward compatibility and ensures citations are always enforced when needed
     if should_append_citation_guidance:
         system_prompt += REQUIRE_CITATION_GUIDANCE
         system_prompt += ANSWER_COVERAGE_GUIDANCE
@@ -353,3 +534,238 @@ def build_system_prompt(
             system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
 
     return system_prompt
+
+
+def _deduplicate_search_passages(messages: list[Message]) -> None:
+    """Shorten exact repeats within a step in caller-owned prompt messages."""
+    seen: dict[tuple[str, str], str] = {}
+    for message in messages:
+        if isinstance(message, (AssistantMessage, UserMessage)):
+            seen.clear()
+            continue
+        if not isinstance(message, ToolResultMessage):
+            continue
+        if (
+            message.is_error
+            or not isinstance(message.content, str)
+            or prompt_metadata(message).omit_tool_result_content
+            or not isinstance(message.details, SearchDocsResponse)
+            or not message.details.citation_mapping
+        ):
+            continue
+        try:
+            passages = _SearchPassages.model_validate_json(message.text)
+        except ValidationError:
+            # Search metadata can accompany unstructured or historical tool output.
+            logger.debug(
+                "Search result has no structured passages: %s", message.tool_call_id
+            )
+            continue
+        changed = False
+        for passage in passages.results:
+            document_id = message.details.citation_mapping[passage.document]
+            key = (document_id, passage.content)
+            reference = seen.get(key)
+            if reference is not None:
+                if len(reference) < len(passage.content):
+                    passage.content = reference
+                    changed = True
+                continue
+            seen[key] = (
+                f"Same passage as document {passage.document} in tool result "
+                f"{message.tool_call_id}; use that result's content."
+            )
+        if changed:
+            message.content = passages.model_dump_json()
+
+
+def prepare_prompt(
+    messages: list[Message],
+    *,
+    system_prompt: Message | None,
+    custom_agent_prompt: Message | None,
+    reminder_message: Message | None,
+    context_files: ExtractedContextFiles | None,
+    token_counter: Callable[[str], int],
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    llm_config: LLMConfig | None = None,
+    available_tool_names: set[str] | None = None,
+) -> list[Message]:
+    """Assemble instructions and file context without discarding execution history."""
+    history = [message.model_copy(deep=True) for message in messages]
+    _deduplicate_search_passages(history)
+    for message in history:
+        metadata = prompt_metadata(message)
+        if isinstance(message, ToolResultMessage) and metadata.omit_tool_result_content:
+            # Keep stored evidence intact; later questions use the existing placeholder.
+            message.content = TOOL_CALL_RESPONSE_CROSS_MESSAGE
+            metadata.token_count = None
+        metadata.token_count = count_message_tokens(message, token_counter)
+        metadata.should_cache = not metadata.is_reminder
+        message.metadata = metadata
+    insertion = next(
+        (
+            index
+            for index in range(len(history) - 1, -1, -1)
+            if isinstance(history[index], UserMessage)
+            and not prompt_metadata(history[index]).is_reminder
+        ),
+        len(history),
+    )
+    result: list[Message] = []
+    if system_prompt is not None:
+        system_prompt = system_prompt.model_copy(deep=True)
+        metadata = prompt_metadata(system_prompt)
+        metadata.should_cache = True
+        system_prompt.metadata = metadata
+        result.append(system_prompt)
+    result.extend(history[:insertion])
+    if custom_agent_prompt is not None:
+        result.append(custom_agent_prompt.model_copy(deep=True))
+    if context_files and context_files.file_texts:
+        result.append(_create_context_files_message(context_files))
+    for message in result:
+        metadata = prompt_metadata(message)
+        metadata.should_cache = True
+        message.metadata = metadata
+    result.extend(history[insertion:])
+
+    # Tool-dependent file notices change between rounds, so keep them after
+    # the stable history and before the reminder, outside the cacheable prefix.
+    if context_files and context_files.file_metadata_for_tool:
+        result.append(
+            _create_file_tool_metadata_message(
+                context_files.file_metadata_for_tool,
+                token_counter,
+                available_tool_names,
+            )
+        )
+    present_files = {prompt_metadata(message).file_id for message in history}
+    omitted_files = [
+        metadata
+        for file_id, metadata in (all_injected_file_metadata or {}).items()
+        if file_id not in present_files
+    ]
+    if omitted_files:
+        result.append(
+            _create_file_tool_metadata_message(
+                omitted_files, token_counter, available_tool_names
+            )
+        )
+    if reminder_message is not None:
+        result.append(reminder_message)
+    return (
+        prepare_model_messages(result, llm_config, token_counter=token_counter)
+        if llm_config
+        else result
+    )
+
+
+def _create_file_tool_metadata_message(
+    file_metadata: list[FileToolMetadata],
+    token_counter: Callable[[str], int],
+    available_tool_names: set[str] | None = None,
+) -> Message:
+    """Build a lightweight metadata-only message listing files not held in context.
+
+    Name only a tool this step actually received. FileReaderTool is attached
+    only when the vector DB is disabled, and internal search can be absent even
+    when it is enabled (persona, ``allowed_tool_ids``, or a disabled search
+    usage setting). Naming a tool the model was never given makes it invent
+    workarounds — it searches the web for the document or guesses the contents.
+
+    Preference order is read_file, then internal search, then the python tool.
+    read_file pages through a file directly; search retrieves from the indexed
+    copy; the python tool is handed the files themselves, so prompt truncation
+    does not take them away from it.
+
+    The python tier applies only when every listed file actually reached
+    ``chat_files_for_tools`` (see ``FileToolMetadata.staged_for_tools``) —
+    summary-truncated files are listed for the LLM but never staged, so naming
+    python for them would send the model after bytes it does not have. The
+    notice also stops short of promising a path, because PythonTool normalizes
+    and de-duplicates filenames at staging time and applies its own count and
+    byte caps.
+
+    An unreported tool set names no tool. Steps that offer none are common (a
+    deep-research final report runs with no tools), and under-promising is the
+    safe direction to fail in.
+    """
+    offered: set[str] = available_tool_names or set()
+    if FILE_READER_TOOL_NAME in offered:
+        lines: list[str] = [
+            "You have access to the following files. Use the read_file tool to "
+            "read sections of any file. You MUST pass the file_id UUID (not the "
+            "filename) to read_file:"
+        ]
+        # The UUID is only meaningful to read_file, so it is listed only here.
+        lines.extend(
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            for meta in file_metadata
+        )
+        return _finalize_file_metadata_message(lines, token_counter)
+
+    if SearchTool.NAME in offered:
+        lines = [
+            "These files are attached but too large to include in full. Their "
+            "contents are indexed — use internal search to find the relevant "
+            "passages. Do not guess them or search the web for them:"
+        ]
+    elif PythonTool.NAME in offered and all(
+        meta.staged_for_tools for meta in file_metadata
+    ):
+        lines = [
+            "These files are attached but too large to include in full. The "
+            "python tool receives them — read them there, listing the working "
+            "directory if a name does not resolve. Do not guess their contents "
+            "or search the web for them:"
+        ]
+    else:
+        lines = [
+            "These files are attached but too large to include in full, and no "
+            "tool here can read them. Do not guess their contents or search the "
+            "web for them — say they are too large to read in this conversation:"
+        ]
+    lines.extend(
+        f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+        for meta in file_metadata
+    )
+    return _finalize_file_metadata_message(lines, token_counter)
+
+
+def _finalize_file_metadata_message(
+    lines: list[str],
+    token_counter: Callable[[str], int],
+) -> Message:
+    message_content = "\n".join(lines)
+    return UserMessage(
+        content=message_content,
+        metadata=PromptMetadata(token_count=token_counter(message_content)),
+    )
+
+
+def _create_context_files_message(
+    context_files: ExtractedContextFiles,
+) -> Message:
+    """Build a user message with numbered document text and titles."""
+    documents: list[_ContextDocument] = []
+    for idx, file_text in enumerate(context_files.file_texts, start=1):
+        title = (
+            context_files.file_metadata[idx - 1].filename
+            if idx - 1 < len(context_files.file_metadata)
+            else None
+        )
+        documents.append(
+            _ContextDocument(document=idx, title=title or None, contents=file_text)
+        )
+
+    documents_json = json.dumps(
+        _ContextDocuments(documents=documents).model_dump(exclude_none=True), indent=2
+    )
+    message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
+
+    # Use pre-calculated token count from context_files
+    return UserMessage(
+        content=message_content,
+        metadata=PromptMetadata(token_count=context_files.total_token_count),
+    )

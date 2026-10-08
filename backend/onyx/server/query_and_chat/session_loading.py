@@ -1,15 +1,30 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import Any, Literal, cast
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.agents.execution_records import RunStatus
 from onyx.chat.citation_utils import extract_citation_order_from_text
+from onyx.chat.models import (
+    ChatExecutionRecord,
+    MessageRendering,
+    PresentationMode,
+    ResponseRecord,
+)
+from onyx.chat.renderer import (
+    HIDDEN_TOOLS,
+    MessageRenderer,
+    ResponseLayout,
+    ToolRenderer,
+)
 from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_QUERY_KEY,
     CODING_AGENT_REPO_KEY,
+    CODING_AGENT_TOOL_NAME,
 )
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
@@ -17,8 +32,14 @@ from onyx.db.chat import (
     get_db_search_doc_by_id,
     translate_db_search_doc_to_saved_search_doc,
 )
-from onyx.db.models import ChatMessage
-from onyx.db.tools import get_tool_by_id
+from onyx.db.chat_response import read_chat_execution
+from onyx.db.models import ChatMessage, Tool, ToolCall
+from onyx.db.tools import (
+    get_response_tool_records,
+    get_tool_by_id,
+    get_tools_by_ids,
+    restore_tool_result,
+)
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
     RESEARCH_AGENT_TASK_KEY,
@@ -537,6 +558,9 @@ def translate_assistant_message_to_packets(
     It needs to be a list of list of packets combined into indices for "steps".
     The final answer and citations are also a "step".
     """
+    execution = read_chat_execution(chat_message)
+    if execution is not None:
+        return _execution_packets(chat_message, execution, db_session)
     packet_list: list[Packet] = []
 
     if chat_message.message_type != MessageType.ASSISTANT:
@@ -577,11 +601,12 @@ def translate_assistant_message_to_packets(
                     )
                 )
 
+            # Process each tool call in this turn (single pass).
+            turn_tool_packets: list[Packet] = []
             for tool_call in tool_calls_in_turn:
                 # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
                     tool = get_tool_by_id(tool_call.tool_id, db_session)
-
                     # Handle different tool types
                     if tool.in_code_tool_id in [
                         SearchTool.__name__,
@@ -594,7 +619,7 @@ def translate_assistant_message_to_packets(
                             translate_db_search_doc_to_saved_search_doc(doc)
                             for doc in tool_call.search_docs
                         ]
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_search_packets(
                                 search_queries=queries,
                                 search_docs=search_docs,
@@ -614,7 +639,7 @@ def translate_assistant_message_to_packets(
                         urls = cast(
                             list[str], tool_call.tool_call_arguments.get("urls", [])
                         )
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_fetch_packets(
                                 fetch_docs,
                                 urls,
@@ -629,14 +654,14 @@ def translate_assistant_message_to_packets(
                                 GeneratedImage(**img)
                                 for img in tool_call.generated_images
                             ]
-                            packet_list.extend(
+                            turn_tool_packets.extend(
                                 create_image_generation_packets(
                                     images, turn_num, tab_index=tool_call.tab_index
                                 )
                             )
 
                     elif tool.in_code_tool_id == FileReaderTool.__name__:
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_file_reader_packets(
                                 summary_json=tool_call.tool_call_response or "",
                                 turn_index=turn_num,
@@ -651,7 +676,7 @@ def translate_assistant_message_to_packets(
                             tool_call.tool_call_arguments.get(RESEARCH_AGENT_TASK_KEY)
                             or "Could not fetch saved research task.",
                         )
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_research_agent_packets(
                                 research_task=research_task,
                                 report_content=tool_call.tool_call_response,
@@ -671,7 +696,7 @@ def translate_assistant_message_to_packets(
                             tool_call.tool_call_arguments.get(CODING_AGENT_REPO_KEY)
                             or "",
                         )
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_coding_agent_packets(
                                 query=coding_query,
                                 repo=coding_repo,
@@ -684,7 +709,7 @@ def translate_assistant_message_to_packets(
                     elif tool.in_code_tool_id == MemoryTool.__name__:
                         if tool_call.tool_call_response:
                             memory_data = json.loads(tool_call.tool_call_response)
-                            packet_list.extend(
+                            turn_tool_packets.extend(
                                 create_memory_packets(
                                     memory_text=memory_data["memory_text"],
                                     operation=cast(
@@ -722,7 +747,7 @@ def translate_assistant_message_to_packets(
                             except (json.JSONDecodeError, KeyError):
                                 # Fall back to raw response as stdout
                                 stdout = tool_call.tool_call_response
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_python_tool_packets(
                                 code=code,
                                 stdout=stdout,
@@ -773,7 +798,7 @@ def translate_assistant_message_to_packets(
                             for k, v in (tool_call.tool_call_arguments or {}).items()
                             if k != "requestBody"
                         }
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_custom_tool_packets(
                                 tool_name=tool.display_name or tool.name,
                                 response_type=custom_response_type,
@@ -790,6 +815,8 @@ def translate_assistant_message_to_packets(
                 except Exception as e:
                     logger.warning("Error processing tool call %s: %s", tool_call.id, e)
                     continue
+
+            packet_list.extend(turn_tool_packets)
 
     # Determine the next turn_index for the final message
     # It should come after all tool calls
@@ -881,3 +908,123 @@ def translate_assistant_message_to_packets(
     )
 
     return packet_list
+
+
+def _execution_packets(
+    chat_message: ChatMessage, execution: ChatExecutionRecord, db_session: Session
+) -> list[Packet]:
+    records = {
+        record.id: record
+        for record in get_response_tool_records(
+            [reference.record_id for reference in execution.tool_records],
+            chat_message.chat_session_id,
+            db_session,
+        )
+    }
+    tools = {
+        tool.id: tool
+        for tool in get_tools_by_ids(
+            list(
+                {
+                    record.tool_id
+                    for record in records.values()
+                    if record.tool_id is not None
+                }
+            ),
+            db_session,
+        )
+    }
+    references = {
+        (reference.message_id, reference.tool_call_id): records[reference.record_id]
+        for reference in execution.tool_records
+    }
+    documents = {
+        doc.document_id: translate_db_search_doc_to_saved_search_doc(doc)
+        for doc in chat_message.search_docs
+    }
+    for record in records.values():
+        documents.update(
+            {
+                doc.document_id: translate_db_search_doc_to_saved_search_doc(doc)
+                for doc in record.search_docs
+            }
+        )
+    return _response_packets(
+        execution.response,
+        references,
+        tools,
+        execution.presentation,
+        documents,
+    )
+
+
+def _response_packets(
+    response: ResponseRecord,
+    records: dict[tuple[str, str], ToolCall],
+    tools: dict[int, Tool],
+    settings: dict[str, MessageRendering],
+    documents: Mapping[str, SearchDoc],
+    layout: ResponseLayout | None = None,
+    parent: Placement | None = None,
+    default_mode: PresentationMode = PresentationMode.ANSWER,
+) -> list[Packet]:
+    layout = layout or ResponseLayout()
+    packets: list[Packet] = []
+    for step_index, step in enumerate(response.steps):
+        message = step.message
+        message_id = message.id or f"{response.run_id}:{step_index}"
+        setting = settings.get(message_id, MessageRendering(mode=default_mode))
+        renderer = MessageRenderer(setting, documents, layout, parent)
+        packets.extend(renderer.complete(message))
+        calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
+        if not calls:
+            continue
+        for call in calls:
+            tool_placement = renderer.tool_placement(call.id)
+            record = records.get((message_id, call.id))
+            tool = tools.get(record.tool_id) if record is not None else None
+            execution = step.tools.get(call.id)
+            result = execution.result if execution is not None else None
+            if result is not None and record is not None:
+                result = restore_tool_result(result, record, tool)
+            tool_renderer = ToolRenderer(
+                call, tool_placement, record.tool_id if record is not None else None
+            )
+            packets.extend(tool_renderer.start())
+            for child in response.child_runs:
+                if (
+                    child.parent_message_id != message_id
+                    or child.parent_tool_call_id != call.id
+                ):
+                    continue
+                tool_renderer.has_child_output = True
+                child_mode = (
+                    PresentationMode.CODING_THINKING
+                    if call.name == CODING_AGENT_TOOL_NAME
+                    else PresentationMode.ANSWER
+                )
+                packets.extend(
+                    _response_packets(
+                        child,
+                        records,
+                        tools,
+                        settings,
+                        documents,
+                        layout,
+                        tool_placement,
+                        child_mode,
+                    )
+                )
+            packets.extend(tool_renderer.complete(result))
+    if response.parent_run_id is None:
+        packets.append(
+            Packet(
+                placement=Placement(turn_index=0),
+                obj=OverallStop(
+                    stop_reason="user_cancelled"
+                    if response.status == RunStatus.CANCELLED
+                    else "finished"
+                ),
+            )
+        )
+    return packets

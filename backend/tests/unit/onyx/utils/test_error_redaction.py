@@ -1,15 +1,15 @@
 import json
 import logging
-from collections.abc import Generator
 from unittest.mock import MagicMock, Mock
+from uuid import uuid4
 
 import pytest
 import requests
 from fastapi.exceptions import RequestValidationError
 from starlette.requests import Request
 
-from onyx.chat import process_message
-from onyx.chat.llm_loop import EmptyLLMResponseError
+from onyx.chat import errors, process_message
+from onyx.chat.errors import EmptyLLMResponseError
 from onyx.chat.models import StreamingError
 from onyx.connectors import connector_runner
 from onyx.connectors.interfaces import LoadConnector
@@ -100,11 +100,11 @@ def test_chat_traceback_only_reaches_development_clients(
 ) -> None:
     monkeypatch.setattr(
         process_message,
-        "get_session_with_current_tenant",
+        "prepare_chat_turn",
         Mock(side_effect=RuntimeError("internal-frame-detail")),
     )
     for dev_mode in (False, True):
-        monkeypatch.setattr(process_message, "DEV_MODE", dev_mode, raising=False)
+        monkeypatch.setattr(errors, "DEV_MODE", dev_mode)
         packets = list(
             process_message.handle_stream_message_objects(
                 new_msg_req=SendMessageRequest(message="test"), user=Mock()
@@ -151,17 +151,14 @@ def test_chat_provider_tracebacks_only_reach_development_clients(
 ) -> None:
     setup = MagicMock()
     setup.incognito_record_mode = None
-    setup.llms = [MagicMock()]
-    setup.llms[0].config.model_name = "test-model"
-    setup.llms[0].config.model_provider = "test-provider"
-    setup.llms[0].redact_error.side_effect = lambda text: text
-
-    def build_turn(**_kwargs: object) -> Generator[None, None, MagicMock]:
-        yield from ()
-        return setup
-
-    monkeypatch.setattr(process_message, "build_chat_turn", build_turn)
-    monkeypatch.setattr(process_message, "get_session_with_current_tenant", MagicMock())
+    setup.chat_session_id = uuid4()
+    setup.user_message_id = 1
+    setup.responses[0].message_id = 2
+    llm = setup.responses[0].llm
+    llm.config.model_name = "test-model"
+    llm.config.model_provider = "test-provider"
+    llm.redact_error.side_effect = lambda text: text
+    monkeypatch.setattr(process_message, "prepare_chat_turn", Mock(return_value=setup))
     monkeypatch.setattr(process_message, "StreamBufferWriter", MagicMock())
     failure = (
         EmptyLLMResponseError(
@@ -173,9 +170,9 @@ def test_chat_provider_tracebacks_only_reach_development_clients(
         if empty_response
         else RuntimeError("internal-provider-frame")
     )
-    monkeypatch.setattr(process_message, "_run_models", Mock(side_effect=failure))
+    monkeypatch.setattr(process_message, "start_chat_turn", Mock(side_effect=failure))
     for dev_mode in (False, True):
-        monkeypatch.setattr(process_message, "DEV_MODE", dev_mode, raising=False)
+        monkeypatch.setattr(errors, "DEV_MODE", dev_mode)
         packets = list(
             process_message.handle_stream_message_objects(
                 new_msg_req=SendMessageRequest(message="test"), user=Mock()

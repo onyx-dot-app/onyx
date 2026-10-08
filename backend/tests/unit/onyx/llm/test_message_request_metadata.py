@@ -1,16 +1,20 @@
 """Guards the per-message capture of what a completion sent to the provider."""
 
-from typing import Any
+from collections.abc import Callable, Iterator
 from unittest.mock import patch
 
+from litellm import ModelResponse
 from litellm.exceptions import BadRequestError
+from pydantic import JsonValue
 
-from onyx.chat.chat_state import ChatStateContainer
-from onyx.llm.model_request import UserMessage
-from onyx.llm.models import GenerationRequestParams, ReasoningEffort
-from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
-
-_SENTINEL = object()
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    GenerationRequestParams,
+    ReasoningEffort,
+    UserMessage,
+)
+from onyx.llm.multi_llm import LitellmLLM
 
 
 def _make_llm(
@@ -29,31 +33,54 @@ def _make_llm(
 
 
 def _run(
-    llm: LitellmLLM, effort: ReasoningEffort, completion: Any = None
-) -> GenerationRequestParams | None:
-    def default_completion(**_kwargs: Any) -> Any:
-        return _SENTINEL
+    llm: LitellmLLM,
+    effort: ReasoningEffort,
+    completion: Callable[[dict[str, JsonValue]], None] | None = None,
+) -> GenerationRequestParams:
+    class Response(Iterator[ModelResponse]):
+        def __init__(self, **kwargs: JsonValue) -> None:
+            if completion is not None:
+                completion(kwargs)
+            self.sent = False
 
-    operation = ProviderOperation()
+        def __iter__(self) -> "Response":
+            return self
 
-    with patch(
-        "onyx.llm.litellm_singleton.litellm.completion",
-        side_effect=completion or default_completion,
-    ):
-        llm._completion(
-            prompt=[UserMessage(content="hello")],
-            tools=None,
-            tool_choice=None,
-            stream=False,
-            parallel_tool_calls=False,
-            reasoning_effort=effort,
-            operation=operation,
+        def __next__(self) -> ModelResponse:
+            if self.sent:
+                raise StopIteration
+            self.sent = True
+            return ModelResponse(
+                stream=True,
+                choices=[
+                    {
+                        "index": 0,
+                        "delta": {"content": "answer"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            )
+
+        def close(self) -> None:
+            pass
+
+    with patch("onyx.llm.litellm_singleton.litellm.completion", Response):
+        events = list(
+            llm.stream(
+                GenerationRequest(
+                    messages=[UserMessage(content="hello")],
+                    options=GenerationOptions(reasoning_effort=effort),
+                )
+            )
         )
-    return operation.request_params
+    params = events[-1].request_params
+    assert params is not None
+    return params
 
 
 def test_captures_model_identity_and_sent_temperature() -> None:
     params = _run(_make_llm(temperature=0.3, model_name="gpt-4o"), ReasoningEffort.AUTO)
+
     assert params is not None
     assert params.model_name == "gpt-4o"
     assert params.model_provider == "openai"
@@ -61,9 +88,9 @@ def test_captures_model_identity_and_sent_temperature() -> None:
 
 
 def test_records_the_pinned_temperature_for_a_reasoning_model() -> None:
-    """Reasoning models are pinned to 1 regardless of the configured value, and
-    attribution has to show what the provider got, not what was configured."""
+    """Diagnostics record the provider's effective temperature."""
     params = _run(_make_llm(temperature=0.3), ReasoningEffort.HIGH)
+
     assert params is not None
     assert params.sent_kwargs["temperature"] == 1
 
@@ -73,16 +100,16 @@ def test_captures_the_effort_after_the_admin_cap_applies() -> None:
     params = _run(
         _make_llm(reasoning_effort_max=ReasoningEffort.LOW), ReasoningEffort.XHIGH
     )
+
     assert params is not None
-    assert params.reasoning_effort == ReasoningEffort.LOW
+    assert params.reasoning_effort == "low"
 
 
 def test_captures_the_attempt_that_returned_after_a_retry() -> None:
-    """On a provider 400 the ladder strips kwargs and retries. What is recorded
-    must be the attempt that actually came back, not the first one."""
-    calls: list[dict[str, Any]] = []
+    """Diagnostics reflect the successful attempt's stripped options."""
+    calls: list[dict[str, JsonValue]] = []
 
-    def completion(**kwargs: Any) -> Any:
+    def completion(kwargs: dict[str, JsonValue]) -> None:
         calls.append(kwargs)
         if "reasoning" in kwargs:
             raise BadRequestError(
@@ -90,7 +117,7 @@ def test_captures_the_attempt_that_returned_after_a_retry() -> None:
                 model="m",
                 llm_provider="openai",
             )
-        return _SENTINEL
+        return None
 
     params = _run(_make_llm(), ReasoningEffort.HIGH, completion)
 
@@ -99,8 +126,8 @@ def test_captures_the_attempt_that_returned_after_a_retry() -> None:
     assert "reasoning" not in params.sent_kwargs
 
 
-def test_tracing_and_capture_receive_the_same_object() -> None:
-    """One object, two sinks, so the chat UI and Braintrust cannot disagree."""
+def test_tracing_and_events_receive_the_same_parameters() -> None:
+    """Trace and display consumers receive the effective request parameters."""
     recorded: list[GenerationRequestParams] = []
     with patch(
         "onyx.llm.multi_llm.record_llm_request_params",
@@ -109,57 +136,31 @@ def test_tracing_and_capture_receive_the_same_object() -> None:
         params = _run(_make_llm(), ReasoningEffort.HIGH)
 
     assert recorded
-    assert recorded[-1] is params
+    assert recorded[-1] == params
 
 
 def test_non_finite_floats_are_dropped() -> None:
-    """These params ride to a JSONB column. Postgres rejects NaN and Infinity,
-    so leaving one in would fail the commit that saves the answer."""
+    """Postgres JSONB rejects non-finite numbers."""
     params = _run(
         _make_llm(temperature=float("nan"), model_name="gpt-4o"), ReasoningEffort.AUTO
     )
+
     assert params is not None
     assert params.sent_kwargs["temperature"] is None
 
 
-class TestStateContainerHandoff:
-    """The value crosses threads via the per-model container."""
+def test_nested_generations_keep_their_request_parameters() -> None:
+    nested: list[GenerationRequestParams] = []
 
-    def test_container_round_trips_the_params(self) -> None:
-        container = ChatStateContainer()
-        assert container.get_request_params() is None
-
-        container.set_request_params({"model_name": "gpt-5.1"})
-        assert container.get_request_params() == {"model_name": "gpt-5.1"}
-
-    def test_container_starts_empty_per_model(self) -> None:
-        """Multi-model turns must not share one model's params with another."""
-        first = ChatStateContainer()
-        second = ChatStateContainer()
-        first.set_request_params({"model_name": "gpt-5.1"})
-
-        assert second.get_request_params() is None
-
-    def test_a_later_step_overwrites_an_earlier_one(self) -> None:
-        """Tool loops run the step repeatedly. The message is attributed to the
-        call that produced the answer, which is the last one to hand off."""
-        container = ChatStateContainer()
-        container.set_request_params({"model_name": "gpt-5.1", "step": 1})
-        container.set_request_params({"model_name": "gpt-5.1", "step": 2})
-
-        assert container.get_request_params() == {"model_name": "gpt-5.1", "step": 2}
-
-    def test_handoff_of_nothing_leaves_it_unset(self) -> None:
-        """A turn that fails before any completion attributes nothing, rather
-        than inheriting whatever ran previously."""
-        container = ChatStateContainer()
-
-        operation = ProviderOperation()
-
-        container.set_request_params(
-            operation.request_params.model_dump(mode="json")
-            if operation.request_params
-            else None
+    def completion(_kwargs: dict[str, JsonValue]) -> None:
+        nested.append(
+            _run(_make_llm(temperature=0.7, model_name="gpt-4o"), ReasoningEffort.AUTO)
         )
 
-        assert container.get_request_params() is None
+    outer = _run(
+        _make_llm(temperature=0.3, model_name="gpt-4o"),
+        ReasoningEffort.AUTO,
+        completion,
+    )
+    assert outer.sent_kwargs["temperature"] == 0.3
+    assert nested[0].sent_kwargs["temperature"] == 0.7

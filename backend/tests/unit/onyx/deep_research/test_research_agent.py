@@ -1,147 +1,154 @@
-"""Deep Research batch runner: failures and timeouts."""
+"""Research deadlines and failed children must preserve the parent's report."""
 
-import queue
-import threading
-import time
-from typing import Any
-from unittest.mock import MagicMock, patch
+from threading import Event, Timer
 
-from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.emitter import Emitter
-from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import SearchDoc
-from onyx.deep_research.models import (
-    CombinedResearchAgentCallResult,
-    ResearchAgentCallFailure,
-    ResearchAgentCallResult,
-)
+import pytest
+
+from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.runtime import Run
+from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import (
-    RESEARCH_AGENT_TASK_KEY,
+    GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
+    THINK_TOOL_NAME,
 )
-from onyx.llm.interfaces import LLM
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.fake_tools import research_agent
-from onyx.tools.fake_tools.research_agent import (
-    RESEARCH_AGENT_FAILURE_MESSAGE,
-    RESEARCH_AGENT_TIMEOUT_MESSAGE,
-    run_research_agent_calls,
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationRequest,
+    ReasoningEffort,
+    TextContent,
+    ToolCall,
+    ToolResultMessage,
+    UserMessage,
 )
-from onyx.tools.models import ToolCallKickoff
-
-TURN = 2
+from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
-def _emitter() -> Emitter:
-    merged: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
-    return Emitter(merged_queue=merged)
+def test_timed_out_child_preserves_successful_sibling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.deep_research.agent.RESEARCH_AGENT_TIMEOUT_SECONDS", 0.1)
+    child_cancelled = Event()
+    timers: list[Timer] = []
 
+    class RecordedTimer(Timer):
+        def start(self) -> None:
+            timers.append(self)
+            super().start()
 
-def _token_counter(value: str) -> int:
-    return len(value) // 4 + 1
+    monkeypatch.setattr("onyx.agents.agent_coordination.threading.Timer", RecordedTimer)
 
-
-def _search_doc(document_id: str) -> SearchDoc:
-    return SearchDoc(
-        document_id=document_id,
-        chunk_ind=0,
-        semantic_identifier=f"Doc {document_id}",
-        link=f"https://example.com/{document_id}",
-        blurb=f"blurb for {document_id}",
-        source_type=DocumentSource.WEB,
-        boost=0,
-        hidden=False,
-        metadata={},
-        score=1.0,
-        match_highlights=[],
-    )
-
-
-def _child_result(report: str, doc_ids: list[str]) -> ResearchAgentCallResult:
-    return ResearchAgentCallResult(
-        intermediate_report=report,
-        citation_mapping={
-            number: _search_doc(doc_id)
-            for number, doc_id in enumerate(doc_ids, start=1)
-        },
-    )
-
-
-def _calls(tasks: list[str]) -> list[ToolCallKickoff]:
-    return [
-        ToolCallKickoff(
-            tool_call_id=f"rc{i}",
-            tool_name=RESEARCH_AGENT_TOOL_NAME,
-            tool_args={RESEARCH_AGENT_TASK_KEY: task},
-            placement=Placement(turn_index=TURN, tab_index=i),
+    def reply(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        results = [m for m in request.messages if isinstance(m, ToolResultMessage)]
+        if any(tool.name == RESEARCH_AGENT_TOOL_NAME for tool in request.tools):
+            if results:
+                assert [(m.tool_call_id, m.is_error) for m in results] == [
+                    ("slow", True),
+                    ("fast", False),
+                ]
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="report", name=GENERATE_REPORT_TOOL_NAME, arguments={}
+                        )
+                    ]
+                )
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id=name, name=RESEARCH_AGENT_TOOL_NAME, arguments={"task": name}
+                    )
+                    for name in ("slow", "fast")
+                ]
+            )
+        if any(m.text == "slow" for m in request.messages):
+            with signal.on_cancel(child_cancelled.set):
+                assert child_cancelled.wait(5)
+            signal.check()
+        if any(m.text == "fast" for m in request.messages):
+            return AssistantMessage(content=[TextContent(text="Fast report")])
+        return AssistantMessage(
+            content=[TextContent(text="Final report" if results else "Plan")]
         )
-        for i, task in enumerate(tasks)
+
+    feature = DeepResearchAgent(
+        [],
+        [],
+        FakeModelClient(reply),
+        len,
+        None,
+        "",
+        ReasoningEffort.LOW,
+        None,
+        skip_clarification=True,
+    )
+    runs: list[Run] = []
+    result = run_agent(
+        feature,
+        messages=[UserMessage(content="Research")],
+        max_steps=4,
+        coordinator=AgentCoordinator(),
+        runs=runs,
+    )
+    assert result.output.text == "Final report"
+    assert child_cancelled.is_set()
+    assert len(timers) == 2
+    assert all(timer.finished.is_set() for timer in timers)
+    assert sorted(child.status.value for child in runs[-1].snapshot().child_runs) == [
+        "cancelled",
+        "complete",
     ]
 
 
-def _run_batch(calls: list[ToolCallKickoff]) -> CombinedResearchAgentCallResult:
-    return run_research_agent_calls(
-        research_agent_calls=calls,
-        tools=[],
-        emitter=_emitter(),
-        state_container=ChatStateContainer(),
-        llm=MagicMock(spec=LLM),
-        is_reasoning_model=True,
-        token_counter=_token_counter,
-        citation_mapping={},
-        language_section="",
+@pytest.mark.parametrize("parent", [False, True])
+def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
+    requests: list[GenerationRequest] = []
+    feature: DeepResearchAgent | ResearchAgent
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        feature.started -= (31 if parent else 13) * 60
+        if len(requests) == 1:
+            return (
+                AssistantMessage(content=[TextContent(text="Plan")])
+                if parent
+                else AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="think",
+                            name=THINK_TOOL_NAME,
+                            arguments={"reasoning": "Plan"},
+                        )
+                    ]
+                )
+            )
+        assert not request.tools
+        return AssistantMessage(content=[TextContent(text="Report")])
+
+    llm = FakeModelClient(reply)
+    feature = (
+        DeepResearchAgent(
+            [],
+            [],
+            llm,
+            len,
+            None,
+            "",
+            ReasoningEffort.LOW,
+            None,
+            skip_clarification=True,
+        )
+        if parent
+        else ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
     )
-
-
-class TestResearchBatch:
-    def test_results_keep_call_order_and_failed_positions(self) -> None:
-        results_by_task: dict[str, tuple[float, ResearchAgentCallResult | None]] = {
-            "first": (0.15, _child_result("First [1].", ["d1"])),
-            "second": (0.0, None),
-            "third": (0.05, _child_result("Third [1].", ["d3"])),
-        }
-
-        def fake_child(call: ToolCallKickoff, *_args: Any) -> Any:
-            delay, result = results_by_task[call.tool_args[RESEARCH_AGENT_TASK_KEY]]
-            time.sleep(delay)
-            return result
-
-        with patch.object(research_agent, "run_research_agent_call", fake_child):
-            combined = _run_batch(_calls(["first", "second", "third"]))
-
-        assert combined.intermediate_reports == [
-            "First [1].",
-            ResearchAgentCallFailure(message=RESEARCH_AGENT_FAILURE_MESSAGE),
-            "Third [2].",
-        ]
-        assert {n: d.document_id for n, d in combined.citation_mapping.items()} == {
-            1: "d1",
-            2: "d3",
-        }
-
-    def test_timed_out_child_returns_timeout_failure(self) -> None:
-        release = threading.Event()
-
-        def fake_child(call: ToolCallKickoff, *_args: Any) -> Any:
-            if call.tool_args[RESEARCH_AGENT_TASK_KEY] == "slow":
-                release.wait(timeout=5)
-                return _child_result("Too late.", ["late"])
-            return _child_result("Fast [1].", ["f"])
-
-        try:
-            with (
-                patch.object(research_agent, "run_research_agent_call", fake_child),
-                patch.object(research_agent, "RESEARCH_AGENT_TIMEOUT_SECONDS", 1.0),
-            ):
-                combined = _run_batch(_calls(["slow", "fast"]))
-        finally:
-            release.set()
-
-        assert combined.intermediate_reports == [
-            ResearchAgentCallFailure(message=RESEARCH_AGENT_TIMEOUT_MESSAGE),
-            "Fast [1].",
-        ]
-        assert {n: d.document_id for n, d in combined.citation_mapping.items()} == {
-            1: "f"
-        }
+    result = run_agent(
+        feature, messages=[UserMessage(content="Research")], max_steps=10
+    )
+    assert result.output.text == "Report"
+    assert len(requests) == 2

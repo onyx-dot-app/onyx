@@ -4,11 +4,14 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+import requests
 
-from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import DynamicSchemaInfo, ToolResponse
+from onyx.agents.tools import ToolInvocation
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import ToolResult
+from onyx.tools.interface import ToolContext
+from onyx.tools.models import CustomToolCallSummary, DynamicSchemaInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
-    CustomToolCallSummary,
     build_custom_tools_from_openapi_schema_and_headers,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
@@ -100,21 +103,26 @@ class TestCustomTool(unittest.TestCase):
         )
 
         result = tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="123",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "123"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
+        assert isinstance(result, ToolResult)
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with("GET", expected_url, json=None, headers={})
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
         self.assertIsNotNone(
-            result.rich_response,
-            "Expected rich_response to be set",
+            result.details,
+            "Expected details to be set",
         )
-        assert isinstance(result.rich_response, CustomToolCallSummary)
+        assert isinstance(result.details, CustomToolCallSummary)
         self.assertEqual(
-            result.rich_response.tool_name,
+            result.details.tool_name,
             "getAssistant",
             "Tool name in response does not match expected value",
         )
@@ -138,10 +146,15 @@ class TestCustomTool(unittest.TestCase):
         )
 
         result = tools[1].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="456",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "456"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
+        assert isinstance(result, ToolResult)
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/456"
         mock_request.assert_called_once_with(
             "POST", expected_url, json=None, headers={}
@@ -149,12 +162,12 @@ class TestCustomTool(unittest.TestCase):
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
         self.assertIsNotNone(
-            result.rich_response,
-            "Expected rich_response to be set",
+            result.details,
+            "Expected details to be set",
         )
-        assert isinstance(result.rich_response, CustomToolCallSummary)
+        assert isinstance(result.details, CustomToolCallSummary)
         self.assertEqual(
-            result.rich_response.tool_name,
+            result.details.tool_name,
             "createAssistant",
             "Tool name in response does not match expected value",
         )
@@ -185,9 +198,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="123",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "123"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         expected_headers = {
@@ -221,9 +238,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="123",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "123"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with("GET", expected_url, json=None, headers={})
@@ -307,9 +328,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            email=user_email,
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"email": user_email},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
 
         expected_url = (
@@ -368,8 +393,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
 
         mock_request.assert_called_once_with(
@@ -382,20 +412,20 @@ class TestCustomTool(unittest.TestCase):
     def test_custom_tool_final_result(self) -> None:
         """
         Test extracting the final result from a custom tool response.
-        Verifies that the tool result can be correctly extracted from the ToolResponse.
+        Verifies that the tool result can be correctly extracted from the ToolResult.
         """
-        mock_response = ToolResponse(
-            rich_response=CustomToolCallSummary(
+        mock_response = ToolResult(
+            details=CustomToolCallSummary(
                 response_type="json",
                 tool_name="getAssistant",
                 tool_result={"id": "789", "name": "Final Assistant"},
             ),
-            llm_facing_response='{"id": "789", "name": "Final Assistant"}',
+            content='{"id": "789", "name": "Final Assistant"}',
         )
 
-        # Extract the final result from the rich_response
-        assert isinstance(mock_response.rich_response, CustomToolCallSummary)
-        final_result = mock_response.rich_response.tool_result
+        # Extract the final result from the details
+        assert isinstance(mock_response.details, CustomToolCallSummary)
+        final_result = mock_response.details.tool_result
         self.assertEqual(
             final_result,
             {"id": "789", "name": "Final Assistant"},
@@ -488,6 +518,53 @@ class TestSanitizeToolName(unittest.TestCase):
             openapi_to_method_specs(schema)
 
 
+if __name__ == "__main__":
+    pytest.main([__file__])
+
+
+@pytest.mark.parametrize("status_code", [200, 401, 403, 500])
+def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> None:
+    tools = build_custom_tools_from_openapi_schema_and_headers(
+        tool_id=1,
+        openapi_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Status", "version": "1.0.0"},
+            "servers": [{"url": "https://example.com"}],
+            "paths": {
+                "/status": {
+                    "get": {
+                        "operationId": "status",
+                        "summary": "Get status",
+                        "responses": {},
+                    }
+                }
+            },
+        },
+    )
+    response = requests.Response()
+    response.status_code = status_code
+    response.headers["Content-Type"] = "application/json"
+    with (
+        patch(
+            "onyx.tools.tool_implementations.custom.custom_tool.requests.request",
+            return_value=response,
+        ),
+        patch.object(response, "json", return_value={"message": "upstream response"}),
+    ):
+        result = tools[0].run(
+            ToolInvocation(
+                call_id="status",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+        assert isinstance(result, ToolResult)
+    assert result.is_error is (status_code >= 400)
+    assert "upstream response" in result.text
+
+
 @pytest.mark.parametrize(
     ("content_type", "response_type"),
     [("text/csv", "csv"), ("image/png", "image")],
@@ -527,12 +604,17 @@ def test_custom_tool_file_response_is_serialized_for_llm(
             return_value=["file-1"],
         ),
     ):
-        result = tools[0].run(placement=Placement(turn_index=0, tab_index=0))
+        result = tools[0].run(
+            ToolInvocation(
+                call_id="file",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+        assert isinstance(result, ToolResult)
 
-    assert isinstance(result.rich_response, CustomToolCallSummary)
-    assert result.rich_response.response_type == response_type
-    assert result.llm_facing_response == '{"file_ids":["file-1"]}'
-
-
-if __name__ == "__main__":
-    pytest.main([__file__])
+    assert isinstance(result.details, CustomToolCallSummary)
+    assert result.details.response_type == response_type
+    assert result.text == '{"file_ids":["file-1"]}'

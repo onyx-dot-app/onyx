@@ -168,7 +168,7 @@ across a multi-model turn, `process_message.py:build_chat_turn`).
 
 ### 4.3 Path A: inlined
 
-Below the ceiling, `chat/llm_loop.py:_build_project_message` renders the
+Below the ceiling, `backend/onyx/chat/prompt_utils.py:_create_context_files_message` renders the
 project's files into the same `document`-keyed JSON block
 [[context-assembly]] §4.4 describes, and inserts it as a `MessageType.USER`
 message. Per `context-assembly.md` §4.3 and `backend/onyx/chat/README.md`'s

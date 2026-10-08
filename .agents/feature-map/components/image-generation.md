@@ -173,12 +173,12 @@ for use as a fast pre-check.
 ### Turn-level effect: a stopping tool
 
 `ImageGenerationTool.NAME` is listed in `tools/built_in_tools.py:STOPPING_TOOLS_NAMES`.
-In `chat/llm_loop.py`, once any tool call in a cycle matches a stopping tool
+In `backend/onyx/chat/agent.py:ChatAgent`, once any tool call in a cycle matches a stopping tool
 name, `ran_image_gen` is set `True` for the rest of that turn; the next cycle
 forces `tool_choice = ToolChoiceOptions.NONE` and offers no tools
-(`llm_loop.py:run_llm_loop`, the `elif out_of_cycles or ran_image_gen` branch), and the reminder text injected before that final answer is
+(`backend/onyx/chat/agent.py:ChatAgent._prepare_step`, the `state.step.is_last or self.ran_image_gen` branch), and the reminder text injected before that final answer is
 `IMAGE_GEN_REMINDER` instead of the normal citation/file reminder
-(`llm_loop.py:select_reminder_text`). After that cycle, the model must answer
+(`backend/onyx/chat/prompt_utils.py:build_chat_reminder`). After that cycle, the model must answer
 without another tool-calling cycle. Other tool calls returned in the same cycle
 still run.
 
@@ -245,7 +245,7 @@ the returned base64 data.
   `LLMFlow.IMAGE_GENERATION` / `LLMFlow.IMAGE_EDIT`.
 
 **Depended on by**
-- [[core-chat-loop]]: `llm_loop.py` special-cases this tool via
+- [[core-chat-loop]]: `backend/onyx/chat/agent.py:ChatAgent` special-cases this tool via
   `STOPPING_TOOLS_NAMES` and `IMAGE_GEN_REMINDER`, so a change to the tool's
   name or registration affects turn control flow, not just tool behavior.
 - [[chat-frontend]]: `ImageToolRenderer` and the packet processor consume this
@@ -259,7 +259,7 @@ the returned base64 data.
 |---|---|
 | adds a fourth image provider | `image_gen/factory.py:PROVIDERS`, `web/src/views/admin/ImageGenerationPage/forms/` (needs a matching form + `getImageGenForm.tsx`), and whether it needs `supports_reference_images`/`max_reference_images` overrides |
 | changes the packet schema (`ImageGenerationToolStart`, `Heartbeat`, `Final`, `GeneratedImage`) | `web/src/app/app/services/streamingModels.ts`'s `PacketType` string values (they must match `StreamingType` in `streaming_models.py` exactly) and `ImageToolRenderer.tsx` |
-| changes what counts as a "stopping tool" or removes `ImageGenerationTool` from `STOPPING_TOOLS_NAMES` | `llm_loop.py`'s cycle-forcing logic and `IMAGE_GEN_REMINDER` text; a tool leaving this list can now chain further tool calls in the same turn |
+| changes what counts as a "stopping tool" or removes `ImageGenerationTool` from `STOPPING_TOOLS_NAMES` | `backend/onyx/chat/agent.py:ChatAgent`'s cycle-forcing logic and `IMAGE_GEN_REMINDER` text; a tool leaving this list can now chain further tool calls in the same turn |
 | changes how a config becomes "default" | `db/image_generation.py:set_default_image_generation_config`'s atomic clear-then-set; a race here would let two configs claim default simultaneously |
 | touches `FileOrigin.CHAT_IMAGE_GEN` access rules | [[file-store-and-user-files]] and [[access-control]]; `access.py:_user_can_access_chat_image_gen_file` grants the session owner, or anyone when the session is public and not deleted, so any change must preserve that scoping |
 

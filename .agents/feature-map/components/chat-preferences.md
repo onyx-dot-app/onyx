@@ -201,7 +201,7 @@ later prompts via `USER_MEMORIES_PROMPT` while `use_memories` is on. When
 (`without_memories()`), but the memory tool can still write them.
 
 The actual write happens after the tool call resolves, in
-`chat/llm_loop.py` (around the `MemoryToolResponse` handling): a new memory
+`backend/onyx/tools/tool_implementations/memory/memory_tool.py:MemoryTool._run`: a new memory
 calls `db/memory.py:add_memory`, an update to an existing one calls
 `update_memory_at_index`. Both require `user_memory_context.user_id` to be
 set; an incognito turn (see §4.6) skips the write entirely and returns an
@@ -320,7 +320,7 @@ in §4.4.
 | If your change… | Also check |
 |---|---|
 | adds a new setting that reaches the prompt | Storage (`User` column, KV blob field, or new table), the API endpoint, both UIs (admin and/or `/app/settings/chat-preferences`), `prompt_utils.py:_build_user_information_section` or `build_system_prompt`'s explicit position for it, and an eval per [[context-assembly]] §8 |
-| changes memory behavior (`enable_memory_tool`, `use_memories`, `MAX_MEMORIES_PER_USER`, incognito refusal) | `tool_constructor.py`'s injection, `llm_loop.py`'s `MemoryToolResponse` handling, [[tools-framework]]'s bypass documentation, and the incognito refusal path |
+| changes memory behavior (`enable_memory_tool`, `use_memories`, `MAX_MEMORIES_PER_USER`, incognito refusal) | `tool_constructor.py`'s injection, `backend/onyx/tools/tool_implementations/memory/memory_tool.py:MemoryTool._run`, [[tools-framework]]'s bypass documentation, and the incognito refusal path |
 | changes a workspace setting (`Settings` fields) | Every reader of `load_settings()` (`process_message.py`, `server/features/search/api.py`, `prompt_utils.py:get_company_context`); a stale cached read after `store_settings` is a common failure mode |
 | adds or edits an input prompt field | `InputPrompt`'s unique constraints (user-owned vs. public partial index); `InputPrompt__User` per-user disable state |
 | changes the default assistant's tool set or system prompt | [[agents-personas]] (the row this modifies is a `Persona`); every user whose chats use the default agent |
