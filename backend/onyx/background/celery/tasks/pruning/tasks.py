@@ -849,7 +849,29 @@ def monitor_ccpair_pruning_taskset(
     # (mark_ccpair_as_pruned / update_sync_record_status commit internally),
     # so the per-batch commits of the drain are safe here.
     if initial > 0:
+        sweep_orphan_tags(r, db_session)
+
+
+def sweep_orphan_tags(r: TenantRedisClient, db_session: Session) -> None:
+    """Drains orphan tags unless a sweep for this tenant is already running.
+
+    A slow sweep outlives check_for_pruning's beat lock, so the next completed
+    prune would start a second one against the same rows. The running sweep
+    drains everything, so the later caller skips. The lock expires after an
+    hour, so a sweep past that may overlap once. The drain is idempotent."""
+    lock: RedisLock = r.lock(
+        OnyxRedisLocks.ORPHAN_TAG_SWEEP_LOCK,
+        timeout=CELERY_PRUNING_LOCK_TIMEOUT,
+    )
+    if not lock.acquire(blocking=False):
+        task_logger.info("Orphan tag sweep already running, skipping")
+        return
+
+    try:
         delete_orphan_tags_batched(db_session)
+    finally:
+        if lock.owned():
+            lock.release()
 
 
 def validate_pruning_fences(

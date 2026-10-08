@@ -556,6 +556,7 @@ class OnyxRedisLocks:
     )
     CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX = "da_lock:connector_external_group_sync"
     PRUNING_LOCK_PREFIX = "da_lock:pruning"
+    ORPHAN_TAG_SWEEP_LOCK = "da_lock:orphan_tag_sweep"
     INDEXING_METADATA_PREFIX = "da_metadata:indexing"
 
     SLACK_BOT_LOCK = "da_lock:slack_bot"
