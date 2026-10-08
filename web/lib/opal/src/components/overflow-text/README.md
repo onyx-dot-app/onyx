@@ -3,18 +3,18 @@
 **Import:** `import { OverflowText } from "@opal/components";`
 
 `Text` clamped to a number of lines. While the clamp cuts the text, hovering it
-shows the full text in a tooltip. Text that fits gets no tooltip, so short
-labels stay plain.
+shows the full text in a tooltip above it, aligned to the text's start (left
+in LTR, right in RTL). Text that fits gets no tooltip, so short labels stay
+plain.
 
 ## Props
 
 Every `Text` prop except `children`, `maxLines` and `ref`, plus:
 
-| Prop          | Type                | Default | Description                               |
-| ------------- | ------------------- | ------- | ----------------------------------------- |
-| `children`    | `string \| RichStr` | —       | The text; it also fills the tooltip       |
-| `maxLines`    | `number`            | `1`     | Lines shown before the text is cut        |
-| `tooltipSide` | `TooltipSide`       | `"top"` | Which side the full-text tooltip opens on |
+| Prop       | Type                | Default | Description                         |
+| ---------- | ------------------- | ------- | ----------------------------------- |
+| `children` | `string \| RichStr` | —       | The text; it also fills the tooltip |
+| `maxLines` | `number`            | `1`     | Lines shown before the text is cut  |
 
 ## Notes
 
