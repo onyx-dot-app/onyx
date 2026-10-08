@@ -29,6 +29,7 @@ from onyx.server.features.build.configs import (
     OPENCODE_SERVE_CONNECT_TIMEOUT,
     OPENCODE_SERVE_EVENT_READ_TIMEOUT,
     OPENCODE_SERVE_REQUEST_TIMEOUT,
+    OPENCODE_SERVE_SESSION_INIT_TIMEOUT,
     OPENCODE_SERVER_USERNAME,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
     SSE_KEEPALIVE_INTERVAL,
@@ -88,14 +89,14 @@ SandboxEvent = (
 class ClientTimeouts:
     """HTTP timeouts for one ``OpencodeServeClient`` instance.
 
-    Ordinary request defaults come from ``configs.py``. Session initialization
-    has a separate budget for cold directory startup.
+    Defaults come from ``configs.py``. Session initialization has a separate
+    budget for cold directory startup.
     """
 
     connect_timeout: float = OPENCODE_SERVE_CONNECT_TIMEOUT
     request_timeout: float = OPENCODE_SERVE_REQUEST_TIMEOUT
     event_read_timeout: float = OPENCODE_SERVE_EVENT_READ_TIMEOUT
-    session_init_timeout: float = 90.0
+    session_init_timeout: float = OPENCODE_SERVE_SESSION_INIT_TIMEOUT
 
 
 # ---------------------------------------------------------------------------
