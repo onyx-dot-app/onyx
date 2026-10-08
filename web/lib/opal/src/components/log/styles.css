@@ -3,7 +3,7 @@
 /* ── Log ─────────────────────────────────────────────────────────────────────
    Not interactive: the status colours the icon (icons stroke with
    `currentColor`, so a `text-*` colour sets it), and the heavy weight tints the
-   line. The details colour comes from `Text`. */
+   line. The centre content brings its own colour. */
 
 .opal-log {
   @apply rounded-08;

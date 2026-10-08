@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import type { TextColor } from "@onyx-ai/shared/contracts";
+import { useOverflow } from "@opal/hooks";
 import { ContentAction, Section } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
 import {
@@ -100,6 +102,52 @@ const GROUPS = [
   states: readonly CheckLineState[];
 }>;
 
+/** A heavy line's details take its status colour; every other line's are text-04. */
+const HEAVY_DETAILS_COLORS: Partial<Record<LogVariant, TextColor>> = {
+  "success-heavy": "status-success-05",
+  "warning-heavy": "theme-amber-05",
+  "error-heavy": "status-error-05",
+};
+
+interface CheckDetailsProps {
+  text: string;
+  color: TextColor;
+}
+/** A check's details on one line; cut off, it shows in full in a tooltip. */
+function CheckDetails({ text, color }: CheckDetailsProps) {
+  // `Text` takes no ref, so the wrapper finds it by its marker.
+  const [textElement, setTextElement] = useState<HTMLElement | null>(null);
+  const ref = useCallback((node: HTMLElement | null) => {
+    setTextElement(
+      node?.querySelector<HTMLElement>("[data-check-details]") ?? null
+    );
+  }, []);
+  const clamped = useOverflow(textElement);
+
+  return (
+    <Tooltip tooltip={clamped ? text : undefined} side="top">
+      <Section
+        ref={ref}
+        justifyContent="start"
+        alignItems="stretch"
+        height="fit"
+        className="min-w-0"
+      >
+        <Text
+          as="p"
+          font="main-ui-body"
+          color={color}
+          textPosition="text-start"
+          maxLines={1}
+          data-check-details=""
+        >
+          {text}
+        </Text>
+      </Section>
+    </Tooltip>
+  );
+}
+
 interface CheckLogProps {
   check: CheckLine;
 }
@@ -112,12 +160,19 @@ function CheckLog({ check }: CheckLogProps) {
     (check.state === "failed" || check.state === "indeterminate") &&
     (check.remediation !== null || check.docs_link !== null);
 
+  const logVariant: LogVariant = blocking ? "error-heavy" : variant;
+
   return (
     <Log
-      variant={blocking ? "error-heavy" : variant}
+      variant={logVariant}
       icon={icon}
       title={check.display_name}
-      details={check.message || t(detail)}
+      centerChildren={
+        <CheckDetails
+          text={check.message || t(detail)}
+          color={HEAVY_DETAILS_COLORS[logVariant] ?? "text-04"}
+        />
+      }
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={1}>
           {showGuidance && (

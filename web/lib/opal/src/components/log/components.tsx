@@ -2,7 +2,6 @@
 
 import "@opal/components/log/styles.css";
 import { useCallback, useState } from "react";
-import type { TextColor } from "@onyx-ai/shared/contracts";
 import { Section } from "@opal/layouts/general/components";
 import { Text } from "@opal/components/text/components";
 import { Tooltip } from "@opal/components/tooltip/components";
@@ -33,43 +32,30 @@ type LogWeight = "heavy" | "light";
 type LogVariant = "default" | `${Exclude<LogStatus, "default">}-${LogWeight}`;
 
 interface LogProps {
-  /** Colours the icon; a heavy variant also colours the details and tints the line. */
+  /** Colours the icon; a heavy variant also tints the line. */
   variant?: LogVariant;
   /** Shown at 1rem, in the status colour. */
   icon: IconFunctionComponent;
   /** What the line is about. One line, in a 10rem column. */
   title: string | RichStr;
-  /** What happened. One line, filling the rest of the row. */
-  details?: string | RichStr;
+  /**
+   * What happened, filling the rest of the row from its start. Any content:
+   * the caller sets its colour and how it fits on one line.
+   */
+  centerChildren?: React.ReactNode;
   /** Trailing content, such as a tag or an action. Not padded. */
   rightChildren?: React.ReactNode;
 }
 
-// The title is always text-03. A heavy line's details take its status colour;
-// every other line's stay text-04, so only the icon carries the status.
-const VARIANTS: Record<
-  LogVariant,
-  { status: LogStatus; weight: LogWeight; details: TextColor }
-> = {
-  default: { status: "default", weight: "light", details: "text-04" },
-  "success-heavy": {
-    status: "success",
-    weight: "heavy",
-    details: "status-success-05",
-  },
-  "success-light": { status: "success", weight: "light", details: "text-04" },
-  "warning-heavy": {
-    status: "warning",
-    weight: "heavy",
-    details: "theme-amber-05",
-  },
-  "warning-light": { status: "warning", weight: "light", details: "text-04" },
-  "error-heavy": {
-    status: "error",
-    weight: "heavy",
-    details: "status-error-05",
-  },
-  "error-light": { status: "error", weight: "light", details: "text-04" },
+// The title is always text-03; `centerChildren` brings its own colour.
+const VARIANTS: Record<LogVariant, { status: LogStatus; weight: LogWeight }> = {
+  default: { status: "default", weight: "light" },
+  "success-heavy": { status: "success", weight: "heavy" },
+  "success-light": { status: "success", weight: "light" },
+  "warning-heavy": { status: "warning", weight: "heavy" },
+  "warning-light": { status: "warning", weight: "light" },
+  "error-heavy": { status: "error", weight: "heavy" },
+  "error-light": { status: "error", weight: "light" },
 };
 
 // ---------------------------------------------------------------------------
@@ -93,21 +79,20 @@ function useClamped(): [(node: HTMLElement | null) => void, boolean] {
 // ---------------------------------------------------------------------------
 
 /**
- * One line of a log or report: an icon, a title, details, and trailing
+ * One line of a log or report: an icon, a title, centre content and trailing
  * content, 2.25rem tall. Not interactive. The variant colours the icon; a
- * heavy variant also colours the details and tints the line. A title or details too long for
- * its line shows in full in a tooltip.
+ * heavy variant also tints the line. A title too long for its column shows in
+ * full in a tooltip.
  */
 function Log({
   variant = "default",
   icon: Icon,
   title,
-  details,
+  centerChildren,
   rightChildren,
 }: LogProps) {
-  const { status, weight, details: detailsColor } = VARIANTS[variant];
+  const { status, weight } = VARIANTS[variant];
   const [titleRef, titleClamped] = useClamped();
-  const [detailsRef, detailsClamped] = useClamped();
 
   return (
     <Section
@@ -124,8 +109,8 @@ function Log({
         <Icon size={16} className="opal-log-icon" />
       </Section>
 
-      {/* The title and the details sit 1rem apart, wider than the line's
-          gap, so the title column reads as a label. */}
+      {/* The title and the centre content sit 1rem apart, wider than the
+          line's gap, so the title column reads as a label. */}
       <Section
         flexDirection="row"
         justifyContent="start"
@@ -153,28 +138,14 @@ function Log({
           </Section>
         </Tooltip>
 
-        <Tooltip tooltip={detailsClamped ? details : undefined} side="top">
-          <Section
-            ref={detailsRef}
-            justifyContent="start"
-            alignItems="stretch"
-            height="fit"
-            className="min-w-0 flex-1"
-          >
-            {details !== undefined && (
-              <Text
-                as="p"
-                font="main-ui-body"
-                color={detailsColor}
-                textPosition="text-start"
-                maxLines={1}
-                data-opal-log-text=""
-              >
-                {details}
-              </Text>
-            )}
-          </Section>
-        </Tooltip>
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          height="fit"
+          className="min-w-0 flex-1"
+        >
+          {centerChildren}
+        </Section>
       </Section>
 
       {rightChildren}
