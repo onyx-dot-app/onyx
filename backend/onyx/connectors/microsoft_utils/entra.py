@@ -39,6 +39,9 @@ class EntraUser(EntraModel):
     display_name: str | None = Field(default=None, alias="displayName")
     user_type: str | None = Field(default=None, alias="userType")
     account_enabled: bool | None = Field(default=None, alias="accountEnabled")
+    # Every address the mailbox answers to, each prefixed with its protocol
+    # ("smtp:" for an alias, "SMTP:" for the primary).
+    proxy_addresses: list[str] = Field(default_factory=list, alias="proxyAddresses")
 
 
 class EntraGroup(EntraModel):

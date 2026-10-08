@@ -92,8 +92,11 @@ def test_list_mailbox_users_builds_the_users_query() -> None:
     assert url == f"{GRAPH_BASE}/users"
     assert params["$filter"] == "accountEnabled eq true"
     assert params["$top"] == "2"
+    assert "proxyAddresses" in params["$select"]
     # An enabled user without a mail address has no mailbox to probe.
     assert [m.address for m in result.mailboxes] == [MAILBOX_ADDRESS]
+    # SMTP aliases only, never the primary or an X.500 address.
+    assert result.mailboxes[0].aliases == ("al@contoso.com",)
     assert result.next_link is None
 
 

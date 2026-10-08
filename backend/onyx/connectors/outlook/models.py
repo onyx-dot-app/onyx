@@ -9,6 +9,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.connectors.models import ConnectorFailure, Document, HierarchyNode
+
 
 class OutlookTokenInfo(BaseModel):
     expires_in: int | None = None
@@ -22,6 +24,9 @@ class OutlookMailbox(BaseModel):
     # The address an admin recognizes: ``mail`` when set, else the UPN.
     address: str
     display_name: str | None = None
+    # The mailbox's other SMTP addresses, lower-cased, so mail sent to an
+    # alias still names it.
+    aliases: tuple[str, ...] = ()
 
 
 class OutlookMailboxPage(BaseModel):
@@ -57,7 +62,8 @@ class OutlookRecipient(BaseModel):
 
 
 class OutlookMessageIdentity(BaseModel):
-    """What the delta listing and a conversation outline know of a message."""
+    """What the delta listing and a conversation outline know of a message:
+    where it sits, which thread it belongs to, and who it names."""
 
     id: str
     # The RFC 5322 Message-ID. The same in every mailbox a message was
@@ -67,6 +73,9 @@ class OutlookMessageIdentity(BaseModel):
     parent_folder_id: str | None = None
     received_at: datetime | None = None
     is_draft: bool = False
+    sender: OutlookRecipient | None = None
+    to_recipients: list[OutlookRecipient] = []
+    cc_recipients: list[OutlookRecipient] = []
 
     @property
     def match_id(self) -> str:
@@ -78,9 +87,6 @@ class OutlookMessageIdentity(BaseModel):
 class OutlookMessage(OutlookMessageIdentity):
     subject: str | None = None
     body_text: str = ""
-    sender: OutlookRecipient | None = None
-    to_recipients: list[OutlookRecipient] = []
-    cc_recipients: list[OutlookRecipient] = []
     sent_at: datetime | None = None
     web_link: str | None = None
     has_attachments: bool = False
@@ -175,6 +181,11 @@ class MailboxCursor(BaseModel):
     folder_change_count: int = 0
     # True once the current folder is being re-read without the server filter.
     folder_unfiltered: bool = False
+    # True once every folder is listed. The connector then holds the mailbox's
+    # listing and builds its conversations, ``built`` of ``to_build`` so far.
+    listed: bool = False
+    built: int = 0
+    to_build: int = 0
     # The calendar view round, one page per step after the folders.
     calendar_next_link: str | None = None
     calendar_done: bool = False
@@ -184,36 +195,34 @@ class MailboxCursor(BaseModel):
 
 
 class ThreadListing(BaseModel):
-    """One mailbox's copy of one message, as the delta listing saw it."""
+    """One message of one mailbox's copy of a thread, as a listing saw it."""
 
     key: str
-    mailbox: OutlookMailbox
     conversation_id: str
     # The Internet Message-ID, or the Graph id when Outlook set none, so a
     # message without one is never matched across mailboxes.
     message_id: str
     received_at: datetime | None = None
+    # The thread's first message, whose headers choose the builder.
+    is_root: bool = False
+    # The sender, when the run walks its mailbox.
+    sender: OutlookMailbox | None = None
+    # The walked mailboxes the message names: the sender and the recipients.
+    named: list[OutlookMailbox] = []
 
 
-class ThreadCopy(BaseModel):
-    """One mailbox's copy of a thread: when it received each message."""
+class DocumentPlan(BaseModel):
+    """One document a mailbox's copy of a thread yields: which of the copy's
+    messages it holds and who reads it."""
 
-    mailbox: OutlookMailbox
-    conversation_id: str
-    received: dict[str, datetime | None] = {}
-
-
-class ThreadGroup(BaseModel):
-    """A thread as listed across mailboxes."""
-
-    key: str
-    newest_message_id: str
-    copies: list[ThreadCopy]
+    document_id: str
+    message_ids: list[str]
+    readers: list[OutlookMailbox]
 
 
-class BucketManifest(BaseModel):
-    """How far the listing is cut into buckets: the pages done and the chunk
-    files written per bucket."""
+class MailboxStep(BaseModel):
+    """What one unit of work in one mailbox produced: items to yield and
+    listing rows for the connector to hold."""
 
-    next_page: int
-    chunks: list[int]
+    items: list[HierarchyNode | Document | ConnectorFailure] = []
+    rows: list[ThreadListing] = []

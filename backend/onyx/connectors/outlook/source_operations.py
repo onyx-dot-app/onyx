@@ -97,10 +97,14 @@ EVENTS_PAGE_SIZE = 50
 # Enough to tell one group with a display name from several.
 GROUP_NAME_MATCH_LIMIT = 2
 
-MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
+MAILBOX_SELECT = "id,mail,userPrincipalName,displayName,proxyAddresses"
+# The user listing's fields plus the aliases a message may name a mailbox by.
+OUTLOOK_USER_SELECT = f"{ENTRA_USER_SELECT},proxyAddresses"
+_SMTP_PREFIX = "smtp:"
 FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
-# Identity, thread and placement of a message, never a body. Shared by the
-# delta walk and the conversation outline.
+# Identity, thread, placement and headers of a message, never a body. Shared
+# by the delta walk and the conversation outline, which decide who builds and
+# reads a thread from the sender and recipients.
 CHANGE_SELECT = ",".join(
     (
         "id",
@@ -110,6 +114,9 @@ CHANGE_SELECT = ",".join(
         "parentFolderId",
         "receivedDateTime",
         "isDraft",
+        "sender",
+        "toRecipients",
+        "ccRecipients",
     )
 )
 MESSAGE_SELECT = ",".join(
@@ -182,10 +189,18 @@ def _mailbox(user: EntraUser) -> OutlookMailbox | None:
     address = user.mail or user.user_principal_name
     if not address:
         return None
+    aliases: list[str] = []
+    for proxy in user.proxy_addresses:
+        if not proxy.lower().startswith(_SMTP_PREFIX):
+            continue
+        alias = proxy[len(_SMTP_PREFIX) :].lower()
+        if alias != address.lower() and alias not in aliases:
+            aliases.append(alias)
     return OutlookMailbox(
         id=user.id,
         address=address,
         display_name=user.display_name,
+        aliases=tuple(aliases),
     )
 
 
@@ -219,6 +234,9 @@ def _parse_change(raw: dict[str, Any]) -> OutlookMessageChange:
         parent_folder_id=raw.get("parentFolderId"),
         received_at=parse_graph_datetime(received) if received else None,
         is_draft=bool(raw.get("isDraft")),
+        sender=_recipient(raw.get("sender")),
+        to_recipients=_recipients(raw.get("toRecipients")),
+        cc_recipients=_recipients(raw.get("ccRecipients")),
     )
 
 
@@ -458,7 +476,7 @@ class OutlookSourceOperations(SourceOperations):
             self._gateway().get_json,
             url=f"{self._graph_base()}/users",
             item_model=EntraUser,
-            select_fields=ENTRA_USER_SELECT,
+            select_fields=OUTLOOK_USER_SELECT,
             next_link=next_link,
             page_size=page_size,
             filter_expression=ENABLED_USERS_FILTER,
@@ -548,7 +566,7 @@ class OutlookSourceOperations(SourceOperations):
                 "/transitiveMembers/microsoft.graph.user"
             ),
             item_model=EntraUser,
-            select_fields=ENTRA_USER_SELECT,
+            select_fields=OUTLOOK_USER_SELECT,
             next_link=next_link,
             page_size=page_size,
         )
@@ -859,10 +877,12 @@ class OutlookSourceOperations(SourceOperations):
         select: str,
         next_link: str | None,
         headers: dict[str, str] | None = None,
+        oldest_first: bool = False,
     ) -> dict[str, Any]:
-        """One page of a conversation in one mailbox, newest first. Ordering
-        needs the ordered property to lead the filter, hence the always-true
-        ``receivedDateTime`` bound ahead of the conversation id."""
+        """One page of a conversation in one mailbox, newest first unless
+        asked otherwise. Ordering needs the ordered property to lead the
+        filter, hence the always-true ``receivedDateTime`` bound ahead of the
+        conversation id."""
         params = None
         url = next_link
         if url is None:
@@ -872,34 +892,11 @@ class OutlookSourceOperations(SourceOperations):
                     f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
                     f"conversationId eq '{_odata_quote(conversation_id)}'"
                 ),
-                "$orderby": "receivedDateTime desc",
+                "$orderby": "receivedDateTime " + ("asc" if oldest_first else "desc"),
                 "$select": select,
                 "$top": str(MESSAGES_PAGE_SIZE),
             }
         return self._get(url, params, headers)
-
-    @source_operation(
-        capabilities={CredentialCapability.INDEXING},
-        consumes=OperationConsumes.CREDENTIAL,
-        untested=(
-            "Needs a Message-ID a second mailbox holds, which only a shared thread "
-            "produces. The mail-read check proves the fields on the mailbox-wide route."
-        ),
-    )
-    def find_message_by_internet_message_id(
-        self, *, mailbox_id: str, internet_message_id: str
-    ) -> OutlookMessageChange | None:
-        """The mailbox's copy of one message by its Internet Message-ID, the
-        CHANGE_SELECT fields only. None when the mailbox holds none."""
-        raw = self._first_item(
-            f"{self._user_url(mailbox_id)}/messages",
-            {
-                "$filter": f"internetMessageId eq '{_odata_quote(internet_message_id)}'",
-                "$select": CHANGE_SELECT,
-                "$top": "1",
-            },
-        )
-        return _parse_change(raw) if raw else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -915,12 +912,17 @@ class OutlookSourceOperations(SourceOperations):
         mailbox_id: str,
         conversation_id: str,
         next_link: str | None = None,
+        oldest_first: bool = False,
     ) -> OutlookDeltaPage:
-        """One page of a conversation's messages in one mailbox, newest
-        first, the CHANGE_SELECT fields only, to compare copies across
-        mailboxes without reading a body."""
+        """One page of a conversation's messages in one mailbox, newest first
+        unless asked otherwise, the CHANGE_SELECT fields only, to decide a
+        copy's documents without reading a body."""
         data = self._conversation_page(
-            mailbox_id, conversation_id, CHANGE_SELECT, next_link
+            mailbox_id,
+            conversation_id,
+            CHANGE_SELECT,
+            next_link,
+            oldest_first=oldest_first,
         )
         return OutlookDeltaPage(
             changes=[_parse_change(raw) for raw in data.get("value", [])],
