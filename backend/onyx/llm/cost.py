@@ -179,16 +179,19 @@ def _catalog_cost_cents(
     """
     # Most specific applicable rate card wins: the highest long-context
     # threshold the prompt clears. `context_over_200k` is the legacy single
-    # tier; `tiers` entries carry arbitrary context thresholds.
+    # tier; `tiers` entries carry arbitrary context thresholds. Upstream
+    # vendors the legacy block verbatim next to `tiers` — sometimes with a
+    # different (correct) tier threshold — so explicit tiers win and the
+    # legacy block only applies when no context tiers exist.
     candidates: list[tuple[float, dict[str, Any]]] = []
-    legacy_tier: dict[str, Any] | None = cost.get("context_over_200k")
-    if legacy_tier:
-        candidates.append((_LONG_CONTEXT_THRESHOLD_TOKENS, legacy_tier))
     for tier_entry in cost.get("tiers") or []:
         tier_meta: dict[str, Any] = tier_entry.get("tier") or {}
         size: Any = tier_meta.get("size")
         if tier_meta.get("type") == "context" and isinstance(size, (int, float)):
             candidates.append((float(size), tier_entry))
+    legacy_tier: dict[str, Any] | None = cost.get("context_over_200k")
+    if legacy_tier and not candidates:
+        candidates.append((_LONG_CONTEXT_THRESHOLD_TOKENS, legacy_tier))
     rates = cost
     best: float = -1.0
     for threshold, tier_rates in candidates:
@@ -198,10 +201,11 @@ def _catalog_cost_cents(
 
     def _rate(key: str, fallback: float | None = None) -> float:
         value = rates.get(key)
-        if value is None:
+        # Negative rates are upstream "unknown price" sentinels, never real —
+        # a negative tier rate defers to the base rate like a missing one.
+        if not isinstance(value, (int, float)) or value < 0:
             value = cost.get(key)
-        # Negative rates are upstream "unknown price" sentinels, never real.
-        if value is not None and value < 0:
+        if not isinstance(value, (int, float)) or value < 0:
             value = None
         return float(value) if value is not None else (fallback or 0.0)
 

@@ -276,26 +276,27 @@ def _remote_section(provider: str) -> dict[str, Any] | None:
         return section
 
 
-def find_remote_model_entry(
+def find_remote_model_obj(
     provider: str, candidates: list[str]
 ) -> dict[str, Any] | None:
-    """Resolve model candidates against the provider's remote section."""
+    """Remote entry rendered in the compat model-map shape."""
     section = _remote_section(provider)
     if section is None:
         return None
     for candidate in candidates:
         entry = _model_in_section(section, candidate)
-        if entry is not None:
-            return entry
+        if entry is None:
+            continue
+        try:
+            return _compat_entry(provider, entry, candidate)
+        except Exception as e:
+            # A malformed remote entry is a remote miss, not an error — the
+            # vendored floor still resolves the lookup.
+            logger.warning(
+                "Malformed remote catalog entry %s/%s: %s", provider, candidate, e
+            )
+            return None
     return None
-
-
-def find_remote_model_obj(
-    provider: str, candidates: list[str]
-) -> dict[str, Any] | None:
-    """Remote entry rendered in the compat model-map shape."""
-    entry = find_remote_model_entry(provider, candidates)
-    return _compat_entry(provider, entry) if entry else None
 
 
 def reset_remote_cache() -> None:
@@ -352,13 +353,28 @@ def find_model_cost(provider: str, model_name: str) -> dict[str, Any] | None:
     return entry.get("cost") if entry else None
 
 
-def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
+def _compat_entry(
+    provider: str, entry: dict[str, Any], model_name: str
+) -> dict[str, Any]:
     """Render a catalog entry in the legacy litellm.model_cost shape consumed
     by model_capabilities and the model name parser."""
     limit = entry.get("limit") or {}
     modalities = entry.get("modalities") or {}
     inputs = modalities.get("input") or []
     display_name = re.sub(r"\s*\(latest\)\s*$", "", entry.get("name") or "")
+
+    # Entries vendored from sources without a mode concept (models.dev-only
+    # providers like vercel_ai_gateway) ship no mode; without one every
+    # embedding/rerank entry would resolve as a chat model. Infer non-chat
+    # classes from the id — the same name heuristic is_embedding_model_name
+    # already applies to uncataloged models.
+    mode: Any = entry.get("mode")
+    if not mode:
+        mode = (
+            "embedding"
+            if _EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1])
+            else "chat"
+        )
 
     # Meta-models (openrouter/auto and friends) route each request to a
     # pool endpoint smaller than their advertised pool-max limits. Emitting
@@ -374,7 +390,7 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
     context: Any = limit.get("context")
     if (
         not unbounded
-        and (entry.get("mode") or "chat") == "chat"
+        and mode == "chat"
         and isinstance(limit_output, (int, float))
         and isinstance(context, (int, float))
         and context > 0
@@ -384,7 +400,7 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "litellm_provider": provider,
-        "mode": entry.get("mode") or "chat",
+        "mode": mode,
         "max_input_tokens": limit.get("input") or limit.get("context"),
         "max_tokens": limit.get("context"),
         "max_output_tokens": None if unbounded else limit_output,
@@ -418,14 +434,14 @@ def build_model_map() -> dict[str, dict[str, Any]]:
     for provider in ordered_providers:
         section = catalog[provider]
         for model_id, entry in section["models"].items():
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, model_id)
             model_map[f"{provider}/{model_id}"] = compat
             model_map.setdefault(model_id, compat)
         for alias, target in section["aliases"].items():
             entry = section["models"].get(target)
             if entry is None:
                 continue
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, alias)
             model_map[f"{provider}/{alias}"] = compat
             model_map.setdefault(alias, compat)
 

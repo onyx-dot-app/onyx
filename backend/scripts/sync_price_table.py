@@ -162,14 +162,27 @@ def _normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
     cost: Any = out.get("cost")
     if isinstance(cost, dict):
         # Negative rates are upstream "unknown price" sentinels, not prices.
-        out["cost"] = {
-            k: v
-            for k, v in cost.items()
-            if not isinstance(v, (int, float)) or isinstance(v, bool) or v >= 0
-        }
+        out["cost"] = _drop_negative_rates(cost)
+        if isinstance(out["cost"].get("context_over_200k"), dict):
+            out["cost"]["context_over_200k"] = _drop_negative_rates(
+                out["cost"]["context_over_200k"]
+            )
+        tiers: Any = out["cost"].get("tiers")
+        if isinstance(tiers, list):
+            out["cost"]["tiers"] = [
+                _drop_negative_rates(t) if isinstance(t, dict) else t for t in tiers
+            ]
         if not out["cost"]:
             del out["cost"]
     return out
+
+
+def _drop_negative_rates(block: dict[str, Any]) -> dict[str, Any]:
+    return {
+        k: v
+        for k, v in block.items()
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or v >= 0
+    }
 
 
 # Entry fields models.dev publishes that we deliberately do not vendor. New
