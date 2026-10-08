@@ -315,9 +315,10 @@ export default function AuthenticationAccountSection({
                 // account stays the chosen one.
                 expandableKeepMounted
                 border="solid"
-                // Selected while its draft is the chosen account.
+                // Selected only while the typed account is chosen and usable:
+                // an empty or invalid field leaves no account to use.
                 state={
-                  newAccountChosen
+                  newAccountChosen && newAccountReady
                     ? "selected"
                     : isCreating
                       ? "filled"
