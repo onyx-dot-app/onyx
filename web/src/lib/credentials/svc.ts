@@ -1,6 +1,7 @@
 import type {
   Credential,
   CredentialBase,
+  CredentialCheckReport,
   CredentialWithPrivateKey,
 } from "@/lib/credentials/types";
 import { AccessType, ProcessingMode } from "@/lib/types";
@@ -231,4 +232,25 @@ export async function submitCredential<T>(
   } catch (error) {
     return { message: buildError(String(error)), isSuccess: false };
   }
+}
+
+/**
+ * Starts the capability checks on a saved credential alone. The run happens
+ * on a worker; poll `SWR_KEYS.credentialCheckReports` for its report.
+ */
+export async function startCredentialCheckRun(
+  credentialId: number
+): Promise<CredentialCheckReport> {
+  const response = await fetch(
+    `/api/manage/admin/credential/${credentialId}/capability-check`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Credential check run request failed: ${response.status}`);
+  }
+  return response.json();
 }

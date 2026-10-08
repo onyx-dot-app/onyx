@@ -267,6 +267,9 @@ export const SWR_KEYS = {
   // Credentials of one source the caller may attach.
   similarCredentials: (source: string) =>
     `/api/manage/admin/similar-credentials/${source}`,
+  // Every stored capability report of one source's credentials.
+  credentialCheckReports: (source: string) =>
+    `/api/manage/admin/credential/capability-reports?source=${source}`,
 
   // ── CC-Pairs ──────────────────────────────────────────────────────────────
   ccPair: (ccPairId: string | number) =>

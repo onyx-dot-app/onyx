@@ -2735,6 +2735,25 @@
           },
           "owner": {
             "you": "{name} (vous)"
+          },
+          "lastTested": {
+            "title": "Dernier test {date}"
+          },
+          "notTested": {
+            "title": "Pas encore testé"
+          },
+          "details": {
+            "description": "Les identifiants d’un compte enregistré ne peuvent pas être modifiés ni redirigés vers un autre hôte. Vous pouvez tester le compte avant de le réutiliser ou ajouter un nouveau compte."
+          },
+          "rerunButton": {
+            "label": "Relancer les vérifications",
+            "runningLabel": "Vérifications en cours"
+          },
+          "authenticationType": {
+            "label": "Type d’authentification"
+          },
+          "rerunFailed": {
+            "toast": "Impossible de lancer les vérifications. Réessayez."
           }
         }
       },

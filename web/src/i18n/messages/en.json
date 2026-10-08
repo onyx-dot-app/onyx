@@ -2735,6 +2735,25 @@
           },
           "owner": {
             "you": "{name} (you)"
+          },
+          "lastTested": {
+            "title": "Last Tested {date}"
+          },
+          "notTested": {
+            "title": "Not Tested Yet"
+          },
+          "details": {
+            "description": "Saved account credentials can't be edited or redirected to a different host. You can test the account before reuse or add a new account instead."
+          },
+          "rerunButton": {
+            "label": "Re-run Checks",
+            "runningLabel": "Running Checks"
+          },
+          "authenticationType": {
+            "label": "Authentication Type"
+          },
+          "rerunFailed": {
+            "toast": "Couldn't start the checks. Try again."
           }
         }
       },

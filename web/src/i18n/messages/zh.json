@@ -2735,6 +2735,25 @@
           },
           "owner": {
             "you": "{name}（你）"
+          },
+          "lastTested": {
+            "title": "上次测试 {date}"
+          },
+          "notTested": {
+            "title": "尚未测试"
+          },
+          "details": {
+            "description": "已保存账户的凭据无法编辑，也无法指向其他主机。你可以在复用前测试该账户，或改为添加新账户。"
+          },
+          "rerunButton": {
+            "label": "重新运行检查",
+            "runningLabel": "正在运行检查"
+          },
+          "authenticationType": {
+            "label": "认证类型"
+          },
+          "rerunFailed": {
+            "toast": "无法启动检查，请重试。"
           }
         }
       },

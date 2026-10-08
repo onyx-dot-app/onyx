@@ -2735,6 +2735,25 @@
           },
           "owner": {
             "you": "{name} (Sie)"
+          },
+          "lastTested": {
+            "title": "Zuletzt getestet {date}"
+          },
+          "notTested": {
+            "title": "Noch nicht getestet"
+          },
+          "details": {
+            "description": "Gespeicherte Kontozugangsdaten können nicht bearbeitet oder an einen anderen Host umgeleitet werden. Sie können das Konto vor der Wiederverwendung testen oder stattdessen ein neues Konto hinzufügen."
+          },
+          "rerunButton": {
+            "label": "Prüfungen erneut ausführen",
+            "runningLabel": "Prüfungen laufen"
+          },
+          "authenticationType": {
+            "label": "Authentifizierungstyp"
+          },
+          "rerunFailed": {
+            "toast": "Die Prüfungen konnten nicht gestartet werden. Versuchen Sie es erneut."
           }
         }
       },

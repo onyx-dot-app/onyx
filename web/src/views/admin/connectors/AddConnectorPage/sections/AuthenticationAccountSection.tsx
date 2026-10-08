@@ -6,7 +6,10 @@ import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
 import { SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/credentials/types";
-import { useCredentialSetup } from "@/lib/credentials/hooks";
+import {
+  useCredentialCheckReports,
+  useCredentialSetup,
+} from "@/lib/credentials/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
@@ -65,6 +68,7 @@ export default function AuthenticationAccountSection({
     authorize,
     isAuthorizing,
   } = useCredentialSetup(connector);
+  const checkReports = useCredentialCheckReports(connector);
 
   // The create card's one label, whatever the number of routes; the tabs
   // inside it name the routes.
@@ -198,6 +202,8 @@ export default function AuthenticationAccountSection({
                 onSelect={onSwap}
                 onDeselect={() => onCredentialChange(null)}
                 onDelete={onDeleteCredential}
+                checkReport={checkReports.reportFor(credential.id)}
+                onRerunChecks={(picked) => checkReports.rerun(picked.id)}
               />
             ))}
 
