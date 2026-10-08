@@ -261,11 +261,9 @@ def _convert_onyx_chunk_to_opensearch_document(
     return DocumentChunk(
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
-        # Use get_title_for_document_index to match the logic used when creating
-        # the title_embedding in the embedder. This method falls back to
-        # semantic_identifier when title is None (but not empty string).
+        # get_title_for_document_index falls back to semantic_identifier when
+        # title is None (but not empty string).
         title=filtered_title,
-        title_vector=chunk.title_embedding,
         content=filtered_content,
         content_vector=chunk.embeddings.full_embedding,
         source_type=source_types[0].value,

@@ -66,7 +66,6 @@ def _make_chunk_with_embedding(
             "embeddings": ChunkEmbedding(
                 full_embedding=embedding, mini_chunk_embeddings=[]
             ),
-            "title_embedding": embedding,
         }
     )
 

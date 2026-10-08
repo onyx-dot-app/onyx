@@ -188,8 +188,7 @@ def _title_prefix(chunk: DocumentChunkWithoutVectors) -> str:
     """The title prefix the chunker prepends to content (`extract_blurb(title) +
     RETURN_SEPARATOR`). Approximated with the full stored title; for very long
     titles the chunker truncates to BLURB_SIZE tokens, so the rebuilt prefix can
-    be marginally longer — accepted imprecision (the title is also encoded
-    separately as `title_vector`)."""
+    be marginally longer — accepted imprecision."""
     return f"{chunk.title}{RETURN_SEPARATOR}" if chunk.title else ""
 
 
@@ -276,7 +275,7 @@ def re_embed_chunks(
     """Re-embed stored chunks under a prebuilt strategy + embedder (no DB access).
 
     Returns DocumentChunks ready to write to the FUTURE index. For MODEL_ONLY only
-    `content_vector`/`title_vector` change; every other field is copied through.
+    `content_vector` changes; every other field is copied through.
     For AUGMENTATION the stored `content`, `doc_summary` and `chunk_context` are
     also rebuilt under FUTURE settings (`augmentation_ctx` is required, and for
     FUTURE-RAG-on must carry the contextual LLM). Chunks may span documents; only
@@ -318,12 +317,11 @@ def re_embed_chunks(
     embedded = embedder.embed_chunks(doc_aware_chunks)
     # Pair each stored chunk with its OWN vector by identity, not list position.
     matched = _match_embeddings_by_identity(stored_chunks, embedded)
-    # Whole stored chunk + the two new vectors; everything else copied through.
+    # Whole stored chunk + the new vector; everything else copied through.
     return [
         DocumentChunk(
             **dict(stored),
             content_vector=index_chunk.embeddings.full_embedding,
-            title_vector=index_chunk.title_embedding,
         )
         for stored, index_chunk in zip(stored_chunks, matched, strict=True)
     ]
@@ -502,7 +500,6 @@ def _augmentation_reembed(
             DocumentChunk(
                 **fields,
                 content_vector=index_chunk.embeddings.full_embedding,
-                title_vector=index_chunk.title_embedding,
             )
         )
     return results

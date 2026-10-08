@@ -113,24 +113,6 @@ class OpenSearchSearchType(str, Enum):
     UNKNOWN = "unknown"
 
 
-class HybridSearchSubqueryConfiguration(Enum):
-    TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD = 1
-    # Current default.
-    CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD = 2
-
-
-# Will raise and block application start if HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-# is set but not a valid value. If not set, defaults to
-# CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD.
-HYBRID_SEARCH_SUBQUERY_CONFIGURATION: HybridSearchSubqueryConfiguration = (
-    HybridSearchSubqueryConfiguration(
-        int(os.environ["HYBRID_SEARCH_SUBQUERY_CONFIGURATION"])
-    )
-    if os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION", None) is not None
-    else HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-)
-
-
 class HybridSearchNormalizationPipeline(Enum):
     # Current default.
     MIN_MAX = 1
