@@ -53,3 +53,5 @@ def test_scheduled_canary_uses_an_isolated_compose_stack() -> None:
     assert alert["with"]["mention"] == "rohoswagger"
     assert alert["with"]["bot-token"] == "${{ secrets.CVE_REVIEWS_BOT_TOKEN }}"
     assert "{mention}" in alert["with"]["text"]
+    assert "\n\n• Routing:" in alert["with"]["text"]
+    assert "|View workflow run and logs>" in alert["with"]["text"]

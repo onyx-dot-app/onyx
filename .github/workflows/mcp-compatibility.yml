@@ -177,9 +177,12 @@ jobs:
           channel: C07K8KBMGKF
           mention: rohoswagger
           fail-on-error: "true"
-          text: >-
-            ${{ inputs.test_alert && 'MCP compatibility alert-delivery test.' || 'MCP compatibility checks failed.' }} {mention}
-            Routing: ${{ needs.routing.result }};
-            Claude Code/Codex: ${{ needs.native-clients.result }};
-            local Compose discovery: ${{ needs.compose-smoke.result }}.
-            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          text: |-
+            *${{ inputs.test_alert && 'MCP compatibility: alert-delivery test' || 'MCP compatibility checks failed' }}*
+            {mention}
+
+            • Routing: `${{ needs.routing.result }}`
+            • Claude Code / Codex: `${{ needs.native-clients.result }}`
+            • Local Compose discovery: `${{ needs.compose-smoke.result }}`
+
+            <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run and logs>
