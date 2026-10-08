@@ -1,7 +1,7 @@
 import hashlib
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any, Self
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -390,15 +390,6 @@ class DocumentChunk(DocumentChunkWithoutVectors):
             f"content length={len(self.content)}, content vector length={len(self.content_vector)}, "
             f"tenant_id={self.tenant_id.tenant_id})"
         )
-
-    @model_validator(mode="after")
-    def check_title_and_title_vector_are_consistent(self) -> Self:
-        # title and title_vector should both either be None or not.
-        if self.title is not None and self.title_vector is None:
-            raise ValueError("Bug: Title vector must not be None if title is not None.")
-        if self.title_vector is not None and self.title is None:
-            raise ValueError("Bug: Title must not be None if title vector is not None.")
-        return self
 
 
 class DocumentSchema:
