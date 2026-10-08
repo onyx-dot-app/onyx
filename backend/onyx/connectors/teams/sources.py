@@ -35,12 +35,12 @@ class SlimWalk:
         with_readers: bool,
         lists_threads: bool = True,
     ) -> None:
-        self.start = start
-        self.callback = callback
-        self.with_readers = with_readers
+        self.start: SecondsSinceUnixEpoch = start
+        self.callback: IndexingHeartbeatInterface | None = callback
+        self.with_readers: bool = with_readers
         # False when the caller has no use for threads: the group a thread
         # names never changes, and the group sync says who is in it.
-        self.lists_threads = lists_threads
+        self.lists_threads: bool = lists_threads
         # Workers report from their own threads and the runner's callback is
         # not built for that, so every report goes through one lock.
         self._signal_lock: threading.Lock = threading.Lock()
