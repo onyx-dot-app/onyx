@@ -143,23 +143,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Alert regressions channel
-        uses: ./.github/actions/slack-post-message
+        uses: ./.github/actions/slack-notify
         with:
-          bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          channel: C0C7E364L5R
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
           fail-on-error: "true"
-          text: >-
-            ${{ inputs.test_alert && 'MCP compatibility alert-delivery test.' || 'MCP compatibility checks failed.' }}
+          title: ${{ inputs.test_alert && 'MCP compatibility alert-delivery test' || 'MCP compatibility checks failed' }}
+          ref-name: ${{ github.ref_name }}
+          details: >-
             Routing: ${{ needs.routing.result }};
             Claude Code/Codex: ${{ needs.native-clients.result }};
             deployed discovery: ${{ needs.deployed-smoke.result }}.
             https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      - name: Identify rejected Slack destination
-        if: failure()
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-        run: |
-          curl -sS --fail-with-body --connect-timeout 10 --max-time 30 \
-            -X POST https://slack.com/api/auth.test \
-            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
-            | jq '{ok, error, team, user, user_id, bot_id, url}'

@@ -378,10 +378,10 @@ An hourly canary checks craft-dev discovery aliases, both endpoint URL forms,
 the advertised slash-free resource, the unauthenticated MCP
 challenge, and provider endpoint routing without creating users or grants.
 `MCP_COMPATIBILITY_BASE_URL` can select another deployed origin. Scheduled and
-manual failures post to `#regressions` with `SLACK_BOT_TOKEN` through the shared
+manual failures use `SLACK_WEBHOOK` through the shared
 Slack action. The required-client mode fails if either CLI is missing.
 Manual runs with `test_alert=true` send a labeled delivery-test message even
-when compatibility checks pass. Slack API failures log only the error code.
+when compatibility checks pass. The webhook selects the destination channel.
 
 ### Tests
 
