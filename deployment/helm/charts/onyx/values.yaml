@@ -1477,6 +1477,7 @@ fleetTelemetry:
   existingSecret: ""
   collector:
     enabled: true
+    # Creates a namespace Role that can list pods and pod metrics.
     kubernetes: true
     schemas: ""
     # Optional backend image override; defaults to the API image. It must
@@ -1485,6 +1486,11 @@ fleetTelemetry:
     schemaShardIndex: 0
     schemaShardCount: 1
     serviceAccountAnnotations: {}
+    # Pod annotations and scheduling for the collector Deployment.
+    podAnnotations: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
     # Enable on one collector for shared managed services. Requires
     # existingSecret with ONYX_TELEMETRY_AWS_RESOURCES_JSON.
     awsResources: false
@@ -1680,8 +1686,6 @@ sandboxPushPolicy:
   allowTelepresenceAmbassador: false
 
 configMap:
-  # Optional build commit for telemetry; accepts only a lowercase hex Git SHA.
-  ONYX_BUILD_SHA: ""
   # WARNING: do NOT copy hostname keys from a docker-compose .env into this
   # block. The compose stack uses underscored service names (e.g. `api_server`,
   # `cache`, `inference_model_server`) which are invalid in K8s DNS labels and
@@ -1856,6 +1860,8 @@ configMap:
   # Logging
   # Set "true" to disable fleet telemetry, including the collector.
   DISABLE_TELEMETRY: ""
+  # Optional build commit for telemetry; accepts only a lowercase hex Git SHA.
+  ONYX_BUILD_SHA: ""
   # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
   # api_server, model_server, slack/discord bots, AND all Celery workers. Empty
   # (default) -> Python falls back to "info" for the api/model/etc processes;

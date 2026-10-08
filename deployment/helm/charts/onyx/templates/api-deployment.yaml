@@ -114,6 +114,7 @@ spec:
             - name: ONYX_API_THREADPOOL_SIZE
               value: "{{ .Values.api.threadpoolSize }}"
             {{- end }}
+            {{- include "onyx.fleetTelemetryEnv" . | nindent 12}}
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- include "onyx.envSecretsRestricted" . | nindent 12}}
             {{- include "onyx.metricsAuthEnv" . | nindent 12}}

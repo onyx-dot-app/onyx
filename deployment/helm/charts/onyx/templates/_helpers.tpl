@@ -109,7 +109,6 @@ Set secret name
 Create env vars from secrets (global secrets only — skips entries with allPods: false)
 */}}
 {{- define "onyx.envSecrets" -}}
-{{- include "onyx.fleetTelemetryEnv" . }}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
     {{- $allPods := or (not (hasKey $secretContent "allPods")) (ne (toString $secretContent.allPods) "false") }}
     {{- if and (ne $secretSuffix "metricsAuth") (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) $allPods }}
@@ -154,6 +153,78 @@ Inject metrics auth only into pods that expose the protected endpoint.
       name: {{ include "onyx.secretName" $metricsAuth }}
       key: {{ default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" $metricsAuth) }}
     {{- end }}
+{{- end }}
+
+{{/*
+Fleet telemetry values with the chart defaults. `helm upgrade --reuse-values` keeps
+the values of a release from before fleetTelemetry existed, so templates read this.
+*/}}
+{{- define "onyx.fleetTelemetry.values" -}}
+{{- $defaults := dict
+  "enabled" true
+  "endpoint" "https://telemetry.onyx.app"
+  "customerUuid" ""
+  "deploymentId" ""
+  "existingSecret" ""
+  "collector" (dict
+    "enabled" true
+    "kubernetes" true
+    "schemas" ""
+    "image" ""
+    "schemaShardIndex" 0
+    "schemaShardCount" 1
+    "serviceAccountAnnotations" dict
+    "podAnnotations" dict
+    "nodeSelector" dict
+    "tolerations" list
+    "affinity" dict
+    "awsResources" false
+    "awsRegion" "us-east-2"
+    "resources" (dict "requests" (dict "cpu" "25m" "memory" "64Mi") "limits" (dict "cpu" "200m" "memory" "256Mi")))
+-}}
+{{- $user := .Values.fleetTelemetry | default dict -}}
+{{- $merged := mergeOverwrite $defaults (deepCopy $user) -}}
+{{- /* A merge cannot clear a default, so user resources replace the defaults whole. */ -}}
+{{- $userCollector := $user.collector | default dict -}}
+{{- if hasKey $userCollector "resources" -}}
+{{- $_ := set $merged.collector "resources" $userCollector.resources -}}
+{{- end -}}
+{{- toYaml $merged -}}
+{{- end }}
+
+{{/*
+Fleet telemetry env for the containers that start a sender: the API server, the
+Celery workers (not beat), the Slack bot and the collector. Give each sender the
+same output. A sender without the explicit identity enrolls a second identity.
+*/}}
+{{- define "onyx.fleetTelemetryEnv" -}}
+{{- $fleet := include "onyx.fleetTelemetry.values" . | fromYaml -}}
+{{- if and $fleet.enabled (ne (lower (toString .Values.configMap.DISABLE_TELEMETRY)) "true") }}
+{{- if and $fleet.deploymentId (not $fleet.customerUuid) }}
+{{- fail "fleetTelemetry.deploymentId requires fleetTelemetry.customerUuid and fleetTelemetry.existingSecret: set all three, or clear deploymentId to enroll automatically" }}
+{{- end }}
+- name: ONYX_TELEMETRY_ENDPOINT
+  value: {{ $fleet.endpoint | quote }}
+{{- if $fleet.customerUuid }}
+- name: ONYX_TELEMETRY_CUSTOMER_UUID
+  value: {{ $fleet.customerUuid | quote }}
+- name: ONYX_TELEMETRY_DEPLOYMENT_ID
+  value: {{ required "fleetTelemetry.deploymentId is required with customerUuid" $fleet.deploymentId | quote }}
+- name: ONYX_TELEMETRY_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ required "fleetTelemetry.existingSecret is required with customerUuid" $fleet.existingSecret }}
+      key: ONYX_TELEMETRY_TOKEN
+- name: ONYX_TELEMETRY_PRIVACY_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $fleet.existingSecret }}
+      key: ONYX_TELEMETRY_PRIVACY_KEY
+{{- end }}
+{{- else }}
+- name: DISABLE_TELEMETRY
+  value: "true"
+{{- end }}
 {{- end }}
 
 {{/*

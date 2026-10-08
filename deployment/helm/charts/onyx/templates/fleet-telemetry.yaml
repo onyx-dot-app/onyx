@@ -1,58 +1,40 @@
-{{- define "onyx.fleetTelemetryEnv" -}}
-{{- if and .Values.fleetTelemetry.enabled (ne (lower (toString .Values.configMap.DISABLE_TELEMETRY)) "true") }}
-- name: ONYX_TELEMETRY_ENDPOINT
-  value: {{ .Values.fleetTelemetry.endpoint | quote }}
-{{- if .Values.fleetTelemetry.customerUuid }}
-- name: ONYX_TELEMETRY_CUSTOMER_UUID
-  value: {{ .Values.fleetTelemetry.customerUuid | quote }}
-- name: ONYX_TELEMETRY_DEPLOYMENT_ID
-  value: {{ required "fleetTelemetry.deploymentId is required with customerUuid" .Values.fleetTelemetry.deploymentId | quote }}
-- name: ONYX_TELEMETRY_TOKEN
-  valueFrom:
-    secretKeyRef:
-      name: {{ required "fleetTelemetry.existingSecret is required with customerUuid" .Values.fleetTelemetry.existingSecret }}
-      key: ONYX_TELEMETRY_TOKEN
-- name: ONYX_TELEMETRY_PRIVACY_KEY
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.fleetTelemetry.existingSecret }}
-      key: ONYX_TELEMETRY_PRIVACY_KEY
-{{- end }}
-{{- else }}
-- name: DISABLE_TELEMETRY
-  value: "true"
-{{- end }}
-{{- end }}
-{{- if and .Values.fleetTelemetry.enabled .Values.fleetTelemetry.collector.enabled (ne (lower (toString .Values.configMap.DISABLE_TELEMETRY)) "true") }}
+{{- $fleet := include "onyx.fleetTelemetry.values" . | fromYaml }}
+{{- $collector := $fleet.collector }}
+{{- if and $fleet.enabled $collector.enabled (ne (lower (toString .Values.configMap.DISABLE_TELEMETRY)) "true") }}
+{{- $image := $collector.image | default (printf "%v:%v" .Values.api.image.repository (.Values.api.image.tag | default .Values.global.version)) }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
-  {{- with .Values.fleetTelemetry.collector.serviceAccountAnnotations }}
+  {{- with $collector.serviceAccountAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-automountServiceAccountToken: {{ .Values.fleetTelemetry.collector.kubernetes }}
-{{- if .Values.fleetTelemetry.collector.kubernetes }}
+automountServiceAccountToken: {{ $collector.kubernetes }}
+{{- if $collector.kubernetes }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list"]
+    verbs: ["list"]
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods"]
-    verbs: ["get", "list"]
+    verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
     name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
@@ -79,25 +61,80 @@ spec:
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with $collector.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
         app: telemetry-collector
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       serviceAccountName: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
-      automountServiceAccountToken: {{ .Values.fleetTelemetry.collector.kubernetes }}
+      automountServiceAccountToken: {{ $collector.kubernetes }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
         runAsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
+      {{- with $collector.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $collector.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $collector.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if include "onyx.customCACerts.enabled" . }}
+      # The collector is non-root with a read-only root filesystem, so it cannot
+      # run update-ca-certificates like the other backend pods. Build an additive
+      # bundle in its writable /tmp instead: a bundle with only the private roots
+      # would break public HTTPS.
+      initContainers:
+        - name: build-ca-bundle
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              # An init container can run again on the same emptyDir.
+              rm -f /tmp/ca-certificates.crt
+              cp /etc/ssl/certs/ca-certificates.crt /tmp/ca-certificates.crt
+              # Secret/ConfigMap mounts expose top-level keys as symlinks. Keep
+              # the search shallow so the backing hidden data directory is not
+              # included again, and print each PEM with a trailing newline.
+              find /usr/local/share/ca-certificates -maxdepth 1 \( -type f -o -type l \) -name '*.crt' -exec awk '1' {} + >> /tmp/ca-certificates.crt
+              chmod 0444 /tmp/ca-certificates.crt
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml $collector.resources | nindent 12 }}
+          volumeMounts:
+            - name: collector-tmp
+              mountPath: /tmp
+            {{- include "onyx.customCACerts.volumeMount" . | nindent 12 }}
+      {{- end }}
       containers:
         - name: collector
-          {{- if .Values.fleetTelemetry.collector.image }}
-          image: {{ .Values.fleetTelemetry.collector.image | quote }}
-          {{- else }}
-          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Values.global.version }}"
-          {{- end }}
+          image: {{ $image | quote }}
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           # Backend images from before the collector wait idle instead of
           # restarting, so a chart upgrade cannot get ahead of its image.
@@ -119,12 +156,16 @@ spec:
             capabilities:
               drop: ["ALL"]
           resources:
-            {{- toYaml .Values.fleetTelemetry.collector.resources | nindent 12 }}
+            {{- toYaml $collector.resources | nindent 12 }}
           volumeMounts:
             - name: collector-tmp
               mountPath: /tmp
-            {{- include "onyx.postgresTls.volumeMount" . | nindent 12 }}
-            {{- include "onyx.redisTls.volumeMount" . | nindent 12 }}
+            {{- with include "onyx.postgresTls.volumeMount" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
+            {{- with include "onyx.redisTls.volumeMount" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
@@ -133,46 +174,53 @@ spec:
                 name: {{ . }}
             {{- end }}
           env:
+            {{- include "onyx.fleetTelemetryEnv" . | nindent 12 }}
             {{- include "onyx.envSecrets" . | nindent 12 }}
+            {{- if include "onyx.customCACerts.enabled" . }}
+            - name: REQUESTS_CA_BUNDLE
+              value: /tmp/ca-certificates.crt
+            - name: SSL_CERT_FILE
+              value: /tmp/ca-certificates.crt
+            {{- end }}
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
             - name: LOG_LEVEL
               value: "ERROR"
             - name: AWS_EC2_METADATA_DISABLED
               value: "true"
-            {{- if .Values.fleetTelemetry.collector.awsResources }}
+            {{- if $collector.awsResources }}
             - name: AWS_REGION
-              value: {{ .Values.fleetTelemetry.collector.awsRegion | quote }}
+              value: {{ $collector.awsRegion | quote }}
             - name: ONYX_TELEMETRY_AWS_RESOURCES_JSON
               valueFrom:
                 secretKeyRef:
-                  name: {{ required "fleetTelemetry.existingSecret is required with collector.awsResources" .Values.fleetTelemetry.existingSecret }}
+                  name: {{ required "fleetTelemetry.existingSecret is required with collector.awsResources" $fleet.existingSecret }}
                   key: ONYX_TELEMETRY_AWS_RESOURCES_JSON
             {{- end }}
-            {{- if .Values.fleetTelemetry.existingSecret }}
+            {{- if $fleet.existingSecret }}
             - name: ONYX_TELEMETRY_DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.fleetTelemetry.existingSecret }}
+                  name: {{ $fleet.existingSecret }}
                   key: ONYX_TELEMETRY_DATABASE_URL
                   optional: true
             - name: ONYX_TELEMETRY_REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.fleetTelemetry.existingSecret }}
+                  name: {{ $fleet.existingSecret }}
                   key: ONYX_TELEMETRY_REDIS_URL
                   optional: true
             {{- end }}
-            {{- if .Values.fleetTelemetry.collector.schemas }}
+            {{- if $collector.schemas }}
             - name: ONYX_TELEMETRY_SCHEMAS
-              value: {{ .Values.fleetTelemetry.collector.schemas | quote }}
+              value: {{ $collector.schemas | quote }}
             {{- end }}
             - name: ONYX_TELEMETRY_SCHEMA_SHARD_INDEX
-              value: {{ .Values.fleetTelemetry.collector.schemaShardIndex | quote }}
+              value: {{ $collector.schemaShardIndex | quote }}
             - name: ONYX_TELEMETRY_SCHEMA_SHARD_COUNT
-              value: {{ .Values.fleetTelemetry.collector.schemaShardCount | quote }}
+              value: {{ $collector.schemaShardCount | quote }}
             - name: ONYX_TELEMETRY_KUBERNETES
-              value: {{ .Values.fleetTelemetry.collector.kubernetes | quote }}
+              value: {{ $collector.kubernetes | quote }}
             - name: ONYX_TELEMETRY_KUBERNETES_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -182,6 +230,13 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 16Mi
-        {{- include "onyx.postgresTls.volume" . | nindent 8 }}
-        {{- include "onyx.redisTls.volume" . | nindent 8 }}
+        {{- with include "onyx.customCACerts.volume" . }}
+        {{- . | nindent 8 }}
+        {{- end }}
+        {{- with include "onyx.postgresTls.volume" . }}
+        {{- . | nindent 8 }}
+        {{- end }}
+        {{- with include "onyx.redisTls.volume" . }}
+        {{- . | nindent 8 }}
+        {{- end }}
 {{- end }}

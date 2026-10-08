@@ -94,6 +94,7 @@ spec:
           env:
             - name: ENABLE_MULTIPASS_INDEXING
               value: "{{ .Values.celery_worker_docprocessing.enableMiniChunk }}"
+            {{- include "onyx.fleetTelemetryEnv" . | nindent 12}}
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}
