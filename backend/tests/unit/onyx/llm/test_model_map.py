@@ -247,6 +247,32 @@ def test_chat_only_skips_non_chat_entries() -> None:
             _reset_caches()
 
 
+def test_chat_only_accepts_responses_mode_entries() -> None:
+    """Responses-API models (mode "responses") are chat-shaped: budget lookups
+    must keep their real limits, not the 32k fallback."""
+    mock_catalog: dict[str, Any] = {
+        "openai": {
+            "models": {
+                "gpt-5-pro": {
+                    "mode": "responses",
+                    "limit": {"context": 400_000, "output": 272_000},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "openai", "gpt-5-pro", chat_only=True)
+            assert obj is not None
+            assert obj["max_tokens"] == 400_000
+            assert obj["max_output_tokens"] == 272_000
+        finally:
+            _reset_caches()
+
+
 def test_twelvelabs_pegasus_override_present() -> None:
     model_map = _fresh_model_map()
     try:

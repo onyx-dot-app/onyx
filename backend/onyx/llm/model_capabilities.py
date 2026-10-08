@@ -119,10 +119,15 @@ def find_model_obj(
     return None
 
 
+# litellm modes that are chat-shaped for token-budget purposes; mirrors the
+# sync script's classification (image/embedding/audio modes stay excluded).
+_CHAT_MODES = {"chat", "responses", "completion"}
+
+
 def _is_chat_entry(model_obj: dict) -> bool:
     """Budget lookups must not land on non-chat entries — a bare-name scan can
     resolve e.g. a custom deployment named like an image/embedding model."""
-    return (model_obj.get("mode") or "chat") == "chat"
+    return (model_obj.get("mode") or "chat") in _CHAT_MODES
 
 
 def llm_max_input_tokens(
