@@ -2725,7 +2725,8 @@
             "ariaLabel": "Masquer les détails du compte"
           },
           "deleteButton": {
-            "label": "Supprimer le compte"
+            "label": "Supprimer le compte",
+            "inUseTooltip": "Des connecteurs utilisent ce compte, il ne peut donc pas être supprimé."
           },
           "usedBy": {
             "label": "Utilisé par {count, plural, one {# connecteur} other {# connecteurs}}"

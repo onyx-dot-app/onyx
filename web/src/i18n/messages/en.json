@@ -2725,7 +2725,8 @@
             "ariaLabel": "Hide account details"
           },
           "deleteButton": {
-            "label": "Delete Account"
+            "label": "Delete Account",
+            "inUseTooltip": "Connectors use this account, so it can't be deleted."
           },
           "usedBy": {
             "label": "Used by {count, plural, one {# connector} other {# connectors}}"

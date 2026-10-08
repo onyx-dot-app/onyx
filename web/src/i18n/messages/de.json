@@ -2725,7 +2725,8 @@
             "ariaLabel": "Kontodetails ausblenden"
           },
           "deleteButton": {
-            "label": "Konto löschen"
+            "label": "Konto löschen",
+            "inUseTooltip": "Connectors verwenden dieses Konto, daher kann es nicht gelöscht werden."
           },
           "usedBy": {
             "label": "Verwendet von {count, plural, one {# Connector} other {# Connectors}}"

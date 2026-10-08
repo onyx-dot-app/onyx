@@ -2725,7 +2725,8 @@
             "ariaLabel": "계정 세부 정보 숨기기"
           },
           "deleteButton": {
-            "label": "계정 삭제"
+            "label": "계정 삭제",
+            "inUseTooltip": "커넥터가 이 계정을 사용 중이므로 삭제할 수 없습니다."
           },
           "usedBy": {
             "label": "{count, plural, other {커넥터 #개}}에서 사용 중"
