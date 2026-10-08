@@ -15,6 +15,14 @@ jest.mock("@/app/craft/services/apiServices", () => ({
   fetchPptxPreview: jest.fn(),
 }));
 
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+beforeEach(() => {
+  Element.prototype.scrollIntoView = jest.fn();
+});
+afterEach(() => {
+  Element.prototype.scrollIntoView = originalScrollIntoView;
+});
+
 it("waits for an updated conversion and reloads slide images at the same paths", async () => {
   const converted = {
     slide_count: 1,
@@ -215,4 +223,40 @@ it("reloads an edited deck by revision and preserves explicit reloads", async ()
   );
   expect(await screen.findByRole("img")).not.toHaveAttribute("src", updatedUrl);
   expect(fetchPptxPreview).toHaveBeenCalledTimes(requests + 2);
+});
+
+it("navigates from thumbnails and ignores keyboard events while its tab is hidden", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 3,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg", "slide-3.jpg"],
+    cached: false,
+  });
+  const { rerender } = render(
+    <PptxPreview sessionId="thumbnails" filePath="outputs/deck.pptx" />
+  );
+  await screen.findByRole("img");
+  fireEvent.click(screen.getByRole("button", { name: "Slide 3 of 3" }));
+  expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
+  expect(screen.getByRole("button", { name: "Slide 3 of 3" })).toHaveAttribute(
+    "aria-current",
+    "true"
+  );
+  expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+    block: "nearest",
+    inline: "nearest",
+  });
+  fireEvent.keyDown(window, { key: "ArrowUp" });
+  expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
+  rerender(
+    <PptxPreview
+      sessionId="thumbnails"
+      filePath="outputs/deck.pptx"
+      isActive={false}
+    />
+  );
+  fireEvent.keyDown(window, { key: "ArrowRight" });
+  expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
+  rerender(<PptxPreview sessionId="thumbnails" filePath="outputs/deck.pptx" />);
+  fireEvent.keyDown(window, { key: "ArrowRight" });
+  expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
 });

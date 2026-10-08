@@ -12647,6 +12647,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "スライド"
+      },
+      "previous": {
+        "label": "前のスライド"
+      },
+      "next": {
+        "label": "次のスライド"
+      },
       "converting": {
         "label": "プレゼンテーションを変換しています..."
       },

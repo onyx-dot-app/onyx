@@ -213,6 +213,11 @@ Cache misses and explicit reloads bypass the browser cache when fetching the art
 These behaviors live in `PptxPreview.tsx` and `PdfPreview.tsx` under
 `web/src/app/craft/components/output-panel/`.
 
+PowerPoint previews use LibreOffice and PDF rasterization to produce slide images.
+A vertical thumbnail column supports click and keyboard navigation, marks the
+selected slide, and scrolls it into view. Thumbnail images load lazily.
+Inactive presentations ignore keyboard navigation.
+
 ## 5. Contracts and invariants
 
 1. **A preview must only be reachable by someone entitled to that session.**
