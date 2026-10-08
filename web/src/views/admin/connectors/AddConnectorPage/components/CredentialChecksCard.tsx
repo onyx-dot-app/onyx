@@ -12,6 +12,7 @@ import {
   Log,
   type LogVariant,
   OverflowText,
+  SelectCard,
   Tag,
   Text,
 } from "@opal/components";
@@ -318,80 +319,101 @@ function CheckCardView({
 
   const progress = useConnectorChecksProgress(stateCounts, status);
 
+  const header = (
+    <ContentAction
+      icon={progress.icon}
+      title={t("title")}
+      suffix={progress.suffix}
+      description={collapsed ? summary : undefined}
+      sizePreset="main-content"
+      variant="section"
+      padding={1.5}
+      rightChildren={
+        <Section flexDirection="row" width="fit" height="fit" gap={0}>
+          {!collapsed && (
+            <Button
+              icon={SvgRefreshCw}
+              prominence="internal"
+              tooltip={t("rerunButton.label")}
+              aria-label={t("rerunButton.label")}
+              disabled={isRunning}
+              onClick={onRerun}
+            />
+          )}
+          {collapsed && requiredFailed > 0 && (
+            <Tag
+              title={t("requiredFailed", { count: requiredFailed })}
+              color="red"
+            />
+          )}
+          <Button
+            icon={collapsed ? SvgExpand : SvgFold}
+            // Folded, the card hovers grey itself; tertiary matches that
+            // grey, where internal would paint a white square on it.
+            prominence={collapsed ? "tertiary" : "internal"}
+            tooltip={collapsed ? t("foldButton.expand") : t("foldButton.fold")}
+            aria-label={
+              collapsed ? t("foldButton.expand") : t("foldButton.fold")
+            }
+            aria-expanded={!collapsed}
+            // Folded, it repeats the card's own action.
+            tabIndex={collapsed ? -1 : undefined}
+            onClick={() => setCollapsed((value) => !value)}
+          />
+        </Section>
+      }
+    />
+  );
+
+  // Folded, the whole card is one target that opens it.
+  if (collapsed) {
+    return (
+      <SelectCard
+        // Filled rests on white, as the expanded card does.
+        state="filled"
+        border="solid"
+        rounding={4}
+        padding={2}
+        onClick={() => setCollapsed(false)}
+      >
+        {header}
+      </SelectCard>
+    );
+  }
+
   return (
     <Card border="solid" rounding={4} padding={2}>
       <Section justifyContent="start" alignItems="stretch" height="fit" gap={1}>
-        <ContentAction
-          icon={progress.icon}
-          title={t("title")}
-          suffix={progress.suffix}
-          description={collapsed ? summary : undefined}
-          sizePreset="main-content"
-          variant="section"
-          padding={1.5}
-          rightChildren={
-            <Section flexDirection="row" width="fit" height="fit" gap={0}>
-              {!collapsed && (
-                <Button
-                  icon={SvgRefreshCw}
-                  prominence="internal"
-                  tooltip={t("rerunButton.label")}
-                  aria-label={t("rerunButton.label")}
-                  disabled={isRunning}
-                  onClick={onRerun}
-                />
-              )}
-              {collapsed && requiredFailed > 0 && (
-                <Tag
-                  title={t("requiredFailed", { count: requiredFailed })}
-                  color="red"
-                />
-              )}
-              <Button
-                icon={collapsed ? SvgExpand : SvgFold}
-                prominence="internal"
-                tooltip={
-                  collapsed ? t("foldButton.expand") : t("foldButton.fold")
-                }
-                aria-label={
-                  collapsed ? t("foldButton.expand") : t("foldButton.fold")
-                }
-                aria-expanded={!collapsed}
-                onClick={() => setCollapsed((value) => !value)}
-              />
-            </Section>
-          }
-        />
+        {header}
 
-        {!collapsed && notice && (
+        {notice && (
           <Text font="main-ui-body" color="status-error-05" role="alert">
             {notice}
           </Text>
         )}
 
-        {!collapsed &&
-          (hasResults || openChecks.length > 0 ? (
-            <Section
-              justifyContent="start"
-              alignItems="stretch"
-              height="fit"
-              gap={0}
-            >
-              {groups.map((group) => (
-                <CheckGroup
-                  key={group.label}
-                  label={group.label}
-                  checks={group.checks}
-                />
-              ))}
-            </Section>
-          ) : (
-            !notice && (
-              <Text font="main-ui-body" color="text-03">
-                {isRunning ? t("running.label") : t("empty.label")}
-              </Text>
-            )
-          ))}
+        {hasResults || openChecks.length > 0 ? (
+          <Section
+            justifyContent="start"
+            alignItems="stretch"
+            height="fit"
+            gap={0}
+          >
+            {groups.map((group) => (
+              <CheckGroup
+                key={group.label}
+                label={group.label}
+                checks={group.checks}
+              />
+            ))}
+          </Section>
+        ) : (
+          !notice && (
+            <Text font="main-ui-body" color="text-03">
+              {isRunning ? t("running.label") : t("empty.label")}
+            </Text>
+          )
+        )}
       </Section>
     </Card>
   );
