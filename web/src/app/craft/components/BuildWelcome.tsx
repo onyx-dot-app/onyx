@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { motion, useReducedMotion } from "motion/react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import { useVideoBackgroundToggleClick } from "@/app/craft/components/video-background/useVideoBackgroundToggleClick";
 import Text from "@/refresh-components/texts/Text";
@@ -39,6 +40,7 @@ export default function BuildWelcome({
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
   const t = useTranslations("craft.welcome");
+  const reduceMotion = useReducedMotion();
   const inputBarRef = useRef<CraftInputBarHandle>(null);
   const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
     null
@@ -103,7 +105,11 @@ export default function BuildWelcome({
       </div>
 
       <div className="row-start-2 w-full flex flex-col items-center">
-        <div className="w-full max-w-(--app-page-main-content-width)">
+        <motion.div
+          layoutId="craft-composer"
+          transition={{ duration: reduceMotion ? 0 : 0.25, ease: "easeOut" }}
+          className="w-full max-w-(--app-page-main-content-width)"
+        >
           <CraftInputBar
             ref={inputBarRef}
             onSubmit={(message, files) =>
@@ -114,7 +120,7 @@ export default function BuildWelcome({
             sandboxInitializing={sandboxInitializing}
             disabled={!hasAnyProvider}
           />
-        </div>
+        </motion.div>
       </div>
 
       <div className="row-start-3 min-h-0 w-full flex flex-col items-center">
