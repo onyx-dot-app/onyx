@@ -293,10 +293,10 @@ async def test_discovery_aliases_and_challenge_point_to_same_resource(
             .split('"')[0]
         )
         discovered = await client.get(metadata_url)
-        alias = await client.get("/.well-known/oauth-protected-resource/mcp")
+        alias = await client.get("/.well-known/oauth-protected-resource/mcp/")
     assert discovered.status_code == alias.status_code == 200
     assert discovered.json() == alias.json()
-    assert discovered.json()["resource"] == "http://localhost:3000/mcp/"
+    assert discovered.json()["resource"] == "http://localhost:3000/mcp"
     assert discovered.json()["authorization_servers"] == [
         "http://localhost:3000/api/oauth-provider"
     ]

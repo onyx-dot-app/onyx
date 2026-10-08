@@ -51,14 +51,15 @@ def create_mcp_fastapi_app() -> FastAPI:
     mcp_asgi_app = mcp_server.http_app(path="/")
     mcp_asgi_app.add_middleware(MCPAuthErrorMiddleware)
     for route in list(mcp_asgi_app.routes):
-        if (
-            isinstance(route, Route)
-            and route.path.startswith("/.well-known/oauth-protected-resource/")
-            and route.path.endswith("/")
+        if isinstance(route, Route) and route.path.startswith(
+            "/.well-known/oauth-protected-resource/"
         ):
+            alias = (
+                route.path.rstrip("/") if route.path.endswith("/") else route.path + "/"
+            )
             mcp_asgi_app.router.routes.append(
                 Route(
-                    route.path.rstrip("/"),
+                    alias,
                     endpoint=route.endpoint,
                     methods=list(route.methods or []),
                 )

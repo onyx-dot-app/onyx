@@ -207,6 +207,9 @@ turned into responses by `MCPAuthErrorMiddleware`); a 403 becomes an
 When `oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS` is set, `build_mcp_server_auth` wraps the verifier
 in fastmcp's `RemoteAuthProvider`, which serves that metadata and names the
 Onyx issuer. The tokens come from the OAuth provider in [[auth-and-identity]] §4.9.
+Discovery advertises `{WEB_DOMAIN}/mcp` without a trailing slash so clients can
+connect with either `/mcp` or `/mcp/`. Stored token audiences remain `/mcp/`.
+The internal MCP mount path does not change the advertised public resource.
 
 ### 4.3 A search call, end to end
 

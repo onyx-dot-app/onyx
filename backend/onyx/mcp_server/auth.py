@@ -149,12 +149,19 @@ class OnyxTokenVerifier(TokenVerifier):
         )
 
 
+class OnyxRemoteAuthProvider(RemoteAuthProvider):
+    def _get_resource_url(self, path: str | None = None) -> AnyHttpUrl:
+        del path
+        # The public MCP URL must not inherit the upstream's internal root path.
+        return self.base_url
+
+
 def build_mcp_server_auth() -> TokenVerifier | RemoteAuthProvider:
     verifier = OnyxTokenVerifier()
     settings = oauth_provider_config.OAUTH_PROVIDER_SETTINGS
     if settings is None:
         return verifier
-    return RemoteAuthProvider(
+    return OnyxRemoteAuthProvider(
         token_verifier=verifier,
         authorization_servers=[AnyHttpUrl(settings.issuer_url)],
         base_url=settings.mcp_resource_url.rstrip("/"),
