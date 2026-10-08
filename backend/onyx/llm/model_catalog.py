@@ -232,6 +232,16 @@ _remote_sections: ThreadSafeDict[str, tuple[float, dict[str, Any] | None]] = (
 _remote_locks: ThreadSafeDict[str, threading.Lock] = ThreadSafeDict()
 
 
+def _fetch_provider_file(provider: str) -> httpx.Response:
+    """One HTTP call for the provider's remote file. Tests patch this seam
+    instead of ``httpx.get`` so unrelated httpx users stay untouched."""
+    return httpx.get(
+        f"{_REMOTE_CATALOG_URL}/{provider}.json",
+        timeout=_REMOTE_FETCH_TIMEOUT_SECONDS,
+        follow_redirects=True,
+    )
+
+
 def _remote_section(provider: str) -> dict[str, Any] | None:
     """The provider's price_table file from main, TTL + negative cached."""
     if ONYX_AIRGAPPED or provider in _LOCAL_PROVIDERS:
@@ -248,11 +258,7 @@ def _remote_section(provider: str) -> dict[str, Any] | None:
             return cached[1]
         section: dict[str, Any] | None = None
         try:
-            response: httpx.Response = httpx.get(
-                f"{_REMOTE_CATALOG_URL}/{provider}.json",
-                timeout=_REMOTE_FETCH_TIMEOUT_SECONDS,
-                follow_redirects=True,
-            )
+            response: httpx.Response = _fetch_provider_file(provider)
             if response.status_code == 200:
                 # Reject malformed payloads instead of caching shapes that
                 # would raise inside _model_in_section / _compat_entry.

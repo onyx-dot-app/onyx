@@ -299,13 +299,13 @@ def test_remote_catalog_resolves_missing_models() -> None:
     }
     calls: list[str] = []
 
-    def fake_get(url: str, **_: Any) -> Any:
-        calls.append(url)
+    def fake_get(provider: str) -> Any:
+        calls.append(provider)
         return _remote_response(remote_section)
 
     with (
         patch.object(model_catalog, "_catalog", return_value={}),
-        patch.object(model_catalog.httpx, "get", side_effect=fake_get),
+        patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get),
     ):
         model_catalog.reset_remote_cache()
         model_map = _fresh_model_map()
@@ -363,12 +363,12 @@ def test_remote_catalog_overrides_vendored() -> None:
         "aliases": {},
     }
 
-    def fake_get(_url: str, **_: Any) -> Any:
+    def fake_get(_provider: str) -> Any:
         return _remote_response(remote_section)
 
     with (
         patch.object(model_catalog, "_catalog", return_value=vendored),
-        patch.object(model_catalog.httpx, "get", side_effect=fake_get),
+        patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get),
     ):
         model_catalog.reset_remote_cache()
         model_map = _fresh_model_map()
@@ -392,13 +392,13 @@ def test_remote_catalog_fails_closed() -> None:
     """Fetch failures degrade to the normal miss and are negative-cached."""
     calls: list[str] = []
 
-    def failing_get(url: str, **_: Any) -> Any:
-        calls.append(url)
+    def failing_get(provider: str) -> Any:
+        calls.append(provider)
         raise model_catalog.httpx.ConnectError("offline")
 
     with (
         patch.object(model_catalog, "_catalog", return_value={}),
-        patch.object(model_catalog.httpx, "get", side_effect=failing_get),
+        patch.object(model_catalog, "_fetch_provider_file", side_effect=failing_get),
     ):
         model_catalog.reset_remote_cache()
         model_map = _fresh_model_map()
@@ -417,8 +417,8 @@ def test_remote_catalog_respects_airgap() -> None:
         patch.object(model_catalog, "_catalog", return_value={}),
         patch.object(model_catalog, "ONYX_AIRGAPPED", True),
         patch.object(
-            model_catalog.httpx,
-            "get",
+            model_catalog,
+            "_fetch_provider_file",
             side_effect=AssertionError("must not fetch when air-gapped"),
         ),
     ):
@@ -444,13 +444,13 @@ def test_remote_catalog_respects_chat_only() -> None:
     }
     calls: list[str] = []
 
-    def fake_get(url: str, **_: Any) -> Any:
-        calls.append(url)
+    def fake_get(provider: str) -> Any:
+        calls.append(provider)
         return _remote_response(remote_section)
 
     with (
         patch.object(model_catalog, "_catalog", return_value={}),
-        patch.object(model_catalog.httpx, "get", side_effect=fake_get),
+        patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get),
     ):
         model_catalog.reset_remote_cache()
         model_map = _fresh_model_map()
