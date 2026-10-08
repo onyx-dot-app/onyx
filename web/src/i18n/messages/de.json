@@ -2780,7 +2780,7 @@
           "label": "Abbrechen"
         },
         "connectButton": {
-          "label": "Verbinden"
+          "label": "Connector erstellen"
         },
         "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein.{hasDocs, select, true { [Doku]({url}) ansehen} other {}}"
       },
@@ -8858,13 +8858,18 @@
         "failed": "{count} Fehlgeschlagen",
         "indeterminate": "{count} Nicht verifiziert",
         "passed": "{count} Abgeschlossen",
-        "skipped": "{count} Übersprungen"
+        "skipped": "{count} Übersprungen",
+        "running": "{count} laufen",
+        "expected": "{count} erwartet"
       },
       "status": {
         "passed": "Bestanden",
         "failed": "Fehlgeschlagen",
         "indeterminate": "Konnte nicht verifiziert werden",
-        "skipped": "Übersprungen"
+        "skipped": "Übersprungen",
+        "running": "Wird getestet…",
+        "pending": "In der Warteschlange",
+        "waiting": "Wartet auf Einstellungen"
       },
       "required": {
         "label": "Erforderlich"
@@ -8894,8 +8899,7 @@
         "skipped": "{count} übersprungen",
         "successful": "{count} erfolgreich"
       },
-      "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
-      "stale": "Das Konto oder seine Einstellungen haben sich seit diesen Prüfungen geändert. Führen Sie sie erneut aus, um fortzufahren."
+      "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut."
     }
   },
   "agents": {

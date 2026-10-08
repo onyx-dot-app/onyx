@@ -2780,7 +2780,7 @@
           "label": "Annuler"
         },
         "connectButton": {
-          "label": "Connecter"
+          "label": "Créer le connecteur"
         },
         "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}.{hasDocs, select, true { Voir la [documentation]({url})} other {}}"
       },
@@ -8858,13 +8858,18 @@
         "failed": "{count} échouées",
         "indeterminate": "{count} non vérifiées",
         "passed": "{count} terminées",
-        "skipped": "{count} ignorées"
+        "skipped": "{count} ignorées",
+        "running": "{count} en cours",
+        "expected": "{count} attendues"
       },
       "status": {
         "passed": "Réussie",
         "failed": "Échouée",
         "indeterminate": "Impossible à vérifier",
-        "skipped": "Ignorée"
+        "skipped": "Ignorée",
+        "running": "Test en cours…",
+        "pending": "En file d’attente",
+        "waiting": "En attente des paramètres"
       },
       "required": {
         "label": "Obligatoire"
@@ -8894,8 +8899,7 @@
         "skipped": "{count} ignorées",
         "successful": "{count} réussies"
       },
-      "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
-      "stale": "Le compte ou ses paramètres ont changé depuis ces vérifications. Relancez-les pour continuer."
+      "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez."
     }
   },
   "agents": {

@@ -36,7 +36,7 @@ export class ConnectorSetupPage {
     // Its own test id: a credential form on the same page has a name field too.
     this.connectorNameInput = page.getByTestId("connector-name");
     this.createConnectorButton = page.getByRole("button", {
-      name: "Connect",
+      name: "Create Connector",
       exact: true,
     });
     this.accessTypeSelect = page.getByRole("combobox", {

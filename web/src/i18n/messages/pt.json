@@ -2780,7 +2780,7 @@
           "label": "Cancelar"
         },
         "connectButton": {
-          "label": "Conectar"
+          "label": "Criar conector"
         },
         "description": "Conecte-se ao {source} e configure o conector para {appName}.{hasDocs, select, true { Ver [documentação]({url})} other {}}"
       },
@@ -8858,13 +8858,18 @@
         "failed": "{count} com falha",
         "indeterminate": "{count} não verificadas",
         "passed": "{count} concluídas",
-        "skipped": "{count} ignoradas"
+        "skipped": "{count} ignoradas",
+        "running": "{count} em execução",
+        "expected": "{count} esperadas"
       },
       "status": {
         "passed": "Aprovada",
         "failed": "Com falha",
         "indeterminate": "Não foi possível verificar",
-        "skipped": "Ignorada"
+        "skipped": "Ignorada",
+        "running": "Testando…",
+        "pending": "Na fila",
+        "waiting": "Aguardando configurações"
       },
       "required": {
         "label": "Obrigatória"
@@ -8894,8 +8899,7 @@
         "skipped": "{count} ignoradas",
         "successful": "{count} bem-sucedidas"
       },
-      "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
-      "stale": "A conta ou as configurações dela mudaram desde que essas verificações foram executadas. Execute-as novamente para continuar."
+      "failedToRun": "Não foi possível executar as verificações. Tente novamente."
     }
   },
   "agents": {

@@ -2780,7 +2780,7 @@
           "label": "キャンセル"
         },
         "connectButton": {
-          "label": "接続"
+          "label": "コネクタを作成"
         },
         "description": "{source} に接続し、{appName} 用のコネクタを設定します。{hasDocs, select, true {[ドキュメント]({url})を見る} other {}}"
       },
@@ -8858,13 +8858,18 @@
         "failed": "失敗 {count} 件",
         "indeterminate": "未検証 {count} 件",
         "passed": "完了 {count} 件",
-        "skipped": "スキップ {count} 件"
+        "skipped": "スキップ {count} 件",
+        "running": "実行中 {count} 件",
+        "expected": "予定 {count} 件"
       },
       "status": {
         "passed": "合格",
         "failed": "失敗",
         "indeterminate": "検証できませんでした",
-        "skipped": "スキップ"
+        "skipped": "スキップ",
+        "running": "テスト中…",
+        "pending": "待機中",
+        "waiting": "設定を待っています"
       },
       "required": {
         "label": "必須"
@@ -8894,8 +8899,7 @@
         "skipped": "スキップ {count} 件",
         "successful": "成功 {count} 件"
       },
-      "failedToRun": "チェックを実行できませんでした。もう一度お試しください。",
-      "stale": "これらのチェックの実行後にアカウントまたはその設定が変更されました。続行するにはもう一度実行してください。"
+      "failedToRun": "チェックを実行できませんでした。もう一度お試しください。"
     }
   },
   "agents": {

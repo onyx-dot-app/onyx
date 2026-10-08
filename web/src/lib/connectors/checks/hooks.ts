@@ -1,14 +1,18 @@
 "use client";
 
-import { createElement, useCallback, useEffect, useMemo } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { SvgProgressRing } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR, { type SWRResponse, useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { startDraftCheckRun } from "@/lib/connectors/checks/svc";
+import {
+  fetchDraftCheckPlan,
+  startDraftCheckRun,
+} from "@/lib/connectors/checks/svc";
+import { INDETERMINATE_CHECKS_BLOCK } from "@/lib/connectors/checks/constants";
 import { connectorFormState } from "@/lib/connectors/checks/formState";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useConnectorConfiguration } from "@/lib/connectors/connectors";
@@ -19,6 +23,7 @@ import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
   ConnectorChecksStatus,
+  DraftCheckPlan,
   DraftCheckRunSnapshot,
   DraftCheckState,
   DraftCheckStateKind,
@@ -38,8 +43,10 @@ interface ConnectorChecksSession {
   draftKey: string;
   /** The latest run. */
   runId: string | null;
-  /** The credential configuration the latest run started with. */
+  /** The credential and bound fields the latest run started with. */
   ranWith: string | null;
+  /** The access type and form values the latest run started with. */
+  ranWithForm: string | null;
   /** A start request is in flight. */
   requesting: boolean;
   /** The last start request failed. */
@@ -55,13 +62,27 @@ const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
   "skipped",
 ]);
 
-// Required checks in these states keep a completed run from passing.
-const BLOCKING_STATES: ReadonlySet<string> = new Set([
-  "failed",
-  "indeterminate",
-  "pending",
-  "running",
-]);
+/** A required check in this state keeps Create, or the form, locked. */
+function blocks(check: DraftCheckState): boolean {
+  switch (check.state) {
+    case "passed":
+    case "skipped":
+    case "not_applicable":
+      return false;
+    case "indeterminate":
+      return INDETERMINATE_CHECKS_BLOCK;
+    case "failed":
+    case "pending":
+    case "running":
+    case "waiting":
+      return true;
+  }
+}
+
+/** A check is the same across a plan and a run by its capability and ID. */
+function checkKey(check: DraftCheckState): string {
+  return `${check.capability}:${check.check_id}`;
+}
 
 function isFinished(
   check: DraftCheckState
@@ -132,10 +153,31 @@ export interface UseConnectorChecksInput {
 
 export interface UseConnectorChecksResult {
   status: ConnectorChecksStatus;
-  /** True only when `status` is `passed`: the rest of the form may unlock. */
-  passed: boolean;
+  /**
+   * The checks a run would hold for this form, before any run; `undefined`
+   * while they load.
+   */
+  plan: DraftCheckPlan | undefined;
+  /**
+   * The rest of the form may unlock: every check that validates the
+   * credential with its bound fields has passed. True at once when the source
+   * has none.
+   */
+  formUnlocked: boolean;
+  /**
+   * Create may run: the form is unlocked, and no required check is failed or
+   * still to run in a run of the current form. True without a run when no
+   * required check applies.
+   */
+  createReady: boolean;
+  /** The form changed since checks started; a new run would cover it. */
+  needsRun: boolean;
+  /** Identifies the current form: what a new run would check. */
+  formKey: string;
   /** The finished checks of the latest run. */
   results: CapabilityCheckResult[];
+  /** The latest run's checks still to finish: running, queued or waiting. */
+  openChecks: DraftCheckState[];
   /** Checks queued or running in the latest run. */
   inProgressCount: number;
   /** Checks waiting on a form field before they can run. */
@@ -146,6 +188,8 @@ export interface UseConnectorChecksResult {
   begin: () => void;
   /** Starts a run that ignores every cached result. */
   rerun: () => void;
+  /** Starts a run for the current form, reusing cached results. */
+  refresh: () => void;
 }
 
 /**
@@ -154,9 +198,9 @@ export interface UseConnectorChecksResult {
  * and the Connect button all read the same run by calling this hook. Must be
  * called inside the form's Formik context.
  *
- * Runs start only on request. A completed result counts only for the
- * credential and credential-bound fields it ran with; when they change, the
- * status turns `stale` until the user reruns.
+ * The first run starts on request. A change to the credential or its bound
+ * fields resets the checks to that request. Any other form change leaves the
+ * result out of date for Create until a new run (see `refresh`) covers it.
  */
 export function useConnectorChecks({
   source,
@@ -182,6 +226,12 @@ export function useConnectorChecks({
     return JSON.stringify([credentialId, boundValues]);
   }, [source, configuration, values, credentialId]);
   const accessType: AccessType = formAccessType(values);
+  // The whole form a run checks: what Create's result is valid for.
+  const formKey: string = useMemo(
+    () => JSON.stringify([accessType, formState]),
+    [accessType, formState]
+  );
+  const { data: plan } = useConnectorCheckPlan(source, accessType);
 
   const runId: string | null = session?.runId ?? null;
   const { data: run } = useSWR<DraftCheckRunSnapshot>(
@@ -204,6 +254,7 @@ export function useConnectorChecks({
           draftKey,
           runId: session?.runId ?? null,
           ranWith: bindingKey,
+          ranWithForm: formKey,
           requesting: true,
           startFailed: false,
           request,
@@ -251,6 +302,7 @@ export function useConnectorChecks({
       session,
       sessionKey,
       bindingKey,
+      formKey,
       source,
       accessType,
       formState,
@@ -258,31 +310,74 @@ export function useConnectorChecks({
     ]
   );
 
+  // Results count only for the credential and bound fields they ran with.
+  const current: boolean = !!session && session.ranWith === bindingKey;
   // A superseded snapshot belongs to an older run.
   const snapshot: DraftCheckRunSnapshot | null =
-    run && run.run_id === runId && run.status !== "superseded" ? run : null;
+    current && run && run.run_id === runId && run.status !== "superseded"
+      ? run
+      : null;
   const checks: DraftCheckState[] = snapshot?.checks ?? [];
 
   const status: ConnectorChecksStatus = (() => {
-    if (credentialId === null || !session) return "notStarted";
+    if (credentialId === null || !session || !current) return "notStarted";
     if (session.requesting) return "running";
     if (session.startFailed) return "failedToRun";
     if (!runId) return "notStarted";
     if (!snapshot || snapshot.status === "running") return "running";
     if (snapshot.status === "failed_to_run") return "failedToRun";
-    if (session.ranWith !== bindingKey) return "stale";
     return checks.some(
-      (check) => check.required && BLOCKING_STATES.has(check.state)
+      (check) => check.required && check.state !== "waiting" && blocks(check)
     )
       ? "failed"
       : "passed";
   })();
 
+  const applicable: DraftCheckState[] = (plan?.checks ?? []).filter(
+    (check) => check.state !== "not_applicable"
+  );
+  const runStates: Map<string, DraftCheckState> = new Map(
+    checks.map((check) => [checkKey(check), check])
+  );
+  const bindingChecks = applicable.filter((check) => check.validates_binding);
+  const formUnlocked: boolean =
+    plan !== undefined &&
+    bindingChecks.every((check) => {
+      const result = runStates.get(checkKey(check));
+      return result !== undefined && !blocks(result);
+    });
+  const ranThisForm: boolean =
+    !!session &&
+    !session.requesting &&
+    session.ranWithForm === formKey &&
+    snapshot?.status === "completed";
+  const createReady: boolean =
+    formUnlocked &&
+    (!applicable.some((check) => check.required) ||
+      (ranThisForm &&
+        !checks.some((check) => check.required && blocks(check))));
+
   return {
     status,
-    passed: status === "passed",
+    plan,
+    formUnlocked,
+    createReady,
+    formKey,
+    needsRun:
+      !!session &&
+      current &&
+      runId !== null &&
+      !session.requesting &&
+      session.ranWithForm !== formKey,
     results: checks.flatMap((check) =>
       isFinished(check) ? [toCheckResult(check)] : []
+    ),
+    // A run that broke will not finish its queued or running checks.
+    openChecks: checks.filter((check) =>
+      check.state === "waiting"
+        ? true
+        : (check.state === "pending" || check.state === "running") &&
+          status !== "failedToRun"
     ),
     // A run that broke will not finish its open checks, so none count.
     inProgressCount:
@@ -295,7 +390,29 @@ export function useConnectorChecks({
     stateCounts: countStates(checks, status === "failedToRun"),
     begin: () => void start("none"),
     rerun: () => void start("all"),
+    refresh: () => void start("none"),
   };
+}
+
+/**
+ * The checks a run would hold for `source` with this access type, fetched
+ * once per pair. Which checks exist and which are required does not depend
+ * on the credential.
+ */
+export function useConnectorCheckPlan(
+  source: ConfigurableSources,
+  accessType: AccessType
+): SWRResponse<DraftCheckPlan> {
+  return useSWR<DraftCheckPlan>(
+    SWR_KEYS.connectorCheckPlan(source, accessType),
+    () =>
+      fetchDraftCheckPlan({
+        source,
+        access_type: accessType,
+        form_state: {},
+      }),
+    { revalidateOnFocus: false }
+  );
 }
 
 /**
@@ -355,4 +472,43 @@ export function useConnectorChecksProgress(
     suffix:
       counted > 0 ? t("titleCount", { complete, total: counted }) : undefined,
   };
+}
+
+function isTyping(): boolean {
+  const focused = document.activeElement;
+  return (
+    focused instanceof HTMLInputElement ||
+    focused instanceof HTMLTextAreaElement ||
+    (focused instanceof HTMLElement && focused.isContentEditable)
+  );
+}
+
+/**
+ * Keeps the checks current as the form fills in: once checks have started, a
+ * form change starts a run when the user leaves the field, or at once when no
+ * text field has focus (a toggle or a select). Waiting checks run as their
+ * fields are set; cached results keep unchanged checks from running again.
+ *
+ * Call it from one component only, so one change starts one run.
+ */
+export function useConnectorChecksAutoRun({
+  needsRun,
+  formKey,
+  refresh,
+}: Pick<UseConnectorChecksResult, "needsRun" | "formKey" | "refresh">): void {
+  const startedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!needsRun) return;
+    const run = () => {
+      if (startedFor.current === formKey) return;
+      startedFor.current = formKey;
+      refresh();
+    };
+    if (!isTyping()) {
+      run();
+      return;
+    }
+    document.addEventListener("focusout", run, { once: true });
+    return () => document.removeEventListener("focusout", run);
+  }, [needsRun, formKey, refresh]);
 }

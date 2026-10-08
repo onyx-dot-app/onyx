@@ -2780,7 +2780,7 @@
           "label": "취소"
         },
         "connectButton": {
-          "label": "연결"
+          "label": "커넥터 만들기"
         },
         "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다.{hasDocs, select, true { [문서]({url}) 보기} other {}}"
       },
@@ -8858,13 +8858,18 @@
         "failed": "실패 {count}개",
         "indeterminate": "미확인 {count}개",
         "passed": "완료 {count}개",
-        "skipped": "건너뜀 {count}개"
+        "skipped": "건너뜀 {count}개",
+        "running": "실행 중 {count}개",
+        "expected": "예정 {count}개"
       },
       "status": {
         "passed": "통과",
         "failed": "실패",
         "indeterminate": "확인할 수 없음",
-        "skipped": "건너뜀"
+        "skipped": "건너뜀",
+        "running": "테스트 중…",
+        "pending": "대기 중",
+        "waiting": "설정을 기다리는 중"
       },
       "required": {
         "label": "필수"
@@ -8894,8 +8899,7 @@
         "skipped": "건너뜀 {count}개",
         "successful": "성공 {count}개"
       },
-      "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
-      "stale": "이 검사를 실행한 후 계정 또는 설정이 변경되었습니다. 계속하려면 다시 실행하세요."
+      "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요."
     }
   },
   "agents": {

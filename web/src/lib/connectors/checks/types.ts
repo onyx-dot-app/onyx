@@ -69,9 +69,7 @@ export type ConnectorChecksStatus =
   /** The run completed, and a required check failed or is unverified. */
   | "failed"
   /** The run itself broke: it could not start, crashed, or its worker died. */
-  | "failedToRun"
-  /** The credential or its bound fields changed since the run started. */
-  | "stale";
+  | "failedToRun";
 
 /** Which cached results a new draft run ignores. */
 export type DraftRerunMode = "none" | "failed" | "all";
@@ -104,6 +102,25 @@ export interface DraftCheckRunSnapshot {
   form_errors: Record<string, string>;
   unknown_fields: string[];
   checks: DraftCheckState[];
+}
+
+/**
+ * The checks a draft run would hold for a form, each in its state before
+ * anything runs: pending, waiting or not applicable.
+ */
+export interface DraftCheckPlan {
+  source: ValidSources;
+  access_type: AccessType | null;
+  form_errors: Record<string, string>;
+  unknown_fields: string[];
+  checks: DraftCheckState[];
+}
+
+/** Body of `POST /manage/admin/connector-checks/plan`. Needs no credential. */
+export interface DraftCheckPlanRequest {
+  source: ValidSources;
+  access_type: AccessType | null;
+  form_state: Record<string, unknown>;
 }
 
 /** Body of `POST /manage/admin/connector-checks/runs`. */

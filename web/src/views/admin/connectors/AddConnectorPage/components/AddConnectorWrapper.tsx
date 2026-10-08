@@ -84,24 +84,34 @@ import {
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
 
+interface ConnectorChecksGates {
+  /** The checks that validate the credential passed: the form may unlock. */
+  formUnlocked: boolean;
+  /** Every required check passed for the current form: Create may run. */
+  createReady: boolean;
+}
+
 interface ConnectorChecksGateProps {
   source: ConfigurableSources;
   credentialId: number | null;
-  children: (checksPassed: boolean) => ReactNode;
+  children: (gates: ConnectorChecksGates) => ReactNode;
 }
 
 /**
- * Gives the form whether the capability checks passed. The hook needs the
- * Formik context, which the form's render function sits inside but cannot
- * call hooks in.
+ * Gives the form the capability checks' two gates. The hook needs the Formik
+ * context, which the form's render function sits inside but cannot call hooks
+ * in.
  */
 function ConnectorChecksGate({
   source,
   credentialId,
   children,
 }: ConnectorChecksGateProps) {
-  const { passed } = useConnectorChecks({ source, credentialId });
-  return children(passed);
+  const { formUnlocked, createReady } = useConnectorChecks({
+    source,
+    credentialId,
+  });
+  return children({ formUnlocked, createReady });
 }
 
 async function submitConnector<T>(
@@ -553,9 +563,12 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
             source={connector}
             credentialId={checkedCredential?.id ?? null}
           >
-            {(checksPassed) => {
+            {(checks) => {
               const formUnlocked: boolean =
-                configUnlocked && (noCredentials || checksPassed);
+                configUnlocked && (noCredentials || checks.formUnlocked);
+              // Non-required checks never block Create.
+              const createReady: boolean =
+                formUnlocked && (noCredentials || checks.createReady);
               const formLockReason: string | undefined = !configUnlocked
                 ? (gateMessage ?? undefined)
                 : formUnlocked
@@ -598,7 +611,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                           credentialsLoading ||
                           credentialsFailed ||
                           !formikProps.isValid ||
-                          !formUnlocked ||
+                          !createReady ||
                           busy
                         }
                         icon={busy ? IconLoader : undefined}

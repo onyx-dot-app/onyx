@@ -2780,7 +2780,7 @@
           "label": "取消"
         },
         "connectButton": {
-          "label": "连接"
+          "label": "创建连接器"
         },
         "description": "连接到 {source} 并为 {appName} 设置连接器。{hasDocs, select, true {查看[文档]({url})} other {}}"
       },
@@ -8858,13 +8858,18 @@
         "failed": "{count} 项失败",
         "indeterminate": "{count} 项未验证",
         "passed": "{count} 项完成",
-        "skipped": "{count} 项跳过"
+        "skipped": "{count} 项跳过",
+        "running": "{count} 项运行中",
+        "expected": "{count} 项待运行"
       },
       "status": {
         "passed": "通过",
         "failed": "失败",
         "indeterminate": "无法验证",
-        "skipped": "已跳过"
+        "skipped": "已跳过",
+        "running": "正在测试…",
+        "pending": "排队中",
+        "waiting": "正在等待设置"
       },
       "required": {
         "label": "必需"
@@ -8894,8 +8899,7 @@
         "skipped": "{count} 项跳过",
         "successful": "{count} 项成功"
       },
-      "failedToRun": "检查未能运行。请重试。",
-      "stale": "自这些检查运行以来，账户或其设置已更改。请重新运行以继续。"
+      "failedToRun": "检查未能运行。请重试。"
     }
   },
   "agents": {

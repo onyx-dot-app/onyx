@@ -190,7 +190,7 @@ export class OneDriveConnectorSetupPage {
         new URL(response.url()).pathname === "/api/manage/admin/connector"
     );
     await this.page
-      .getByRole("button", { name: "Connect", exact: true })
+      .getByRole("button", { name: "Create Connector", exact: true })
       .click();
     const response = await responsePromise;
     expect(response.status()).toBe(200);
@@ -199,7 +199,7 @@ export class OneDriveConnectorSetupPage {
   async submitInvalidConnector(name: string, message: string) {
     await this.page.getByTestId("connector-name").fill(name);
     await expect(
-      this.page.getByRole("button", { name: "Connect", exact: true })
+      this.page.getByRole("button", { name: "Create Connector", exact: true })
     ).toBeDisabled();
     await expect(this.page.getByText(message)).toBeVisible();
   }

@@ -2780,7 +2780,7 @@
           "label": "إلغاء"
         },
         "connectButton": {
-          "label": "اتصال"
+          "label": "إنشاء موصل"
         },
         "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}.{hasDocs, select, true { عرض [الوثائق]({url})} other {}}"
       },
@@ -8858,13 +8858,18 @@
         "failed": "{count} فشلت",
         "indeterminate": "{count} لم يتم التحقق منها",
         "passed": "{count} اكتملت",
-        "skipped": "{count} تم تخطيها"
+        "skipped": "{count} تم تخطيها",
+        "running": "{count} قيد التشغيل",
+        "expected": "{count} متوقعة"
       },
       "status": {
         "passed": "ناجح",
         "failed": "فاشل",
         "indeterminate": "تعذّر التحقق",
-        "skipped": "تم التخطي"
+        "skipped": "تم التخطي",
+        "running": "جارٍ الاختبار…",
+        "pending": "في قائمة الانتظار",
+        "waiting": "في انتظار الإعدادات"
       },
       "required": {
         "label": "مطلوب"
@@ -8894,8 +8899,7 @@
         "skipped": "{count} تم تخطيها",
         "successful": "{count} نجحت"
       },
-      "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى.",
-      "stale": "تغيّر الحساب أو إعداداته منذ تشغيل عمليات التحقق هذه. شغّلها مرة أخرى للمتابعة."
+      "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى."
     }
   },
   "agents": {
