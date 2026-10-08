@@ -156,7 +156,10 @@ export interface CredentialSchemaResponse {
 }
 
 /** Where a credential's stored capability check run stands. */
-export type CredentialCheckRunStatus = "running" | "completed" | "failed_to_run";
+export type CredentialCheckRunStatus =
+  | "running"
+  | "completed"
+  | "failed_to_run";
 
 /**
  * One stored capability report. `connector_id` is null for the report on the
