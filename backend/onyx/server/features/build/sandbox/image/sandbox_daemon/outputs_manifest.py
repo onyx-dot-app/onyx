@@ -124,7 +124,11 @@ def build_outputs_manifest(session_id: UUID) -> OutputsManifestResponse:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Describe a session's output files.")
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
+        description="Describe a session's output files."
+    )
     parser.add_argument("session_id")
-    request = OutputsManifestRequest.model_validate(vars(parser.parse_args()))
+    request: OutputsManifestRequest = OutputsManifestRequest.model_validate(
+        vars(parser.parse_args())
+    )
     print(build_outputs_manifest(request.session_id).model_dump_json())
