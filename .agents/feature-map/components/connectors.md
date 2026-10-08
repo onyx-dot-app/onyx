@@ -343,6 +343,33 @@ shape the table above does not cover:
   and the doc sync see the same documents indexing built, eight mailboxes side
   by side like the listing.
 
+### 4.6.2 Teams: channels side by side, then organizers
+
+`teams/connector.py:TeamsConnector` indexes four kinds of document from one
+credential: channel threads, channel files, meeting transcripts and the days
+of meeting chats.
+
+- **Teams, then channels.** The first step lists every team
+  (`listing.collect_all_teams`) and a team step lists its channels into
+  `todo_channels`. A channel step walks one delta page of up to `max_workers`
+  channels at once (`TeamsCheckpoint.active`, `_channel_step`,
+  `_advance_channel`): the roots of the page, then one replies call per root
+  and the images pasted into them. Cursors are advanced on copies and written
+  back only when every channel finished its page, so a raise in one leaves the
+  step to be retried. A checkpoint saved by the one-channel walk joins `active`
+  when it is loaded.
+- **Files.** After a channel's last page its library is read on the consuming
+  thread (`FileSource.index`): the folder children, each file's text, and its
+  readers through SharePoint REST, whose client is kept per site.
+- **Organizers.** The meeting side follows the channels: a page of licensed
+  users per step, then eight organizers at a time, each reading its
+  transcripts and the days of its meeting chats that changed.
+- **Prune and permission sync.** `_slim_docs` relists the channels through the
+  delta, ids only and no replies, `max_workers` channels at a time for ids and
+  one at a time with readers (file readers come through the SharePoint REST
+  client, which is not safe across threads), then the organizers eight at a
+  time.
+
 ### 4.7 The `SourceOperations` gateway pattern
 
 `source_operations.py` defines an ABC, `SourceOperations`, that a connector's
