@@ -11,7 +11,7 @@ import pytest
 
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.enums import QueryType
-from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import VectorQuantization
 from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import (
@@ -40,7 +40,7 @@ _NEW_DOC_ID = "new_doc"
 
 
 def _unit_vector(position: int) -> list[float]:
-    vector = [0.0] * EMBEDDING_DIM
+    vector: list[float] = [0.0] * EMBEDDING_DIM
     vector[position] = 1.0
     return vector
 
@@ -57,7 +57,7 @@ def _chunk(doc_id: str, embedding: list[float]) -> DocMetadataAwareIndexChunk:
 
 def _legacy_mappings() -> dict[str, Any]:
     """The current schema plus the title_vector field older indices carry."""
-    mappings = DocumentSchema.get_document_schema(
+    mappings: dict[str, Any] = DocumentSchema.get_document_schema(
         vector_dimension=EMBEDDING_DIM, multitenant=False
     )
     mappings["properties"][TITLE_VECTOR_FIELD_NAME] = dict(
@@ -74,8 +74,8 @@ def test_legacy_index_with_title_vector_still_works(
     if not wait_for_opensearch_with_timeout():
         pytest.fail("OpenSearch is not available.")
 
-    index_name = f"test_legacy_title_vector_{uuid.uuid4().hex[:8]}"
-    document_index = OpenSearchDocumentIndex(
+    index_name: str = f"test_legacy_title_vector_{uuid.uuid4().hex[:8]}"
+    document_index: OpenSearchDocumentIndex = OpenSearchDocumentIndex(
         tenant_state=TenantState(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, multitenant=False
         ),
@@ -97,24 +97,23 @@ def test_legacy_index_with_title_vector_still_works(
                 ),
             )
             client.refresh_index()
-            legacy_hit = client._client.search(
-                index=index_name,
-                body={"query": {"term": {DOCUMENT_ID_FIELD_NAME: _LEGACY_DOC_ID}}},
-            )["hits"]["hits"][0]
-            client._client.update(
-                index=index_name,
-                id=legacy_hit["_id"],
-                body={"doc": {TITLE_VECTOR_FIELD_NAME: _unit_vector(1)}},
+            planted: int = client.update_by_query(
+                {
+                    "query": {"term": {DOCUMENT_ID_FIELD_NAME: _LEGACY_DOC_ID}},
+                    "script": {
+                        "source": f"ctx._source.{TITLE_VECTOR_FIELD_NAME} = params.v",
+                        "params": {"v": _unit_vector(1)},
+                    },
+                }
             )
+            assert planted == 1
 
             # Startup re-puts the current mapping, which no longer has the field.
             document_index.verify_and_create_index_if_necessary(
                 embedding_dim=EMBEDDING_DIM
             )
-            mapping_properties = client._client.indices.get_mapping(index=index_name)[
-                index_name
-            ]["mappings"]["properties"]
-            assert TITLE_VECTOR_FIELD_NAME in mapping_properties
+            still_mapped: bool = client.validate_index(_legacy_mappings())
+            assert still_mapped
 
             # Current code writes chunks without title_vector.
             document_index.index(
@@ -124,22 +123,21 @@ def test_legacy_index_with_title_vector_still_works(
                 ),
             )
             client.refresh_index()
-            title_vector_count = client._client.count(
-                index=index_name,
-                body={"query": {"exists": {"field": TITLE_VECTOR_FIELD_NAME}}},
-            )["count"]
+            title_vector_count: int = client.count_by_query(
+                {"query": {"exists": {"field": TITLE_VECTOR_FIELD_NAME}}}
+            )
             assert title_vector_count == 1
 
-            filters = IndexFilters(
+            filters: IndexFilters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
                 tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
-            semantic_results = document_index.semantic_retrieval(
+            semantic_results: list[InferenceChunk] = document_index.semantic_retrieval(
                 query_embedding=_unit_vector(0),
                 filters=filters,
                 num_to_retrieve=5,
             )
-            hybrid_results = document_index.hybrid_retrieval(
+            hybrid_results: list[InferenceChunk] = document_index.hybrid_retrieval(
                 query="quarterly revenue",
                 query_embedding=_unit_vector(0),
                 final_keywords=None,
@@ -147,7 +145,7 @@ def test_legacy_index_with_title_vector_still_works(
                 filters=filters,
                 num_to_retrieve=5,
             )
-            expected_doc_ids = {_LEGACY_DOC_ID, _NEW_DOC_ID}
+            expected_doc_ids: set[str] = {_LEGACY_DOC_ID, _NEW_DOC_ID}
             assert {c.document_id for c in semantic_results} == expected_doc_ids
             assert {c.document_id for c in hybrid_results} == expected_doc_ids
         finally:
