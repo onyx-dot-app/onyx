@@ -24,6 +24,9 @@ class OutlookMailbox(BaseModel):
     # The address an admin recognizes: ``mail`` when set, else the UPN.
     address: str
     display_name: str | None = None
+    # The mailbox's other SMTP addresses, lower-cased, so mail sent to an
+    # alias still names it.
+    aliases: tuple[str, ...] = ()
 
 
 class OutlookMailboxPage(BaseModel):

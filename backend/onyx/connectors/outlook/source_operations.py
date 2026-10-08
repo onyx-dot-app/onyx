@@ -97,7 +97,10 @@ EVENTS_PAGE_SIZE = 50
 # Enough to tell one group with a display name from several.
 GROUP_NAME_MATCH_LIMIT = 2
 
-MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
+MAILBOX_SELECT = "id,mail,userPrincipalName,displayName,proxyAddresses"
+# The user listing's fields plus the aliases a message may name a mailbox by.
+OUTLOOK_USER_SELECT = f"{ENTRA_USER_SELECT},proxyAddresses"
+_SMTP_PREFIX = "smtp:"
 FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
 # Identity, thread, placement and headers of a message, never a body. Shared
 # by the delta walk and the conversation outline, which decide who builds and
@@ -186,10 +189,18 @@ def _mailbox(user: EntraUser) -> OutlookMailbox | None:
     address = user.mail or user.user_principal_name
     if not address:
         return None
+    aliases: list[str] = []
+    for proxy in user.proxy_addresses:
+        if not proxy.lower().startswith(_SMTP_PREFIX):
+            continue
+        alias = proxy[len(_SMTP_PREFIX) :].lower()
+        if alias != address.lower() and alias not in aliases:
+            aliases.append(alias)
     return OutlookMailbox(
         id=user.id,
         address=address,
         display_name=user.display_name,
+        aliases=tuple(aliases),
     )
 
 
@@ -465,7 +476,7 @@ class OutlookSourceOperations(SourceOperations):
             self._gateway().get_json,
             url=f"{self._graph_base()}/users",
             item_model=EntraUser,
-            select_fields=ENTRA_USER_SELECT,
+            select_fields=OUTLOOK_USER_SELECT,
             next_link=next_link,
             page_size=page_size,
             filter_expression=ENABLED_USERS_FILTER,
@@ -555,7 +566,7 @@ class OutlookSourceOperations(SourceOperations):
                 "/transitiveMembers/microsoft.graph.user"
             ),
             item_model=EntraUser,
-            select_fields=ENTRA_USER_SELECT,
+            select_fields=OUTLOOK_USER_SELECT,
             next_link=next_link,
             page_size=page_size,
         )

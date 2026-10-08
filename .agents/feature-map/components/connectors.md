@@ -337,9 +337,12 @@ shape the table above does not cover:
   the first message, a thread whose first message names no walked mailbox, a
   holder it does not name, or a reply that left the builder out, is written
   by its own mailbox as `outlook-thread:<key>:<mailbox id>:own`.
-- **Known limits.** A thread whose builder mailbox no longer holds its first
-  message is not built, since no other holder knows to; the other holders
-  keep only their own documents of the replies that left the builder out. The
+- **Known limits.** The builder's copy is the thread. A reply the builder
+  deleted or filed in an excluded folder is indexed nowhere, since the other
+  holders assume a message naming the builder is the builder's to write. A
+  thread whose builder mailbox no longer holds its first message is not
+  built at all; the other holders keep only their own documents of the
+  replies that left the builder out. The
   builder's first message sits in its Sent Items, so excluding that folder
   has the same effect on every thread the mailbox started. The listing in
   memory is bounded by one mailbox per worker, eight at once, and by

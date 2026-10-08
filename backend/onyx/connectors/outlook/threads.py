@@ -49,7 +49,7 @@ def _conversation_root(conversation_index: str) -> bytes | None:
 
 def thread_key(conversation_index: str) -> str | None:
     """The thread a message belongs to, or None for an index Outlook did not set."""
-    raw = _conversation_root(conversation_index)
+    raw: bytes | None = _conversation_root(conversation_index)
     if raw is None:
         return None
     return base64.urlsafe_b64encode(raw[:_ROOT_BYTES]).decode().rstrip("=")
@@ -57,7 +57,7 @@ def thread_key(conversation_index: str) -> str | None:
 
 def is_thread_root(conversation_index: str) -> bool:
     """True for the thread's first message, whose index carries no reply blocks."""
-    raw = _conversation_root(conversation_index)
+    raw: bytes | None = _conversation_root(conversation_index)
     return raw is not None and len(raw) == _ROOT_BYTES
 
 
@@ -77,7 +77,13 @@ def own_document_id(key: str, mailbox: OutlookMailbox) -> str:
 
 
 def roster_of(mailboxes: Iterable[OutlookMailbox]) -> Roster:
-    return {mailbox.address.lower(): mailbox for mailbox in mailboxes}
+    """Every address a walked mailbox answers to. A primary address wins over
+    another mailbox's alias."""
+    roster: Roster = {mailbox.address.lower(): mailbox for mailbox in mailboxes}
+    for mailbox in mailboxes:
+        for alias in mailbox.aliases:
+            roster.setdefault(alias, mailbox)
+    return roster
 
 
 def listing_row(change: OutlookMessageChange, roster: Roster) -> ThreadListing | None:
@@ -85,8 +91,8 @@ def listing_row(change: OutlookMessageChange, roster: Roster) -> ThreadListing |
     message Outlook set no conversation index on."""
     if change.removed or change.is_draft or not change.conversation_id:
         return None
-    index = change.conversation_index or ""
-    key = thread_key(index)
+    index: str = change.conversation_index or ""
+    key: str | None = thread_key(index)
     if key is None:
         logger.warning(
             "Outlook: message %s has no conversation index, skipping", change.id
@@ -99,7 +105,7 @@ def listing_row(change: OutlookMessageChange, roster: Roster) -> ThreadListing |
     if sender is not None:
         named[sender.id] = sender
     for recipient in [*change.to_recipients, *change.cc_recipients]:
-        mailbox = roster.get(recipient.address.lower())
+        mailbox: OutlookMailbox | None = roster.get(recipient.address.lower())
         if mailbox is not None:
             named.setdefault(mailbox.id, mailbox)
     return ThreadListing(
@@ -168,15 +174,18 @@ def plan_documents(
     mailbox's own document. The builder's copy of the first message is in its
     Sent Items, so excluding that folder leaves the threads a mailbox started
     to its own documents of the replies."""
-    kept = newest_rows(rows, MAX_MESSAGES_PER_CONVERSATION)
+    kept: list[ThreadListing] = newest_rows(rows, MAX_MESSAGES_PER_CONVERSATION)
     if not kept:
         return []
-    key = kept[0].key
-    roots = [row for row in rows if row.is_root]
-    root = min(roots, key=_row_order) if roots else None
-    builder = designated_builder(root, is_available) if root is not None else None
+    key: str = kept[0].key
+    roots: list[ThreadListing] = [row for row in rows if row.is_root]
+    root: ThreadListing | None = min(roots, key=_row_order) if roots else None
+    builder: OutlookMailbox | None = (
+        designated_builder(root, is_available) if root is not None else None
+    )
     if root is not None and builder is not None and builder.id == mailbox.id:
         return _builder_documents(key, kept, root, mailbox)
+    own: list[ThreadListing]
     if root is None or builder is None or mailbox.id not in _named_ids(root):
         own = kept
     else:
@@ -204,7 +213,7 @@ def _builder_documents(
         for reader in row.named:
             if reader.id in named_everywhere:
                 readers.setdefault(reader.id, reader)
-    plans = [
+    plans: list[DocumentPlan] = [
         DocumentPlan(
             document_id=thread_document_id(key),
             message_ids=_message_ids(kept),
@@ -214,7 +223,9 @@ def _builder_documents(
     for participant in sorted(root.named, key=lambda m: m.id):
         if participant.id in readers:
             continue
-        theirs = [row for row in kept if participant.id in _named_ids(row)]
+        theirs: list[ThreadListing] = [
+            row for row in kept if participant.id in _named_ids(row)
+        ]
         if not theirs:
             continue
         plans.append(

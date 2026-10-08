@@ -58,6 +58,11 @@ def user_json(**overrides: Any) -> dict[str, Any]:
         "mail": MAILBOX_ADDRESS,
         "userPrincipalName": MAILBOX_ADDRESS,
         "displayName": "Alice",
+        "proxyAddresses": [
+            f"SMTP:{MAILBOX_ADDRESS}",
+            "smtp:al@contoso.com",
+            "x500:/o=x",
+        ],
     }
     return fields | overrides
 

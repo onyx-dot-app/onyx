@@ -103,6 +103,7 @@ from onyx.connectors.outlook.models import (
     MailboxCursor,
     MailboxStep,
     OutlookAttachment,
+    OutlookDeltaPage,
     OutlookEvent,
     OutlookFolder,
     OutlookMailbox,
@@ -627,7 +628,7 @@ def build_thread_document(
 ) -> Document | None:
     """Assemble the messages of one document, oldest first, each followed by
     the text of its attachments. None when there is nothing to index."""
-    kept = sorted(messages, key=_message_sort_key)
+    kept: list[OutlookMessage] = sorted(messages, key=_message_sort_key)
     if not kept:
         return None
 
@@ -847,7 +848,9 @@ class OutlookConnector(
             max_workers=MAILBOX_WORKERS,
         )
         for cursor, result in zip(cursors, results, strict=True):
-            listing = self._listings.setdefault(cursor.mailbox.id, _MailboxListing())
+            listing: _MailboxListing = self._listings.setdefault(
+                cursor.mailbox.id, _MailboxListing()
+            )
             listing.rows.extend(result.rows)
             yield from result.items
             if len(listing.rows) > MAX_LISTING_ROWS_PER_MAILBOX:
@@ -867,7 +870,7 @@ class OutlookConnector(
         """The cursor as this process can continue it. A mailbox part way
         through its listing or its build in another process is walked again
         from the start, since its listing lived there."""
-        needs_listing = cursor.opened and not (
+        needs_listing: bool = cursor.opened and not (
             cursor.listed and cursor.built >= cursor.to_build
         )
         if not needs_listing or cursor.mailbox.id in self._listings:
@@ -917,9 +920,13 @@ class OutlookConnector(
     ) -> list[Document | ConnectorFailure]:
         """Builds the next CONVERSATIONS_PER_STEP conversations of the
         mailbox's listing, side by side."""
-        conversations = self._listings[cursor.mailbox.id].conversations
-        batch = conversations[cursor.built : cursor.built + CONVERSATIONS_PER_STEP]
-        excluded = set(cursor.excluded_folder_ids)
+        conversations: list[list[ThreadListing]] = self._listings[
+            cursor.mailbox.id
+        ].conversations
+        batch: list[list[ThreadListing]] = conversations[
+            cursor.built : cursor.built + CONVERSATIONS_PER_STEP
+        ]
+        excluded: set[str] = set(cursor.excluded_folder_ids)
         results: list[list[Document | ConnectorFailure]] = (
             run_functions_tuples_in_parallel(
                 [
@@ -1196,7 +1203,7 @@ class OutlookConnector(
         yield list(self._hierarchy_nodes(mailbox, tree, access))
         # A copy's documents are decided across its folders, so the mailbox's
         # listing is held whole. One mailbox per worker at a time.
-        listing = _MailboxListing()
+        listing: _MailboxListing = _MailboxListing()
         for rows in self._thread_listing_pages(mailbox, tree):
             listing.rows.extend(rows)
             if len(listing.rows) > MAX_LISTING_ROWS_PER_MAILBOX:
@@ -1511,7 +1518,7 @@ class OutlookConnector(
                 continue
             if end_at and change.received_at and change.received_at > end_at:
                 continue
-            row = listing_row(change, roster)
+            row: ThreadListing | None = listing_row(change, roster)
             if row is not None:
                 rows.setdefault(row.message_id, row)
 
@@ -1692,11 +1699,13 @@ class OutlookConnector(
             messages: list[OutlookMessage] = self._copy_messages(
                 mailbox, conversation_id, excluded_folder_ids, wanted
             )
-            attachments = self._conversation_attachments(mailbox, messages)
+            attachments: dict[str, list[TextSection]] = self._conversation_attachments(
+                mailbox, messages
+            )
             by_id: dict[str, OutlookMessage] = {m.match_id: m for m in messages}
             documents: list[Document | ConnectorFailure] = []
             for plan in plans:
-                document = build_thread_document(
+                document: Document | None = build_thread_document(
                     plan.document_id,
                     mailbox,
                     plan.readers,
@@ -1753,22 +1762,24 @@ class OutlookConnector(
             for change in changes:
                 if not is_indexable(change, excluded_folder_ids):
                     continue
-                row = listing_row(change, roster)
-                if row is not None:
-                    rows.append(row)
+                outline_row: ThreadListing | None = listing_row(change, roster)
+                if outline_row is not None:
+                    rows.append(outline_row)
             if len(rows) >= CONVERSATION_FETCH_LIMIT:
                 break
         if rows and not any(row.is_root for row in rows):
-            oldest = self.ops.fetch_conversation_outline_page(
+            oldest: OutlookDeltaPage = self.ops.fetch_conversation_outline_page(
                 mailbox_id=mailbox.id,
                 conversation_id=conversation_id,
                 oldest_first=True,
             )
-            first = next(
+            first: OutlookMessageChange | None = next(
                 (c for c in oldest.changes if is_indexable(c, excluded_folder_ids)),
                 None,
             )
-            root = listing_row(first, roster) if first is not None else None
+            root: ThreadListing | None = (
+                listing_row(first, roster) if first is not None else None
+            )
             if root is not None and root.is_root:
                 rows.append(root)
         return rows

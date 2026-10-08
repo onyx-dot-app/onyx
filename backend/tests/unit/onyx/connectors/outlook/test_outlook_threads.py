@@ -95,6 +95,39 @@ def test_thread_key_rejects_short_or_malformed_indexes() -> None:
     assert not is_thread_root("not base64!")
 
 
+def test_roster_answers_to_aliases_but_a_primary_address_wins() -> None:
+    alice = OutlookMailbox(
+        id="user-1", address="alice@contoso.com", aliases=("al@contoso.com",)
+    )
+    bob = OutlookMailbox(
+        id="user-2", address="bob@contoso.com", aliases=("al@contoso.com",)
+    )
+    al = OutlookMailbox(id="user-3", address="al@contoso.com")
+
+    roster = roster_of([bob, alice, al])
+
+    assert roster["al@contoso.com"] == al
+    assert roster_of([bob, alice])["al@contoso.com"] == bob
+
+
+def test_a_reply_to_an_alias_still_names_the_mailbox() -> None:
+    alice = OutlookMailbox(
+        id="user-1", address="alice@contoso.com", aliases=("al@contoso.com",)
+    )
+    change = OutlookMessageChange(
+        id="g-2",
+        conversation_id="conv-a",
+        conversation_index=REPLY_INDEX,
+        sender=_recipient(BOB.address),
+        to_recipients=[_recipient("Al@Contoso.com")],
+    )
+
+    row = listing_row(change, roster_of([alice, BOB]))
+
+    assert row is not None
+    assert [m.id for m in row.named] == [BOB.id, alice.id]
+
+
 def test_listing_row_maps_headers_to_the_walked_mailboxes() -> None:
     change = OutlookMessageChange(
         id="g-1",
