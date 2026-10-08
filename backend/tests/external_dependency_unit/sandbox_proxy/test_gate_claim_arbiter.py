@@ -33,6 +33,7 @@ from onyx.external_apps.matching.engine import (
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.addons.gate import GateAddon, _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
+from onyx.sandbox_proxy.destination_policy import parse_destination_policy
 from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
@@ -113,6 +114,7 @@ def _build_addon(cache_factory: Any | None = None) -> GateAddon:
         raise AssertionError("cache_factory unexpectedly used")
 
     return GateAddon(
+        destination_policy=parse_destination_policy(""),
         identity=_UnusedResolver(),
         request_evaluator=_UnusedMatcher(),
         cache_factory=cache_factory or _factory_raises,

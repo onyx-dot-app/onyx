@@ -10,12 +10,16 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
+import pytest
 from mitmproxy import http
+from mitmproxy.tools.dump import DumpMaster
 
+from onyx.cache.interface import CacheBackend
 from onyx.db.enums import EndpointPolicy, GatedAppKind
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
@@ -29,6 +33,7 @@ from onyx.sandbox_proxy.identity import (
     SandboxIdentity,
     SandboxIPLookup,
 )
+from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 
 _SANDBOX_ID = UUID("11111111-1111-1111-1111-111111111111")
 
@@ -227,3 +232,32 @@ def make_matched_actions(
         ),
         payload=payload if payload is not None else {},
     )
+
+
+async def wait_for_proxy_listener(master: DumpMaster, task: asyncio.Task[None]) -> int:
+    """Return the assigned port after mitmproxy starts its listener."""
+    for _ in range(100):
+        if task.done():
+            await task
+            pytest.fail("Proxy exited before listening")
+        listeners: list[tuple[str, int]] = list(
+            master.addons.get("proxyserver").listen_addrs()
+        )
+        if listeners:
+            return listeners[0][1]
+        await asyncio.sleep(0.05)
+    pytest.fail("Proxy did not bind")
+
+
+class NoMatchedRequest(RequestEvaluator):
+    def evaluate(
+        self,
+        request: http.Request,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+    ) -> AllMatchedActions | None:
+        return None
+
+
+def unused_cache(_tenant_id: str) -> CacheBackend:
+    raise AssertionError("Off-catalog requests do not use the approval cache")

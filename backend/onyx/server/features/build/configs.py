@@ -101,6 +101,15 @@ ONYX_SERVER_URL = os.environ.get("ONYX_SERVER_URL", "")
 SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
 SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
 
+SANDBOX_PROXY_LISTEN_HOST = os.environ.get(
+    "SANDBOX_PROXY_LISTEN_HOST",
+    "0.0.0.0",  # noqa: S104 — pod network listener
+)
+SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS = (
+    os.environ.get("SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS", "false").lower() == "true"
+)
+SANDBOX_PROXY_INTERNAL_CIDRS: str = os.environ.get("SANDBOX_PROXY_INTERNAL_CIDRS", "")
+
 SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "8080"))
 # Env-tunable on Helm only; compose's healthcheck.test hardcodes 8081 (can't
 # read container env), so a compose change here desyncs the probe.

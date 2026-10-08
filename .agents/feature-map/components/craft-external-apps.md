@@ -85,6 +85,9 @@ time.
 | Variable | Where | Effect |
 |---|---|---|
 | `SANDBOX_PROXY_LISTEN_PORT`, `SANDBOX_PROXY_HEALTHZ_PORT` | `server/features/build/configs.py` | Proxy listen and health ports. |
+| `SANDBOX_PROXY_LISTEN_HOST` | `configs.py` | Proxy and health listener; defaults to `0.0.0.0`. Use `::` for IPv6-only clients. |
+| `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS` | `configs.py` | Defaults to `false`. Enable for global IPv6 sandbox addresses only with restricted proxy ingress. Known sandbox identity remains required. |
+| `SANDBOX_PROXY_INTERNAL_CIDRS` | `configs.py` | Comma-separated internal VPC, pod, Service, node, and connected-network ranges, including global IPv6 ranges. The proxy blocks destinations in these ranges. |
 | `SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA` | `configs.py` | mitmproxy upstream cert verification mode. |
 | `SANDBOX_BACKEND` (`SandboxBackend.KUBERNETES`/`DOCKER`) | `configs.py` | Selects `K8sSecretCAStore`/`K8sInformerLookup` vs. `FileCAStore`/`DockerEventsLookup` (`sandbox_proxy/backend.py:build_ca_store`, `build_ip_lookup`). |
 | `SANDBOX_PROXY_CA_SECRET`, `SANDBOX_PROXY_CA_CONFIGMAP`, `SANDBOX_PROXY_NAMESPACE` | `configs.py` | K8s CA persistence and cross-namespace projection targets (`ca_k8s.py`). |
@@ -94,6 +97,15 @@ time.
 | `MCP_SESSION_TAG_HEADER` | `configs.py` | Header opencode's in-process MCP client uses to carry the session tag (`gate.py:_extract_session_tag`). |
 | `PARSER_MAX_BODY_BYTES` | `sandbox_proxy/addons/gate.py` (constant, not env) | 32 MiB request-body cap; see §9. |
 | `AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` | `backend/onyx/configs/app_configs.py` (default `false`) | Seeds Onyx-managed built-ins (disabled) on tenant creation. |
+
+The proxy requires `SANDBOX_PROXY_INTERNAL_CIDRS` at startup when the listener
+uses IPv6 or global clients are enabled. Invalid CIDRs also prevent startup.
+Internal destinations remain blocked for HTTP and CONNECT. The exact
+`ONYX_SERVER_URL` host and port remain the only internal destination exception.
+Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
+Use listeners and Services in that address family: IPv4 remains the default;
+IPv6 listeners support IPv6-only deployments. Switching an IPv4-primary
+dual-stack deployment to secondary IPv6 pod addresses is not supported.
 
 ---
 
@@ -165,15 +177,17 @@ sandbox process (opencode / a tool call)
      on the CONNECT, not the decrypted inner request.
      sandbox_proxy/addons/gate.py:GateAddon.http_connect
   │
-2. Destination check (three checkpoints)
-     destination_is_blocked(host, port) denies anything that is, or resolves
-     to, a non-globally-routable address, except ONYX_SERVER_URL's own
-     host:port. Checked at http_connect (early deny), request (decrypted
-     inner request, both HTTP and HTTPS), and server_connect (a final
-     re-check right before mitmproxy opens the upstream TCP connection).
-     It narrows the DNS-rebinding window but does not close it: gate.py
-     does not pin server.address to the resolved IP.
-     sandbox_proxy/addons/gate.py:destination_is_blocked, GateAddon.server_connect
+2. Destination checks and address pinning
+     is_destination_blocked(config, host, port) rejects non-global addresses
+     and configured internal CIDRs, except ONYX_SERVER_URL's exact host:port.
+     http_connect and request check destinations before processing traffic.
+     server_connect resolves and validates all answers again, then pins the
+     upstream TCP connection to those addresses through UpstreamEventLoop.
+     No new hostname lookup occurs between validation and connection.
+     The original hostname remains in server.address and TLS SNI, preserving
+     hostname verification, MITM processing, and credential injection.
+     sandbox_proxy/destination_policy.py:resolve_destination, pin_destination,
+     UpstreamEventLoop; sandbox_proxy/addons/gate.py:GateAddon.server_connect
   │
 3. Identity resolution
      GateAddon._resolve_and_match extracts the client's source IP and calls
@@ -343,7 +357,7 @@ process's memory and the encrypted DB columns
 `Sandbox.encrypted_pat`, all `EncryptedJson`/`SensitiveValue`). A sandbox
 attempting to curl the credential-issuing DB or the proxy's own control
 plane directly, rather than through a matched app request, would be a
-request to an internal address and blocked by `destination_is_blocked`
+request to an internal address and blocked by `is_destination_blocked`
 (§4.1 step 2) before it ever reached anything that could answer.
 
 ### 4.5 Approvals
@@ -499,15 +513,14 @@ they can never disagree about which server owns a request; see
    non-plumbing, non-well-formed-`tools/call` body on a matched MCP host is
    `UNCLASSIFIABLE` and becomes a synthetic `DENY`
    (`request_evaluator.py:_mcp_tool_actions`), never a silent pass-through.
-7. **Destination blocking is a three-checkpoint, resolve-and-reresolve
-   design; removing any one checkpoint reopens a DNS-rebinding window.**
-   `http_connect` (early), `request` (decrypted inner request, both
-   plaintext and MITM'd HTTPS), and `server_connect` (immediately before the
-   real upstream socket opens) all call `destination_is_blocked`. Do not
-   consolidate to one checkpoint without re-reading `gate.py`'s own comments
-   on why `server_connect` cannot pin `server.address` to a resolved IP
-   (doing so breaks credential injection by forcing a raw passthrough
-   tunnel).
+7. **The upstream socket must use only validated destination addresses.**
+   `http_connect` and `request` reject forbidden destinations early.
+   `server_connect` calls `resolve_destination` and rejects the entire answer
+   set if any address is forbidden. `pin_destination` and `UpstreamEventLoop`
+   use those approved addresses for the TCP connection without another DNS
+   lookup. Preserve the original hostname for TLS SNI, certificate verification,
+   and credential matching. Keep the real TLS tests when changing mitmproxy;
+   they verify address pinning, hostname checks, and credential injection.
 8. **`try_record_decision` is the only writer of a terminal decision;** any
    new path that can end an approval (a new UI action, a new grant source)
    must go through it, not write `ActionApproval.decision` directly, or the
