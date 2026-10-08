@@ -4,10 +4,7 @@ sync, which turns it into access rows and hides what the walk no longer lists.""
 from unittest.mock import MagicMock, patch
 
 from ee.onyx.configs.app_configs import ZOOM_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.external_permissions.sync_params import (
-    get_source_perm_sync_config,
-    mock_doc_sync,
-)
+from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from ee.onyx.external_permissions.zoom.doc_sync import zoom_doc_sync
 from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.configs.constants import DocumentSource
@@ -73,10 +70,16 @@ def test_the_walk_becomes_access_rows_and_unlisted_documents_go_private() -> Non
     ]
 
 
-def test_zoom_is_registered_with_a_real_doc_sync() -> None:
+def test_zoom_is_registered_with_its_own_doc_sync() -> None:
     config = get_source_perm_sync_config(DocumentSource.ZOOM)
     assert config is not None and config.doc_sync_config is not None
-    assert config.doc_sync_config.doc_sync_func is not mock_doc_sync
+    cc_pair, fetch_docs, fetch_ids = MagicMock(), MagicMock(), MagicMock()
+
+    # The registry holds a lazy wrapper, so calling it is what shows where it leads.
+    with patch(f"{MODULE}.zoom_doc_sync") as doc_sync:
+        config.doc_sync_config.doc_sync_func(cc_pair, fetch_docs, fetch_ids, None)
+
+    doc_sync.assert_called_once_with(cc_pair, fetch_docs, fetch_ids, None)
     assert (
         config.doc_sync_config.doc_sync_frequency == ZOOM_PERMISSION_DOC_SYNC_FREQUENCY
     )
