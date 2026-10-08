@@ -803,7 +803,7 @@ class OutlookSourceOperations(SourceOperations):
         )
         try:
             return download_graph_url_with_cap(
-                access_token=self._access_token(),
+                get_access_token=self._access_token,
                 url=url,
                 cap=cap,
                 description=f"outlook attachment {attachment_id}",

@@ -885,14 +885,18 @@ def test_attachment_download_streams_the_value_endpoint_with_a_cap() -> None:
         data = gateway.download_attachment(
             mailbox_id=MAILBOX_ID, message_id="msg-1", attachment_id="att-1", cap=10
         )
+        download.assert_called_once()
+        called = download.call_args.kwargs
+        # The getter is the gateway's own token fetch, called per attempt.
+        assert called["get_access_token"]() == "tok"
 
     assert data == b"pdf"
-    download.assert_called_once_with(
-        access_token="tok",
-        url=f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments/att-1/$value",
-        cap=10,
-        description="outlook attachment att-1",
+    assert (
+        called["url"]
+        == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments/att-1/$value"
     )
+    assert called["cap"] == 10
+    assert called["description"] == "outlook attachment att-1"
 
 
 def test_attachment_download_failure_is_a_graph_error() -> None:
