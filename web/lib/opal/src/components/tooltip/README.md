@@ -45,7 +45,7 @@ import { Tooltip } from "@opal/components";
   that forwards refs).
 - `string` and `RichStr` content is rendered via `Text font="secondary-body" color="inherit"`.
 - `ReactNode` content is rendered as-is for custom tooltip layouts.
-- The `opal-tooltip` CSS class provides z-indexing, animations, and a `max-width: 20rem` cap.
+- The `opal-tooltip` CSS class provides z-indexing, animations, and a `max-width: 20rem` cap. Text with no spaces, such as a URL, breaks at that edge rather than running past it.
 - The surface is dark in both themes, so content renders inside a `dark` theme scope. Adaptive
   tokens (`text-03` and friends) resolve to their dark values; `text-inverted-*` resolves
   backwards and is wrong here.
