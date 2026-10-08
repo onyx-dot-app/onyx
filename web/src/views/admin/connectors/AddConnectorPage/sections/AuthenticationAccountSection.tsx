@@ -78,7 +78,8 @@ export default function AuthenticationAccountSection({
   async function onDeleteCredential(credential: Credential<any | null>) {
     const error = await remove(credential, t("add.unknownError.toast"));
     if (error === null) {
-      toast.success(t("add.credentialDeleted.toast"));
+      // A deleted account cannot stay picked.
+      if (credential.id === currentCredential?.id) onCredentialChange(null);
     } else {
       toast.error(error);
     }

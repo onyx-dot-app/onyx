@@ -2648,9 +2648,6 @@
         "createCredentialButton": {
           "label": "Créer"
         },
-        "credentialDeleted": {
-          "toast": "Identifiant supprimé avec succès !"
-        },
         "credentialModal": {
           "title": "Créer un identifiant pour {source}"
         },

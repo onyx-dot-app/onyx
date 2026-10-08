@@ -2648,9 +2648,6 @@
         "createCredentialButton": {
           "label": "新建"
         },
-        "credentialDeleted": {
-          "toast": "已成功删除凭据！"
-        },
         "credentialModal": {
           "title": "创建 {source} 凭据"
         },

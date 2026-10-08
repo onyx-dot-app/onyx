@@ -2648,9 +2648,6 @@
         "createCredentialButton": {
           "label": "Crear una nueva"
         },
-        "credentialDeleted": {
-          "toast": "¡Credencial eliminada!"
-        },
         "credentialModal": {
           "title": "Crear una credencial de {source}"
         },

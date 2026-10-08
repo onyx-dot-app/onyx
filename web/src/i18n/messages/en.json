@@ -2648,9 +2648,6 @@
         "createCredentialButton": {
           "label": "Create New"
         },
-        "credentialDeleted": {
-          "toast": "Credential deleted successfully!"
-        },
         "credentialModal": {
           "title": "Create a {source} credential"
         },

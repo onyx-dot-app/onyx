@@ -26,6 +26,29 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { getSourceMetadata } from "@/lib/sources";
 import { useUser } from "@/providers/UserProvider";
 
+interface DetailRowProps {
+  label: string;
+  value: string;
+  /** Sets the value in the mono font, as for a secret. */
+  mono?: boolean;
+}
+function DetailRow({ label, value, mono = false }: DetailRowProps) {
+  return (
+    <ContentAction
+      sizePreset="main-ui"
+      variant="section"
+      padding={0}
+      titleColor="text-03"
+      title={label}
+      rightChildren={
+        <Text font={mono ? "main-ui-mono" : "main-ui-body"} color="text-04">
+          {value}
+        </Text>
+      }
+    />
+  );
+}
+
 interface AuthenticationAccountCardProps {
   /** The saved account this card shows. */
   credential: SimilarCredential;
@@ -46,42 +69,11 @@ interface AuthenticationAccountCardProps {
   /** Starts the checks on this account; resolves once the run is queued. */
   onRerunChecks: (credential: Credential<any>) => Promise<void>;
 }
-
 /**
  * One saved account in the Authentication Account section. The whole card
  * picks the account, or drops it when it is already picked; the chevron
  * opens the details below it.
  */
-interface DetailRowProps {
-  label: string;
-  value: string;
-  /** Sets the value in the mono font, as for a secret. */
-  mono?: boolean;
-}
-
-/** One label and value of the account's details. */
-function DetailRow({ label, value, mono = false }: DetailRowProps) {
-  return (
-    <Section
-      flexDirection="row"
-      justifyContent="between"
-      alignItems="center"
-      gap={4}
-      width="full"
-    >
-      <Text font="main-content-body" color="text-03">
-        {label}
-      </Text>
-      <Text
-        font={mono ? "main-content-mono" : "main-content-body"}
-        color="text-04"
-      >
-        {value}
-      </Text>
-    </Section>
-  );
-}
-
 export default function AuthenticationAccountCard({
   credential,
   source,
@@ -190,7 +182,7 @@ export default function AuthenticationAccountCard({
         expandedContent={
           <Section padding={2} width="full">
             <Card border="none" padding={2} rounding={3}>
-              <Section gap={2} alignItems="stretch" width="full">
+              <Section gap={3} alignItems="stretch" width="full">
                 <ContentAction
                   title={
                     checkedAt
@@ -198,18 +190,21 @@ export default function AuthenticationAccountCard({
                       : t("notTested.title")
                   }
                   description={t("details.description")}
-                  sizePreset="main-content"
+                  sizePreset="main-ui"
                   variant="section"
                   padding={0}
                   rightChildren={
-                    <Section flexDirection="row" gap={1} width="fit">
+                    <Section
+                      flexDirection="row"
+                      gap={1}
+                      width="fit"
+                      height="fit"
+                    >
                       <Button
                         variant="danger"
                         prominence="tertiary"
                         icon={SvgTrash}
                         aria-label={t("deleteButton.label")}
-                        // The connector is about to use the selected account.
-                        disabled={selected}
                         onClick={() => setConfirmingDelete(true)}
                       />
                       <Button
