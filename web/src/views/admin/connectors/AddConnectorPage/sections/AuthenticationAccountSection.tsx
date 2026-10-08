@@ -32,7 +32,6 @@ import {
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import {
-  isDraftCredential,
   shouldRedirectToOAuth,
   toCredentialRef,
 } from "@/lib/credentials/utils";
