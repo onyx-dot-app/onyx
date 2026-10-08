@@ -200,6 +200,19 @@ provisioning entirely, since nothing will view them live.
 
 ---
 
+### Artifact preview refresh
+
+PowerPoint and PDF previews key cached data by file path, optional file revision,
+and explicit reload counter. When a revision is supplied, unchanged previews reuse
+cached data across tab switches. Without a revision, previews revalidate on mount.
+Each successful response assigns a fresh slide image token, because local refresh
+counters can repeat after page reloads. A refreshed deck can have fewer slides; selection stays within
+its new bounds. Next-slide input is ignored while conversion has no slides.
+PDF previews cache bytes in SWR and release viewer object URLs on unmount.
+Cache misses and explicit reloads bypass the browser cache when fetching the artifact.
+These behaviors live in `PptxPreview.tsx` and `PdfPreview.tsx` under
+`web/src/app/craft/components/output-panel/`.
+
 ## 5. Contracts and invariants
 
 1. **A preview must only be reachable by someone entitled to that session.**
