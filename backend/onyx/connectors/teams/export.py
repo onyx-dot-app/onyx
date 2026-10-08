@@ -76,9 +76,11 @@ class ExportSource:
         root was created inside the window is complete in the stream; an older
         thread that changed anywhere gets its replies from Graph, and its root
         too when the stream lacks it."""
-        graph_client = self._session.graph()
-        channels = listing.team_channels(graph_client, team_id)
+        # The listing is an SDK query, which must run on this worker's own
+        # client. The stream is direct requests on the shared one.
+        channels = listing.team_channels(self._session.graph_for_thread(), team_id)
         by_id = {channel.id: channel for channel in channels}
+        graph_client = self._session.graph()
 
         threads: dict[str, list[Message]] = defaultdict(list)
         roots: dict[str, Message] = {}

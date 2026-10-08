@@ -206,6 +206,28 @@ def test_a_team_too_large_to_hold_goes_to_the_channel_walk(
     assert checkpoint.has_more is True
 
 
+def test_a_worker_lists_its_teams_channels_on_its_own_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The listing is an SDK query, which queues on the client it was built
+    from, so four workers listing at once cannot share the direct-request
+    client."""
+    listing_clients: list[Any] = []
+
+    def team_channels(graph_client: Any, _team_id: str) -> list[ChannelRef]:
+        listing_clients.append(graph_client)
+        return [CHANNEL]
+
+    monkeypatch.setattr("onyx.connectors.teams.listing.team_channels", team_channels)
+    client = graph_client({PROBE: {"value": []}, team_export_url(TEAM_ID, 0, 1): {}})
+    teams_connector = connector(client)
+
+    step(teams_connector, _team_checkpoint())
+
+    assert len(listing_clients) == 1
+    assert listing_clients[0] is not teams_connector.graph()
+
+
 def test_a_team_whose_stream_is_refused_goes_to_the_channel_walk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

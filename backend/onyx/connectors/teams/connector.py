@@ -379,8 +379,8 @@ class TeamsConnector(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
         """A channel's files, library opened and left here. A channel Graph
-        describes without a library, or refuses, is one recorded failure;
-        anything else fails the attempt."""
+        describes without a library, or refuses, is one recorded failure.
+        Anything else fails the attempt."""
         if self._files is None:
             return
         try:
