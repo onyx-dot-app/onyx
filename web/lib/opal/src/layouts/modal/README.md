@@ -11,6 +11,7 @@ It renders open, so mount it inside the `Provider` from `useCreateModal`. Closin
 | Prop          | Type                    | Default        | Description                                                   |
 | ------------- | ----------------------- | -------------- | ------------------------------------------------------------- |
 | `icon`        | `IconFunctionComponent` | **(required)** | Header icon                                                   |
+| `color`       | `ColorTypes`            | `"default"`    | Colour mode of the header icon and title, as on `Content`     |
 | `title`       | `string \| RichStr`     | **(required)** | Header title                                                  |
 | `description` | `string \| RichStr`     | —              | Header description                                            |
 | `submit`      | `ReactNode`             | **(required)** | Confirm action, rendered in the footer after Cancel           |
