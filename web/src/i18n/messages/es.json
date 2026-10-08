@@ -11041,6 +11041,11 @@
       "adminLimitedSetting": {
         "tooltip": "Tu administrador limita este modelo a un nivel de razonamiento más bajo."
       },
+      "autoMode": {
+        "caption": {
+          "text": "La puerta de enlace elige un modelo para cada mensaje."
+        }
+      },
       "contextWindow": {
         "row": {
           "caption": "Límite de tokens para cada sesión",
@@ -11059,6 +11064,14 @@
         },
         "loadingMore": {
           "text": "Cargando más modelos..."
+        }
+      },
+      "modeToggle": {
+        "models": {
+          "label": "Modelos"
+        },
+        "routers": {
+          "label": "Auto"
         }
       },
       "modelSettingsButton": {
@@ -11093,6 +11106,9 @@
         "xhigh": {
           "label": "Muy alto"
         }
+      },
+      "routerBadge": {
+        "label": "Enrutador"
       },
       "searchInput": {
         "placeholder": "Buscar modelos..."

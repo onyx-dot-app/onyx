@@ -651,7 +651,8 @@ def sync_model_configurations(
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 
     new_models: list[NewModelConfiguration] = []
-    upgraded_flow_count = 0
+    # Rows touched in place: flow additions plus newly-marked routers.
+    upgraded_count = 0
     for model in models:
         existing = existing_by_name.get(model.name)
         if existing is None:
@@ -669,9 +670,16 @@ def sync_model_configurations(
                     is_visible=False,
                     max_input_tokens=model.max_input_tokens,
                     display_name=model.display_name,
+                    is_router=model.is_router,
                 )
             )
             continue
+
+        # Router status is additive like the capability flags: a later fetch
+        # that newly reports the entry as a router marks the stored row.
+        if model.is_router and not existing.is_router:
+            existing.is_router = True
+            upgraded_count += 1
 
         # Existing model: add newly-reported capability flags (additive only).
         # TODO(ENG-4233): durable admin flow removals.
@@ -691,12 +699,12 @@ def sync_model_configurations(
                 model_configuration_id=existing.id,
                 flow_type=flow_type,
             )
-            upgraded_flow_count += 1
+            upgraded_count += 1
 
     insert_new_model_configurations__no_commit(db_session, provider.id, new_models)
     new_count = len(new_models)
 
-    if new_count > 0 or upgraded_flow_count > 0:
+    if new_count > 0 or upgraded_count > 0:
         db_session.commit()
 
     return new_count
@@ -1645,6 +1653,7 @@ class NewModelConfiguration(BaseModel):
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
+    is_router: bool = False
 
 
 # Rows per INSERT. Keeps bind-parameter counts modest while tens of
@@ -1680,6 +1689,7 @@ def insert_new_model_configurations__no_commit(
                         "reasoning_effort_max": model.reasoning_effort_max,
                         "reasoning_effort_default": model.reasoning_effort_default,
                         "temperature_default": model.temperature_default,
+                        "is_router": model.is_router,
                     }
                     for model in chunk
                 ]

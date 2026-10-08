@@ -6,6 +6,8 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
   Button,
   LineItemButton,
+  Tabs,
+  Tag,
   Text,
   InputTypeIn,
   PopoverMenu,
@@ -461,8 +463,29 @@ export default function ModelSelectorContent({
     [llmProviders, currentModelName, includeHiddenModels]
   );
 
+  // Router entries (openrouter/auto, gateway configs) live behind the "Auto"
+  // tab so the model list stays a list of concrete models. The toggle only
+  // renders when at least one router is enabled by the admin.
+  const hasRouters = useMemo(
+    () => llmOptions.some((opt) => opt.isRouter),
+    [llmOptions]
+  );
+  const initialMode = useMemo<"models" | "routers">(
+    () =>
+      llmOptions.some((opt) => opt.isRouter && isSelected(opt))
+        ? "routers"
+        : "models",
+    [llmOptions, isSelected]
+  );
+  const [selectorMode, setSelectorMode] = useState<"models" | "routers">(
+    initialMode
+  );
+  useEffect(() => setSelectorMode(initialMode), [initialMode]);
+
   const filteredOptions = useMemo(() => {
-    let result = llmOptions;
+    let result = llmOptions.filter((opt) =>
+      selectorMode === "routers" ? opt.isRouter : !opt.isRouter
+    );
     if (requiresImageInput) {
       result = result.filter((opt) => opt.supportsImageInput);
     }
@@ -476,7 +499,7 @@ export default function ModelSelectorContent({
       );
     }
     return result;
-  }, [llmOptions, searchQuery, requiresImageInput]);
+  }, [llmOptions, searchQuery, requiresImageInput, selectorMode]);
 
   const groupedOptions = useMemo(
     () => groupLlmOptions(filteredOptions),
@@ -626,23 +649,28 @@ export default function ModelSelectorContent({
             description={description}
             onClick={() => onSelect(option)}
             rightChildren={
-              modelDetail ? (
-                <Hoverable.Item group="model-row" variant="appear-on-hover">
-                  <Button
-                    icon={SvgSliders}
-                    prominence="tertiary"
-                    size="sm"
-                    aria-label={t("modelSettingsButton.ariaLabel", {
-                      model: option.displayName,
-                    })}
-                    tooltip={t("modelSettingsButton.tooltip")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDetailSelect?.(option);
-                      setDetailOption(option);
-                    }}
-                  />
-                </Hoverable.Item>
+              option.isRouter || modelDetail ? (
+                <div className="flex flex-row items-center gap-1">
+                  {option.isRouter && <Tag title={t("routerBadge.label")} />}
+                  {modelDetail && (
+                    <Hoverable.Item group="model-row" variant="appear-on-hover">
+                      <Button
+                        icon={SvgSliders}
+                        prominence="tertiary"
+                        size="sm"
+                        aria-label={t("modelSettingsButton.ariaLabel", {
+                          model: option.displayName,
+                        })}
+                        tooltip={t("modelSettingsButton.tooltip")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDetailSelect?.(option);
+                          setDetailOption(option);
+                        }}
+                      />
+                    </Hoverable.Item>
+                  )}
+                </div>
               ) : null
             }
             sizePreset="main-ui"
@@ -665,6 +693,31 @@ export default function ModelSelectorContent({
 
   return (
     <Section gap={2}>
+      {hasRouters && (
+        <Tabs
+          variant="contained"
+          value={selectorMode}
+          onValueChange={(value) =>
+            setSelectorMode(value === "routers" ? "routers" : "models")
+          }
+        >
+          <Tabs.List>
+            <Tabs.Trigger value="models">
+              {t("modeToggle.models.label")}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="routers">
+              {t("modeToggle.routers.label")}
+            </Tabs.Trigger>
+          </Tabs.List>
+        </Tabs>
+      )}
+
+      {hasRouters && selectorMode === "routers" && (
+        <Text font="secondary-body" color="text-03">
+          {t("autoMode.caption.text")}
+        </Text>
+      )}
+
       <InputTypeIn
         searchIcon
         variant="internal"

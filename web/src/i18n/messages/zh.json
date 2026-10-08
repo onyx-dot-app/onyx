@@ -11041,6 +11041,11 @@
       "adminLimitedSetting": {
         "tooltip": "管理员将此模型限制为较低的推理级别。"
       },
+      "autoMode": {
+        "caption": {
+          "text": "网关为每条消息选择一个模型。"
+        }
+      },
       "contextWindow": {
         "row": {
           "caption": "每个会话的 token 上限",
@@ -11059,6 +11064,14 @@
         },
         "loadingMore": {
           "text": "正在加载更多模型..."
+        }
+      },
+      "modeToggle": {
+        "models": {
+          "label": "模型"
+        },
+        "routers": {
+          "label": "自动"
         }
       },
       "modelSettingsButton": {
@@ -11093,6 +11106,9 @@
         "xhigh": {
           "label": "极高"
         }
+      },
+      "routerBadge": {
+        "label": "路由器"
       },
       "searchInput": {
         "placeholder": "搜索模型..."

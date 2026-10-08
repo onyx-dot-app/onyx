@@ -11041,6 +11041,11 @@
       "adminLimitedSetting": {
         "tooltip": "管理者により、このモデルの推論レベルは低く制限されています。"
       },
+      "autoMode": {
+        "caption": {
+          "text": "ゲートウェイがメッセージごとにモデルを選択します。"
+        }
+      },
       "contextWindow": {
         "row": {
           "caption": "セッションごとの token 上限",
@@ -11059,6 +11064,14 @@
         },
         "loadingMore": {
           "text": "さらにモデルを読み込み中..."
+        }
+      },
+      "modeToggle": {
+        "models": {
+          "label": "モデル"
+        },
+        "routers": {
+          "label": "自動"
         }
       },
       "modelSettingsButton": {
@@ -11093,6 +11106,9 @@
         "xhigh": {
           "label": "最高"
         }
+      },
+      "routerBadge": {
+        "label": "ルーター"
       },
       "searchInput": {
         "placeholder": "モデルを検索..."

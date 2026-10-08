@@ -1757,6 +1757,7 @@ def get_openrouter_available_models(
                     display_name=display_name,
                     max_input_tokens=context_length,
                     supports_image_input=model_details.supports_image_input,
+                    is_router=model_details.is_router,
                 )
             )
         except Exception as e:
@@ -1784,6 +1785,7 @@ def get_openrouter_available_models(
                     display_name=r.display_name,
                     max_input_tokens=r.max_input_tokens,
                     supports_image_input=r.supports_image_input,
+                    is_router=r.is_router,
                 )
                 for r in sorted_results
             ],

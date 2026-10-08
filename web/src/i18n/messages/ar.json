@@ -11041,6 +11041,11 @@
       "adminLimitedSetting": {
         "tooltip": "يقصر المسؤول هذا النموذج على مستوى استدلال أدنى."
       },
+      "autoMode": {
+        "caption": {
+          "text": "تختار البوابة نموذجًا لكل رسالة."
+        }
+      },
       "contextWindow": {
         "row": {
           "caption": "حد الرموز لكل جلسة",
@@ -11059,6 +11064,14 @@
         },
         "loadingMore": {
           "text": "جارٍ تحميل المزيد من النماذج..."
+        }
+      },
+      "modeToggle": {
+        "models": {
+          "label": "النماذج"
+        },
+        "routers": {
+          "label": "تلقائي"
         }
       },
       "modelSettingsButton": {
@@ -11093,6 +11106,9 @@
         "xhigh": {
           "label": "مرتفع جدًا"
         }
+      },
+      "routerBadge": {
+        "label": "موجّه"
       },
       "searchInput": {
         "placeholder": "البحث في النماذج..."
