@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Fold, SelectCard, Tabs } from "@opal/components";
+import { Button, Fold, SelectButton, SelectCard, Tabs } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/credentials/types";
@@ -166,18 +166,26 @@ export default function AuthenticationAccountSection({
         padding={0}
         rightChildren={
           <>
-            <Button
+            <SelectButton
               icon={SvgListTree}
-              prominence="internal"
-              // Shown, the button holds its hover look.
+              variant="select-heavy"
+              // Blue while an account is picked; held in its hover look
+              // while the list is open.
+              state={
+                !currentCredential
+                  ? "empty"
+                  : showSavedAccounts
+                    ? "selected"
+                    : "filled"
+              }
               interaction={showSavedAccounts ? "hover" : "rest"}
-              aria-pressed={showSavedAccounts}
+              aria-expanded={showSavedAccounts}
               onClick={() => setShowSavedAccounts((shown) => !shown)}
             >
               {t("add.savedAccountsButton.label", {
                 count: credentials?.length ?? 0,
               })}
-            </Button>
+            </SelectButton>
             <Button
               icon={isCreating ? SvgFold : SvgExpand}
               prominence="tertiary"
