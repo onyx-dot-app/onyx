@@ -2743,8 +2743,7 @@
             "description": "As credenciais de uma conta salva não podem ser editadas nem redirecionadas para outro host. Você pode testar a conta antes de reutilizá-la ou adicionar uma nova conta."
           },
           "rerunButton": {
-            "label": "Executar verificações novamente",
-            "runningLabel": "Executando verificações"
+            "label": "Executar verificações novamente"
           },
           "authenticationType": {
             "label": "Tipo de autenticação"

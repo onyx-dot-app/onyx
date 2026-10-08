@@ -2743,8 +2743,7 @@
             "description": "已保存账户的凭据无法编辑，也无法指向其他主机。你可以在复用前测试该账户，或改为添加新账户。"
           },
           "rerunButton": {
-            "label": "重新运行检查",
-            "runningLabel": "正在运行检查"
+            "label": "重新运行检查"
           },
           "authenticationType": {
             "label": "认证类型"
