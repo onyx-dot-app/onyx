@@ -1172,8 +1172,8 @@ class TestUserRecordingsSessionTypes:
 
     def test_a_code_zoom_added_later_stops_the_attempt(self) -> None:
         # Indexing it as a meeting would freeze that guess into the document id
-        # and into which access-list endpoint ticket 04 calls for it. Failing keeps
-        # the checkpoint, so widening the sets is enough to pick it up.
+        # and into which details endpoint is called for it. Failing keeps the
+        # checkpoint, so widening the sets is enough to pick it up.
         source = GroupSource("group-1")
         client = _client_for_hosts(
             members=[user(id="u1")],

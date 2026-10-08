@@ -5,6 +5,7 @@ import type {
 } from "@/lib/credentials/types";
 import { AccessType, ProcessingMode } from "@/lib/types";
 import { TypedFile } from "@/lib/connectors/fileTypes";
+import type { ManageAccessEntry } from "@/lib/connectors/accessType";
 import {
   CREDENTIAL_NAME,
   CREDENTIAL_SOURCE,
@@ -95,7 +96,9 @@ export function linkCredential(
   groups?: number[],
   autoSyncOptions?: Record<string, any>,
   processingMode?: ProcessingMode,
-  dataAccess?: number[]
+  dataAccess?: number[],
+  /** The manage groups with their roles. Given, it replaces `groups`. */
+  manageAccess?: ManageAccessEntry[]
 ) {
   return fetch(
     `/api/manage/connector/${connectorId}/credential/${credentialId}`,
@@ -107,7 +110,10 @@ export function linkCredential(
       body: JSON.stringify({
         name,
         access_type: accessType !== undefined ? accessType : "public",
-        groups: groups || null,
+        // The backend takes one or the other: plain `groups` are Editors.
+        ...(manageAccess !== undefined
+          ? { groups: [], manage_access: manageAccess }
+          : { groups: groups || null }),
         auto_sync_options: autoSyncOptions || null,
         processing_mode: processingMode || "REGULAR",
         // Left out, a private connector gives data access to its groups.

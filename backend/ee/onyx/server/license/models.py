@@ -128,6 +128,11 @@ class LicenseUploadResponse(BaseModel):
     message: str | None = None
 
 
+class CommunityDowngradeResponse(BaseModel):
+    connectors_made_public: int
+    user_groups_removed: int
+
+
 class SeatUsageResponse(BaseModel):
     """Response for seat usage API."""
 

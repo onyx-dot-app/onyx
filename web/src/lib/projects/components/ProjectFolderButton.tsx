@@ -11,13 +11,13 @@ import { useTranslations } from "next-intl";
 import { useDroppable } from "@dnd-kit/core";
 import {
   Button,
-  LineItemButton,
-  Popover,
-  PopoverMenu,
+  Dropdown,
   SidebarTab,
+  type DropdownMenuItem,
 } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { cn } from "@opal/utils";
+import { Hoverable } from "@opal/core";
 import {
   SvgEdit,
   SvgFolder,
@@ -152,7 +152,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
     useState(false);
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Unfold whichever project the user moves into, so its chats are visible on
   // arrival. Only ever opens — folding it again while still inside the project
@@ -179,25 +179,27 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
     await renameProject(project.id, newName);
   }
 
-  const popoverItems = [
-    <LineItemButton
-      key="rename-project"
-      sizePreset="main-ui"
-      rounding={2}
-      icon={SvgEdit}
-      title={t("projects.folder.rename.label")}
-      onClick={noProp(() => setIsEditing(true))}
-    />,
-    null,
-    <LineItemButton
-      key="delete-project"
-      sizePreset="main-ui"
-      rounding={2}
-      color="danger"
-      icon={SvgTrash}
-      title={t("projects.folder.delete.label")}
-      onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-    />,
+  const menuItems: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "rename-project",
+      icon: SvgEdit,
+      title: t("projects.folder.rename.label"),
+      onSelect: () => setIsEditing(true),
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          kind: "action",
+          id: "delete-project",
+          icon: SvgTrash,
+          danger: true,
+          title: t("projects.folder.delete.label"),
+          onSelect: () => setDeleteConfirmationModalOpen(true),
+        },
+      ],
+    },
   ];
 
   return (
@@ -232,52 +234,68 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
 
       {/* Project Folder */}
       <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
-        <Popover onOpenChange={setPopoverOpen}>
-          <Popover.Anchor>
-            <SidebarTab
-              icon={FolderIcon}
-              // Folded, the project's chats are hidden — and a project chat
-              // appears nowhere else in the sidebar (Recents excludes them), so
-              // the folder itself has to carry the "you are here" mark.
-              selected={isActiveProject && (activeSidebar.isProject() || !open)}
-              /* While renaming, drop the click target so the input stays usable. */
-              onClick={isEditing ? undefined : noProp(handleTextClick)}
-              rightChildren={
-                <>
-                  <Popover.Trigger asChild onClick={noProp()}>
-                    <div
-                      className={cn(
-                        !popoverOpen && "hidden",
-                        !isEditing && "group-hover/SidebarTab:flex"
-                      )}
-                    >
-                      <Button
-                        icon={SvgMoreHorizontal}
-                        prominence="internal"
-                        size="sm"
-                        interaction={popoverOpen ? "hover" : "rest"}
-                      />
-                    </div>
-                  </Popover.Trigger>
-
-                  <Popover.Content side="right" align="end" width="md">
-                    <PopoverMenu>{popoverItems}</PopoverMenu>
-                  </Popover.Content>
-                </>
-              }
+        <Dropdown
+          width={60}
+          side="right"
+          align="end"
+          onOpenChange={setMenuOpen}
+        >
+          {/* The menu flies out beside the whole row, not the button. */}
+          <Dropdown.Anchor asChild>
+            <Hoverable.Root
+              group="ProjectFolderButton"
+              interaction={menuOpen ? "hover" : "rest"}
             >
-              {isEditing ? (
-                <ButtonRenaming
-                  initialName={project.name}
-                  onRename={handleRename}
-                  onClose={() => setIsEditing(false)}
-                />
-              ) : (
-                project.name
-              )}
-            </SidebarTab>
-          </Popover.Anchor>
-        </Popover>
+              <SidebarTab
+                icon={FolderIcon}
+                // Folded, the project's chats are hidden — and a project chat
+                // appears nowhere else in the sidebar (Recents excludes them), so
+                // the folder itself has to carry the "you are here" mark.
+                selected={
+                  isActiveProject && (activeSidebar.isProject() || !open)
+                }
+                /* While renaming, drop the click target so the input stays usable. */
+                onClick={isEditing ? undefined : noProp(handleTextClick)}
+                rightChildren={
+                  <>
+                    {/* The click stays here: the tab underneath opens the project. */}
+                    <div role="presentation" onClick={noProp()}>
+                      {/* While renaming the row is an input, so the menu stays
+                        away unless its own list is already open. */}
+                      {(!isEditing || menuOpen) && (
+                        <Hoverable.Item group="ProjectFolderButton">
+                          <Dropdown.Trigger asChild>
+                            <Button
+                              icon={SvgMoreHorizontal}
+                              prominence="internal"
+                              size="sm"
+                              interaction={menuOpen ? "hover" : "rest"}
+                              aria-label={t("projects.folder.options.label")}
+                            />
+                          </Dropdown.Trigger>
+                        </Hoverable.Item>
+                      )}
+                    </div>
+                    <Dropdown.Data
+                      label={t("projects.folder.options.label")}
+                      items={menuItems}
+                    />
+                  </>
+                }
+              >
+                {isEditing ? (
+                  <ButtonRenaming
+                    initialName={project.name}
+                    onRename={handleRename}
+                    onClose={() => setIsEditing(false)}
+                  />
+                ) : (
+                  project.name
+                )}
+              </SidebarTab>
+            </Hoverable.Root>
+          </Dropdown.Anchor>
+        </Dropdown>
       </FolderIconProvider>
 
       {/* Project Chat-Sessions */}

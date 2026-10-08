@@ -17,3 +17,4 @@ class ZoomConnectorConfig(ZoomCredentialBinding, ConnectorConfig):
     rate_limit_percent: StrictInt | StrictFloat | None = None
     include_meetings: bool | None = None
     include_webinars: bool | None = None
+    treat_link_access_as_public: bool | None = None

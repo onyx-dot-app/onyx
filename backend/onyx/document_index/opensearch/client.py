@@ -35,8 +35,13 @@ from onyx.configs.app_configs import (
 from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
+    RESOURCE_CHECK_TIMEOUT_SECONDS,
     OpenSearchAuthMethod,
     OpenSearchSearchType,
+)
+from onyx.document_index.opensearch.models import (
+    NodesResourceStats,
+    VectorResourceStats,
 )
 from onyx.document_index.opensearch.schema import (
     CHUNK_INDEX_FIELD_NAME,
@@ -263,6 +268,7 @@ class OpenSearchClient(AbstractContextManager):
             (IAM). Defaults to OPENSEARCH_AUTH_METHOD.
         aws_region: AWS region used for SigV4 signing. Required when auth_method
             is IAM. Defaults to OPENSEARCH_AWS_REGION.
+        max_retries: Maximum transport retries after a failed request.
         aws_service: AWS service name for SigV4 signing ("es" for managed
             domains, "aoss" for Serverless). Defaults to OPENSEARCH_AWS_SERVICE.
     """
@@ -282,6 +288,7 @@ class OpenSearchClient(AbstractContextManager):
         auth_method: OpenSearchAuthMethod = OPENSEARCH_AUTH_METHOD,
         aws_region: str | None = OPENSEARCH_AWS_REGION,
         aws_service: str = OPENSEARCH_AWS_SERVICE,
+        max_retries: int = 3,
     ):
         logger.debug(
             "Creating OpenSearch client with host %s, port %s, auth method "
@@ -327,7 +334,31 @@ class OpenSearchClient(AbstractContextManager):
             # partial results from OpenSearch, pass in a timeout parameter to
             # your request body that is less than this value.
             timeout=timeout,
+            max_retries=max_retries,
         )
+
+    def get_node_resource_stats(self) -> NodesResourceStats:
+        response: dict[str, Any] = self._client.nodes.stats(
+            node_id="data:true",
+            metric="jvm,fs",
+            params={
+                "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
+                "timeout": f"{RESOURCE_CHECK_TIMEOUT_SECONDS}s",
+                "filter_path": "_nodes.failed,nodes.*.jvm.mem.heap_used_percent,nodes.*.fs.data.total_in_bytes,nodes.*.fs.data.available_in_bytes",
+            },
+        )
+        return NodesResourceStats.model_validate(response)
+
+    def get_vector_resource_stats(self) -> VectorResourceStats:
+        response: dict[str, Any] = self._client.transport.perform_request(
+            "GET",
+            "/_plugins/_knn/stats/circuit_breaker_triggered,graph_memory_usage_percentage",
+            params={
+                "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
+                "timeout": f"{RESOURCE_CHECK_TIMEOUT_SECONDS}s",
+            },
+        )
+        return VectorResourceStats.model_validate(response)
 
     def __exit__(self, *_: Any) -> None:
         self.close()
@@ -528,7 +559,13 @@ class OpenSearchClient(AbstractContextManager):
         Returns:
             True if OpenSearch could be reached, False if it could not.
         """
-        return self._client.ping()
+        # opensearch-py's ping() discards the error, which hides TLS and auth
+        # failures from the readiness probe logs.
+        try:
+            return bool(self._client.transport.perform_request("HEAD", "/"))
+        except TransportError as e:
+            logger.warning("[OpenSearch] Ping failed: %s", e)
+            return False
 
     @log_function_time(print_only=True, debug_only=True)
     def get_opensearch_version(self) -> tuple[int, int] | None:

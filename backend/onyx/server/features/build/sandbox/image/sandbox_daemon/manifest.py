@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import NamedTuple
 from uuid import UUID
 
-from sandbox_daemon.contract import OutputsManifestEntry, OutputsManifestResponse
+from sandbox_daemon.models import OutputsManifestEntry, OutputsManifestResponse
 from sandbox_daemon.snapshot import SESSIONS_ROOT
 
 # Ceilings so a pathological outputs tree cannot stall the daemon or exhaust

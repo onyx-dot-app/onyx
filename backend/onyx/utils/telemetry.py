@@ -6,7 +6,7 @@ from typing import Any
 
 import requests
 
-from onyx.configs.app_configs import DISABLE_TELEMETRY, ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.constants import (
     KV_CUSTOMER_UUID_KEY,
     KV_INSTANCE_DOMAIN_KEY,
@@ -16,8 +16,10 @@ from onyx.db.encrypted_kv_store import load_encrypted_kv, upsert_encrypted_kv
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.key_value_store.interface import KvKeyNotFoundError, unwrap_str
+from onyx.server.settings.models import Tier
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
     fetch_versioned_implementation_with_fallback,
     noop_fallback,
 )
@@ -94,6 +96,12 @@ def _get_or_generate_instance_domain() -> str | None:  #
     return _CACHED_INSTANCE_DOMAIN
 
 
+def _get_tier(tenant_id: str) -> Tier:
+    return fetch_ee_implementation_or_noop(
+        "onyx.utils.tier", "get_tier", Tier.COMMUNITY
+    )(tenant_id)
+
+
 def optional_telemetry(
     record_type: RecordType,
     data: dict,
@@ -126,7 +134,8 @@ def optional_telemetry(
                     "customer_uuid": customer_uuid,
                     "is_cloud": MULTI_TENANT,
                 }
-                if ENTERPRISE_EDITION_ENABLED:
+                # Licensed deployments only.
+                if _get_tier(tenant_id) != Tier.COMMUNITY:
                     payload["instance_domain"] = _get_or_generate_instance_domain()
                 response = requests.post(
                     _DANSWER_TELEMETRY_ENDPOINT,

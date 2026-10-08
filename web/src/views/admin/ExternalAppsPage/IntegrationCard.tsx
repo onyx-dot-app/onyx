@@ -4,10 +4,9 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
+  Dropdown,
   Card,
-  LineItemButton,
-  Popover,
-  PopoverMenu,
+  type DropdownMenuItem,
   InputSwitch,
   Tag,
   Text,
@@ -55,6 +54,32 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
       setIsMutating(false);
     }
   }
+
+  const menuItems: DropdownMenuItem[] = [
+    ...(edit
+      ? [
+          {
+            kind: "action" as const,
+            id: "edit",
+            icon: SvgEdit,
+            title: t("card.editAction.label"),
+            onSelect: edit,
+          },
+        ]
+      : []),
+    ...(remove
+      ? [
+          {
+            kind: "action" as const,
+            id: "delete",
+            icon: SvgTrash,
+            danger: true,
+            title: t("card.deleteAction.label"),
+            onSelect: () => setConfirmingRemoval(true),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <Hoverable.Root group="integration-row">
@@ -115,49 +140,20 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
             {/* Secondary actions live in an overflow menu at the card's edge.
                 Every row renders the trigger, so the switch position is
                 uniform whether or not a row can be edited or deleted. */}
-            <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-              <Popover.Trigger asChild>
+            <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
+              <Dropdown.Trigger asChild>
                 <Button
                   prominence="tertiary"
                   icon={SvgMoreHorizontal}
                   disabled={isMutating || (!edit && !remove)}
                   aria-label={t("card.actionsButton.ariaLabel", { name })}
                 />
-              </Popover.Trigger>
-              <Popover.Content align="end" width="sm">
-                <PopoverMenu>
-                  {[
-                    edit ? (
-                      <LineItemButton
-                        sizePreset="main-ui"
-                        rounding={2}
-                        key="edit"
-                        icon={SvgEdit}
-                        onClick={() => {
-                          setMenuOpen(false);
-                          edit();
-                        }}
-                        title={t("card.editAction.label")}
-                      />
-                    ) : undefined,
-                    remove ? (
-                      <LineItemButton
-                        sizePreset="main-ui"
-                        rounding={2}
-                        key="delete"
-                        icon={SvgTrash}
-                        color="danger"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          setConfirmingRemoval(true);
-                        }}
-                        title={t("card.deleteAction.label")}
-                      />
-                    ) : undefined,
-                  ]}
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("card.actionsButton.ariaLabel", { name })}
+                items={menuItems}
+              />
+            </Dropdown>
           </div>
         </div>
         {confirmingRemoval && remove && (

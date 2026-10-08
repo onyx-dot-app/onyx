@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from onyx.server.features.build.configs import SANDBOX_PUSH_PRIVATE_KEY
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,

@@ -10,14 +10,14 @@ from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.emitter import Emitter
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
-from onyx.deep_research.dr_mock_tools import (
-    RESEARCH_AGENT_TASK_KEY,
-    RESEARCH_AGENT_TOOL_NAME,
-)
 from onyx.deep_research.models import (
     CombinedResearchAgentCallResult,
     ResearchAgentCallFailure,
     ResearchAgentCallResult,
+)
+from onyx.deep_research.tool_definitions import (
+    RESEARCH_AGENT_TASK_KEY,
+    RESEARCH_AGENT_TOOL_NAME,
 )
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.placement import Placement

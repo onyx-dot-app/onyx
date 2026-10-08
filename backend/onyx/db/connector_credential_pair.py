@@ -32,6 +32,7 @@ from onyx.db.models import (
     Credential,
     DocumentByConnectorCredentialPair,
     IndexAttempt,
+    IndexAttemptError,
     IndexingStatus,
     SearchSettings,
     User,
@@ -135,18 +136,26 @@ def build_restricted_acl_guard(
     return or_(~has_cc_pair(hidden_restricted_pair), has_cc_pair(visible_acl_pair))
 
 
-def has_sync_restricted_cc_pairs(db_session: Session) -> bool:
+def _has_cc_pair_with_access_type(
+    db_session: Session, access_types: list[AccessType]
+) -> bool:
     return bool(
         db_session.scalar(
             select(
                 select(ConnectorCredentialPair.id)
-                .where(
-                    ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED
-                )
+                .where(ConnectorCredentialPair.access_type.in_(access_types))
                 .exists()
             )
         )
     )
+
+
+def has_perm_synced_cc_pairs(db_session: Session) -> bool:
+    return _has_cc_pair_with_access_type(db_session, AccessType.perm_synced_types())
+
+
+def has_sync_restricted_cc_pairs(db_session: Session) -> bool:
+    return _has_cc_pair_with_access_type(db_session, [AccessType.SYNC_RESTRICTED])
 
 
 class CCPairAccessSets(BaseModel):
@@ -711,6 +720,20 @@ def get_connector_credential_pairs_for_source(
     return list(db_session.scalars(stmt).unique().all())
 
 
+def _has_unresolved_entity_error() -> ColumnElement[bool]:
+    """Correlates to the enclosing query's IndexAttempt row."""
+    return (
+        select(IndexAttemptError.id)
+        .where(
+            IndexAttemptError.index_attempt_id == IndexAttempt.id,
+            IndexAttemptError.is_resolved.is_(False),
+            IndexAttemptError.entity_id.is_not(None),
+        )
+        .correlate(IndexAttempt)
+        .exists()
+    )
+
+
 def get_last_successful_attempt_poll_range_end(
     cc_pair_id: int,
     earliest_index: float,
@@ -722,6 +745,11 @@ def get_last_successful_attempt_poll_range_end(
     """Used to get the latest `poll_range_end` for a given connector and credential.
 
     This can be used to determine the next "start" time for a new index attempt.
+
+    An attempt that completed with errors moves the cursor too, unless one of
+    its unresolved errors is an entity (a whole mailbox or folder) rather than
+    a document: nothing names what that entity's window held, so the window
+    stays open. Failed documents are tracked as IndexAttemptError rows.
 
     A reindex-port synthetic seed carries PRESENT's poll cursor and IS a valid resume
     point, so it is considered by default - the FUTURE's first connector attempt resumes
@@ -740,7 +768,13 @@ def get_last_successful_attempt_poll_range_end(
         .filter(
             ConnectorCredentialPair.id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings.id,
-            IndexAttempt.status == IndexingStatus.SUCCESS,
+            or_(
+                IndexAttempt.status == IndexingStatus.SUCCESS,
+                and_(
+                    IndexAttempt.status == IndexingStatus.COMPLETED_WITH_ERRORS,
+                    ~_has_unresolved_entity_error(),
+                ),
+            ),
         )
     )
     if ignore_targeted_reindex:

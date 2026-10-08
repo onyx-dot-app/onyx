@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Table, createTableColumns } from "@opal/components";
+import { Table, type TableColumn } from "@opal/components";
 import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import Text from "@/refresh-components/texts/Text";
@@ -24,8 +24,6 @@ import { can } from "@/lib/permissions/resource-actions";
 // Columns
 // ---------------------------------------------------------------------------
 
-const tc = createTableColumns<Agent>();
-
 /** Typographic placeholder for a blank cell. */
 const BLANK_CELL = "—";
 
@@ -39,7 +37,7 @@ export default function AgentsTable() {
 
   const { agents, isLoading, refresh } = useAdminAgents();
 
-  const columns = useMemo(() => {
+  const columns = useMemo((): TableColumn<Agent>[] => {
     function renderCreatedByColumn(
       _value: MinimalUserSnapshot | null,
       row: Agent
@@ -85,44 +83,52 @@ export default function AgentsTable() {
     }
 
     return [
-      tc.qualifier({
+      {
+        kind: "qualifier",
         content: "icon",
         background: true,
-        getContent: (row) => (props) => (
-          <AgentAvatar agent={row} size={props.size} />
-        ),
-      }),
-      tc.column("name", {
-        header: t("table.nameColumn.header"),
+        icon: (row) => (props) => <AgentAvatar agent={row} size={props.size} />,
+      },
+      {
+        kind: "data",
+        field: "name",
+        title: t("table.nameColumn.header"),
         weight: 25,
         cell: (value) => (
           <Text as="span" mainUiBody text05>
             {value}
           </Text>
         ),
-      }),
-      tc.column("description", {
-        header: t("table.descriptionColumn.header"),
+      },
+      {
+        kind: "data",
+        field: "description",
+        title: t("table.descriptionColumn.header"),
         weight: 35,
         cell: (value) => (
           <Text as="span" mainUiBody text03>
             {value || BLANK_CELL}
           </Text>
         ),
-      }),
-      tc.column("owner", {
-        header: t("table.createdByColumn.header"),
+      },
+      {
+        kind: "data",
+        field: "owner",
+        title: t("table.createdByColumn.header"),
         weight: 20,
         cell: renderCreatedByColumn,
-      }),
-      tc.column("is_public", {
-        header: t("table.accessColumn.header"),
+      },
+      {
+        kind: "data",
+        field: "is_public",
+        title: t("table.accessColumn.header"),
         weight: 12,
         cell: renderAccessColumn,
-      }),
-      tc.actions({
+      },
+      {
+        kind: "actions",
         cell: (row) => <AgentRowActions agent={row} onMutate={refresh} />,
-      }),
+      },
     ];
   }, [refresh, t]);
 
@@ -169,11 +175,11 @@ export default function AgentsTable() {
         </Section>
       </Section>
       <Table
-        data={filteredAgents}
+        items={filteredAgents}
         columns={columns}
         getRowId={(row) => String(row.id)}
         pageSize={DEFAULT_PAGE_SIZE}
-        searchTerm={searchTerm}
+        query={searchTerm}
         draggable={canReorder ? { onReorder: handleReorder } : undefined}
         emptyState={
           <IllustrationContent

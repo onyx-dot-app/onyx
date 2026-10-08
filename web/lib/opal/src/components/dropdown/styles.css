@@ -1,0 +1,224 @@
+@reference "#reference.css";
+
+/* ============================================================================
+   Dropdown — the floating list under a trigger
+
+   State styling rides data attributes set by the components:
+     Rows are presentational LineItemButtons: selection, hover, press and
+     the keyboard highlight are its palette. This file carries the box,
+     the search field, the groups and the create row's icon.
+   ============================================================================ */
+
+.opal-dropdown {
+  @apply pointer-events-auto touch-auto;
+  z-index: var(--z-popover);
+  /* A list matched to a narrow anchor still needs room for its rows. */
+  min-width: var(--block-width-dropdown-min);
+}
+
+/* The stage holds the card, and two cards while a view changes. Nothing
+   clips: a card slides out over the page and fades. */
+.opal-dropdown-stage {
+  @apply relative;
+}
+
+/* The card: the bordered box with the search field and the rows. */
+.opal-dropdown-card {
+  @apply relative overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01;
+}
+
+/* The search field pinned above the rows: a borderless input on its own
+   row, with a 4px inset on every side. */
+.opal-dropdown-search {
+  @apply p-1;
+}
+
+/* The inner padding sits inside the ShadowDiv, so its scroll gradients span
+   the bordered box edge to edge instead of stopping at the padding. The
+   list scrolls without a visible scrollbar: the mask fade at each edge
+   already says there is more. */
+.opal-dropdown-scroll {
+  @apply flex flex-col gap-1 overflow-x-hidden p-1;
+  scrollbar-width: none;
+}
+
+/* Under a search field the rows take no top inset: the field's own 4px
+   below it is the gap. */
+.opal-dropdown-scroll[data-under-search] {
+  @apply pt-0;
+}
+.opal-dropdown-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Open and close animations. floating-ui positions the root with a
+   transform, so the root only fades; the rise and settle run on the
+   ShadowDiv's non-scrolling wrapper, never on the scroller itself (a
+   transform there makes Chromium repaint it at scroll offset 0 for a
+   frame). `data-state="closed"` is the exit, kept mounted by usePresence
+   until the animation ends. */
+.opal-dropdown[data-state="open"] {
+  animation: opal-dropdown-in 120ms ease-out;
+}
+
+.opal-dropdown[data-state="open"] .opal-dropdown-content {
+  animation: opal-dropdown-content-in 120ms ease-out;
+}
+
+.opal-dropdown[data-state="closed"] {
+  animation: opal-dropdown-out 80ms ease-in forwards;
+  pointer-events: none;
+}
+
+.opal-dropdown[data-state="closed"] .opal-dropdown-content {
+  animation: opal-dropdown-content-out 80ms ease-in forwards;
+}
+
+@keyframes opal-dropdown-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes opal-dropdown-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes opal-dropdown-content-in {
+  from {
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes opal-dropdown-content-out {
+  to {
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-dropdown[data-state],
+  .opal-dropdown[data-state] .opal-dropdown-content {
+    animation: none;
+  }
+}
+
+.opal-dropdown-empty-set {
+  @apply p-2;
+}
+
+.opal-dropdown-no-match {
+  @apply px-2 py-2 text-text-02 font-secondary-body;
+}
+
+/* ---------------------------------------------------------------------------
+   Option rows
+   --------------------------------------------------------------------------- */
+
+/* 8px side padding: with the listbox 6px wider than the trigger on each
+   side, a row's text and icon then sit exactly under the trigger's. */
+/* Keyboard mode: rows and titles ignore the pointer, so the pointer's hover
+   cannot paint a second highlight beside the keyboard's. A pointer movement
+   over the list drops the flag and hover returns. */
+.opal-dropdown[data-keyboard-nav] [data-index] {
+  pointer-events: none;
+}
+
+/* A line between groups takes no inset across the rows: the scroller's own
+   gap already keeps it clear of them. The side inset stays. */
+.opal-dropdown-scroll .opal-divider {
+  padding-block: 0;
+}
+
+/* A foldable group wraps its title and its fold. The row gap lives inside
+   the fold, so a closed group collapses to its title with no stray gap. */
+.opal-dropdown-group {
+  @apply flex flex-col;
+}
+.opal-dropdown-group-rows {
+  @apply flex flex-col gap-1 pt-1;
+}
+
+/* Keyboard scrolling brings a stop to the nearest edge; the mask fade there
+   is 12px, so a stop keeps that much clear of the edge. */
+.opal-dropdown-scroll [data-index],
+.opal-dropdown-group > :first-child {
+  scroll-margin-block: 0.75rem;
+}
+
+/* A toggle row's switch shows the state; the row is the control. */
+.opal-dropdown-toggle {
+  @apply ms-2 flex shrink-0 items-center;
+}
+
+.opal-dropdown-create-icon {
+  @apply ms-2 h-4 w-4 shrink-0 text-text-03;
+}
+
+/* ---------------------------------------------------------------------------
+   Views
+   --------------------------------------------------------------------------- */
+
+/* A view change swaps the whole card. The old card, kept one animation
+   longer, slides out and fades; the new card slides in from the other side
+   and fades in. Each card keeps its own height. Forward goes leftwards;
+   back, the reverse. Both cards ride the same curve, one card width and a
+   gap apart, so they travel as a pair and never overlap. */
+.opal-dropdown-card[data-exit] {
+  @apply absolute inset-x-0 top-0 pointer-events-none;
+}
+/* A list anchored by its bottom grows upward: the leaving card stays on
+   the bottom edge, where it was. */
+.opal-dropdown-card[data-exit][data-pin="bottom"] {
+  top: auto;
+  bottom: 0;
+}
+.opal-dropdown-card[data-enter="forward"] {
+  animation: opal-dropdown-card-in-forward 200ms ease-in-out;
+}
+.opal-dropdown-card[data-enter="back"] {
+  animation: opal-dropdown-card-in-back 200ms ease-in-out;
+}
+.opal-dropdown-card[data-exit="forward"] {
+  animation: opal-dropdown-card-out-forward 200ms ease-in-out forwards;
+}
+.opal-dropdown-card[data-exit="back"] {
+  animation: opal-dropdown-card-out-back 200ms ease-in-out forwards;
+}
+/* A card arriving or leaving does not replay the box's own entrance. */
+.opal-dropdown-card[data-enter] .opal-dropdown-content,
+.opal-dropdown-card[data-exit] .opal-dropdown-content {
+  animation: none;
+}
+@keyframes opal-dropdown-card-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+}
+@keyframes opal-dropdown-card-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-100% - 1rem));
+  }
+}
+@keyframes opal-dropdown-card-out-forward {
+  to {
+    opacity: 0;
+    transform: translateX(calc(-100% - 1rem));
+  }
+}
+@keyframes opal-dropdown-card-out-back {
+  to {
+    opacity: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .opal-dropdown-card[data-enter],
+  .opal-dropdown-card[data-exit] {
+    animation: none;
+  }
+}

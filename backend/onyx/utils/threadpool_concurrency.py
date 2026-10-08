@@ -459,16 +459,15 @@ def start_thread_with_context(
     daemon: bool = False,
     args: tuple[Any, ...] = (),
     kwargs: dict[str, Any] | None = None,
+    context: contextvars.Context | None = None,
 ) -> threading.Thread:
-    """Spawn a fire-and-forget thread that inherits the caller's contextvars
-    (tenant id, request id, trace context). A raw ``threading.Thread`` starts
-    with an empty context, so tenant-scoped DB access inside the thread would
-    raise "Tenant ID is not set".
+    """Start a thread with an explicit context or a copy of the caller's context.
 
-    Unlike ``run_in_background``, this is for daemon producer threads that are
-    never joined.
+    Preserve tenant ID, request ID, and trace context across threads.
     """
-    ctx = contextvars.copy_context()
+    ctx: contextvars.Context = (
+        context if context is not None else contextvars.copy_context()
+    )
     thread = threading.Thread(
         target=lambda: ctx.run(target, *args, **(kwargs or {})),
         name=name,
@@ -476,6 +475,23 @@ def start_thread_with_context(
     )
     thread.start()
     return thread
+
+
+def start_thread_future[T](operation: Callable[[], T], *, name: str) -> Future[T]:
+    """Start independent work with the caller's context and an observable result."""
+    result: Future[T] = Future()
+    result.set_running_or_notify_cancel()
+
+    def run() -> None:
+        try:
+            value: T = operation()
+        except BaseException as error:
+            result.set_exception(error)
+        else:
+            result.set_result(value)
+
+    start_thread_with_context(run, name=name, daemon=True)
+    return result
 
 
 class TimeoutThread(threading.Thread, Generic[R]):

@@ -3,7 +3,7 @@ from sqlalchemy import select
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ToolCall as ToolCallModel
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TASK_KEY,

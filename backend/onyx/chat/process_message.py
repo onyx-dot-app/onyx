@@ -22,11 +22,10 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import set_processing_status
-from onyx.chat.chat_state import AvailableFiles, ChatStateContainer, ChatTurnSetup
+from onyx.chat.chat_state import ChatStateContainer, ChatTurnSetup
 from onyx.chat.chat_utils import (
     build_file_context,
     convert_chat_history,
-    create_chat_history_chain,
     create_chat_session_from_request,
     get_custom_agent_prompt,
     is_last_assistant_message_clarification,
@@ -35,8 +34,8 @@ from onyx.chat.chat_utils import (
 from onyx.chat.compression import (
     calculate_total_history_tokens,
     compress_chat_history,
-    find_summary_for_branch,
     get_compression_params,
+    load_branch_summary,
 )
 from onyx.chat.emitter import Emitter
 from onyx.chat.incognito import (
@@ -52,6 +51,7 @@ from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
 from onyx.chat.models import (
     AnswerStream,
     AnswerStreamPart,
+    AvailableFiles,
     ChatBasicResponse,
     ChatFullResponse,
     ChatLoadedFile,
@@ -66,8 +66,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
-from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
-from onyx.chat.stop_signal_checker import reset_cancel_status
+from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import StreamBufferWriter
 from onyx.configs.app_configs import DEV_MODE, DISABLE_VECTOR_DB
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
@@ -79,6 +78,7 @@ from onyx.configs.constants import (
 )
 from onyx.context.search.models import BaseFilters, SearchDoc
 from onyx.db.chat import (
+    create_chat_history_chain,
     create_new_chat_message,
     get_chat_session_by_id,
     get_or_create_root_message,
@@ -91,12 +91,13 @@ from onyx.db.enums import HookPoint, record_mode_persists_content
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.projects import get_user_files_from_project
-from onyx.db.tools import get_tools
+from onyx.db.tools import capture_persona_tool_configuration, get_tools
+from onyx.db.user_file import capture_user_file_metadata
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, log_onyx_error
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
 from onyx.file_store.utils import (
     get_default_file_store,
     load_in_memory_chat_files,
@@ -107,15 +108,11 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
     QueryProcessingResponse,
 )
+from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import LLMErrorInfo, ReasoningEffort
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.utils import (
-    collect_credential_values,
-    litellm_exception_to_safe_error,
-    scrub_sensitive_values,
-)
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
@@ -372,10 +369,9 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
 
 
 def extract_context_files(
-    user_files: list[UserFile],
+    user_files: list[UserFileMetadata],
     llm_max_context_window: int,
     reserved_token_count: int,
-    db_session: Session,
     # Because the tokenizer is a generic tokenizer, the token count may be incorrect.
     # to account for this, the maximum context that is allowed for this function is
     # 60% of the LLM's max context window. The other benefit is that for projects with
@@ -389,11 +385,9 @@ def extract_context_files(
     the all-or-nothing fit check and the actual content loading.
 
     Args:
-        project_id: The project ID to load files from
-        user_id: The user ID for authorization
+        user_files: Captured metadata for authorized files
         llm_max_context_window: Maximum tokens allowed in the LLM context window
         reserved_token_count: Number of tokens to reserve for other content
-        db_session: Database session
         max_llm_context_percentage: Maximum percentage of the LLM context window to use.
     Returns:
         ExtractedContextFiles containing:
@@ -442,10 +436,7 @@ def extract_context_files(
 
     # Files fit — load them into context
     user_file_map = {uf.file_id: uf for uf in user_files}
-    in_memory_files = load_in_memory_chat_files(
-        user_file_ids=[uf.id for uf in user_files],
-        db_session=db_session,
-    )
+    in_memory_files = load_in_memory_chat_files(user_files)
 
     file_texts: list[str] = []
     image_files: list[ChatLoadedFile] = []
@@ -509,8 +500,8 @@ def extract_context_files(
     )
 
 
-def _build_tool_metadata(user_file: UserFile) -> FileToolMetadata:
-    """Build lightweight FileToolMetadata from a UserFile record.
+def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
+    """Build lightweight FileToolMetadata from captured file fields.
 
     Delegates to ``build_file_context`` so that the file ID exposed to the
     LLM is always consistent with what FileReaderTool expects.
@@ -827,13 +818,14 @@ def build_chat_turn(
     )
 
     # Find applicable summary for the current branch
-    summary_message = find_summary_for_branch(db_session, chat_history)
+    branch_summary = load_branch_summary(db_session, chat_history)
+    summary_message = branch_summary.message if branch_summary else None
     # Collect file metadata from messages that will be dropped by summary truncation.
     # These become "pre-summarized" file metadata so the forgotten-file mechanism can
     # still tell the LLM about them.
     summarized_file_metadata: dict[str, FileToolMetadata] = {}
-    if summary_message and summary_message.last_summarized_message_id:
-        cutoff_id = summary_message.last_summarized_message_id
+    if branch_summary is not None:
+        cutoff_id = branch_summary.cutoff_id
         for msg in chat_history:
             if msg.id > cutoff_id or not msg.files:
                 continue
@@ -904,10 +896,9 @@ def build_chat_turn(
     llm_max_context_window = min(llm.config.max_input_tokens for llm in llms)
 
     extracted_context_files = extract_context_files(
-        user_files=context_user_files,
+        user_files=capture_user_file_metadata(context_user_files),
         llm_max_context_window=llm_max_context_window,
         reserved_token_count=reserved_token_count,
-        db_session=db_session,
     )
 
     search_params = determine_search_params(
@@ -986,7 +977,7 @@ def build_chat_turn(
             user_message_id=user_message.id,
             reserved_assistant_message_id=assistant_response.id,
         )
-    processing_run_id = user_message.id if is_multi else reserved_messages[0].id
+    processing_stream_id = user_message.id if is_multi else reserved_messages[0].id
 
     # Convert the chat history into a simple format that is free of any DB objects
     # and is easy to parse for the agent loop.
@@ -1056,20 +1047,26 @@ def build_chat_turn(
 
     # ── Stop signal and processing status ────────────────────────────────────
     cache = get_cache_backend()
-    reset_cancel_status(chat_session.id, cache)
+    clear_stop(chat_session.id, cache, stream_id=processing_stream_id)
+
+    # Capture after clearing stale stops and before the processing fence, so a
+    # failure here cannot leave the fence set.
+    tool_configuration = capture_persona_tool_configuration(persona)
 
     # Bind the id, not the row: this closure is stored on ChatTurnSetup and
     # would otherwise keep a detached ChatSession reachable for the whole turn.
     chat_session_id = chat_session.id
 
     def check_is_connected() -> bool:
-        return check_stop_signal(chat_session_id, cache)
+        return not is_stop_requested(
+            chat_session_id, cache, stream_id=processing_stream_id
+        )
 
     set_processing_status(
         chat_session_id=chat_session.id,
         cache=cache,
         value=True,
-        run_id=processing_run_id,
+        stream_id=processing_stream_id,
     )
 
     # Release any read transaction before the long-running LLM stream.
@@ -1087,6 +1084,7 @@ def build_chat_turn(
         chat_session_project_id=chat_session.project_id,
         incognito_record_mode=chat_session.incognito_record_mode,
         persona=persona,
+        tool_configuration=tool_configuration,
         user_message_id=user_message.id,
         user_identity=user_identity,
         llms=llms,
@@ -1094,7 +1092,7 @@ def build_chat_turn(
         simple_chat_history=simple_chat_history,
         extracted_context_files=extracted_context_files,
         reserved_messages=reserved_messages,
-        processing_run_id=processing_run_id,
+        processing_stream_id=processing_stream_id,
         reserved_token_count=reserved_token_count,
         reasoning_effort=chat_session.reasoning_effort_override or ReasoningEffort.AUTO,
         search_params=search_params,
@@ -1343,7 +1341,7 @@ def _run_models(
             # connection for the entire LLM loop (minutes), and cloud
             # infrastructure may drop idle connections.
             thread_tool_dict = construct_tools(
-                persona=setup.persona,
+                configuration=setup.tool_configuration,
                 emitter=model_emitter,
                 user=user,
                 llm=model_llm,
@@ -1506,7 +1504,7 @@ def _run_models(
                             chat_session_id=setup.chat_session_id,
                             cache=setup.cache,
                             value=True,
-                            run_id=setup.processing_run_id,
+                            stream_id=setup.processing_stream_id,
                         )
                     except Exception:
                         # Worst case the fence lapses early; never kill the
@@ -1557,11 +1555,8 @@ def _run_models(
                     stack_trace = "".join(
                         traceback.format_exception(type(item), item, item.__traceback__)
                     )
-                    secrets = collect_credential_values(
-                        model_llm.config.api_key, model_llm.config.custom_config
-                    )
-                    error_msg = scrub_sensitive_values(info.message, secrets)
-                    stack_trace = scrub_sensitive_values(stack_trace, secrets)
+                    error_msg = model_llm.redact_error(info.message)
+                    stack_trace = model_llm.redact_error(stack_trace)
                     _publish(
                         StreamingError(
                             error=error_msg,
@@ -1768,7 +1763,7 @@ def _stream_chat_turn(
         stream_buffer = StreamBufferWriter(
             cache=setup.cache,
             chat_session_id=setup.chat_session_id,
-            run_id=setup.processing_run_id,
+            stream_id=setup.processing_stream_id,
             delete_on_done=content_free,
             session_ended=(
                 (lambda: incognito_session_ended(setup.chat_session_id))
@@ -1838,10 +1833,7 @@ def _stream_chat_turn(
         llm = setup.llms[0] if setup else None
         if llm:
             error_info = litellm_exception_to_safe_error(e, llm)
-            stack_trace = scrub_sensitive_values(
-                stack_trace,
-                collect_credential_values(llm.config.api_key, llm.config.custom_config),
-            )
+            stack_trace = llm.redact_error(stack_trace)
             yield StreamingError(
                 error=error_info.message,
                 stack_trace=stack_trace if DEV_MODE else None,
@@ -2067,13 +2059,14 @@ def llm_loop_completion_handle(
         # (if any) plus messages after its cutoff. The full chain only grows,
         # so counting it would keep the trigger on permanently once crossed
         # and inflate tokens_for_recent until compression stalls.
-        summary_message = find_summary_for_branch(db_session, updated_chat_history)
+        branch_summary = load_branch_summary(db_session, updated_chat_history)
         effective_history = updated_chat_history
         summary_tokens = 0
-        if summary_message and summary_message.last_summarized_message_id:
-            cutoff_id = summary_message.last_summarized_message_id
-            effective_history = [m for m in updated_chat_history if m.id > cutoff_id]
-            summary_tokens = summary_message.token_count or 0
+        if branch_summary is not None:
+            effective_history = [
+                m for m in updated_chat_history if m.id > branch_summary.cutoff_id
+            ]
+            summary_tokens = branch_summary.message.token_count or 0
         total_tokens = summary_tokens + calculate_total_history_tokens(
             effective_history
         )

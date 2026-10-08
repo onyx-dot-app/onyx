@@ -25,7 +25,7 @@ from tests.integration.tests.permissions._access_matrix import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Custom group permission assignment is enterprise only",
 )
 

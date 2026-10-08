@@ -61,7 +61,8 @@ class SavedSearchSettings(IndexingSetting):
 
 
 class ContextualRagModelUpdateResponse(BaseModel):
-    contextual_rag_model_configuration_id: int
+    # PRESENT's model after the update. Turning Contextual Retrieval off keeps it.
+    contextual_rag_model_configuration_id: int | None
 
 
 class Tag(BaseModel):
@@ -446,17 +447,8 @@ class SearchDocsResponse(BaseModel):
     # document id is  the most staightforward way.
     citation_mapping: dict[int, str]
 
-    # For cases where the frontend only needs to display a subset of the search docs
-    # The whole list is typically still needed for later steps but this set should be saved separately
+    # None uses all retrieved documents; an empty list selects no documents.
     displayed_docs: list[SearchDoc] | None = None
-
-    @field_validator("displayed_docs", mode="before")
-    @classmethod
-    def normalize_empty_displayed_docs(
-        cls,
-        value: list[SearchDoc] | None,
-    ) -> list[SearchDoc] | None:
-        return value or None
 
 
 class SavedSearchDoc(SearchDoc):

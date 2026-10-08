@@ -208,6 +208,20 @@ module "onyx" {
 }
 ```
 
+### Accounts that require a permissions boundary on new roles
+Some AWS accounts let operators create IAM roles only if each role carries a set permissions boundary. Pass that boundary, and optionally an IAM path, to apply it to every role the stack creates (VPC flow logs, EKS cluster and node groups, EBS CSI, workload, load balancer controller and cluster autoscaler roles):
+
+```hcl
+module "onyx" {
+  source = "./modules/aws/onyx"
+  # ...
+  iam_role_permissions_boundary = "arn:aws:iam::123456789012:policy/MyBoundary"
+  iam_role_path                 = "/bounded/"
+}
+```
+
+Both default to null, which leaves existing stacks unchanged. Setting `iam_role_path` on an existing stack replaces its roles, so set it only on new stacks.
+
 ## What each module does
 
 ### `onyx`

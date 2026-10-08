@@ -97,6 +97,11 @@ class Settings(BaseModel):
     # overrides win. The deployment-level Craft gate still applies on top.
     craft_default_enabled: bool = True
 
+    # Workspace-wide switch for the LLM gateway (/api/gateway — direct model
+    # API access for external tools like Claude Code or Cursor). When False,
+    # every gateway route rejects requests. Default on.
+    llm_gateway_enabled: bool = True
+
     # Workspace-wide instructions injected into every Craft agent's AGENTS.md
     # as an "Organization instructions" section.
     craft_instructions: str | None = Field(
@@ -113,6 +118,7 @@ class Settings(BaseModel):
 
 
 class UserSettings(Settings):
+    oauth_provider_enabled: bool = False
     notifications: list[NotificationResponse]
     needs_reindexing: bool
     tenant_id: str = POSTGRES_DEFAULT_SCHEMA

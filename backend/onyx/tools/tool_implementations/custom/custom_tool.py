@@ -6,11 +6,13 @@ from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
 import requests
+from pydantic import JsonValue, TypeAdapter
 from requests import JSONDecodeError
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolArgs,
@@ -36,7 +38,6 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     MethodSpec,
     openapi_to_method_specs,
     openapi_to_url,
-    validate_openapi_schema,
 )
 from onyx.utils.headers import HeaderItemDict, header_list_to_header_dict
 from onyx.utils.logger import setup_logger
@@ -102,7 +103,7 @@ class CustomTool(Tool[None]):
         # (e.g. "ServiceNow.GetIncident" vs "ServiceNow_GetIncident").
         return self._method_spec.raw_name
 
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> ToolDefinition:
         return self._tool_definition
 
     def _save_and_get_file_references(
@@ -210,7 +211,7 @@ class CustomTool(Tool[None]):
                 response.status_code,
             )
 
-        tool_result: Any
+        tool_result: CustomToolUserFileSnapshot | JsonValue
         response_type: str
         file_ids: List[str] | None = None
         data: dict | list | str | int | float | bool | None = None
@@ -231,7 +232,7 @@ class CustomTool(Tool[None]):
 
         else:
             try:
-                tool_result = response.json()
+                tool_result = TypeAdapter(JsonValue).validate_python(response.json())
                 response_type = "json"
                 data = tool_result
             except JSONDecodeError:
@@ -261,7 +262,11 @@ class CustomTool(Tool[None]):
             )
         )
 
-        llm_facing_response = json.dumps(tool_result)
+        llm_facing_response = (
+            TypeAdapter(CustomToolUserFileSnapshot | JsonValue)
+            .dump_json(tool_result)
+            .decode()
+        )
 
         return ToolResponse(
             rich_response=CustomToolCallSummary(
@@ -332,82 +337,3 @@ def build_custom_tools_from_openapi_schema_and_headers(
         )
         for method_spec in method_specs
     ]
-
-
-if __name__ == "__main__":
-    import openai
-    from openai.types.chat.chat_completion_message_function_tool_call import (
-        ChatCompletionMessageFunctionToolCall,
-    )
-
-    openapi_schema = {
-        "openapi": "3.0.0",
-        "info": {
-            "version": "1.0.0",
-            "title": "Assistants API",
-            "description": "An API for managing assistants",
-        },
-        "servers": [
-            {"url": "http://localhost:8080"},
-        ],
-        "paths": {
-            "/assistant/{assistant_id}": {
-                "get": {
-                    "summary": "Get a specific Assistant",
-                    "operationId": "getAssistant",
-                    "parameters": [
-                        {
-                            "name": "assistant_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string"},
-                        }
-                    ],
-                },
-                "post": {
-                    "summary": "Create a new Assistant",
-                    "operationId": "createAssistant",
-                    "parameters": [
-                        {
-                            "name": "assistant_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string"},
-                        }
-                    ],
-                    "requestBody": {
-                        "required": True,
-                        "content": {"application/json": {"schema": {"type": "object"}}},
-                    },
-                },
-            }
-        },
-    }
-    validate_openapi_schema(openapi_schema)
-
-    tools = build_custom_tools_from_openapi_schema_and_headers(
-        tool_id=0,  # dummy tool id
-        openapi_schema=openapi_schema,
-        emitter=Emitter(merged_queue=queue.Queue()),
-        dynamic_schema_info=None,
-    )
-
-    openai_client = openai.OpenAI()
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Can you fetch assistant with ID 10"},
-        ],
-        tools=[  # ty: ignore[invalid-argument-type]
-            tool.tool_definition() for tool in tools
-        ],
-    )
-    choice = response.choices[0]
-    if choice.message.tool_calls:
-        print(choice.message.tool_calls)
-        tool_call = choice.message.tool_calls[0]
-        if isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
-            # Note: This example code would need a proper run_context with emitter
-            # For testing purposes, this would need to be updated
-            print("Tool execution requires run_context with emitter")
