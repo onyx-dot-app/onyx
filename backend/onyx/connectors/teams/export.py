@@ -4,6 +4,7 @@ channel and a replies call per thread. The export API answers for an app
 whose message permission was approved for it, so a team step probes once and
 the channel walk stays the fallback."""
 
+import time
 from collections import defaultdict
 from collections.abc import Iterator
 
@@ -14,7 +15,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, Document, EntityFailure
 from onyx.connectors.teams import listing
 from onyx.connectors.teams.models import ChannelRef, Message, TeamExport
-from onyx.connectors.teams.refusals import is_permanent, status
+from onyx.connectors.teams.refusals import is_export_refusal, is_permanent, status
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.threads import ThreadSource
 from onyx.connectors.teams.utils import (
@@ -33,9 +34,6 @@ EXPORT_TEAM_WORKERS = 4
 # A team's stream is grouped in memory before its threads are built. Past this
 # many messages the team goes to the channel walk instead.
 EXPORT_MESSAGES_CAP = 250_000
-# A still-metered tenant refuses the export API with 402: a refusal, not an
-# outage.
-_PAYMENT_REQUIRED = 402
 
 
 class ExportSource:
@@ -50,7 +48,7 @@ class ExportSource:
         try:
             get_json_with_retry(self._session.graph(), team_export_probe_url(team_id))
         except requests.HTTPError as e:
-            if not is_permanent(e) and status(e) != _PAYMENT_REQUIRED:
+            if not is_export_refusal(e):
                 raise
             logger.info(
                 "The export API is not available to this app (%s); walking channels",
@@ -65,7 +63,10 @@ class ExportSource:
         """Every thread of the team that changed in the window. A thread whose
         root was created inside the window is complete in the stream; an older
         thread that changed anywhere gets its replies from Graph, and its root
-        too when the stream lacks it."""
+        too when the stream lacks it. The stream runs to the time of the
+        request rather than the window's end, so a reply edited while the
+        attempt runs is in it, as it would be in a live replies call; the next
+        window lists that reply again."""
         # The listing is an SDK query, which must run on this worker's own
         # client. The stream is direct requests on the shared one.
         channels: list[ChannelRef] = listing.team_channels(
@@ -77,9 +78,10 @@ class ExportSource:
         threads: dict[str, list[Message]] = defaultdict(list)
         roots: dict[str, Message] = {}
         try:
-            for seen, message in enumerate(
-                fetch_team_export(graph_client, team_id, start, end), start=1
-            ):
+            stream = fetch_team_export(
+                graph_client, team_id, start, max(end, time.time())
+            )
+            for seen, message in enumerate(stream, start=1):
                 if seen > EXPORT_MESSAGES_CAP:
                     logger.warning(
                         "Team %s streams more than %s messages; walking its channels",
@@ -94,7 +96,7 @@ class ExportSource:
         except requests.HTTPError as e:
             # The channel walk records what each channel refuses, as it does
             # for an app without the approval.
-            if not is_permanent(e):
+            if not is_export_refusal(e):
                 raise
             logger.warning(
                 "Team %s refused its export stream (%s); walking its channels",

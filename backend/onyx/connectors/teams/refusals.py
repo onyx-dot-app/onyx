@@ -27,6 +27,17 @@ def is_permanent(error: requests.RequestException) -> bool:
     return is_permanent_refusal(error)
 
 
+# Graph meters the export API for some tenants and refuses it to them with
+# 402.
+_PAYMENT_REQUIRED = 402
+
+
+def is_export_refusal(error: requests.RequestException) -> bool:
+    """Graph refuses the export API to an app without the approval, and with
+    402 to a tenant it meters. Anything else is an outage."""
+    return is_permanent(error) or status(error) == _PAYMENT_REQUIRED
+
+
 @contextmanager
 def channel_context(channel: ChannelRef, call: str) -> Iterator[None]:
     """A refusal in here stops a walk whose partial listing would delete

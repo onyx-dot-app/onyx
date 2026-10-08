@@ -61,6 +61,13 @@ def _team_with_channels(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _clock_inside_the_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The stream runs to the time of the request, which here never passes
+    the window's end."""
+    monkeypatch.setattr("onyx.connectors.teams.export.time.time", lambda: 0.0)
+
+
 def _documents(items: list[Any]) -> dict[str, Document]:
     return {item.id: item for item in items if isinstance(item, Document)}
 
@@ -232,15 +239,16 @@ def test_a_worker_lists_its_teams_channels_on_its_own_client(
     assert listing_clients[0] is not teams_connector.graph()
 
 
+@pytest.mark.parametrize("refusal", [403, 402])
 def test_a_team_whose_stream_is_refused_goes_to_the_channel_walk(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, refusal: int
 ) -> None:
-    """One team's refusal must not fail the attempt: the channel walk records
-    what each of its channels refuses, as it does for an app without the
-    approval."""
+    """One team's refusal, or a metered tenant's 402, must not fail the
+    attempt: the channel walk records what each of its channels refuses, as
+    it does for an app without the approval."""
     _team_with_channels(monkeypatch)
     client: MagicMock = graph_client(
-        {PROBE: {"value": []}}, refused={team_export_url(TEAM_ID, 0, 1): 403}
+        {PROBE: {"value": []}}, refused={team_export_url(TEAM_ID, 0, 1): refusal}
     )
 
     items, checkpoint = step(connector(client), _team_checkpoint())
@@ -266,6 +274,35 @@ def test_a_team_whose_stream_is_down_fails_the_step(
     # An outage says nothing about the team, so the step fails and is retried.
     with pytest.raises(GraphRetriesExhausted):
         step(connector(client), _team_checkpoint())
+
+
+def test_a_reply_edited_while_the_attempt_runs_is_in_the_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The window's end is fixed when the attempt starts, so a stream bounded
+    by it would drop a reply edited since, and the thread would lose that
+    reply until the next window. The stream runs to the request's time."""
+    _team_with_channels(monkeypatch)
+    monkeypatch.setattr("onyx.connectors.teams.export.time.time", lambda: 1000.0)
+    client: MagicMock = graph_client(
+        {
+            PROBE: {"value": []},
+            team_export_url(TEAM_ID, 0, 1000): {
+                "value": [
+                    _in_channel(message("m1", "one"), CHANNEL),
+                    _in_channel(message("r1", "edited", reply_to="m1"), CHANNEL),
+                ]
+            },
+        }
+    )
+
+    items, _ = step(connector(client), _team_checkpoint())
+
+    documents: dict[str, Document] = _documents(items)
+    assert [section.text or "" for section in documents["m1"].sections][-1].endswith(
+        "edited"
+    )
+    assert team_export_url(TEAM_ID, 0, 1) not in requested_urls(client)
 
 
 def test_a_thread_in_a_channel_the_team_does_not_list_is_one_failure(
