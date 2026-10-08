@@ -27,6 +27,7 @@ import {
 import type {
   AnyCredential,
   Credential,
+  SimilarCredential,
   CredentialSetup,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
@@ -128,7 +129,7 @@ export function useSourceCredentials(
   sourceType: ValidSources,
   { enabled = true }: CredentialFetchOptions = {}
 ): SourceCredentialsResult {
-  return useSWR<AnyCredential[], Error>(
+  return useSWR<SimilarCredential[], Error>(
     enabled ? SWR_KEYS.similarCredentials(sourceType) : null,
     errorHandlingFetcher,
     { refreshInterval: CREDENTIALS_REFRESH_INTERVAL_MS }

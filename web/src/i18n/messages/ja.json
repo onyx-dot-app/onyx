@@ -2729,6 +2729,12 @@
           },
           "deleteButton": {
             "label": "アカウントを削除"
+          },
+          "usedBy": {
+            "label": "{count, plural, other {# 個のコネクタ}}で使用中"
+          },
+          "owner": {
+            "you": "{name}（あなた）"
           }
         }
       },

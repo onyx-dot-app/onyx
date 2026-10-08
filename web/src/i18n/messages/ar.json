@@ -2729,6 +2729,12 @@
           },
           "deleteButton": {
             "label": "حذف الحساب"
+          },
+          "usedBy": {
+            "label": "مستخدم في {count, plural, zero {# موصلات} one {موصل واحد} two {موصلين} few {# موصلات} many {# موصلًا} other {# موصل}}"
+          },
+          "owner": {
+            "you": "{name} (أنت)"
           }
         }
       },

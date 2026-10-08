@@ -38,6 +38,8 @@ export interface Credential<T> extends CredentialBase<T> {
   id: number;
   user_id: string | null;
   user_email: string | null;
+  /** The creator's display name; null when they never set one. */
+  user_personal_name: string | null;
   time_created: string;
   time_updated: string;
 }
@@ -49,6 +51,22 @@ export interface Credential<T> extends CredentialBase<T> {
  */
 export type AnyCredential = Credential<Record<string, unknown>>;
 
+/** A connector that uses a credential. */
+export interface CredentialUsage {
+  cc_pair_id: number;
+  cc_pair_name: string | null;
+  connector_id: number;
+  source: ValidSources;
+}
+
+/**
+ * A credential from a source's credential list, with the connectors that use
+ * it. `usages` holds only the connectors the current user can manage.
+ */
+export interface SimilarCredential extends AnyCredential {
+  usages: CredentialUsage[];
+}
+
 /**
  * What `useSourceCredentials` returns: every credential the current admin
  * can see for one source.
@@ -56,7 +74,7 @@ export type AnyCredential = Credential<Record<string, unknown>>;
  * `data` is undefined until the first response lands. The endpoint filters
  * by permission, so each entry is the caller's to edit and delete.
  */
-export type SourceCredentialsResult = SWRResponse<AnyCredential[], Error>;
+export type SourceCredentialsResult = SWRResponse<SimilarCredential[], Error>;
 
 /**
  * Everything one source needs in order to be authenticated against, from
@@ -70,7 +88,7 @@ export interface CredentialSetup {
   /** The source's name for prose and labels, falling back to its key. */
   displayName: string;
   /** Every credential this admin can see. Undefined until the first load. */
-  credentials: AnyCredential[] | undefined;
+  credentials: SimilarCredential[] | undefined;
   /**
    * Set when the credentials never loaded. A refresh that fails after a
    * success does not count, and neither do OAuth details that fail to load.

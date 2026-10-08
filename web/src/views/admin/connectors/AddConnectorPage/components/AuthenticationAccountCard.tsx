@@ -3,22 +3,25 @@
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Modal, SelectCard, Text } from "@opal/components";
-import { ContentAction, Section } from "@opal/layouts";
+import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
   SvgArrowRightCircle,
   SvgCheckSquare,
   SvgChevronDown,
   SvgChevronUp,
+  SvgLinkedDots,
   SvgTrash,
+  SvgUserKey,
 } from "@opal/icons";
-import type { Credential } from "@/lib/credentials/types";
+import type { Credential, SimilarCredential } from "@/lib/credentials/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { getSourceMetadata } from "@/lib/sources";
+import { useUser } from "@/providers/UserProvider";
 
 interface AuthenticationAccountCardProps {
   /** The saved account this card shows. */
-  credential: Credential<any>;
+  credential: SimilarCredential;
   /** The source being set up; it gives the card its icon. */
   source: ConfigurableSources;
   /** The source's display name, shown beside the account's name. */
@@ -50,6 +53,7 @@ export default function AuthenticationAccountCard({
   const t = useTranslations("admin.connectorsList.add.account");
   const tCredentials = useTranslations("admin.credentials.delete");
   const format = useFormatter();
+  const { user } = useUser();
   const [expanded, setExpanded] = useState<boolean>(false);
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
@@ -58,6 +62,14 @@ export default function AuthenticationAccountCard({
     month: "2-digit",
     day: "2-digit",
   });
+
+  // The creator, by display name where they set one. An account with no
+  // creator shows no owner.
+  const ownerName: string | null =
+    credential.user_id === null
+      ? null
+      : (credential.user_personal_name ?? credential.user_email);
+  const isOwnAccount: boolean = user !== null && credential.user_id === user.id;
 
   return (
     <>
@@ -125,41 +137,70 @@ export default function AuthenticationAccountCard({
           </Section>
         }
       >
-        <Section gap={0} alignItems="stretch" width="full">
-          <ContentAction
-            icon={getSourceMetadata(source).icon}
-            // Named by who created it; the account's own name stands in for
-            // one with no creator.
-            title={
-              credential.user_email ?? credential.name ?? t("untitled.label")
-            }
-            suffix={t("sourceSuffix", { source: sourceName })}
-            description={t("addedOn.label", { date: addedOn })}
-            sizePreset="main-ui"
-            variant="section"
-            rightChildren={
-              selected ? (
-                <Button
-                  variant="action"
-                  prominence="tertiary"
-                  rightIcon={SvgCheckSquare}
-                  tabIndex={-1}
-                >
-                  {t("selected.label")}
-                </Button>
-              ) : (
-                // Repeats the card's own action, so it leaves the tab order.
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgArrowRightCircle}
-                  tabIndex={-1}
-                >
-                  {t("useButton.label")}
-                </Button>
-              )
-            }
-          />
-          <Section flexDirection="row" justifyContent="end" width="full">
+        <Section flexDirection="row" alignItems="stretch" gap={4} width="full">
+          <Section alignItems="start" gap={0} width="full">
+            <Content
+              icon={getSourceMetadata(source).icon}
+              // Named by who created it; the account's own name stands in
+              // for one with no creator.
+              title={
+                credential.user_email ?? credential.name ?? t("untitled.label")
+              }
+              suffix={t("sourceSuffix", { source: sourceName })}
+              description={t("addedOn.label", { date: addedOn })}
+              sizePreset="main-ui"
+              variant="section"
+            />
+            <div className="flex flex-row gap-4 ps-6 pt-2">
+              <Content
+                icon={SvgLinkedDots}
+                title={t("usedBy.label", { count: credential.usages.length })}
+                sizePreset="secondary"
+                variant="body"
+                color="muted"
+                width="fit"
+              />
+              {ownerName !== null && (
+                <Content
+                  icon={SvgUserKey}
+                  title={
+                    isOwnAccount
+                      ? t("owner.you", { name: ownerName })
+                      : ownerName
+                  }
+                  sizePreset="secondary"
+                  variant="body"
+                  color="muted"
+                  width="fit"
+                />
+              )}
+            </div>
+          </Section>
+          <Section
+            alignItems="end"
+            justifyContent="between"
+            gap={1}
+            width="fit"
+          >
+            {selected ? (
+              <Button
+                variant="action"
+                prominence="tertiary"
+                rightIcon={SvgCheckSquare}
+                tabIndex={-1}
+              >
+                {t("selected.label")}
+              </Button>
+            ) : (
+              // Repeats the card's own action, so it leaves the tab order.
+              <Button
+                prominence="tertiary"
+                rightIcon={SvgArrowRightCircle}
+                tabIndex={-1}
+              >
+                {t("useButton.label")}
+              </Button>
+            )}
             <Button
               icon={expanded ? SvgChevronUp : SvgChevronDown}
               prominence="tertiary"

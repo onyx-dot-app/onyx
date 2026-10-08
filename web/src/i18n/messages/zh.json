@@ -2729,6 +2729,12 @@
           },
           "deleteButton": {
             "label": "删除账户"
+          },
+          "usedBy": {
+            "label": "{count, plural, other {# 个连接器}}正在使用"
+          },
+          "owner": {
+            "you": "{name}（你）"
           }
         }
       },
