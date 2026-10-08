@@ -138,7 +138,7 @@ export default function AuthenticationAccountCard({
         }
       >
         <Section flexDirection="row" alignItems="stretch" gap={4} width="full">
-          <Section alignItems="start" gap={0} width="full">
+          <Section alignItems="start" gap={0} padding={2} width="full">
             <Content
               icon={getSourceMetadata(source).icon}
               // Named by who created it; the account's own name stands in
