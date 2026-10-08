@@ -121,10 +121,16 @@ class OpencodeServeClient:
         produces the same accumulator as the live stream."""
 ```
 
-`ClientTimeouts` is a small dataclass with three named timeouts:
+`ClientTimeouts` is a small dataclass with four named timeouts:
 - `connect_timeout` (default 5s) — TCP/TLS handshake to serve
-- `request_timeout` (default 90s) — per-request HTTP for non-streaming endpoints
+- `request_timeout` (default 30s) — per-request HTTP for non-streaming endpoints
 - `event_read_timeout` (default 60s) — `/event` SSE idle timeout; client reconnects after this
+- `session_init_timeout` (default 90s) — HTTP read/write timeout for session lookup and creation in `ensure_session`
+
+Session lookup and creation can initialize a cold directory-scoped OpenCode Instance.
+They use a per-request timeout override. Message submission and other requests keep
+`request_timeout`; TCP connection and pool waits keep `connect_timeout`.
+The initialization timeout is not an overall provisioning deadline.
 
 ## Internal architecture
 
