@@ -121,12 +121,12 @@ def _routes(*messages: dict, members: list[dict] | None = None) -> dict[str, Any
 
 
 def _walk(
-    teams_connector: TeamsConnector, start: int = 0
+    teams_connector: TeamsConnector, start: int = 0, end: int | None = None
 ) -> list[Document | ConnectorFailure]:
     checkpoint = TeamsCheckpoint(has_more=True, todo_team_ids=[])
     items: list[Document | ConnectorFailure] = []
     while checkpoint.has_more:
-        page, checkpoint = step(teams_connector, checkpoint, start=start)
+        page, checkpoint = step(teams_connector, checkpoint, start=start, end=end)
         items.extend(page)
     return items
 
@@ -751,7 +751,7 @@ def test_a_poll_asks_one_export_stream_instead_of_every_chat() -> None:
     start = NOW - 3600
     recent = "19:meeting_recent@thread.v2"
     older = "19:meeting_older@thread.v2"
-    export = export_url(user_chats_collection("user-1"), start, start + 1)
+    export = export_url(user_chats_collection("user-1"), start, NOW)
     routes = _routes()
     routes[CHATS_EXPORT_PROBE] = {"value": []}
     routes[CHATS_URL] = {
@@ -769,7 +769,7 @@ def test_a_poll_asks_one_export_stream_instead_of_every_chat() -> None:
     ] = {"value": [_said("n1", "new", "2026-09-21T13:00:00Z")]}
     client = graph_client(routes)
 
-    items = _walk(connector(client, include_meeting_chats=True), start=start)
+    items = _walk(connector(client, include_meeting_chats=True), start=start, end=NOW)
 
     assert [item.id for item in items if isinstance(item, Document)] == [
         chat_document_id("user-1", recent, date(2026, 9, 21))
@@ -799,7 +799,7 @@ def _one_recent_chat_routes(start: int) -> tuple[dict[str, Any], str, str]:
     """An app the probe answers, one chat spoken in this month, and the
     per-chat question routed for it."""
     recent = "19:meeting_recent@thread.v2"
-    export = export_url(user_chats_collection("user-1"), start, start + 1)
+    export = export_url(user_chats_collection("user-1"), start, NOW)
     routes = _routes()
     routes[CHATS_EXPORT_PROBE] = {"value": []}
     routes[CHATS_URL] = {"value": [_chat(recent, last_message="2026-09-20T09:00:00Z")]}
@@ -815,7 +815,7 @@ def test_a_refused_export_stream_asks_each_chat_what_changed() -> None:
     routes, recent, export = _one_recent_chat_routes(start)
     client = graph_client(routes, refused={export: 403})
 
-    items = _walk(connector(client, include_meeting_chats=True), start=start)
+    items = _walk(connector(client, include_meeting_chats=True), start=start, end=NOW)
 
     assert items == []
     assert f"chats/{recent}/{CHANGED_QUERY}" in _requested(client)
@@ -835,10 +835,37 @@ def test_an_export_stream_too_large_to_hold_asks_each_chat_what_changed(
     }
     client = graph_client(routes)
 
-    items = _walk(connector(client, include_meeting_chats=True), start=start)
+    items = _walk(connector(client, include_meeting_chats=True), start=start, end=NOW)
 
     assert items == []
     assert f"chats/{recent}/{CHANGED_QUERY}" in _requested(client)
+
+
+def test_a_probe_refused_for_one_user_decides_nothing_for_the_next(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A gone or locked organizer refuses its probe with 404 or 423, which says
+    nothing about the app: that organizer asks each chat, and the next one
+    probes again and streams."""
+    # One worker, so the refused probe comes first.
+    monkeypatch.setattr("onyx.connectors.teams.organizers.ORGANIZER_WORKERS", 1)
+    start = NOW - 3600
+    bob = {"id": "user-2", "userPrincipalName": "bob@example.com", "mail": None}
+    bob_chats = f"users/user-2/chats?{CHATS_QUERY}"
+    bob_export = export_url(user_chats_collection("user-2"), start, NOW)
+    routes, recent, _ = _one_recent_chat_routes(start)
+    routes.pop(CHATS_EXPORT_PROBE)
+    routes[ORGANIZERS_URL] = {"value": [ADA, bob]}
+    routes[export_probe_url(user_chats_collection("user-2"))] = {"value": []}
+    routes[bob_export] = {"value": []}
+    routes[bob_chats] = {"value": []}
+    client = graph_client(routes, refused={CHATS_EXPORT_PROBE: 404})
+
+    items = _walk(connector(client, include_meeting_chats=True), start=start, end=NOW)
+
+    assert items == []
+    assert f"chats/{recent}/{CHANGED_QUERY}" in _requested(client)
+    assert bob_export in _requested(client)
 
 
 def test_a_chat_listing_refused_after_the_export_answered_is_one_failure() -> None:
@@ -850,7 +877,7 @@ def test_a_chat_listing_refused_after_the_export_answered_is_one_failure() -> No
     routes[export] = {"value": []}
     client = graph_client(routes, refused={CHATS_URL: PLAIN_403})
 
-    items = _walk(connector(client, include_meeting_chats=True), start=start)
+    items = _walk(connector(client, include_meeting_chats=True), start=start, end=NOW)
 
     assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
     assert items[0].failed_entity is not None

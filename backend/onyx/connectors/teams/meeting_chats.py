@@ -34,6 +34,7 @@ from onyx.connectors.teams.messages import message_authors, message_text, modifi
 from onyx.connectors.teams.models import ChannelMember, Message
 from onyx.connectors.teams.organizers import Organizer, OrganizerSource
 from onyx.connectors.teams.refusals import (
+    ExportProbe,
     graph_error_message,
     graph_said,
     is_export_refusal,
@@ -362,12 +363,19 @@ class ChatSource(OrganizerSource):
         self._export: bool | None = None
 
     def _export_available(self, user_id: str) -> bool:
+        """Whether this organizer's chats stream. A refusal to the app is
+        kept for the attempt; one for the user alone (gone, locked) decides
+        nothing for the next organizer, who probes again."""
         # Workers drain organizers side by side, so two may probe at once. Both
         # get the same answer.
-        if self._export is None:
-            self._export = export_api_answers(
-                self._session.graph(), export_probe_url(user_chats_collection(user_id))
-            )
+        if self._export is not None:
+            return self._export
+        probe: ExportProbe = export_api_answers(
+            self._session.graph(), export_probe_url(user_chats_collection(user_id))
+        )
+        if probe is ExportProbe.REFUSED_FOR_ITEM:
+            return False
+        self._export = probe is ExportProbe.ANSWERS
         return self._export
 
     def validate(self, organizer: Organizer) -> None:

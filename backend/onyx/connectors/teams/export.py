@@ -42,21 +42,18 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def export_api_answers(graph_client: GraphClient, probe_url: str) -> bool:
-    """Whether the export API behind the probe answers for this app. A refusal
-    means the caller's slower path, anything else is an outage and raises."""
+def export_api_answers(graph_client: GraphClient, probe_url: str) -> ExportProbe:
+    """Whether the export API behind the probe answers. A refusal means the
+    caller's slower path, for the app or for the probed item alone; anything
+    else is an outage and raises."""
     try:
         get_json_with_retry(graph_client, probe_url)
     except requests.HTTPError as e:
         if not is_export_refusal(e):
             raise
-        logger.info(
-            "The export API is not available to this app (%s at %s)",
-            status(e),
-            probe_url,
-        )
-        return False
-    return True
+        logger.info("The export API is not available (%s at %s)", status(e), probe_url)
+        return export_probe_refusal(e)
+    return ExportProbe.ANSWERS
 
 
 class ExportSource:

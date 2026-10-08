@@ -203,11 +203,15 @@ def step(
     teams_connector: TeamsConnector,
     checkpoint: TeamsCheckpoint,
     start: SecondsSinceUnixEpoch = 0,
+    end: SecondsSinceUnixEpoch | None = None,
 ) -> tuple[list[Document | ConnectorFailure], TeamsCheckpoint]:
     """One connector step, with the checkpoint round-tripped through JSON the
-    way the indexing pipeline persists it."""
+    way the indexing pipeline persists it. The window closes a second after
+    it opens unless the test says otherwise."""
     items: list[Document | ConnectorFailure] = []
-    generator = teams_connector.load_from_checkpoint(start, start + 1, checkpoint)
+    generator = teams_connector.load_from_checkpoint(
+        start, start + 1 if end is None else end, checkpoint
+    )
     while True:
         try:
             item = next(generator)
