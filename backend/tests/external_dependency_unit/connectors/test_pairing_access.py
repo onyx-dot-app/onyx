@@ -45,7 +45,6 @@ def ee_business_tier(
     enable_ee: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> MagicMock:
-    monkeypatch.setattr(tier, "LICENSE_ENFORCEMENT_ENABLED", True)
     get_tier = MagicMock(return_value=Tier.BUSINESS)
     monkeypatch.setattr(tier, "get_tier", get_tier)
     return get_tier
