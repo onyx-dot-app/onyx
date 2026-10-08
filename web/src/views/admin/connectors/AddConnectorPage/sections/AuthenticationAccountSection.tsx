@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Fold, SelectButton, SelectCard, Tabs } from "@opal/components";
+import {
+  Button,
+  Divider,
+  Fold,
+  SelectButton,
+  SelectCard,
+  Tabs,
+} from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential, DraftCredential } from "@/lib/credentials/types";
@@ -12,6 +19,16 @@ import {
 } from "@/lib/credentials/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
+import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
+import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
+import { getIn, useFormikContext } from "formik";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
+import {
+  NEW_ACCOUNT_FIELD,
+  typedAccountSpec,
+  type NewAccountValues,
+} from "@/views/admin/connectors/AddConnectorPage/newAccount";
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import {
@@ -30,15 +47,19 @@ interface AuthenticationAccountSectionProps {
   connector: ConfigurableSources;
   /** Access type from the connector form; a new credential inherits it. */
   accessType: AccessType;
+  /** The saved account the page pairs once the connector is created. */
+  currentCredential: Credential<any> | null;
+  /** Called when the user picks a saved account, or drops it. */
+  onCredentialChange: (credential: Credential<any> | null) => void;
   /**
-   * The account the page pairs once the connector is created: saved, or a
-   * draft that Create saves.
+   * Whether the account typed into the new-account form is the chosen one.
+   * Create saves it; until then it is only the form's values.
    */
-  currentCredential: Credential<any> | DraftCredential | null;
-  /** Called when the user picks or adds an account, or drops it. */
-  onCredentialChange: (
-    credential: Credential<any> | DraftCredential | null
-  ) => void;
+  newAccountChosen: boolean;
+  /** Chooses the typed account. */
+  onChooseNewAccount: () => void;
+  /** Whether the typed account's values are valid. */
+  newAccountReady: boolean;
   /** The account the capability checks run with; `null` locks them. */
   checkedCredential: Credential<any> | DraftCredential | null;
   /** Locks the Start Checks prompt, as the configuration below is locked. */
@@ -56,6 +77,9 @@ export default function AuthenticationAccountSection({
   accessType,
   currentCredential,
   onCredentialChange,
+  newAccountChosen,
+  onChooseNewAccount,
+  newAccountReady,
   checkedCredential,
   checksLocked,
 }: AuthenticationAccountSectionProps) {
@@ -85,31 +109,16 @@ export default function AuthenticationAccountSection({
   const newAccountLabel = t("add.newAccountButton.label", {
     source: displayName,
   });
-  // The new-account form's values, sealed as a draft once they are valid:
-  // held only on this page until Create saves them. Each valid edit makes a
-  // new draft, and the new draft becomes the chosen account.
-  const [draft, setDraft] = useState<DraftCredential | null>(null);
-  const selectedSavedId: number | null =
-    currentCredential && !isDraftCredential(currentCredential)
-      ? currentCredential.id
-      : null;
-  const draftChosen: boolean =
-    currentCredential !== null && isDraftCredential(currentCredential);
-  // The form reports late (after a seal), so it reads the choice from here.
-  const draftChosenRef = useRef(draftChosen);
-  useEffect(() => {
-    draftChosenRef.current = draftChosen;
-  });
-
-  function onDraft(next: DraftCredential | null) {
-    setDraft(next);
-    if (next !== null) {
-      onCredentialChange(next);
-    } else if (draftChosenRef.current) {
-      // The values stopped being valid, or the form closed.
-      onCredentialChange(null);
-    }
-  }
+  const selectedSavedId: number | null = currentCredential?.id ?? null;
+  // The source's fields when a new account is typed into this form; `null`
+  // when it saves through its own account form instead.
+  const typedSpec = typedAccountSpec(connector);
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const { values } = useFormikContext<Record<string, unknown>>();
+  const newAccountValues: NewAccountValues | undefined = getIn(
+    values,
+    NEW_ACCOUNT_FIELD
+  );
 
   async function onDeleteCredential(credential: Credential<any | null>) {
     const error = await remove(credential, t("add.unknownError.toast"));
@@ -142,6 +151,35 @@ export default function AuthenticationAccountSection({
         />
       );
     }
+    if (typedSpec) {
+      // Part of the connector form: Formik validates the account with the
+      // rest, and nothing is saved until Create. Typing in it chooses it.
+      return (
+        <div onFocusCapture={onChooseNewAccount}>
+          <Section alignItems="stretch" gap={4}>
+            <CredentialFieldsRenderer
+              source={connector}
+              spec={typedSpec}
+              namePrefix={NEW_ACCOUNT_FIELD}
+              authMethod={
+                typeof newAccountValues?.authentication_method === "string"
+                  ? newAccountValues.authentication_method
+                  : undefined
+              }
+            />
+            {businessTier && (
+              <>
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
+                <ShareAccountField
+                  namePrefix={NEW_ACCOUNT_FIELD}
+                  disabled={!newAccountReady}
+                />
+              </>
+            )}
+          </Section>
+        </div>
+      );
+    }
     return (
       <CreateCredential
         close
@@ -149,7 +187,6 @@ export default function AuthenticationAccountSection({
         sourceType={connector}
         accessType={accessType}
         onSwitch={onSwap}
-        onDraft={onDraft}
         onClose={close}
       />
     );
@@ -275,13 +312,17 @@ export default function AuthenticationAccountSection({
                 expandable
                 expanded={isCreating}
                 expandableContentHeight="full"
-                // The form keeps what was typed while folded, and with it the
-                // draft, which stays the chosen account.
+                // The form keeps what was typed while folded, and the typed
+                // account stays the chosen one.
                 expandableKeepMounted
                 border="solid"
                 // Selected while its draft is the chosen account.
                 state={
-                  draftChosen ? "selected" : isCreating ? "filled" : "empty"
+                  newAccountChosen
+                    ? "selected"
+                    : isCreating
+                      ? "filled"
+                      : "empty"
                 }
                 rounding={4}
                 padding={2}
@@ -328,17 +369,17 @@ export default function AuthenticationAccountSection({
                     )}
                   </div>
                 }
-                // Open with a draft that is not chosen, the header chooses it
-                // again; otherwise it opens or folds the form. Opening a filled
-                // form chooses its draft; folding keeps it chosen.
+                // Open and not chosen, the header chooses the typed account;
+                // otherwise it opens or folds the form. Opening chooses it;
+                // folding keeps it chosen.
                 onClick={() => {
-                  if (isCreating && draft !== null && !draftChosen) {
-                    onCredentialChange(draft);
+                  if (isCreating && typedSpec && !newAccountChosen) {
+                    onChooseNewAccount();
                   } else if (isCreating) {
                     close();
                   } else {
                     selectMethod(defaultMethod);
-                    if (draft !== null) onCredentialChange(draft);
+                    if (typedSpec) onChooseNewAccount();
                   }
                 }}
               >

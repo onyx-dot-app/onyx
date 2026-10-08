@@ -184,27 +184,23 @@ export interface CredentialSharing {
 }
 
 /**
- * A new account that is not saved until its connector is created. The server
- * sealed its values: the page holds the sealed string but cannot read it, and
- * a reload loses it.
+ * A new account typed into the add-connector form. It is not saved until its
+ * connector is created: checks and Create send its values as they are.
  */
 export interface DraftCredential {
-  /** Sealed by the server. Checks and Create send it back. */
-  draft_credential: string;
   source: ValidSources;
-  /** The values as typed, for display and the form's own conditions. */
+  /** The values as typed. */
   credential_json: Record<string, unknown>;
   sharing: CredentialSharing;
-  /** When it was sealed. */
-  sealed_at: string;
 }
 
 /**
- * The credential a request runs on: a saved one by id, or a draft by its
- * sealed string. Spread into a request body.
+ * The credential a request runs on: a saved one by id, typed values, or an
+ * OAuth sign-in's tokens that the server sealed. Spread into a request body.
  */
 export type CredentialRef =
   | { credential_id: number }
+  | { credential_json: Record<string, unknown> }
   | { draft_credential: string };
 
 /**

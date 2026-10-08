@@ -8,8 +8,6 @@ import type {
 } from "@/lib/credentials/types";
 import { AccessType, ProcessingMode } from "@/lib/types";
 import { TypedFile } from "@/lib/connectors/fileTypes";
-import type { ValidSources } from "@/lib/connectors/types/source";
-import { parseErrorDetail } from "@/lib/fetcher";
 import type { ManageAccessEntry } from "@/lib/connectors/accessType";
 import type { ConnectorBase } from "@/lib/connectors/types";
 import {
@@ -284,39 +282,17 @@ export async function startCredentialCheckRun(
   return response.json();
 }
 
-const SEAL_DRAFT_ERROR = "Unable to add the account";
-
-/**
- * Seals a new account's values as a draft. Nothing is saved: Create saves it
- * with the connector.
- */
-export async function sealDraftCredential(
-  source: ValidSources,
-  credentialJson: Record<string, unknown>
-): Promise<string> {
-  const response = await fetch("/api/manage/admin/draft-credential", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source, credential_json: credentialJson }),
-  });
-  if (!response.ok) {
-    throw new Error(await parseErrorDetail(response, SEAL_DRAFT_ERROR));
-  }
-  const body: { draft_credential: string } = await response.json();
-  return body.draft_credential;
-}
-
 export interface ConnectorWithCredentialRequest {
   connector: ConnectorBase<unknown>;
   pairing: Record<string, unknown>;
   credential: CredentialRef;
-  /** How a draft's new credential is shared. */
+  /** How a new (typed) credential is shared. */
   credentialSharing?: CredentialSharing;
 }
 
 /**
- * Creates a connector and pairs it with a saved credential or a draft, which
- * this saves. A failure leaves nothing behind. The response's `data` is the
+ * Creates a connector and pairs it with a saved credential or a new one,
+ * which this saves. A failure leaves nothing behind. The response's `data` is the
  * new pair's id.
  */
 export async function createConnectorWithCredential({
