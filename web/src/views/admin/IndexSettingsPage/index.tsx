@@ -119,6 +119,12 @@ import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
 import { parseErrorDetail } from "@/lib/fetcher";
 
+// Vector quantization is hidden until the rescore oversample factor is tuned
+// per model and corpus size. The saved value still round-trips unchanged.
+const VECTOR_QUANTIZATION_ENABLED = false;
+const SHOW_VECTOR_QUANTIZATION =
+  VECTOR_QUANTIZATION_ENABLED && !NEXT_PUBLIC_CLOUD_ENABLED;
+
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
 const MODEL_TAB_CLOUD = "cloud-based";
@@ -2046,7 +2052,7 @@ export default function IndexSettingsPage() {
                           )
                         )}
 
-                        {!NEXT_PUBLIC_CLOUD_ENABLED && (
+                        {SHOW_VECTOR_QUANTIZATION && (
                           <Card
                             border="solid"
                             borderColor={quantizationCardBorder}
