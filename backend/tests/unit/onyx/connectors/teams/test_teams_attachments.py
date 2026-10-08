@@ -32,7 +32,7 @@ from onyx.connectors.teams import listing as listing_module
 from onyx.connectors.teams import session as session_module
 from onyx.connectors.teams.connector import TeamsConnector
 from onyx.connectors.teams.files import FileSource, file_document_id
-from onyx.connectors.teams.models import ChannelRef
+from onyx.connectors.teams.models import ChannelLibrary, ChannelRef
 from onyx.connectors.teams.utils import (
     GraphRetriesExhausted,
     channel_access,
@@ -499,6 +499,38 @@ def test_each_thread_gets_its_own_graph_client_for_queries() -> None:
     assert teams_connector.graph_for_thread() is first
     assert seen[0] is not first
     assert first is not teams_connector.graph()
+
+
+@pytest.mark.usefixtures("library")
+def test_a_file_without_a_list_item_id_is_looked_up_on_the_threads_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The readers lookup fetches a list item Graph did not name through the
+    drive item's own client, so a worker's drive item must carry the worker's
+    client, not the shared one the direct requests use."""
+    teams_connector = connector(graph_client({}), include_attachments=True)
+    teams_connector._acquire_token = lambda: {"access_token": "token"}
+    monkeypatch.setattr(DriveItemData, "to_sdk_driveitem", lambda _, client: client)
+    seen: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        files_module,
+        "get_sharepoint_external_access",
+        lambda **kwargs: seen.append(kwargs) or SHAREPOINT_READERS,
+    )
+    channel_library = ChannelLibrary(
+        drive_id=DRIVE, list_id="list-1", site_url=SITE_URL, folder_id="folder-1"
+    )
+
+    worker = threading.Thread(
+        target=lambda: _files(teams_connector)._file_access(
+            channel_library, _item("f1", "a.pdf"), for_indexing=True
+        )
+    )
+    worker.start()
+    worker.join()
+
+    assert seen[0]["drive_item"] is seen[0]["graph_client"]
+    assert seen[0]["graph_client"] is not teams_connector.graph()
 
 
 @pytest.mark.usefixtures("library")

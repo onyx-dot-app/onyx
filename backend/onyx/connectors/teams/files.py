@@ -257,11 +257,14 @@ class FileSource:
         """The file's own readers from SharePoint, expanded through site and
         Entra groups. Empty without the enterprise permission code, as for
         SharePoint documents, so the pair's access type decides on those builds."""
+        # The lookup fetches a list item Graph did not name through the drive
+        # item's own client, so that client must be this thread's as well.
+        graph_client = self._session.graph_for_thread()
         access = get_sharepoint_external_access(
             ctx=self.rest_context(library.site_url),
-            graph_client=self._session.graph_for_thread(),
+            graph_client=graph_client,
             permission_cache=self._permission_cache,
-            drive_item=item.to_sdk_driveitem(self._session.graph()),
+            drive_item=item.to_sdk_driveitem(graph_client),
             list_id=library.list_id,
         )
         return ExternalAccess(
