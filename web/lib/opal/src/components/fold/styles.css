@@ -9,18 +9,28 @@
    Pure CSS. Paints nothing, so the content stays part of its surroundings.
 ============================================================================ */
 
+/* The height and the fade run one after the other, so content is never
+   half-faded while the edge sweeps over it. A transition takes the timings of
+   the state it moves to, so each rule times the move into its own state.
+   Keep the total close time in sync with FOLD_CLOSE_MS in components.tsx. */
+
+/* Closing: fade out first, then collapse. */
 .opal-fold {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
   transition:
-    grid-template-rows 200ms ease-out,
-    opacity 200ms ease-out;
+    opacity 100ms ease-in,
+    grid-template-rows 150ms ease-out 100ms;
 }
 
+/* Opening: expand fully first, then fade in. */
 .opal-fold[data-open="true"] {
   grid-template-rows: 1fr;
   opacity: 1;
+  transition:
+    grid-template-rows 150ms ease-out,
+    opacity 100ms ease-out 150ms;
 }
 
 /* Clips the grid child so it collapses to zero cleanly. */
@@ -30,7 +40,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .opal-fold {
+  .opal-fold,
+  .opal-fold[data-open="true"] {
     transition: none;
   }
 }

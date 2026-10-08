@@ -3,8 +3,8 @@
 import "@opal/components/fold/styles.css";
 import { useEffect, useState } from "react";
 
-/** Matches the transition in `styles.css`. */
-const FOLD_DURATION_MS = 200;
+/** The whole close in `styles.css`: the fade, then the collapse. */
+const FOLD_CLOSE_MS = 250;
 
 type FoldProps = {
   /** Whether the fold is open. */
@@ -41,7 +41,7 @@ function Fold({ open, keepMounted = false, id, children }: FoldProps) {
       setClosing(true);
       return;
     }
-    const timeout = setTimeout(() => setClosing(false), FOLD_DURATION_MS);
+    const timeout = setTimeout(() => setClosing(false), FOLD_CLOSE_MS);
     return () => clearTimeout(timeout);
   }, [open]);
 
