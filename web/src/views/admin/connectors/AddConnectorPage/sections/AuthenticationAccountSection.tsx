@@ -26,6 +26,7 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import {
   NEW_ACCOUNT_FIELD,
+  initialNewAccountValues,
   typedAccountSpec,
   type NewAccountValues,
 } from "@/views/admin/connectors/AddConnectorPage/newAccount";
@@ -110,7 +111,8 @@ export default function AuthenticationAccountSection({
   // when it saves through its own account form instead.
   const typedSpec = typedAccountSpec(connector);
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { values } = useFormikContext<Record<string, unknown>>();
+  const { values, setFieldValue, setFieldTouched } =
+    useFormikContext<Record<string, unknown>>();
   const newAccountValues: NewAccountValues | undefined = getIn(
     values,
     NEW_ACCOUNT_FIELD
@@ -127,6 +129,12 @@ export default function AuthenticationAccountSection({
   }
 
   async function onSwap(selectedCredential: Credential<any>) {
+    // Picking a saved account drops what was typed, so the typed account
+    // cannot mask the pick.
+    if (typedSpec) {
+      setFieldValue(NEW_ACCOUNT_FIELD, initialNewAccountValues(typedSpec));
+      setFieldTouched(NEW_ACCOUNT_FIELD, false);
+    }
     onCredentialChange(selectedCredential);
     refresh();
   }
