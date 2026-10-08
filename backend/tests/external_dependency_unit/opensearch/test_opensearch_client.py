@@ -121,7 +121,6 @@ def _create_test_document_chunk(
     chunk_index: int = 0,
     content_vector: list[float] | None = None,
     title: str | None = None,
-    title_vector: list[float] | None = None,
     hidden: bool = False,
     document_access: DocumentAccess = _PUBLIC_DOCUMENT_ACCESS,
     source_type: DocumentSource = DocumentSource.FILE,
@@ -134,15 +133,10 @@ def _create_test_document_chunk(
         # Generate dummy vector - 128 dimensions for fast testing.
         content_vector = [0.1] * 128
 
-    # If title is provided but no vector, generate one.
-    if title is not None and title_vector is None:
-        title_vector = [0.2] * 128
-
     return DocumentChunk(
         document_id=document_id,
         chunk_index=chunk_index,
         title=title,
-        title_vector=title_vector,
         content=content,
         content_vector=content_vector,
         source_type=source_type.value,

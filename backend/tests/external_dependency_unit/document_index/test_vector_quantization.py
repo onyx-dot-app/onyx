@@ -106,20 +106,17 @@ def test_vector_quantization_mapping_and_retrieval(
             lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(
                 vector_quantization
             )
-            for vector_field_name in (
-                TITLE_VECTOR_FIELD_NAME,
-                CONTENT_VECTOR_FIELD_NAME,
-            ):
-                method_parameters = mapping_properties[vector_field_name]["method"][
-                    "parameters"
-                ]
-                if lucene_scalar_quantization is None:
-                    assert "encoder" not in method_parameters
-                else:
-                    assert method_parameters["encoder"] == {
-                        "name": "sq",
-                        "parameters": {"bits": lucene_scalar_quantization.bits},
-                    }
+            assert TITLE_VECTOR_FIELD_NAME not in mapping_properties
+            method_parameters = mapping_properties[CONTENT_VECTOR_FIELD_NAME]["method"][
+                "parameters"
+            ]
+            if lucene_scalar_quantization is None:
+                assert "encoder" not in method_parameters
+            else:
+                assert method_parameters["encoder"] == {
+                    "name": "sq",
+                    "parameters": {"bits": lucene_scalar_quantization.bits},
+                }
 
             # Startup puts the mapping on the existing index again. OpenSearch
             # rejects a changed encoder, so this also checks nothing drifted.

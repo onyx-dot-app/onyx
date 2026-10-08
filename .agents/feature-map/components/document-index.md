@@ -137,10 +137,11 @@ used for query responses that exclude vectors.
 Field-name constants (all in `opensearch/schema.py`), grouped by role:
 
 - Content and vectors: `TITLE_FIELD_NAME`, `CONTENT_FIELD_NAME` (`text`, stemmed by
-  `OPENSEARCH_TEXT_ANALYZER`), `TITLE_VECTOR_FIELD_NAME`, `CONTENT_VECTOR_FIELD_NAME`
-  (`knn_vector`, HNSW/`cosinesimil`/`lucene` engine, `EF_CONSTRUCTION`/`M` from
-  `opensearch/constants.py`). `title_vector` is still mapped but no longer written or
-  queried; existing indices keep stored values until chunks are rewritten.
+  `OPENSEARCH_TEXT_ANALYZER`), `CONTENT_VECTOR_FIELD_NAME` (`knn_vector`,
+  HNSW/`cosinesimil`/`lucene` engine, `EF_CONSTRUCTION`/`M` from
+  `opensearch/constants.py`). `TITLE_VECTOR_FIELD_NAME` is no longer mapped or
+  written; indices created before its removal still store it until reindexed, so
+  searches keep excluding it from `_source`.
 - Access control: `PUBLIC_FIELD_NAME`, `ACCESS_CONTROL_LIST_FIELD_NAME`,
   `HIDDEN_FIELD_NAME`.
 - Identity and chunking: `DOCUMENT_ID_FIELD_NAME`, `CHUNK_INDEX_FIELD_NAME`,
