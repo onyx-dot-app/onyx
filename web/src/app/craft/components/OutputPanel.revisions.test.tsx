@@ -94,6 +94,11 @@ it("refreshes an open PowerPoint through inventory updates and reuses unchanged 
   expect(updatedUrl).not.toBe(originalUrl);
   expect(updatedImage).toHaveAttribute("alt", "Slide 1 of 1");
 
+  act(() => store().setActiveOutputTab(sessionId, "artifacts"));
+  act(() => store().setActivePanelTabId(sessionId, `file:${path}`));
+  expect(screen.getByRole("img")).toBe(updatedImage);
+  expect(fetchPptxPreview).toHaveBeenCalledTimes(2);
+
   act(() => store().closePanelTab(sessionId, `file:${path}`));
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
   act(() => store().openFilePreview(sessionId, path, "deck.pptx"));
@@ -134,7 +139,13 @@ it("refreshes an open PDF through inventory updates and reuses unchanged bytes",
     originalUrl
   );
   expect(URL.revokeObjectURL).toHaveBeenCalledWith(originalUrl);
+  const updatedFrame = screen.getByTitle("report.pdf");
   const updatedBlob = jest.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0];
+  act(() => store().setActiveOutputTab(sessionId, "artifacts"));
+  act(() => store().setActivePanelTabId(sessionId, `file:${path}`));
+  expect(screen.getByTitle("report.pdf")).toBe(updatedFrame);
+  expect(fetch).toHaveBeenCalledTimes(2);
+
   act(() => store().closePanelTab(sessionId, `file:${path}`));
   expect(screen.queryByTitle(isReportFrame)).not.toBeInTheDocument();
   act(() => store().openFilePreview(sessionId, path, "report.pdf"));

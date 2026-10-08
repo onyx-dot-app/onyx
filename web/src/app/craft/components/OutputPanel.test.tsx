@@ -123,6 +123,75 @@ it.each([false, true])(
   }
 );
 
+it("keeps PDF and pinned tab bodies mounted across switches", async () => {
+  render(<BuildOutputPanel isOpen />);
+  const files: HTMLElement = await screen.findByTestId("files-body");
+  openFile("outputs/report.pdf");
+  const pdf: HTMLElement = await screen.findByTitle("outputs/report.pdf");
+  fireEvent.click(screen.getByRole("button", { name: "Artifacts" }));
+  const artifacts: HTMLElement = await screen.findByTestId("artifacts-body");
+  expect(pdf).toBeInTheDocument();
+  expect(pdf.parentElement).toHaveAttribute("inert");
+  expect(pdf.parentElement).toHaveAttribute("aria-hidden", "true");
+  openFile("outputs/report.pdf");
+  expect(screen.getByTitle("outputs/report.pdf")).toBe(pdf);
+  expect(pdf.parentElement).not.toHaveAttribute("inert");
+  expect(screen.getByTestId("artifacts-body")).toBe(artifacts);
+  expect(screen.getByTestId("files-body")).toBe(files);
+});
+
+it("evicts the least recently visited tab at five, without reordering retained iframes", async () => {
+  render(<BuildOutputPanel isOpen />);
+  for (const name of ["a", "b", "c", "d", "e"]) {
+    openFile(`outputs/${name}.pdf`);
+    await screen.findByTitle(`outputs/${name}.pdf`);
+  }
+  const a: HTMLElement = screen.getByTitle("outputs/a.pdf");
+  const order: Element[] = Array.from(a.parentElement!.parentElement!.children);
+  openFile("outputs/a.pdf");
+  expect(Array.from(a.parentElement!.parentElement!.children)).toEqual(order);
+  openFile("outputs/f.pdf");
+  await screen.findByTitle("outputs/f.pdf");
+  expect(screen.getByTitle("outputs/a.pdf")).toBe(a);
+  expect(screen.queryByTitle("outputs/b.pdf")).not.toBeInTheDocument();
+  expect(document.querySelectorAll("iframe")).toHaveLength(5);
+});
+
+it("releases closed tabs and resets retained content when changing sessions", async () => {
+  render(<BuildOutputPanel isOpen />);
+  openFile("outputs/report.pdf");
+  const original: HTMLElement = await screen.findByTitle("outputs/report.pdf");
+  fireEvent.click(screen.getByRole("button", { name: "Artifacts" }));
+  act(() => store().closePanelTab(sessionId, "file:outputs/report.pdf"));
+  expect(original).not.toBeInTheDocument();
+  openFile("outputs/report.pdf");
+  const reopened: HTMLElement = await screen.findByTitle("outputs/report.pdf");
+  expect(reopened).not.toBe(original);
+  act(() => {
+    store().createSession("other-session", { status: "running" });
+    store().setCurrentSession("other-session");
+  });
+  expect(reopened).not.toBeInTheDocument();
+});
+
+it("releases retained viewers after the panel closes", async () => {
+  const { rerender } = render(<BuildOutputPanel isOpen />);
+  openFile("outputs/report.pdf");
+  const pdf: HTMLElement = await screen.findByTitle("outputs/report.pdf");
+  jest.useFakeTimers();
+  try {
+    rerender(<BuildOutputPanel isOpen={false} />);
+    expect(pdf).toBeInTheDocument();
+    expect(pdf.parentElement).toHaveAttribute("inert");
+    await act(async () => jest.advanceTimersByTimeAsync(300));
+    expect(pdf).not.toBeInTheDocument();
+    rerender(<BuildOutputPanel isOpen />);
+    expect(await screen.findByTitle("outputs/report.pdf")).not.toBe(pdf);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 it("closes an inactive file tab without selecting it or nesting buttons", async () => {
   render(<BuildOutputPanel isOpen />);
   openFile("outputs/first.pdf");
