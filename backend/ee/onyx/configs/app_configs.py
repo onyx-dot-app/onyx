@@ -149,6 +149,14 @@ ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S = int(
     os.environ.get("ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
 )
 
+#####
+# Zoom
+#####
+# In seconds, default is 5 minutes
+ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
 
 ####
 # Celery Job Frequency

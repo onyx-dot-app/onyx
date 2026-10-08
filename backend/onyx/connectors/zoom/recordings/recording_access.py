@@ -54,12 +54,16 @@ _OWNER_ONLY = RuleGrant(public=False, domains=frozenset())
 _EVERYONE = RuleGrant(public=True, domains=frozenset())
 
 
-def load_rule_grants(client: ZoomClient) -> dict[str, RuleGrant]:
-    """The catalogue is account-wide, so it is asked for through a user the
-    account still lists rather than a recording's owner, who may have left.
-    An account with no users has no recordings to ask about either."""
-    page = client.list_users()
-    user_id = next((u.id for u in page.users if u.id), None)
+def load_rule_grants(
+    client: ZoomClient, user_id: str | None = None
+) -> dict[str, RuleGrant]:
+    """The catalogue is account-wide, so it is asked for through any user the
+    account still lists rather than a recording's owner, who may have left; a
+    caller that has listed the account passes one it saw. An account with no
+    users has no recordings to ask about either."""
+    if user_id is None:
+        page = client.list_users()
+        user_id = next((u.id for u in page.users if u.id), None)
     if user_id is None:
         return {}
     catalogue = client.get_recording_authentication_rules(user_id)
