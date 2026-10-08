@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Modal, SelectCard, Text } from "@opal/components";
+import {
+  Button,
+  Card,
+  Modal,
+  OverflowText,
+  SelectCard,
+  Text,
+} from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import {
   SvgAlertTriangle,
@@ -34,18 +41,22 @@ interface DetailRowProps {
 }
 function DetailRow({ label, value, mono = false }: DetailRowProps) {
   return (
-    <ContentAction
-      sizePreset="main-ui"
-      variant="section"
-      padding={0}
-      titleColor="text-03"
-      title={label}
-      rightChildren={
-        <Text font={mono ? "main-ui-mono" : "main-ui-body"} color="text-04">
+    <Section flexDirection="row" gap={4}>
+      <Text font="main-ui-action" color="text-03" wordWrap="whitespace-nowrap">
+        {label}
+      </Text>
+      {/* The value takes what the label leaves, and a long one is cut with
+      its full text on hover. */}
+      <div className="min-w-0 flex-1 text-end">
+        <OverflowText
+          as="p"
+          font={mono ? "main-ui-mono" : "main-ui-body"}
+          color="text-04"
+        >
           {value}
-        </Text>
-      }
-    />
+        </OverflowText>
+      </div>
+    </Section>
   );
 }
 
