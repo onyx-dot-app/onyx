@@ -2648,9 +2648,6 @@
         "createCredentialButton": {
           "label": "새로 만들기"
         },
-        "credentialDeleted": {
-          "toast": "자격 증명을 삭제했습니다!"
-        },
         "credentialModal": {
           "title": "{source} 자격 증명 만들기"
         },
