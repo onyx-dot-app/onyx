@@ -2639,9 +2639,6 @@
           "label": "Mit {source} autorisieren",
           "pendingLabel": "Wird autorisiert..."
         },
-        "collapseButton": {
-          "ariaLabel": "Einklappen"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
@@ -2661,9 +2658,6 @@
         },
         "error": {
           "toast": "Fehler: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Ausklappen"
         },
         "federated": {
           "tooltip": {
