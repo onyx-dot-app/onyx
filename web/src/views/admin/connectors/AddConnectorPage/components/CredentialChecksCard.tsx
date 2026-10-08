@@ -94,7 +94,10 @@ const GROUPS = [
   states: readonly CheckLineState[];
 }>;
 
-function CheckLog({ check }: { check: CheckLine }) {
+interface CheckLogProps {
+  check: CheckLine;
+}
+function CheckLog({ check }: CheckLogProps) {
   const t = useTranslations("admin.connectorChecks");
   const { variant, icon, detail } = CHECK_LOGS[check.state];
   // A failed required check blocks the form or Create, so its tag stands out.
@@ -165,7 +168,6 @@ interface CheckGroupProps {
   label: (typeof GROUPS)[number]["label"];
   checks: CheckLine[];
 }
-
 function CheckGroup({ label, checks }: CheckGroupProps) {
   const t = useTranslations("admin.connectorChecks");
   return (
