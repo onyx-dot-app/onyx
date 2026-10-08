@@ -85,6 +85,13 @@ if [[ "$CURRENT_CTX" != "$EXPECTED_CTX" ]]; then
   exit 1
 fi
 
+# Kindnet handles network-policy packets; a CPU cap can stall sandbox egress.
+echo "removing the kindnet CPU limit ..."
+kubectl --context "$EXPECTED_CTX" -n kube-system patch daemonset kindnet \
+  --type=strategic \
+  -p '{"spec":{"template":{"spec":{"containers":[{"name":"kindnet-cni","resources":{"limits":{"cpu":null}}}]}}}}'
+kubectl --context "$EXPECTED_CTX" -n kube-system rollout status daemonset/kindnet --timeout=120s
+
 # ---- 2. helm install / upgrade ----
 
 if [[ "$SKIP_HELM" -eq 1 ]]; then

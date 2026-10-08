@@ -692,6 +692,10 @@ DNS/VPN into the cluster, and the vscode debugger attached to
 instead only when the change is in the docker sandbox backend or
 `sandbox-proxy` specifically (`SANDBOX_BACKEND=docker`); it is slower for
 general Craft work.
+`deployment/helm/dev/k8s-up.sh` removes Kindnet's CPU limit and waits for its
+rollout on both new and existing clusters. CPU requests and memory settings stay
+unchanged. This prevents the container's CPU quota from throttling network-policy
+processing and blocking sandbox egress during OpenCode startup.
 
 ### Manual reproduction
 
