@@ -2726,7 +2726,7 @@
           },
           "deleteButton": {
             "label": "删除账户",
-            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它"
+            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。"
           },
           "usedBy": {
             "label": "{count, plural, other {# 个连接器}}正在使用"

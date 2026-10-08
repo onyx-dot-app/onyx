@@ -2726,7 +2726,7 @@
           },
           "deleteButton": {
             "label": "Supprimer le compte",
-            "inUseTooltip": "Impossible de supprimer cet identifiant, car d’autres connecteurs l’utilisent"
+            "inUseTooltip": "Impossible de supprimer cet identifiant, car d’autres connecteurs l’utilisent."
           },
           "usedBy": {
             "label": "Utilisé par {count, plural, one {# connecteur} other {# connecteurs}}"

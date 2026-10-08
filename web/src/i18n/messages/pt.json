@@ -2726,7 +2726,7 @@
           },
           "deleteButton": {
             "label": "Excluir conta",
-            "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a"
+            "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a."
           },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
