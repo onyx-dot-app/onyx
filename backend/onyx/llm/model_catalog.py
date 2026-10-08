@@ -23,7 +23,8 @@ from typing import Any
 import httpx
 
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import ONYX_AIRGAPPED
+from onyx.utils.threadpool_concurrency import ThreadSafeDict
+from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS, ONYX_AIRGAPPED
 
 logger = setup_logger()
 
@@ -177,14 +178,18 @@ def iter_models(provider: str, mode: str | None = None) -> list[str]:
     )
 
 
-def _lookup_provider(provider: str, model_name: str) -> dict[str, Any] | None:
+def _vendored_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
+    """A model's vendored catalog entry for the provider (direct or alias)."""
     section = _catalog().get(provider)
     if not section:
         return None
-    return _lookup_section(section, model_name)
+    return _model_in_section(section, model_name)
 
 
-def _lookup_section(section: dict[str, Any], model_name: str) -> dict[str, Any] | None:
+def _model_in_section(
+    section: dict[str, Any], model_name: str
+) -> dict[str, Any] | None:
+    """A model's raw catalog entry inside one provider's section."""
     entry = section["models"].get(model_name)
     if entry is not None:
         return entry
@@ -215,18 +220,16 @@ _REMOTE_CATALOG_URL = (
     "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/"
     "backend/onyx/llm/price_table"
 )
-# Same cadence as AUTO_LLM_UPDATE_INTERVAL_SECONDS.
-_REMOTE_TTL_SECONDS = 1800
 _REMOTE_FETCH_TIMEOUT_SECONDS = 5.0
 # provider -> (fetched_at epoch, section or None). None negative-caches
 # failures so repeated misses don't refetch every lookup.
-_remote_sections: dict[str, tuple[float, dict[str, Any] | None]] = {}
+_remote_sections: ThreadSafeDict[str, tuple[float, dict[str, Any] | None]] = (
+    ThreadSafeDict()
+)
 # One lock per provider: workers missing the same provider share one
 # download per cache window without serializing unrelated providers
-# behind each other's timeouts. _remote_locks_guard only covers lock
-# creation, never the fetch.
-_remote_locks: dict[str, threading.Lock] = {}
-_remote_locks_guard = threading.Lock()
+# behind each other's timeouts.
+_remote_locks: ThreadSafeDict[str, threading.Lock] = ThreadSafeDict()
 
 
 def _remote_section(provider: str) -> dict[str, Any] | None:
@@ -235,16 +238,13 @@ def _remote_section(provider: str) -> dict[str, Any] | None:
         return None
     now: float = time.time()
     cached: tuple[float, dict[str, Any] | None] | None = _remote_sections.get(provider)
-    if cached is not None and now - cached[0] < _REMOTE_TTL_SECONDS:
+    if cached is not None and now - cached[0] < AUTO_LLM_UPDATE_INTERVAL_SECONDS:
         return cached[1]
-    with _remote_locks_guard:
-        provider_lock: threading.Lock = _remote_locks.setdefault(
-            provider, threading.Lock()
-        )
+    provider_lock: threading.Lock = _remote_locks.setdefault(provider, threading.Lock())
     with provider_lock:
         # Another worker may have fetched while we waited on the lock.
         cached = _remote_sections.get(provider)
-        if cached is not None and now - cached[0] < _REMOTE_TTL_SECONDS:
+        if cached is not None and now - cached[0] < AUTO_LLM_UPDATE_INTERVAL_SECONDS:
             return cached[1]
         section: dict[str, Any] | None = None
         try:
@@ -254,13 +254,14 @@ def _remote_section(provider: str) -> dict[str, Any] | None:
                 follow_redirects=True,
             )
             if response.status_code == 200:
-                data: Any = response.json()
                 # Reject malformed payloads instead of caching shapes that
-                # would raise inside _lookup_section / _compat_entry.
-                if isinstance(data, dict) and isinstance(data.get("models"), dict):
+                # would raise inside _model_in_section / _compat_entry.
+                data: dict[str, Any] = response.json()
+                models: Any = data.get("models")
+                if isinstance(data, dict) and isinstance(models, dict):
                     aliases: Any = data.get("aliases")
                     section = {
-                        "models": data["models"],
+                        "models": models,
                         "aliases": aliases if isinstance(aliases, dict) else {},
                     }
         except Exception as e:
@@ -277,7 +278,7 @@ def find_remote_model_entry(
     if section is None:
         return None
     for candidate in candidates:
-        entry = _lookup_section(section, candidate)
+        entry = _model_in_section(section, candidate)
         if entry is not None:
             return entry
     return None
@@ -294,8 +295,7 @@ def find_remote_model_obj(
 def reset_remote_cache() -> None:
     """Testing hook: forget fetched sections."""
     _remote_sections.clear()
-    with _remote_locks_guard:
-        _remote_locks.clear()
+    _remote_locks.clear()
 
 
 def _strip_colon_tag(model_name: str) -> str:
@@ -319,21 +319,19 @@ def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
         _strip_colon_tag(c) for c in list(candidates) if ":" in c.split("/")[-1]
     )
 
-    remote = _remote_section(provider)
-    for candidate in candidates:
-        if remote is not None:
-            entry = _lookup_section(remote, candidate)
+    for section in (_remote_section(provider), _catalog().get(provider)):
+        if section is None:
+            continue
+        for candidate in candidates:
+            entry = _model_in_section(section, candidate)
             if entry is not None:
                 return entry
-        entry = _lookup_provider(provider, candidate)
-        if entry is not None:
-            return entry
 
     for other in provider_names():
         if other == provider:
             continue
         for candidate in candidates:
-            entry = _lookup_provider(other, candidate)
+            entry = _vendored_model_entry(other, candidate)
             if entry is not None:
                 return entry
     return None
