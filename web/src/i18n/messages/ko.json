@@ -2729,6 +2729,12 @@
           },
           "deleteButton": {
             "label": "계정 삭제"
+          },
+          "usedBy": {
+            "label": "{count, plural, other {커넥터 #개}}에서 사용 중"
+          },
+          "owner": {
+            "you": "{name} (나)"
           }
         }
       },

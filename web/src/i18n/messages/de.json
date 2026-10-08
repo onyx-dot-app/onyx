@@ -2729,6 +2729,12 @@
           },
           "deleteButton": {
             "label": "Konto löschen"
+          },
+          "usedBy": {
+            "label": "Verwendet von {count, plural, one {# Connector} other {# Connectors}}"
+          },
+          "owner": {
+            "you": "{name} (Sie)"
           }
         }
       },

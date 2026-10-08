@@ -27,6 +27,7 @@ function buildCredential(
     source: ValidSources.Jira,
     user_id: null,
     user_email: null,
+    user_personal_name: null,
     time_created: "2026-01-01T00:00:00Z",
     time_updated: "2026-01-01T00:00:00Z",
     ...credential,
