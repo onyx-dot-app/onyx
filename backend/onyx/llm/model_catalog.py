@@ -219,9 +219,12 @@ _REMOTE_FETCH_TIMEOUT_SECONDS = 5.0
 # provider -> (fetched_at epoch, section or None). None negative-caches
 # failures so repeated misses don't refetch every lookup.
 _remote_sections: dict[str, tuple[float, dict[str, Any] | None]] = {}
-# Serializes fetches per cache window so workers missing the same provider
-# don't repeat the download.
-_remote_lock = threading.Lock()
+# One lock per provider: workers missing the same provider share one
+# download per cache window without serializing unrelated providers
+# behind each other's timeouts. _remote_locks_guard only covers lock
+# creation, never the fetch.
+_remote_locks: dict[str, threading.Lock] = {}
+_remote_locks_guard = threading.Lock()
 
 
 def _remote_section(provider: str) -> dict[str, Any] | None:
@@ -232,7 +235,11 @@ def _remote_section(provider: str) -> dict[str, Any] | None:
     cached: tuple[float, dict[str, Any] | None] | None = _remote_sections.get(provider)
     if cached is not None and now - cached[0] < _REMOTE_TTL_SECONDS:
         return cached[1]
-    with _remote_lock:
+    with _remote_locks_guard:
+        provider_lock: threading.Lock = _remote_locks.setdefault(
+            provider, threading.Lock()
+        )
+    with provider_lock:
         # Another worker may have fetched while we waited on the lock.
         cached = _remote_sections.get(provider)
         if cached is not None and now - cached[0] < _REMOTE_TTL_SECONDS:
@@ -285,6 +292,8 @@ def find_remote_model_obj(
 def reset_remote_cache() -> None:
     """Testing hook: forget fetched sections."""
     _remote_sections.clear()
+    with _remote_locks_guard:
+        _remote_locks.clear()
 
 
 def _strip_colon_tag(model_name: str) -> str:
