@@ -599,6 +599,8 @@ class OnyxRedisSignals:
         "signal:block_validate_permission_sync_fences"
     )
     BLOCK_PRUNING = "signal:block_pruning"
+    # Set by a sweep that skipped because another one held the lock.
+    ORPHAN_TAG_SWEEP_PENDING = "signal:orphan_tag_sweep_pending"
     BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
     BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
     BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = (
