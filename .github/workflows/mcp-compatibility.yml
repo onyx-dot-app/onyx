@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mcp-compatibility-${{ github.head_ref || github.ref_name }}
+  group: mcp-compatibility-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -154,3 +154,12 @@ jobs:
             Claude Code/Codex: ${{ needs.native-clients.result }};
             deployed discovery: ${{ needs.deployed-smoke.result }}.
             https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Identify rejected Slack destination
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          curl -sS --fail-with-body --connect-timeout 10 --max-time 30 \
+            -X POST https://slack.com/api/auth.test \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            | jq '{ok, error, team, user, user_id, bot_id, url}'
