@@ -868,6 +868,39 @@ def test_a_probe_refused_for_one_user_decides_nothing_for_the_next(
     assert bob_export in _requested(client)
 
 
+def test_a_chats_stream_outage_fails_the_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("onyx.connectors.teams.utils.time.sleep", lambda _: None)
+    start = NOW - 3600
+    routes, _, export = _one_recent_chat_routes(start)
+    client = graph_client(routes, refused={export: 503})
+
+    # An outage says nothing about the chats, so the step fails and is retried.
+    with pytest.raises(GraphRetriesExhausted):
+        _walk(connector(client, include_meeting_chats=True), start=start, end=NOW)
+
+
+def test_a_metered_refusal_on_one_stream_stops_every_later_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """402 applies to the whole tenant, so the organizers left ask each chat
+    without a probe or a stream of their own."""
+    monkeypatch.setattr("onyx.connectors.teams.organizers.ORGANIZER_WORKERS", 1)
+    start = NOW - 3600
+    bob = {"id": "user-2", "userPrincipalName": "bob@example.com", "mail": None}
+    routes, recent, export = _one_recent_chat_routes(start)
+    routes[ORGANIZERS_URL] = {"value": [ADA, bob]}
+    routes[f"users/user-2/chats?{CHATS_QUERY}"] = {"value": []}
+    client = graph_client(routes, refused={export: 402})
+
+    items = _walk(connector(client, include_meeting_chats=True), start=start, end=NOW)
+
+    assert items == []
+    requested = _requested(client)
+    assert f"chats/{recent}/{CHANGED_QUERY}" in requested
+    assert export_probe_url(user_chats_collection("user-2")) not in requested
+    assert export_url(user_chats_collection("user-2"), start, NOW) not in requested
+
+
 def test_a_chat_listing_refused_after_the_export_answered_is_one_failure() -> None:
     """The export stream's pages are not the chat listing's: refused at its own
     first page, the listing is one recorded failure for the organizer."""

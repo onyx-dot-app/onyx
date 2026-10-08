@@ -31,13 +31,14 @@ from onyx.connectors.teams import images
 from onyx.connectors.teams.export import EXPORT_MESSAGES_CAP, export_api_answers
 from onyx.connectors.teams.images import IMAGES_NOT_INDEXED, harvest_message_images
 from onyx.connectors.teams.messages import message_authors, message_text, modified_at
-from onyx.connectors.teams.models import ChannelMember, Message
+from onyx.connectors.teams.models import ChannelMember, ChatExportRow, Message
 from onyx.connectors.teams.organizers import Organizer, OrganizerSource
 from onyx.connectors.teams.refusals import (
     ExportProbe,
     graph_error_message,
     graph_said,
     is_export_refusal,
+    is_metered_refusal,
     is_permanent,
     status,
 )
@@ -138,8 +139,10 @@ def fetch_meeting_chats(
     before_page: Callable[[], None] | None = None,
 ) -> Generator[MeetingChat]:
     """The chats of the meetings this user organized with a message inside the
-    lookback. Every one of them is asked what changed, since a delete in a chat
-    that has gone quiet must still leave the index. Needs Chat.Read.All."""
+    lookback. Every one of them is read on the first index, and on a poll the
+    ones the export stream names, or every one when the stream is refused,
+    since a delete in a chat that has gone quiet must still leave the index.
+    Needs Chat.Read.All."""
     since = datetime.fromtimestamp(_lookback_opens(), tz=timezone.utc)
     url = f"users/{organizer_id}/chats?{CHATS_QUERY}"
     for row in iter_values(graph_client, url, before_page):
@@ -158,12 +161,20 @@ def fetch_touched_days(
 ) -> dict[str, set[date]] | None:
     """The days that changed inside the window in each chat the user is in,
     from one export stream. Days older than the lookback are left out. None
-    past the cap: the stream is held in memory, so a user streaming more goes
-    back to a question per chat."""
+    past the cap, which bounds the time spent on one user: a user streaming
+    more goes back to a question per chat. The stream runs to the time of the
+    request, as the team stream does, so a message edited while the attempt
+    runs is in it."""
+    # The stream carries every message of every chat the user is in, with
+    # bodies, and is metered where the tenant meters the export API. It is
+    # still one call per organizer against one per chat.
     oldest: datetime = _lookback_oldest_day()
     touched: dict[str, set[date]] = {}
+    without_chat: int = 0
+    seen: int = 0
     stream: Iterator[dict[str, Any]] = iter_values(
-        graph_client, export_url(user_chats_collection(user_id), start, end)
+        graph_client,
+        export_url(user_chats_collection(user_id), start, max(end, time.time())),
     )
     for seen, row in enumerate(stream, start=1):
         if seen > EXPORT_MESSAGES_CAP:
@@ -173,10 +184,22 @@ def fetch_touched_days(
                 EXPORT_MESSAGES_CAP,
             )
             return None
-        message: ChatMessage = ChatMessage(**_sanitize_message_user_display_name(row))
-        if message.chat_id is None or message.created_date_time < oldest:
+        message: ChatExportRow = ChatExportRow(**row)
+        if message.chat_id is None:
+            without_chat += 1
+            continue
+        if message.created_date_time < oldest:
             continue
         touched.setdefault(message.chat_id, set()).add(message.created_date_time.date())
+    if without_chat:
+        # A row names its chat on every tenant measured. A stream that did
+        # not would make every chat look unchanged.
+        logger.warning(
+            "User %s: %s of %s exported chat rows name no chat",
+            user_id,
+            without_chat,
+            seen,
+        )
     return touched
 
 
@@ -450,6 +473,10 @@ class ChatSource(OrganizerSource):
         except requests.HTTPError as e:
             if not is_export_refusal(e):
                 raise
+            if is_metered_refusal(e):
+                # 402 applies to the whole tenant, so no organizer streams
+                # again this attempt.
+                self._export = False
             logger.warning(
                 "The chats export stream of %s was refused (%s); asking each chat what changed",
                 organizer.email,
