@@ -2,15 +2,15 @@
 {{- if and .Values.fleetTelemetry.enabled (ne (lower (toString .Values.configMap.DISABLE_TELEMETRY)) "true") }}
 - name: ONYX_TELEMETRY_ENDPOINT
   value: {{ .Values.fleetTelemetry.endpoint | quote }}
-{{- if .Values.fleetTelemetry.existingSecret }}
+{{- if .Values.fleetTelemetry.customerUuid }}
 - name: ONYX_TELEMETRY_CUSTOMER_UUID
-  value: {{ required "fleetTelemetry.customerUuid is required" .Values.fleetTelemetry.customerUuid | quote }}
+  value: {{ .Values.fleetTelemetry.customerUuid | quote }}
 - name: ONYX_TELEMETRY_DEPLOYMENT_ID
-  value: {{ required "fleetTelemetry.deploymentId is required" .Values.fleetTelemetry.deploymentId | quote }}
+  value: {{ required "fleetTelemetry.deploymentId is required with customerUuid" .Values.fleetTelemetry.deploymentId | quote }}
 - name: ONYX_TELEMETRY_TOKEN
   valueFrom:
     secretKeyRef:
-      name: {{ required "fleetTelemetry.existingSecret is required" .Values.fleetTelemetry.existingSecret }}
+      name: {{ required "fleetTelemetry.existingSecret is required with customerUuid" .Values.fleetTelemetry.existingSecret }}
       key: ONYX_TELEMETRY_TOKEN
 - name: ONYX_TELEMETRY_PRIVACY_KEY
   valueFrom:
@@ -146,7 +146,7 @@ spec:
             - name: ONYX_TELEMETRY_AWS_RESOURCES_JSON
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.fleetTelemetry.existingSecret }}
+                  name: {{ required "fleetTelemetry.existingSecret is required with collector.awsResources" .Values.fleetTelemetry.existingSecret }}
                   key: ONYX_TELEMETRY_AWS_RESOURCES_JSON
             {{- end }}
             {{- if .Values.fleetTelemetry.existingSecret }}
@@ -155,6 +155,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.fleetTelemetry.existingSecret }}
                   key: ONYX_TELEMETRY_DATABASE_URL
+                  optional: true
             - name: ONYX_TELEMETRY_REDIS_URL
               valueFrom:
                 secretKeyRef:

@@ -42,7 +42,9 @@ for thresholds, timeouts, and recovery behavior.
 The optional isolated fleet collector also reports allowlisted cluster status/counts and cached
 resource pressure through `backend/onyx/utils/fleet_telemetry_opensearch.py`. Network reads have
 short timeouts and run outside application requests. Cluster, node, index names and raw errors
-are excluded. Missing/stale pressure remains unknown. See `deployment/fleet-telemetry.md`.
+are excluded. Missing/stale pressure remains unknown. During indexing, the bulk client
+reports write counters through `emit_stage_counter`; create-only 409 conflicts are not
+write errors. See [[observability]] and `deployment/fleet-telemetry.md`.
 
 An admin experiences it directly on the embedding-model page. They pick a new
 embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, Bifrost,
@@ -547,35 +549,3 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 
 Cross-links: [[internal-search]], [[indexing-pipeline]], [[access-control]],
 [[connectors]], [[background-jobs]], [[multi-tenancy]].
-
-### Emission-only fleet telemetry
-
-Fleet telemetry sends events and reads bounded delivery receipts only. It never fetches remote collection settings.
-Collection uses a source-owned schedule: connectors and resources every 300 seconds; queues every 600 seconds.
-Fleet-service labels, classifications, and alert thresholds cannot change deployment behavior.
-
-`DISABLE_TELEMETRY=true` prevents fleet sender startup and all isolated collection. Helm omits the collector when this flag is set.
-
-### Legacy callhome removal
-
-Timing decorators now write local logs only. The obsolete print_only export option is removed from their callers.
-
-### Bounded transport and counter aggregation
-
-The fleet sender compresses batches and reuses its HTTP session in its background thread.
-Fetch/embed/write batch deltas are combined for up to 30 seconds by attempt and stage,
-capped at 256 active keys; error counters bypass that window. Native cumulative stage
-summaries keep their collector schedule and 30-day central retention. Application threads
-only sanitize allowlisted fields and append to a bounded queue without a lock. Unchanged license
-and signup-domain metadata is reconciled every six hours, after delivery loss, or when changed.
-Spawned docfetching processes deliver their remaining counters at exit and wait at most two seconds.
-See `backend/tests/unit/onyx/utils/test_fleet_telemetry.py` for sum, failure, retry, and hot-path checks.
-
-### Automatic fleet enrollment
-
-Application startup schedules background identity initialization. It never waits for storage or network access.
-`backend/onyx/db/fleet_enrollment.py` persists one installation seed in the existing encrypted key-value table.
-Identity storage waits until the process selects its edition. An earlier read would cache the Community secret codec for the whole process.
-The sender derives separate enrollment and privacy keys, then enrolls at `https://telemetry.onyx.app/v1/enroll`.
-Docker Compose and Helm enable the separate snapshot collector by default. `DISABLE_TELEMETRY=true` disables both paths.
-Optional explicit credentials retain their previous identity mapping. See `deployment/fleet-telemetry.md` for release order.

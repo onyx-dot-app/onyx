@@ -166,14 +166,24 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 
 ## 4. How it works
 
-### Fleet callhome
+### Fleet telemetry
 
-Fleet callhome replaces the legacy anonymous Go telemetry protocol. The bounded
+Fleet telemetry replaces the legacy anonymous Go telemetry protocol. The bounded
 sender in `backend/onyx/utils/fleet_telemetry.py` emits allowlisted events without
-network I/O on request paths. The isolated collector supplies connector, queue,
-job, resource, OpenSearch, and index attempt snapshots.
-The old anonymous endpoint, adapter, duplicate Celery monitoring task, and daily
-version task are removed. Timing decorators retain local logs only.
+network I/O on request paths: application threads only check the allow-lists and
+append to a bounded queue without a lock. A background thread compresses batches,
+reuses its HTTP session, and reads only bounded delivery receipts. The isolated
+collector supplies connector, queue, job, resource, OpenSearch, and index attempt
+snapshots. The old anonymous endpoint, adapter, duplicate Celery monitoring task,
+and daily version task are removed. Timing decorators retain local logs only.
+
+Startup schedules identity initialization in the background and never waits for
+storage or network access. `backend/onyx/db/fleet_enrollment.py` keeps one
+installation seed in the encrypted key-value table and reads it only after the
+process selects its edition; an earlier read would cache the Community secret codec
+for the whole process. The sender derives separate enrollment and privacy keys, then
+enrolls at `https://telemetry.onyx.app/v1/enroll`. The Slack listener starts its own
+sender because Slack answers run in that process.
 
 Set `DISABLE_TELEMETRY=true` at deployment startup to disable fleet senders and
 collectors. Collection configuration comes from the deployment; the service cannot
@@ -539,18 +549,3 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 Related: [[llm-providers]], [[multi-tenancy]], [[editions-and-gating]],
 [[background-jobs]], [[chat-persistence]], [[rate-and-usage-limits]],
 [[core-chat-loop]], [[indexing-pipeline]].
-
-### Automatic fleet enrollment
-
-The Slack listener starts its own sender because Slack answers run inside that process.
-Kubernetes HTTP 410 responses clear expired pod page tokens. The next scheduled poll starts a fresh scan.
-Transient errors preserve the current page token and the bounded poll cadence.
-Automatic database and queue connections use the source PostgreSQL and Redis TLS settings.
-The Helm collector mounts the configured database and Redis CA sources.
-
-Application startup schedules background identity initialization. It never waits for storage or network access.
-`backend/onyx/db/fleet_enrollment.py` persists one installation seed in the existing encrypted key-value table.
-Identity storage waits until the process selects its edition. An earlier read would cache the Community secret codec for the whole process.
-The sender derives separate enrollment and privacy keys, then enrolls at `https://telemetry.onyx.app/v1/enroll`.
-Docker Compose and Helm enable the separate snapshot collector by default. `DISABLE_TELEMETRY=true` disables both paths.
-Optional explicit credentials retain their previous identity mapping. See `deployment/fleet-telemetry.md` for release order.

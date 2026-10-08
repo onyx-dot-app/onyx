@@ -1464,23 +1464,29 @@ extraEnvFromSecret: ""
 
 # Fleet instrumentation performs no I/O on application emission paths.
 # Installation identity is created automatically in the Onyx database.
-# existingSecret optionally selects operator-provisioned credentials and a read-only DB role.
 fleetTelemetry:
   enabled: true
   endpoint: "https://telemetry.onyx.app"
+  # Operator-provisioned identity, used instead of automatic enrollment. Setting
+  # customerUuid requires deploymentId and an existingSecret with the keys
+  # ONYX_TELEMETRY_TOKEN and ONYX_TELEMETRY_PRIVACY_KEY.
   customerUuid: ""
   deploymentId: ""
+  # Optional Secret for collector settings: ONYX_TELEMETRY_DATABASE_URL (a
+  # read-only role), ONYX_TELEMETRY_REDIS_URL, and ONYX_TELEMETRY_AWS_RESOURCES_JSON.
   existingSecret: ""
   collector:
     enabled: true
     kubernetes: true
     schemas: ""
-    # Optional standalone collector image; defaults to the API image.
+    # Optional backend image override; defaults to the API image. It must
+    # contain the collector module (onyx.utils.fleet_telemetry_collector).
     image: ""
     schemaShardIndex: 0
     schemaShardCount: 1
     serviceAccountAnnotations: {}
-    # Enable on one collector for shared managed services.
+    # Enable on one collector for shared managed services. Requires
+    # existingSecret with ONYX_TELEMETRY_AWS_RESOURCES_JSON.
     awsResources: false
     awsRegion: us-east-2
     resources:
@@ -1848,7 +1854,7 @@ configMap:
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
   # Logging
-  # Set "true" to disable callhome and fleet telemetry, including the collector.
+  # Set "true" to disable fleet telemetry, including the collector.
   DISABLE_TELEMETRY: ""
   # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
   # api_server, model_server, slack/discord bots, AND all Celery workers. Empty

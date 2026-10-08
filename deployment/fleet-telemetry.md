@@ -83,17 +83,19 @@ Set `DISABLE_TELEMETRY=true` to opt out. Helm also supports `fleetTelemetry.enab
 An endpoint override is optional; TLS is required outside approved local test hosts.
 To retain operator-provisioned identity, supply all four identity/authentication variables together.
 A partial override fails closed and does not create another installation.
+In Helm, set `fleetTelemetry.customerUuid` and `fleetTelemetry.deploymentId`, and put
+`ONYX_TELEMETRY_TOKEN` and `ONYX_TELEMETRY_PRIVACY_KEY` in `fleetTelemetry.existingSecret`.
 
 Optional variables on API pods, workers, and the collector:
 
-- `ONYX_TELEMETRY_ENDPOINT`: HTTPS base URL. Local tests also accept localhost or the `telemetry` Compose service.
+- `ONYX_TELEMETRY_ENDPOINT`: HTTPS base URL. Local tests may use plain HTTP to `localhost` or `127.0.0.1`.
 - `ONYX_TELEMETRY_TOKEN`: scoped customer or Cloud deployment token.
 - `ONYX_TELEMETRY_CUSTOMER_UUID`: registered installation UUID.
 - `ONYX_TELEMETRY_DEPLOYMENT_ID`: opaque deployment identifier.
 - `ONYX_TELEMETRY_INSTANCE_DOMAIN`: optional instance host; defaults to `WEB_DOMAIN`.
   Startup canonicalizes the host and stores only its installation-keyed HMAC in telemetry.
 - `ONYX_TELEMETRY_PRIVACY_KEY`: separate random installation key with at least 32 characters.
-- `DISABLE_TELEMETRY=true`: disable callhome and all fleet collection and sending.
+- `DISABLE_TELEMETRY=true`: disable fleet enrollment, collection, and sending.
   This takes precedence over valid fleet credentials and enablement settings.
   Set it on all application services and separately deployed collector containers, then restart them.
   Disabled collectors do not create sender threads or read PostgreSQL, Redis, Kubernetes, OpenSearch, or AWS.
@@ -105,6 +107,7 @@ Rotate `ONYX_TELEMETRY_DEPLOYMENT_ID` whenever a source database is reset or rep
 This prevents reused numeric connector/attempt IDs from merging with the prior installation.
 
 The optional `ONYX_TELEMETRY_DATABASE_URL` selects a dedicated read-only PostgreSQL role.
+In Helm, put it in `fleetTelemetry.existingSecret`. Automatic enrollment still applies.
 Use `ONYX_TELEMETRY_REDIS_URL` to override queue access and `ONYX_TELEMETRY_SCHEMAS` for explicit schemas.
 Run `python -m onyx.utils.fleet_telemetry_collector` in a separate container.
 One source connection has a two-second connect timeout, 1.5-second statement limit, and 100ms lock limit.
@@ -125,12 +128,14 @@ Each collector discovers new tenant schemas every minute when explicit schemas a
 Only one designated collector should report shared queues and AWS infrastructure.
 Omit Redis URLs and AWS resource configuration from other replicas. Automatic queue discovery runs only on shard zero.
 The collector uses the same backend image as the application, avoiding a separate dependency set.
-In Helm, set `schemaShardIndex`/`schemaShardCount` for each collector.
+The Helm chart runs one collector. Set its `collector.schemaShardIndex` and
+`collector.schemaShardCount`, and run the other shards from separate manifests.
 Use `fleetTelemetry.collector.image` only for a compatible backend-image override. Empty `collector.schemas`
 enables discovery for Cloud instead of restricting collection to `public`.
 
 Collection schedules are source-owned. The collector never fetches fleet-service settings.
 The intervals are five minutes for connectors/resources and ten minutes for queues.
+With Kubernetes collection, pod lists are read every 30 seconds and pod metrics every five minutes.
 Collector health reports every five minutes and immediately on a failure-level transition.
 License snapshots and signup-domain metadata are sent when changed, after observed delivery loss,
 and at least every six hours while connected. The source still reads them on its normal schedule;
@@ -182,7 +187,8 @@ Redis requires `node_id`; OpenSearch requires `node_id` and `account_id`.
 Raw identifiers remain local. The collector emits fixed service roles and keyed IDs.
 Missing metrics or allocations stay unavailable. RDS memory use is derived from freeable memory;
 Redis memory describes engine capacity, and OpenSearch memory describes operating-system utilization.
-In Helm, enable `collector.awsResources` on one collector and put JSON in the existing Secret.
+In Helm, enable `collector.awsResources` on one collector and put the JSON in
+`fleetTelemetry.existingSecret` under `ONYX_TELEMETRY_AWS_RESOURCES_JSON`.
 Use `collector.serviceAccountAnnotations` for a narrow CloudWatch read role through IRSA.
 
 ## Read-only source grants
@@ -244,7 +250,7 @@ Run source tests against a migrated test database:
 ONYX_TELEMETRY_TEST_DB="$TEST_SOURCE_DATABASE_URL" uv run pytest backend/tests/external_dependency_unit/telemetry/test_fleet_collector.py
 ```
 
-The tests create and remove an isolated schema. They check 250 connector pages,
+The tests create and remove an isolated schema. They check 250 connectors,
 terminal failures, permission/group syncs, source read-only enforcement, and schema validation.
 
 
@@ -292,12 +298,6 @@ This adds no per-document emit calls and cannot block application threads.
 The fleet service routes these summaries and legacy stage deltas to short-lived storage: 30-day
 queryable retention, no cold archive. Attempt outcomes and document totals keep their existing
 history policy. Deploy the updated fleet service before enabling this collector version.
-
-### Emission-only fleet telemetry
-
-Fleet telemetry sends events and reads bounded delivery receipts only. It never fetches remote collection settings.
-Collection uses a source-owned schedule: connectors and resources every 300 seconds; queues every 600 seconds.
-Fleet-service labels, classifications, and alert thresholds cannot change deployment behavior.
 
 ## Legacy callhome replacement
 

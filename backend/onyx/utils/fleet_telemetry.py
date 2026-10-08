@@ -501,7 +501,7 @@ class TelemetryConfig:
             parsed: SplitResult = urlsplit(endpoint)
             if parsed.scheme != "https" and not (
                 parsed.scheme == "http"
-                and parsed.hostname in {"localhost", "127.0.0.1", "telemetry"}
+                and parsed.hostname in {"localhost", "127.0.0.1"}
             ):
                 return None
             if (
