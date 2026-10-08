@@ -275,6 +275,9 @@ export default function AuthenticationAccountSection({
                 expandable
                 expanded={isCreating}
                 expandableContentHeight="full"
+                // The form keeps what was typed while folded, and with it the
+                // draft, which stays the chosen account.
+                expandableKeepMounted
                 border="solid"
                 // Selected while its draft is the chosen account.
                 state={
@@ -326,15 +329,18 @@ export default function AuthenticationAccountSection({
                   </div>
                 }
                 // Open with a draft that is not chosen, the header chooses it
-                // again; otherwise it opens or closes the form. Closing drops
-                // the form's values, and with them the draft.
-                onClick={() =>
-                  isCreating && draft !== null && !draftChosen
-                    ? onCredentialChange(draft)
-                    : isCreating
-                      ? close()
-                      : selectMethod(defaultMethod)
-                }
+                // again; otherwise it opens or folds the form. Opening a filled
+                // form chooses its draft; folding keeps it chosen.
+                onClick={() => {
+                  if (isCreating && draft !== null && !draftChosen) {
+                    onCredentialChange(draft);
+                  } else if (isCreating) {
+                    close();
+                  } else {
+                    selectMethod(defaultMethod);
+                    if (draft !== null) onCredentialChange(draft);
+                  }
+                }}
               >
                 <Section padding={2} width="full">
                   <Content

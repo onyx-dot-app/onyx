@@ -165,6 +165,13 @@ type CardExpandableProps = CardBaseProps & {
    * @default 80
    */
   expandableContentHeight?: CardFoldHeight;
+  /**
+   * Keeps the expanded content mounted while folded, e.g. so a form keeps
+   * what was typed. Off, folding drops it once the fold closes.
+   *
+   * @default false
+   */
+  expandableKeepMounted?: boolean;
 };
 
 type CardProps = CardPlainProps | CardExpandableProps;
@@ -267,6 +274,7 @@ function Card(props: CardProps) {
     expanded = false,
     expandedContent,
     expandableContentHeight = 80,
+    expandableKeepMounted = false,
   } = props;
   const showContent = expanded && expandedContent !== undefined;
   // The stylesheet rounds the header, and squares its bottom corners while
@@ -301,6 +309,7 @@ function Card(props: CardProps) {
           radius={radius}
           borderColor={borderColor}
           contentHeight={expandableContentHeight}
+          keepMounted={expandableKeepMounted}
         >
           {expandedContent}
         </CardFold>
