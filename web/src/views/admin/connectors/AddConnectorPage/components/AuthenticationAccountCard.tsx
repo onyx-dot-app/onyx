@@ -111,7 +111,7 @@ export default function AuthenticationAccountCard({
         expandable
         expanded={expanded}
         expandableContentHeight="full"
-        state={selected ? "selected" : "empty"}
+        state={selected ? "selected" : "filled"}
         border="solid"
         rounding={4}
         padding={2}
