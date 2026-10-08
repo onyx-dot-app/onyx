@@ -84,40 +84,52 @@ def check(base_url: str) -> None:
     for suffix in ("/mcp", "/mcp/"):
         url = origin + "/.well-known/oauth-protected-resource" + suffix
         document = metadata(url)
-        if document.get("resource") != origin + "/mcp/" or document.get(
+        if document.get("resource") != origin + "/mcp" or document.get(
             "authorization_servers"
         ) != [issuer]:
             raise ValueError(f"{url}: resource or authorization server mismatch")
         print(f"PASS protected-resource discovery {suffix}")
-    status, headers, _ = request(
-        origin + "/mcp/",
-        json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-03-26",
-                    "capabilities": {},
-                    "clientInfo": {"name": "onyx-compatibility-check", "version": "1"},
-                },
-            }
-        ).encode(),
-    )
-    challenge: str = next(
-        (value for key, value in headers.items() if key.lower() == "www-authenticate"),
-        "",
-    )
-    match = re.search(r'resource_metadata="([^"]+)"', challenge)
-    if (
-        status != 401
-        or match is None
-        or match.group(1) != origin + "/.well-known/oauth-protected-resource/mcp/"
-    ):
-        raise ValueError(
-            f"MCP initialize: expected HTTP 401 with resource discovery, got {status}"
+    initialize = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "onyx-compatibility-check", "version": "1"},
+            },
+        }
+    ).encode()
+    for suffix in ("/mcp", "/mcp/"):
+        status, headers, _ = request(origin + suffix, initialize)
+        challenge: str = next(
+            (
+                value
+                for key, value in headers.items()
+                if key.lower() == "www-authenticate"
+            ),
+            "",
         )
-    print("PASS unauthenticated MCP challenge")
+        match = re.search(r'resource_metadata="([^"]+)"', challenge)
+        if (
+            status != 401
+            or match is None
+            or match.group(1) != origin + "/.well-known/oauth-protected-resource/mcp"
+            or not any(
+                key.lower() == "content-type" and value.startswith("application/json")
+                for key, value in headers.items()
+            )
+        ):
+            raise ValueError(
+                f"MCP initialize {suffix}: expected JSON HTTP 401 with resource discovery, got {status}"
+            )
+        discovered = metadata(match.group(1))
+        if discovered.get("resource") != origin + "/mcp":
+            raise ValueError(
+                f"MCP initialize {suffix}: incompatible protected resource"
+            )
+        print(f"PASS unauthenticated MCP challenge {suffix}")
     for endpoint in ("register", "token"):
         status, _, _ = request(issuer + "/" + endpoint)
         if status != 405:

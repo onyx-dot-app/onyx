@@ -367,12 +367,15 @@ whatever those endpoints give back.
 
 The `MCP Compatibility` workflow checks real nginx routing on PRs and merge
 groups. Its native-client job runs Claude Code and Codex OAuth login against
-an isolated Onyx test server with PostgreSQL and Redis, without LLM calls.
+an isolated Onyx test server with PostgreSQL and Redis, through real nginx
+using the shipped routing configuration, without LLM calls. Each client runs
+OAuth and authenticated tool discovery with both `/mcp` and `/mcp/` URLs.
 PRs use pinned CLI versions; the nightly run uses their latest releases.
 The same job checks the OAuth protocol with omitted resource parameters, which
 legacy Claude Code clients use. Tokens remain bound to the configured MCP URL.
 
-An hourly canary checks craft-dev discovery aliases, the unauthenticated MCP
+An hourly canary checks craft-dev discovery aliases, both endpoint URL forms,
+the advertised slash-free resource, the unauthenticated MCP
 challenge, and provider endpoint routing without creating users or grants.
 `MCP_COMPATIBILITY_BASE_URL` can select another deployed origin. Scheduled and
 manual failures post to `#regressions` with `SLACK_BOT_TOKEN` through the shared

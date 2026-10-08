@@ -6,6 +6,7 @@ import select
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import AsyncGenerator, Generator, Sequence
@@ -43,7 +44,6 @@ from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.oauth_provider import config as oauth_config
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.server.oauth_provider.api import router as user_router
-from onyx.server.oauth_provider.protocol import metadata as oauth_metadata
 from onyx.server.oauth_provider.protocol import router as protocol_router
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -54,6 +54,9 @@ pytestmark = pytest.mark.usefixtures("tenant_context")
 _CLI_TIMEOUT_SECONDS = 120
 _STRICT_ENV = "MCP_NATIVE_CLIENTS_REQUIRED"
 _URL_PATTERN = re.compile(r"https?://[^\s'\"<>\x00-\x1f]+")
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_NGINX_IMAGE = os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.25.5-alpine")
+_MCP_NGINX_TEMPLATE = _REPO_ROOT / "deployment/data/nginx/mcp.conf.inc.template"
 
 
 @dataclass
@@ -69,6 +72,7 @@ class NativeRequestEvent:
 @dataclass
 class NativeOAuthServer:
     base_url: str
+    mcp_path: str
     user_id: str
     cookie_name: str
     session_token: str
@@ -77,7 +81,7 @@ class NativeOAuthServer:
 
     @property
     def mcp_url(self) -> str:
-        return f"{self.base_url}/mcp/"
+        return f"{self.base_url}{self.mcp_path}"
 
     @property
     def origin(self) -> str:
@@ -95,7 +99,7 @@ class NativeOAuthServer:
         with self._lock:
             return any(
                 method == "POST"
-                and path.rstrip("/") == "/mcp"
+                and path == "/"
                 and authorization is not None
                 and authorization.startswith("Bearer onyx_oat_")
                 for method, path, authorization in (
@@ -108,7 +112,7 @@ class NativeOAuthServer:
         with self._lock:
             return any(
                 event.method == "POST"
-                and event.path.rstrip("/") == "/mcp"
+                and event.path == "/"
                 and event.status_code == 200
                 and event.rpc_method == "tools/list"
                 and "search_indexed_documents" in event.response_body
@@ -159,6 +163,25 @@ def _require_cli(executable: str) -> str:
     return path
 
 
+def _require_docker() -> str:
+    docker = shutil.which("docker")
+    if docker is None:
+        _skip_or_fail("docker is not available; native MCP OAuth nginx tests need it.")
+    probe = subprocess.run(
+        [docker, "info"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    if probe.returncode != 0:
+        _skip_or_fail(
+            "docker daemon is not available; native MCP OAuth nginx tests need it. "
+            f"{probe.stderr or probe.stdout}"
+        )
+    return docker
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -177,6 +200,97 @@ def _wait_for_http(url: str) -> None:
             last_error = error
         time.sleep(0.1)
     raise RuntimeError(f"server did not become ready at {url}: {last_error!r}")
+
+
+def _write_nginx_config(config_dir: Path, upstream_port: int) -> None:
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "mcp.conf.inc").write_text(_MCP_NGINX_TEMPLATE.read_text())
+    (config_dir / "mcp_upstream.conf.inc").write_text(
+        "upstream mcp_server {\n"
+        f"    server host.docker.internal:{upstream_port} fail_timeout=0;\n"
+        "}\n"
+    )
+    (config_dir / "default.conf").write_text(
+        "server_tokens off;\n"
+        "upstream api_server {\n"
+        f"    server host.docker.internal:{upstream_port} fail_timeout=0;\n"
+        "}\n"
+        "upstream web_server {\n"
+        f"    server host.docker.internal:{upstream_port} fail_timeout=0;\n"
+        "}\n"
+        "map $http_upgrade $connection_upgrade {\n"
+        "    default upgrade;\n"
+        "    '' close;\n"
+        "}\n"
+        "include /etc/nginx/conf.d/mcp_upstream.conf.inc;\n"
+        "server {\n"
+        "    listen 80 default_server;\n"
+        "    include /etc/nginx/conf.d/mcp.conf.inc;\n"
+        "    location = /nginx-health {\n"
+        "        access_log off;\n"
+        '        return 200 "ok\\n";\n'
+        "    }\n"
+        "    location ~ ^/(api|openapi.json)(/.*)?$ {\n"
+        "        rewrite ^/api(/.*)$ $1 break;\n"
+        "        proxy_set_header X-Real-IP $remote_addr;\n"
+        "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n"
+        "        proxy_set_header X-Forwarded-Proto $scheme;\n"
+        "        proxy_set_header X-Forwarded-Host $host;\n"
+        "        proxy_set_header X-Forwarded-Port $server_port;\n"
+        "        proxy_set_header Host $host;\n"
+        "        proxy_http_version 1.1;\n"
+        "        proxy_set_header Upgrade $http_upgrade;\n"
+        "        proxy_set_header Connection $connection_upgrade;\n"
+        "        proxy_buffering off;\n"
+        "        proxy_connect_timeout 30s;\n"
+        "        proxy_send_timeout 300s;\n"
+        "        proxy_read_timeout 300s;\n"
+        "        proxy_redirect off;\n"
+        "        proxy_pass http://api_server;\n"
+        "    }\n"
+        "    location / {\n"
+        "        proxy_set_header X-Real-IP $remote_addr;\n"
+        "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n"
+        "        proxy_set_header X-Forwarded-Proto $scheme;\n"
+        "        proxy_set_header X-Forwarded-Host $host;\n"
+        "        proxy_set_header X-Forwarded-Port $server_port;\n"
+        "        proxy_set_header Host $host;\n"
+        "        proxy_http_version 1.1;\n"
+        "        proxy_pass http://web_server;\n"
+        "    }\n"
+        "}\n"
+    )
+
+
+def _start_nginx_proxy(
+    docker: str, config_dir: Path, proxy_port: int
+) -> subprocess.CompletedProcess[str]:
+    command = [
+        docker,
+        "run",
+        "--rm",
+        "--detach",
+        "--name",
+        f"onyx-native-mcp-oauth-{uuid4().hex[:12]}",
+        "--publish",
+        f"127.0.0.1:{proxy_port}:80",
+        "--volume",
+        f"{config_dir / 'default.conf'}:/etc/nginx/conf.d/default.conf:ro",
+        "--volume",
+        f"{config_dir / 'mcp.conf.inc'}:/etc/nginx/conf.d/mcp.conf.inc:ro",
+        "--volume",
+        f"{config_dir / 'mcp_upstream.conf.inc'}:/etc/nginx/conf.d/mcp_upstream.conf.inc:ro",
+    ]
+    if sys.platform.startswith("linux"):
+        command.extend(["--add-host", "host.docker.internal:host-gateway"])
+    command.append(_NGINX_IMAGE)
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
 
 
 def _jsonrpc_method(body: bytes) -> str | None:
@@ -255,7 +369,7 @@ def _approve_consent(server: NativeOAuthServer, authorization_url: str) -> str:
     with httpx.Client(
         base_url=server.base_url,
         cookies={server.cookie_name: server.session_token},
-        timeout=10,
+        timeout=30,
     ) as client:
         request_id = parse_qs(urlsplit(authorization_url).query).get("request", [None])[
             0
@@ -462,15 +576,20 @@ def _codex_discover_mcp_tools(
 
 
 @pytest.fixture(scope="module")
-def native_oauth_server() -> Generator[NativeOAuthServer, None, None]:
+def native_oauth_server(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[NativeOAuthServer, None, None]:
+    docker = _require_docker()
     tenant_token: Token[str | None] = CURRENT_TENANT_ID_CONTEXTVAR.set(
         POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
     )
     monkeypatch = pytest.MonkeyPatch()
     event_loop = asyncio.new_event_loop()
-    port = _free_port()
-    base_url = f"http://127.0.0.1:{port}"
-    monkeypatch.setattr(app_configs, "WEB_DOMAIN", base_url)
+    upstream_port = _free_port()
+    proxy_port = _free_port()
+    upstream_url = f"http://127.0.0.1:{upstream_port}"
+    public_url = f"http://127.0.0.1:{proxy_port}"
+    monkeypatch.setattr(app_configs, "WEB_DOMAIN", public_url)
     monkeypatch.setattr(app_configs, "AUTH_BACKEND", AuthBackend.REDIS)
     monkeypatch.setattr(
         oauth_config,
@@ -490,7 +609,8 @@ def native_oauth_server() -> Generator[NativeOAuthServer, None, None]:
     strategy = get_redis_strategy()
     session_token = event_loop.run_until_complete(strategy.write_token(user))
     server_state = NativeOAuthServer(
-        base_url=base_url,
+        base_url=public_url,
+        mcp_path="/mcp",
         user_id=str(user.id),
         cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
         session_token=session_token,
@@ -500,8 +620,9 @@ def native_oauth_server() -> Generator[NativeOAuthServer, None, None]:
     from onyx.mcp_server import auth as mcp_auth
 
     def _test_api_server_url(respect_env_override_if_set: bool = False) -> str:
-        assert respect_env_override_if_set
-        return f"{base_url}/api"
+        if respect_env_override_if_set:
+            pass
+        return upstream_url
 
     monkeypatch.setattr(
         mcp_auth,
@@ -526,27 +647,11 @@ def native_oauth_server() -> Generator[NativeOAuthServer, None, None]:
     def health() -> JSONResponse:
         return JSONResponse({"success": True})
 
-    app.add_api_route(
-        "/.well-known/oauth-authorization-server/api/oauth-provider",
-        oauth_metadata,
-        methods=["GET", "OPTIONS"],
-    )
-    app.add_api_route(
-        "/.well-known/oauth-authorization-server",
-        oauth_metadata,
-        methods=["GET", "OPTIONS"],
-    )
-    app.add_api_route(
-        "/.well-known/oauth-authorization-server/mcp",
-        oauth_metadata,
-        methods=["GET", "OPTIONS"],
-    )
-
-    app.include_router(protocol_router, prefix="/api")
-    app.include_router(user_router, prefix="/api")
+    app.include_router(protocol_router)
+    app.include_router(user_router)
     app.include_router(
         fastapi_users.get_refresh_router(auth_backend, requires_verification=False),
-        prefix="/api/auth",
+        prefix="/auth",
     )
     app.dependency_overrides[auth_backend.get_strategy] = lambda: strategy
 
@@ -556,24 +661,43 @@ def native_oauth_server() -> Generator[NativeOAuthServer, None, None]:
     ) -> dict[str, str]:
         return {"user_id": str(authenticated_user.id)}
 
-    app.mount("/mcp", mcp_child_app)
     app.mount("/", mcp_child_app)
 
     config = uvicorn.Config(
         NativeCaptureMiddleware(app, server_state),
-        host="127.0.0.1",
-        port=port,
+        host="0.0.0.0",
+        port=upstream_port,
         log_level="warning",
         lifespan="on",
     )
     uvicorn_server = uvicorn.Server(config)
     thread = threading.Thread(target=uvicorn_server.run, daemon=True)
     thread.start()
-    _wait_for_http(f"{base_url}/health")
+    container_id = ""
 
     try:
+        _wait_for_http(f"{upstream_url}/health")
+
+        nginx_dir = tmp_path_factory.mktemp("native-nginx")
+        _write_nginx_config(nginx_dir, upstream_port)
+        nginx = _start_nginx_proxy(docker, nginx_dir, proxy_port)
+        container_id = nginx.stdout.strip()
+        if nginx.returncode != 0:
+            _skip_or_fail(
+                f"failed to start Docker nginx proxy with {_NGINX_IMAGE}: "
+                f"{nginx.stderr or nginx.stdout}"
+            )
+        _wait_for_http(f"{public_url}/nginx-health")
         yield server_state
     finally:
+        if container_id:
+            subprocess.run(
+                [docker, "rm", "--force", container_id],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
         uvicorn_server.should_exit = True
         thread.join(timeout=10)
         event_loop.run_until_complete(strategy.destroy_token(session_token, user))
@@ -612,8 +736,12 @@ def _codex_config(server_name: str, server: NativeOAuthServer) -> list[str]:
 
 
 @pytest.mark.parametrize("registration", ["dcr", "auto"])
+@pytest.mark.parametrize("mcp_path", ["/mcp", "/mcp/"], ids=["bare-mcp", "slash-mcp"])
 def test_codex_mcp_login_exchanges_tokens_and_reaches_mcp(
-    native_oauth_server: NativeOAuthServer, tmp_path: Path, registration: str
+    native_oauth_server: NativeOAuthServer,
+    tmp_path: Path,
+    registration: str,
+    mcp_path: str,
 ) -> None:
     codex = _require_cli("codex")
     server_name = f"onyx_native_{registration}_{uuid4().hex[:8]}"
@@ -625,6 +753,7 @@ def test_codex_mcp_login_exchanges_tokens_and_reaches_mcp(
         "XDG_DATA_HOME": str(tmp_path / "data"),
         "XDG_STATE_HOME": str(tmp_path / "state"),
     }
+    native_oauth_server.mcp_path = mcp_path
     config = _codex_config(server_name, native_oauth_server)
     native_oauth_server.clear_events()
     try:
@@ -655,8 +784,9 @@ def test_codex_mcp_login_exchanges_tokens_and_reaches_mcp(
         _run_cli([codex, "mcp", *config, "logout", server_name], env=env)
 
 
+@pytest.mark.parametrize("mcp_path", ["/mcp", "/mcp/"], ids=["bare-mcp", "slash-mcp"])
 def test_claude_mcp_login_and_get_discovers_tools(
-    native_oauth_server: NativeOAuthServer, tmp_path: Path
+    native_oauth_server: NativeOAuthServer, tmp_path: Path, mcp_path: str
 ) -> None:
     claude = _require_cli("claude")
     server_name = f"onyx-native-claude-{uuid4().hex[:8]}"
@@ -666,6 +796,7 @@ def test_claude_mcp_login_and_get_discovers_tools(
         "NO_COLOR": "1",
         "CLAUDE_CONFIG_DIR": str(tmp_path / "claude-config"),
     }
+    native_oauth_server.mcp_path = mcp_path
     add = _run_cli(
         [
             claude,
