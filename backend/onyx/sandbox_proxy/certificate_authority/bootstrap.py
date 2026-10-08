@@ -2,7 +2,6 @@
 
 import datetime as dt
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -10,7 +9,9 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from pydantic import BaseModel, ConfigDict
 
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.utils.logger import setup_logger
 
 _CA_KEY_SIZE_BITS = 4096
@@ -40,8 +41,9 @@ class CAStore(Protocol):
     def persist(self, cert_pem: bytes, key_pem: bytes) -> None: ...
 
 
-@dataclass(frozen=True)
-class MaterializedCA:
+class MaterializedCA(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     cert_pem: bytes
     key_pem: bytes
     pem_path: Path
@@ -202,3 +204,16 @@ class CABootstrap:
         return MaterializedCA(
             cert_pem=cert_pem, key_pem=key_pem, pem_path=self._pem_path
         )
+
+
+def build_ca_store() -> CAStore:
+    """Build the configured backend without importing the other backend SDK."""
+    if SANDBOX_BACKEND is SandboxBackend.KUBERNETES:
+        from onyx.sandbox_proxy.certificate_authority.kubernetes import K8sSecretCAStore
+
+        return K8sSecretCAStore()
+    if SANDBOX_BACKEND is SandboxBackend.DOCKER:
+        from onyx.sandbox_proxy.certificate_authority.docker import FileCAStore
+
+        return FileCAStore()
+    raise RuntimeError(f"Unsupported SANDBOX_BACKEND={SANDBOX_BACKEND!r}.")

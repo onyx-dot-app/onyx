@@ -11,13 +11,13 @@ import ipaddress
 import operator
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
 from cachetools import TTLCache, cachedmethod
 from mitmproxy import http
 from mitmproxy.proxy import server_hooks
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
@@ -32,11 +32,7 @@ from onyx.external_apps.matching.engine import (
     actions_requiring_approval,
 )
 from onyx.sandbox_proxy import approval_cache
-from onyx.sandbox_proxy.credential_injection import (
-    CredentialInjectionDispatcher,
-    InjectionContext,
-    InjectionOutcome,
-)
+from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import (
     clear_destination,
     is_destination_blocked,
@@ -44,7 +40,6 @@ from onyx.sandbox_proxy.destination_policy import (
     resolve_destination,
 )
 from onyx.sandbox_proxy.errors import SandboxProxyError, http_403
-from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.logging_utils import (
     APPROVAL_DECIDED_FIELDS,
     EGRESS_APPROVAL_MATCHED_FIELDS,
@@ -61,8 +56,13 @@ from onyx.sandbox_proxy.logging_utils import (
     sandbox_log_label,
     short_log_id,
 )
-from onyx.sandbox_proxy.models import DestinationPolicyConfig
+from onyx.sandbox_proxy.models import (
+    DestinationPolicyConfig,
+    InjectionContext,
+    InjectionOutcome,
+)
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
 from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
@@ -97,13 +97,14 @@ CacheFactory = Callable[[str], CacheBackend]
 _CRAFT_SESSION_LINK_TEMPLATE = "/craft/v1?sessionId={session_id}"
 
 
-@dataclass(frozen=True)
-class _ApprovalGrant:
+class _ApprovalGrant(BaseModel):
     """A decision to approve a gated request without parking it.
 
     Produced by a grant source in ``_resolve_approval_grant``. Carries how to
     attribute the audit row (``decided_via``) and any bell entry to raise.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     decided_via: ApprovalDecidedVia
     notif_type: NotificationType | None = None

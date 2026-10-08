@@ -27,13 +27,11 @@ from onyx.external_apps.matching.engine import (
     MatchedAction,
 )
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
-from onyx.sandbox_proxy.credential_injection import CredentialResolver, InjectionContext
-from onyx.sandbox_proxy.identity import (
-    ResolvedSandbox,
-    SandboxIdentity,
-    SandboxIPLookup,
-)
+from onyx.sandbox_proxy.credential_injection import CredentialResolver
+from onyx.sandbox_proxy.models import InjectionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
+from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIPLookup
 
 _SANDBOX_ID = UUID("11111111-1111-1111-1111-111111111111")
 

@@ -21,7 +21,7 @@ from docker import DockerClient
 from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 
-from onyx.sandbox_proxy.identity_docker import (
+from onyx.sandbox_proxy.sandbox_identity.docker import (
     DockerEventsLookup,
     _identity_from_container,
 )

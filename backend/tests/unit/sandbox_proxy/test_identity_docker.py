@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from docker import DockerClient
 
-from onyx.sandbox_proxy.identity_docker import (
+from onyx.sandbox_proxy.sandbox_identity.docker import (
     DockerEventsLookup,
     _identity_from_container,
 )
