@@ -6159,15 +6159,13 @@
         "unknownError": "Erreur inconnue"
       },
       "modelRouting": {
-        "title": "Routage des modèles",
-        "description": "Acheminez chaque conversation via un modèle routeur au lieu d'un modèle fixe. Les utilisateurs voient un seul élément Auto dans le sélecteur de modèles.",
         "autoMode": {
           "title": "Mode auto",
-          "description": "Affiche un élément Auto dans le sélecteur de modèle qui achemine chaque message via le modèle routeur choisi."
+          "description": "Ajoute une option Auto au sélecteur de modèle qui choisit le modèle le plus adapté à chaque message."
         },
         "target": {
-          "title": "Cible de routage",
-          "description": "Le modèle routeur auquel Auto renvoie (par exemple openrouter/auto).",
+          "title": "Modèle de routage",
+          "description": "Gère le routage des modèles pour le mode Auto.",
           "empty": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle."
         }
       }
@@ -11134,7 +11132,8 @@
         "tooltip": "La modification de ce paramètre n'est pas prise en charge pour ce modèle."
       },
       "autoItem": {
-        "label": "Auto"
+        "label": "Auto",
+        "description": "Choisit le meilleur modèle pour chaque message"
       }
     },
     "nrf": {

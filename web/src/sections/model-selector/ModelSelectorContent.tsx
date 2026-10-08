@@ -629,8 +629,11 @@ export default function ModelSelectorContent({
     const disabled = isDisabled?.(option) ?? false;
 
     // Skip the model-id description when it would just repeat the display name.
-    const description =
-      option.modelName !== option.displayName ? option.modelName : undefined;
+    const description = option.isAuto
+      ? t("autoItem.description")
+      : option.modelName !== option.displayName
+        ? option.modelName
+        : undefined;
 
     return (
       <Disabled key={llmOptionKey(option)} disabled={disabled}>
@@ -638,14 +641,14 @@ export default function ModelSelectorContent({
           <LineItemButton
             selectVariant="select-heavy"
             state={selected ? "selected" : "empty"}
-            icon={selectionIcon(selected)}
+            icon={
+              option.isAuto && !selected ? SvgSparkle : selectionIcon(selected)
+            }
             title={option.displayName}
             description={description}
             onClick={() => onSelect(option)}
             rightChildren={
-              option.isAuto ? (
-                <SvgSparkle className="h-4 w-4 stroke-status-info-05 fill-status-info-05" />
-              ) : modelDetail ? (
+              modelDetail ? (
                 <Hoverable.Item group="model-row" variant="appear-on-hover">
                   <Button
                     icon={SvgSliders}

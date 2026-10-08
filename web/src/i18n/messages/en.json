@@ -6159,15 +6159,13 @@
         "unknownError": "Unknown error"
       },
       "modelRouting": {
-        "title": "Model Routing",
-        "description": "Send each chat through a router model instead of a fixed one. Users see a single Auto item in the model picker.",
         "autoMode": {
           "title": "Auto Mode",
-          "description": "Show an Auto item in the model picker that routes each message through the chosen router model."
+          "description": "Add an Auto option to the model picker that picks the best-fit model for each message."
         },
         "target": {
-          "title": "Routing Target",
-          "description": "The router model Auto resolves to (for example openrouter/auto).",
+          "title": "Router Model",
+          "description": "Handles model routing for Auto mode.",
           "empty": "No router models found. Enable a router model on a gateway provider first."
         }
       }
@@ -11134,7 +11132,8 @@
         "tooltip": "Modifying this setting is not supported for this model."
       },
       "autoItem": {
-        "label": "Auto"
+        "label": "Auto",
+        "description": "Picks the best model for each message"
       }
     },
     "nrf": {

@@ -6159,15 +6159,13 @@
         "unknownError": "Erro desconhecido"
       },
       "modelRouting": {
-        "title": "Roteamento de modelos",
-        "description": "Encaminhe cada conversa por um modelo roteador em vez de um modelo fixo. Os usuários veem um único item Auto no seletor de modelos.",
         "autoMode": {
           "title": "Modo automático",
-          "description": "Mostra um item Auto no seletor de modelos que encaminha cada mensagem pelo modelo de roteador escolhido."
+          "description": "Adiciona uma opção Auto ao seletor de modelos que escolhe o modelo mais adequado para cada mensagem."
         },
         "target": {
-          "title": "Destino do roteamento",
-          "description": "O modelo de roteador para o qual o Auto resolve (por exemplo, openrouter/auto).",
+          "title": "Modelo de roteamento",
+          "description": "Gerencia o roteamento de modelos para o modo Auto.",
           "empty": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway."
         }
       }
@@ -11134,7 +11132,8 @@
         "tooltip": "Modificar esta configuração não é compatível com este modelo."
       },
       "autoItem": {
-        "label": "Auto"
+        "label": "Auto",
+        "description": "Escolhe o melhor modelo para cada mensagem"
       }
     },
     "nrf": {

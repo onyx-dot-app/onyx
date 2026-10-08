@@ -6159,15 +6159,13 @@
         "unknownError": "未知错误"
       },
       "modelRouting": {
-        "title": "模型路由",
-        "description": "通过路由器模型而不是固定模型处理每个聊天。用户在模型选择器中只会看到一个 Auto 项。",
         "autoMode": {
           "title": "自动模式",
-          "description": "在模型选择器中显示一个 Auto 项，通过所选的路由器模型路由每条消息。"
+          "description": "在模型选择器中添加 Auto 项，为每条消息选择最合适的模型。"
         },
         "target": {
-          "title": "路由目标",
-          "description": "Auto 解析到的路由器模型（例如 openrouter/auto）。",
+          "title": "路由器模型",
+          "description": "负责 Auto 模式的模型路由。",
           "empty": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。"
         }
       }
@@ -11134,7 +11132,8 @@
         "tooltip": "此模型不支持修改该设置。"
       },
       "autoItem": {
-        "label": "自动"
+        "label": "自动",
+        "description": "为每条消息选择最佳模型"
       }
     },
     "nrf": {

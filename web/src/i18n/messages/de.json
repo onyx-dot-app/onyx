@@ -6159,15 +6159,13 @@
         "unknownError": "Unbekannter Fehler"
       },
       "modelRouting": {
-        "title": "Modell-Routing",
-        "description": "Leiten Sie jeden Chat über ein Router-Modell statt über ein festes Modell. Benutzer sehen ein einzelnes Auto-Element in der Modellauswahl.",
         "autoMode": {
           "title": "Auto-Modus",
-          "description": "Zeigt ein Auto-Element in der Modellauswahl, das jede Nachricht über das gewählte Router-Modell leitet."
+          "description": "Fügt der Modellauswahl eine Auto-Option hinzu, die für jede Nachricht das am besten passende Modell wählt."
         },
         "target": {
-          "title": "Routing-Ziel",
-          "description": "Das Router-Modell, auf das Auto verweist (zum Beispiel openrouter/auto).",
+          "title": "Router-Modell",
+          "description": "Übernimmt das Modell-Routing für den Auto-Modus.",
           "empty": "Keine Router-Modelle gefunden. Aktivieren Sie zuerst ein Router-Modell bei einem Gateway-Anbieter."
         }
       }
@@ -11134,7 +11132,8 @@
         "tooltip": "Das Ändern dieser Einstellung wird für dieses Modell nicht unterstützt."
       },
       "autoItem": {
-        "label": "Auto"
+        "label": "Auto",
+        "description": "Wählt für jede Nachricht das beste Modell"
       }
     },
     "nrf": {

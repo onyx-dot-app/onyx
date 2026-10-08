@@ -6159,15 +6159,13 @@
         "unknownError": "Error desconocido"
       },
       "modelRouting": {
-        "title": "Enrutamiento de modelos",
-        "description": "Dirige cada chat a través de un modelo enrutador en lugar de uno fijo. Los usuarios ven un único elemento Auto en el selector de modelos.",
         "autoMode": {
           "title": "Modo automático",
-          "description": "Muestra una opción Auto en el selector de modelos que enruta cada mensaje a través del modelo de router elegido."
+          "description": "Agrega una opción Auto al selector de modelos que elige el modelo más adecuado para cada mensaje."
         },
         "target": {
-          "title": "Destino del enrutamiento",
-          "description": "El modelo de router al que se resuelve Auto (por ejemplo, openrouter/auto).",
+          "title": "Modelo de enrutamiento",
+          "description": "Gestiona el enrutamiento de modelos para el modo Auto.",
           "empty": "No se encontraron modelos de router. Primero habilite un modelo de router en un proveedor de puerta de enlace."
         }
       }
@@ -11134,7 +11132,8 @@
         "tooltip": "Modificar esta configuración no es compatible con este modelo."
       },
       "autoItem": {
-        "label": "Auto"
+        "label": "Auto",
+        "description": "Elige el mejor modelo para cada mensaje"
       }
     },
     "nrf": {
