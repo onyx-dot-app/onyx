@@ -1,7 +1,7 @@
 """add connector_config_hash to index_attempt
 
 Revision ID: 50bbc151ad39
-Revises: e22aca06966a
+Revises: 7c3e9a2d41f6
 Create Date: 2026-10-05 15:59:43.922809
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "50bbc151ad39"
-down_revision = "e22aca06966a"
+down_revision = "7c3e9a2d41f6"
 branch_labels = None
 depends_on = None
 
