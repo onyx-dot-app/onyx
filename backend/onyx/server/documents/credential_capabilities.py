@@ -20,6 +20,7 @@ from onyx.configs.constants import (
     DocumentSource,
 )
 from onyx.connectors.capability_checks.draft_runs import (
+    DraftCheckPlan,
     DraftCheckRunSnapshot,
     DraftRerunMode,
     read_draft_run_for_user,
@@ -61,6 +62,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.capability_check_runs import (
     CapabilityRunEnqueueError,
+    plan_draft_capability_checks,
     start_capability_check_run,
     start_draft_capability_check_run,
 )
@@ -445,6 +447,45 @@ def check_credential_binding(
             ),
         )
     return CredentialBindingCheckResponse(field_errors={}, rejection=None)
+
+
+class DraftCheckPlanRequest(BaseModel):
+    """Body of the draft plan endpoint: an unsaved connector form, with or
+    without a credential picked yet."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: DocumentSource
+    access_type: AccessType | None = None
+    form_state: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/admin/connector-checks/plan")
+def plan_draft_checks(
+    request: DraftCheckPlanRequest,
+    _: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+) -> DraftCheckPlan:
+    """Lists the checks a draft run would hold for an unsaved connector form,
+    each in its state before anything runs, so the page knows which checks
+    exist and which are required before the admin starts them.
+
+    Needs no credential: which checks apply depends only on the source, the
+    access type and the form. Does no I/O to the source and starts no run.
+    """
+    mapping = CONNECTOR_CLASS_MAP.get(request.source)
+    if mapping is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{request.source.value} has no connector configuration.",
+        )
+    return plan_draft_capability_checks(
+        source=request.source,
+        config_class=mapping.config_class,
+        access_type=request.access_type,
+        form_values=request.form_state,
+    )
 
 
 class DraftCheckRunRequest(BaseModel):

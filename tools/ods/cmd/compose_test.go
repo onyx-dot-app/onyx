@@ -11,30 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestCheckComposeOptions(t *testing.T) {
-	tests := []struct {
-		name    string
-		profile string
-		noEE    bool
-		wantErr bool
-	}{
-		{name: "default profile with EE", profile: "", noEE: false, wantErr: false},
-		{name: "default profile without EE", profile: "", noEE: true, wantErr: false},
-		{name: "dev profile without EE", profile: "dev", noEE: true, wantErr: false},
-		{name: "multitenant profile with EE", profile: "multitenant", noEE: false, wantErr: false},
-		{name: "multitenant profile without EE", profile: "multitenant", noEE: true, wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := checkComposeOptions(tt.profile, &ComposeOptions{NoEE: tt.noEE})
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("checkComposeOptions(%q, NoEE=%v) error = %v, wantErr %v", tt.profile, tt.noEE, err, tt.wantErr)
-			}
-		})
-	}
-}
-
 // composeDockerScript answers "docker port <container> <port>" with host port
 // 2<port> and records IMAGE_TAG and the working directory of every other call.
 func composeDockerScript(bin string) string {
@@ -75,21 +51,18 @@ func TestComposeCommand(t *testing.T) {
 		wantPorts  bool
 	}{
 		{
-			name:     "default profile starts the stack with EE enabled",
-			args:     nil,
-			wantCall: "compose -p ods-proj -f docker-compose.yml up -d --wait",
-			wantEnv: map[string]string{
-				"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES": "true",
-				"LICENSE_ENFORCEMENT_ENABLED":             "false",
-			},
-			wantTag: "unset",
+			name:       "default profile starts the stack without touching .env",
+			args:       nil,
+			initialEnv: "KEEP=1\n",
+			wantCall:   "compose -p ods-proj -f docker-compose.yml up -d --wait",
+			wantEnv:    map[string]string{"KEEP": "1"},
+			wantTag:    "unset",
 		},
 		{
 			name:     "dev profile writes the discovered ports and passes every start flag",
-			args:     []string{"dev", "--no-ee", "--wait=false", "--force-recreate", "--infra", "--tag", "edge"},
+			args:     []string{"dev", "--wait=false", "--force-recreate", "--infra", "--tag", "edge"},
 			wantCall: "compose -p ods-proj -f docker-compose.yml -f docker-compose.dev.yml --profile s3-filestore up -d --force-recreate " + composeInfraServices,
 			wantEnv: map[string]string{
-				"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES": "false",
 				"MINIO_REPLICAS":             "0",
 				"S3_ENDPOINT_URL":            "http://object-store:8333",
 				"POSTGRES_HOST_PORT":         "25432",
@@ -125,6 +98,7 @@ func TestComposeCommand(t *testing.T) {
 			composeFakeTool(t, bin, "docker", composeDockerScript(bin))
 			t.Setenv("IMAGE_TAG", "")
 			_ = os.Unsetenv("IMAGE_TAG")
+			t.Setenv(devLicenseEnv, "")
 			root := composeRepo(t)
 			dir := filepath.Join(root, "deployment", "docker_compose")
 			envPath := filepath.Join(dir, ".env")
@@ -168,6 +142,56 @@ func TestComposeCommand(t *testing.T) {
 	}
 }
 
+func TestRunCompose_seedsTheDevLicense(t *testing.T) {
+	const seed = "compose -p ods-proj -f docker-compose.yml exec -T -e ONYX_DEV_LICENSE api_server python -m scripts.seed_dev_license"
+	tests := []struct {
+		name     string
+		profile  string
+		opts     ComposeOptions
+		license  string
+		wantSeed bool
+	}{
+		{name: "healthy stack with a license", opts: ComposeOptions{Wait: true}, license: "license-blob", wantSeed: true},
+		{name: "no license", opts: ComposeOptions{Wait: true}},
+		{name: "not waiting for health", opts: ComposeOptions{}, license: "license-blob"},
+		{name: "infra only", opts: ComposeOptions{Wait: true, Infra: true}, license: "license-blob"},
+		{name: "multitenant", profile: "multitenant", opts: ComposeOptions{Wait: true}, license: "license-blob"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bin := composeFakeBin(t)
+			composeFakeTool(t, bin, "docker", composeDockerScript(bin))
+			t.Setenv(devLicenseEnv, tt.license)
+			composeRepo(t)
+
+			if err := runCompose(tt.profile, &tt.opts); err != nil {
+				t.Fatalf("runCompose: %v", err)
+			}
+
+			calls := composeCalls(t, bin, "docker")
+			last := calls[len(calls)-1]
+			if tt.wantSeed && last != seed {
+				t.Fatalf("expected the last docker call to be %q, got %q", seed, calls)
+			}
+			if !tt.wantSeed && (strings.Contains(strings.Join(calls, "\n"), "seed_dev_license") || !strings.Contains(last, " up -d")) {
+				t.Fatalf("expected the stack to start with no seed, got %q", calls)
+			}
+		})
+	}
+}
+
+func TestRunCompose_reportsAFailedSeed(t *testing.T) {
+	bin := composeFakeBin(t)
+	composeFakeTool(t, bin, "docker", `case "$*" in *seed_dev_license*) exit 3;; esac`)
+	t.Setenv(devLicenseEnv, "license-blob")
+	composeRepo(t)
+
+	err := runCompose("", &ComposeOptions{Wait: true})
+	if err == nil || !strings.HasPrefix(err.Error(), "Failed to seed the dev license") {
+		t.Fatalf("expected a seed failure, got %v", err)
+	}
+}
+
 func TestRunCompose_errors(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -179,7 +203,6 @@ func TestRunCompose_errors(t *testing.T) {
 		wantDocker bool
 	}{
 		{name: "invalid profile", profile: "prod", wantPrefix: `Invalid profile "prod". Valid profiles: dev, multitenant`},
-		{name: "multitenant without EE", profile: "multitenant", opts: ComposeOptions{NoEE: true}, wantPrefix: "--no-ee cannot be used with the multitenant profile"},
 		{name: "docker compose fails", docker: "exit 2", wantPrefix: "Docker compose failed: exit status 2", wantDocker: true},
 		{name: "start outside a git repo", noRepo: true, wantPrefix: "Failed to find git root: "},
 		{name: "stop outside a git repo", opts: ComposeOptions{Down: true}, noRepo: true, wantPrefix: "Failed to find git root: "},

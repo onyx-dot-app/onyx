@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgBubbleText, SvgEdit, SvgLock, SvgOrganization } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { SharePermissionMenuOption } from "@/sections/modals/SharePermissionMenu";
+import { SharePermissionMenuOption } from "@/lib/permissions/components";
 
 export type ShareScope = "PRIVATE" | "PUBLIC";
 export type ShareAccessPermission = "EDITOR" | "VIEWER";

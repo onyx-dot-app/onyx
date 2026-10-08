@@ -106,6 +106,90 @@ def test_list_mailbox_users_follows_next_link_without_resending_params() -> None
     assert client.get_json.call_args.args[:2] == ("https://graph/next", None)
 
 
+GROUP_ID = "0b7c4c6e-5b7b-4c53-9a36-1e6a5f3f2d10"
+
+
+def test_resolve_groups_reads_an_object_id_directly() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = {"id": GROUP_ID, "displayName": "Onyx Users"}
+
+    result = gateway.resolve_groups(identifier=GROUP_ID)
+
+    assert [group.id for group in result] == [GROUP_ID]
+    assert client.get_json.call_args.args[0] == f"{GRAPH_BASE}/groups/{GROUP_ID}"
+
+
+def test_resolve_groups_treats_an_unknown_object_id_as_no_match() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = http_error(404, "Request_ResourceNotFound")
+
+    assert gateway.resolve_groups(identifier=GROUP_ID) == []
+
+
+def test_resolve_groups_follows_a_continuation_after_one_match() -> None:
+    gateway, client = _gateway()
+    first = page_json([{"id": "group-1"}])
+    first["@odata.nextLink"] = "https://graph/next"
+    client.get_json.side_effect = [first, page_json([{"id": "group-2"}])]
+
+    result = gateway.resolve_groups(identifier="Sales")
+
+    assert [group.id for group in result] == ["group-1", "group-2"]
+    assert client.get_json.call_args.args[0] == "https://graph/next"
+
+
+def test_resolve_groups_returns_every_group_sharing_a_display_name() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [{"id": "group-1", "displayName": "Sales"}, {"id": "group-2"}]
+    )
+
+    result = gateway.resolve_groups(identifier="Sales's")
+
+    url, params = client.get_json.call_args.args[:2]
+    assert url == f"{GRAPH_BASE}/groups"
+    assert params["$filter"] == "displayName eq 'Sales''s'"
+    assert [group.id for group in result] == ["group-1", "group-2"]
+
+
+def test_group_member_without_an_account_enabled_field_is_kept() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([user_json()])
+
+    result = gateway.list_group_mailbox_users(group_id=GROUP_ID)
+
+    assert [m.id for m in result.mailboxes] == [MAILBOX_ID]
+
+
+def test_resolve_groups_canonicalises_an_object_id_in_the_path() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = {"id": GROUP_ID, "displayName": "Onyx Users"}
+
+    gateway.resolve_groups(identifier="{" + GROUP_ID.upper() + "}")
+
+    assert client.get_json.call_args.args[0] == f"{GRAPH_BASE}/groups/{GROUP_ID}"
+
+
+def test_group_members_keep_only_enabled_users_with_a_mail_address() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [
+            user_json(),
+            user_json(id="user-disabled", accountEnabled=False),
+            user_json(id="user-no-mail", mail=None),
+        ]
+    )
+    client.get_json.return_value["@odata.nextLink"] = "https://graph/next"
+
+    result = gateway.list_group_mailbox_users(group_id=GROUP_ID)
+
+    assert client.get_json.call_args.args[0] == (
+        f"{GRAPH_BASE}/groups/{GROUP_ID}/transitiveMembers/microsoft.graph.user"
+    )
+    assert [m.id for m in result.mailboxes] == [MAILBOX_ID]
+    assert result.next_link == "https://graph/next"
+
+
 def test_resolve_mailbox_falls_back_to_the_primary_smtp_address() -> None:
     gateway, client = _gateway()
     client.get_json.side_effect = [
@@ -275,6 +359,16 @@ def test_folder_listing_marks_hidden_folders() -> None:
     assert [f.is_hidden for f in result.folders] == [False, True]
 
 
+def test_delta_page_selects_the_conversation_index_the_thread_key_needs() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([change_json()])
+
+    page = gateway.fetch_folder_delta_page(mailbox_id=MAILBOX_ID, folder_id=INBOX_ID)
+
+    assert "conversationIndex" in client.get_json.call_args.args[1]["$select"]
+    assert page.changes[0].conversation_index == change_json()["conversationIndex"]
+
+
 def test_delta_page_sends_query_params_once_and_the_page_size_header_always() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json(
@@ -333,7 +427,7 @@ def test_conversation_page_orders_newest_first_and_reads_text_bodies() -> None:
     )
 
     result = gateway.fetch_conversation_messages_page(
-        mailbox_id=MAILBOX_ID, conversation_id="conv'1", page_size=3
+        mailbox_id=MAILBOX_ID, conversation_id="conv'1"
     )
 
     url, params, headers = client.get_json.call_args.args
@@ -342,12 +436,37 @@ def test_conversation_page_orders_newest_first_and_reads_text_bodies() -> None:
         f"receivedDateTime ge {EPOCH_TIMESTAMP} and conversationId eq 'conv''1'"
     )
     assert params["$orderby"] == "receivedDateTime desc"
-    assert params["$top"] == "3"
+    assert params["$top"] == str(MESSAGES_PAGE_SIZE)
     assert headers == {"Prefer": TEXT_BODY_PREFERENCE}
     assert [m.id for m in result.messages] == ["msg-1", "msg-2"]
     assert result.messages[1].body_text == "Hi Bob"
     assert result.messages[0].sender is not None
     assert result.messages[0].sender.address == MAILBOX_ADDRESS
+    assert result.next_link == "https://graph/messages?page=2"
+
+
+def test_conversation_outline_reads_identity_fields_without_a_body() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [
+            change_json(internetMessageId="<a@contoso.com>", isDraft=True),
+            change_json(id="msg-2"),
+        ],
+        next_link="https://graph/messages?page=2",
+    )
+
+    result = gateway.fetch_conversation_outline_page(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID
+    )
+
+    url, params, headers = client.get_json.call_args.args
+    assert url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages"
+    assert params["$select"] == CHANGE_SELECT
+    assert "body" not in params["$select"].split(",")
+    assert params["$orderby"] == "receivedDateTime desc"
+    assert headers is None
+    assert [c.match_id for c in result.changes] == ["<a@contoso.com>", "msg-2"]
+    assert [c.is_draft for c in result.changes] == [True, False]
     assert result.next_link == "https://graph/messages?page=2"
 
 

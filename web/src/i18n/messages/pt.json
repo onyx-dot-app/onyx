@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Conectar ao Onyx",
+      "request": "Permitir que {clientName} pesquise no Onyx?",
+      "account": "Conectado como {email}",
+      "workspace": "Espaço de trabalho: {workspaceName}",
+      "appAddress": "Endereço do aplicativo: {origin}",
+      "access": "Ler resultados de documentos aos quais você tem acesso. Usar a pesquisa na web e abrir páginas da web.",
+      "allow": "Permitir acesso",
+      "deny": "Negar",
+      "pending": "Salvando sua escolha...",
+      "loading": "Carregando solicitação de autorização...",
+      "unavailable": "Esta solicitação expirou ou foi alterada. Recomece pelo seu aplicativo.",
+      "failed": "Não foi possível concluir a autorização. Recomece pelo seu aplicativo.",
+      "signInRequired": "Entre para autorizar este aplicativo.",
+      "signIn": "Entrar",
+      "forbidden": "Você não pode autorizar este aplicativo. Contate o administrador do seu espaço de trabalho.",
+      "loadFailed": "O Onyx não conseguiu carregar esta solicitação. Tente novamente.",
+      "retry": "Tentar novamente"
+    },
+    "connections": {
+      "cancel": "Cancelar",
+      "title": "Aplicativos conectados",
+      "description": "Aplicativos que você autorizou a pesquisar no Onyx.",
+      "empty": "Nenhum aplicativo conectado.",
+      "loading": "Carregando aplicativos conectados...",
+      "expires": "Expira em {date}",
+      "disconnect": "Desconectar",
+      "disconnectAriaLabel": "Desconectar {clientName}",
+      "pending": "Desconectando...",
+      "failed": "Não foi possível desconectar o aplicativo. Tente novamente.",
+      "loadFailed": "Não foi possível carregar os aplicativos conectados.",
+      "confirmTitle": "Desconectar {clientName}?",
+      "confirmDescription": "Este aplicativo perderá o acesso ao Onyx. Você poderá conectá-lo novamente mais tarde."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "Conta"
@@ -1385,6 +1421,34 @@
           "text": "Você será cobrado em <value>{date}</value> após o fim da sua avaliação gratuita de 1 mês."
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "Falha ao mudar para Community"
+        },
+        "link": {
+          "label": "Mudar para Community"
+        },
+        "modal": {
+          "confirmButton": {
+            "label": "Mudar para Community",
+            "loading": "Mudando..."
+          },
+          "connectors": {
+            "text": "Todos os conectores se tornam públicos. Documentos que eram privados por permissões sincronizadas ou grupos ficam visíveis para todos os usuários. Os resultados de busca são atualizados quando o índice é reescrito, o que pode demorar em um índice grande."
+          },
+          "description": "Isso remove sua licença e todos os recursos pagos. Não pode ser desfeito.",
+          "features": {
+            "text": "As chaves de API de contas de serviço, os limites de taxa de tokens e os hooks são excluídos. Respostas padrão e tokens SCIM são desativados. A marca personalizada e a retenção de conversas são redefinidas."
+          },
+          "groups": {
+            "text": "Os grupos de usuários são removidos. Agentes, conjuntos de documentos, provedores de LLM, servidores MCP e skills compartilhados com um grupo se tornam públicos."
+          },
+          "license": {
+            "text": "A licença é removida desta implantação."
+          },
+          "title": "Mudar para a Community Edition"
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "Ativar chave de licença"
@@ -1963,25 +2027,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "Sincronizaremos automaticamente as permissões da fonte. Um documento só poderá ser pesquisado no {appName} se o usuário que realiza a pesquisa tiver permissão para acessar o documento na fonte.",
-          "disabledReason": "O método de autenticação da credencial atual não oferece suporte à sincronização automática de permissões. Altere o método de autenticação da credencial para um compatível.",
-          "name": "Sincronização automática de permissões"
-        },
-        "heading": {
-          "description": "Controle quem tem acesso aos documentos indexados por este conector.",
-          "title": "Acesso a documentos"
-        },
-        "privateOption": {
-          "description": "Apenas usuários que receberam acesso explícito a este conector (pela página de Grupos de usuários) podem acessar os documentos importados por este conector",
-          "name": "Privado"
-        },
-        "publicOption": {
-          "description": "Qualquer pessoa com uma conta no {appName} pode acessar os documentos importados por este conector",
-          "name": "Público"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# dia} other {# dias}}",
@@ -2157,6 +2202,7 @@
           "description": "Todos mantêm o acesso sincronizado da origem.",
           "title": "Sem restrição até que grupos sejam adicionados"
         },
+        "loadError": "Não foi possível carregar os grupos. Recarregue a página para tentar novamente.",
         "memberCount": "{count, plural, one {# membro} other {# membros}}",
         "picker": {
           "placeholder": "Adicione grupos para restringir o acesso a este conector"
@@ -2164,26 +2210,12 @@
         "remove": {
           "tooltip": "Remover {name}"
         },
+        "table": {
+          "group": "Grupo"
+        },
         "toggle": {
           "description": "Limite o acesso aos membros dos grupos selecionados. As permissões sincronizadas continuam valendo.",
           "title": "Restringir acesso a grupos"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "Atribuir acesso de grupos a este conector"
-        },
-        "assignToGroup": {
-          "title": "Grupos que podem gerenciar este conector"
-        },
-        "scopedManagerGroups": {
-          "description": "Selecione um ou mais dos grupos que você gerencia para dar acesso a este conector"
-        },
-        "syncGroups": {
-          "description": "Os grupos abaixo controlam quem pode gerenciar este conector. O acesso aos seus documentos é herdado das permissões da própria fonte."
-        },
-        "visibleToGroups": {
-          "description": "Este conector ficará visível/acessível para os grupos selecionados abaixo"
         }
       },
       "indexAttemptsTable": {
@@ -2562,7 +2594,7 @@
       "oneDrive": {
         "description": "Configurar o conector do OneDrive",
         "indexingScope": {
-          "label": "Quais arquivos do OneDrive o Onyx deve indexar?",
+          "label": "Arquivos do OneDrive para indexar",
           "general": {
             "label": "Geral",
             "description": "Indexe todos os usuários qualificados que o aplicativo da Microsoft pode acessar."
@@ -2578,7 +2610,7 @@
         },
         "excludedPaths": {
           "label": "Caminhos excluídos",
-          "description": "Padrões glob comparados com cada caminho e nome de arquivo, como '*.tmp' ou 'Archive/*'."
+          "description": "Padrões glob comparados com cada caminho e nome de arquivo, como `*.tmp` ou `Archive/*`."
         },
         "organizationLinks": {
           "label": "Tratar links da organização como públicos",
@@ -2670,10 +2702,6 @@
           "toast": "Ocorreu um erro desconhecido"
         }
       },
-      "connectorName": {
-        "label": "Nome do conector",
-        "subtext": "Um nome descritivo para o conector."
-      },
       "credentialRequired": {
         "tooltip": "Selecione uma credencial primeiro."
       },
@@ -2689,9 +2717,6 @@
         "title": "Falha ao carregar as credenciais."
       },
       "field": {
-        "optional": {
-          "label": "(opcional)"
-        },
         "optionalSuffix": {
           "label": "opcional"
         }
@@ -2819,7 +2844,7 @@
           "label": "Cancelar"
         },
         "connectButton": {
-          "label": "Conectar"
+          "label": "Criar conector"
         },
         "description": "Conecte-se ao {source} e configure o conector para {appName}.{hasDocs, select, true { Ver [documentação]({url})} other {}}"
       },
@@ -2924,22 +2949,13 @@
           "title": "Erro durante o envio."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Configuração"
-        }
+      "content": {
+        "title": "Conteúdo do conector",
+        "description": "Selecione o conteúdo a ser indexado para este conector."
       },
       "selectInput": {
         "emptyOption": {
           "label": "Selecione uma opção"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "Adicionar novo"
-        },
-        "removeButton": {
-          "tooltip": "Remover"
         }
       },
       "tabs": {
@@ -2951,8 +2967,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "Cole a URL do seu site. A API REST do {connectorName} deve estar acessível nele."
+      },
       "boundFields": {
-        "advancedOptions": "Opções avançadas",
         "errors": {
           "missing": "Insira um valor.",
           "invalid": "Este valor não é válido: {detail}"
@@ -2978,6 +2996,57 @@
           "hours": "horas",
           "minutes": "minutos"
         }
+      },
+      "settings": {
+        "description": "Informações e acesso do conector.",
+        "displayName": {
+          "title": "Nome de exibição do conector"
+        },
+        "documentAccess": {
+          "description": "Controle quem pode acessar os documentos indexados por este conector.",
+          "everyone": {
+            "description": "Os documentos indexados por este conector serão públicos para todos na sua organização.",
+            "title": "Todos na sua organização"
+          },
+          "specificGroups": {
+            "description": "Indique os grupos que podem acessar os documentos deste conector.",
+            "required": "Escolha pelo menos um grupo.",
+            "title": "Grupos específicos"
+          },
+          "sync": {
+            "description": "O {appName} sincroniza as permissões com a fonte. Os usuários só podem pesquisar o que conseguem ver na fonte.",
+            "disabledReason": "O método de autenticação da credencial atual não oferece suporte à sincronização automática de permissões. Altere o método de autenticação da credencial para um compatível.",
+            "title": "Sincronizar com {source}"
+          },
+          "title": "Acesso aos documentos"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "Sempre compartilhado",
+            "title": "Administradores"
+          },
+          "description": "Controle quem pode operar (agendar e monitorar a indexação) e/ou editar as configurações do conector.",
+          "note": "Somente usuários com permissão “Gerenciar conectores” (função de gerente de grupo ou permissões de grupo) terão acesso para operar e/ou editar conectores.",
+          "placeholder": "Adicionar grupos para compartilhar este conector",
+          "role": {
+            "editor": {
+              "description": "Atualizar/excluir configurações.",
+              "label": "Editor"
+            },
+            "menu": {
+              "ariaLabel": "Função de {name}"
+            },
+            "operator": {
+              "description": "Agendar/monitorar a indexação.",
+              "label": "Operador"
+            },
+            "removeAccess": {
+              "label": "Remover acesso"
+            }
+          },
+          "title": "Acesso de gerenciamento do conector"
+        },
+        "title": "Configurações do conector"
       }
     },
     "costOverrides": {
@@ -5055,6 +5124,10 @@
         "title": "LLM de legendagem"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "Pare agora de gerar contexto para documentos novos e atualizados ou reconstrua todos os documentos para remover também o contexto já gerado.",
+          "title": "Escolha como desativar a recuperação contextual"
+        },
         "contextualModelMissing": {
           "description": "A recuperação contextual está ativada, mas nenhum modelo foi selecionado. Escolha um LLM de recuperação contextual abaixo antes de reindexar — sem ele, a reindexação não pode ser executada.",
           "title": "Selecione um LLM de recuperação contextual"
@@ -5171,6 +5244,10 @@
       "forwardOnlyModal": {
         "description": "Os documentos existentes mantêm o contexto gerado pelo modelo anterior. O novo modelo se aplica apenas quando documentos são adicionados ou atualizados. O enriquecimento contextual pode variar entre os documentos.",
         "title": "Aplicar o LLM de recuperação contextual daqui em diante"
+      },
+      "disableForwardModal": {
+        "description": "A recuperação contextual é interrompida para documentos adicionados ou atualizados a partir de agora. Os documentos existentes mantêm o contexto já gerado até serem atualizados ou até que você reindexe.",
+        "title": "Desativar a recuperação contextual daqui em diante"
       },
       "header": {
         "description": "Configure como os documentos são indexados, transformados em embeddings e preparados para pesquisa e recuperação."
@@ -5309,9 +5386,6 @@
           },
           "title": "Adicione configurações para seus provedores de embedding {provider}."
         },
-        "deprecated": {
-          "suffix": "(descontinuado)"
-        },
         "disconnect": {
           "errorToast": "Falha ao desconectar {provider}",
           "successToast": "{provider} desconectado"
@@ -5390,6 +5464,8 @@
         "contextualModelRequired": "Selecione um LLM de recuperação contextual antes de reindexar.",
         "contextualModelUpdateFailed": "Falha ao atualizar o LLM de recuperação contextual",
         "contextualModelUpdated": "LLM de recuperação contextual atualizado",
+        "contextualRetrievalDisableFailed": "Falha ao desativar a recuperação contextual",
+        "contextualRetrievalDisabled": "Recuperação contextual desativada",
         "modelNotFound": "Não foi possível encontrar o modelo selecionado",
         "providerResolveFailed": "Não foi possível resolver o provedor",
         "reindexCanceled": "Reindexação cancelada",
@@ -5448,6 +5524,9 @@
         "googleGeminiEmbedding2": "O modelo de embeddings multimodal mais recente do Google (GA). Recuperação da mais alta qualidade com saída de 3072 dimensões.",
         "googleGeminiEmbedding2Preview": "Versão prévia do Gemini Embedding 2. Substituída pelo gemini-embedding-2 em novas configurações.",
         "voyageLarge2Instruct": "Modelo de embeddings grande da Voyage. Alto desempenho com ajuste fino por instruções.",
+        "voyage4Large": "O maior modelo de embeddings da série 4 da Voyage. A melhor qualidade de recuperação da Voyage, multilíngue.",
+        "voyage4": "Modelo de embeddings de uso geral da série 4 da Voyage. Alta qualidade de recuperação a um custo moderado.",
+        "voyage4Lite": "Modelo leve de embeddings da série 4 da Voyage. Menor custo e maiores limites de taxa.",
         "voyageLight2Instruct": "Modelo leve de embeddings da Voyage. Bom equilíbrio entre desempenho e eficiência.",
         "nomicEmbedTextV1": "Modelo de embeddings da Nomic especializado em recuperação, similaridade, agrupamento e classificação.",
         "e5BaseV2": "Um modelo menor e mais rápido que o padrão. É cerca de 2x mais rápido que o modelo padrão, com menor qualidade de busca.",
@@ -8444,6 +8523,9 @@
         "makeAdmin": {
           "label": "Tornar administrador"
         },
+        "menuButton": {
+          "ariaLabel": "Ações do usuário"
+        },
         "removeAdmin": {
           "label": "Remover acesso de administrador"
         },
@@ -8799,6 +8881,93 @@
           "label": "URL base da API",
           "description": "A URL base da sua API do Firecrawl."
         }
+      }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM Gateway",
+        "description": "Controle o acesso direto por API aos modelos de linguagem do workspace a partir de ferramentas externas."
+      },
+      "access": {
+        "title": "Acesso direto a modelos por API",
+        "description": "Permite que os usuários chamem os modelos de linguagem do workspace a partir de ferramentas externas como Claude Code ou Cursor. As chamadas usam tokens de acesso com escopo e são cobradas dos seus provedores configurados.",
+        "toggle": {
+          "title": "Ativar LLM Gateway",
+          "description": "Quando desativado, todos os endpoints do gateway rejeitam solicitações, os tokens existentes param de funcionar e o escopo do gateway fica oculto no seletor de tokens. O tráfego do sandbox do Craft é controlado separadamente nas configurações do Craft."
+        }
+      },
+      "businessPlanTag": {
+        "label": "Plano Business"
+      },
+      "tierTooltip": "O LLM Gateway requer o plano Business ou Enterprise.",
+      "scopeNote": {
+        "title": "Cada usuário configura seu próprio token e os dados de conexão em Configurações → LLM Gateway."
+      },
+      "toasts": {
+        "settingsUpdated": "Configurações atualizadas",
+        "settingsUpdateFailed": "Falha ao atualizar as configurações"
+      }
+    },
+    "connectorChecks": {
+      "lockReason": "Execute as verificações do conector acima e resolva quaisquer falhas para continuar.",
+      "prompt": {
+        "title": "Testar conexão",
+        "description": "{appName} executará verificações para validar os escopos necessários antes de continuar.",
+        "startButton": {
+          "label": "Iniciar verificações"
+        }
+      },
+      "title": "Verificações do conector",
+      "groups": {
+        "failed": "{count} com falha",
+        "indeterminate": "{count} não verificadas",
+        "passed": "{count} concluídas",
+        "skipped": "{count} ignoradas",
+        "running": "{count} em execução",
+        "expected": "{count} esperadas"
+      },
+      "status": {
+        "passed": "Aprovada",
+        "failed": "Com falha",
+        "indeterminate": "Não foi possível verificar",
+        "skipped": "Ignorada",
+        "running": "Testando…",
+        "pending": "Na fila",
+        "waiting": "Aguardando configurações"
+      },
+      "required": {
+        "label": "Obrigatória"
+      },
+      "running": {
+        "label": "Executando verificações…"
+      },
+      "empty": {
+        "label": "Nenhuma verificação foi executada ainda."
+      },
+      "docsLink": {
+        "label": "Documentação"
+      },
+      "rerunButton": {
+        "label": "Executar as verificações novamente"
+      },
+      "foldButton": {
+        "fold": "Recolher",
+        "expand": "Expandir"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} com falha",
+        "unverified": "{count} não verificadas",
+        "inProgress": "{count} em andamento",
+        "expected": "{count} a mais previstas",
+        "skipped": "{count} ignoradas",
+        "successful": "{count} bem-sucedidas"
+      },
+      "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
+      "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
+      "state": {
+        "completed": "Verificações concluídas",
+        "inProgress": "Verificações em andamento…"
       }
     }
   },
@@ -11234,6 +11403,9 @@
         "expand": {
           "ariaLabel": "Expandir projeto"
         },
+        "options": {
+          "label": "Opções do projeto"
+        },
         "rename": {
           "label": "Renomear projeto"
         }
@@ -11292,6 +11464,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {Escolher arquivos} other {Escolher um arquivo}}"
+      },
+      "prompt": "{multiple, select, true {Ou arraste e solte arquivos aqui.} other {Ou arraste e solte um arquivo aqui.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "Adicionar novo"
+      },
+      "removeButton": {
+        "tooltip": "Remover"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "Abrir barra lateral"
@@ -11455,6 +11641,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "Se você é o administrador, acesse a página de <billingLink>Faturamento do administrador</billingLink> para {hadLicense, select, true {renovar} other {ativar}} sua licença, cadastre-se pelo Stripe ou escreva para <supportLink>support@onyx.app</supportLink> para obter ajuda com o faturamento."
+        },
+        "downgradeButton": {
+          "label": "Mudar para Community"
         },
         "heading": {
           "title": "Acesso restrito"
@@ -11873,7 +12062,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "Associar {name}",
         "associateButton": "Associar existente",
         "create": {
           "github": {
@@ -12585,6 +12773,9 @@
       "newSession": {
         "label": "Começar a criar"
       },
+      "options": {
+        "label": "Opções da sessão"
+      },
       "rename": {
         "label": "Renomear"
       },
@@ -13292,6 +13483,9 @@
       "sevenDays": "7D",
       "threeMonths": "3M"
     },
+    "iconTooltip": {
+      "label": "Mais informações"
+    },
     "input": {
       "day": "Dia",
       "hidePassword": "Ocultar senha",
@@ -13582,6 +13776,10 @@
       "title": "Zona de perigo"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "Um administrador desativou o LLM Gateway para este workspace. Contate um administrador para reativá-lo.",
+        "title": "O LLM Gateway está desativado"
+      },
       "accessToken": {
         "button": "Novo token",
         "description": "Crie um token com escopo definido antes de conectar um aplicativo.",
@@ -13893,6 +14091,9 @@
         "languageModels": {
           "label": "Modelos de linguagem"
         },
+        "llmGateway": {
+          "label": "LLM Gateway"
+        },
         "mcpActions": {
           "label": "Ações MCP"
         },
@@ -14041,6 +14242,9 @@
       },
       "moveToProject": {
         "label": "Mover para um projeto"
+      },
+      "options": {
+        "label": "Opções do chat"
       },
       "projectSearchInput": {
         "placeholder": "Pesquisar projetos"
@@ -14603,5 +14807,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "O OpenSearch precisa de mais recursos",
+    "disk": "O uso de disco do OpenSearch é de pelo menos 85% em um nó de dados. A indexação pode parar se o disco ficar cheio.",
+    "jvmMemory": "O uso de memória JVM do OpenSearch permaneceu acima de 85% em verificações repetidas. A pesquisa e a indexação podem falhar.",
+    "vectorMemory": "A memória vetorial do OpenSearch está quase cheia ou atingiu seu limite. A pesquisa e a indexação podem falhar.",
+    "contact": "Entre em contato com o administrador do sistema ou com a equipe Onyx em [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "A última verificação está indisponível. Este aviso reflete a última verificação bem-sucedida; a recuperação não foi confirmada.",
+    "dismiss": "Fechar",
+    "diskTitle": "Espaço em disco",
+    "jvmMemoryTitle": "Memória da JVM",
+    "vectorMemoryTitle": "Memória vetorial",
+    "viewDetails": "Ver detalhes"
   }
 }

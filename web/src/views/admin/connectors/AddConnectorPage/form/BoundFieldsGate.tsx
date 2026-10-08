@@ -37,7 +37,7 @@ function labelOf(
 ): string {
   return typeof field.label === "function"
     ? field.label(credential)
-    : field.label;
+    : (field.label ?? field.name);
 }
 
 /**

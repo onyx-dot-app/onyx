@@ -64,7 +64,9 @@ resource "aws_vpc_endpoint" "s3" {
 
 # Create minimal IAM role for VPC Flow Logs (required by AWS)
 resource "aws_iam_role" "vpc_flow_logs" {
-  name = "${var.vpc_name}-flow-logs-role"
+  name                 = "${var.vpc_name}-flow-logs-role"
+  path                 = var.iam_role_path
+  permissions_boundary = var.iam_role_permissions_boundary
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

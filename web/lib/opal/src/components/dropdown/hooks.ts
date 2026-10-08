@@ -15,8 +15,12 @@ import {
   useFloating,
   type ReferenceType,
 } from "@floating-ui/react-dom";
+import { DROPDOWN_WIDTH_TOKENS } from "@opal/components/dropdown/model";
 import type {
+  DropdownAlign,
   DropdownRow,
+  DropdownSide,
+  DropdownWidth,
   NavItem,
   RowGroup,
 } from "@opal/components/dropdown/types";
@@ -157,6 +161,9 @@ interface UseDropdownKeyboardProps {
   setHighlightedIndex: (index: number | ((prev: number) => number)) => void;
   setIsKeyboardNav: (isKeyboard: boolean) => void;
   listRef: React.RefObject<ListModel>;
+  /** The list's element: focus inside it returns to the trigger on close. */
+  floatingRef: React.RefObject<HTMLElement | null>;
+  focusTrigger: () => void;
   /** Overrides what Tab does, for every trigger of this dropdown. */
   tabKey?: DropdownTabKey;
 }
@@ -168,6 +175,18 @@ function rowLabel(row: DropdownRow): string {
 }
 
 const TYPE_AHEAD_RESET_MS = 500;
+
+/** The caret sits at the end of a text field's value, with nothing selected. */
+function caretAtEnd(field: HTMLElement): boolean {
+  if (
+    !(field instanceof HTMLInputElement) &&
+    !(field instanceof HTMLTextAreaElement)
+  ) {
+    return true;
+  }
+  const end = field.value.length;
+  return field.selectionStart === end && field.selectionEnd === end;
+}
 
 /**
  * Keyboard navigation for the list, the same for every trigger: Enter or
@@ -187,6 +206,8 @@ export function useDropdownKeyboard({
   setHighlightedIndex,
   setIsKeyboardNav,
   listRef,
+  floatingRef,
+  focusTrigger,
   tabKey,
 }: UseDropdownKeyboardProps) {
   // The letters typed in quick succession; they clear after a pause, so
@@ -200,6 +221,28 @@ export function useDropdownKeyboard({
     window.clearTimeout(typeAheadTimer.current);
     typeAheadRef.current = "";
   }, [isOpen]);
+
+  // Escape belongs to an open list before anything around it: a dialog
+  // listens for Escape on the document in the capture phase and would
+  // otherwise take the key, leaving the list open and dismissing itself.
+  // A listener on the window runs earlier still, so the list leaves a
+  // view or closes and the key goes no further.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (listRef.current.back()) return;
+      setIsOpen(false);
+      setIsKeyboardNav(false);
+      // Focus in the list (its search field, a control in a row) has
+      // nowhere to go once the list leaves: back to the trigger.
+      if (floatingRef.current?.contains(document.activeElement)) focusTrigger();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [isOpen, listRef, floatingRef, focusTrigger, setIsOpen, setIsKeyboardNav]);
 
   // A disabled row is not a stop: the walk passes over it.
   const isStop = useCallback(
@@ -302,9 +345,10 @@ export function useDropdownKeyboard({
             }
             break;
           }
-          // Otherwise only a row with a secondary control takes the key; a
-          // text field keeps it for its caret.
-          if (options.textField) break;
+          // Otherwise only a row with a secondary control takes the key. A
+          // text field keeps it for its caret, until the caret reaches the
+          // end of the text.
+          if (options.textField && !caretAtEnd(e.currentTarget)) break;
           if (listRef.current.secondary(item)) e.preventDefault();
           break;
         }
@@ -390,12 +434,19 @@ export interface DropdownVirtualAnchor {
   contextElement?: Element;
 }
 
+/** How far the list reaches past the anchor on its aligned side, in px. */
+const PUNCH_OUT_PX = 6;
+
 interface UseDropdownOverlayProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   /** A disabled dropdown never opens, from a click or a key alike. */
   disabled: boolean;
   virtualAnchor?: DropdownVirtualAnchor;
+  /** A fixed contextual-menu width; left out, the list matches its anchor. */
+  width?: DropdownWidth;
+  align: DropdownAlign;
+  side: DropdownSide;
 }
 
 /**
@@ -409,6 +460,9 @@ export function useDropdownOverlay({
   onOpenChange,
   disabled,
   virtualAnchor,
+  width,
+  align,
+  side,
 }: UseDropdownOverlayProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isOpen = openProp ?? uncontrolledOpen;
@@ -454,28 +508,58 @@ export function useDropdownOverlay({
     }
   }, [isOpen]);
 
-  const { refs, floatingStyles, isPositioned } = useFloating<ReferenceType>({
-    open: isOpen,
-    placement: "bottom-start",
-    middleware: [
-      // The list starts 6px before the anchor and is 6px wider on each
-      // side: with its 4px inset and 1px border, the rows' bounding boxes
-      // then align flush with the anchor's content, inside its own border.
-      // The stylesheet floors the width, so a narrow anchor still gets a
-      // usable list. crossAxis is direction-aware, so RTL mirrors.
-      offset({ mainAxis: 4, crossAxis: -6 }),
-      flip(),
-      shift({ padding: 8 }),
-      size({
-        apply({ rects, elements }) {
-          Object.assign(elements.floating.style, {
-            width: `${rects.reference.width + 12}px`,
-          });
-        },
-      }),
-    ],
-    whileElementsMounted: autoUpdate,
-  });
+  const widthRef = useRef(width);
+  const { refs, floatingStyles, isPositioned, placement, update } =
+    useFloating<ReferenceType>({
+      open: isOpen,
+      placement: `${side}-${align}`,
+      middleware: [
+        // Below or above the anchor, the list reaches 6px past it on its aligned side:
+        // with its 4px inset and 1px border, the rows' bounding boxes then
+        // align flush with the anchor's content, inside its own border.
+        // Matched to the anchor it reaches 6px past both sides; a fixed width
+        // includes that reach. A flyout beside the anchor lines its edge up
+        // exactly. crossAxis is direction-aware, so RTL mirrors.
+        offset({
+          mainAxis: 4,
+          crossAxis:
+            side === "right"
+              ? 0
+              : align === "end"
+                ? PUNCH_OUT_PX
+                : -PUNCH_OUT_PX,
+        }),
+        flip(),
+        shift({ padding: 8 }),
+        size({
+          apply({ rects, elements }) {
+            // Read through a ref: floating-ui compares middleware by source
+            // text, so a closure over `width` would never be seen to change.
+            // Inline, so a fixed width also beats the stylesheet's floor.
+            const fixed =
+              widthRef.current === undefined
+                ? undefined
+                : `var(${DROPDOWN_WIDTH_TOKENS[widthRef.current]})`;
+            Object.assign(
+              elements.floating.style,
+              fixed !== undefined
+                ? { width: fixed, minWidth: fixed }
+                : {
+                    width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px`,
+                    // Back from a fixed width: the stylesheet's floor again.
+                    minWidth: "",
+                  }
+            );
+          },
+        }),
+      ],
+      whileElementsMounted: autoUpdate,
+    });
+  // A view can change the width while the list is open: measure again.
+  useLayoutEffect(() => {
+    widthRef.current = width;
+    update();
+  }, [width, update]);
 
   const setReference = useCallback(
     (node: HTMLElement | null) => {
@@ -577,5 +661,12 @@ export function useDropdownOverlay({
     setFloatingRef,
     floatingStyles,
     isPositioned,
+    // The edge the list grows from: its top, unless it was flipped above
+    // the anchor or flies out beside it bottoms-aligned.
+    anchoredEdge:
+      placement.startsWith("top") ||
+      (!placement.startsWith("bottom") && placement.endsWith("-end"))
+        ? ("bottom" as const)
+        : ("top" as const),
   };
 }

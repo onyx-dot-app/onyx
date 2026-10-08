@@ -54,11 +54,6 @@ DO NOT provide any links following the citations. Cite inline as opposed to leav
 """
 
 
-# Reminder message if any search tool has been run anytime in the chat turn
-CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [2], [3], etc. based on the "document" field of the documents.
-""".strip()
-
 # Pushes answers to cover every part of the question with the exact values the
 # sources state. Validated on EnterpriseRAG-Bench (500 questions, paired runs).
 ANSWER_COMPLETENESS_REMINDER = """

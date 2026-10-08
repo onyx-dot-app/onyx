@@ -4,20 +4,20 @@
  * Tests logo icons to ensure they render correctly with proper accessibility
  * and support various display sizes.
  */
-import { SvgBifrost, SvgConfluence, SvgGitbook, SvgGithub } from "@opal/logos";
+import { SvgBifrost, SvgConfluence, SvgGitBook, SvgGitHub } from "@opal/logos";
 import { render } from "@tests/setup/test-utils";
 import { GoogleStorageIcon } from "./icons";
 
 describe("Logo Icons", () => {
   test("renders as an SVG element", () => {
-    const { container } = render(<SvgGithub />);
+    const { container } = render(<SvgGitHub />);
     const svg = container.querySelector("svg");
 
     expect(svg).toBeInTheDocument();
   });
 
   test("applies custom size", () => {
-    const { container } = render(<SvgGithub size={48} />);
+    const { container } = render(<SvgGitHub size={48} />);
     const svg = container.querySelector("svg");
 
     expect(svg).toHaveAttribute("width", "48");
@@ -42,7 +42,7 @@ describe("Logo Icons", () => {
   });
 
   test("renders opal SVG logo as single element", () => {
-    const { container } = render(<SvgGitbook size={32} />);
+    const { container } = render(<SvgGitBook size={32} />);
     const svg = container.querySelector("svg");
 
     expect(svg).toBeInTheDocument();
@@ -52,7 +52,7 @@ describe("Logo Icons", () => {
 
   test("accepts className and size props", () => {
     expect(() => {
-      render(<SvgGithub size={100} className="custom-class" />);
+      render(<SvgGitHub size={100} className="custom-class" />);
     }).not.toThrow();
   });
 

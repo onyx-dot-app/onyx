@@ -20,7 +20,6 @@ from onyx.connectors.interfaces import (
     BaseConnector,
     CheckpointedConnector,
     CredentialsConnector,
-    EventConnector,
     LoadConnector,
     PollConnector,
 )
@@ -90,9 +89,7 @@ def _validate_connector_supports_input_type(
         )
     )
 
-    event_unsupported = input_type == InputType.EVENT and not issubclass(
-        connector, EventConnector
-    )
+    event_unsupported = input_type == InputType.EVENT
 
     if any([load_state_unsupported, poll_unsupported, event_unsupported]):
         raise ConnectorMissingException(

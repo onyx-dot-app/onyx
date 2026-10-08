@@ -7,7 +7,7 @@
 !/.vscode/tasks.json
 .cursor/*
 !/.cursor/mcp.json
-!/.cursor/skills/
+!/.cursor/skills
 
 # macos
 .DS_store

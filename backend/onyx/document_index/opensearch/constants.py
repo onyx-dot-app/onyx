@@ -150,3 +150,6 @@ HYBRID_SEARCH_NORMALIZATION_PIPELINE: HybridSearchNormalizationPipeline = (
     if os.environ.get("HYBRID_SEARCH_NORMALIZATION_PIPELINE", None) is not None
     else HybridSearchNormalizationPipeline.MIN_MAX
 )
+
+RESOURCE_CHECK_INTERVAL_SECONDS = 5 * 60
+RESOURCE_CHECK_TIMEOUT_SECONDS = 3

@@ -402,6 +402,7 @@ class MessageType(str, Enum):
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage - Can include tool_calls field for parallel tool calling
+    SUMMARY = "summary"
     TOOL_CALL_RESPONSE = "tool_call_response"
     USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
 
@@ -676,12 +677,16 @@ class OnyxCeleryTask:
     CHECK_FOR_INDEX_ATTEMPT_CLEANUP = "check_for_index_attempt_cleanup"
     CLEANUP_INDEX_ATTEMPT = "cleanup_index_attempt"
 
+    CLEANUP_OAUTH_PROVIDER_GRANTS = "cleanup_oauth_provider_grants"
+    CLEANUP_OAUTH_PROVIDER_CLIENTS = "cleanup_oauth_provider_clients"
+
     # Old-index reclamation (post-reindex deletion of the now-PAST index)
     CHECK_FOR_OLD_INDEX_RECLAIM = "check_for_old_index_reclaim"
     RUN_OLD_INDEX_RECLAIM = "run_old_index_reclaim"
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
+    MONITOR_OPENSEARCH_RESOURCES = "monitor_opensearch_resources"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
     EMIT_VERSION_TELEMETRY = "emit_version_telemetry"

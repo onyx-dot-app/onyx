@@ -356,6 +356,7 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.index_reclaim",
             "onyx.background.celery.tasks.port",
             "onyx.background.celery.tasks.evals",
+            "onyx.background.celery.tasks.oauth_provider",
             "onyx.background.celery.tasks.hierarchyfetching",
             "onyx.background.celery.tasks.pruning",
             "onyx.background.celery.tasks.scheduled_tasks",

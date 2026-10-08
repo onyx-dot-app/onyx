@@ -265,7 +265,7 @@ export default function useChatSessionController({
 
       // Re-attach to an in-flight run: replay its buffered stream and tail it
       // live instead of leaving a stale placeholder. Single-model only — a
-      // multi-model run_id is the user message, not an assistant node, so it
+      // multi-model stream_id is the user message, not an assistant node, so it
       // fails the node-type check and keeps the refresh-after-completion
       // behavior.
       async function resumeInFlightRun(
@@ -367,14 +367,14 @@ export default function useChatSessionController({
         }
       }
 
-      const currentRun = chatSession.current_run;
+      const currentStream = chatSession.current_stream;
       if (
-        currentRun &&
-        newMessageMap.get(currentRun.run_id)?.type === "assistant"
+        currentStream &&
+        newMessageMap.get(currentStream.stream_id)?.type === "assistant"
       ) {
         void resumeInFlightRun(
           chatSession.chat_session_id,
-          currentRun.run_id,
+          currentStream.stream_id,
           newMessageMap
         );
       }

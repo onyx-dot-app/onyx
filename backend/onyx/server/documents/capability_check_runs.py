@@ -1,5 +1,6 @@
 """Starting granular capability-check runs: mark the scope RUNNING, then enqueue."""
 
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -18,6 +19,7 @@ from onyx.configs.constants import (
 )
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_RUN_QUEUE_EXPIRY_SECONDS,
+    DraftCheckPlan,
     DraftCheckRunSnapshot,
     DraftCheckState,
     DraftCheckStateKind,
@@ -32,8 +34,12 @@ from onyx.connectors.capability_checks.draft_runs import (
     save_draft_run,
     set_latest_draft_run,
 )
-from onyx.connectors.capability_checks.form_state import validate_form_state
+from onyx.connectors.capability_checks.form_state import (
+    FormState,
+    validate_form_state,
+)
 from onyx.connectors.capability_checks.models import (
+    CapabilityCheck,
     CapabilityCheckContext,
 )
 from onyx.connectors.capability_checks.registry import (
@@ -158,6 +164,68 @@ def start_capability_checks_for_new_credential(
         db_session.rollback()
 
 
+@dataclass(frozen=True)
+class _PlannedDraft:
+    form_state: FormState[Any]
+    # None for a form with no values: config-reading checks wait.
+    connector_specific_config: dict[str, Any] | None
+    checks: list[tuple[CapabilityCheck[Any], DraftCheckState]]
+
+
+def _plan_draft(
+    *,
+    source: DocumentSource,
+    config_class: type[ConnectorConfig],
+    access_type: AccessType | None,
+    form_values: dict[str, Any],
+) -> _PlannedDraft:
+    """Decides each check's state before it runs. Reads no credential and does
+    no I/O to the source."""
+    form_state = validate_form_state(config_class, form_values)
+    connector_specific_config = (
+        form_values if form_state.provided or form_state.errors else None
+    )
+    context = CapabilityCheckContext(
+        source=source,
+        credential_json={},
+        connector_specific_config=connector_specific_config,
+        access_type=access_type,
+    )
+    return _PlannedDraft(
+        form_state=form_state,
+        connector_specific_config=connector_specific_config,
+        checks=[
+            (check, decide_draft_check_state(check, context))
+            for check in get_capability_checks(source)
+        ],
+    )
+
+
+def plan_draft_capability_checks(
+    *,
+    source: DocumentSource,
+    config_class: type[ConnectorConfig],
+    access_type: AccessType | None,
+    form_values: dict[str, Any],
+) -> DraftCheckPlan:
+    """The checks a draft run would hold for this form, each in its state
+    before anything runs. Needs no credential, does no I/O to the source, and
+    starts no run."""
+    plan = _plan_draft(
+        source=source,
+        config_class=config_class,
+        access_type=access_type,
+        form_values=form_values,
+    )
+    return DraftCheckPlan(
+        source=source,
+        access_type=access_type,
+        form_errors=plan.form_state.errors,
+        unknown_fields=sorted(plan.form_state.unknown),
+        checks=[state for _, state in plan.checks],
+    )
+
+
 def start_draft_capability_check_run(
     *,
     user_id: UUID,
@@ -183,21 +251,17 @@ def start_draft_capability_check_run(
         OnyxError: A concurrent start of the same draft key held the start
             lock for too long.
     """
-    form_state = validate_form_state(config_class, form_values)
-    # A form with no values is config-less: config-reading checks wait.
-    connector_specific_config = (
-        form_values if form_state.provided or form_state.errors else None
-    )
-    context = CapabilityCheckContext(
+    plan = _plan_draft(
         source=source,
-        credential_json={},
-        connector_specific_config=connector_specific_config,
+        config_class=config_class,
         access_type=access_type,
+        form_values=form_values,
     )
+    form_state = plan.form_state
+    connector_specific_config = plan.connector_specific_config
     checks: list[DraftCheckState] = []
     result_cache_keys: dict[str, str] = {}
-    for check in get_capability_checks(source):
-        check_state = decide_draft_check_state(check, context)
+    for check, check_state in plan.checks:
         checks.append(check_state)
         if check_state.state != DraftCheckStateKind.PENDING:
             continue

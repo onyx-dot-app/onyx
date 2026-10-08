@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgMediawiki = ({ size, ...props }: IconProps) => (
+const SvgMediaWiki = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -121,4 +121,4 @@ const SvgMediawiki = ({ size, ...props }: IconProps) => (
     </g>
   </svg>
 );
-export default SvgMediawiki;
+export default SvgMediaWiki;

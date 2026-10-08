@@ -26,6 +26,7 @@ import { Row, targetTakesFocus } from "@opal/components/dropdown/rows";
 import type {
   DropdownMode,
   DropdownRow,
+  DropdownSearch,
   RowGroup,
 } from "@opal/components/dropdown/types";
 
@@ -43,6 +44,8 @@ interface DropdownListProps {
    * at the wrong width, so anything measured against them is off.
    */
   isPositioned: boolean;
+  /** The edge the list grows from: a leaving card stays pinned to it. */
+  anchoredEdge: "top" | "bottom";
   setFloatingRef: (node: HTMLDivElement | null) => void;
   /** The view on show; a change swaps the rows in place, animated. */
   viewKey: string;
@@ -68,6 +71,7 @@ interface DropdownListProps {
   onMouseMove: () => void;
   create?: { text: string; onCreate: (text: string) => void };
   maxHeight?: string;
+  noMatchText?: string;
   /** The rows scrolled to within SCROLL_END_THRESHOLD_PX of their end. */
   onReachEnd?: () => void;
   /**
@@ -75,9 +79,8 @@ interface DropdownListProps {
    * opens; the key handler is the trigger's, so arrows, Enter, Escape and
    * Tab behave the same from either.
    */
-  searchField?: {
+  searchField?: Omit<DropdownSearch, "onChange"> & {
     value: string;
-    placeholder: string;
     onChange: (value: string) => void;
     onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   };
@@ -103,6 +106,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       label,
       floatingStyles,
       isPositioned,
+      anchoredEdge,
       setFloatingRef,
       viewKey,
       viewDirection,
@@ -117,6 +121,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       onMouseMove,
       create,
       maxHeight,
+      noMatchText,
       onReachEnd,
       searchField,
     },
@@ -133,7 +138,10 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     const searchRef = useRef<HTMLInputElement>(null);
     const hasSearch = searchField !== undefined;
     useEffect(() => {
-      if (isOpen && hasSearch) searchRef.current?.focus();
+      // preventScroll: the field can be anywhere before floating-ui places
+      // the list, and a focus scroll would move the page behind the portal.
+      if (isOpen && hasSearch)
+        searchRef.current?.focus({ preventScroll: true });
     }, [isOpen, hasSearch, viewKey]);
 
     const listRef = useRef<HTMLDivElement | null>(null);
@@ -145,19 +153,28 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     const [exiting, setExiting] = useState<{
       key: string;
       props: CardProps;
+      width: number | null;
       direction: "forward" | "back";
     } | null>(null);
     // The live card arrived by a view change, from this side. Kept for the
     // card's whole life: it also holds off the box's own entrance on the
     // rows, which would otherwise replay the moment the attribute left.
     const [enter, setEnter] = useState<"forward" | "back" | null>(null);
-    // The card as the list closed. The view resets underneath the exit, so
-    // the list keeps showing this snapshot until it unmounts.
+    // The card and its place as the list closed. The view resets and the
+    // trigger may hide underneath the exit, so the list keeps showing this
+    // snapshot, where it was, until it unmounts.
     const [frozen, setFrozen] = useState<{
       key: string;
       props: CardProps;
+      styles: React.CSSProperties;
+      width: number | null;
     } | null>(null);
-    const lastCardRef = useRef<{ key: string; props: CardProps } | null>(null);
+    const lastCardRef = useRef<{
+      key: string;
+      props: CardProps;
+      styles: React.CSSProperties;
+      width: number | null;
+    } | null>(null);
     const lastViewKeyRef = useRef(viewKey);
     useLayoutEffect(() => {
       if (!isOpen) {
@@ -188,9 +205,12 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // highlights never scroll: the list must not move under the mouse.
     useEffect(() => {
       if (!isOpen || !keyboardNav || highlightedIndex < 0) return;
-      liveCard(listRef.current)
-        ?.querySelector(`[data-index="${highlightedIndex}"]`)
-        ?.scrollIntoView({ block: "nearest", behavior: "instant" });
+      scrollWithinList(
+        liveCard(listRef.current)?.querySelector(
+          `[data-index="${highlightedIndex}"]`
+        ),
+        "nearest"
+      );
     }, [highlightedIndex, isOpen, keyboardNav]);
 
     // Opening shows the selection: the (first) selected row is centred in
@@ -203,7 +223,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       const selected = liveCard(listRef.current)?.querySelector(
         '[role="option"][aria-selected="true"]'
       );
-      selected?.scrollIntoView({ block: "center", behavior: "instant" });
+      scrollWithinList(selected, "center");
     }, [isOpen, isPositioned]);
 
     const cardProps: CardProps = {
@@ -219,13 +239,19 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       onToggleGroup,
       create,
       maxHeight,
+      noMatchText,
       onReachEnd,
       searchField,
     };
     // What this commit shows, for the next view change to animate away.
     useLayoutEffect(() => {
       if (!isOpen) return;
-      lastCardRef.current = { key: viewKey, props: cardProps };
+      lastCardRef.current = {
+        key: viewKey,
+        props: cardProps,
+        styles: floatingStyles,
+        width: liveCard(listRef.current)?.offsetWidth ?? null,
+      };
     });
 
     if (!presence.mounted || disabled || typeof document === "undefined") {
@@ -253,13 +279,20 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
         data-keyboard-nav={keyboardNav || undefined}
         onMouseMove={onMouseMove}
         className="opal-dropdown"
-        style={floatingStyles}
+        style={frozen?.styles ?? floatingStyles}
         onAnimationEnd={presence.onAnimationEnd}
         onMouseDown={(e) => {
           // Clicks on padding, gaps, or dividers must not steal focus from
           // the trigger (the list is tabIndex={-1} for AT only). A control
           // that needs focus keeps the default.
           if (!targetTakesFocus(e)) e.preventDefault();
+        }}
+        onKeyDown={(e) => {
+          // Keys typed into the list (its search field, a control in a
+          // custom row) are the list's. React bubbles them through the
+          // portal to the trigger's ancestors, where a row's drag handle or
+          // link would otherwise claim Space and Enter.
+          e.stopPropagation();
         }}
         onWheel={(e) => {
           // Scroll here, not in whatever sits behind the portal.
@@ -287,6 +320,11 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
               key={`exit-${exiting.key}`}
               live={false}
               data-exit={exiting.direction}
+              data-pin={anchoredEdge}
+              // Its own width, should the new view ask for another.
+              style={
+                exiting.width === null ? undefined : { width: exiting.width }
+              }
               onExit={() => setExiting(null)}
               {...exiting.props}
               listId={`${listId}-exit`}
@@ -311,6 +349,43 @@ function liveCard(root: HTMLElement | null): HTMLElement | null {
   return root?.querySelector<HTMLElement>(".opal-dropdown-card") ?? null;
 }
 
+/**
+ * Scrolls a row into view inside the list's own scroller only.
+ * `scrollIntoView` also scrolls every ancestor of the portal, `<body>`
+ * included even under `overflow: hidden`, which moves the whole page.
+ * Like `scrollIntoView`, "nearest" keeps the row's `scroll-margin-block`
+ * clear of the edge, so a stop never parks under the mask fade.
+ */
+export function scrollWithinList(
+  row: Element | null | undefined,
+  block: "nearest" | "center"
+): void {
+  const scroller: HTMLElement | null | undefined = row?.closest<HTMLElement>(
+    ".opal-dropdown-scroll"
+  );
+  if (!row || !scroller) return;
+  const rowRect: DOMRect = row.getBoundingClientRect();
+  const viewTop: number =
+    scroller.getBoundingClientRect().top + scroller.clientTop;
+  const viewBottom: number = viewTop + scroller.clientHeight;
+  // The row's top in the scroller's content coordinates.
+  const rowTop: number = rowRect.top - viewTop + scroller.scrollTop;
+  if (block === "center") {
+    scroller.scrollTop = rowTop - (scroller.clientHeight - rowRect.height) / 2;
+    return;
+  }
+  const style: CSSStyleDeclaration = window.getComputedStyle(row);
+  const marginStart: number =
+    Number.parseFloat(style.scrollMarginBlockStart) || 0;
+  const marginEnd: number = Number.parseFloat(style.scrollMarginBlockEnd) || 0;
+  if (rowRect.top - marginStart < viewTop) {
+    scroller.scrollTop = rowTop - marginStart;
+  } else if (rowRect.bottom + marginEnd > viewBottom) {
+    scroller.scrollTop =
+      rowTop + rowRect.height + marginEnd - scroller.clientHeight;
+  }
+}
+
 /** What a card renders: the search field and the rows of one view. */
 interface CardProps {
   listId: string;
@@ -325,6 +400,7 @@ interface CardProps {
   onToggleGroup: (group: RowGroup) => void;
   create?: { text: string; onCreate: (text: string) => void };
   maxHeight?: string;
+  noMatchText?: string;
   onReachEnd?: () => void;
   searchField?: DropdownListProps["searchField"];
 }
@@ -339,6 +415,9 @@ interface CardElementProps extends CardProps {
   searchRef?: React.RefObject<HTMLInputElement | null>;
   "data-enter"?: "forward" | "back";
   "data-exit"?: "forward" | "back";
+  /** Which stage edge a leaving card stays on while the live one resizes. */
+  "data-pin"?: "top" | "bottom";
+  style?: React.CSSProperties;
   /** The leaving card's own exit animation ended. */
   onExit?: () => void;
 }
@@ -352,6 +431,8 @@ function Card({
   searchRef,
   "data-enter": enter,
   "data-exit": exit,
+  "data-pin": pin,
+  style,
   onExit,
   listId,
   mode,
@@ -365,11 +446,20 @@ function Card({
   onToggleGroup,
   create,
   maxHeight,
+  noMatchText,
   onReachEnd,
   searchField,
 }: CardElementProps) {
   const strings = useOpalStrings();
   const hasSearch = searchField !== undefined;
+  // The list owns the field's text and keys; the rest is the caller's.
+  const {
+    value = "",
+    placeholder = "",
+    onChange = () => {},
+    onKeyDown,
+    ...fieldProps
+  } = searchField ?? {};
   const totalRows = groups.reduce(
     (count, group) => count + group.rows.length,
     0
@@ -380,6 +470,8 @@ function Card({
       className="opal-dropdown-card"
       data-enter={enter}
       data-exit={exit}
+      data-pin={pin}
+      style={style}
       inert={!live || undefined}
       aria-hidden={!live || undefined}
       onAnimationEnd={(e) => {
@@ -399,14 +491,15 @@ function Card({
           onClick={(e) => e.stopPropagation()}
         >
           <InputTypeIn
+            {...fieldProps}
             ref={searchRef}
             searchIcon
             variant="internal"
-            placeholder={searchField.placeholder}
-            aria-label={searchField.placeholder}
-            value={searchField.value}
-            onChange={(e) => searchField.onChange(e.target.value)}
-            onKeyDown={searchField.onKeyDown}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
           />
         </div>
       )}
@@ -452,7 +545,7 @@ function Card({
             </div>
           ) : (
             <div className="opal-dropdown-no-match">
-              {strings.comboBoxNoOptions}
+              {noMatchText ?? strings.comboBoxNoOptions}
             </div>
           )
         ) : (
