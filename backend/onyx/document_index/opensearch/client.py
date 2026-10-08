@@ -764,6 +764,25 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
         logger.debug("Successfully put mappings for index %s.", self._index_name)
 
+    def get_vector_field_encoder(self, field_name: str) -> dict[str, Any] | None:
+        """Returns the encoder of a knn_vector field's HNSW method.
+
+        Returns None when the field is not mapped or has no encoder.
+        """
+        mappings: dict[str, Any] = self._client.indices.get_mapping(
+            index=self._index_name
+        )
+        properties: dict[str, Any] = (
+            mappings.get(self._index_name, {}).get("mappings", {}).get("properties", {})
+        )
+        field: dict[str, Any] | None = properties.get(field_name)
+        if field is None:
+            return None
+        encoder: dict[str, Any] | None = (
+            field.get("method", {}).get("parameters", {}).get("encoder")
+        )
+        return encoder
+
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def validate_index(self, expected_mappings: dict[str, Any]) -> bool:
         """Validates the index.
