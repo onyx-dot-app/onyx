@@ -19,8 +19,6 @@ from onyx.natural_language_processing.utils import (
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
-_MODULE = "onyx.natural_language_processing.search_nlp_models"
-
 
 class _FakeGateway:
     """Records each request and answers like an OpenAI-compatible /v1/embeddings."""
@@ -94,24 +92,24 @@ async def test_openai_model_omits_task_type_and_sends_dimensions() -> None:
         (EmbedTextType.PASSAGE, "RETRIEVAL_DOCUMENT"),
     ],
 )
-async def test_gemini_model_sends_task_type_in_capped_batches(
+async def test_gemini_model_sends_task_type_one_input_per_request(
     text_type: EmbedTextType, task_type: str
 ) -> None:
     gateway = _FakeGateway()
-    with patch(f"{_MODULE}.VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", 2):
-        async with _bifrost(gateway, "https://bifrost.example/v1", None) as embedding:
-            result = await embedding.embed(
-                texts=["a", "b", "c"],
-                text_type=text_type,
-                model_name="gemini/gemini-embedding-001",
-            )
+    async with _bifrost(gateway, "https://bifrost.example/v1", None) as embedding:
+        result = await embedding.embed(
+            texts=["a", "b", "c"],
+            text_type=text_type,
+            model_name="gemini/gemini-embedding-001",
+        )
 
     assert len(result) == 3
     assert [str(r.url) for r in gateway.requests] == [
         "https://bifrost.example/v1/embeddings"
-    ] * 2
-    assert [p["input"] for p in gateway.payloads] == [["a", "b"], ["c"]]
+    ] * 3
+    assert [p["input"] for p in gateway.payloads] == [["a"], ["b"], ["c"]]
     assert all(p["task_type"] == task_type for p in gateway.payloads)
+    assert all(p["taskType"] == task_type for p in gateway.payloads)
     assert all("Authorization" not in r.headers for r in gateway.requests)
 
 

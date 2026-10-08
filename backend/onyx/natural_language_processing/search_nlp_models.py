@@ -620,12 +620,9 @@ class CloudEmbedding:
         # Bifrost forwards `task_type` as-is, and OpenAI rejects unknown fields.
         is_google_model = model_name.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES)
         is_gemini_embedding_2 = _is_gemini_embedding_2_model(model_name)
-        # Bifrost sends one upstream request per call; Gemini caps its batch size.
-        batch_size = _OPENAI_MAX_INPUT_LEN
-        if is_gemini_embedding_2:
-            batch_size = 1
-        elif is_google_model:
-            batch_size = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+        # Bifrost releases up to v2.2.6 apply the task type to the first input
+        # of a Gemini/Vertex batch only, so send one input per request.
+        batch_size = 1 if is_google_model else _OPENAI_MAX_INPUT_LEN
 
         final_embeddings: list[Embedding] = []
         for text_batch in batch_list(texts, batch_size):
@@ -640,6 +637,9 @@ class CloudEmbedding:
             }
             if is_google_model and not is_gemini_embedding_2:
                 payload["task_type"] = embedding_type
+                # Bifrost releases up to v2.2.6 read Gemini's task type only from `taskType`.
+                if model_name.startswith("gemini/"):
+                    payload["taskType"] = embedding_type
             if reduced_dimension:
                 payload["dimensions"] = reduced_dimension
 
