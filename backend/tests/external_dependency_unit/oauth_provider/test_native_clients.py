@@ -119,19 +119,6 @@ class NativeOAuthServer:
         with self._lock:
             self.events.clear()
 
-    def saw_authenticated_mcp_request(self) -> bool:
-        with self._lock:
-            return any(
-                method == "POST"
-                and path == "/"
-                and authorization is not None
-                and authorization.startswith("Bearer onyx_oat_")
-                for method, path, authorization in (
-                    (event.method, event.path, event.authorization)
-                    for event in self.events
-                )
-            )
-
     def saw_successful_tools_list(self) -> bool:
         with self._lock:
             return any(
