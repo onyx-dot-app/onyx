@@ -285,18 +285,14 @@ panel is already open. Opening, selecting, and locking the selection happen in
 one store update. Other formats update the inventory without opening a generic tab;
 helper scripts must not reveal an empty Artifacts view before the deliverable exists. Changed files
 refresh their previews without selecting a tab. Deleted files invalidate their
-previews. Preview caches use the file path, inventory revision, and an explicit
-reload counter. Unchanged output previews reuse cached data across tab switches.
-Reload counters are per file and change only when the user requests a reload.
-Files without inventory revisions still revalidate when their preview mounts.
-Each successful PowerPoint conversion response gives slide images a fresh browser
-cache token. Cached conversions retain that token across tab switches.
-PDF previews release each viewer's object URL and payload on unmount.
-The panel retains up to five recently visited tab bodies, preserving scroll and
-slide selection across switches. Retained iframes stay in stable DOM order.
-Closed tabs and prior sessions are removed; closing the panel releases its bodies
-after the animation. Hidden file viewers retain their displayed revision and load the
-latest revision on activation. Presentation keyboard navigation stays inside the viewer.
+previews. Each mounted viewer caches one payload for its file path, inventory
+revision, and explicit reload counter. Reload counters are per file and change only
+when the user requests a reload. Unmounting releases the viewer cache; selecting a
+different tab unmounts the previous body. Files without inventory revisions still
+revalidate when their preview mounts. Each successful PowerPoint conversion response
+gives slide images a fresh browser cache token. PDF previews release each viewer's
+object URL and payload on unmount. Presentation keyboard navigation stays inside
+the viewer.
 
 The first automatic output selection, manual tab selection, closing a tab, and
 history navigation suppress further automatic selection for the current turn.

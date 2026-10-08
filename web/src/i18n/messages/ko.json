@@ -12629,6 +12629,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} 닫기"
+      },
       "artifactsEmpty": {
         "tooltip": "무언가를 만들기 시작하면 아티팩트가 표시됩니다!"
       },

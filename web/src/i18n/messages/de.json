@@ -12629,6 +12629,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} schließen"
+      },
       "artifactsEmpty": {
         "tooltip": "Beginnen Sie etwas zu bauen, um Artefakte zu sehen!"
       },

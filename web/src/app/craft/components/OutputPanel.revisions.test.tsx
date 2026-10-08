@@ -101,6 +101,10 @@ it("refreshes an open PowerPoint through inventory updates and reuses unchanged 
   expect(fetchPptxPreview).toHaveBeenCalledTimes(3);
 });
 
+function isReportFrame(title: string, element: Element | null): boolean {
+  return title === "report.pdf" && element?.tagName === "IFRAME";
+}
+
 it("refreshes an open PDF through inventory updates and reuses unchanged bytes", async () => {
   const path = "outputs/report.pdf";
   const fetch = jest
@@ -114,7 +118,7 @@ it("refreshes an open PDF through inventory updates and reuses unchanged bytes",
   });
   render(<BuildOutputPanel isOpen />);
   act(() => store().openFilePreview(sessionId, path, "report.pdf"));
-  const originalUrl = (await screen.findByTitle("report.pdf")).getAttribute(
+  const originalUrl = (await screen.findByTitle(isReportFrame)).getAttribute(
     "src"
   );
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -125,16 +129,16 @@ it("refreshes an open PDF through inventory updates and reuses unchanged bytes",
 
   await refreshInventory([{ path, revision: "200:1000", size: 1000 }]);
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-  expect(await screen.findByTitle("report.pdf")).not.toHaveAttribute(
+  expect(await screen.findByTitle(isReportFrame)).not.toHaveAttribute(
     "src",
     originalUrl
   );
   expect(URL.revokeObjectURL).toHaveBeenCalledWith(originalUrl);
   const updatedBlob = jest.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0];
   act(() => store().closePanelTab(sessionId, `file:${path}`));
-  expect(screen.queryByTitle("report.pdf")).not.toBeInTheDocument();
+  expect(screen.queryByTitle(isReportFrame)).not.toBeInTheDocument();
   act(() => store().openFilePreview(sessionId, path, "report.pdf"));
-  await screen.findByTitle("report.pdf");
+  await screen.findByTitle(isReportFrame);
   expect(fetch).toHaveBeenCalledTimes(3);
   expect(jest.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0]).not.toBe(
     updatedBlob

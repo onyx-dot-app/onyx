@@ -27,7 +27,7 @@ import {
 import { getFileIcon } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { useDirection } from "@radix-ui/react-direction";
-import { Text, Tooltip } from "@opal/components";
+import { Button, LineItemButton, Text, Tooltip } from "@opal/components";
 import { SvgGlobe, SvgHardDrive, SvgFiles, SvgX, SvgLoader } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
@@ -577,7 +577,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                       key={id}
                       className={cn(
                         "group relative inline-flex items-center justify-center pe-2 rounded-t-lg",
-                        "max-w-[150px] min-w-fit",
+                        "max-w-[150px] min-w-0 shrink-0",
                         isActive
                           ? "bg-background-neutral-00 text-text-04 z-10"
                           : "text-text-03 bg-transparent hover:bg-background-tint-02"
@@ -589,38 +589,37 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                           style={jointMasks.start}
                         />
                       )}
-                      <button
-                        onClick={() => handlePanelTabClick(id)}
-                        className="inline-flex min-w-0 items-center gap-1.5 ps-3 pe-1.5 py-1.5"
-                      >
-                        <TabIcon
-                          size={14}
-                          className={cn(
-                            "stroke-current shrink-0",
-                            isActive ? "stroke-text-04" : "stroke-text-03"
-                          )}
+                      <div className="min-w-0 flex-1">
+                        <LineItemButton
+                          onClick={() => handlePanelTabClick(id)}
+                          icon={TabIcon}
+                          title={tab.fileName}
+                          titleMaxLines={1}
+                          sizePreset="secondary"
+                          variant="heading"
+                          padding={0}
+                          rounding={2}
+                          aria-pressed={isActive}
                         />
-                        <Text
-                          font="secondary-body"
-                          color="text-05"
-                          maxLines={1}
-                        >
-                          {tab.fileName}
-                        </Text>
-                      </button>
-                      {/* Close button */}
-                      <button
-                        onClick={() => handlePanelTabClose(tab)}
+                      </div>
+                      <div
                         className={cn(
-                          "shrink-0 p-0.5 rounded-sm hover:bg-background-tint-03 transition-colors",
+                          "shrink-0 transition-opacity",
                           isActive
                             ? "opacity-100"
                             : "opacity-0 group-hover:opacity-100 no-hover:opacity-100"
                         )}
-                        aria-label={`Close ${tab.fileName}`}
                       >
-                        <SvgX size={12} className="stroke-text-03" />
-                      </button>
+                        <Button
+                          onClick={() => handlePanelTabClose(tab)}
+                          icon={SvgX}
+                          prominence="tertiary"
+                          size="2xs"
+                          aria-label={t("closeTab.ariaLabel", {
+                            fileName: tab.fileName,
+                          })}
+                        />
+                      </div>
                       {isActive && (
                         <div
                           className="absolute -end-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"

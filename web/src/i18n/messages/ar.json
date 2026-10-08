@@ -12629,6 +12629,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "إغلاق {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "ابدأ ببناء شيء ما لرؤية المخرجات!"
       },

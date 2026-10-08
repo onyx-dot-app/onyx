@@ -12629,6 +12629,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} を閉じる"
+      },
       "artifactsEmpty": {
         "tooltip": "何かを作り始めるとアーティファクトが表示されます！"
       },

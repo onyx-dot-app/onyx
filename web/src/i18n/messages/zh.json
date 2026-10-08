@@ -12629,6 +12629,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "关闭 {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "开始构建内容即可查看产物！"
       },
