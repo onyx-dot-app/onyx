@@ -2726,7 +2726,7 @@
           },
           "deleteButton": {
             "label": "계정 삭제",
-            "inUseTooltip": "다른 커넥터가 이 자격 증명을 사용하고 있어 삭제할 수 없습니다"
+            "inUseTooltip": "다른 커넥터가 이 자격 증명을 사용하고 있어 삭제할 수 없습니다."
           },
           "usedBy": {
             "label": "{count, plural, other {커넥터 #개}}에서 사용 중"

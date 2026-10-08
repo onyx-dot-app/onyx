@@ -2726,7 +2726,7 @@
           },
           "deleteButton": {
             "label": "Delete Account",
-            "inUseTooltip": "Cannot delete this credential because there are other connectors that are using it"
+            "inUseTooltip": "Cannot delete this credential because there are other connectors that are using it."
           },
           "usedBy": {
             "label": "Used by {count, plural, one {# connector} other {# connectors}}"
