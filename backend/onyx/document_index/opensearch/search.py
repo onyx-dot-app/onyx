@@ -23,10 +23,8 @@ from onyx.document_index.opensearch.constants import (
     DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
     DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
     HYBRID_SEARCH_NORMALIZATION_PIPELINE,
-    HYBRID_SEARCH_SUBQUERY_CONFIGURATION,
     LUCENE_SCALAR_QUANTIZATION,
     HybridSearchNormalizationPipeline,
-    HybridSearchSubqueryConfiguration,
 )
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
@@ -78,45 +76,15 @@ def _get_enforced_cc_pair_access(
 # The number and ordering of weights should match the query clauses. The values
 # of the weights should sum to 1.
 def _get_hybrid_search_normalization_weights() -> list[float]:
-    if (
-        HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-        is HybridSearchSubqueryConfiguration.TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-    ):
-        # Since the titles are included in the contents, the embedding matches
-        # are heavily downweighted as they act as a boost rather than an
-        # independent scoring component.
-        search_title_vector_weight = 0.1
-        search_content_vector_weight = 0.45
-        # Single keyword weight for both title and content (merged from former
-        # title keyword + content keyword).
-        search_keyword_weight = 0.45
-
-        # NOTE: It is critical that the order of these weights matches the order
-        # of the sub-queries in the hybrid search.
-        hybrid_search_normalization_weights = [
-            search_title_vector_weight,
-            search_content_vector_weight,
-            search_keyword_weight,
-        ]
-    elif (
-        HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-        is HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-    ):
-        search_content_vector_weight = 0.5
-        # Single keyword weight for both title and content (merged from former
-        # title keyword + content keyword).
-        search_keyword_weight = 0.5
-
-        # NOTE: It is critical that the order of these weights matches the order
-        # of the sub-queries in the hybrid search.
-        hybrid_search_normalization_weights = [
-            search_content_vector_weight,
-            search_keyword_weight,
-        ]
-    else:
-        raise ValueError(
-            f"Bug: Unhandled hybrid search subquery configuration: {HYBRID_SEARCH_SUBQUERY_CONFIGURATION}."
-        )
+    # NOTE: It is critical that the order of these weights matches the order
+    # of the sub-queries in the hybrid search.
+    search_content_vector_weight = 0.5
+    # Single keyword weight for both title and content.
+    search_keyword_weight = 0.5
+    hybrid_search_normalization_weights = [
+        search_content_vector_weight,
+        search_keyword_weight,
+    ]
 
     assert sum(hybrid_search_normalization_weights) == 1.0, (
         "Bug: Hybrid search normalization weights do not sum to 1.0."
@@ -832,8 +800,8 @@ class DocumentQuery:
         The weights of each of these subqueries should be configured in a search
         pipeline.
 
-        The exact subqueries executed depend on the
-        HYBRID_SEARCH_SUBQUERY_CONFIGURATION setting.
+        The subqueries are a content vector similarity search and a combined
+        title and content keyword search.
 
         NOTE: For OpenSearch, 5 is the maximum number of query clauses allowed
         in a single hybrid query. Source:
@@ -870,37 +838,12 @@ class DocumentQuery:
         """
         # Build sub-queries for hybrid search. Order must match normalization
         # pipeline weights.
-        if (
-            HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-            is HybridSearchSubqueryConfiguration.TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-        ):
-            return [
-                DocumentQuery._get_title_vector_similarity_search_query(
-                    query_vector, vector_quantization, vector_candidates
-                ),
-                DocumentQuery._get_content_vector_similarity_search_query(
-                    query_vector, vector_quantization, vector_candidates
-                ),
-                DocumentQuery._get_title_content_combined_keyword_search_query(
-                    query_text
-                ),
-            ]
-        elif (
-            HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-            is HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-        ):
-            return [
-                DocumentQuery._get_content_vector_similarity_search_query(
-                    query_vector, vector_quantization, vector_candidates
-                ),
-                DocumentQuery._get_title_content_combined_keyword_search_query(
-                    query_text
-                ),
-            ]
-        else:
-            raise ValueError(
-                f"Bug: Unhandled hybrid search subquery configuration: {HYBRID_SEARCH_SUBQUERY_CONFIGURATION}"
-            )
+        return [
+            DocumentQuery._get_content_vector_similarity_search_query(
+                query_vector, vector_quantization, vector_candidates
+            ),
+            DocumentQuery._get_title_content_combined_keyword_search_query(query_text),
+        ]
 
     @staticmethod
     def _get_knn_field_query(
@@ -922,20 +865,6 @@ class DocumentQuery:
                 "oversample_factor": lucene_scalar_quantization.rescore_oversample_factor
             }
         return knn_field_query
-
-    @staticmethod
-    def _get_title_vector_similarity_search_query(
-        query_vector: list[float],
-        vector_quantization: VectorQuantization,
-        vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
-    ) -> dict[str, Any]:
-        return {
-            "knn": {
-                TITLE_VECTOR_FIELD_NAME: DocumentQuery._get_knn_field_query(
-                    query_vector, vector_quantization, vector_candidates
-                )
-            }
-        }
 
     @staticmethod
     def _get_content_vector_similarity_search_query(
