@@ -379,17 +379,28 @@ def message_delta_url(
     )
 
 
-def team_export_url(
-    team_id: str, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+def export_url(
+    collection: str, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
 ) -> str:
-    """Every message of every channel of a team changed inside the window,
-    replies included, in one stream. The export API wants both bounds."""
+    """Every message of every conversation in the collection (a team's
+    channels, a user's chats) changed inside the window, replies included, in
+    one stream. The export API wants both bounds."""
     return (
-        f"teams/{team_id}/channels/getAllMessages"
+        f"{collection}/getAllMessages"
         f"?$filter=lastModifiedDateTime gt {graph_timestamp(start)}"
         f" and lastModifiedDateTime lt {graph_timestamp(end)}"
         f"&$top={MESSAGE_PAGE_SIZE}"
     )
+
+
+def export_probe_url(collection: str) -> str:
+    return f"{collection}/getAllMessages?$top=1"
+
+
+def team_export_url(
+    team_id: str, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+) -> str:
+    return export_url(f"teams/{team_id}/channels", start, end)
 
 
 def fetch_team_export(
@@ -405,7 +416,7 @@ def fetch_team_export(
 def team_export_probe_url(team_id: str) -> str:
     """One row and no filter: whether the API answers at all is known from
     the first page, before any filter applies."""
-    return f"teams/{team_id}/channels/getAllMessages?$top=1"
+    return export_probe_url(f"teams/{team_id}/channels")
 
 
 def fetch_root_message(

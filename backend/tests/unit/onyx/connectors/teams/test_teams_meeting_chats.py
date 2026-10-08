@@ -22,10 +22,14 @@ from onyx.connectors.teams.meeting_chats import (
     CHATS_QUERY,
     chat_document_id,
     fetch_chat_days,
-    user_chats_export_probe_url,
-    user_chats_export_url,
+    user_chats_collection,
 )
-from onyx.connectors.teams.utils import USER_LOOKUP_URL, GraphRetriesExhausted
+from onyx.connectors.teams.utils import (
+    USER_LOOKUP_URL,
+    GraphRetriesExhausted,
+    export_probe_url,
+    export_url,
+)
 from tests.unit.onyx.connectors.teams.helpers import (
     SERVICE_ROOT,
     Refusal,
@@ -50,6 +54,12 @@ CHATS_URL = f"users/user-1/chats?{CHATS_QUERY}"
 MEMBERS_URL = f"chats/{CHAT}/members"
 ALL_MESSAGES_URL = f"chats/{CHAT}/messages?$top=50&$orderby=createdDateTime desc"
 WHOLE_CHAT = "0001-01-01T00:00:00Z"
+CHATS_EXPORT_PROBE = export_probe_url(user_chats_collection("user-1"))
+# What a poll asks a chat when no export stream answered for it.
+CHANGED_QUERY = (
+    "messages?$top=50&$filter=lastModifiedDateTime gt "
+    "2026-09-21T12:33:20Z&$orderby=lastModifiedDateTime desc"
+)
 PLAIN_403: Refusal = (403, "Forbidden", "Missing role permissions on the request.")
 
 
@@ -444,12 +454,13 @@ def test_a_poll_asks_every_chat_of_the_lookback_what_changed() -> None:
     }
     routes[f"chats/{recent}/{modified}"] = {"value": []}
     routes[f"chats/{older}/{modified}"] = {"value": []}
-    client = graph_client(routes)
+    client = graph_client(routes, refused={CHATS_EXPORT_PROBE: 403})
 
     items = _walk(connector(client, include_meeting_chats=True), start=start)
 
     # A message deleted in a chat that went quiet months ago must still leave
-    # the index, so every chat of the lookback is asked. One request each.
+    # the index, so every chat of the lookback is asked, one request each, when
+    # the export API is refused.
     assert items == []
     assert f"chats/{recent}/{modified}" in _requested(client)
     assert f"chats/{older}/{modified}" in _requested(client)
@@ -471,7 +482,7 @@ def test_an_edit_to_a_message_older_than_the_lookback_brings_nothing_back() -> N
             )
         ]
     }
-    client = graph_client(routes)
+    client = graph_client(routes, refused={CHATS_EXPORT_PROBE: 403})
 
     items = _walk(connector(client, include_meeting_chats=True), start=start)
 
@@ -526,7 +537,7 @@ def test_a_poll_rebuilds_the_days_that_changed_with_all_their_messages() -> None
     routes[days_that_changed] = {
         "value": [new, earlier_today, untouched, edited, before_all]
     }
-    client = graph_client(routes)
+    client = graph_client(routes, refused={CHATS_EXPORT_PROBE: 403})
 
     items = _walk(connector(client, include_meeting_chats=True), start=start)
 
@@ -740,9 +751,9 @@ def test_a_poll_asks_one_export_stream_instead_of_every_chat() -> None:
     start = NOW - 3600
     recent = "19:meeting_recent@thread.v2"
     older = "19:meeting_older@thread.v2"
-    export = user_chats_export_url("user-1", start, start + 1)
+    export = export_url(user_chats_collection("user-1"), start, start + 1)
     routes = _routes()
-    routes[user_chats_export_probe_url("user-1")] = {"value": []}
+    routes[CHATS_EXPORT_PROBE] = {"value": []}
     routes[CHATS_URL] = {
         "value": [
             _chat(recent, last_message="2026-09-20T09:00:00Z"),
@@ -772,17 +783,75 @@ def test_a_poll_asks_one_export_stream_instead_of_every_chat() -> None:
 def test_a_poll_without_the_export_approval_asks_every_chat() -> None:
     start = NOW - 3600
     recent = "19:meeting_recent@thread.v2"
-    modified = (
-        "messages?$top=50&$filter=lastModifiedDateTime gt "
-        "2026-09-21T12:33:20Z&$orderby=lastModifiedDateTime desc"
-    )
     routes = _routes()
     routes[CHATS_URL] = {"value": [_chat(recent, last_message="2026-09-20T09:00:00Z")]}
-    routes[f"chats/{recent}/{modified}"] = {"value": []}
-    client = graph_client(routes, refused={user_chats_export_probe_url("user-1"): 403})
+    routes[f"chats/{recent}/{CHANGED_QUERY}"] = {"value": []}
+    client = graph_client(routes, refused={CHATS_EXPORT_PROBE: 403})
 
     items = _walk(connector(client, include_meeting_chats=True), start=start)
 
     assert items == []
-    assert f"chats/{recent}/{modified}" in _requested(client)
-    assert _requested(client).count(user_chats_export_probe_url("user-1")) == 1
+    assert f"chats/{recent}/{CHANGED_QUERY}" in _requested(client)
+    assert _requested(client).count(CHATS_EXPORT_PROBE) == 1
+
+
+def _one_recent_chat_routes(start: int) -> tuple[dict[str, Any], str, str]:
+    """An app the probe answers, one chat spoken in this month, and the
+    per-chat question routed for it."""
+    recent = "19:meeting_recent@thread.v2"
+    export = export_url(user_chats_collection("user-1"), start, start + 1)
+    routes = _routes()
+    routes[CHATS_EXPORT_PROBE] = {"value": []}
+    routes[CHATS_URL] = {"value": [_chat(recent, last_message="2026-09-20T09:00:00Z")]}
+    routes[f"chats/{recent}/{CHANGED_QUERY}"] = {"value": []}
+    return routes, recent, export
+
+
+def test_a_refused_export_stream_asks_each_chat_what_changed() -> None:
+    """The stream is a shortcut: refused for one organizer, their chats are
+    still asked, so the optional stream never holds back chats the app can
+    read."""
+    start = NOW - 3600
+    routes, recent, export = _one_recent_chat_routes(start)
+    client = graph_client(routes, refused={export: 403})
+
+    items = _walk(connector(client, include_meeting_chats=True), start=start)
+
+    assert items == []
+    assert f"chats/{recent}/{CHANGED_QUERY}" in _requested(client)
+
+
+def test_an_export_stream_too_large_to_hold_asks_each_chat_what_changed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(meeting_chats_module, "EXPORT_MESSAGES_CAP", 1)
+    start = NOW - 3600
+    routes, recent, export = _one_recent_chat_routes(start)
+    routes[export] = {
+        "value": [
+            {**_said("n1", "one", "2026-09-21T13:00:00Z"), "chatId": recent},
+            {**_said("n2", "two", "2026-09-21T13:00:00Z"), "chatId": recent},
+        ]
+    }
+    client = graph_client(routes)
+
+    items = _walk(connector(client, include_meeting_chats=True), start=start)
+
+    assert items == []
+    assert f"chats/{recent}/{CHANGED_QUERY}" in _requested(client)
+
+
+def test_a_chat_listing_refused_after_the_export_answered_is_one_failure() -> None:
+    """The export stream's pages are not the chat listing's: refused at its own
+    first page, the listing is one recorded failure for the organizer."""
+    start = NOW - 3600
+    routes, _, export = _one_recent_chat_routes(start)
+    routes.pop(CHATS_URL)
+    routes[export] = {"value": []}
+    client = graph_client(routes, refused={CHATS_URL: PLAIN_403})
+
+    items = _walk(connector(client, include_meeting_chats=True), start=start)
+
+    assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
+    assert items[0].failed_entity is not None
+    assert items[0].failed_entity.entity_id == "user-1"
