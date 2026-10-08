@@ -10,18 +10,23 @@ export function useFilePreview<T>(
 ) {
   const request = { key, revision, refreshKey };
   const previousRequest = useRef(request);
-  const { data: result, mutate } = useSWR(
+  const {
+    data: result,
+    error,
+    mutate,
+  } = useSWR<
+    { revision: string | undefined; refreshKey: number; data: T },
+    Error & { revision: string | undefined; refreshKey: number }
+  >(
     key,
     async () => {
       try {
-        return { revision, refreshKey, data: await load(), error: undefined };
+        return { revision, refreshKey, data: await load() };
       } catch (error) {
-        return {
-          revision,
-          refreshKey,
-          data: undefined,
-          error: error instanceof Error ? error : new Error(String(error)),
-        };
+        throw Object.assign(
+          error instanceof Error ? error : new Error(String(error)),
+          { revision, refreshKey }
+        );
       }
     },
     {
@@ -45,9 +50,13 @@ export function useFilePreview<T>(
 
   const isCurrent =
     result?.revision === revision && result?.refreshKey === refreshKey;
+  const currentError: Error | undefined =
+    error?.revision === revision && error?.refreshKey === refreshKey
+      ? error
+      : undefined;
   return {
     data: isCurrent ? result?.data : undefined,
-    error: isCurrent ? result?.error : undefined,
-    isLoading: !isCurrent,
+    error: currentError,
+    isLoading: !isCurrent && !currentError,
   };
 }

@@ -208,10 +208,10 @@ Inactive viewers defer revision changes until activation.
 
 Each mounted file viewer owns a private SWR cache with one current payload.
 `web/src/lib/build/hooks.ts:useFilePreview` owns revision-aware payload replacement.
-File revisions and explicit reloads replace that payload. An unchanged tab switch
-reuses its data and DOM. Closing or evicting a viewer releases its cache; reopening
-fetches fresh bytes. SWR rejects superseded responses, and viewers show only results
-for their accepted revision and reload counter. Cache misses and reloads bypass the
+File revisions and explicit reloads replace that payload. Mounted viewers reuse
+unchanged data. Unmounting a viewer releases its cache; remounting fetches fresh
+bytes. SWR retries failed requests and rejects superseded responses. Viewers show
+only results and errors for their accepted revision and reload counter. Cache misses and reloads bypass the
 browser cache when fetching artifacts. PDF object URLs are revoked when replaced
 or when their viewer unmounts.
 
