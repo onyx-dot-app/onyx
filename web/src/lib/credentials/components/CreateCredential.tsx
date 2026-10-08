@@ -329,8 +329,10 @@ export default function CreateCredential({
               />
 
               {/* Above: the fields the source needs. Below: optional sharing
-              and the Create button. */}
-              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              and the Create button, so with neither there is no divider. */}
+              {(businessTier || !sealsDrafts) && (
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
+              )}
 
               {businessTier && (
                 <ShareAccountField disabled={!formikProps.isValid} />
