@@ -3,7 +3,7 @@ import os
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from itertools import chain
-from typing import Any
+from typing import Any, cast
 
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
@@ -354,12 +354,15 @@ class TeamsConnector(
             checkpoint.active.append(
                 ChannelCursor(channel=checkpoint.todo_channels.pop())
             )
-        advances: list[ChannelAdvance] = run_functions_tuples_in_parallel(
-            [
-                (self._advance_channel, (cursor.model_copy(deep=True), start))
-                for cursor in checkpoint.active
-            ],
-            max_workers=self.max_workers,
+        advances = cast(
+            list[ChannelAdvance],
+            run_functions_tuples_in_parallel(
+                [
+                    (self._advance_channel, (cursor.model_copy(deep=True), start))
+                    for cursor in checkpoint.active
+                ],
+                max_workers=self.max_workers,
+            ),
         )
         active: list[ChannelCursor] = []
         for advance in advances:
