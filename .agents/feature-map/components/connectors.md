@@ -214,7 +214,8 @@ as satisfying an `InputType.POLL` request).
 content. `retrieve_all_slim_docs` is consumed only by the pruning diff in §4.4.
 `retrieve_all_slim_docs_perm_sync` is also consumed by EE permission-sync jobs
 (`ee/onyx/external_permissions/utils.py`). A slim connector
-does the same enumeration as the full connector without downloading bodies.
+normally does the same enumeration as the full connector without downloading bodies.
+Airtable reuses full record processing to preserve its empty-content filter.
 
 ### 4.2 Registry and factory: source to running instance
 
@@ -303,6 +304,12 @@ connector's listing filters by the same date as indexing. A slim connector
 opts in with `BaseConnector.slim_listing_honors_indexing_start`. Such a prune
 also removes documents that still exist at the source but were last updated
 before the start. Other connectors list every document.
+
+Airtable uses `airtable/airtable_connector.py:AirtableConnector.retrieve_all_slim_docs`
+for pruning. It uses the full document selection path so empty-content records
+remain excluded. In all-base mode, this path calls `_load_all(fail_on_error=True)`.
+A failed base listing or table fetch aborts pruning, including failures after
+earlier batches. Normal indexing still skips failed bases and tables.
 
 ### 4.6 Three representative shapes
 
