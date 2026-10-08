@@ -464,7 +464,7 @@ export function getCredentialDetails(
 export function isDraftCredential(
   credential: Credential<unknown> | DraftCredential
 ): credential is DraftCredential {
-  return "draft_credential" in credential;
+  return !("id" in credential);
 }
 
 /** The request reference to a saved credential or a draft. */
@@ -473,6 +473,6 @@ export function toCredentialRef(
 ): CredentialRef | null {
   if (credential === null) return null;
   return isDraftCredential(credential)
-    ? { draft_credential: credential.draft_credential }
+    ? { credential_json: credential.credential_json }
     : { credential_id: credential.id };
 }

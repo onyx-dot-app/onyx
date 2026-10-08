@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useFormikContext } from "formik";
+import { getIn, useFormikContext } from "formik";
 import {
   InputMultiSelect,
   InputSingleSelect,
@@ -42,6 +42,8 @@ export function shareAccountPayload({ share, groups }: ShareAccountFormValues) {
 const ADMINS_TAG_ID = "admins";
 
 interface ShareAccountFieldProps {
+  /** The Formik path `share` and `groups` live under, e.g. `new_account`. */
+  namePrefix?: string;
   /** Dims and locks the field, as while the account's fields are invalid. */
   disabled: boolean;
 }
@@ -51,10 +53,19 @@ interface ShareAccountFieldProps {
  * user groups, or only its creator. With groups, a picker below lists them
  * after a fixed admins chip, since admins keep access either way.
  */
-export function ShareAccountField({ disabled }: ShareAccountFieldProps) {
+export function ShareAccountField({
+  disabled,
+  namePrefix,
+}: ShareAccountFieldProps) {
   const t = useTranslations("admin.credentials.create.share");
   const tGroups = useTranslations("common.groupsMultiSelect");
-  const { values, setFieldValue } = useFormikContext<ShareAccountFormValues>();
+  const { values: formValues, setFieldValue } =
+    useFormikContext<ShareAccountFormValues>();
+  const values: ShareAccountFormValues = namePrefix
+    ? getIn(formValues, namePrefix)
+    : formValues;
+  const path = (field: keyof ShareAccountFormValues): string =>
+    namePrefix ? `${namePrefix}.${field}` : field;
   const { data: userGroups } = useUserGroups();
 
   const groupNames = new Map(
@@ -85,7 +96,7 @@ export function ShareAccountField({ disabled }: ShareAccountFieldProps) {
           <InputSingleSelect
             value={values.share}
             onValueChange={(next) => {
-              if (isShareAudience(next)) setFieldValue("share", next);
+              if (isShareAudience(next)) setFieldValue(path("share"), next);
             }}
             defaultOption={DEFAULT_SHARE_AUDIENCE}
             placeholder={t("title")}
@@ -122,11 +133,14 @@ export function ShareAccountField({ disabled }: ShareAccountFieldProps) {
               icon: SvgUsers,
             }))}
             onSelectOption={(option) =>
-              setFieldValue("groups", [...values.groups, Number(option.value)])
+              setFieldValue(path("groups"), [
+                ...values.groups,
+                Number(option.value),
+              ])
             }
             onRemoveTag={(id) =>
               setFieldValue(
-                "groups",
+                path("groups"),
                 values.groups.filter((group) => String(group) !== id)
               )
             }

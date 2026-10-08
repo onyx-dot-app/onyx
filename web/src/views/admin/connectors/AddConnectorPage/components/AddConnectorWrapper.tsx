@@ -7,7 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Formik } from "formik";
+import { Formik, getIn } from "formik";
+import * as Yup from "yup";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { PageLoader, IconLoader } from "@opal/loaders";
@@ -70,10 +71,18 @@ import type {
 } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
 import {
+  useCredentialFieldCopy,
   useGmailCredentials,
   useCredentialLoad,
   useGoogleDriveCredentials,
 } from "@/lib/credentials/hooks";
+import {
+  NEW_ACCOUNT_FIELD,
+  initialNewAccountValues,
+  newAccountSchema,
+  typedAccountSpec,
+  typedDraft,
+} from "@/views/admin/connectors/AddConnectorPage/newAccount";
 import { deleteConnector } from "@/lib/connector";
 import {
   SYNC_RESTRICTED_ACCESS_TYPE,
@@ -202,11 +211,19 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load
 
-  // State for managing credentials and files
-  // A saved account, or a draft that Create saves.
-  const [currentCredential, setCurrentCredential] = useState<
-    Credential<any> | DraftCredential | null
-  >(null);
+  // The chosen account: a saved one, or the one typed into the form, which
+  // Create saves. Choosing one drops the other.
+  const [currentCredential, setCurrentCredential] =
+    useState<Credential<any> | null>(null);
+  const [newAccountChosen, setNewAccountChosen] = useState<boolean>(false);
+  const chooseSavedAccount = (credential: Credential<any> | null) => {
+    setCurrentCredential(credential);
+    setNewAccountChosen(false);
+  };
+  const chooseNewAccount = () => {
+    setCurrentCredential(null);
+    setNewAccountChosen(true);
+  };
 
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -222,11 +239,14 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     connector,
     configuration
   );
-  const formControlFieldNames = new Set(
-    [...configuration.values, ...configuration.advanced_values]
+  // Form keys that are not connector config: tab controls, and the typed
+  // account, which Create sends as the credential.
+  const formControlFieldNames = new Set([
+    ...[...configuration.values, ...configuration.advanced_values]
       .filter((field) => field.type === "tab")
-      .map((field) => field.name)
-  );
+      .map((field) => field.name),
+    NEW_ACCOUNT_FIELD,
+  ]);
 
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
@@ -247,15 +267,38 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
   const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
   const { liveGmailCredential } = useGmailCredentials(connector);
 
-  // Check if credential is activated
-  const credentialActivated =
-    (connector === "google_drive" && liveGDriveCredential) ||
-    (connector === "gmail" && liveGmailCredential) ||
-    currentCredential;
-
   // Sources without a credential spec skip the credential section.
   const noCredentials = credentialSpec == null;
-  const canCreate = noCredentials || credentialActivated != null;
+
+  // The new account is part of this form: its fields live under
+  // NEW_ACCOUNT_FIELD and validate with the rest while it is chosen.
+  const tValidation = useTranslations("admin.credentials.validation");
+  const fieldCopy = useCredentialFieldCopy(connector);
+  const typedSpec = typedAccountSpec(connector);
+  const accountSchema = typedSpec
+    ? newAccountSchema(typedSpec, {
+        fieldTitle: (key) => fieldCopy(key).title,
+        required: (field) => tValidation("required", { field }),
+        empty: (field) => tValidation("empty", { field }),
+        invalidEmail: (field) => tValidation("invalidEmail", { field }),
+        fileRequired: (field) => tValidation("fileRequired", { field }),
+        authMethodRequired: tValidation("authMethodRequired"),
+      })
+    : null;
+
+  /**
+   * The chosen account for these form values: the typed one while it is
+   * chosen and valid, else the saved one (or Google's live account).
+   */
+  const accountFor = (
+    values: Record<string, unknown>
+  ): Credential<any> | DraftCredential | null =>
+    newAccountChosen
+      ? typedDraft(connector, accountSchema, getIn(values, NEW_ACCOUNT_FIELD))
+      : currentCredential ||
+        liveGDriveCredential ||
+        liveGmailCredential ||
+        null;
 
   // The page body waits for the source's saved credentials: no connector
   // can be set up without them. Sources without credentials fetch nothing and go
@@ -306,9 +349,15 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
 
   const credentialsFailed = credentialLoadError !== undefined;
 
+  const initialValues: ReturnType<typeof createConnectorInitialValues> =
+    createConnectorInitialValues(connector);
+  if (typedSpec) {
+    initialValues[NEW_ACCOUNT_FIELD] = initialNewAccountValues(typedSpec);
+  }
+
   return (
     <Formik
-      initialValues={createConnectorInitialValues(connector)}
+      initialValues={initialValues}
       validationSchema={createConnectorValidationSchema(
         connector,
         isScopedManager,
@@ -322,7 +371,11 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
           stringPairEmptyKey: keyValueT("emptyKey"),
           stringPairDuplicateKey: keyValueT("duplicateKey"),
         }
-      )}
+      ).shape({
+        // The typed account counts only while it is the chosen one.
+        [NEW_ACCOUNT_FIELD]:
+          newAccountChosen && accountSchema ? accountSchema : Yup.mixed(),
+      })}
       onSubmit={async (values) => {
         const {
           name,
@@ -462,7 +515,8 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
             groups: groups,
           };
           const connectorCreationPromise = (async () => {
-            if (!credentialActivated) {
+            const credential = noCredentials ? null : accountFor(values);
+            if (!credential) {
               const { errorDetail, isSuccess, response } =
                 await submitConnector<any>(connectorData, undefined, true);
 
@@ -482,14 +536,9 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
             }
 
             // With credential: one request creates the connector and pairs
-            // it, saving a draft account on the way.
-            const credential =
-              currentCredential ||
-              liveGDriveCredential ||
-              liveGmailCredential ||
-              null;
+            // it, saving a typed account on the way.
             const credentialRef = toCredentialRef(credential);
-            if (credential && credentialRef) {
+            if (credentialRef) {
               const createResponse = await createConnectorWithCredential({
                 connector: connectorData,
                 pairing: credentialPairMetadata(
@@ -549,11 +598,14 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     >
       {(formikProps) => {
         const busy = uploading || creatingConnector;
-        const formCredential =
-          currentCredential ||
-          liveGDriveCredential ||
-          liveGmailCredential ||
-          null;
+        const formCredential = accountFor(formikProps.values);
+        const canCreate = noCredentials || formCredential !== null;
+        const newAccountReady =
+          typedDraft(
+            connector,
+            accountSchema,
+            getIn(formikProps.values, NEW_ACCOUNT_FIELD)
+          ) !== null;
         const showAdvancedBoundFields =
           !configuration.advancedValuesVisibleCondition ||
           configuration.advancedValuesVisibleCondition(
@@ -714,7 +766,10 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                               connector={connector}
                               accessType={formikProps.values.access_type}
                               currentCredential={currentCredential}
-                              onCredentialChange={setCurrentCredential}
+                              onCredentialChange={chooseSavedAccount}
+                              newAccountChosen={newAccountChosen}
+                              onChooseNewAccount={chooseNewAccount}
+                              newAccountReady={newAccountReady}
                               checkedCredential={checkedCredential}
                               checksLocked={!configUnlocked}
                             />

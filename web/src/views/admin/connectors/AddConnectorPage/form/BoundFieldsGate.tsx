@@ -75,13 +75,11 @@ export function BoundFieldsGate<FormValues extends Record<string, unknown>>({
   const gate = useBoundFieldsGate({
     source,
     credential,
-    // A draft is never edited; a new one is a new draft.
+    // New values are a new credential reference, so a draft needs no time.
     credentialUpdatedAt:
-      currentCredential === null
+      currentCredential === null || isDraftCredential(currentCredential)
         ? null
-        : isDraftCredential(currentCredential)
-          ? currentCredential.sealed_at
-          : currentCredential.time_updated,
+        : currentCredential.time_updated,
     credentialSelected,
     boundFieldNames: allBoundFields.map((field) => field.name),
     boundFields,

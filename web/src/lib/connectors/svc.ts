@@ -304,21 +304,20 @@ export async function checkCredentialBinding(
   credential: CredentialRef,
   request: CredentialBindingCheckRequest
 ): Promise<CredentialBindingCheckResponse> {
-  const response =
-    "draft_credential" in credential
-      ? await fetch("/api/manage/admin/draft-credential/binding-check", {
+  const response = !("credential_id" in credential)
+    ? await fetch("/api/manage/admin/draft-credential/binding-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...request, ...credential }),
+      })
+    : await fetch(
+        `/api/manage/admin/credential/${credential.credential_id}/binding-check`,
+        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...request, ...credential }),
-        })
-      : await fetch(
-          `/api/manage/admin/credential/${credential.credential_id}/binding-check`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(request),
-          }
-        );
+          body: JSON.stringify(request),
+        }
+      );
   if (!response.ok) {
     throw new Error(await parseErrorDetail(response, BINDING_CHECK_ERROR));
   }

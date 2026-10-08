@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Divider } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { sealDraftCredential, submitCredential } from "@/lib/credentials/svc";
-import { Form, Formik, FormikHelpers, useFormikContext } from "formik";
+import { submitCredential } from "@/lib/credentials/svc";
+import { Form, Formik, FormikHelpers } from "formik";
 import { Section, toast } from "@opal/layouts";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
-import type { Credential, DraftCredential } from "@/lib/credentials/types";
+import type { Credential } from "@/lib/credentials/types";
 import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
 import type { CredentialActionType } from "@/lib/credentials/types";
 import {
@@ -53,101 +53,12 @@ type CreateCredentialFormValues = ShareAccountFormValues & {
   [key: string]: unknown;
 };
 
-/** Waits this long after the last edit before sealing the values. */
-const DRAFT_SEAL_DELAY_MS = 500;
-
-interface DraftSealerProps {
-  source: ValidSources;
-  onDraft: (draft: DraftCredential | null) => void;
-}
-
-/**
- * Seals the form's values as a draft whenever they are valid, after typing
- * pauses, and hands the draft up; hands up `null` when they stop being valid
- * and when the form unmounts. Renders nothing.
- */
-function DraftSealer({ source, onDraft }: DraftSealerProps) {
-  const t = useTranslations("admin");
-  const { values, isValid } = useFormikContext<CreateCredentialFormValues>();
-  const { share, groups, ...credentialValues } = values;
-  const credentialJson: Record<string, unknown> = Object.fromEntries(
-    Object.entries(credentialValues).filter(
-      ([, value]) => value !== null && value !== ""
-    )
-  );
-  const valuesKey: string = JSON.stringify(credentialJson);
-  const sharing = shareAccountPayload({ share, groups });
-  const sharingKey: string = JSON.stringify(sharing);
-
-  // The latest callback, so a seal that lands late reports to the current one.
-  const onDraftRef = useRef(onDraft);
-  useEffect(() => {
-    onDraftRef.current = onDraft;
-  });
-  // The values the last draft holds, and the draft itself.
-  const sealedRef = useRef<{ key: string; draft: DraftCredential } | null>(
-    null
-  );
-
-  useEffect(() => {
-    if (!isValid) {
-      if (sealedRef.current !== null) {
-        sealedRef.current = null;
-        onDraftRef.current(null);
-      }
-      return;
-    }
-    const sealed = sealedRef.current;
-    if (sealed !== null && sealed.key === valuesKey) {
-      // Only the sharing changed: it is not sealed, so no new seal.
-      if (JSON.stringify(sealed.draft.sharing) !== sharingKey) {
-        const next: DraftCredential = { ...sealed.draft, sharing };
-        sealedRef.current = { key: valuesKey, draft: next };
-        onDraftRef.current(next);
-      }
-      return;
-    }
-    let cancelled = false;
-    const timeout = setTimeout(() => {
-      sealDraftCredential(source, credentialJson).then(
-        (draftCredential) => {
-          if (cancelled) return;
-          const next: DraftCredential = {
-            draft_credential: draftCredential,
-            source,
-            credential_json: credentialJson,
-            sharing,
-            sealed_at: new Date().toISOString(),
-          };
-          sealedRef.current = { key: valuesKey, draft: next };
-          onDraftRef.current(next);
-        },
-        () => {
-          if (!cancelled)
-            toast.error(t("credentials.create.submitError.toast"));
-        }
-      );
-    }, DRAFT_SEAL_DELAY_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeout);
-    };
-    // The keys stand for the values; the objects change every render.
-  }, [isValid, valuesKey, sharingKey, source]);
-
-  // A form that leaves the page takes its draft with it.
-  useEffect(() => () => onDraftRef.current(null), []);
-
-  return null;
-}
-
 export default function CreateCredential({
   sourceType,
   accessType,
   close,
   onClose = () => null,
   onSwitch,
-  onDraft,
   onSwap = async () => null,
   swapConnector,
   refresh = () => null,
@@ -163,11 +74,6 @@ export default function CreateCredential({
   onClose?: () => void;
   // Switch currently selected credential
   onSwitch?: (selectedCredential: Credential<any>) => Promise<void>;
-  // Given, nothing is saved and there is no Create button: once the form is
-  // valid, its values are sealed as a draft and handed here, and creating the
-  // connector saves it. `null` when the form stops being valid or unmounts.
-  // Sources with a file field (which cannot be sealed yet) still save.
-  onDraft?: (draft: DraftCredential | null) => void;
   // Switch currently selected credential + link with connector
   onSwap?: (
     selectedCredential: Credential<any>,
@@ -287,10 +193,6 @@ export default function CreateCredential({
 
   // A spec with auth methods starts on its first one.
   const initialAuthMethod = spec.methods?.[0]?.value;
-  // A file cannot be sealed, so a source with a file field still saves.
-  const sealsDrafts: boolean =
-    onDraft !== undefined &&
-    !Object.values(spec.fields).some((field) => field.kind === "file");
 
   return (
     <Formik<CreateCredentialFormValues>
@@ -329,32 +231,26 @@ export default function CreateCredential({
               />
 
               {/* Above: the fields the source needs. Below: optional sharing
-              and the Create button, so with neither there is no divider. */}
-              {(businessTier || !sealsDrafts) && (
-                <Divider paddingParallel={0} paddingPerpendicular={0} />
-              )}
+              and the Create button. */}
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               {businessTier && (
                 <ShareAccountField disabled={!formikProps.isValid} />
               )}
 
-              {sealsDrafts && onDraft ? (
-                <DraftSealer source={sourceType} onDraft={onDraft} />
-              ) : (
-                <Section flexDirection="row" justifyContent="end">
-                  <CreateButton
-                    onClick={() =>
-                      handleSubmit(
-                        formikProps.values,
-                        formikProps,
-                        swapConnector ? "createAndSwap" : "create"
-                      )
-                    }
-                    isSubmitting={formikProps.isSubmitting}
-                    isValid={formikProps.isValid}
-                  />
-                </Section>
-              )}
+              <Section flexDirection="row" justifyContent="end">
+                <CreateButton
+                  onClick={() =>
+                    handleSubmit(
+                      formikProps.values,
+                      formikProps,
+                      swapConnector ? "createAndSwap" : "create"
+                    )
+                  }
+                  isSubmitting={formikProps.isSubmitting}
+                  isValid={formikProps.isValid}
+                />
+              </Section>
             </Section>
           </Form>
         );
