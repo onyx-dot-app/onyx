@@ -230,6 +230,55 @@ beat_task_templates: list[dict] = [
             "queue": OnyxCeleryQueues.PRIMARY,
         },
     },
+    # Flow automations. Same split as the Craft scheduled tasks above: the
+    # dispatcher and sweepers are DB-only and stay on primary, while the
+    # executor itself runs on the `scheduled_tasks` queue.
+    {
+        "name": "dispatch-due-flows",
+        "task": OnyxCeleryTask.FLOWS_DISPATCH_DUE,
+        # Matches the scheduled-task dispatcher: 60 s is too coarse for a
+        # minute-cadence cron, 15 s over-runs the claim query for tenants
+        # with nothing due.
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": 60,
+            "queue": OnyxCeleryQueues.PRIMARY,
+        },
+    },
+    {
+        "name": "resume-delayed-flow-runs",
+        "task": OnyxCeleryTask.FLOWS_RESUME_DELAYS,
+        # Same cadence as the trigger dispatcher: a delay step is only
+        # offered for waits over a minute, so a tick of this size is well
+        # inside what the author asked for.
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": 60,
+            "queue": OnyxCeleryQueues.PRIMARY,
+        },
+    },
+    {
+        "name": "cleanup-stuck-flow-runs",
+        "task": OnyxCeleryTask.FLOWS_CLEANUP_STUCK,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": 60 * 60,
+            "queue": OnyxCeleryQueues.PRIMARY,
+        },
+    },
+    {
+        "name": "purge-old-flow-runs",
+        "task": OnyxCeleryTask.FLOWS_PURGE_OLD_RUNS,
+        "schedule": timedelta(days=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOWEST,
+            "expires": 60 * 60,
+            "queue": OnyxCeleryQueues.PRIMARY,
+        },
+    },
     # Sandbox sweep: background-snapshot changed sessions, sleep idle sandboxes.
     {
         "name": "cleanup-idle-sandboxes",

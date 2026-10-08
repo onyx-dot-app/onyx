@@ -1,0 +1,345 @@
+/**
+ * Shapes returned by the flows API.
+ *
+ * Mirrors `backend/onyx/flows/models.py` and
+ * `backend/onyx/server/features/flows/models.py`. The node union is
+ * discriminated on `kind`, the same way the backend discriminates its
+ * Pydantic union, so narrowing works identically on both sides.
+ */
+
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export type JsonObject = { [key: string]: JsonValue };
+
+export type FlowStatus = "ACTIVE" | "PAUSED";
+export type FlowNodeKind =
+  | "HTTP"
+  | "TRANSFORM"
+  | "CONDITION"
+  | "AI"
+  | "HUMAN"
+  | "CODE"
+  | "LOOP"
+  | "RETRY"
+  | "WEBHOOK"
+  | "DELAY"
+  | "FILTER"
+  | "SCHEDULE"
+  | "MERGE"
+  | "SPLIT"
+  | "PARALLEL"
+  | "SWITCH"
+  | "REPEAT";
+export type FlowTriggerKind = "SCHEDULE" | "WEBHOOK" | "MANUAL";
+export type FlowTriggerSource = "SCHEDULE" | "WEBHOOK" | "MANUAL" | "TEST";
+
+export type FlowRunStatus =
+  | "QUEUED"
+  | "RUNNING"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "SKIPPED"
+  /** Parked on a human step. Not terminal — a decision re-queues the run. */
+  | "AWAITING_DECISION"
+  /** Parked on a delay step. Not terminal — a sweep re-queues it when due. */
+  | "AWAITING_DELAY";
+
+/** What a person can answer at a human step. */
+export type FlowDecision = "approve" | "reject";
+
+export type FlowNodeRunStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "SKIPPED";
+
+export type ConditionOperator =
+  | "eq"
+  | "ne"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "contains"
+  | "not_contains"
+  | "is_empty"
+  | "is_not_empty";
+
+/** Operators that compare against nothing, so `right` is hidden for them. */
+export const UNARY_OPERATORS: readonly ConditionOperator[] = [
+  "is_empty",
+  "is_not_empty",
+];
+
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+export interface RetryPolicy {
+  max_attempts: number;
+  backoff_seconds: number;
+}
+
+interface NodeBase {
+  id: string;
+  name: string;
+  next: string[];
+  for_each: string | null;
+  /** Seconds between items while fanning out. Absent from specs saved before
+   *  it existed; the server reads that as no pause. */
+  pause_seconds?: number;
+  on_error: "stop" | "skip";
+  retry: RetryPolicy;
+}
+
+export interface HttpNode extends NodeBase {
+  kind: "HTTP";
+  method: HttpMethod;
+  url: string;
+  headers: Record<string, string>;
+  query: Record<string, string>;
+  body: JsonValue;
+  timeout_seconds: number;
+  result_path: string | null;
+  fail_on_error_status: boolean;
+}
+
+export interface TransformNode extends NodeBase {
+  kind: "TRANSFORM";
+  fields: Record<string, string>;
+}
+
+export interface ConditionNode extends NodeBase {
+  kind: "CONDITION";
+  left: string;
+  operator: ConditionOperator;
+  right: string | null;
+  on_true: string[];
+  on_false: string[];
+}
+
+export interface AiOutputField {
+  name: string;
+  type: "text" | "number" | "boolean" | "list";
+  description: string;
+}
+
+export interface AiNode extends NodeBase {
+  kind: "AI";
+  prompt: string;
+  output_fields: AiOutputField[];
+  timeout_seconds: number;
+}
+
+export interface HumanNode extends NodeBase {
+  kind: "HUMAN";
+  question: string;
+  assignee: string | null;
+  on_approve: string[];
+  on_reject: string[];
+}
+
+export interface CodeNode extends NodeBase {
+  kind: "CODE";
+  code: string;
+  timeout_seconds: number;
+}
+
+export interface LoopNode extends NodeBase {
+  kind: "LOOP";
+  over: string;
+  batch_size: number;
+}
+
+export interface RetryNode extends Omit<HttpNode, "kind"> {
+  kind: "RETRY";
+  until_path: string | null;
+  operator: ConditionOperator;
+  value: string | null;
+  max_checks: number;
+  interval_seconds: number;
+  fail_when_exhausted: boolean;
+}
+
+export interface WebhookNode extends NodeBase {
+  kind: "WEBHOOK";
+  url: string;
+  payload: JsonValue;
+  headers: Record<string, string>;
+  timeout_seconds: number;
+  fail_on_error_status: boolean;
+}
+
+export interface DelayNode extends NodeBase {
+  kind: "DELAY";
+  seconds: number;
+}
+
+export interface FilterNode extends NodeBase {
+  kind: "FILTER";
+  over: string;
+  left: string;
+  operator: ConditionOperator;
+  right: string | null;
+}
+
+export interface ScheduleNode extends NodeBase {
+  kind: "SCHEDULE";
+  /** 5-field cron, read in UTC. */
+  cron: string;
+}
+
+export type MergeMode = "combine" | "append";
+
+export interface MergeNode extends NodeBase {
+  kind: "MERGE";
+  /** Earlier steps to combine. Not adjacency — they name this one in `next`. */
+  sources: string[];
+  mode: MergeMode;
+}
+
+export interface SplitNode extends NodeBase {
+  kind: "SPLIT";
+  value: string;
+  separator: string;
+  trim: boolean;
+  drop_empty: boolean;
+}
+
+/** Calls an endpoint once per item of `over`, several calls at a time. */
+export interface ParallelNode extends Omit<HttpNode, "kind"> {
+  kind: "PARALLEL";
+  over: string;
+  /** Calls kept in flight at once, 1 to 10. */
+  concurrency: number;
+}
+
+export interface SwitchCase {
+  /** Compared with the switch's value using `eq`, so "2" matches 2. */
+  equals: string;
+  then: string[];
+}
+
+export interface SwitchNode extends NodeBase {
+  kind: "SWITCH";
+  value: string;
+  /** Checked in order; the first case that matches wins. */
+  cases: SwitchCase[];
+  /** Where the run goes when no case matches. Empty ends the branch. */
+  otherwise: string[];
+}
+
+/**
+ * Runs a group of steps pass after pass until a condition holds.
+ *
+ * `body` names where each pass starts; everything reachable from there is
+ * the loop's own. Each pass sees `{{ index }}` and `{{ item }}` — `start` on
+ * the first pass, then what `carry` said at the end of the one before.
+ */
+export interface RepeatNode extends NodeBase {
+  kind: "REPEAT";
+  body: string[];
+  until: string;
+  operator: ConditionOperator;
+  value: string | null;
+  max_passes: number;
+  start: string | null;
+  carry: string | null;
+  collect: string | null;
+  fail_when_exhausted: boolean;
+}
+
+export type FlowNode =
+  | HttpNode
+  | TransformNode
+  | ConditionNode
+  | AiNode
+  | HumanNode
+  | CodeNode
+  | LoopNode
+  | RetryNode
+  | WebhookNode
+  | DelayNode
+  | FilterNode
+  | ScheduleNode
+  | MergeNode
+  | SplitNode
+  | ParallelNode
+  | SwitchNode
+  | RepeatNode;
+
+export interface FlowSpec {
+  spec_version: 1;
+  start: string;
+  nodes: FlowNode[];
+}
+
+export interface FlowTrigger {
+  id: string;
+  kind: FlowTriggerKind;
+  config: JsonObject;
+  enabled: boolean;
+  next_run_at: string | null;
+  /** Returned only by the response that mints it. */
+  webhook_secret: string | null;
+}
+
+export interface FlowSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  status: FlowStatus;
+  published_version: number | null;
+  node_count: number;
+  triggers: FlowTrigger[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FlowDetail extends FlowSummary {
+  spec: FlowSpec;
+  has_unpublished_changes: boolean;
+  /** What this flow's webhook steps sign their deliveries with. */
+  webhook_signing_secret: string | null;
+}
+
+export interface NodeRun {
+  node_id: string;
+  kind: FlowNodeKind;
+  status: FlowNodeRunStatus;
+  /** The loop pass this row belongs to, from 0; 0 outside a loop. */
+  iteration: number;
+  item_index: number;
+  attempt: number;
+  input: JsonObject | null;
+  output: JsonValue;
+  error_class: string | null;
+  error_detail: string | null;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface RunSummary {
+  id: string;
+  flow_id: string;
+  status: FlowRunStatus;
+  trigger_source: FlowTriggerSource;
+  skip_reason: string | null;
+  error_class: string | null;
+  error_detail: string | null;
+  started_at: string;
+  finished_at: string | null;
+  /** Set only while a run is parked on a delay: when it carries on. */
+  resume_at: string | null;
+}
+
+export interface RunDetail extends RunSummary {
+  trigger_payload: JsonObject | null;
+  node_runs: NodeRun[];
+}
+
+export interface TriggerDefinition {
+  kind: FlowTriggerKind;
+  config: JsonObject;
+  enabled: boolean;
+}

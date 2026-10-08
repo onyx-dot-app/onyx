@@ -96,6 +96,11 @@ PUBLIC_ENDPOINT_SPECS = [
     # craft webapp proxy — access enforced per-session via sharing_scope in handler
     ("/build/sessions/{session_id}/webapp", {"GET"}),
     ("/build/sessions/{session_id}/webapp/{path:path}", {"GET"}),
+    # inbound flow webhooks — the caller is an external system with no Onyx
+    # session, so the trigger's own secret is the credential. The handler
+    # compares it in constant time and answers 404 for every rejection, so a
+    # caller cannot learn which triggers exist.
+    ("/flows/webhooks/{trigger_id}", {"POST"}),
 ]
 
 

@@ -80,6 +80,12 @@ from onyx.db.enums import (
     DefaultAppMode,
     EndpointPolicy,
     ExternalAppType,
+    FlowNodeKind,
+    FlowNodeRunStatus,
+    FlowRunStatus,
+    FlowStatus,
+    FlowTriggerKind,
+    FlowTriggerSource,
     GatedAppKind,
     GrantSource,
     HierarchyNodeType,
@@ -7513,4 +7519,348 @@ class SSOProvider(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class Flow(Base):
+    """A user-authored automation: triggers plus a graph of nodes.
+
+    The spec people edit lives on `draft_spec`. Publishing copies it into an
+    immutable `FlowVersion` and records that version number here. Runs always
+    pin the version they started on, so editing a flow never changes a graph
+    that is already executing.
+    """
+
+    __tablename__ = "flow"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    status: Mapped[FlowStatus] = mapped_column(
+        Enum(FlowStatus, native_enum=False, name="flowstatus"),
+        nullable=False,
+        default=FlowStatus.PAUSED,
+        server_default="PAUSED",
+    )
+
+    # Working copy, validated on every write. Only test runs execute it.
+    draft_spec: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(), nullable=False
+    )
+    # Version number of the published snapshot, NULL until first publish.
+    # Deliberately not a FK: flow_version already points at flow, and a
+    # second FK back would make both tables un-droppable in one migration.
+    published_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Signs the payloads this flow's webhook nodes send out, so a receiver can
+    # tell a real delivery from anything else that found the URL. One per
+    # flow: a receiver verifies deliveries from a flow, not from a node.
+    webhook_signing_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+
+    deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    versions: Mapped[list["FlowVersion"]] = relationship(
+        "FlowVersion",
+        back_populates="flow",
+        cascade="all, delete-orphan",
+        order_by="desc(FlowVersion.version)",
+    )
+    triggers: Mapped[list["FlowTrigger"]] = relationship(
+        "FlowTrigger",
+        back_populates="flow",
+        cascade="all, delete-orphan",
+        order_by="FlowTrigger.created_at",
+    )
+    runs: Mapped[list["FlowRun"]] = relationship(
+        "FlowRun",
+        back_populates="flow",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (Index("ix_flow_user_created", "user_id", desc("created_at")),)
+
+
+class FlowVersion(Base):
+    """Immutable snapshot of a flow's spec.
+
+    `version` counts up from 1 per flow. Nothing mutates a row once written;
+    a new publish always inserts.
+    """
+
+    __tablename__ = "flow_version"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    flow_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("flow.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    spec: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB(), nullable=False)
+
+    created_by_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    flow: Mapped[Flow] = relationship("Flow", back_populates="versions")
+
+    __table_args__ = (
+        UniqueConstraint("flow_id", "version", name="uq_flow_version_flow_version"),
+    )
+
+
+class FlowTrigger(Base):
+    """One way a flow can start.
+
+    A flow may hold several: a nightly cron and a webhook, for instance. The
+    dispatcher only ever reads SCHEDULE rows, which is why `next_run_at` is
+    NULL for every other kind.
+    """
+
+    __tablename__ = "flow_trigger"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    flow_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("flow.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind: Mapped[FlowTriggerKind] = mapped_column(
+        Enum(FlowTriggerKind, native_enum=False, name="flowtriggerkind"),
+        nullable=False,
+    )
+    # SCHEDULE: {"cron": "0 9 * * 1-5", "editor_mode": "daily_weekly"}.
+    # WEBHOOK and MANUAL carry no config today but keep the column so a
+    # future option does not need a migration.
+    config: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(), nullable=False, default=dict
+    )
+
+    # The dispatcher's only read field. NULL when the flow is paused, the
+    # trigger is disabled, or the kind is not SCHEDULE. Stored UTC.
+    next_run_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Shared secret an inbound webhook must present. Compared in constant
+    # time against the `X-Onyx-Flow-Token` header.
+    webhook_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    flow: Mapped[Flow] = relationship("Flow", back_populates="triggers")
+
+    __table_args__ = (
+        # Dispatcher hot path: WHERE enabled AND next_run_at <= now()
+        #                       ORDER BY next_run_at
+        Index("ix_flow_trigger_dispatch", "enabled", "next_run_at"),
+        Index("ix_flow_trigger_flow", "flow_id"),
+    )
+
+
+class FlowRun(Base):
+    """One execution of a flow.
+
+    `flow_version_id` is NULL only for TEST runs, which execute the draft
+    spec. Everything else pins a published version.
+    """
+
+    __tablename__ = "flow_run"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    flow_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("flow.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    flow_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("flow_version.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    trigger_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("flow_trigger.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    trigger_source: Mapped[FlowTriggerSource] = mapped_column(
+        Enum(FlowTriggerSource, native_enum=False, name="flowtriggersource"),
+        nullable=False,
+    )
+    status: Mapped[FlowRunStatus] = mapped_column(
+        Enum(FlowRunStatus, native_enum=False, name="flowrunstatus"),
+        nullable=False,
+        default=FlowRunStatus.QUEUED,
+        server_default="QUEUED",
+    )
+
+    # Whatever the trigger produced. Becomes the root of `{{ trigger.* }}`.
+    trigger_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    skip_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    error_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # When a run parked on a delay step becomes due. NULL for every other
+    # state, which is what keeps the sweep's index small and its query one
+    # comparison wide — the same shape as `flow_trigger.next_run_at`.
+    resume_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    started_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    finished_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    flow: Mapped[Flow] = relationship("Flow", back_populates="runs")
+    version: Mapped["FlowVersion | None"] = relationship(
+        "FlowVersion", foreign_keys=[flow_version_id]
+    )
+    node_runs: Mapped[list["FlowNodeRun"]] = relationship(
+        "FlowNodeRun",
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="FlowNodeRun.started_at",
+    )
+
+    __table_args__ = (
+        Index("ix_flow_run_flow_started", "flow_id", desc("started_at")),
+        Index("ix_flow_run_status", "status"),
+        # Partial: only parked runs carry a resume time, so the index stays
+        # the size of what is actually waiting rather than of all history.
+        Index(
+            "ix_flow_run_resume_at",
+            "resume_at",
+            postgresql_where=text("resume_at IS NOT NULL"),
+        ),
+    )
+
+
+class FlowNodeRun(Base):
+    """One node's execution inside a run.
+
+    A node that fans out over a list gets one row per item, distinguished by
+    `item_index`, and a node inside a loop gets one per pass, distinguished by
+    `iteration`. The unique key on (run_id, node_id, iteration, item_index) is
+    what makes a redelivered executor safe: the insert conflicts and the
+    engine reuses the recorded output instead of repeating the side effect.
+    """
+
+    __tablename__ = "flow_node_run"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("flow_run.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Spec-local node id, e.g. "fetch_issues". Not a FK — the spec lives in
+    # JSONB and a node can be renamed between versions.
+    node_id: Mapped[str] = mapped_column(String, nullable=False)
+    kind: Mapped[FlowNodeKind] = mapped_column(
+        Enum(FlowNodeKind, native_enum=False, name="flownodekind"),
+        nullable=False,
+    )
+    status: Mapped[FlowNodeRunStatus] = mapped_column(
+        Enum(FlowNodeRunStatus, native_enum=False, name="flownoderunstatus"),
+        nullable=False,
+        default=FlowNodeRunStatus.RUNNING,
+        server_default="RUNNING",
+    )
+
+    # 0 unless an upstream node fanned out over a list.
+    item_index: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    # The loop pass this execution belongs to. 0 outside a loop.
+    iteration: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    # Retries within this row. 1 on the first try.
+    attempt: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
+
+    # Resolved input and produced output, both shown in the run inspector.
+    input: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    output: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    error_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    started_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    finished_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    run: Mapped[FlowRun] = relationship("FlowRun", back_populates="node_runs")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "node_id",
+            "iteration",
+            "item_index",
+            name="uq_flow_node_run_identity",
+        ),
+        Index("ix_flow_node_run_run", "run_id"),
     )
