@@ -3,8 +3,7 @@
 import { useTranslations } from "next-intl";
 import { Button, SelectCard, Tabs } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
-// SvgExpand, SvgFold and SvgListTree return with the header buttons below.
-import { SvgPlusCircle } from "@opal/icons";
+import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/credentials/types";
 import {
   useCredentialCheckReports,
@@ -163,28 +162,25 @@ export default function AuthenticationAccountSection({
         sizePreset="main-content"
         variant="section"
         padding={0}
-        // The saved-accounts count has nowhere to lead yet, and the fold
-        // button only ever closes, so it reads as broken while no card is
-        // open. Both wait for the rest of the accounts panel.
-        // rightChildren={
-        //   <>
-        //     <Button icon={SvgListTree} prominence="tertiary">
-        //       {t("add.savedAccountsButton.label", {
-        //         count: credentials.length,
-        //       })}
-        //     </Button>
-        //     <Button
-        //       icon={isOpen ? SvgFold : SvgExpand}
-        //       prominence="tertiary"
-        //       aria-label={
-        //         isOpen
-        //           ? t("add.collapseButton.ariaLabel")
-        //           : t("add.expandButton.ariaLabel")
-        //       }
-        //       onClick={close}
-        //     />
-        //   </>
-        // }
+        rightChildren={
+          <>
+            <Button icon={SvgListTree} prominence="tertiary">
+              {t("add.savedAccountsButton.label", {
+                count: credentials?.length ?? 0,
+              })}
+            </Button>
+            <Button
+              icon={isCreating ? SvgFold : SvgExpand}
+              prominence="tertiary"
+              aria-label={
+                isCreating
+                  ? t("add.collapseButton.ariaLabel")
+                  : t("add.expandButton.ariaLabel")
+              }
+              onClick={close}
+            />
+          </>
+        }
       />
 
       {/* The page mounts this step only once the credentials have loaded,
