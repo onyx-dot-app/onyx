@@ -634,7 +634,7 @@ def list_router_model_providers(
     """Every router model configuration, grouped under its provider. Unlike
     the paged listings this never truncates: pickers offering a routing
     target must see hidden routers too, so no visibility or page filter."""
-    views = [
+    views: list[LLMProviderView] = [
         LLMProviderView.from_model(
             provider,
             include_api_key=False,
