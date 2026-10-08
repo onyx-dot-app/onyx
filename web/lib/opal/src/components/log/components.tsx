@@ -89,8 +89,8 @@ function Log({
         <Icon size={16} className="opal-log-icon" />
       </Section>
 
-      {/* The title and the centre content sit 1rem apart, wider than the
-          line's gap, so the title column reads as a label. */}
+      {/* The title, the centre content and the trailing content sit 1rem
+          apart, wider than the line's gap, so the columns read apart. */}
       <Section
         flexDirection="row"
         justifyContent="start"
@@ -118,9 +118,9 @@ function Log({
         >
           {centerChildren}
         </Section>
-      </Section>
 
-      {rightChildren}
+        {rightChildren}
+      </Section>
     </Section>
   );
 }

@@ -40,7 +40,8 @@ can match it to the variant.
 
 - A row `Section`, 2.25rem tall with 0.5rem padding and a 0.25rem gap, so tall
   trailing content cannot stretch the line. The title column is exactly 10rem,
-  and 1rem separates it from the centre content.
+  and 1rem separates it from the centre content, and the centre content from
+  the trailing content.
 - A title too long for its column is cut with an ellipsis and shows in full
   in a tooltip. `centerChildren` handles its own overflow.
 
