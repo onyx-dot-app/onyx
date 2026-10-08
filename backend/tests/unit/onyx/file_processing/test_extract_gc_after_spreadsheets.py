@@ -27,15 +27,21 @@ from onyx.file_processing.extract_file_text import extract_text_and_images
 def test_garbage_is_collected_after_spreadsheets_only(
     file_name: str, content_type: str | None, collections: int
 ) -> None:
+    order: list[str] = []
     with (
         patch(
-            "onyx.file_processing.extract_file_text._extract_text_and_images"
-        ) as extract,
-        patch("onyx.file_processing.extract_file_text.gc.collect") as collect,
+            "onyx.file_processing.extract_file_text._extract_text_and_images",
+            side_effect=lambda *_args, **_kwargs: order.append("extract"),
+        ),
+        patch(
+            "onyx.file_processing.extract_file_text.gc.collect",
+            side_effect=lambda: order.append("collect") or 0,
+        ),
     ):
         extract_text_and_images(
             io.BytesIO(b"bytes"), file_name, content_type=content_type
         )
 
-    assert extract.call_count == 1
-    assert collect.call_count == collections
+    # The collection must follow the extraction: it exists for the cycles the
+    # workbook parser leaves behind.
+    assert order == ["extract"] + ["collect"] * collections
