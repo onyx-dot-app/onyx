@@ -646,3 +646,64 @@ it.each([true, false])(
     );
   }
 );
+
+it("retries discovery before a silent focus read can consume new files", async () => {
+  jest.useFakeTimers();
+  await refresh([]);
+  store().updateSessionData(sessionId, { activeTurnId: "finishing-turn" });
+  jest
+    .mocked(fetchOutputInventory)
+    .mockRejectedValueOnce(new Error("sandbox unavailable"))
+    .mockResolvedValue({ files: [slides], complete: true });
+  const discovery = store().refreshOutputInventory(sessionId);
+  store().updateSessionData(sessionId, {
+    activeTurnId: null,
+    status: "active",
+  });
+  const focus = store().refreshOutputInventory(sessionId, { silent: true });
+  await jest.advanceTimersByTimeAsync(1000);
+  await Promise.all([discovery, focus]);
+  expect(session()?.activePanelTabId).toBe(`file:${slides.path}`);
+  jest.useRealTimers();
+});
+
+it("does not retry an older turn after a new task starts", async () => {
+  jest.useFakeTimers();
+  await refresh([]);
+  jest.mocked(fetchOutputInventory).mockRejectedValueOnce(new Error("offline"));
+  const discovery = store().refreshOutputInventory(sessionId);
+  await jest.advanceTimersByTimeAsync(0);
+  store().updateSessionData(sessionId, { turnGeneration: 1 });
+  await jest.advanceTimersByTimeAsync(1000);
+  await discovery;
+  expect(fetchOutputInventory).toHaveBeenCalledTimes(2);
+  expect(session()?.outputInventoryStatus).toBe("complete");
+  jest.useRealTimers();
+});
+
+it("bounds stalled requests and preserves the inventory after retries fail", async () => {
+  jest.useFakeTimers();
+  const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+  await refresh([oldFile]);
+  jest.mocked(fetchOutputInventory).mockImplementation(
+    (_sessionId, signal) =>
+      new Promise((_resolve, reject) => {
+        signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("Aborted", "AbortError")),
+          { once: true }
+        );
+      })
+  );
+  const discovery = store().refreshOutputInventory(sessionId);
+  await jest.advanceTimersByTimeAsync(108000);
+  await discovery;
+  expect(fetchOutputInventory).toHaveBeenCalledTimes(4);
+  expect(session()).toMatchObject({
+    outputInventory: { [oldFile.path]: oldFile },
+    outputInventoryStatus: "error",
+    outputBaselinePending: false,
+  });
+  warn.mockRestore();
+  jest.useRealTimers();
+});

@@ -708,7 +708,7 @@ export interface BuildSessionData {
   /** Shared metadata for discovery, Artifacts, and preview revisions. */
   outputInventory: Record<string, OutputFile> | null;
   outputInventoryStatus: "loading" | "complete" | "partial" | "error";
-  /** A new task needs a complete baseline before selecting newly discovered files. */
+  /** Automatic discovery starts after the first complete inventory. */
   outputBaselinePending: boolean;
   /** Explicit preview reloads, keyed by file path. File edits use inventory revisions. */
   filePreviewRefreshKeys: Record<string, number>;
@@ -1689,7 +1689,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           current?.outputInventory === null ||
           current?.status !== "running"
         ) {
-          await get().refreshOutputInventory(sessionId, { silent: true });
+          void get().refreshOutputInventory(sessionId, { silent: true });
         }
       }
 
@@ -1823,7 +1823,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         try {
           const restoredArtifacts = await fetchArtifacts(sessionId);
           updateSessionData(sessionId, { artifacts: restoredArtifacts });
-          await get().refreshOutputInventory(sessionId, { silent: true });
+          void get().refreshOutputInventory(sessionId, { silent: true });
         } catch (artifactsErr) {
           console.warn(
             "Failed to fetch artifacts after restore:",
@@ -1990,6 +1990,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             sessionId: sessionData.id,
           },
         }));
+        void get().refreshOutputInventory(sessionData.id, { silent: true });
         return sessionData.id;
       } catch (err) {
         console.error("[PreProvision] Failed to pre-provision session:", err);
@@ -2119,104 +2120,101 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   ) => {
     const started: BuildSessionData | undefined = get().sessions.get(sessionId);
     if (!started || signal?.aborted) return;
-    const readInventory = async (): Promise<void> => {
+    const isCurrent = (): boolean => {
       const current = get().sessions.get(sessionId);
-      if (
-        signal?.aborted ||
-        !current ||
-        current.turnGeneration !== started.turnGeneration ||
-        (silent && current.activeTurnId !== started.activeTurnId) ||
-        (current.activeTurnId &&
-          started.activeTurnId &&
-          current.activeTurnId !== started.activeTurnId)
-      )
-        return;
-      const controller: AbortController = new AbortController();
-      const abort = (): void => controller.abort();
-      signal?.addEventListener("abort", abort, { once: true });
-      // Metadata reads must not hold up prompts or stream settlement.
-      const timeout: ReturnType<typeof setTimeout> = setTimeout(abort, 2000);
-      try {
-        const inventory: OutputInventory = await fetchOutputInventory(
-          sessionId,
-          controller.signal
-        );
-        if (controller.signal.aborted) return;
-        const session = get().sessions.get(sessionId);
-        if (
-          !session ||
-          session.turnGeneration !== started.turnGeneration ||
-          (silent && session.activeTurnId !== started.activeTurnId) ||
-          (session.activeTurnId &&
-            started.activeTurnId &&
-            session.activeTurnId !== started.activeTurnId)
-        )
-          return;
-        const previous = session.outputInventory;
-        const { files, added, changed } = compareOutputInventory(
-          previous ?? {},
-          inventory
-        );
-        const updates: Partial<BuildSessionData> = {
-          outputInventory: files,
-          outputInventoryStatus: inventory.complete ? "complete" : "partial",
-          outputBaselinePending:
-            (session.outputBaselinePending || previous === null) &&
-            !inventory.complete,
-          filesNeedsRefresh:
-            session.filesNeedsRefresh +
-            (previous !== null && (added.length > 0 || changed.length > 0)
-              ? 1
-              : 0),
-        };
-        // Unknown baselines still refresh previews, but cannot attribute files to this task.
-        if (previous === null || session.outputBaselinePending || silent) {
+      return (
+        !signal?.aborted &&
+        current !== undefined &&
+        current.turnGeneration === started.turnGeneration &&
+        (!silent || current.activeTurnId === started.activeTurnId) &&
+        (!current.activeTurnId ||
+          !started.activeTurnId ||
+          current.activeTurnId === started.activeTurnId)
+      );
+    };
+    const readInventory = async (): Promise<void> => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (!isCurrent()) return;
+        const controller = new AbortController();
+        const abort = (): void => controller.abort();
+        signal?.addEventListener("abort", abort, { once: true });
+        // Allow the backend's 30-second RPC deadline plus HTTP overhead.
+        const timeout = setTimeout(abort, 35000);
+        try {
+          const inventory = await fetchOutputInventory(
+            sessionId,
+            controller.signal
+          );
+          if (!isCurrent()) return;
+          const session = get().sessions.get(sessionId);
+          if (!session) return;
+          const previous = session.outputInventory;
+          const { files, added, changed } = compareOutputInventory(
+            previous ?? {},
+            inventory
+          );
+          const updates: Partial<BuildSessionData> = {
+            outputInventory: files,
+            outputInventoryStatus: inventory.complete ? "complete" : "partial",
+            outputBaselinePending:
+              (session.outputBaselinePending || previous === null) &&
+              !inventory.complete,
+            filesNeedsRefresh:
+              session.filesNeedsRefresh +
+              (previous !== null && (added.length > 0 || changed.length > 0)
+                ? 1
+                : 0),
+          };
+          // Unknown baselines still refresh previews, but cannot attribute files to this task.
+          if (previous === null || session.outputBaselinePending || silent) {
+            get().updateSessionData(sessionId, updates);
+            return;
+          }
+          const newTabs: PanelTab[] = added
+            .filter((file) => outputPreviewPriority(file.path) < 4)
+            .map(
+              (file): PanelTab => ({
+                kind: "file",
+                path: file.path,
+                fileName: file.path.split("/").pop() || file.path,
+              })
+            );
+          const existingIds: Set<string> = new Set(
+            session.panelTabs.map(panelTabId)
+          );
+          const panelTabs: PanelTab[] = [
+            ...session.panelTabs,
+            ...newTabs.filter((tab) => !existingIds.has(panelTabId(tab))),
+          ];
+          updates.panelTabs = panelTabs;
+          const target: PanelTab | undefined = newTabs[0];
+          if (target)
+            Object.assign(
+              updates,
+              automaticallySelectOutput({ ...session, panelTabs }, target)
+            );
           get().updateSessionData(sessionId, updates);
           return;
+        } catch (error) {
+          if (!isCurrent()) return;
+          if (attempt === 2) {
+            get().updateSessionData(sessionId, {
+              outputInventoryStatus: "error",
+            });
+            console.warn(
+              "[Streaming] Failed to refresh output inventory:",
+              error
+            );
+          }
+        } finally {
+          clearTimeout(timeout);
+          signal?.removeEventListener("abort", abort);
         }
-        const newTabs: PanelTab[] = added
-          .filter((file) => outputPreviewPriority(file.path) < 4)
-          .map(
-            (file): PanelTab => ({
-              kind: "file",
-              path: file.path,
-              fileName: file.path.split("/").pop() || file.path,
-            })
-          );
-        const existingIds: Set<string> = new Set(
-          session.panelTabs.map(panelTabId)
-        );
-        const panelTabs: PanelTab[] = [
-          ...session.panelTabs,
-          ...newTabs.filter((tab) => !existingIds.has(panelTabId(tab))),
-        ];
-        updates.panelTabs = panelTabs;
-        const target: PanelTab | undefined = newTabs[0];
-        if (target)
-          Object.assign(
-            updates,
-            automaticallySelectOutput({ ...session, panelTabs }, target)
-          );
-        get().updateSessionData(sessionId, updates);
-      } catch (error) {
-        const current = get().sessions.get(sessionId);
-        if (
-          !signal?.aborted &&
-          current &&
-          current.turnGeneration === started.turnGeneration &&
-          current.activeTurnId === started.activeTurnId
-        ) {
-          get().updateSessionData(sessionId, {
-            outputInventoryStatus: "error",
-          });
-          console.warn(
-            "[Streaming] Failed to refresh output inventory:",
-            error
+        if (attempt < 2) {
+          await new Promise<void>((resolve) =>
+            setTimeout(resolve, 1000 * (attempt + 1))
           );
         }
-      } finally {
-        clearTimeout(timeout);
-        signal?.removeEventListener("abort", abort);
       }
     };
 

@@ -102,6 +102,7 @@ it("retains files through incomplete scans and removes empty folders after a com
 });
 
 it("distinguishes loading and failure from a complete empty inventory", async () => {
+  jest.useFakeTimers();
   let rejectRequest: ((error: Error) => void) | undefined;
   jest.mocked(fetchOutputInventory).mockImplementationOnce(
     () =>
@@ -112,7 +113,11 @@ it("distinguishes loading and failure from a complete empty inventory", async ()
   const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
   render(<ArtifactsTab sessionId={sessionId} artifacts={[]} />);
   expect(screen.getByRole("status")).toHaveTextContent("Loading outputs");
-  await act(async () => rejectRequest?.(new Error("offline")));
+  jest.mocked(fetchOutputInventory).mockRejectedValue(new Error("offline"));
+  await act(async () => {
+    rejectRequest?.(new Error("offline"));
+    await jest.advanceTimersByTimeAsync(3000);
+  });
   expect(screen.getByRole("status")).toHaveTextContent(
     "Could not refresh outputs"
   );
@@ -120,6 +125,7 @@ it("distinguishes loading and failure from a complete empty inventory", async ()
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
   expect(screen.getByText("No artifacts yet")).toBeInTheDocument();
   warn.mockRestore();
+  jest.useRealTimers();
 });
 
 it("opens files and downloads files or inferred folders through existing routes", async () => {
@@ -158,4 +164,22 @@ it("reconciles on activation without absorbing a live task's new output silently
   expect(store().sessions.get(sessionId)?.activePanelTabId).toBe(
     "file:outputs/new.pdf"
   );
+});
+
+it("recovers an activation read without another click", async () => {
+  jest.useFakeTimers();
+  jest
+    .mocked(fetchOutputInventory)
+    .mockRejectedValueOnce(new Error("sandbox unavailable"))
+    .mockResolvedValue({ files: [file("outputs/report.pdf")], complete: true });
+  render(<ArtifactsTab sessionId={sessionId} artifacts={[]} />);
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(1000);
+  });
+  expect(
+    screen.getByRole("button", { name: "Open report.pdf" })
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(store().sessions.get(sessionId)?.outputPanelOpen).toBe(false);
+  jest.useRealTimers();
 });

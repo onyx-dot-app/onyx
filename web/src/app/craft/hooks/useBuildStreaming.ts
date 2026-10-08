@@ -41,8 +41,6 @@ import {
 
 const INTERRUPT_RECONCILE_INTERVAL_MS = 1000;
 const INTERRUPT_RECONCILE_MAX_ATTEMPTS = 30;
-// No backend turn exists while its initial output inventory loads.
-const pendingOutputBaselines = new WeakSet<AbortController>();
 
 /** Coalesce tool completions. Turn completion queues its final read immediately. */
 function createOutputRefreshQueue(refresh: () => Promise<void>) {
@@ -957,7 +955,7 @@ export function useBuildStreaming() {
       try {
         const response = await fetchTurnEventStream(sessionId, turnId, signal);
         if (!response) {
-          await processor.finalizeOutputs();
+          void processor.finalizeOutputs();
           clearTurnIfCurrent({
             status: "active",
             isInterrupting: false,
@@ -965,7 +963,7 @@ export function useBuildStreaming() {
           return;
         }
         await processSSEStream(response, processor.processPacket);
-        await processor.finalizeOutputs();
+        void processor.finalizeOutputs();
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           const currentSession = useBuildSessionStore
@@ -1058,7 +1056,6 @@ export function useBuildStreaming() {
         isInterrupting: false,
         wasInterrupted: false,
         outputSelectionLocked: false,
-        outputBaselinePending: true,
         turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
         activeTurnId: null,
         activeTurnIndex: null,
@@ -1067,19 +1064,6 @@ export function useBuildStreaming() {
       clearStreamItems(sessionId);
 
       try {
-        // Reconcile previous tasks before this task can create or select files.
-        pendingOutputBaselines.add(controller);
-        try {
-          await useBuildSessionStore
-            .getState()
-            .refreshOutputInventory(sessionId, {
-              silent: true,
-              signal: controller.signal,
-            });
-        } finally {
-          pendingOutputBaselines.delete(controller);
-        }
-        if (controller.signal.aborted) return;
         const turn = await createTurn(
           sessionId,
           content,
@@ -1163,16 +1147,6 @@ export function useBuildStreaming() {
         return;
       }
 
-      if (pendingOutputBaselines.has(session.abortController)) {
-        session.abortController.abort();
-        updateSessionData(sessionId, {
-          status: "active",
-          wasInterrupted: true,
-          activeTurnLocalOwner: false,
-        });
-        return;
-      }
-
       const interruptedTurnId = session.activeTurnId;
       const generation = session.turnGeneration;
       updateSessionData(sessionId, {
@@ -1218,7 +1192,7 @@ export function useBuildStreaming() {
       try {
         const response = await fetchScheduledRunEventStream(sessionId, signal);
         await processSSEStream(response, processor.processPacket);
-        await processor.finalizeOutputs();
+        void processor.finalizeOutputs();
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           return;

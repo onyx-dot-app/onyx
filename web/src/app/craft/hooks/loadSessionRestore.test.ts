@@ -58,10 +58,33 @@ describe("loadSession restore status", () => {
     mockedApi.fetchMessages.mockResolvedValue([] as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
     mockedApi.fetchArtifacts.mockResolvedValue([] as never);
+    mockedApi.fetchOutputInventory.mockResolvedValue({
+      files: [],
+      complete: true,
+    });
     // Default: webapp already serving, so the readiness gate is a no-op.
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, true) as never
     );
+  });
+
+  it("loads the session while its inventory is still pending", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    const inventory =
+      deferred<Awaited<ReturnType<typeof api.fetchOutputInventory>>>();
+    mockedApi.fetchOutputInventory.mockReturnValueOnce(inventory.promise);
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      isLoaded: true,
+      outputInventory: null,
+    });
+    inventory.resolve({ files: [], complete: true });
+    // Wait for the serialized queue to settle before resetting the store.
+    await useBuildSessionStore
+      .getState()
+      .refreshOutputInventory(SESSION_ID, { silent: true });
   });
 
   it("keeps the sandbox running when the post-restore artifact fetch fails", async () => {
@@ -581,6 +604,10 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
     } as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
     mockedApi.fetchArtifacts.mockResolvedValue([] as never);
+    mockedApi.fetchOutputInventory.mockResolvedValue({
+      files: [],
+      complete: true,
+    });
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, true) as never
     );

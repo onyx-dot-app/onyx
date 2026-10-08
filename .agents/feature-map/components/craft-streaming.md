@@ -251,17 +251,18 @@ It shows loading, failed, and incomplete reads separately from complete empty re
 Partial first reads can display known files but cannot establish a discovery baseline.
 Activating Artifacts reconciles the inventory; only idle sessions use a silent refresh.
 The browser does not walk output directories.
-The first complete response establishes a silent baseline. Session loading establishes this baseline. Each interactive prompt takes a silent
-snapshot before creating its backend turn, so outputs from a previous task are not
-selected as new. Inventory reads have a two-second timeout, so slow metadata cannot
-block prompts or stream settlement. Stopping during that snapshot aborts its request
-and cancels locally without setting a backend interrupt fence. Idle cached sessions reconcile revisions on entry and focus
-without adding tabs or changing selection.
-Reloading the page discards it; nothing is written to the database or local storage.
-If the first inventory stays incomplete, automatic file selection stays disabled.
+Session loading and pre-provisioning fetch the inventory in the background.
+Messages send immediately, using the last successful inventory for discovery.
+Neither message submission nor turn completion waits for inventory reads.
+The first complete response establishes a silent baseline, even if a task has already created files.
+Those files appear in Artifacts but do not automatically open. Later discoveries can open normally.
+Partial initial reads cannot establish the baseline.
+Idle cached sessions reconcile revisions on entry and focus without adding tabs or changing selection.
+Reloading the page discards the inventory; nothing is written to the database or local storage.
+Reads allow 35 seconds per attempt, covering the backend's 30-second RPC deadline and HTTP overhead.
+Failed reads retry twice, after one and two seconds. Retries retain their original turn and selection rules.
+An incomplete scan preserves known entries and waits for a later refresh to establish a complete baseline.
 This can occur when a tree exceeds scan limits or contains an unreadable directory.
-A failed or incomplete pre-prompt scan leaves discovery pending until a complete baseline arrives.
-Cached revisions remain available, and later scans still refresh previews without selecting previous-task files.
 
 `useBuildSessionStore.ts:compareOutputInventory` compares paths and metadata
 revisions. Completed shell and edit tools, including child-agent tools,
