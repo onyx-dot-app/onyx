@@ -326,6 +326,7 @@ export const fetchOpenRouterModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
+      is_router: modelData.is_router,
       effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 

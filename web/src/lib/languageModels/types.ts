@@ -170,6 +170,7 @@ export interface OpenRouterModelResponse {
   display_name: string;
   max_input_tokens: number | null;
   supports_image_input: boolean;
+  is_router: boolean;
 }
 
 export interface BedrockModelResponse {

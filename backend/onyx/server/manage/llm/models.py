@@ -274,6 +274,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
     supports_reasoning: bool | None = None
     display_name: str | None = None  # For dynamic providers, from source API
     custom_display_name: str | None = None  # Admin-specified override
+    is_router: bool = False
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
@@ -337,6 +338,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
             ),
             display_name=model_configuration_model.display_name,
             custom_display_name=model_configuration_model.custom_display_name,
+            is_router=model_configuration_model.is_router,
             reasoning_effort_max=model_configuration_model.reasoning_effort_max,
             reasoning_effort_default=model_configuration_model.reasoning_effort_default,
             temperature_default=model_configuration_model.temperature_default,

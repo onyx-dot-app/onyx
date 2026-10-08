@@ -554,6 +554,8 @@ def upsert_llm_provider(
                 else existing.temperature_default
             )
             ensure_default_within_max(merged_reasoning_default, merged_reasoning_max)
+            # Router status is additive like the capability flags.
+            existing.is_router = existing.is_router or model_config.is_router
             update_model_configuration__no_commit(
                 db_session=db_session,
                 model_configuration_id=existing.id,
@@ -589,6 +591,7 @@ def upsert_llm_provider(
                     reasoning_effort_max=model_config.reasoning_effort_max,
                     reasoning_effort_default=model_config.reasoning_effort_default,
                     temperature_default=model_config.temperature_default,
+                    is_router=model_config.is_router,
                 )
             )
     insert_new_model_configurations__no_commit(
@@ -828,9 +831,10 @@ def fetch_model_configurations_page(
     name_query: str | None = None,
 ) -> dict[int, ModelConfigurationWindow]:
     """The same LLM_PROVIDER_MODEL_PAGE_SIZE window of every provider's models,
-    visible first then by name. `name_query` narrows each provider to models
-    whose name or display names contain it, so a picker can search models it
-    has not paged in yet."""
+    visible first (routers before other visible models, so a picker's router
+    tab sees them all on page one) then by name. `name_query` narrows each
+    provider to models whose name or display names contain it, so a picker can
+    search models it has not paged in yet."""
     if not provider_ids:
         return {}
 
@@ -840,6 +844,7 @@ def fetch_model_configurations_page(
             partition_by=ModelConfiguration.llm_provider_id,
             order_by=(
                 ModelConfiguration.is_visible.desc(),
+                ModelConfiguration.is_router.desc(),
                 ModelConfiguration.name,
                 ModelConfiguration.id,
             ),
