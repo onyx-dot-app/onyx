@@ -37,8 +37,13 @@ from onyx.oauth_provider.attempts import (
     get_authorization_request,
     store_authorization_code,
 )
+from onyx.oauth_provider.auth import get_oauth_provider_token_info
 from onyx.oauth_provider.config import require_oauth_provider_settings
-from onyx.oauth_provider.models import OAuthProviderGrantInfo, StoredOAuthProviderCode
+from onyx.oauth_provider.models import (
+    OAuthProviderGrantInfo,
+    OAuthProviderIntrospection,
+    StoredOAuthProviderCode,
+)
 from onyx.server.oauth_provider.models import (
     OAuthConsentDecision,
     OAuthConsentInfo,
@@ -117,6 +122,26 @@ async def _authorization_session(request: Request, user: User) -> str:
             OnyxErrorCode.UNAUTHORIZED, "Workspace membership is no longer active"
         )
     return session_hash
+
+
+@router.get("/introspect")
+def introspect(
+    request: Request,
+    response: Response,
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
+) -> OAuthProviderIntrospection:
+    info = get_oauth_provider_token_info(request)
+    if info is None:
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
+    response.headers.update(NO_STORE_HEADERS)
+    return OAuthProviderIntrospection(
+        client_id=info.grant.client_id,
+        scopes=list(info.grant.scopes),
+        resource=info.grant.resource,
+        expires_at=int(info.expires_at.timestamp()),
+        subject=str(user.id),
+        grant_id=info.grant.id,
+    )
 
 
 @router.get("/consent")

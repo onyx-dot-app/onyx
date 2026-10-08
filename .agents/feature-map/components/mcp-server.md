@@ -173,7 +173,7 @@ through an `/mcp` ingress path.
 
 ### 4.2 Auth: every request, not just connection setup
 
-`mcp_server = FastMCP(..., auth=OnyxTokenVerifier())` (`api.py`) wires
+`mcp_server = FastMCP(..., auth=build_mcp_server_auth())` (`api.py`, `auth.py`) wires
 `OnyxTokenVerifier.verify_token` (`auth.py`) into FastMCP's per-request
 authentication. On every MCP request, it makes a synchronous `GET /me` call to
 the API server with `Authorization: Bearer {token}` (`auth.py:verify_token`).
@@ -195,6 +195,21 @@ Tokens are the PAT/API-key mechanism `[[auth-and-identity]]` owns
 `db/enums.py:Permission.READ_SEARCH` / `READ_CHAT` / `WRITE_CHAT`, described in
 that enum's own docstring as "API-surface scopes... coarser than the
 capability tokens... exist primarily to scope Personal Access Tokens."
+
+**OAuth provider tokens.** A bearer with the `onyx_oat_` prefix goes to
+`auth.py:verify_oauth_token` instead of `/me`. It calls
+`GET /oauth-provider/introspect` on the API server and accepts the token only
+if the resource is the MCP resource (`{WEB_DOMAIN}/mcp/`), the token is not
+expired, and the scope is exactly `read:search`. A 401 returns `None`; a 402
+and an outage stay distinct (`SUBSCRIPTION_INACTIVE`, `SERVICE_UNAVAILABLE`,
+turned into responses by `MCPAuthErrorMiddleware`); a 403 becomes an
+`insufficient_scope` challenge that points at the protected-resource metadata.
+When `oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS` is set, `build_mcp_server_auth` wraps the verifier
+in fastmcp's `RemoteAuthProvider`, which serves that metadata and names the
+Onyx issuer. The tokens come from the OAuth provider in [[auth-and-identity]] §4.9.
+Discovery advertises `{WEB_DOMAIN}/mcp` without a trailing slash so clients can
+connect with either `/mcp` or `/mcp/`. Stored token audiences remain `/mcp/`.
+The internal MCP mount path does not change the advertised public resource.
 
 ### 4.3 A search call, end to end
 
@@ -288,6 +303,13 @@ whatever those endpoints give back.
    `Permission.READ_SEARCH` gate as any other programmatic caller
    (`[[onyx-api]]`); it adds no bypass of its own, including the budget
    checks (see §9).
+8. **An OAuth provider token reaches only its route allowlist.**
+   `oauth_provider/auth.py:authenticate_oauth_provider_request` admits the
+   token only on `_ACCESS_ROUTES` and only with exactly the `read:search`
+   scope, and sets `request.state.token_scopes` so `require_permission` caps
+   it like a scoped PAT. An invalid or refresh-type OAuth bearer is rejected
+   and never falls back to a browser cookie. Adding a route the MCP server
+   calls means adding it to `_ACCESS_ROUTES`.
 
 ---
 

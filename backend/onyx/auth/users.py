@@ -154,6 +154,10 @@ from onyx.error_handling.exceptions import (
     log_onyx_error,
     onyx_error_to_json_response,
 )
+from onyx.oauth_provider.auth import (
+    authenticate_oauth_provider_request,
+    extract_oauth_provider_bearer,
+)
 from onyx.redis.redis_pool import (
     get_async_redis_connection,
     retrieve_auth_token_data,
@@ -2256,6 +2260,14 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
+    mcp_token = extract_oauth_provider_bearer(request)
+    if mcp_token is not None:
+        mcp_user = await authenticate_oauth_provider_request(
+            request, async_db_session, mcp_token
+        )
+        await _maybe_refresh_oauth_tokens(mcp_user, async_db_session, user_manager)
+        return mcp_user
+
     if user is not None:
         request.state.usage_credential = UsageCredentialIdentity(
             UsageCredentialType.SESSION

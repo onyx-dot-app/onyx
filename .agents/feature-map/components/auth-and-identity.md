@@ -336,6 +336,10 @@ Request → classify_session_token_value: EXPIRED / TERMINATED / NOT_FOUND /
 ```
 Authorization: Bearer <token>  or raw key (API keys only, historically)
   optional_user → _resolve_optional_user (auth/users.py)
+    ├─ OAuth provider bearer (onyx_oat_ / onyx_ort_ prefix) first:
+    │    extract_oauth_provider_bearer → authenticate_oauth_provider_request
+    │    (oauth_provider/auth.py); usage credential OAUTH_PROVIDER; never
+    │    falls back to the session cookie
     ├─ SAML/JWT check
     ├─ get_hashed_pat_from_request → resolve_pat → sets request.state.token_scopes
     │    (Bearer-only; api_key.py additionally accepts a raw, non-Bearer key)
@@ -397,7 +401,7 @@ metadata | register | authorize | token | revoke     server/oauth_provider/proto
               redirects to the web consent page {WEB_DOMAIN}/oauth-provider/authorize
   token     → reads the tenant from the code record or the refresh token,
               sets CURRENT_TENANT_ID_CONTEXTVAR, then runs the SDK handler
-consent (GET, POST) | grants | grants/{id}            server/oauth_provider/api.py
+consent (GET, POST) | grants | grants/{id} | introspect   server/oauth_provider/api.py
   GET consent  → bind_authorization_request: binds the request to user,
                  tenant, login session (_session_hash) and a CSRF token
   POST consent → Origin check, consume_authorization_request, revalidate
@@ -418,6 +422,12 @@ codes, which hold user data, live in that tenant's cache
 (`onyx_oac_{tenant}.{secret}`, `auth/oauth_provider.py`) so `/token` can find it
 without a session; it is stored under a hash of the whole code, so an edited
 tenant misses.
+
+Accepting an issued access token: in multi-tenant deployments the tenant
+middleware takes the tenant from the token (`oauth_provider_tenant_from_request`,
+which rejects unknown tenants before routing), then `_resolve_optional_user`
+authenticates it (§4.7). `introspect` lets the MCP server verify a token
+through the API ([[mcp-server]] §4.2).
 
 ---
 
