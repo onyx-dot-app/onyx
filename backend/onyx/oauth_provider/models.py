@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from mcp.server.auth.provider import AuthorizationParams
+from mcp.server.auth.provider import AuthorizationCode, AuthorizationParams
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from onyx.auth.oauth_provider import OAuthProviderTokenKind
@@ -62,3 +62,25 @@ class StoredOAuthProviderCode(BaseModel):
     user_id: UUID
     tenant_id: str
     expires_at: float
+
+
+class OAuthProviderAuthorizationCode(AuthorizationCode):
+    tenant_id: str
+    user_id: UUID
+
+
+class OAuthProviderOwner(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    user_id: UUID
+    email: str
+    oauth_identities: tuple[tuple[str, str], ...]
+
+
+class OAuthProviderSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    issuer_url: str
+    mcp_resource_url: str
+    web_url: str
+    web_origin: str

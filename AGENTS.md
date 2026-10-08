@@ -155,6 +155,14 @@ Keep it high level. You can reference certain files or functions though.
 
 Before writing your plan, make sure to do research. Explore the relevant sections in the codebase.
 
+## Reuse Existing Standards
+
+Before you add a helper, utility, pattern or convention, search the codebase for one that does
+the same job, and use it. For example, use the existing rate limiting, caching, URL validation,
+router and settings patterns. Do not invent a parallel mechanism. If the existing one does not
+do enough, extend it so other callers get the change too. A new pattern needs a reason that the
+existing ones cannot meet.
+
 ## Best Practices
 
 In addition to the other content in this file, best practices for contributing
