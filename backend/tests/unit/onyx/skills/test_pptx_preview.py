@@ -25,11 +25,32 @@ def test_preserved_mtime_edit_replaces_cached_slides(
 
     source = tmp_path / "report.pptx"
     source.write_bytes(b"first")
+    os.utime(source, ns=(10_000_000_000, 10_000_000_000))
     original = source.stat()
     cache = tmp_path / "cache"
     cache.mkdir()
     slide = cache / "slide-1.jpg"
     slide.write_bytes(b"old preview")
+    os.utime(slide, ns=(20_000_000_000, 20_000_000_000))
+
+    # Filesystems set ctime themselves; control it without waiting for the clock.
+    source_ctime_ns = 10_000_000_000
+    real_stat = Path.stat
+
+    def controlled_stat(path: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+        result = real_stat(path, follow_symlinks=follow_symlinks)
+        if path == source:
+            return os.stat_result(
+                result,
+                {
+                    "st_atime_ns": result.st_atime_ns,
+                    "st_mtime_ns": result.st_mtime_ns,
+                    "st_ctime_ns": source_ctime_ns,
+                },
+            )
+        return result
+
+    monkeypatch.setattr(Path, "stat", controlled_stat)
     monkeypatch.setattr(sys, "argv", [str(_SCRIPT), str(source), str(cache)])
 
     def convert(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -40,6 +61,7 @@ def test_preserved_mtime_edit_replaces_cached_slides(
         *_args: object, **_kwargs: object
     ) -> subprocess.CompletedProcess[str]:
         slide.write_bytes(b"new preview")
+        os.utime(slide, ns=(40_000_000_000, 40_000_000_000))
         return subprocess.CompletedProcess([], 0)
 
     convert_mock = MagicMock(side_effect=convert)
@@ -54,6 +76,7 @@ def test_preserved_mtime_edit_replaces_cached_slides(
 
     source.write_bytes(b"other")
     os.utime(source, ns=(original.st_atime_ns, original.st_mtime_ns))
+    source_ctime_ns = 30_000_000_000
     assert source.stat().st_size == original.st_size
     assert source.stat().st_mtime_ns == original.st_mtime_ns
 
