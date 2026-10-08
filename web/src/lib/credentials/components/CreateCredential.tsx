@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Divider } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { sealDraftCredential, submitCredential } from "@/lib/credentials/svc";
-import { Form, Formik, FormikHelpers } from "formik";
+import { Form, Formik, FormikHelpers, useFormikContext } from "formik";
 import { Section, toast } from "@opal/layouts";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
@@ -53,6 +53,94 @@ type CreateCredentialFormValues = ShareAccountFormValues & {
   [key: string]: unknown;
 };
 
+/** Waits this long after the last edit before sealing the values. */
+const DRAFT_SEAL_DELAY_MS = 500;
+
+interface DraftSealerProps {
+  source: ValidSources;
+  onDraft: (draft: DraftCredential | null) => void;
+}
+
+/**
+ * Seals the form's values as a draft whenever they are valid, after typing
+ * pauses, and hands the draft up; hands up `null` when they stop being valid
+ * and when the form closes. Renders nothing.
+ */
+function DraftSealer({ source, onDraft }: DraftSealerProps) {
+  const t = useTranslations("admin");
+  const { values, isValid } = useFormikContext<CreateCredentialFormValues>();
+  const { share, groups, ...credentialValues } = values;
+  const credentialJson: Record<string, unknown> = Object.fromEntries(
+    Object.entries(credentialValues).filter(
+      ([, value]) => value !== null && value !== ""
+    )
+  );
+  const valuesKey: string = JSON.stringify(credentialJson);
+  const sharing = shareAccountPayload({ share, groups });
+  const sharingKey: string = JSON.stringify(sharing);
+
+  // The latest callback, so a seal that lands late reports to the current one.
+  const onDraftRef = useRef(onDraft);
+  useEffect(() => {
+    onDraftRef.current = onDraft;
+  });
+  // The values the last draft holds, and the draft itself.
+  const sealedRef = useRef<{ key: string; draft: DraftCredential } | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (!isValid) {
+      if (sealedRef.current !== null) {
+        sealedRef.current = null;
+        onDraftRef.current(null);
+      }
+      return;
+    }
+    const sealed = sealedRef.current;
+    if (sealed !== null && sealed.key === valuesKey) {
+      // Only the sharing changed: it is not sealed, so no new seal.
+      if (JSON.stringify(sealed.draft.sharing) !== sharingKey) {
+        const next: DraftCredential = { ...sealed.draft, sharing };
+        sealedRef.current = { key: valuesKey, draft: next };
+        onDraftRef.current(next);
+      }
+      return;
+    }
+    let cancelled = false;
+    const timeout = setTimeout(() => {
+      sealDraftCredential(source, credentialJson).then(
+        (draftCredential) => {
+          if (cancelled) return;
+          const next: DraftCredential = {
+            draft_credential: draftCredential,
+            source,
+            credential_json: credentialJson,
+            sharing,
+            sealed_at: new Date().toISOString(),
+          };
+          sealedRef.current = { key: valuesKey, draft: next };
+          onDraftRef.current(next);
+        },
+        () => {
+          if (!cancelled)
+            toast.error(t("credentials.create.submitError.toast"));
+        }
+      );
+    }, DRAFT_SEAL_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+    // The keys stand for the values; the objects change every render.
+  }, [isValid, valuesKey, sharingKey, source]);
+
+  // A closed form's values are gone, so its draft goes too.
+  useEffect(() => () => onDraftRef.current(null), []);
+
+  return null;
+}
+
 export default function CreateCredential({
   sourceType,
   accessType,
@@ -75,9 +163,11 @@ export default function CreateCredential({
   onClose?: () => void;
   // Switch currently selected credential
   onSwitch?: (selectedCredential: Credential<any>) => Promise<void>;
-  // Given, the account is not saved: it is sealed as a draft and handed here,
-  // and creating the connector saves it.
-  onDraft?: (draft: DraftCredential) => void;
+  // Given, nothing is saved and there is no Create button: once the form is
+  // valid, its values are sealed as a draft and handed here, and creating the
+  // connector saves it. `null` when the form stops being valid or closes.
+  // Sources with a file field (which cannot be sealed yet) still save.
+  onDraft?: (draft: DraftCredential | null) => void;
   // Switch currently selected credential + link with connector
   onSwap?: (
     selectedCredential: Credential<any>,
@@ -125,30 +215,6 @@ export default function CreateCredential({
         return value !== null && value !== "";
       })
     );
-
-    // A file (private key) cannot be sealed yet, so such an account is saved.
-    if (onDraft && privateKey === null) {
-      try {
-        const sealed = await sealDraftCredential(
-          sourceType,
-          filteredCredentialValues
-        );
-        onDraft({
-          draft_credential: sealed,
-          source: sourceType,
-          credential_json: filteredCredentialValues,
-          sharing: shareAccountPayload({ share, groups }),
-          sealed_at: new Date().toISOString(),
-        });
-        if (close) onClose();
-      } catch (error) {
-        console.error("Error sealing draft credential:", error);
-        toast.error(t("credentials.create.submitError.toast"));
-      } finally {
-        formikHelpers.setSubmitting(false);
-      }
-      return;
-    }
 
     try {
       const response = await submitCredential({
@@ -221,6 +287,10 @@ export default function CreateCredential({
 
   // A spec with auth methods starts on its first one.
   const initialAuthMethod = spec.methods?.[0]?.value;
+  // A file cannot be sealed, so a source with a file field still saves.
+  const sealsDrafts: boolean =
+    onDraft !== undefined &&
+    !Object.values(spec.fields).some((field) => field.kind === "file");
 
   return (
     <Formik<CreateCredentialFormValues>
@@ -266,19 +336,23 @@ export default function CreateCredential({
                 <ShareAccountField disabled={!formikProps.isValid} />
               )}
 
-              <Section flexDirection="row" justifyContent="end">
-                <CreateButton
-                  onClick={() =>
-                    handleSubmit(
-                      formikProps.values,
-                      formikProps,
-                      swapConnector ? "createAndSwap" : "create"
-                    )
-                  }
-                  isSubmitting={formikProps.isSubmitting}
-                  isValid={formikProps.isValid}
-                />
-              </Section>
+              {sealsDrafts && onDraft ? (
+                <DraftSealer source={sourceType} onDraft={onDraft} />
+              ) : (
+                <Section flexDirection="row" justifyContent="end">
+                  <CreateButton
+                    onClick={() =>
+                      handleSubmit(
+                        formikProps.values,
+                        formikProps,
+                        swapConnector ? "createAndSwap" : "create"
+                      )
+                    }
+                    isSubmitting={formikProps.isSubmitting}
+                    isValid={formikProps.isValid}
+                  />
+                </Section>
+              )}
             </Section>
           </Form>
         );

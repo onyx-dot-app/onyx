@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Fold, SelectButton, SelectCard, Tabs } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
@@ -85,22 +85,30 @@ export default function AuthenticationAccountSection({
   const newAccountLabel = t("add.newAccountButton.label", {
     source: displayName,
   });
-  // A new account added here: a draft, held only on this page until Create
-  // saves it. A newer one replaces it.
+  // The new-account form's values, sealed as a draft once they are valid:
+  // held only on this page until Create saves them. Each valid edit makes a
+  // new draft, and the new draft becomes the chosen account.
   const [draft, setDraft] = useState<DraftCredential | null>(null);
   const selectedSavedId: number | null =
     currentCredential && !isDraftCredential(currentCredential)
       ? currentCredential.id
       : null;
+  const draftChosen: boolean =
+    currentCredential !== null && isDraftCredential(currentCredential);
+  // The form reports late (after a seal), so it reads the choice from here.
+  const draftChosenRef = useRef(draftChosen);
+  useEffect(() => {
+    draftChosenRef.current = draftChosen;
+  });
 
-  function onDraft(next: DraftCredential) {
+  function onDraft(next: DraftCredential | null) {
     setDraft(next);
-    onCredentialChange(next);
-  }
-
-  function discardDraft() {
-    if (currentCredential === draft) onCredentialChange(null);
-    setDraft(null);
+    if (next !== null) {
+      onCredentialChange(next);
+    } else if (draftChosenRef.current) {
+      // The values stopped being valid, or the form closed.
+      onCredentialChange(null);
+    }
   }
 
   async function onDeleteCredential(credential: Credential<any | null>) {
@@ -225,21 +233,6 @@ export default function AuthenticationAccountSection({
             {/* Hidden accounts animate away, then leave the page. The fold
             holds the cards' gap, so a closed one leaves no space behind. A
             div, as Section's own padding would override the bottom one. */}
-            {draft && (
-              // Not a saved account, so it stays out of the saved list.
-              <div className="pb-2">
-                <AuthenticationAccountCard
-                  credential={draft}
-                  source={connector}
-                  sourceName={displayName}
-                  selected={currentCredential === draft}
-                  onSelect={() => onCredentialChange(draft)}
-                  onDeselect={() => onCredentialChange(null)}
-                  onDelete={discardDraft}
-                  checkReport={null}
-                />
-              </div>
-            )}
             <Fold open={showSavedAccounts && credentials.length > 0}>
               <div className="flex flex-col gap-2 pb-2">
                 {credentials.map((credential) => (
@@ -283,7 +276,10 @@ export default function AuthenticationAccountSection({
                 expanded={isCreating}
                 expandableContentHeight="full"
                 border="solid"
-                state={isCreating ? "filled" : "empty"}
+                // Selected while its draft is the chosen account.
+                state={
+                  draftChosen ? "selected" : isCreating ? "filled" : "empty"
+                }
                 rounding={4}
                 padding={2}
                 // The card is one action, so it names itself. Nothing inside the
@@ -329,8 +325,15 @@ export default function AuthenticationAccountSection({
                     )}
                   </div>
                 }
+                // Open with a draft that is not chosen, the header chooses it
+                // again; otherwise it opens or closes the form. Closing drops
+                // the form's values, and with them the draft.
                 onClick={() =>
-                  isCreating ? close() : selectMethod(defaultMethod)
+                  isCreating && draft !== null && !draftChosen
+                    ? onCredentialChange(draft)
+                    : isCreating
+                      ? close()
+                      : selectMethod(defaultMethod)
                 }
               >
                 <Section padding={2} width="full">

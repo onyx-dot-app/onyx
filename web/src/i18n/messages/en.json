@@ -2745,14 +2745,6 @@
           },
           "rerunFailed": {
             "toast": "Couldn't start the checks. Try again."
-          },
-          "draft": {
-            "description": "Not saved yet",
-            "detailsTitle": "Not Saved Yet",
-            "detailsDescription": "This account is saved when you create the connector. Leaving this page discards it.",
-            "discardButton": {
-              "label": "Discard Account"
-            }
           }
         }
       },
