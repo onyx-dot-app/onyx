@@ -30,7 +30,10 @@ def _bad_request(message: str = "effort not supported") -> BadRequestError:
 
 
 def _run(
-    llm: LitellmLLM, completion: Any, effort: ReasoningEffort, stream: bool = False
+    llm: LitellmLLM,
+    completion: Any,
+    effort: ReasoningEffort,
+    stream: bool = False,
 ) -> Any:
     with patch("onyx.llm.litellm_singleton.litellm.completion", side_effect=completion):
         return llm._completion(

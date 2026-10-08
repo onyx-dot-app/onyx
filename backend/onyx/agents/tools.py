@@ -75,10 +75,6 @@ class SpawnResult(BaseModel):
     run_id: str
 
 
-class ChildRunCancelled(RuntimeError):
-    """The awaited child was cancelled; its parent can continue."""
-
-
 class AgentControl(Protocol):
     """Start and observe authorized agent executions."""
 
@@ -106,9 +102,7 @@ class AgentControl(Protocol):
 
     def wait_run(
         self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
-    ) -> "RunResult | None":
-        """Return completed output, or raise ChildRunCancelled for a cancelled child."""
-        ...
+    ) -> "RunResult | None": ...
 
     def cancel_run(self, run_id: str) -> None: ...
 

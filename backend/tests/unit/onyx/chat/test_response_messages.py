@@ -2,13 +2,12 @@
 
 import pytest
 
-from onyx.agents.models import RunStatus, StepResult
+from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import StepResult
 from onyx.agents.runtime import Agent, Run
 from onyx.chat.response import response_record, response_snapshot
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import AssistantMessage, GenerationRequest, TextContent
-from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
@@ -24,9 +23,7 @@ def test_harness_selects_answer_and_message_ids_survive_restore() -> None:
         return result.message.text != "The answer"
 
     agent = Agent(
-        FakeModelClient(lambda _request, _signal: next(replies)),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        after_step=after_step,
+        FakeModelClient(lambda _request, _signal: next(replies)), after_step=after_step
     )
     runs: list[Run] = []
     run_agent(agent, max_steps=2, runs=runs)
@@ -48,14 +45,7 @@ def test_empty_cancelled_generation_survives_storage_round_trip() -> None:
 
     runs: list[Run] = []
     with pytest.raises(AgentCancelled):
-        run_agent(
-            Agent(
-                FakeModelClient(cancel),
-                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            ),
-            max_steps=1,
-            runs=runs,
-        )
+        run_agent(Agent(FakeModelClient(cancel)), max_steps=1, runs=runs)
     snapshot = runs[0].snapshot()
     record = response_record(snapshot)
     assert record.answer_step_index is None

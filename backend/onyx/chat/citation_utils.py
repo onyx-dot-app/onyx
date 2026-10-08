@@ -6,40 +6,15 @@ from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ContextFileMetadata
 from onyx.llm.models import ToolResultMessage
 from onyx.tools.constants import CITEABLE_TOOLS_NAMES
-from onyx.tools.models import ToolResponse
-from onyx.tools.results import ResearchAgentCallResult
-
-
-def update_citation_processor_from_tool_response(
-    tool_response: ToolResponse,
-    citation_processor: DynamicCitationProcessor,
-) -> None:
-    if tool_response.tool_call is not None:
-        _update_search_citations(
-            tool_response.tool_call.tool_name,
-            tool_response.rich_response,
-            citation_processor,
-        )
 
 
 def update_citation_processor_from_tool_result(
     tool_response: ToolResultMessage,
     citation_processor: DynamicCitationProcessor,
 ) -> None:
-    if isinstance(tool_response.details, ResearchAgentCallResult):
-        citation_processor.update_citation_mapping(
-            tool_response.details.citation_mapping
-        )
-        return
-    _update_search_citations(
-        tool_response.tool_name, tool_response.details, citation_processor
-    )
-
-
-def _update_search_citations(
-    tool_name: str, data: object, citation_processor: DynamicCitationProcessor
-) -> None:
-    if tool_name not in CITEABLE_TOOLS_NAMES or not isinstance(
+    """Add citeable search artifacts to the citation lookup."""
+    data = tool_response.details
+    if tool_response.tool_name not in CITEABLE_TOOLS_NAMES or not isinstance(
         data, SearchDocsResponse
     ):
         return

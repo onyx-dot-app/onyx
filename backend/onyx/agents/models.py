@@ -1,70 +1,28 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
-from onyx.agents.execution_records import messages_for_model
+from onyx.agents.execution_records import (
+    CompactionCheckpoint,
+    ExecutionStatus,
+    RunFailure,
+    RunStatus,
+    messages_for_model,
+)
 from onyx.agents.tools import AgentTool, ChildRunWait, HumanToolAnswer, PendingToolInput
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
     GenerationRequest,
     GenerationRequestParams,
-    LLMErrorInfo,
     Message,
     ToolCall,
     ToolDefinition,
     ToolResultMessage,
 )
-
-
-class RunStatus(str, Enum):
-    RUNNING = "running"
-    SUSPENDED = "suspended"
-    COMPLETE = "complete"
-    LIMIT = "limit"
-    CANCELLED = "cancelled"
-    ERROR = "error"
-
-    @property
-    def is_terminal(self) -> bool:
-        return self not in (RunStatus.RUNNING, RunStatus.SUSPENDED)
-
-
-class ExecutionStatus(str, Enum):
-    """State of one generation or tool invocation; running means no terminal outcome yet."""
-
-    RUNNING = "running"
-    COMPLETE = "complete"
-    CANCELLED = "cancelled"
-    ERROR = "error"
-
-
-class RunFailureKind(str, Enum):
-    LLM = "llm"
-    LLM_TIMEOUT = "llm_timeout"
-    LLM_RATE_LIMIT = "llm_rate_limit"
-    EXECUTION = "execution"
-
-
-class RunFailure(BaseModel):
-    kind: RunFailureKind
-    message: str
-    llm_error: LLMErrorInfo | None = None
-
-
-class ContextBudget(BaseModel):
-    input_limit: int = Field(gt=0)
-    trigger: int = Field(gt=0)
-    recent: int = Field(gt=0)
-    summary: int = Field(gt=0)
-
-
-class CompactionCheckpoint(BaseModel):
-    summary: str
-    covered_through_message_id: str = Field(min_length=1)
 
 
 class AgentInfo(BaseModel):
@@ -107,7 +65,7 @@ class CompactionMetadata(BaseModel):
 
 
 class PreparedStep(BaseModel):
-    """Step settings reused during compaction; tools select registered Agent.tools instances."""
+    """Decisions captured once and reused when compaction rebuilds a request."""
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True, frozen=True)
     system_prompt: str = ""
@@ -115,13 +73,14 @@ class PreparedStep(BaseModel):
     options: GenerationOptions = Field(default_factory=GenerationOptions)
     stall_timeout_s: int | None = Field(default=None, gt=0)
     output_metadata: SerializeAsAny[BaseModel] | None = None
-    assemble_messages: Callable[[Sequence[Message]], list[Message]] | None = None
+    assemble_messages: Callable[[list[Message]], list[Message]] | None = None
 
     def generation_request(self, messages: list[Message]) -> GenerationRequest:
-        """Build a detached request; assembly must not mutate borrowed history."""
         history = messages
         if self.assemble_messages is not None:
-            history = self.assemble_messages(tuple(messages))
+            history = self.assemble_messages(
+                [message.model_copy(deep=True) for message in messages]
+            )
         return GenerationRequest(
             messages=messages_for_model(history),
             system_prompt=self.system_prompt,
@@ -224,7 +183,7 @@ class RunProgress(BaseModel):
     tools: list[ToolDefinition] = Field(default_factory=list)
     previous_options: GenerationOptions | None = None
     finalized_tools: int = 0
-    feature_state: dict[str, JsonValue] | None = None
+    feature_state: SerializeAsAny[BaseModel] | None = None
     pending_tool_calls: dict[str, PendingToolInput | ChildRunWait] = Field(
         default_factory=dict
     )
