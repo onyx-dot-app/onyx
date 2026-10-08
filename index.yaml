@@ -3,6 +3,73 @@ entries:
   onyx:
   - annotations:
       artifacthub.io/changes: |
+        - kind: added
+          description: Configure Craft proxy, OpenCode, daemon, and generated web app
+            listeners for IPv6-only clusters while keeping IPv4 defaults.
+        - kind: security
+          description: Apply one destination policy to HTTP requests and CONNECT tunnels.
+            Require internal network ranges for IPv6 proxy deployments and a known sandbox identity.
+        - kind: fixed
+          description: Permit IPv6 neighbor discovery during sandbox firewall lockdown and
+            normalize IPv4-mapped proxy client addresses.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+      org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-10-08T19:20:35.391838223Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.9
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 736e4d3c66eb4f70cb59fb31fc6dd2aa933b44e4ebcef3cee39d576b23201513
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://github.com/onyx-dot-app/onyx/releases/download/helm/onyx-0.9.9/onyx-0.9.9.tgz
+    version: 0.9.9
+  - annotations:
+      artifacthub.io/changes: |
         - kind: fixed
           description: Serve OAuth discovery at the root and MCP compatibility paths
             without build-time frontend proxy destinations.
@@ -9339,4 +9406,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-10-08T11:50:22.993115734Z"
+generated: "2026-10-08T19:20:35.392315564Z"
