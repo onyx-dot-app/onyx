@@ -937,6 +937,19 @@ def test_kubernetes_version_reports_only_safe_tag_digest_once_and_on_change() ->
     assert sender._take_batch()[0]["data"]["version"] == "v1.2.4"
 
 
+def test_kubernetes_ipv6_service_host_forms_a_valid_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from urllib.parse import urlsplit
+
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "fd00:10:96::1")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.delenv("ONYX_TELEMETRY_KUBERNETES_API_URL", raising=False)
+    watcher = KubernetesCollector(client())
+    assert watcher.base == "https://[fd00:10:96::1]:443"
+    assert urlsplit(watcher.base).port == 443
+
+
 def test_memory_quantities_are_whole_bytes() -> None:
     assert quantity("1.1Ki") == 1126 and type(quantity("1.1Ki")) is int
     assert quantity("250m", cpu=True) == pytest.approx(0.25)

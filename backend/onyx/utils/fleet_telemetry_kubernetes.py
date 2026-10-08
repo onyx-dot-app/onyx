@@ -92,6 +92,9 @@ class KubernetesCollector:
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", self.namespace):
             raise ValueError("Invalid namespace")
         host = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+        if ":" in host and not host.startswith("["):
+            # IPv6 clusters inject a bare address; URLs need it in brackets.
+            host = f"[{host}]"
         port = os.environ.get("KUBERNETES_SERVICE_PORT_HTTPS", "443")
         self.base = f"https://{host}:{port}"
         self.base = os.environ.get(
