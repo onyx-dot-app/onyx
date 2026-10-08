@@ -4,7 +4,7 @@ import "@opal/components/fold/styles.css";
 import { useEffect, useState } from "react";
 
 /** The whole close in `styles.css`: the fade, then the collapse. */
-const FOLD_CLOSE_MS = 250;
+const FOLD_CLOSE_MS: number = 250;
 
 type FoldProps = {
   /** Whether the fold is open. */
@@ -40,15 +40,18 @@ type FoldProps = {
 function Fold({ open, keepMounted = false, id, frame, children }: FoldProps) {
   // True from the moment the fold opens until its closing animation ends,
   // the window where the children must stay mounted though `open` is false.
-  const [closing, setClosing] = useState(false);
-  const mounted = keepMounted || open || closing;
+  const [closing, setClosing] = useState<boolean>(false);
+  const mounted: boolean = keepMounted || open || closing;
 
   useEffect(() => {
     if (open) {
       setClosing(true);
       return;
     }
-    const timeout = setTimeout(() => setClosing(false), FOLD_CLOSE_MS);
+    const timeout: ReturnType<typeof setTimeout> = setTimeout(
+      () => setClosing(false),
+      FOLD_CLOSE_MS
+    );
     return () => clearTimeout(timeout);
   }, [open]);
 
@@ -56,14 +59,14 @@ function Fold({ open, keepMounted = false, id, frame, children }: FoldProps) {
   // already exists, so opening mounts the content hidden and shows it a frame
   // later, which lets it fade in after the height. Open from the start, it
   // shows at once, with no fade on page load.
-  const [shown, setShown] = useState(open);
+  const [shown, setShown] = useState<boolean>(open);
   useEffect(() => {
     if (!open) {
       setShown(false);
       return;
     }
-    let second = 0;
-    const first = requestAnimationFrame(() => {
+    let second: number = 0;
+    const first: number = requestAnimationFrame(() => {
       second = requestAnimationFrame(() => setShown(true));
     });
     return () => {
