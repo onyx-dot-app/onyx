@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import re
-import select
 import shutil
 import socket
 import subprocess
@@ -14,7 +13,8 @@ from contextlib import asynccontextmanager
 from contextvars import Token
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Never
+from queue import Empty, Queue
+from typing import Never, TextIO
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
@@ -77,6 +77,7 @@ class NativeOAuthServer:
     cookie_name: str
     session_token: str
     events: list[NativeRequestEvent] = field(default_factory=list)
+    _registered_client_ids: set[str] = field(default_factory=set)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
@@ -90,6 +91,19 @@ class NativeOAuthServer:
     def record(self, event: NativeRequestEvent) -> None:
         with self._lock:
             self.events.append(event)
+            if (
+                event.method != "POST"
+                or event.path != "/oauth-provider/register"
+                or event.status_code is None
+                or not 200 <= event.status_code < 300
+            ):
+                return
+            try:
+                payload = json.loads(event.response_body)
+            except json.JSONDecodeError:
+                return
+            if isinstance(payload, dict) and isinstance(payload.get("client_id"), str):
+                self._registered_client_ids.add(payload["client_id"])
 
     def clear_events(self) -> None:
         with self._lock:
@@ -120,19 +134,8 @@ class NativeOAuthServer:
             )
 
     def registered_client_ids(self) -> set[str]:
-        client_ids: set[str] = set()
         with self._lock:
-            events = list(self.events)
-        for event in events:
-            if event.method != "POST" or not event.path.endswith("/register"):
-                continue
-            try:
-                payload = json.loads(event.response_body)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(payload, dict) and isinstance(payload.get("client_id"), str):
-                client_ids.add(payload["client_id"])
-        return client_ids
+            return set(self._registered_client_ids)
 
 
 def _skip_or_fail(reason: str) -> Never:
@@ -492,20 +495,25 @@ def _send_codex_app_server_request(
     process.stdin.flush()
 
 
+def _collect_codex_output(stream: TextIO, lines: Queue[str | None]) -> None:
+    try:
+        for line in stream:
+            lines.put(line)
+    finally:
+        lines.put(None)
+
+
 def _read_codex_app_server_response(
-    process: subprocess.Popen[str], request_id: int
+    lines: Queue[str | None], request_id: int
 ) -> dict[str, object]:
-    assert process.stdout is not None
     deadline = time.monotonic() + _CLI_TIMEOUT_SECONDS
     messages: list[dict[str, object]] = []
     while time.monotonic() < deadline:
-        ready, _, _ = select.select(
-            [process.stdout], [], [], deadline - time.monotonic()
-        )
-        if not ready:
+        try:
+            line = lines.get(timeout=max(0.0, deadline - time.monotonic()))
+        except Empty:
             break
-        line = process.stdout.readline()
-        if not line:
+        if line is None:
             break
         try:
             message = json.loads(line)
@@ -540,6 +548,12 @@ def _codex_discover_mcp_tools(
         text=True,
         env=env,
     )
+    assert process.stdout is not None
+    lines: Queue[str | None] = Queue()
+    reader = threading.Thread(
+        target=_collect_codex_output, args=(process.stdout, lines), daemon=True
+    )
+    reader.start()
     try:
         _send_codex_app_server_request(
             process,
@@ -553,7 +567,7 @@ def _codex_discover_mcp_tools(
                 "capabilities": {},
             },
         )
-        _read_codex_app_server_response(process, 1)
+        _read_codex_app_server_response(lines, 1)
         _send_codex_app_server_request(
             process,
             2,
@@ -564,7 +578,7 @@ def _codex_discover_mcp_tools(
                 "limit": 1,
             },
         )
-        response = _read_codex_app_server_response(process, 2)
+        response = _read_codex_app_server_response(lines, 2)
     finally:
         process.terminate()
         try:
@@ -572,6 +586,7 @@ def _codex_discover_mcp_tools(
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+        reader.join(timeout=5)
     return response
 
 
