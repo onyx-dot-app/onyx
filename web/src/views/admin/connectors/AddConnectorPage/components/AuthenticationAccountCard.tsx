@@ -151,7 +151,7 @@ export default function AuthenticationAccountCard({
               sizePreset="main-ui"
               variant="section"
             />
-            <div className="flex flex-row gap-4 ps-6 pt-2">
+            <div className="flex flex-row gap-4 ps-5 pt-2">
               <Content
                 icon={SvgLinkedDots}
                 title={t("usedBy.label", { count: credential.usages.length })}
