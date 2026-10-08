@@ -211,8 +211,9 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load
 
-  // The chosen account: a saved one, or the one typed into the form, which
-  // Create saves. Choosing one drops the other.
+  // The picked saved account, and whether the user turned to the account
+  // typed into the form, which Create saves. The typed account takes over
+  // only while its values are valid; until then the saved pick stays.
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
   const [newAccountChosen, setNewAccountChosen] = useState<boolean>(false);
@@ -220,10 +221,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     setCurrentCredential(credential);
     setNewAccountChosen(false);
   };
-  const chooseNewAccount = () => {
-    setCurrentCredential(null);
-    setNewAccountChosen(true);
-  };
+  const chooseNewAccount = () => setNewAccountChosen(true);
 
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -287,18 +285,20 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     : null;
 
   /**
-   * The chosen account for these form values: the typed one while it is
-   * chosen and valid, else the saved one (or Google's live account).
+   * The chosen account for these form values: the typed one while the user
+   * turned to it and its values are valid, else the saved pick (or Google's
+   * live account).
    */
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
-    newAccountChosen
+    (newAccountChosen
       ? typedDraft(connector, accountSchema, getIn(values, NEW_ACCOUNT_FIELD))
-      : currentCredential ||
-        liveGDriveCredential ||
-        liveGmailCredential ||
-        null;
+      : null) ||
+    currentCredential ||
+    liveGDriveCredential ||
+    liveGmailCredential ||
+    null;
 
   // The page body waits for the source's saved credentials: no connector
   // can be set up without them. Sources without credentials fetch nothing and go
@@ -767,7 +767,9 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                               accessType={formikProps.values.access_type}
                               currentCredential={currentCredential}
                               onCredentialChange={chooseSavedAccount}
-                              newAccountChosen={newAccountChosen}
+                              newAccountInUse={
+                                newAccountChosen && newAccountReady
+                              }
                               onChooseNewAccount={chooseNewAccount}
                               newAccountReady={newAccountReady}
                               checkedCredential={checkedCredential}
