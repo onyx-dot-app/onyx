@@ -22,6 +22,8 @@ from onyx.connectors.teams.meeting_chats import (
     CHATS_QUERY,
     chat_document_id,
     fetch_chat_days,
+    user_chats_export_probe_url,
+    user_chats_export_url,
 )
 from onyx.connectors.teams.utils import USER_LOOKUP_URL, GraphRetriesExhausted
 from tests.unit.onyx.connectors.teams.helpers import (
@@ -730,3 +732,57 @@ def test_setup_passes_on_an_organizer_with_no_meeting_chat() -> None:
     routes[CHATS_URL] = {"value": []}
 
     _validate_organizers(connector(graph_client(routes), include_meeting_chats=True))
+
+
+def test_a_poll_asks_one_export_stream_instead_of_every_chat() -> None:
+    """With the export API, a poll reads one stream per organizer and asks
+    only the chats it names, so a quiet chat costs nothing."""
+    start = NOW - 3600
+    recent = "19:meeting_recent@thread.v2"
+    older = "19:meeting_older@thread.v2"
+    export = user_chats_export_url("user-1", start, start + 1)
+    routes = _routes()
+    routes[user_chats_export_probe_url("user-1")] = {"value": []}
+    routes[CHATS_URL] = {
+        "value": [
+            _chat(recent, last_message="2026-09-20T09:00:00Z"),
+            _chat(older, last_message="2026-05-10T09:00:00Z"),
+        ]
+    }
+    routes[export] = {
+        "value": [{**_said("n1", "new", "2026-09-21T13:00:00Z"), "chatId": recent}]
+    }
+    routes[f"chats/{recent}/members"] = routes[MEMBERS_URL]
+    routes[
+        f"chats/{recent}/messages?$top=50&$filter=createdDateTime lt 2026-09-22T00:00:00Z&$orderby=createdDateTime desc"
+    ] = {"value": [_said("n1", "new", "2026-09-21T13:00:00Z")]}
+    client = graph_client(routes)
+
+    items = _walk(connector(client, include_meeting_chats=True), start=start)
+
+    assert [item.id for item in items if isinstance(item, Document)] == [
+        chat_document_id("user-1", recent, date(2026, 9, 21))
+    ]
+    requested = _requested(client)
+    assert export in requested
+    assert not [url for url in requested if older in url]
+    assert not [url for url in requested if "lastModifiedDateTime desc" in url]
+
+
+def test_a_poll_without_the_export_approval_asks_every_chat() -> None:
+    start = NOW - 3600
+    recent = "19:meeting_recent@thread.v2"
+    modified = (
+        "messages?$top=50&$filter=lastModifiedDateTime gt "
+        "2026-09-21T12:33:20Z&$orderby=lastModifiedDateTime desc"
+    )
+    routes = _routes()
+    routes[CHATS_URL] = {"value": [_chat(recent, last_message="2026-09-20T09:00:00Z")]}
+    routes[f"chats/{recent}/{modified}"] = {"value": []}
+    client = graph_client(routes, refused={user_chats_export_probe_url("user-1"): 403})
+
+    items = _walk(connector(client, include_meeting_chats=True), start=start)
+
+    assert items == []
+    assert f"chats/{recent}/{modified}" in _requested(client)
+    assert _requested(client).count(user_chats_export_probe_url("user-1")) == 1
