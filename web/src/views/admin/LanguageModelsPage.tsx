@@ -394,7 +394,11 @@ export default function LanguageModelsPage() {
   // routing target. The dedicated endpoint returns every router regardless
   // of visibility or paging, so hidden and persona-restricted routers all
   // appear.
-  const { data: routerProviders } = useSWR<LLMProviderView[]>(
+  const {
+    data: routerProviders,
+    error: routerProvidersError,
+    mutate: mutateRouterProviders,
+  } = useSWR<LLMProviderView[]>(
     SWR_KEYS.llmRouterModels,
     async (url: string) => {
       const providers = await errorHandlingFetcher<LLMProviderView[]>(url);
@@ -631,7 +635,20 @@ export default function LanguageModelsPage() {
                   description={t("modelRouting.target.description")}
                   withLabel
                 >
-                  {routerProviders === undefined ? (
+                  {routerProvidersError ? (
+                    <Section flexDirection="row" alignItems="center" gap={2}>
+                      <Text font="secondary-body" color="text-03">
+                        {t("modelRouting.target.error")}
+                      </Text>
+                      <Button
+                        prominence="tertiary"
+                        size="sm"
+                        onClick={() => void mutateRouterProviders()}
+                      >
+                        {t("modelRouting.target.retry")}
+                      </Button>
+                    </Section>
+                  ) : routerProviders === undefined ? (
                     <OnyxLoader size={24} />
                   ) : routerProviders.length > 0 ? (
                     <SimpleModelSelector

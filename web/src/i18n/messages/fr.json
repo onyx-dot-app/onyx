@@ -6211,7 +6211,9 @@
         "target": {
           "title": "Modèle de routage",
           "description": "Gère le routage des modèles pour le mode Auto.",
-          "empty": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle."
+          "empty": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle.",
+          "error": "Impossible de charger les modèles de routage.",
+          "retry": "Réessayer"
         }
       }
     },

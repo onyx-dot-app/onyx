@@ -6211,7 +6211,9 @@
         "target": {
           "title": "Modelo de roteamento",
           "description": "Gerencia o roteamento de modelos para o modo Auto.",
-          "empty": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway."
+          "empty": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway.",
+          "error": "Falha ao carregar os modelos de roteamento.",
+          "retry": "Tentar novamente"
         }
       }
     },

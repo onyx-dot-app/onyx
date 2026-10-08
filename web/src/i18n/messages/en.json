@@ -6211,7 +6211,9 @@
         "target": {
           "title": "Router Model",
           "description": "Handles model routing for Auto mode.",
-          "empty": "No router models found. Enable a router model on a gateway provider first."
+          "empty": "No router models found. Enable a router model on a gateway provider first.",
+          "error": "Failed to load router models.",
+          "retry": "Retry"
         }
       }
     },
