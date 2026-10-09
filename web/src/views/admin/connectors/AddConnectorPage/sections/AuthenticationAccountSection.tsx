@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Divider,
-  Fold,
   InputTypeIn,
   SelectCard,
   Tabs,
@@ -20,7 +19,11 @@ import {
 import { Disabled } from "@opal/core";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
-import type { Credential, DraftCredential } from "@/lib/credentials/types";
+import type {
+  Credential,
+  DraftCredential,
+  SimilarCredential,
+} from "@/lib/credentials/types";
 import {
   useCredentialCheckReports,
   useCredentialSetup,
@@ -297,6 +300,100 @@ export default function AuthenticationAccountSection({
     }
   }
 
+  function renderSavedCard(credential: SimilarCredential) {
+    return (
+      <AuthenticationAccountCard
+        key={credential.id}
+        credential={credential}
+        source={connector}
+        sourceName={displayName}
+        selected={credential.id === selectedSavedId}
+        selectable={isSelectable(credential)}
+        onSelect={() => onSwap(credential)}
+        onDeselect={() => onCredentialChange(null)}
+        onDelete={() => onDeleteCredential(credential)}
+        checkReport={checkReports.reportFor(credential.id)}
+        onRerunChecks={() => checkReports.rerun(credential.id)}
+      />
+    );
+  }
+
+  // What the folded section shows: the chosen saved account, the typed
+  // account, or the closed new-account card when nothing is chosen.
+  const pickedSavedCredential: SimilarCredential | null =
+    credentials?.find((credential) => credential.id === selectedSavedId) ??
+    null;
+  const newAccountChosen: boolean = selectedSavedId === null && newAccountReady;
+
+  // One card creates a credential. Its header toggles it; the fold below is a
+  // plain container, so a click in the open form cannot fold it away. The
+  // routes into the source are tabs inside the fold.
+  const newAccountCard = (
+    <SelectCard
+      expandable
+      expanded={isCreating}
+      expandableContentHeight="full"
+      // The form keeps what was typed while folded.
+      expandableKeepMounted
+      border="solid"
+      state={isCreating ? "filled" : "empty"}
+      rounding={4}
+      padding={2}
+      // The card is one action, so it names itself. Nothing inside the
+      // interactive half is focusable, so a role here folds no other
+      // control into that name.
+      role="button"
+      aria-label={newAccountLabel}
+      tabIndex={0}
+      expandedContent={
+        <div className="p-4" data-testid="credential-form">
+          {namesMethods ? (
+            <Tabs
+              gap={4}
+              value={openMethod ?? defaultMethod}
+              onValueChange={(value) => {
+                // Matched against the real methods rather than cast:
+                // the tab strip hands back a plain string.
+                const picked = methods.find((method) => method === value);
+                if (picked) selectMethod(picked);
+              }}
+            >
+              <Tabs.List>
+                {orderedMethods.map((method) => (
+                  <Tabs.Trigger key={method} value={method}>
+                    {method === CredentialCreationMethod.OAuth
+                      ? t("add.connectWithTab.label")
+                      : t("add.manualTab.label")}
+                  </Tabs.Trigger>
+                ))}
+              </Tabs.List>
+              {/* A tab switch keeps what the user typed in the other
+            route. */}
+              {orderedMethods.map((method) => (
+                <Tabs.Content key={method} value={method} keepMounted>
+                  {renderCredentialForm(method)}
+                </Tabs.Content>
+              ))}
+            </Tabs>
+          ) : (
+            renderCredentialForm(defaultMethod)
+          )}
+        </div>
+      }
+      onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
+    >
+      <Section padding={2} width="full">
+        <Content
+          icon={SvgPlusCircle}
+          title={newAccountLabel}
+          sizePreset="main-ui"
+          variant="body"
+          color={isCreating ? "interactive" : "muted"}
+        />
+      </Section>
+    </SelectCard>
+  );
+
   return (
     <Section gap={2} alignItems="stretch" width="full">
       <ContentAction
@@ -344,30 +441,9 @@ export default function AuthenticationAccountSection({
       the types honest. */}
       {!credentials ? null : (
         <Section gap={6} alignItems="stretch" width="full">
-          <Section gap={0} alignItems="stretch" width="full" height="fit">
-            {/* Hidden accounts animate away, then leave the page. The fold
-            holds the cards' gap, so a closed one leaves no space behind. A
-            div, as Section's own padding would override the bottom one. */}
-            <Fold open={accountsExpanded && credentials.length > 0}>
-              <div className="flex flex-col gap-2 pb-2">
-                {credentials.map((credential) => (
-                  <AuthenticationAccountCard
-                    key={credential.id}
-                    credential={credential}
-                    source={connector}
-                    sourceName={displayName}
-                    selected={credential.id === selectedSavedId}
-                    selectable={isSelectable(credential)}
-                    onSelect={() => onSwap(credential)}
-                    onDeselect={() => onCredentialChange(null)}
-                    onDelete={() => onDeleteCredential(credential)}
-                    checkReport={checkReports.reportFor(credential.id)}
-                    onRerunChecks={() => checkReports.rerun(credential.id)}
-                  />
-                ))}
-              </div>
-            </Fold>
+          {accountsExpanded ? (
             <Section gap={2} alignItems="stretch" width="full">
+              {credentials.map(renderSavedCard)}
               {canAuthorize && (
                 <Section flexDirection="row" justifyContent="start" gap={1}>
                   <Button
@@ -383,79 +459,17 @@ export default function AuthenticationAccountSection({
                   </Button>
                 </Section>
               )}
-
-              {/* One card creates a credential. Its header toggles it; the fold
-          below is a plain container, so a click in the open form cannot fold
-          it away. The routes into the source are tabs inside the fold. */}
-              <SelectCard
-                expandable
-                expanded={isCreating}
-                expandableContentHeight="full"
-                // The form keeps what was typed while folded.
-                expandableKeepMounted
-                border="solid"
-                state={isCreating ? "filled" : "empty"}
-                rounding={4}
-                padding={2}
-                // The card is one action, so it names itself. Nothing inside the
-                // interactive half is focusable, so a role here folds no other
-                // control into that name.
-                role="button"
-                aria-label={newAccountLabel}
-                tabIndex={0}
-                expandedContent={
-                  <div className="p-4" data-testid="credential-form">
-                    {namesMethods ? (
-                      <Tabs
-                        gap={4}
-                        value={openMethod ?? defaultMethod}
-                        onValueChange={(value) => {
-                          // Matched against the real methods rather than cast:
-                          // the tab strip hands back a plain string.
-                          const picked = methods.find(
-                            (method) => method === value
-                          );
-                          if (picked) selectMethod(picked);
-                        }}
-                      >
-                        <Tabs.List>
-                          {orderedMethods.map((method) => (
-                            <Tabs.Trigger key={method} value={method}>
-                              {method === CredentialCreationMethod.OAuth
-                                ? t("add.connectWithTab.label")
-                                : t("add.manualTab.label")}
-                            </Tabs.Trigger>
-                          ))}
-                        </Tabs.List>
-                        {/* A tab switch keeps what the user typed in the other
-                      route. */}
-                        {orderedMethods.map((method) => (
-                          <Tabs.Content key={method} value={method} keepMounted>
-                            {renderCredentialForm(method)}
-                          </Tabs.Content>
-                        ))}
-                      </Tabs>
-                    ) : (
-                      renderCredentialForm(defaultMethod)
-                    )}
-                  </div>
-                }
-                onClick={() =>
-                  isCreating ? close() : selectMethod(defaultMethod)
-                }
-              >
-                <Section padding={2} width="full">
-                  <Content
-                    icon={SvgPlusCircle}
-                    title={newAccountLabel}
-                    sizePreset="main-ui"
-                    variant="body"
-                    color={isCreating ? "interactive" : "muted"}
-                  />
-                </Section>
-              </SelectCard>
+              {newAccountCard}
             </Section>
-          </Section>
+          ) : pickedSavedCredential ? (
+            // Folded, only the chosen account shows.
+            renderSavedCard(pickedSavedCredential)
+          ) : newAccountChosen ? (
+            // TODO: the folded summary of a typed account, still to design.
+            newAccountCard
+          ) : (
+            newAccountCard
+          )}
 
           <CredentialChecksCard
             source={connector}
