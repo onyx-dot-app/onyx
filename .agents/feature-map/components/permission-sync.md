@@ -95,6 +95,7 @@ only added to `beat_task_templates` when the build ships the EE code
 | Zoom | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY`, but `doc_sync_func=mock_doc_sync` (a no-op; see §4.3) | no group sync |
 | Linear | `LINEAR_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` because `ConnectorRunner` passes `include_permissions` only to checkpointed connectors, so an issue stays private until the first doc sync lists it | `LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min); one group per team the token can see plus `workspace_members:<organization id>`; a public team's issues name both, a restricted sub-team's its private parent too |
 | Salesforce | none (`doc_sync_config=None`) | none; `censoring_config` only (§4.5) |
+| HubSpot | `HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` (indexing never fetches viewers, so only the doc sync grants access) | no group sync; stores the viewer emails HubSpot's permitted-users API returns |
 
 Every value is env-overridable and is additionally multiplied by
 `OnyxRuntime.get_doc_permission_sync_multiplier()` in
@@ -265,8 +266,8 @@ Most doc-sync implementations funnel through
    reporting it, so Onyx makes it private. This is the fail-closed default for
    the "document disappeared or the user lost access" case.
 
-Confluence, Jira, Canvas, Box, SharePoint, OneDrive, Teams, and Outlook doc_sync
-(`ee/onyx/external_permissions/{confluence,jira,canvas,box,sharepoint,onedrive,teams,outlook}/doc_sync.py`)
+Confluence, Jira, Canvas, Box, SharePoint, OneDrive, Teams, Outlook, and HubSpot doc_sync
+(`ee/onyx/external_permissions/{confluence,jira,canvas,box,sharepoint,onedrive,teams,outlook,hubspot}/doc_sync.py`)
 are thin wrappers around `generic_doc_sync`, differing only in which connector
 class and `DocumentSource` they pass. Four sources have a different
 shape: Slack and Google Drive (below), and Gmail and GitHub (own `doc_sync.py`, no

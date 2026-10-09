@@ -31,4 +31,5 @@ export const autoSyncConfigBySource: Record<
   onedrive: {},
   zoom: {},
   linear: {},
+  hubspot: {},
 };

@@ -30,21 +30,33 @@ from hubspot.crm.tickets.models import SimplePublicObjectId as TicketObjectId
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.hubspot.config import HubSpotObjectType
+from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.hubspot.config import HUBSPOT_OBJECT_SPECS, HubSpotObjectType
+from onyx.connectors.hubspot.permissions import (
+    PERMITTED_USERS_BATCH_SIZE,
+    HubSpotApiError,
+    HubSpotPermissionReader,
+)
 from onyx.connectors.hubspot.rate_limit import HubSpotRateLimiter
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
     LoadConnector,
     PollConnector,
     SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
     ImageSection,
+    SlimDocument,
     TextSection,
 )
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 
 HUBSPOT_BASE_URL = "https://app.hubspot.com"
@@ -66,6 +78,44 @@ ASSOC_NOTE_PROPERTIES = [
     "hs_created_by",
     "hubspot_owner_id",
 ]
+# The cheapest property to request. Every record carries it.
+HS_OBJECT_ID_PROPERTY = "hs_object_id"
+_SLIM_BATCH_SIZE = 1000
+_SLIM_DOC_SYNC_LABEL = "hubspot_slim_doc_sync"
+
+
+def hubspot_document_id(object_type: HubSpotObjectType, object_id: str) -> str:
+    return f"hubspot_{HUBSPOT_OBJECT_SPECS[object_type].document_noun}_{object_id}"
+
+
+def _crm_apis(api_client: HubSpot) -> dict[HubSpotObjectType, Any]:
+    """The SDK's per-object clients, which it leaves untyped."""
+    return {
+        HubSpotObjectType.TICKETS: api_client.crm.tickets,
+        HubSpotObjectType.COMPANIES: api_client.crm.companies,
+        HubSpotObjectType.DEALS: api_client.crm.deals,
+        HubSpotObjectType.CONTACTS: api_client.crm.contacts,
+    }
+
+
+def _utc(timestamp: SecondsSinceUnixEpoch | None) -> datetime | None:
+    return (
+        datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        if timestamp is not None
+        else None
+    )
+
+
+def _probe_scope(call: Callable[[], object]) -> None:
+    try:
+        call()
+    except HubSpotApiError as e:
+        if e.status != 403:
+            raise
+        raise InsufficientPermissionsError(
+            f"HubSpot refused GET {e.path}. Permission sync needs the private app "
+            "to read users (settings.users.read) and the viewers of records."
+        ) from e
 
 
 _T = TypeVar("_T")
@@ -81,7 +131,12 @@ T = TypeVar("T")
 logger = setup_logger()
 
 
-class HubSpotConnector(LoadConnector, PollConnector):
+class HubSpotConnector(
+    LoadConnector, PollConnector, SlimConnector, SlimConnectorWithPermSync
+):
+    # The slim listings filter on the same modified date as poll_source.
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -262,15 +317,17 @@ class HubSpotConnector(LoadConnector, PollConnector):
         search_fn: Callable[..., Any],
         properties: list[str],
         start: datetime,
-        end: datetime,
+        end: datetime | None,
         modified_date_prop: str,
+        incomplete_is_error: bool = False,
     ) -> Generator[Any, None, None]:
-        """Search [start, end] sorted by modified date ASC.
+        """Search [start, end] sorted by modified date ASC. No end means open-ended.
 
         If results hit the 10,000-record hard cap, yield all fetched results
         and continue from the last seen modified timestamp. Documents sharing
         that exact timestamp may be yielded twice (acceptable — re-indexing is
-        idempotent).
+        idempotent). A cap the search cannot pass ends the listing early;
+        incomplete_is_error raises instead, for callers that act on absence.
 
         Note: PublicObjectSearchRequest does not support an `associations`
         parameter, so objects returned here will not have inline association
@@ -294,13 +351,19 @@ class HubSpotConnector(LoadConnector, PollConnector):
         if len(results) < HUBSPOT_SEARCH_LIMIT:
             return
 
+        def incomplete(reason: str) -> None:
+            message = (
+                f"HubSpot search limit reached but {reason}. Records after the "
+                f"{HUBSPOT_SEARCH_LIMIT}th may be missing."
+            )
+            if incomplete_is_error:
+                raise RuntimeError(message)
+            logger.error(message)
+
         # Hit the cap — continue from the last seen modified timestamp.
         last_ts_ms = (results[-1].properties or {}).get(modified_date_prop)
         if last_ts_ms is None:
-            logger.error(
-                "HubSpot search limit reached but last modified timestamp is "
-                "unavailable; records after the 10,000th may be missing."
-            )
+            incomplete("the last modified timestamp is unavailable")
             return
 
         try:
@@ -312,20 +375,21 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     int(last_ts_ms) / 1000, tz=timezone.utc
                 )
             except (ValueError, TypeError):
-                logger.error(
-                    "HubSpot search limit reached but last modified timestamp has unrecognized format (%r); records after the 10,000th may be missing.",
-                    last_ts_ms,
+                incomplete(
+                    f"the last modified timestamp has unrecognized format ({last_ts_ms!r})"
                 )
                 return
         if next_start <= start:
-            logger.error(
-                "HubSpot search limit reached but timestamp did not advance; "
-                "records after the 10,000th may be missing."
-            )
+            incomplete("the timestamp did not advance")
             return
 
         yield from self._search_time_range(
-            search_fn, properties, next_start, end, modified_date_prop
+            search_fn,
+            properties,
+            next_start,
+            end,
+            modified_date_prop,
+            incomplete_is_error,
         )
 
     def _clean_html_content(self, html_content: str) -> str:
@@ -371,22 +435,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
     def _get_object_url(self, object_type: str, object_id: str) -> str:
         """Generate HubSpot URL for different object types"""
-        if object_type == "tickets":
-            return (
-                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-5/{object_id}"
-            )
-        elif object_type == "companies":
-            return (
-                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-2/{object_id}"
-            )
-        elif object_type == "deals":
-            return (
-                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-3/{object_id}"
-            )
-        elif object_type == "contacts":
-            return (
-                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-1/{object_id}"
-            )
+        if object_type in AVAILABLE_OBJECT_TYPES:
+            type_id = HUBSPOT_OBJECT_SPECS[HubSpotObjectType(object_type)].type_id
+            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/{type_id}/{object_id}"
         elif object_type == "notes":
             return (
                 f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/objects/0-4/{object_id}"
@@ -650,7 +701,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 ticket_properties,
                 start or datetime.min.replace(tzinfo=timezone.utc),
                 end or datetime.max.replace(tzinfo=timezone.utc),
-                "hs_lastmodifieddate",
+                HUBSPOT_OBJECT_SPECS[HubSpotObjectType.TICKETS].modified_date_property,
             )
         else:
             tickets_iter = self._paginated_results(
@@ -742,7 +793,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             doc_batch.append(
                 Document(
-                    id=f"hubspot_ticket_{ticket.id}",
+                    id=hubspot_document_id(HubSpotObjectType.TICKETS, ticket.id),
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
@@ -788,7 +839,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 company_properties,
                 start or datetime.min.replace(tzinfo=timezone.utc),
                 end or datetime.max.replace(tzinfo=timezone.utc),
-                "hs_lastmodifieddate",
+                HUBSPOT_OBJECT_SPECS[
+                    HubSpotObjectType.COMPANIES
+                ].modified_date_property,
             )
         else:
             companies_iter = self._paginated_results(
@@ -899,7 +952,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             doc_batch.append(
                 Document(
-                    id=f"hubspot_company_{company.id}",
+                    id=hubspot_document_id(HubSpotObjectType.COMPANIES, company.id),
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
@@ -945,7 +998,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 deal_properties,
                 start or datetime.min.replace(tzinfo=timezone.utc),
                 end or datetime.max.replace(tzinfo=timezone.utc),
-                "hs_lastmodifieddate",
+                HUBSPOT_OBJECT_SPECS[HubSpotObjectType.DEALS].modified_date_property,
             )
         else:
             deals_iter = self._paginated_results(
@@ -1054,7 +1107,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             doc_batch.append(
                 Document(
-                    id=f"hubspot_deal_{deal.id}",
+                    id=hubspot_document_id(HubSpotObjectType.DEALS, deal.id),
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
@@ -1102,7 +1155,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 contact_properties,
                 start or datetime.min.replace(tzinfo=timezone.utc),
                 end or datetime.max.replace(tzinfo=timezone.utc),
-                "lastmodifieddate",
+                HUBSPOT_OBJECT_SPECS[HubSpotObjectType.CONTACTS].modified_date_property,
             )
         else:
             contacts_iter = self._paginated_results(
@@ -1229,7 +1282,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             doc_batch.append(
                 Document(
-                    id=f"hubspot_contact_{contact.id}",
+                    id=hubspot_document_id(HubSpotObjectType.CONTACTS, contact.id),
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
@@ -1252,6 +1305,134 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         if doc_batch:
             yield doc_batch
+
+    def _configured_object_types(self) -> list[HubSpotObjectType]:
+        return sorted(HubSpotObjectType(value) for value in self.object_types)
+
+    def _iter_record_ids(
+        self,
+        api_client: HubSpot,
+        object_type: HubSpotObjectType,
+        start: datetime | None,
+        end: datetime | None,
+    ) -> Generator[str, None, None]:
+        crm_api = _crm_apis(api_client)[object_type]
+        if start is None:
+            # Pruning and doc sync pass a start at most, so this is the full listing.
+            records = self._paginated_results(
+                crm_api.basic_api.get_page, properties=[HS_OBJECT_ID_PROPERTY]
+            )
+        else:
+            # The search walk reads the modified date to pass the 10,000-result cap.
+            # A partial listing would revoke access or prune live records.
+            modified_date_property = HUBSPOT_OBJECT_SPECS[
+                object_type
+            ].modified_date_property
+            records = self._search_time_range(
+                crm_api.search_api.do_search,
+                [HS_OBJECT_ID_PROPERTY, modified_date_property],
+                start,
+                end,
+                modified_date_property,
+                incomplete_is_error=True,
+            )
+        for record in records:
+            yield str(record.id)
+
+    def _permission_reader(self) -> HubSpotPermissionReader:
+        return HubSpotPermissionReader(
+            self.access_token, self.portal_id, self._rate_limiter
+        )
+
+    def _iter_slim_docs(
+        self, api_client: HubSpot, start: datetime | None, end: datetime | None
+    ) -> Generator[SlimDocument | HierarchyNode, None, None]:
+        for object_type in self._configured_object_types():
+            for record_id in self._iter_record_ids(api_client, object_type, start, end):
+                yield SlimDocument(id=hubspot_document_id(object_type, record_id))
+
+    def _iter_slim_docs_with_access(
+        self,
+        api_client: HubSpot,
+        start: datetime | None,
+        end: datetime | None,
+        callback: IndexingHeartbeatInterface | None,
+    ) -> Generator[SlimDocument | HierarchyNode, None, None]:
+        reader = self._permission_reader()
+        for object_type in self._configured_object_types():
+            record_ids = self._iter_record_ids(api_client, object_type, start, end)
+            for chunk in batch_generator(record_ids, PERMITTED_USERS_BATCH_SIZE):
+                # Every chunk is a remote call, so the sync lock is refreshed here
+                # and not only once per yielded batch of _SLIM_BATCH_SIZE.
+                if callback:
+                    if callback.should_stop():
+                        raise RuntimeError(
+                            f"{_SLIM_DOC_SYNC_LABEL}: Stop signal detected"
+                        )
+                    callback.progress(_SLIM_DOC_SYNC_LABEL, 1)
+                viewers = reader.viewers(object_type, chunk)
+                for record_id in chunk:
+                    yield SlimDocument(
+                        id=hubspot_document_id(object_type, record_id),
+                        external_access=reader.access_for(viewers[record_id]),
+                    )
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        api_client = HubSpot(access_token=self.access_token)
+        yield from batch_generator(
+            self._iter_slim_docs(api_client, _utc(start), _utc(end)), _SLIM_BATCH_SIZE
+        )
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Every configured record with the emails of the users HubSpot lets view it."""
+        api_client = HubSpot(access_token=self.access_token)
+        yield from batch_generator(
+            self._iter_slim_docs_with_access(
+                api_client, _utc(start), _utc(end), callback
+            ),
+            _SLIM_BATCH_SIZE,
+        )
+
+    def _sample_record(
+        self, api_client: HubSpot
+    ) -> tuple[HubSpotObjectType, str] | None:
+        crm_apis = _crm_apis(api_client)
+        for object_type in self._configured_object_types():
+            page = self._call_hubspot(
+                crm_apis[object_type].basic_api.get_page,
+                limit=1,
+                properties=[HS_OBJECT_ID_PROPERTY],
+            )
+            if page.results:
+                return object_type, str(page.results[0].id)
+        return None
+
+    def probe_permission_sync_scopes(self) -> None:
+        """A 403 here is a missing private-app scope. Failing creation with the
+        endpoint named beats a sync that never succeeds while every record stays
+        hidden."""
+        api_client = HubSpot(access_token=self.access_token)
+        reader = self._permission_reader()
+        _probe_scope(reader.probe_users)
+        sample = self._sample_record(api_client)
+        if sample is None:
+            logger.warning(
+                "HubSpot has no records yet, so the viewer lookup stays "
+                "unchecked until one exists"
+            )
+            return
+        object_type, record_id = sample
+        _probe_scope(lambda: reader.viewers(object_type, [record_id]))
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Load all HubSpot objects (tickets, companies, deals, contacts)"""
