@@ -13,10 +13,10 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.linear.config import LinearConnectorConfig
 from onyx.connectors.linear.connector import LinearConnector
 
-MODULE = "onyx.connectors.linear.connector"
+MODULE: str = "onyx.connectors.linear.connector"
 
 
-PROJECT_URL = "https://linear.app/acme/project/chat-ui-improvements-f90f2bc07871"
+PROJECT_URL: str = "https://linear.app/acme/project/chat-ui-improvements-f90f2bc07871"
 
 
 def _connector(
@@ -27,17 +27,21 @@ def _connector(
     return connector
 
 
-LAST_PAGE = {"hasNextPage": False, "endCursor": None}
+LAST_PAGE: dict[str, Any] = {"hasNextPage": False, "endCursor": None}
 
 
-def _teams_response(*keys: str) -> MagicMock:
+def _teams_response(*keys: str, page_info: dict[str, Any] = LAST_PAGE) -> MagicMock:
     response = MagicMock()
     response.json.return_value = {
         "data": {
-            "teams": {"nodes": [{"key": key} for key in keys], "pageInfo": LAST_PAGE}
+            "teams": {"nodes": [{"key": key} for key in keys], "pageInfo": page_info}
         }
     }
     return response
+
+
+def _next_page(cursor: str) -> dict[str, Any]:
+    return {"hasNextPage": True, "endCursor": cursor}
 
 
 def _projects_response(*projects: tuple[str, str]) -> MagicMock:
@@ -92,6 +96,44 @@ def test_validation_names_the_projects_linear_did_not_answer_for() -> None:
         pytest.raises(ConnectorValidationError, match="not found: Gone, f90f2bc07871"),
     ):
         _connector(None, ["Roadmap", "Gone", PROJECT_URL]).validate_connector_settings()
+
+
+def test_validation_names_missing_teams_and_projects_together() -> None:
+    responses = [
+        _teams_response("ENG"),
+        _projects_response(("Roadmap", "aaaaaaaaaaaa")),
+    ]
+    with (
+        patch(f"{MODULE}._make_query", side_effect=responses),
+        pytest.raises(
+            ConnectorValidationError,
+            match=r"teams not found: OPS\. Linear projects not found: Gone\.",
+        ),
+    ):
+        _connector(["ENG", "OPS"], ["Roadmap", "Gone"]).validate_connector_settings()
+
+
+def test_validation_follows_the_teams_cursor_to_the_last_page() -> None:
+    responses = [
+        _teams_response("ENG", page_info=_next_page("cursor-1")),
+        _teams_response("DES"),
+    ]
+    with patch(f"{MODULE}._make_query", side_effect=responses) as query:
+        _connector(["ENG", "DES"]).validate_connector_settings()
+
+    sent: list[str | None] = [
+        call.args[0]["variables"]["after"] for call in query.call_args_list
+    ]
+    assert sent == [None, "cursor-1"]
+
+
+def test_a_cursor_that_stops_advancing_fails_the_walk() -> None:
+    stuck = _teams_response("ENG", page_info=_next_page("cursor-1"))
+    with (
+        patch(f"{MODULE}._make_query", side_effect=[stuck, stuck]),
+        pytest.raises(RuntimeError, match="stopped advancing"),
+    ):
+        _connector(["ENG"]).validate_connector_settings()
 
 
 def test_validation_checks_teams_then_projects() -> None:

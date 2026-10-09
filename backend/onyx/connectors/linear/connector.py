@@ -91,17 +91,17 @@ def _run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str,
 
 
 # Linear caps a query's complexity at 10,000 points. A listing page fits at 100.
-_LISTING_PAGE_SIZE = 100
+_LISTING_PAGE_SIZE: int = 100
 # A walk still paging past this is a cursor cycling rather than ending.
-_MAX_PAGES = 100_000
+_MAX_PAGES: int = 100_000
 
-_PAGE_INFO = """
+_PAGE_INFO: str = """
     pageInfo {
         hasNextPage
         endCursor
     }
 """
-_TEAMS_BY_KEY_QUERY = f"""
+_TEAMS_BY_KEY_QUERY: str = f"""
     query TeamsByKey($keys: [String!], $first: Int, $after: String) {{
         teams(first: $first, after: $after, filter: {{ key: {{ in: $keys }} }}) {{
             nodes {{ key }}
@@ -109,7 +109,7 @@ _TEAMS_BY_KEY_QUERY = f"""
         }}
     }}
 """
-_PROJECTS_QUERY = f"""
+_PROJECTS_QUERY: str = f"""
     query ProjectsInScope($filter: ProjectFilter, $first: Int, $after: String) {{
         projects(first: $first, after: $after, filter: $filter) {{
             nodes {{ name slugId }}
@@ -119,7 +119,7 @@ _PROJECTS_QUERY = f"""
 """
 # A project URL ends in the slug and the project's slug id:
 # https://linear.app/<workspace>/project/<slug>-<slug id>
-_PROJECT_URL_SLUG_ID = re.compile(
+_PROJECT_URL_SLUG_ID: re.Pattern[str] = re.compile(
     r"linear\.app/[^/]+/project/[^/?#]*?([0-9a-f]{12})(?:[/?#]|$)"
 )
 
@@ -165,14 +165,27 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
     def validate_connector_settings(self) -> None:
         """A team or project Linear does not answer for is misspelled or is in
         a private team the token's user is not in. Linear hides both the same
-        way, so the messages name the two causes."""
-        if self.team_keys:
-            self._validate_teams()
+        way, so one message names every missing entry and the two causes."""
+        missing_teams: list[str] = self._missing_teams() if self.team_keys else []
         project_filter: dict[str, Any] | None = self._project_filter()
-        if project_filter is not None:
-            self._validate_projects(project_filter)
+        missing_projects: list[str] = (
+            self._missing_projects(project_filter) if project_filter is not None else []
+        )
+        if not missing_teams and not missing_projects:
+            return
+        problems: list[str] = []
+        if missing_teams:
+            problems.append(f"Linear teams not found: {', '.join(missing_teams)}.")
+        if missing_projects:
+            problems.append(
+                f"Linear projects not found: {', '.join(missing_projects)}."
+            )
+        raise ConnectorValidationError(
+            f"{' '.join(problems)} Check each key, name or URL, or connect as a "
+            "member if the team is private."
+        )
 
-    def _validate_teams(self) -> None:
+    def _missing_teams(self) -> list[str]:
         found: set[str] = {
             team["key"]
             for data in self._pages(
@@ -180,14 +193,9 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
             )
             for team in data["teams"]["nodes"]
         }
-        missing: list[str] = sorted(set(self.team_keys) - found)
-        if missing:
-            raise ConnectorValidationError(
-                f"Linear teams not found: {', '.join(missing)}. Check the key, "
-                "or connect as a member if the team is private."
-            )
+        return sorted(set(self.team_keys) - found)
 
-    def _validate_projects(self, project_filter: dict[str, Any]) -> None:
+    def _missing_projects(self, project_filter: dict[str, Any]) -> list[str]:
         projects: list[dict[str, Any]] = [
             project
             for data in self._pages(
@@ -197,16 +205,10 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         ]
         found_names: set[str] = {project["name"] for project in projects}
         found_slug_ids: set[str] = {project["slugId"] for project in projects}
-        missing: list[str] = sorted(
+        return sorted(
             (set(self.project_names) - found_names)
             | (set(self.project_slug_ids) - found_slug_ids)
         )
-        if missing:
-            raise ConnectorValidationError(
-                f"Linear projects not found: {', '.join(missing)}. Check the "
-                "name or URL, or connect as a member if the project's team is "
-                "private."
-            )
 
     def _project_filter(self) -> dict[str, Any] | None:
         clauses: list[dict[str, Any]] = []
