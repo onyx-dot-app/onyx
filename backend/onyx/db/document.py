@@ -438,7 +438,7 @@ def get_documents_for_connector_credential_pair_limited_columns(
     for row in rows:
         doc_row = DocumentRow(
             id=row.id,
-            doc_metadata=row.doc_metadata,
+            doc_metadata=row.doc_metadata or {},
             external_user_group_ids=row.external_user_group_ids or [],
             external_user_emails=row.external_user_emails or [],
         )
