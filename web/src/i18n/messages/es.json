@@ -9098,6 +9098,20 @@
       "credentialSwap": {
         "title": "Elegiste otra credencial",
         "description": "El plan te permite conservar los documentos indexados, o volver a indexar todo y eliminar los documentos que la nueva credencial no puede ver."
+      },
+      "files": {
+        "title": "Archivos",
+        "description": "Agrega o quita archivos. Los archivos nuevos se indexan solo después de aplicar el plan.",
+        "empty": "El conector no tiene archivos.",
+        "addButton": {
+          "label": "Agregar archivos"
+        },
+        "remove": {
+          "tooltip": "Quitar {name}"
+        },
+        "uploadFailed": {
+          "toast": "No se pudieron subir los archivos: {detail}"
+        }
       }
     }
   },

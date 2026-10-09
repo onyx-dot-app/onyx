@@ -9098,6 +9098,20 @@
       "credentialSwap": {
         "title": "Vous avez choisi d'autres identifiants",
         "description": "Le plan vous permet de conserver les documents indexés, ou de tout réindexer et de supprimer les documents que les nouveaux identifiants ne voient pas."
+      },
+      "files": {
+        "title": "Fichiers",
+        "description": "Ajoutez ou supprimez des fichiers. Les nouveaux fichiers sont indexés seulement après l'application du plan.",
+        "empty": "Le connecteur n'a aucun fichier.",
+        "addButton": {
+          "label": "Ajouter des fichiers"
+        },
+        "remove": {
+          "tooltip": "Supprimer {name}"
+        },
+        "uploadFailed": {
+          "toast": "Impossible de téléverser les fichiers : {detail}"
+        }
       }
     }
   },

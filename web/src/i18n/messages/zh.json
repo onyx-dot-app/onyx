@@ -9098,6 +9098,20 @@
       "credentialSwap": {
         "title": "你选择了其他凭据",
         "description": "在计划中，你可以保留已索引的文档，或全部重新索引并清除新凭据无法访问的文档。"
+      },
+      "files": {
+        "title": "文件",
+        "description": "添加或移除文件。新文件仅在你应用计划后才会被索引。",
+        "empty": "该连接器没有文件。",
+        "addButton": {
+          "label": "添加文件"
+        },
+        "remove": {
+          "tooltip": "移除 {name}"
+        },
+        "uploadFailed": {
+          "toast": "无法上传文件：{detail}"
+        }
       }
     }
   },

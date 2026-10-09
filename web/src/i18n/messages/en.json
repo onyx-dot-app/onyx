@@ -9098,6 +9098,20 @@
       "credentialSwap": {
         "title": "You picked another credential",
         "description": "The plan lets you keep the indexed documents, or re-index everything and prune the documents the new credential cannot see."
+      },
+      "files": {
+        "title": "Files",
+        "description": "Add or remove files. New files are indexed only after you apply the plan.",
+        "empty": "The connector has no files.",
+        "addButton": {
+          "label": "Add files"
+        },
+        "remove": {
+          "tooltip": "Remove {name}"
+        },
+        "uploadFailed": {
+          "toast": "Could not upload the files: {detail}"
+        }
       }
     }
   },
