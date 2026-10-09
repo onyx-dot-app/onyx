@@ -305,6 +305,15 @@ export const connectorConfigs: Record<
     values: [
       {
         type: "text",
+        label: "GitHub Enterprise Server URL",
+        name: "github_base_url",
+        optional: true,
+        description: "Leave blank for github.com.",
+        placeholder: "https://github.example.com",
+        subDescription: "siteUrl",
+      },
+      {
+        type: "text",
         query: "Enter the GitHub username or organization:",
         label: "Repository Owner",
         name: "repo_owner",
@@ -389,6 +398,14 @@ export const connectorConfigs: Record<
     values: [
       {
         type: "text",
+        label: "TestRail Base URL",
+        name: "testrail_base_url",
+        optional: false,
+        placeholder: "https://acme.testrail.io",
+        subDescription: "siteUrl",
+      },
+      {
+        type: "text",
         label: "Project IDs",
         name: "project_ids",
         optional: true,
@@ -426,6 +443,14 @@ export const connectorConfigs: Record<
   gitlab: {
     description: "Configure GitLab connector",
     values: [
+      {
+        type: "text",
+        label: "GitLab URL",
+        name: "gitlab_url",
+        optional: false,
+        placeholder: "https://gitlab.com",
+        subDescription: "siteUrl",
+      },
       {
         type: "text",
         query: "Enter the project owner:",
@@ -666,12 +691,30 @@ export const connectorConfigs: Record<
   },
   bookstack: {
     description: "Configure Bookstack connector",
-    values: [],
+    values: [
+      {
+        type: "text",
+        label: "BookStack Base URL",
+        name: "bookstack_base_url",
+        optional: false,
+        placeholder: "https://bookstack.example.com",
+        subDescription: "siteUrl",
+      },
+    ],
     advanced_values: [],
   },
   outline: {
     description: "Configure Outline connector",
-    values: [],
+    values: [
+      {
+        type: "text",
+        label: "Outline Base URL",
+        name: "outline_base_url",
+        optional: false,
+        placeholder: "https://app.getoutline.com",
+        subDescription: "siteUrl",
+      },
+    ],
     advanced_values: [],
   },
   confluence: {
@@ -1344,6 +1387,14 @@ export const connectorConfigs: Record<
     description: "Configure Axero connector",
     values: [
       {
+        type: "text",
+        label: "Axero Base URL",
+        name: "base_url",
+        optional: false,
+        placeholder: "https://axero.example.com",
+        subDescription: "siteUrl",
+      },
+      {
         type: "list",
         query: "Enter spaces to include:",
         label: "Spaces",
@@ -1439,6 +1490,15 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     description: "Configure Gong connector",
     values: [
       {
+        type: "text",
+        label: "Gong API Base URL",
+        name: "gong_base_url",
+        optional: true,
+        description: "Defaults to `https://api.gong.io`.",
+        placeholder: "https://api.gong.io",
+        subDescription: "siteUrl",
+      },
+      {
         type: "list",
         query: "Enter workspaces to include:",
         label: "Workspaces",
@@ -1453,6 +1513,15 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
   loopio: {
     description: "Configure Loopio connector",
     values: [
+      {
+        type: "text",
+        label: "Loopio Subdomain",
+        name: "loopio_subdomain",
+        optional: false,
+        description:
+          "The subdomain of your Loopio site, like `acme` in `acme.loopio.com`.",
+        placeholder: "acme",
+      },
       {
         type: "text",
         query: "Enter the Loopio stack name",
@@ -1624,6 +1693,15 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
   zendesk: {
     description: "Configure Zendesk connector",
     values: [
+      {
+        type: "text",
+        label: "Zendesk Subdomain",
+        name: "zendesk_subdomain",
+        optional: false,
+        description:
+          "The subdomain of your Zendesk site, like `acme` in `acme.zendesk.com`.",
+        placeholder: "acme",
+      },
       {
         type: "select",
         query: "Select the what content this connector will index:",
@@ -1988,7 +2066,17 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
   },
   freshdesk: {
     description: "Configure Freshdesk connector",
-    values: [],
+    values: [
+      {
+        type: "text",
+        label: "Freshdesk Domain",
+        name: "freshdesk_domain",
+        optional: false,
+        description:
+          "The subdomain of your Freshdesk site, like `acme` in `acme.freshdesk.com`.",
+        placeholder: "acme",
+      },
+    ],
     advanced_values: [],
   },
   fireflies: {
@@ -2141,6 +2229,15 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     values: [
       {
         type: "text",
+        label: "Egnyte Domain",
+        name: "domain",
+        optional: false,
+        description:
+          "The subdomain of your Egnyte site, like `acme` in `acme.egnyte.com`.",
+        placeholder: "acme",
+      },
+      {
+        type: "text",
         query: "Enter folder path to index:",
         label: "Folder Path",
         name: "folder_path",
@@ -2213,6 +2310,14 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
   highspot: {
     description: "Configure Highspot connector",
     values: [
+      {
+        type: "text",
+        label: "Highspot URL",
+        name: "highspot_url",
+        optional: false,
+        placeholder: "https://api-su2.highspot.com/v1.0/",
+        subDescription: "siteUrl",
+      },
       {
         type: "tab",
         name: "highspot_scope",

@@ -64,6 +64,11 @@ export interface CredentialBoundFieldSplit {
 const CREDENTIAL_BOUND_FIELDS: Partial<Record<ValidSources, string[]>> =
   credentialBoundFields;
 
+/** The names of the source's credential-bound config fields. */
+export function credentialBoundFieldNames(source: ValidSources): string[] {
+  return CREDENTIAL_BOUND_FIELDS[source] ?? [];
+}
+
 /**
  * Takes the credential-bound fields out of a configuration, so the create form
  * can show them above the credential section. Only top-level fields move. A

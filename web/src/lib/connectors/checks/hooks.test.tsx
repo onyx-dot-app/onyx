@@ -1,3 +1,4 @@
+import type { CredentialRef } from "@/lib/credentials/types";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { Formik, useFormikContext } from "formik";
@@ -110,12 +111,16 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 
+function refFor(credentialId: number | null): CredentialRef | null {
+  return credentialId === null ? null : { credential_id: credentialId };
+}
+
 function renderChecks(credentialId: number | null = 1) {
   return renderHook(
     (props: { credentialId: number | null }) => ({
       checks: useConnectorChecks({
         source: ValidSources.Confluence,
-        credentialId: props.credentialId,
+        credential: refFor(props.credentialId),
       }),
       form: useFormikContext<Record<string, unknown>>(),
     }),
@@ -257,8 +262,14 @@ it("shares one session between every caller for the source", async () => {
   startMock.mockResolvedValue(run([check({ ...BINDING, state: "passed" })]));
   const { result } = renderHook(
     () => [
-      useConnectorChecks({ source: ValidSources.Confluence, credentialId: 1 }),
-      useConnectorChecks({ source: ValidSources.Confluence, credentialId: 1 }),
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+      }),
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+      }),
     ],
     { wrapper }
   );
@@ -266,4 +277,32 @@ it("shares one session between every caller for the source", async () => {
   act(() => result.current[0]!.begin());
   await waitFor(() => expect(result.current[1]!.formUnlocked).toBe(true));
   expect(startMock).toHaveBeenCalledTimes(1);
+});
+
+it("sends a typed account's values with its first run, then names its draft", async () => {
+  startMock.mockResolvedValue({
+    ...run([check({ ...BINDING, state: "passed" }), CONTENT]),
+    credential_id: 7,
+  });
+  const typed: CredentialRef = { credential_json: { api_token: "token" } };
+  const { result } = renderHook(
+    () =>
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: typed,
+      }),
+    { wrapper }
+  );
+
+  act(() => result.current.begin());
+  await waitFor(() => expect(result.current.status).toBe("passed"));
+  expect(startMock).toHaveBeenLastCalledWith(
+    expect.objectContaining({ credential_json: { api_token: "token" } })
+  );
+  expect(startMock.mock.lastCall?.[0]).not.toHaveProperty("credential_id");
+
+  act(() => result.current.rerun());
+  await waitFor(() => expect(startMock).toHaveBeenCalledTimes(2));
+  expect(startMock.mock.lastCall?.[0]).toHaveProperty("credential_id", 7);
+  expect(startMock.mock.lastCall?.[0]).not.toHaveProperty("credential_json");
 });

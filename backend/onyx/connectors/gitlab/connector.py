@@ -160,6 +160,8 @@ class GitlabConnector(LoadConnector, PollConnector):
         include_mrs: bool = True,
         include_issues: bool = True,
         include_code_files: bool = GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+        # Checked against the credential by the binding; unused here.
+        gitlab_url: str | None = None,  # noqa: ARG002
     ) -> None:
         self.project_owner = project_owner
         self.project_name = project_name

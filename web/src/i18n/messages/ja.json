@@ -2639,17 +2639,11 @@
           "label": "{source} で認可",
           "pendingLabel": "認可しています..."
         },
-        "collapseButton": {
-          "ariaLabel": "折りたたむ"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "新規作成"
-        },
-        "credentialDeleted": {
-          "toast": "認証情報を削除しました！"
         },
         "credentialModal": {
           "title": "{source} の認証情報を作成"
@@ -2662,14 +2656,8 @@
           "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
           "title": "認証アカウント"
         },
-        "credentialSwapped": {
-          "toast": "認証情報を切り替えました！"
-        },
         "error": {
           "toast": "エラー: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "展開"
         },
         "federated": {
           "tooltip": {
@@ -2709,6 +2697,58 @@
         },
         "unknownError": {
           "toast": "不明なエラーが発生しました"
+        },
+        "account": {
+          "untitled": {
+            "label": "無題"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "{date} に追加"
+          },
+          "selected": {
+            "label": "選択中"
+          },
+          "useButton": {
+            "label": "このアカウントを使用"
+          },
+          "unsupportedRealm": {
+            "label": "サポートされていないサイトドメイン"
+          },
+          "expandButton": {
+            "ariaLabel": "アカウントの詳細を表示"
+          },
+          "collapseButton": {
+            "ariaLabel": "アカウントの詳細を非表示"
+          },
+          "deleteButton": {
+            "label": "アカウントを削除",
+            "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。"
+          },
+          "usedBy": {
+            "label": "{count, plural, other {# 個のコネクタ}}で使用中"
+          },
+          "owner": {
+            "you": "{name}（あなた）"
+          },
+          "lastTested": {
+            "title": "最終テスト {date}"
+          },
+          "notTested": {
+            "title": "未テスト"
+          },
+          "details": {
+            "description": "保存済みアカウントの認証情報は編集したり、別のホストに向けたりすることはできません。再利用する前にアカウントをテストするか、新しいアカウントを追加してください。"
+          },
+          "rerunButton": {
+            "label": "チェックを再実行"
+          },
+          "authenticationType": {
+            "label": "認証タイプ"
+          },
+          "rerunFailed": {
+            "toast": "チェックを開始できませんでした。もう一度お試しください。"
+          }
         }
       },
       "credentialRequired": {
@@ -2718,6 +2758,7 @@
         "enterField": "「{field}」を入力してください。",
         "fixField": "「{field}」を確認してください。",
         "awaitingCheck": "フィールドから移動すると、認証情報で確認します。",
+        "runChecks": "チェックを実行して、新しいアカウントをこの設定で確認します。",
         "checking": "認証情報を確認しています…",
         "fieldInvalid": "「{field}」を確認してください: {detail}",
         "rejected": "この認証情報はこの設定では使用できません。{detail}"
@@ -3320,6 +3361,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "API トークンを所有するアカウントのメールアドレスを使用してください。"
+        },
+        "nameField": {
+          "title": "表示名",
+          "placeholder": "認証アカウントに名前を付けてください"
         },
         "apiTokenField": {
           "subDescription": "{source} にアクセスするための API トークンを貼り付けてください。"

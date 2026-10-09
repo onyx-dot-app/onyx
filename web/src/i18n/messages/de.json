@@ -2639,17 +2639,11 @@
           "label": "Mit {source} autorisieren",
           "pendingLabel": "Wird autorisiert..."
         },
-        "collapseButton": {
-          "ariaLabel": "Einklappen"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Neu erstellen"
-        },
-        "credentialDeleted": {
-          "toast": "Anmeldedaten erfolgreich gelöscht!"
         },
         "credentialModal": {
           "title": "Anmeldedaten für {source} erstellen"
@@ -2662,14 +2656,8 @@
           "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto.",
           "title": "Authentifizierungskonto"
         },
-        "credentialSwapped": {
-          "toast": "Anmeldedaten erfolgreich gewechselt!"
-        },
         "error": {
           "toast": "Fehler: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Ausklappen"
         },
         "federated": {
           "tooltip": {
@@ -2709,6 +2697,58 @@
         },
         "unknownError": {
           "toast": "Ein unbekannter Fehler ist aufgetreten"
+        },
+        "account": {
+          "untitled": {
+            "label": "Ohne Titel"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Hinzugefügt am {date}"
+          },
+          "selected": {
+            "label": "Ausgewählt"
+          },
+          "useButton": {
+            "label": "Konto verwenden"
+          },
+          "unsupportedRealm": {
+            "label": "Nicht unterstützte Website-Domain"
+          },
+          "expandButton": {
+            "ariaLabel": "Kontodetails anzeigen"
+          },
+          "collapseButton": {
+            "ariaLabel": "Kontodetails ausblenden"
+          },
+          "deleteButton": {
+            "label": "Konto löschen",
+            "inUseTooltip": "Diese Zugangsdaten können nicht gelöscht werden, da andere Connectors sie verwenden."
+          },
+          "usedBy": {
+            "label": "Verwendet von {count, plural, one {# Connector} other {# Connectors}}"
+          },
+          "owner": {
+            "you": "{name} (Sie)"
+          },
+          "lastTested": {
+            "title": "Zuletzt getestet {date}"
+          },
+          "notTested": {
+            "title": "Noch nicht getestet"
+          },
+          "details": {
+            "description": "Gespeicherte Kontozugangsdaten können nicht bearbeitet oder an einen anderen Host umgeleitet werden. Sie können das Konto vor der Wiederverwendung testen oder stattdessen ein neues Konto hinzufügen."
+          },
+          "rerunButton": {
+            "label": "Prüfungen erneut ausführen"
+          },
+          "authenticationType": {
+            "label": "Authentifizierungstyp"
+          },
+          "rerunFailed": {
+            "toast": "Die Prüfungen konnten nicht gestartet werden. Versuchen Sie es erneut."
+          }
         }
       },
       "credentialRequired": {
@@ -2718,6 +2758,7 @@
         "enterField": "Geben Sie das Feld „{field}“ ein.",
         "fixField": "Prüfen Sie das Feld „{field}“.",
         "awaitingCheck": "Verlassen Sie das Feld, um es mit den Anmeldedaten zu prüfen.",
+        "runChecks": "Führen Sie die Prüfungen aus, um das neue Konto mit diesen Einstellungen zu prüfen.",
         "checking": "Die Anmeldedaten werden geprüft…",
         "fieldInvalid": "Prüfen Sie das Feld „{field}“: {detail}",
         "rejected": "Diese Anmeldedaten können mit diesen Einstellungen nicht verwendet werden. {detail}"
@@ -3320,6 +3361,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "Verwenden Sie die E-Mail-Adresse des Kontos, dem das API-Token gehört."
+        },
+        "nameField": {
+          "title": "Anzeigename",
+          "placeholder": "Geben Sie Ihrem Authentifizierungskonto einen Namen"
         },
         "apiTokenField": {
           "subDescription": "Fügen Sie Ihr API-Token ein, um auf {source} zuzugreifen."

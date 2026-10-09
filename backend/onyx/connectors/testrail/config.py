@@ -3,7 +3,7 @@ from typing import Annotated, Any
 from pydantic import field_validator
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import ConnectorConfig, RealmCredentialBinding
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
@@ -17,7 +17,14 @@ DEFAULT_MAX_PAGES = 10000
 DEFAULT_SKIP_DOC_ABSOLUTE_CHARS = 200000
 
 
-class TestRailConnectorConfig(ConnectorConfig):
+class TestRailCredentialBinding(RealmCredentialBinding):
+    REALM_KEY = "testrail_base_url"
+
+    # Where the account works. The connector reads it from the credential.
+    testrail_base_url: Annotated[str | None, FieldPolicy(FieldClass.COSMETIC)] = None
+
+
+class TestRailConnectorConfig(TestRailCredentialBinding, ConnectorConfig):
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
     # A blank string or None fetches every project. A list ([] fetches none)
     # comes only from the API.

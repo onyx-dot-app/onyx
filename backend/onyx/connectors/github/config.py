@@ -2,7 +2,7 @@ from typing import Annotated, Any
 
 from pydantic import field_validator
 
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import ConnectorConfig, RealmCredentialBinding
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
@@ -16,7 +16,15 @@ _DOCUMENT_TYPE_TOGGLE = FieldPolicy(
 )
 
 
-class GithubConnectorConfig(ConnectorConfig):
+class GithubCredentialBinding(RealmCredentialBinding):
+    REALM_KEY = "github_base_url"
+    DEFAULT_REALM = "https://github.com"
+
+    # Where the account works. The connector reads it from the credential.
+    github_base_url: Annotated[str | None, FieldPolicy(FieldClass.COSMETIC)] = None
+
+
+class GithubConnectorConfig(GithubCredentialBinding, ConnectorConfig):
     repo_owner: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
     repositories: Annotated[
         str | None,

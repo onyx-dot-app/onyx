@@ -2639,17 +2639,11 @@
           "label": "使用 {source} 授权",
           "pendingLabel": "正在授权…"
         },
-        "collapseButton": {
-          "ariaLabel": "折叠"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "新建"
-        },
-        "credentialDeleted": {
-          "toast": "已成功删除凭据！"
         },
         "credentialModal": {
           "title": "创建 {source} 凭据"
@@ -2662,14 +2656,8 @@
           "description": "使用共享服务账户。{appName} 将以此账户为内容建立索引。",
           "title": "身份验证账户"
         },
-        "credentialSwapped": {
-          "toast": "已成功更换凭据！"
-        },
         "error": {
           "toast": "错误：{detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "展开"
         },
         "federated": {
           "tooltip": {
@@ -2709,6 +2697,58 @@
         },
         "unknownError": {
           "toast": "发生未知错误"
+        },
+        "account": {
+          "untitled": {
+            "label": "未命名"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "添加于 {date}"
+          },
+          "selected": {
+            "label": "已选择"
+          },
+          "useButton": {
+            "label": "使用此账户"
+          },
+          "unsupportedRealm": {
+            "label": "不支持的网站域名"
+          },
+          "expandButton": {
+            "ariaLabel": "显示账户详情"
+          },
+          "collapseButton": {
+            "ariaLabel": "隐藏账户详情"
+          },
+          "deleteButton": {
+            "label": "删除账户",
+            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。"
+          },
+          "usedBy": {
+            "label": "{count, plural, other {# 个连接器}}正在使用"
+          },
+          "owner": {
+            "you": "{name}（你）"
+          },
+          "lastTested": {
+            "title": "上次测试 {date}"
+          },
+          "notTested": {
+            "title": "尚未测试"
+          },
+          "details": {
+            "description": "已保存账户的凭据无法编辑，也无法指向其他主机。你可以在复用前测试该账户，或改为添加新账户。"
+          },
+          "rerunButton": {
+            "label": "重新运行检查"
+          },
+          "authenticationType": {
+            "label": "认证类型"
+          },
+          "rerunFailed": {
+            "toast": "无法启动检查，请重试。"
+          }
         }
       },
       "credentialRequired": {
@@ -2718,6 +2758,7 @@
         "enterField": "请输入“{field}”。",
         "fixField": "请检查“{field}”。",
         "awaitingCheck": "离开该字段后将使用凭据进行检查。",
+        "runChecks": "运行检查，以使用这些设置检查新账户。",
         "checking": "正在检查凭据…",
         "fieldInvalid": "请检查“{field}”：{detail}",
         "rejected": "此凭据无法与这些设置一起使用。{detail}"
@@ -3320,6 +3361,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "请使用拥有该 API 令牌的账户邮箱。"
+        },
+        "nameField": {
+          "title": "显示名称",
+          "placeholder": "为你的身份验证账户命名"
         },
         "apiTokenField": {
           "subDescription": "粘贴你的 API 令牌以访问 {source}。"

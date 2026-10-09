@@ -4,6 +4,9 @@
 .opal-tooltip {
   z-index: var(--z-tooltip);
   max-width: 20rem;
+  /* A run with no spaces (a URL, a token) breaks at the edge instead of
+     running past it. Inherited, so custom tooltip content gets it too. */
+  overflow-wrap: break-word;
   @apply rounded-08 px-3 py-2 text-sm
     bg-background-neutral-dark-03 text-text-light-05
     animate-in fade-in-0 zoom-in-95

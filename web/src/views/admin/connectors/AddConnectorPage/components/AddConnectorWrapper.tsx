@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { Formik } from "formik";
+import * as Yup from "yup";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { PageLoader, IconLoader } from "@opal/loaders";
@@ -33,15 +34,27 @@ import {
   isValidSource,
 } from "@/lib/sources";
 import { Logo } from "@/lib/app/components";
-import { linkCredential } from "@/lib/credentials/svc";
+import {
+  createConnectorWithCredential,
+  credentialPairMetadata,
+} from "@/lib/credentials/svc";
 import { submitFiles, submitGoogleSite } from "@/lib/connectors/svc";
 import {
   useBindingGateMessage,
   type UseBoundFieldsGateResult,
 } from "@/lib/connectors/hooks";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import { getCredentialSpec } from "@/lib/credentials/utils";
-import type { Credential } from "@/lib/credentials/types";
+import {
+  getCredentialSpec,
+  isDraftCredential,
+  toCredentialRef,
+  toCredentialRequest,
+} from "@/lib/credentials/utils";
+import type {
+  Credential,
+  CredentialRef,
+  DraftCredential,
+} from "@/lib/credentials/types";
 import {
   defaultRefreshFreqMinutes,
   useConnectorConfiguration,
@@ -59,10 +72,20 @@ import type {
 } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
 import {
+  useCredentialFieldCopy,
   useGmailCredentials,
   useCredentialLoad,
   useGoogleDriveCredentials,
+  useResetSavedDraftCredential,
+  useSavedDraftCredential,
 } from "@/lib/credentials/hooks";
+import {
+  NEW_ACCOUNT_FIELD,
+  initialNewAccountValues,
+  newAccountSchema,
+  typedAccountSpec,
+  typedDraft,
+} from "@/views/admin/connectors/AddConnectorPage/newAccount";
 import { deleteConnector } from "@/lib/connector";
 import {
   SYNC_RESTRICTED_ACCESS_TYPE,
@@ -93,7 +116,7 @@ interface ConnectorChecksGates {
 
 interface ConnectorChecksGateProps {
   source: ConfigurableSources;
-  credentialId: number | null;
+  credential: CredentialRef | null;
   children: (gates: ConnectorChecksGates) => ReactNode;
 }
 
@@ -104,12 +127,12 @@ interface ConnectorChecksGateProps {
  */
 function ConnectorChecksGate({
   source,
-  credentialId,
+  credential,
   children,
 }: ConnectorChecksGateProps) {
   const { formUnlocked, createReady } = useConnectorChecks({
     source,
-    credentialId,
+    credential,
   });
   return children({ formUnlocked, createReady });
 }
@@ -191,7 +214,8 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load
 
-  // State for managing credentials and files
+  // The picked saved account. Clicking a saved card picks it; typing into
+  // the new account drops the pick (see AuthenticationAccountSection).
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
 
@@ -209,11 +233,14 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     connector,
     configuration
   );
-  const formControlFieldNames = new Set(
-    [...configuration.values, ...configuration.advanced_values]
+  // Form keys that are not connector config: tab controls, and the typed
+  // account, which Create sends as the credential.
+  const formControlFieldNames = new Set([
+    ...[...configuration.values, ...configuration.advanced_values]
       .filter((field) => field.type === "tab")
-      .map((field) => field.name)
-  );
+      .map((field) => field.name),
+    NEW_ACCOUNT_FIELD,
+  ]);
 
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
@@ -234,15 +261,37 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
   const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
   const { liveGmailCredential } = useGmailCredentials(connector);
 
-  // Check if credential is activated
-  const credentialActivated =
-    (connector === "google_drive" && liveGDriveCredential) ||
-    (connector === "gmail" && liveGmailCredential) ||
-    currentCredential;
-
   // Sources without a credential spec skip the credential section.
   const noCredentials = credentialSpec == null;
-  const canCreate = noCredentials || credentialActivated != null;
+
+  // The new account is part of this form: its fields live under
+  // NEW_ACCOUNT_FIELD and validate with the rest while it is chosen.
+  const tValidation = useTranslations("admin.credentials.validation");
+  const fieldCopy = useCredentialFieldCopy(connector);
+  const typedSpec = typedAccountSpec(connector);
+  const accountSchema = typedSpec
+    ? newAccountSchema(typedSpec, {
+        fieldTitle: (key) => fieldCopy(key).title,
+        required: (field) => tValidation("required", { field }),
+        empty: (field) => tValidation("empty", { field }),
+        invalidEmail: (field) => tValidation("invalidEmail", { field }),
+        fileRequired: (field) => tValidation("fileRequired", { field }),
+        authMethodRequired: tValidation("authMethodRequired"),
+      })
+    : null;
+
+  /**
+   * The chosen account for these form values: the saved pick; else the typed
+   * one when its values are valid (or Google's live account).
+   */
+  const accountFor = (
+    values: Record<string, unknown>
+  ): Credential<any> | DraftCredential | null =>
+    currentCredential ||
+    typedDraft(connector, accountSchema, values) ||
+    liveGDriveCredential ||
+    liveGmailCredential ||
+    null;
 
   // The page body waits for the source's saved credentials: no connector
   // can be set up without them. Sources without credentials fetch nothing and go
@@ -263,6 +312,9 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
   // The rest of the form also waits for the capability checks. Each visit
   // starts without a run. Sources without a credential step have no checks.
   useResetConnectorChecks(connector);
+  // A check run saves a typed account as a draft; Create names that draft.
+  useResetSavedDraftCredential(connector);
+  const { savedDraft } = useSavedDraftCredential(connector);
   const checksT = useTranslations("admin.connectorChecks");
 
   const convertStringToDateTime = (indexingStart: string | null) => {
@@ -293,9 +345,15 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
 
   const credentialsFailed = credentialLoadError !== undefined;
 
+  const initialValues: ReturnType<typeof createConnectorInitialValues> =
+    createConnectorInitialValues(connector);
+  if (typedSpec) {
+    initialValues[NEW_ACCOUNT_FIELD] = initialNewAccountValues(typedSpec);
+  }
+
   return (
     <Formik
-      initialValues={createConnectorInitialValues(connector)}
+      initialValues={initialValues}
       validationSchema={createConnectorValidationSchema(
         connector,
         isScopedManager,
@@ -309,7 +367,13 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
           stringPairEmptyKey: keyValueT("emptyKey"),
           stringPairDuplicateKey: keyValueT("duplicateKey"),
         }
-      )}
+      ).shape({
+        // With a saved pick, the typed account is not used, so it must not
+        // block Create. With no pick it is the only account, and its errors
+        // show.
+        [NEW_ACCOUNT_FIELD]:
+          accountSchema && !currentCredential ? accountSchema : Yup.mixed(),
+      })}
       onSubmit={async (values) => {
         const {
           name,
@@ -437,30 +501,27 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
             )
           );
 
+          const connectorData: ConnectorBase<any> = {
+            connector_specific_config: transformedConnectorSpecificConfig,
+            input_type: isLoadState(connector) ? "load_state" : "poll", // single case
+            name: name,
+            source: connector,
+            access_type: access_type,
+            refresh_freq: advancedConfiguration.refreshFreq || null,
+            prune_freq: advancedConfiguration.pruneFreq || null,
+            indexing_start: advancedConfiguration.indexingStart || null,
+            groups: groups,
+          };
           const connectorCreationPromise = (async () => {
-            const { errorDetail, isSuccess, response } =
-              await submitConnector<any>(
-                {
-                  connector_specific_config: transformedConnectorSpecificConfig,
-                  input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-                  name: name,
-                  source: connector,
-                  access_type: access_type,
-                  refresh_freq: advancedConfiguration.refreshFreq || null,
-                  prune_freq: advancedConfiguration.pruneFreq || null,
-                  indexing_start: advancedConfiguration.indexingStart || null,
-                  groups: groups,
-                },
-                undefined,
-                credentialActivated ? false : true
-              );
+            const credential = noCredentials ? null : accountFor(values);
+            if (!credential) {
+              const { errorDetail, isSuccess, response } =
+                await submitConnector<any>(connectorData, undefined, true);
 
-            // Store the connector id immediately for potential timeout
-            if (response?.id) {
-              connectorIdRef.current = response.id;
-            }
-
-            if (!credentialActivated) {
+              // Store the connector id immediately for potential timeout
+              if (response?.id) {
+                connectorIdRef.current = response.id;
+              }
               if (isSuccess) {
                 onSuccess();
               } else {
@@ -472,39 +533,35 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
               return;
             }
 
-            // With credential
-            if (credentialActivated && isSuccess && response) {
-              const credential =
-                currentCredential ||
-                liveGDriveCredential ||
-                liveGmailCredential;
-              const linkCredentialResponse = await linkCredential(
-                response.id,
-                credential!.id,
-                name,
-                access_type,
-                groups,
-                auto_sync_options,
-                undefined,
-                access_type === SYNC_RESTRICTED_ACCESS_TYPE
-                  ? wireAccess.restriction_group_ids
-                  : dataAccess,
-                manageAccess
-              );
-              if (linkCredentialResponse.ok) {
+            // With credential: one request creates the connector and pairs
+            // it, saving a typed account on the way.
+            const credentialRef = toCredentialRef(credential);
+            if (credentialRef) {
+              const createResponse = await createConnectorWithCredential({
+                connector: connectorData,
+                pairing: credentialPairMetadata(
+                  name,
+                  access_type,
+                  groups,
+                  auto_sync_options,
+                  undefined,
+                  access_type === SYNC_RESTRICTED_ACCESS_TYPE
+                    ? wireAccess.restriction_group_ids
+                    : dataAccess,
+                  manageAccess
+                ),
+                credential: toCredentialRequest(credentialRef, savedDraft),
+                credentialSharing: isDraftCredential(credential)
+                  ? credential.sharing
+                  : undefined,
+              });
+              if (createResponse.ok) {
                 onSuccess();
-              } else {
-                const errorData = await linkCredentialResponse.json();
-
-                if (!timeoutErrorHappenedRef.current) {
-                  // Only show error if timeout didn't happen
-                  toast.error(errorData.detail || errorData.message);
-                }
+              } else if (!timeoutErrorHappenedRef.current) {
+                // Only show error if timeout didn't happen
+                const errorData = await createResponse.json();
+                toast.error(errorData.detail || errorData.message);
               }
-            } else if (isSuccess) {
-              onSuccess();
-            } else {
-              toast.error(t("add.error.toast", { detail: errorDetail ?? "" }));
             }
 
             timeoutErrorHappenedRef.current = false;
@@ -539,11 +596,10 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     >
       {(formikProps) => {
         const busy = uploading || creatingConnector;
-        const formCredential =
-          currentCredential ||
-          liveGDriveCredential ||
-          liveGmailCredential ||
-          null;
+        const formCredential = accountFor(formikProps.values);
+        const canCreate = noCredentials || formCredential !== null;
+        const newAccountReady =
+          typedDraft(connector, accountSchema, formikProps.values) !== null;
         const showAdvancedBoundFields =
           !configuration.advancedValuesVisibleCondition ||
           configuration.advancedValuesVisibleCondition(
@@ -561,7 +617,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
         return (
           <ConnectorChecksGate
             source={connector}
-            credentialId={checkedCredential?.id ?? null}
+            credential={toCredentialRef(checkedCredential)}
           >
             {(checks) => {
               const formUnlocked: boolean =
@@ -661,8 +717,10 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                       <>
                         <BoundFieldsGate
                           source={connector}
-                          credentialId={
-                            noCredentials ? null : (formCredential?.id ?? null)
+                          credential={
+                            noCredentials
+                              ? null
+                              : toCredentialRef(formCredential)
                           }
                           credentialSelected={canCreate}
                           currentCredential={formCredential}
@@ -703,8 +761,14 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                               accessType={formikProps.values.access_type}
                               currentCredential={currentCredential}
                               onCredentialChange={setCurrentCredential}
+                              newAccountReady={newAccountReady}
                               checkedCredential={checkedCredential}
-                              checksLocked={!configUnlocked}
+                              // A typed account's binding waits for a run,
+                              // so the checks stay open for it.
+                              checksLocked={
+                                !configUnlocked &&
+                                gate?.reason?.kind !== "runChecks"
+                              }
                             />
                           )}
 

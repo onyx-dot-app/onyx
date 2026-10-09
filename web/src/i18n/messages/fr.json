@@ -2639,17 +2639,11 @@
           "label": "Autoriser avec {source}",
           "pendingLabel": "Autorisation en cours..."
         },
-        "collapseButton": {
-          "ariaLabel": "Replier"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Créer"
-        },
-        "credentialDeleted": {
-          "toast": "Identifiant supprimé avec succès !"
         },
         "credentialModal": {
           "title": "Créer un identifiant pour {source}"
@@ -2662,14 +2656,8 @@
           "description": "Utilisez un compte de service partagé. {appName} indexe le contenu avec ce compte.",
           "title": "Compte d'authentification"
         },
-        "credentialSwapped": {
-          "toast": "Identifiant remplacé avec succès !"
-        },
         "error": {
           "toast": "Erreur : {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Déplier"
         },
         "federated": {
           "tooltip": {
@@ -2709,6 +2697,58 @@
         },
         "unknownError": {
           "toast": "Une erreur inconnue est survenue"
+        },
+        "account": {
+          "untitled": {
+            "label": "Sans titre"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Ajouté le {date}"
+          },
+          "selected": {
+            "label": "Sélectionné"
+          },
+          "useButton": {
+            "label": "Utiliser le compte"
+          },
+          "unsupportedRealm": {
+            "label": "Domaine de site non pris en charge"
+          },
+          "expandButton": {
+            "ariaLabel": "Afficher les détails du compte"
+          },
+          "collapseButton": {
+            "ariaLabel": "Masquer les détails du compte"
+          },
+          "deleteButton": {
+            "label": "Supprimer le compte",
+            "inUseTooltip": "Impossible de supprimer cet identifiant, car d’autres connecteurs l’utilisent."
+          },
+          "usedBy": {
+            "label": "Utilisé par {count, plural, one {# connecteur} other {# connecteurs}}"
+          },
+          "owner": {
+            "you": "{name} (vous)"
+          },
+          "lastTested": {
+            "title": "Dernier test {date}"
+          },
+          "notTested": {
+            "title": "Pas encore testé"
+          },
+          "details": {
+            "description": "Les identifiants d’un compte enregistré ne peuvent pas être modifiés ni redirigés vers un autre hôte. Vous pouvez tester le compte avant de le réutiliser ou ajouter un nouveau compte."
+          },
+          "rerunButton": {
+            "label": "Relancer les vérifications"
+          },
+          "authenticationType": {
+            "label": "Type d’authentification"
+          },
+          "rerunFailed": {
+            "toast": "Impossible de lancer les vérifications. Réessayez."
+          }
         }
       },
       "credentialRequired": {
@@ -2718,6 +2758,7 @@
         "enterField": "Saisissez le champ « {field} ».",
         "fixField": "Vérifiez le champ « {field} ».",
         "awaitingCheck": "Quittez le champ pour le vérifier avec les identifiants.",
+        "runChecks": "Lancez les vérifications pour vérifier le nouveau compte avec ces paramètres.",
         "checking": "Vérification des identifiants…",
         "fieldInvalid": "Vérifiez le champ « {field} » : {detail}",
         "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}"
@@ -3320,6 +3361,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "Utilisez l'adresse e-mail du compte propriétaire du jeton d'API."
+        },
+        "nameField": {
+          "title": "Nom d'affichage",
+          "placeholder": "Nommez votre compte d'authentification"
         },
         "apiTokenField": {
           "subDescription": "Collez votre jeton d'API pour accéder à {source}."

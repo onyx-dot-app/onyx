@@ -298,7 +298,10 @@ export async function getConnectorOauthRedirectUrl(
 
 const BINDING_CHECK_ERROR = "Unable to check the credential";
 
-/** Checks the credential-bound fields of an unsaved form against a credential. */
+/**
+ * Checks the credential-bound fields of an unsaved form against a saved
+ * credential or the user's draft. Sends no credential values.
+ */
 export async function checkCredentialBinding(
   credentialId: number,
   request: CredentialBindingCheckRequest

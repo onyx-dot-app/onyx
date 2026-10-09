@@ -40,6 +40,8 @@ class LoopioConnector(LoadConnector, PollConnector):
         self,
         loopio_stack_name: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
+        # Checked against the credential by the binding; unused here.
+        loopio_subdomain: str | None = None,  # noqa: ARG002
     ) -> None:
         self.batch_size = batch_size
         self.loopio_client_id: str | None = None

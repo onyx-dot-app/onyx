@@ -100,7 +100,7 @@ uses. So `padding={2}` is the same distance as `p-2`, and the default `4` is `1r
 
 ## Expandable mode
 
-Enabled by passing `expandable: true`. The type is a discriminated union — `expanded` and `expandedContent` are only available (and type-checked) when `expandable: true`.
+Enabled by passing `expandable: true`. The type is a discriminated union — `expanded` and `expandedContent` are only available (and type-checked) when `expandable: true`. `expandableKeepMounted` keeps `expandedContent` mounted while folded, e.g. so a form keeps what was typed.
 
 ```tsx
 import { Card } from "@opal/components";

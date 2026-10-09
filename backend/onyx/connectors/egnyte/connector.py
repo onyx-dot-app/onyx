@@ -147,6 +147,8 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         self,
         folder_path: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
+        # Checked against the credential by the binding; unused here.
+        domain: str | None = None,  # noqa: ARG002
     ) -> None:
         self.domain = ""  # will always be set in `load_credentials`
         self.folder_path = folder_path or ""  # Root folder if not specified

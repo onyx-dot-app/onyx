@@ -151,6 +151,20 @@ MASK_CREDENTIALS_WHITELIST = {
     "wiki_base",
     "cloud_name",
     "cloud_id",
+    # Where an account works (its realm): not secrets, and the add-connector
+    # form compares them with the realm typed above the saved accounts.
+    "github_base_url",
+    "gitlab_url",
+    "bookstack_base_url",
+    "outline_base_url",
+    "gong_base_url",
+    "loopio_subdomain",
+    "zendesk_subdomain",
+    "base_url",
+    "freshdesk_domain",
+    "domain",
+    "highspot_url",
+    "testrail_base_url",
     # OAuth scope lists are public identifiers, not secrets, and masked list
     # items cannot round-trip through a chip editor.
     "scopes",

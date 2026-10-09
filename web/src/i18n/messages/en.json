@@ -2639,17 +2639,11 @@
           "label": "Authorize with {source}",
           "pendingLabel": "Authorizing..."
         },
-        "collapseButton": {
-          "ariaLabel": "Collapse"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Create New"
-        },
-        "credentialDeleted": {
-          "toast": "Credential deleted successfully!"
         },
         "credentialModal": {
           "title": "Create a {source} credential"
@@ -2662,14 +2656,8 @@
           "description": "Use a shared service account. {appName} indexes content as this account.",
           "title": "Authentication Account"
         },
-        "credentialSwapped": {
-          "toast": "Swapped credential successfully!"
-        },
         "error": {
           "toast": "Error: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Expand"
         },
         "federated": {
           "tooltip": {
@@ -2709,6 +2697,58 @@
         },
         "unknownError": {
           "toast": "An unknown error occurred"
+        },
+        "account": {
+          "untitled": {
+            "label": "Untitled"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Added on {date}"
+          },
+          "selected": {
+            "label": "Selected"
+          },
+          "useButton": {
+            "label": "Use Account"
+          },
+          "unsupportedRealm": {
+            "label": "Unsupported site domain"
+          },
+          "expandButton": {
+            "ariaLabel": "Show account details"
+          },
+          "collapseButton": {
+            "ariaLabel": "Hide account details"
+          },
+          "deleteButton": {
+            "label": "Delete Account",
+            "inUseTooltip": "Cannot delete this credential because there are other connectors that are using it."
+          },
+          "usedBy": {
+            "label": "Used by {count, plural, one {# connector} other {# connectors}}"
+          },
+          "owner": {
+            "you": "{name} (you)"
+          },
+          "lastTested": {
+            "title": "Last Tested {date}"
+          },
+          "notTested": {
+            "title": "Not Tested Yet"
+          },
+          "details": {
+            "description": "Saved account credentials can't be edited or redirected to a different host. You can test the account before reuse or add a new account instead."
+          },
+          "rerunButton": {
+            "label": "Re-run Checks"
+          },
+          "authenticationType": {
+            "label": "Authentication Type"
+          },
+          "rerunFailed": {
+            "toast": "Couldn't start the checks. Try again."
+          }
         }
       },
       "credentialRequired": {
@@ -2718,6 +2758,7 @@
         "enterField": "Enter the {field}.",
         "fixField": "Check the {field}.",
         "awaitingCheck": "Leave the field to check it with the credential.",
+        "runChecks": "Run the checks to check the new account with these settings.",
         "checking": "Checking the credential…",
         "fieldInvalid": "Check the {field}: {detail}",
         "rejected": "This credential cannot be used with these settings. {detail}"
@@ -3320,6 +3361,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "Use the account email that owns the API token."
+        },
+        "nameField": {
+          "title": "Display Name",
+          "placeholder": "Name your authentication account"
         },
         "apiTokenField": {
           "subDescription": "Paste your API token to access {source}."

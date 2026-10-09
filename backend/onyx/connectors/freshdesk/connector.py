@@ -187,7 +187,12 @@ def _create_doc_from_ticket(ticket: dict, domain: str) -> Document:
 
 
 class FreshdeskConnector(PollConnector, LoadConnector):
-    def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
+    def __init__(
+        self,
+        batch_size: int = INDEX_BATCH_SIZE,
+        # Checked against the credential by the binding; unused here.
+        freshdesk_domain: str | None = None,  # noqa: ARG002
+    ) -> None:
         self.batch_size = batch_size
 
     def load_credentials(self, credentials: dict[str, str | int]) -> None:

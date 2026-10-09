@@ -85,6 +85,12 @@ export const SWR_KEYS = {
     "connector-check-session",
     source,
   ],
+  // The draft credential a check run saved the add-connector form's typed
+  // account as. Client state.
+  connectorDraftCredential: (source: string) => [
+    "connector-draft-credential",
+    source,
+  ],
   // The checks a run would hold for an unsaved connector form (a POST).
   connectorCheckPlan: (
     source: string,
@@ -267,6 +273,9 @@ export const SWR_KEYS = {
   // Credentials of one source the caller may attach.
   similarCredentials: (source: string) =>
     `/api/manage/admin/similar-credentials/${source}`,
+  // Every stored capability report of one source's credentials.
+  credentialCheckReports: (source: string) =>
+    `/api/manage/admin/credential/capability-reports?source=${source}`,
 
   // ── CC-Pairs ──────────────────────────────────────────────────────────────
   ccPair: (ccPairId: string | number) =>

@@ -2639,17 +2639,11 @@
           "label": "التفويض عبر {source}",
           "pendingLabel": "جارٍ التفويض..."
         },
-        "collapseButton": {
-          "ariaLabel": "طي"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "إنشاء جديد"
-        },
-        "credentialDeleted": {
-          "toast": "تم حذف بيانات الاعتماد بنجاح!"
         },
         "credentialModal": {
           "title": "إنشاء بيانات اعتماد {source}"
@@ -2662,14 +2656,8 @@
           "description": "استخدم حساب خدمة مشتركًا. يفهرس {appName} المحتوى باسم هذا الحساب.",
           "title": "حساب المصادقة"
         },
-        "credentialSwapped": {
-          "toast": "تم تبديل بيانات الاعتماد بنجاح!"
-        },
         "error": {
           "toast": "خطأ: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "توسيع"
         },
         "federated": {
           "tooltip": {
@@ -2709,6 +2697,58 @@
         },
         "unknownError": {
           "toast": "حدث خطأ غير معروف"
+        },
+        "account": {
+          "untitled": {
+            "label": "بدون عنوان"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "أُضيف في {date}"
+          },
+          "selected": {
+            "label": "محدد"
+          },
+          "useButton": {
+            "label": "استخدام الحساب"
+          },
+          "unsupportedRealm": {
+            "label": "نطاق موقع غير مدعوم"
+          },
+          "expandButton": {
+            "ariaLabel": "عرض تفاصيل الحساب"
+          },
+          "collapseButton": {
+            "ariaLabel": "إخفاء تفاصيل الحساب"
+          },
+          "deleteButton": {
+            "label": "حذف الحساب",
+            "inUseTooltip": "لا يمكن حذف بيانات الاعتماد هذه لأن هناك موصلات أخرى تستخدمها."
+          },
+          "usedBy": {
+            "label": "مستخدم في {count, plural, zero {# موصلات} one {موصل واحد} two {موصلين} few {# موصلات} many {# موصلًا} other {# موصل}}"
+          },
+          "owner": {
+            "you": "{name} (أنت)"
+          },
+          "lastTested": {
+            "title": "آخر اختبار {date}"
+          },
+          "notTested": {
+            "title": "لم يُختبر بعد"
+          },
+          "details": {
+            "description": "لا يمكن تعديل بيانات اعتماد الحساب المحفوظ أو توجيهها إلى مضيف آخر. يمكنك اختبار الحساب قبل إعادة استخدامه أو إضافة حساب جديد بدلًا منه."
+          },
+          "rerunButton": {
+            "label": "إعادة تشغيل الفحوصات"
+          },
+          "authenticationType": {
+            "label": "نوع المصادقة"
+          },
+          "rerunFailed": {
+            "toast": "تعذّر بدء الفحوصات. حاول مرة أخرى."
+          }
         }
       },
       "credentialRequired": {
@@ -2718,6 +2758,7 @@
         "enterField": "أدخل «{field}».",
         "fixField": "تحقق من «{field}».",
         "awaitingCheck": "غادر الحقل للتحقق منه باستخدام بيانات الاعتماد.",
+        "runChecks": "شغّل عمليات التحقق للتحقق من الحساب الجديد مع هذه الإعدادات.",
         "checking": "جارٍ التحقق من بيانات الاعتماد…",
         "fieldInvalid": "تحقق من «{field}»: {detail}",
         "rejected": "لا يمكن استخدام بيانات الاعتماد هذه مع هذه الإعدادات. {detail}"
@@ -3320,6 +3361,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "استخدم البريد الإلكتروني للحساب الذي يملك رمز API."
+        },
+        "nameField": {
+          "title": "الاسم المعروض",
+          "placeholder": "سمِّ حساب المصادقة الخاص بك"
         },
         "apiTokenField": {
           "subDescription": "الصق رمز API للوصول إلى {source}."

@@ -7,7 +7,7 @@ import type {
 } from "@/lib/connectors/types";
 import { MultiSelectField } from "@/components/Field";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import {
   InputKeyValue,
@@ -36,7 +36,7 @@ interface TabsFieldProps {
   tabField: TabOption;
   values: any;
   connector: ConfigurableSources;
-  currentCredential: Credential<any> | null;
+  currentCredential: CredentialValues | null;
 }
 
 const TabsField: FC<TabsFieldProps> = ({
@@ -256,7 +256,7 @@ interface RenderFieldProps {
   field: any;
   values: any;
   connector: ConfigurableSources;
-  currentCredential: Credential<any> | null;
+  currentCredential: CredentialValues | null;
 }
 
 export const RenderField: FC<RenderFieldProps> = ({

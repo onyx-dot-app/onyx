@@ -399,6 +399,8 @@ class ZendeskConnector(
         self,
         content_type: str = "articles",
         calls_per_minute: int | None = None,
+        # Checked against the credential by the binding; unused here.
+        zendesk_subdomain: str | None = None,  # noqa: ARG002
     ) -> None:
         self.content_type = content_type
         self.subdomain = ""

@@ -185,13 +185,15 @@ export const CREDENTIAL_SPECS = {
       github_base_url: url("enterpriseServerUrl", {
         optional: true,
         hint: { key: "githubBaseUrl" },
+        realm: true,
+        defaultValue: "https://github.com",
       }),
     },
   }),
   gitlab: defineCredentialSpec({
     brandName: "GitLab",
     fields: {
-      gitlab_url: url("url"),
+      gitlab_url: url("url", { realm: true }),
       gitlab_access_token: secret("apiToken"),
     },
   }),
@@ -219,7 +221,7 @@ export const CREDENTIAL_SPECS = {
   bookstack: defineCredentialSpec({
     brandName: "Bookstack",
     fields: {
-      bookstack_base_url: url("baseUrl"),
+      bookstack_base_url: url("baseUrl", { realm: true }),
       bookstack_api_token_id: text("apiTokenId"),
       bookstack_api_token_secret: secret("apiTokenSecret"),
     },
@@ -227,7 +229,10 @@ export const CREDENTIAL_SPECS = {
   outline: defineCredentialSpec({
     brandName: "Outline",
     fields: {
-      outline_base_url: url("baseUrl", { hint: { key: "outlineBaseUrl" } }),
+      outline_base_url: url("baseUrl", {
+        hint: { key: "outlineBaseUrl" },
+        realm: true,
+      }),
       outline_api_token: secret("apiToken"),
     },
   }),
@@ -279,6 +284,8 @@ export const CREDENTIAL_SPECS = {
       gong_base_url: url("apiBaseUrl", {
         optional: true,
         hint: { key: "gongBaseUrl" },
+        realm: true,
+        defaultValue: "https://api.gong.io",
       }),
     },
   }),
@@ -304,7 +311,10 @@ export const CREDENTIAL_SPECS = {
   loopio: defineCredentialSpec({
     brandName: "Loopio",
     fields: {
-      loopio_subdomain: text("subdomain"),
+      loopio_subdomain: text("subdomain", {
+        realm: true,
+        realmHostSuffix: ".loopio.com",
+      }),
       loopio_client_id: text("clientId"),
       loopio_client_token: secret("clientToken"),
     },
@@ -381,7 +391,10 @@ export const CREDENTIAL_SPECS = {
   zendesk: defineCredentialSpec({
     brandName: "Zendesk",
     fields: {
-      zendesk_subdomain: text("subdomain"),
+      zendesk_subdomain: text("subdomain", {
+        realm: true,
+        realmHostSuffix: ".zendesk.com",
+      }),
       zendesk_email: email("accountEmail"),
       zendesk_token: secret("apiToken"),
     },
@@ -396,7 +409,7 @@ export const CREDENTIAL_SPECS = {
   axero: defineCredentialSpec({
     brandName: "Axero",
     fields: {
-      base_url: url("baseUrl"),
+      base_url: url("baseUrl", { realm: true }),
       axero_api_token: secret("apiToken"),
     },
   }),
@@ -456,7 +469,10 @@ export const CREDENTIAL_SPECS = {
   freshdesk: defineCredentialSpec({
     brandName: "Freshdesk",
     fields: {
-      freshdesk_domain: text("domain"),
+      freshdesk_domain: text("domain", {
+        realm: true,
+        realmHostSuffix: ".freshdesk.com",
+      }),
       freshdesk_api_key: secret("apiToken"),
     },
   }),
@@ -483,7 +499,7 @@ export const CREDENTIAL_SPECS = {
   egnyte: defineCredentialSpec({
     brandName: "Egnyte",
     fields: {
-      domain: text("domain"),
+      domain: text("domain", { realm: true, realmHostSuffix: ".egnyte.com" }),
       access_token: secret("apiToken"),
     },
   }),
@@ -526,7 +542,7 @@ export const CREDENTIAL_SPECS = {
   highspot: defineCredentialSpec({
     brandName: "Highspot",
     fields: {
-      highspot_url: url("url"),
+      highspot_url: url("url", { realm: true }),
       highspot_key: text("key"),
       highspot_secret: secret("secret"),
     },
@@ -541,7 +557,10 @@ export const CREDENTIAL_SPECS = {
   testrail: defineCredentialSpec({
     brandName: "TestRail",
     fields: {
-      testrail_base_url: url("baseUrl", { hint: { key: "testrailBaseUrl" } }),
+      testrail_base_url: url("baseUrl", {
+        hint: { key: "testrailBaseUrl" },
+        realm: true,
+      }),
       testrail_username: email("accountEmail"),
       testrail_api_key: secret("apiToken"),
     },
