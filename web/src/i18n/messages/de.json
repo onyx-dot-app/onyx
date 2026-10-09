@@ -2748,7 +2748,7 @@
           }
         },
         "realm": {
-          "description": "Fügen Sie Ihre Website-URL oder Subdomain ein. Die REST-API von {source} muss dort erreichbar sein.{hasDefault, select, true { Wenn nicht angegeben, wird stattdessen `{value}` verwendet.} other {}}"
+          "description": "Fügen Sie Ihre Website-URL oder Subdomain ein. Die REST-API von {source} muss dort erreichbar sein.{hasDefault, select, true { Standardwert: `{value}`.} other {}}"
         }
       },
       "credentialRequired": {

@@ -2748,7 +2748,7 @@
           }
         },
         "realm": {
-          "description": "Paste your site URL or subdomain. {source}'s REST API must be reachable there.{hasDefault, select, true { If not provided, `{value}` will be used instead.} other {}}"
+          "description": "Paste your site URL or subdomain. {source}'s REST API must be reachable there.{hasDefault, select, true { Defaults to `{value}`.} other {}}"
         }
       },
       "credentialRequired": {
