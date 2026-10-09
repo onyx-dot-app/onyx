@@ -250,6 +250,8 @@ def test_connector_failure_yields_route_to_failed_doc_ids(
 
     assert result.landed_doc_ids == {"d1"}
     assert result.failed_doc_ids == {"d2"}
+    assert result.connector_failures["d2"].failure_message == "still 403"
+    assert set(result.connector_failures) == {"d2"}
 
 
 def test_doc_never_yielded_is_marked_failed(

@@ -71,13 +71,18 @@ class CCPairReindexResult:
     in this set.
 
     `failed_doc_ids` covers connector-side failures (connector yielded
-    `ConnectorFailure`) plus pipeline-side failures (handler caught an
+    `ConnectorFailure`), targets the connector never yielded, and
+    pipeline-side failures (handler caught an
     exception during chunk/embed/write). They drive the per-job
     `still_failing_count`.
 
     `unsupported` is True iff the connector class does not implement
     `Resolver`. All targets for that cc_pair are bucketed into
     `failed_doc_ids` in that case so the admin sees a clear signal.
+
+    `connector_failures` maps each doc_id the connector failed to the
+    failure it yielded, so the task can record the latest reason on the
+    source error.
     """
 
     def __init__(
@@ -85,10 +90,12 @@ class CCPairReindexResult:
         landed_doc_ids: set[str],
         failed_doc_ids: set[str],
         unsupported: bool,
+        connector_failures: dict[str, ConnectorFailure] | None = None,
     ) -> None:
         self.landed_doc_ids = landed_doc_ids
         self.failed_doc_ids = failed_doc_ids
         self.unsupported = unsupported
+        self.connector_failures: dict[str, ConnectorFailure] = connector_failures or {}
 
 
 def _flush_batch(
@@ -271,7 +278,7 @@ def process_targets_for_cc_pair(
     connector.set_raw_file_callback(staging_callback)
 
     docs: list[Document] = []
-    failed_from_connector: set[str] = set()
+    connector_failures: dict[str, ConnectorFailure] = {}
     landed_overall: set[str] = set()
     failed_pipeline_overall: set[str] = set()
     try:
@@ -283,7 +290,7 @@ def process_targets_for_cc_pair(
         ):
             if isinstance(item, ConnectorFailure):
                 if item.failed_document is not None:
-                    failed_from_connector.add(item.failed_document.document_id)
+                    connector_failures[item.failed_document.document_id] = item
                 continue
             if isinstance(item, Document):
                 docs.append(item)
@@ -334,9 +341,11 @@ def process_targets_for_cc_pair(
     # ever causes too many false-still-failing on transient infra
     # blips, switch to per-attempt landing tracking and require all
     # attempts to land independently.
-    docs_never_yielded = target_doc_ids - {d.id for d in docs} - failed_from_connector
-    failed_doc_ids = (
-        failed_from_connector | failed_pipeline_overall | docs_never_yielded
+    docs_never_yielded: set[str] = (
+        target_doc_ids - {d.id for d in docs} - connector_failures.keys()
+    )
+    failed_doc_ids: set[str] = (
+        connector_failures.keys() | failed_pipeline_overall | docs_never_yielded
     )
     landed_doc_ids = landed_overall - failed_doc_ids
 
@@ -344,6 +353,7 @@ def process_targets_for_cc_pair(
         landed_doc_ids=landed_doc_ids,
         failed_doc_ids=failed_doc_ids,
         unsupported=False,
+        connector_failures=connector_failures,
     )
 
 

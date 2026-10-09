@@ -14,12 +14,14 @@ from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from onyx.db.targeted_reindex import (
     get_index_attempts_for_targeted_reindex_job,
     get_targeted_reindex_job,
     get_targets_for_job,
+    record_latest_target_failures,
     resolve_failure_derived_targets,
 )
 from shared_configs.contextvars import get_current_tenant_id
@@ -90,6 +92,7 @@ def run_targeted_reindex(
             # another.
             landed_keys: set[tuple[int, str]] = set()
             failed_keys: set[tuple[int, str]] = set()
+            connector_failures: dict[tuple[int, str], ConnectorFailure] = {}
             for cc_pair_id, cc_targets in by_cc_pair.items():
                 try:
                     result = process_targets_for_cc_pair(
@@ -115,6 +118,10 @@ def run_targeted_reindex(
                 failed_keys.update(
                     (cc_pair_id, doc_id) for doc_id in result.failed_doc_ids
                 )
+                connector_failures.update(
+                    ((cc_pair_id, doc_id), failure)
+                    for doc_id, failure in result.connector_failures.items()
+                )
                 if result.unsupported:
                     log.info(
                         "cc_pair_id=%s connector does not support targeted reindex",
@@ -124,9 +131,12 @@ def run_targeted_reindex(
             # 4. resolution tracking: clear error rows only for the
             #    (cc_pair, doc) pairs that actually landed. Errors
             #    whose target failed to land stay open so the admin can
-            #    retry.
+            #    retry. Those the connector failed again take its new reason.
             resolved_count, summary = resolve_failure_derived_targets(
                 db_session, targeted_reindex_job_id, landed_keys
+            )
+            record_latest_target_failures(
+                db_session, targeted_reindex_job_id, connector_failures
             )
 
             still_failing_count = len(failed_keys)

@@ -4,6 +4,7 @@ Covers the lifecycle and resolution-tracking layers of the task:
 - Job + synthetic IndexAttempt lifecycle transitions
 - Resolution tracking on `IndexAttemptError` rows referenced by targets
   with `source_error_id` (gated on landed_doc_ids)
+- Latest connector failure written to the still-open error row
 - Idempotent re-run (job already terminal → drop)
 - Resolved-summary snapshot
 - Mid-task exception → FAILED recovery
@@ -24,6 +25,7 @@ from onyx.background.celery.tasks.docprocessing.targeted_reindex_task import (
     run_targeted_reindex,
 )
 from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
+from onyx.connectors.models import ConnectorFailure, DocumentFailure
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -52,6 +54,7 @@ def _patch_processor(
     landed_doc_ids: set[str] | None = None,
     failed_doc_ids: set[str] | None = None,
     unsupported: bool = False,
+    connector_failures: dict[str, ConnectorFailure] | None = None,
 ):
     """Patch the per-cc-pair processor with a fixed result.
 
@@ -66,6 +69,7 @@ def _patch_processor(
             landed_doc_ids=landed_doc_ids or set(),
             failed_doc_ids=failed_doc_ids or set(),
             unsupported=unsupported,
+            connector_failures=connector_failures,
         ),
     )
 
@@ -241,7 +245,7 @@ def test_task_does_not_resolve_errors_when_doc_failed_to_land(
         db_session=db_session, requested_by_user_id=None, targets=derived
     )
 
-    # Doc didn't land — connector or pipeline failed.
+    # Doc didn't land: pipeline failed or connector never yielded it.
     with _patch_processor(failed_doc_ids={"still-broken"}):
         _run_task(result.targeted_reindex_job_id)
 
@@ -249,12 +253,77 @@ def test_task_does_not_resolve_errors_when_doc_failed_to_land(
     err_after = db_session.get(IndexAttemptError, err.id)
     assert err_after is not None
     assert err_after.is_resolved is False  # NOT resolved; doc still failing
+    # No connector failure to report, so the original reason stays.
+    assert err_after.failure_message == "boom"
 
     job = db_session.get(TargetedReindexJob, result.targeted_reindex_job_id)
     assert job is not None
     assert job.resolved_count == 0
     assert job.still_failing_count == 1
     assert job.resolved_summary == []
+
+
+@pytest.mark.parametrize("resolved_before_retry", [False, True])
+def test_task_writes_latest_connector_failure_to_open_error(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    resolved_before_retry: bool,
+) -> None:
+    """A retry that fails again shows the connector's new reason on the
+    error row the admin retried, and the row stays open. A row another
+    index resolved in the meantime keeps its reason."""
+    settings = get_current_search_settings(db_session)
+    parent = IndexAttempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=settings.id,
+        from_beginning=False,
+        status=IndexingStatus.FAILED,
+    )
+    db_session.add(parent)
+    db_session.commit()
+    db_session.refresh(parent)
+
+    err = IndexAttemptError(
+        index_attempt_id=parent.id,
+        connector_credential_pair_id=cc_pair.id,
+        document_id="refused-again",
+        failure_message="boom",
+        is_resolved=False,
+        error_type="TimeoutError",
+    )
+    db_session.add(err)
+    db_session.commit()
+    db_session.refresh(err)
+
+    derived, _ = resolve_error_ids_to_targets(db_session, [err.id])
+    result = create_targeted_reindex_job(
+        db_session=db_session, requested_by_user_id=None, targets=derived
+    )
+    if resolved_before_retry:
+        err.is_resolved = True
+        db_session.commit()
+
+    failure = ConnectorFailure(
+        failed_document=DocumentFailure(document_id="refused-again"),
+        failure_message="Graph refused the transcript again",
+        exception=PermissionError("403"),
+    )
+    with _patch_processor(
+        failed_doc_ids={"refused-again"},
+        connector_failures={"refused-again": failure},
+    ):
+        _run_task(result.targeted_reindex_job_id)
+
+    db_session.expire_all()
+    err_after = db_session.get(IndexAttemptError, err.id)
+    assert err_after is not None
+    assert err_after.is_resolved is resolved_before_retry
+    if resolved_before_retry:
+        assert err_after.failure_message == "boom"
+        assert err_after.error_type == "TimeoutError"
+    else:
+        assert err_after.failure_message == "Graph refused the transcript again"
+        assert err_after.error_type == "PermissionError"
 
 
 def test_task_does_not_resolve_error_when_doc_landed_for_other_cc_pair(
