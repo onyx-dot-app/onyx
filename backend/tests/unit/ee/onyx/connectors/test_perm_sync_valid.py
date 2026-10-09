@@ -9,6 +9,7 @@ from ee.onyx.connectors.perm_sync_valid import (
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.zoom.connector import ZoomConnector
 
 
@@ -28,6 +29,7 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
             DocumentSource.GMAIL,
             DocumentSource.GOOGLE_DRIVE,
             DocumentSource.JIRA,
+            DocumentSource.LINEAR,
             DocumentSource.ONEDRIVE,
             DocumentSource.SHAREPOINT,
             DocumentSource.SLACK,
@@ -41,6 +43,7 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
         DocumentSource.CANVAS,
         DocumentSource.CONFLUENCE,
         DocumentSource.GOOGLE_DRIVE,
+        DocumentSource.LINEAR,
         DocumentSource.ONEDRIVE,
         DocumentSource.SHAREPOINT,
         DocumentSource.ZOOM,
@@ -57,9 +60,10 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
                 "probe_account_user_listing_permission",
             ],
         ),
+        (LinearConnector, ["probe_perm_sync_access"]),
         (ZoomConnector, ["probe_recording_access_permissions"]),
     ],
-    ids=["canvas", "zoom"],
+    ids=["canvas", "linear", "zoom"],
 )
 def test_dispatch_reaches_the_matching_validator(
     connector_class: type[BaseConnector], probes: list[str]

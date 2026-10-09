@@ -10,8 +10,17 @@ from onyx.access.models import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credential_families import to_source_credential_json
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch, SlimConnectorWithPermSync
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
 from onyx.connectors.models import HierarchyNode
+from onyx.db.credentials import (
+    backend_update_credential_json,
+    fetch_credential_by_id_for_update,
+)
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -29,6 +38,34 @@ def credential_json(cc_pair: ConnectorCredentialPair) -> dict[str, Any]:
             else {}
         ),
     )
+
+
+def load_cc_pair_credentials(
+    connector: BaseConnector, cc_pair: ConnectorCredentialPair
+) -> None:
+    """Loads the pair's credential and stores a refreshed one. An OAuth refresh
+    token is spent on use, so the row stays locked across the refresh call:
+    a doc sync and a group sync starting together would otherwise both redeem
+    it, and a refresh kept only in memory would leave the stored token dead."""
+    source: DocumentSource = cc_pair.connector.source
+    with get_session_with_current_tenant() as db_session:
+        credential = fetch_credential_by_id_for_update(
+            cc_pair.credential.id, db_session
+        )
+        if credential is None:
+            raise ValueError(
+                f"Credential {cc_pair.credential.id} was deleted during the sync"
+            )
+        stored: dict[str, Any] = (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        )
+        refreshed = connector.load_credentials(
+            to_source_credential_json(source, stored)
+        )
+        if refreshed is not None:
+            backend_update_credential_json(credential, source, refreshed, db_session)
 
 
 def generic_doc_sync(

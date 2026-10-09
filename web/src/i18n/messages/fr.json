@@ -2643,7 +2643,8 @@
         "projects": {
           "label": "Projets",
           "description": "Noms ou URL des projets Linear à indexer. Laissez vide pour indexer tous les projets. Si des équipes sont aussi définies, un ticket doit correspondre aux deux."
-        }
+        },
+        "syncNotice": "Connectez-vous en tant que membre de l'espace de travail, pas en tant qu'invité, appartenant à chaque équipe privée à indexer. Onyx ne voit pas les équipes privées dont l'utilisateur connecté n'est pas membre. Les tickets des équipes publiques sont consultables par tous les membres de l'espace de travail, ceux des équipes privées ou restreintes par leurs membres."
       },
       "add": {
         "authorizeButton": {
