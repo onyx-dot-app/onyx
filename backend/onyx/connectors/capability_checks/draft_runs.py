@@ -138,6 +138,9 @@ class DraftCheckState(BaseModel):
     from_cache: bool = False
     # The check proves the credential works with the credential-bound fields.
     validates_binding: bool = False
+    # A discovery check: it finds what the credential reaches and never
+    # gates the form.
+    discovery: bool = False
     # What the check found, once it passed.
     findings: list[CheckFinding] = []
 
@@ -226,6 +229,7 @@ def decide_draft_check_state(
         remediation=check.remediation,
         docs_link=check.docs_link,
         validates_binding=check.validates_binding,
+        discovery=check.discovery,
     )
     match readiness.kind:
         case CheckReadinessKind.RUNNABLE:
@@ -406,6 +410,7 @@ def cached_check_result(
         docs_link=check.docs_link,
         duration_ms=cached.duration_ms,
         validates_binding=check.validates_binding,
+        discovery=check.discovery,
         # Cached before the workspace turned findings off.
         findings=cached.findings if check_findings_enabled() else [],
     )

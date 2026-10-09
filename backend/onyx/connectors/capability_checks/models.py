@@ -225,13 +225,19 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         remediation: str | None = None,
         docs_link: str | None = None,
         validates_binding: bool = False,
+        discovery: bool = False,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
         self.display_name = display_name
         # Required checks gate the capability verdict; non-required checks only
-        # downgrade PASSED to PASSED_WITH_WARNINGS (partial capability).
-        self.required = required
+        # downgrade PASSED to PASSED_WITH_WARNINGS (partial capability). A
+        # discovery check is never required.
+        self.required = required and not discovery
+        # Retrieves findings (``findings.py``) that take much longer to gather
+        # than validation. It never counts toward the verdict, runs after the
+        # validation checks of its run, and does not run at pairing creation.
+        self.discovery = discovery
         self.requires_connector_instance = requires_connector_instance
         # Needs a config to read, even if every field it reads is optional.
         # Implied by a non-empty ``requires_fields``.
@@ -323,6 +329,8 @@ class CapabilityCheckResult(BaseModel):
     # config. It does not count toward the verdict.
     applicable: bool = True
     validates_binding: bool = False
+    # A discovery check: never part of the verdict.
+    discovery: bool = False
     # What a passing check found. Empty for every other status.
     findings: list[CheckFinding] = []
 
@@ -402,7 +410,9 @@ def aggregate_capability_verdict(
     """
     if not applicable:
         return CapabilityVerdict.NOT_APPLICABLE
-    results = [result for result in results if result.applicable]
+    results = [
+        result for result in results if result.applicable and not result.discovery
+    ]
     if any(
         result.status == CapabilityCheckStatus.FAILED and result.required
         for result in results

@@ -60,6 +60,8 @@ _SKIP_NEEDS_CONFIG_MESSAGE = (
     "Requires connector configuration -- will re-run automatically when the "
     "connector is configured."
 )
+_SKIP_FINDINGS_OFF_MESSAGE = "Findings are turned off for this workspace."
+_SKIP_VALIDATION_FAILED_MESSAGE = "Skipped: a required check failed."
 _TIMEOUT_MESSAGE = (
     "Check timed out; the source may be slow -- try re-running the checks."
 )
@@ -118,6 +120,7 @@ def _build_result(
         duration_ms=outcome.duration_ms,
         applicable=outcome.applicable,
         validates_binding=check.validates_binding,
+        discovery=check.discovery,
         findings=outcome.findings,
     )
 
@@ -234,6 +237,28 @@ def _execute_check(
     )
 
 
+def _discovery_skip_outcome(
+    validation_results: Sequence[CapabilityCheckResult], keep_findings: bool
+) -> _CheckOutcome | None:
+    """Why a discovery check does not run, or None when it runs."""
+    if not keep_findings:
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=_SKIP_FINDINGS_OFF_MESSAGE,
+            applicable=False,
+        )
+    if any(
+        result.required and result.status == CapabilityCheckStatus.FAILED
+        for result in validation_results
+    ):
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=_SKIP_VALIDATION_FAILED_MESSAGE,
+            applicable=False,
+        )
+    return None
+
+
 def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
     """Upper bound on one run's legitimate execution time, in seconds.
 
@@ -315,7 +340,19 @@ def run_capability_checks(
             # A snapshot: the callback must not observe later appends.
             on_result(tuple(results))
 
-    for check in checks:
+    # Discovery checks run after validation, and only when it found the
+    # credential usable: they exist to show what a working credential reaches.
+    ordered: list[CapabilityCheck] = [
+        check for check in checks if not check.discovery
+    ] + [check for check in checks if check.discovery]
+    for check in ordered:
+        if check.discovery:
+            discovery_outcome: _CheckOutcome | None = _discovery_skip_outcome(
+                results, check_findings_enabled()
+            )
+            if discovery_outcome is not None:
+                record(check, discovery_outcome)
+                continue
         unrunnable_outcome = _unrunnable_outcome(check, context)
         if unrunnable_outcome is not None:
             record(check, unrunnable_outcome)
