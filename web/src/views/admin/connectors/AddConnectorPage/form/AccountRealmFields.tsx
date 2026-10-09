@@ -26,8 +26,8 @@ interface AccountRealmFieldsProps {
  * Where the account works (its site, host or subdomain), asked for first:
  * the account cannot be checked without it. The values belong to the typed
  * account, under NEW_ACCOUNT_FIELD. While a saved account is in use, the
- * fields show its realm and are disabled; picking a saved account resets the
- * typed values, so they come back empty.
+ * fields show its realm and are disabled. The typed values stay, and come
+ * back when the saved account is dropped.
  */
 export default function AccountRealmFields({
   source,

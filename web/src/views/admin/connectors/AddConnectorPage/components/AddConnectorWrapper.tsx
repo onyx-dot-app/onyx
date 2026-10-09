@@ -216,8 +216,8 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load
 
-  // The picked saved account. A valid account typed into the form masks it
-  // (see `accountFor`); it applies again when the typed one is not valid.
+  // The picked saved account. Clicking a saved card picks it; typing into
+  // the new account drops the pick (see AuthenticationAccountSection).
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
 
@@ -285,15 +285,14 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     : null;
 
   /**
-   * The chosen account for these form values: the typed one when its values
-   * are valid, which masks any saved pick; else the saved pick (or Google's
-   * live account).
+   * The chosen account for these form values: the saved pick; else the typed
+   * one when its values are valid (or Google's live account).
    */
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
-    typedDraft(connector, accountSchema, getIn(values, NEW_ACCOUNT_FIELD)) ||
     currentCredential ||
+    typedDraft(connector, accountSchema, getIn(values, NEW_ACCOUNT_FIELD)) ||
     liveGDriveCredential ||
     liveGmailCredential ||
     null;
@@ -373,9 +372,9 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
           stringPairDuplicateKey: keyValueT("duplicateKey"),
         }
       ).shape({
-        // With a saved pick, the typed account is optional: one that is not
-        // valid falls back to the pick, so it must not block Create. With no
-        // pick it is the only account, and its errors show.
+        // With a saved pick, the typed account is not used, so it must not
+        // block Create. With no pick it is the only account, and its errors
+        // show.
         [NEW_ACCOUNT_FIELD]:
           accountSchema && !currentCredential ? accountSchema : Yup.mixed(),
       })}
