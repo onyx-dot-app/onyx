@@ -1,28 +1,27 @@
 """In-pod sandbox_daemon server tests.
 
 Behavior tests over the FastAPI sandbox_daemon (push + snapshot endpoints) using
-``fastapi.testclient``. The sandbox_daemon module is loaded dynamically under the
-``sandbox_daemon`` package name because its in-container layout (``COPY sandbox_daemon/
-/workspace/sandbox_daemon``) isn't reflected in the backend Python path.
+``fastapi.testclient``. Tests add the sandbox image directory to the import path,
+so Python uses the same ``sandbox_daemon`` package name as the container.
 """
 
 from __future__ import annotations
 
 import base64
 import hashlib
-import importlib.util
+import importlib
 import io
+import json
 import os
 import shutil
 import sqlite3
 import sys
 import tarfile
 import time
-import types
 from collections.abc import Generator
 from pathlib import Path
 from types import ModuleType
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -30,12 +29,14 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
 
+import onyx.server.features.build.sandbox.kubernetes.sidecar_client as sidecar
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
+    SIDECAR_OUTPUTS_MANIFEST_PATH,
     SIDECAR_READY_PATH,
     SIDECAR_SNAPSHOT_CREATE_PATH,
     FilesystemListRequest,
@@ -47,53 +48,6 @@ _REPO_ROOT = find_ancestor_containing("backend/onyx")
 _DAEMON_DIR = (
     _REPO_ROOT / "backend/onyx/server/features/build/sandbox/image/sandbox_daemon"
 )
-
-
-def _load_sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
-    """Load ``sandbox_daemon.extract`` and ``sandbox_daemon.server`` from the sandbox_daemon
-    directory.
-
-    The sandbox_daemon's source imports ``from sandbox_daemon.extract import ...`` because
-    in the container the directory is copied to ``/workspace/sandbox_daemon/``.
-    The test runner doesn't have that path, so we register the modules under
-    the expected names in ``sys.modules`` before loading server.py.
-    """
-    if (
-        "sandbox_daemon.server" in sys.modules
-        and "sandbox_daemon.models" in sys.modules
-        and "sandbox_daemon.extract" in sys.modules
-        and "sandbox_daemon.filesystem" in sys.modules
-    ):
-        return sys.modules["sandbox_daemon.extract"], sys.modules[
-            "sandbox_daemon.server"
-        ]
-
-    if "sandbox_daemon" not in sys.modules:
-        sys.modules["sandbox_daemon"] = types.ModuleType("sandbox_daemon")
-
-    for name in (
-        "models",
-        "extract",
-        "snapshot",
-        "opencode_history",
-        "filesystem",
-        "manifest",
-        "server",
-    ):
-        spec = importlib.util.spec_from_file_location(
-            f"sandbox_daemon.{name}", str(_DAEMON_DIR / f"{name}.py")
-        )
-        assert spec is not None and spec.loader is not None
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[f"sandbox_daemon.{name}"] = mod
-        spec.loader.exec_module(mod)
-
-    return sys.modules["sandbox_daemon.extract"], sys.modules["sandbox_daemon.server"]
-
-
-# ---------------------------------------------------------------------------
-# Key / signing helpers
-# ---------------------------------------------------------------------------
 
 
 def _new_keypair() -> tuple[Ed25519PrivateKey, str]:
@@ -168,9 +122,14 @@ def _write_test_sqlite_db(path: Path, body: str) -> None:
 
 
 @pytest.fixture
-def sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
-    """Load extract + server modules once per test."""
-    return _load_sandbox_daemon_modules()
+def sandbox_daemon_modules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[ModuleType, ModuleType]:
+    monkeypatch.syspath_prepend(str(_DAEMON_DIR.parent))
+    return (
+        importlib.import_module("sandbox_daemon.extract"),
+        importlib.import_module("sandbox_daemon.server"),
+    )
 
 
 @pytest.fixture
@@ -1596,3 +1555,53 @@ def test_push_signature_cannot_be_replayed_against_snapshot_endpoint(
         timestamp=ts,
     )
     assert resp.status_code == 401
+
+
+def test_output_manifest_client_and_daemon_contract(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    keypair: tuple[Ed25519PrivateKey, str],
+) -> None:
+    session_id = uuid4()
+    sessions_root = tmp_path / "sessions"
+    outputs = sessions_root / str(session_id) / "outputs"
+    outputs.mkdir(parents=True)
+    (outputs / "deck.pptx").write_bytes(b"presentation")
+    (outputs / "web").mkdir()
+    (outputs / "web" / "page.tsx").write_text("source")
+    monkeypatch.setattr(
+        sys.modules["sandbox_daemon.outputs_manifest"], "SESSIONS_ROOT", sessions_root
+    )
+    monkeypatch.setattr(sidecar, "get_push_key_pair", lambda: keypair)
+    bodies: list[bytes] = []
+
+    def dispatch(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == SIDECAR_OUTPUTS_MANIFEST_PATH
+        bodies.append(request.content)
+        return client.request(
+            request.method,
+            request.url.path,
+            content=request.content,
+            headers=request.headers,
+        )
+
+    http_client_class = httpx.Client
+
+    def in_process_client(*, timeout: float) -> httpx.Client:
+        return http_client_class(
+            transport=httpx.MockTransport(dispatch), timeout=timeout
+        )
+
+    monkeypatch.setattr(sidecar.httpx, "Client", in_process_client)
+    transport = sidecar.SidecarClient(host=lambda _: "sandbox.test")
+    result = transport.outputs_manifest(sandbox_id=uuid4(), session_id=session_id)
+    expected_body = {"session_id": str(session_id)}
+    assert [entry.path for entry in result.entries] == ["deck.pptx"]
+    assert result.entries[0].size == len(b"presentation")
+    assert result.complete
+
+    assert len(bodies) == 1
+    assert json.loads(bodies[0]) == expected_body
+    assert result.entries[0].mtime_ns == (outputs / "deck.pptx").stat().st_mtime_ns
+    assert result.entries[0].ctime_ns == (outputs / "deck.pptx").stat().st_ctime_ns

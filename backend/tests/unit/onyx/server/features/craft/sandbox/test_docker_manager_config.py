@@ -309,6 +309,32 @@ def _empty_byte_stream() -> Generator[bytes, None, int]:
     return 0
 
 
+def test_outputs_manifest_uses_trusted_cli(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, _ = _bare_manager_with_image("onyxdotapp/sandbox:test")
+    container = MagicMock()
+    monkeypatch.setattr(manager, "_require_container", lambda _: container)
+    run = MagicMock(return_value=dsm.ExecResult(0, b'{"entries":[]}', b""))
+    monkeypatch.setattr(dsm, "_run_in_container_as_sandbox_user", run)
+
+    result = manager.get_outputs_manifest(SANDBOX_ID, USER_ID)
+
+    assert result.entries == []
+    run.assert_called_once_with(
+        container,
+        [
+            "/usr/local/bin/python3",
+            "-E",
+            "-s",
+            "-m",
+            "sandbox_daemon.outputs_manifest",
+            str(USER_ID),
+        ],
+        workdir="/opt",
+    )
+
+
 def test_sandbox_stream_exec_wrappers_pair_uid_with_user_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
