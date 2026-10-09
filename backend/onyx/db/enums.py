@@ -899,6 +899,8 @@ class CapabilityCheckTrigger(str, PyEnum):
     INDEXING_ATTEMPT = "indexing_attempt"
     # Recorded from the blocking validation at doc-permission-sync run start.
     PERM_SYNC_ATTEMPT = "perm_sync_attempt"
+    # Recorded from the validation that applies an edit to an existing cc-pair.
+    CONNECTOR_CONFIG_UPDATE = "connector_config_update"
 
 
 class CapabilityReportRunStatus(str, PyEnum):

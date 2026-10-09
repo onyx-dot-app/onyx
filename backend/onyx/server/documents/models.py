@@ -19,6 +19,7 @@ from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
+from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
@@ -240,6 +241,9 @@ class IndexAttemptSnapshot(BaseModel):
     time_updated: str
     poll_range_start: datetime | None = None
     poll_range_end: datetime | None = None
+    # A one-off run over poll_range_start..poll_range_end outside the pair's
+    # incremental cursor; it does not drive the pair's status.
+    is_backfill: bool = False
 
     @classmethod
     def from_index_attempt_db_model(
@@ -263,6 +267,7 @@ class IndexAttemptSnapshot(BaseModel):
             time_updated=index_attempt.time_updated.isoformat(),
             poll_range_start=index_attempt.poll_range_start,
             poll_range_end=index_attempt.poll_range_end,
+            is_backfill=index_attempt.is_backfill,
         )
 
 
@@ -484,6 +489,32 @@ class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
     total_items: int
 
 
+class PendingBackfillSnapshot(BaseModel):
+    """A backfill an applied edit requested, until an attempt of it succeeds.
+    The beat retries a failed one after ``retry_after``."""
+
+    window_start: datetime
+    window_end: datetime
+    requested_at: datetime
+    # It runs with a config other than the saved one.
+    scoped: bool
+    attempt_id: int | None
+    failure_count: int
+    retry_after: datetime | None
+
+    @classmethod
+    def from_pending(cls, pending: PendingBackfill) -> "PendingBackfillSnapshot":
+        return cls(
+            window_start=pending.backfill.window_start,
+            window_end=pending.backfill.window_end,
+            requested_at=pending.requested_at,
+            scoped=pending.backfill.connector_config_override is not None,
+            attempt_id=pending.attempt_id,
+            failure_count=pending.failure_count,
+            retry_after=pending.retry_after,
+        )
+
+
 class CCPairFullInfo(BaseModel):
     id: int
     name: str
@@ -532,6 +563,7 @@ class CCPairFullInfo(BaseModel):
 
     # Set while the first index attempt waits on the capability checks.
     indexing_hold: IndexingHold | None = None
+    pending_backfills: list[PendingBackfillSnapshot]
 
     @classmethod
     def _get_last_full_permission_sync(
@@ -661,6 +693,10 @@ class CCPairFullInfo(BaseModel):
             auto_sync_options=cc_pair_model.auto_sync_options,
             processing_mode=cc_pair_model.processing_mode,
             indexing_hold=indexing_hold,
+            pending_backfills=[
+                PendingBackfillSnapshot.from_pending(pending)
+                for pending in cc_pair_model.pending_backfills
+            ],
         )
 
 

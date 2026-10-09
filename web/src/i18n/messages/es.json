@@ -1429,24 +1429,33 @@
           "label": "Cambiar a Community"
         },
         "modal": {
+          "changes": {
+            "text": "Al cambiar a la versión inferior:"
+          },
           "confirmButton": {
-            "label": "Cambiar a Community",
-            "loading": "Cambiando..."
+            "label": "Cambiar de versión",
+            "loading": "Cambiando de versión..."
           },
-          "connectors": {
-            "text": "Todos los conectores pasan a ser públicos. Los documentos que eran privados por permisos sincronizados o grupos serán visibles para todos los usuarios. Los resultados de búsqueda se actualizan cuando se reescribe el índice, lo que puede tardar en un índice grande."
+          "deleted": {
+            "text": "**Eliminado:** Grupos de usuarios, claves de API de cuentas de servicio, límites de tasa de tokens y hooks;"
           },
-          "description": "Esto elimina tu licencia y todas las funciones de pago. No se puede deshacer.",
-          "features": {
-            "text": "Se eliminan las claves de API de cuentas de servicio, los límites de frecuencia de tokens y los hooks. Se desactivan las respuestas estándar y los tokens SCIM. Se restablecen la marca personalizada y la retención de chats."
+          "description": "Elimina tu licencia y todas las funciones de pago.",
+          "disabled": {
+            "text": "**Desactivado:** Respuestas estándar y tokens SCIM;"
           },
-          "groups": {
-            "text": "Se eliminan los grupos de usuarios. Los agentes, conjuntos de documentos, proveedores de LLM, servidores MCP y skills compartidos con un grupo pasan a ser públicos."
+          "intro": {
+            "text": "Los controles de acceso se eliminan de esta implementación. **Esto inicia una reindexación** para que los resultados de búsqueda reflejen el cambio, lo que puede tardar un tiempo en un índice grande."
           },
-          "license": {
-            "text": "La licencia se elimina de este despliegue."
+          "madePublic": {
+            "text": "**Hecho público:** Todos los conectores, además de cualquier agente, conjunto de documentos, proveedor de LLM, servidor MCP y habilidad compartidos con un grupo de usuarios;"
           },
-          "title": "Cambiar a Community Edition"
+          "reset": {
+            "text": "**Restablecido a los valores predeterminados:** Marca personalizada y política de retención de chats."
+          },
+          "title": "Cambiar a Community Edition",
+          "warning": {
+            "text": "Los documentos restringidos por permisos sincronizados o grupos de usuarios pasan a ser **visibles para todos los usuarios**. Esto no se puede deshacer."
+          }
         }
       },
       "footer": {
@@ -12300,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Alternar {name}"
+      },
+      "status": {
+        "loading": "Cargando resultados…",
+        "incomplete": "No se pudieron listar algunos resultados. Abre Archivos para explorar el espacio de trabajo.",
+        "error": "No se pudieron actualizar los resultados. Inténtalo de nuevo."
       }
     },
     "chatPanel": {
@@ -12445,17 +12459,11 @@
         "description": "Los archivos creados durante la compilación aparecerán aquí",
         "title": "Aún no hay archivos"
       },
-      "emptyDirectory": {
-        "label": "No hay archivos en este directorio"
-      },
       "error": {
         "title": "Error al cargar los archivos"
       },
       "loading": {
         "label": "Cargando archivos..."
-      },
-      "loadingChildren": {
-        "label": "Cargando..."
       },
       "preparing": {
         "description": "Configurando tu entorno de desarrollo",
@@ -12615,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Cerrar {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "¡Empieza a construir algo para ver artefactos!"
       },
@@ -12638,6 +12649,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Diapositivas"
+      },
+      "previous": {
+        "label": "Diapositiva anterior"
+      },
+      "next": {
+        "label": "Diapositiva siguiente"
+      },
       "converting": {
         "label": "Convirtiendo presentación..."
       },
@@ -13043,9 +13063,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# llamada} other {# llamadas}}"
-        },
-        "failed": {
-          "tag": "{count} con error"
         },
         "working": {
           "label": "Trabajando"

@@ -1429,24 +1429,33 @@
           "label": "Auf Community herabstufen"
         },
         "modal": {
+          "changes": {
+            "text": "Beim Downgrade:"
+          },
           "confirmButton": {
             "label": "Herabstufen",
             "loading": "Wird herabgestuft..."
           },
-          "connectors": {
-            "text": "Alle Konnektoren werden öffentlich. Dokumente, die durch synchronisierte Berechtigungen oder Gruppen privat waren, werden für alle Benutzer sichtbar. Die Suchergebnisse folgen, sobald der Index neu geschrieben ist, was bei einem großen Index eine Weile dauern kann."
+          "deleted": {
+            "text": "**Gelöscht:** Benutzergruppen, API-Schlüssel von Dienstkonten, Token-Ratenlimits und Hooks;"
           },
-          "description": "Dadurch werden Ihre Lizenz und alle kostenpflichtigen Funktionen entfernt. Dies kann nicht rückgängig gemacht werden.",
-          "features": {
-            "text": "API-Schlüssel von Dienstkonten, Token-Ratenlimits und Hooks werden gelöscht. Standardantworten und SCIM-Token werden deaktiviert. Benutzerdefiniertes Branding und die Chat-Aufbewahrung werden zurückgesetzt."
+          "description": "Entfernt Ihre Lizenz und alle kostenpflichtigen Funktionen.",
+          "disabled": {
+            "text": "**Deaktiviert:** Standardantworten und SCIM-Token;"
           },
-          "groups": {
-            "text": "Benutzergruppen werden entfernt. Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Gruppe geteilt wurden, werden öffentlich."
+          "intro": {
+            "text": "Zugriffskontrollen werden aus dieser Bereitstellung entfernt. **Dies startet eine Neuindizierung**, damit die Suchergebnisse die Änderung widerspiegeln, was bei einem großen Index eine Weile dauern kann."
           },
-          "license": {
-            "text": "Die Lizenz wird aus dieser Bereitstellung entfernt."
+          "madePublic": {
+            "text": "**Öffentlich gemacht:** Alle Konnektoren sowie alle Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Benutzergruppe geteilt wurden;"
           },
-          "title": "Auf die Community Edition herabstufen"
+          "reset": {
+            "text": "**Auf Standard zurückgesetzt:** Benutzerdefiniertes Branding und Chat-Aufbewahrungsrichtlinie."
+          },
+          "title": "Auf Community Edition herabstufen",
+          "warning": {
+            "text": "Dokumente, die durch synchronisierte Berechtigungen oder Benutzergruppen eingeschränkt waren, werden **für alle Benutzer sichtbar**. Dies kann nicht rückgängig gemacht werden."
+          }
         }
       },
       "footer": {
@@ -12300,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "{name} umschalten"
+      },
+      "status": {
+        "loading": "Ausgaben werden geladen…",
+        "incomplete": "Einige Ausgaben konnten nicht aufgelistet werden. Öffne Dateien, um den Arbeitsbereich zu durchsuchen.",
+        "error": "Ausgaben konnten nicht aktualisiert werden. Versuche es erneut."
       }
     },
     "chatPanel": {
@@ -12445,17 +12459,11 @@
         "description": "Während des Builds erstellte Dateien erscheinen hier",
         "title": "Noch keine Dateien"
       },
-      "emptyDirectory": {
-        "label": "Keine Dateien in diesem Verzeichnis"
-      },
       "error": {
         "title": "Fehler beim Laden der Dateien"
       },
       "loading": {
         "label": "Dateien werden geladen..."
-      },
-      "loadingChildren": {
-        "label": "Wird geladen..."
       },
       "preparing": {
         "description": "Deine Entwicklungsumgebung wird eingerichtet",
@@ -12615,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} schließen"
+      },
       "artifactsEmpty": {
         "tooltip": "Beginnen Sie etwas zu bauen, um Artefakte zu sehen!"
       },
@@ -12638,6 +12649,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Folien"
+      },
+      "previous": {
+        "label": "Vorherige Folie"
+      },
+      "next": {
+        "label": "Nächste Folie"
+      },
       "converting": {
         "label": "Präsentation wird konvertiert..."
       },
@@ -13043,9 +13063,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# Aufruf} other {# Aufrufe}}"
-        },
-        "failed": {
-          "tag": "{count} fehlgeschlagen"
         },
         "working": {
           "label": "In Arbeit"

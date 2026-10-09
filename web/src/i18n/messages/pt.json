@@ -1429,24 +1429,33 @@
           "label": "Mudar para Community"
         },
         "modal": {
+          "changes": {
+            "text": "Ao fazer o downgrade:"
+          },
           "confirmButton": {
-            "label": "Mudar para Community",
-            "loading": "Mudando..."
+            "label": "Fazer downgrade",
+            "loading": "Fazendo downgrade..."
           },
-          "connectors": {
-            "text": "Todos os conectores se tornam públicos. Documentos que eram privados por permissões sincronizadas ou grupos ficam visíveis para todos os usuários. Os resultados de busca são atualizados quando o índice é reescrito, o que pode demorar em um índice grande."
+          "deleted": {
+            "text": "**Excluídos:** grupos de usuários, chaves de API de contas de serviço, limites de taxa de tokens e hooks;"
           },
-          "description": "Isso remove sua licença e todos os recursos pagos. Não pode ser desfeito.",
-          "features": {
-            "text": "As chaves de API de contas de serviço, os limites de taxa de tokens e os hooks são excluídos. Respostas padrão e tokens SCIM são desativados. A marca personalizada e a retenção de conversas são redefinidas."
+          "description": "Remove sua licença e todos os recursos pagos.",
+          "disabled": {
+            "text": "**Desativados:** respostas padrão e tokens SCIM;"
           },
-          "groups": {
-            "text": "Os grupos de usuários são removidos. Agentes, conjuntos de documentos, provedores de LLM, servidores MCP e skills compartilhados com um grupo se tornam públicos."
+          "intro": {
+            "text": "Os controles de acesso são removidos desta implantação. **Isso inicia uma reindexação** para que os resultados de pesquisa reflitam a mudança, o que pode demorar em um índice grande."
           },
-          "license": {
-            "text": "A licença é removida desta implantação."
+          "madePublic": {
+            "text": "**Tornados públicos:** todos os conectores, além de agentes, conjuntos de documentos, provedores de LLM, servidores MCP e habilidades compartilhados com um grupo de usuários;"
           },
-          "title": "Mudar para a Community Edition"
+          "reset": {
+            "text": "**Redefinidos para o padrão:** marca personalizada e política de retenção de chats."
+          },
+          "title": "Fazer downgrade para a Community Edition",
+          "warning": {
+            "text": "Documentos restritos por permissões sincronizadas ou grupos de usuários ficam **visíveis para todos os usuários**. Isso não pode ser desfeito."
+          }
         }
       },
       "footer": {
@@ -12300,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Alternar {name}"
+      },
+      "status": {
+        "loading": "Carregando resultados…",
+        "incomplete": "Não foi possível listar alguns resultados. Abra Arquivos para explorar o espaço de trabalho.",
+        "error": "Não foi possível atualizar os resultados. Tente novamente."
       }
     },
     "chatPanel": {
@@ -12445,17 +12459,11 @@
         "description": "Arquivos criados durante a construção aparecerão aqui",
         "title": "Ainda não há arquivos"
       },
-      "emptyDirectory": {
-        "label": "Não há arquivos neste diretório"
-      },
       "error": {
         "title": "Erro ao carregar os arquivos"
       },
       "loading": {
         "label": "Carregando arquivos..."
-      },
-      "loadingChildren": {
-        "label": "Carregando..."
       },
       "preparing": {
         "description": "Configurando seu ambiente de desenvolvimento",
@@ -12615,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Fechar {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Comece a construir algo para ver artefatos!"
       },
@@ -12638,6 +12649,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Slides"
+      },
+      "previous": {
+        "label": "Slide anterior"
+      },
+      "next": {
+        "label": "Próximo slide"
+      },
       "converting": {
         "label": "Convertendo apresentação..."
       },
@@ -13043,9 +13063,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# chamada} other {# chamadas}}"
-        },
-        "failed": {
-          "tag": "{count} com falha"
         },
         "working": {
           "label": "Trabalhando"

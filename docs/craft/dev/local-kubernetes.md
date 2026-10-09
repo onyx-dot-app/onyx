@@ -119,6 +119,9 @@ script is idempotent and refuses to run unless your kubectl context is
 per cluster. New clusters use the `kindest/node:v1.33.1` node image so Craft's
 native init sidecar pod shape is supported. Existing clusters are not recreated;
 set `KIND_NODE_IMAGE` to override the default for a newly created cluster.
+The script removes Kindnet's CPU limit so network-policy processing can use available CPU.
+It keeps the CPU request and memory settings, then waits for the rollout.
+This applies to existing clusters too, including runs with `--skip-helm`.
 
 Watch pods (opensearch and CNPG-postgres take a minute or two on first boot):
 
@@ -387,6 +390,27 @@ and load it per [step 3 of One-time setup](#3-build-and-load-the-sandbox-image)
 before launching the api_server.
 
 ## Troubleshooting
+
+### Sandbox egress stalls with Kindnet CPU throttling
+
+Kindnet processes network-policy packets. Its default `100m` CPU limit can delay
+connections to the sandbox proxy and Kubernetes resource watches. OpenCode startup
+can then time out while installing plugins, before sending an LLM request.
+
+Apply the local networking configuration without reinstalling Onyx:
+
+```bash
+deployment/helm/dev/k8s-up.sh --skip-cluster-create --skip-helm
+```
+
+Check the active CPU quota and throttling counters:
+
+```bash
+kubectl --context kind-onyx-dev -n kube-system exec daemonset/kindnet -- \
+  cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpu.stat
+```
+
+`cpu.max` starts with `max` when the container has no CPU limit.
 
 ### VPN or proxy certificate errors
 

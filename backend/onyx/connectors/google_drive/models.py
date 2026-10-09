@@ -30,21 +30,15 @@ GoogleDriveFileType = dict[str, Any]
 TOKEN_EXPIRATION_TIME = 3600  # 1 hour
 
 
-# These correspond to The major stages of retrieval for google drive.
-# The stages for the oauth flow are:
+# Stages of the OAuth flow:
 # get_all_files_for_oauth(),
 # get_all_drive_ids(),
 # get_files_in_shared_drive(),
 # crawl_folders_for_files()
 #
-# The stages for the service account flow are roughly:
-# get_all_user_emails(),
-# get_all_drive_ids(),
-# get_files_in_shared_drive(),
-# Then for each user:
-#   get_files_in_my_drive()
-#   get_files_in_shared_drive()
-#   crawl_folders_for_files()
+# The service account flow advances through DriveRetrievalPhase instead. It
+# still labels each RetrievedDriveFile with a stage, for error reporting, and
+# sets completion_stage to DONE when its last phase ends.
 class DriveRetrievalStage(str, Enum):
     START = "start"
     DONE = "done"
@@ -61,6 +55,101 @@ class DriveRetrievalStage(str, Enum):
     FOLDER_FILES = "folder_files"
 
 
+class DriveRetrievalPhase(str, Enum):
+    """Phases of the redesigned retrieval, run once for the whole connector.
+
+    This replaces the per-user DriveRetrievalStage loop, where every user walked
+    every stage independently. One phase is active at a time, so a phase can be
+    closed and its state dropped once it finishes.
+
+    Shared drives run before My Drives on purpose: once the shared drive phase
+    is done, later phases can discard any file whose driveId was already
+    covered, which kills the shortcut duplication path with a check against a
+    list of drive ids rather than a set of file ids.
+    """
+
+    INVENTORY = "inventory"
+    SHARED_DRIVES = "shared_drives"
+    MY_DRIVES = "my_drives"
+    REQUESTED_TARGETS = "requested_targets"
+    EXTERNAL_SHARES = "external_shares"
+    DONE = "done"
+
+
+# Order the connector advances through. INVENTORY collects the partition keys
+# the later phases walk, so it has to come first.
+PHASE_ORDER: tuple[DriveRetrievalPhase, ...] = (
+    DriveRetrievalPhase.INVENTORY,
+    DriveRetrievalPhase.SHARED_DRIVES,
+    DriveRetrievalPhase.MY_DRIVES,
+    DriveRetrievalPhase.REQUESTED_TARGETS,
+    DriveRetrievalPhase.EXTERNAL_SHARES,
+    DriveRetrievalPhase.DONE,
+)
+
+
+def next_phase(phase: DriveRetrievalPhase) -> DriveRetrievalPhase:
+    if phase is DriveRetrievalPhase.DONE:
+        return DriveRetrievalPhase.DONE
+    return PHASE_ORDER[PHASE_ORDER.index(phase) + 1]
+
+
+class PhaseProgress(BaseModel):
+    """Position inside one phase: which partition, and where inside it.
+
+    Every item belongs to exactly one partition (a drive id, or an owner email),
+    so resuming needs only an index into a stable key list plus a page token.
+    That is what keeps the checkpoint proportional to drives and users instead
+    of to documents.
+    """
+
+    phase: DriveRetrievalPhase
+    # Stable order. Built once when the phase starts so a resumed run walks the
+    # same partitions in the same sequence.
+    partition_keys: list[str] = []
+    partition_index: int = Field(default=0, ge=0)
+    # Resume point inside the current partition. The listing that produced it
+    # must be repeated with the same query, so resumes reuse the run's range.
+    next_page_token: str | None = None
+    # Latest modifiedTime yielded in the current partition. Diagnostic only.
+    completed_until: SecondsSinceUnixEpoch = 0
+
+    @property
+    def current_partition(self) -> str | None:
+        if self.partition_index >= len(self.partition_keys):
+            return None
+        return self.partition_keys[self.partition_index]
+
+    @property
+    def is_complete(self) -> bool:
+        return self.partition_index >= len(self.partition_keys)
+
+    @property
+    def remaining_partitions(self) -> list[str]:
+        return self.partition_keys[self.partition_index :]
+
+    def advance_partition(self) -> None:
+        """Finish the current partition and reset the within-partition cursor."""
+        self.partition_index += 1
+        self.next_page_token = None
+        self.completed_until = 0
+
+
+# Requested target partitions pair a target id with the email that crawls it.
+# Drive file ids never contain the separator, so splitting on the first one is
+# safe for any email.
+_TARGET_KEY_SEPARATOR = "|"
+
+
+def target_partition_key(target_id: str, email: str) -> str:
+    return f"{target_id}{_TARGET_KEY_SEPARATOR}{email}"
+
+
+def split_target_partition_key(key: str) -> tuple[str, str]:
+    target_id, email = key.split(_TARGET_KEY_SEPARATOR, 1)
+    return target_id, email
+
+
 class StageCompletion(BaseModel):
     """
     Describes the point in the retrieval+indexing process that the
@@ -74,9 +163,6 @@ class StageCompletion(BaseModel):
     completed_until: SecondsSinceUnixEpoch
     current_folder_or_drive_id: str | None = None
     next_page_token: str | None = None
-
-    # only used for shared drives
-    processed_drive_ids: set[str] = set()
 
     def update(
         self,
@@ -132,8 +218,12 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # timestamp part is not used for folder crawling.
     completion_map: ThreadSafeDict[str, StageCompletion]
 
-    # all file ids that have been retrieved
-    all_retrieved_file_ids: set[str] = set()
+    # Drive file ids already yielded this run, used only for dedup. Previously
+    # keyed on the document URL under the name `all_retrieved_file_ids`; the
+    # rename is deliberate so checkpoints written by the old code deserialize
+    # with an empty set rather than a set of keys in the other format.
+    # Capped at MAX_DEDUP_DRIVE_FILE_IDS, so it is not a completeness record.
+    retrieved_drive_file_ids: set[str] = set()
 
     # cached version of the drive and folder ids to retrieve
     drive_ids_to_retrieve: list[str] | None = None
@@ -141,6 +231,34 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
 
     # cached user emails
     user_emails: list[str] | None = None
+
+    # --- Phased retrieval state, used by the service account flow. Sized by
+    # drives and users, never by documents.
+
+    # None until the first phased run; a checkpoint written by the per-user
+    # stage loop also has None here and restarts at INVENTORY.
+    phase_progress: PhaseProgress | None = None
+
+    # Drive id -> the email that listed it. Once the shared drive phase is
+    # over, a drive here and not in incomplete_drive_ids is fully covered.
+    organizer_email_by_drive_id: dict[str, str] = {}
+
+    # Drives listed by someone who is not an organizer, or by nobody, so
+    # limited-access folders may be missing.
+    incomplete_drive_ids: set[str] = set()
+
+    # Users whose impersonation failed this run. Their files are not covered by
+    # an owner pass, so other users' listings must not drop them.
+    failed_impersonation_emails: set[str] = set()
+
+    # Requested targets at least one principal crawled. At the end of the
+    # requested-target phase, every planned target missing here is unreachable.
+    crawled_target_ids: set[str] = set()
+
+    # Requested drives and folders that no impersonable user could reach.
+    # Pruning refuses to run while this is non-empty, because absence from the
+    # listing would delete every document indexed from them.
+    unreachable_target_ids: set[str] = set()
 
     # Hierarchy node raw IDs that have already been yielded.
     # Used to avoid yielding duplicate hierarchy nodes across checkpoints.

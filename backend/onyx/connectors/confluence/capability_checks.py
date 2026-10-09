@@ -36,21 +36,23 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CredentialCapability,
 )
-from onyx.connectors.confluence.config import ConfluenceConnectorConfig
+from onyx.connectors.confluence.config import (
+    ConfluenceConnectorConfig,
+    ConfluenceIndexingMode,
+    get_indexing_mode,
+)
 from onyx.connectors.confluence.connector import (
     ATTACHMENT_EXPANSION_FIELDS,
     COMMENT_EXPANSION_FIELDS,
     PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS,
     PRUNING_EXPANSION_FIELDS,
     RESTRICTIONS_EXPANSION_FIELDS,
-    ConfluenceIndexingMode,
     build_attachment_cql,
     build_base_page_cql,
     build_comment_cql,
     build_label_filter,
     build_page_cql,
     build_page_retrieval_url,
-    get_indexing_mode,
 )
 from onyx.connectors.confluence.models import ConfluenceUser
 from onyx.connectors.confluence.source_operations import (

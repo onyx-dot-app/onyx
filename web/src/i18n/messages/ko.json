@@ -1429,24 +1429,33 @@
           "label": "Community로 다운그레이드"
         },
         "modal": {
+          "changes": {
+            "text": "다운그레이드하면:"
+          },
           "confirmButton": {
             "label": "다운그레이드",
             "loading": "다운그레이드 중..."
           },
-          "connectors": {
-            "text": "모든 커넥터가 공개됩니다. 동기화된 권한이나 그룹으로 비공개였던 문서가 모든 사용자에게 표시됩니다. 검색 결과는 인덱스가 다시 작성된 후 반영되며, 인덱스가 크면 시간이 걸릴 수 있습니다."
+          "deleted": {
+            "text": "**삭제:** 사용자 그룹, 서비스 계정 API 키, 토큰 속도 제한, 훅"
           },
-          "description": "라이선스와 모든 유료 기능이 제거됩니다. 이 작업은 되돌릴 수 없습니다.",
-          "features": {
-            "text": "서비스 계정 API 키, Token 사용량 제한, 훅이 삭제됩니다. 표준 답변과 SCIM 토큰이 비활성화됩니다. 사용자 지정 브랜딩과 채팅 보존 기간이 초기화됩니다."
+          "description": "라이선스와 모든 유료 기능을 제거합니다.",
+          "disabled": {
+            "text": "**비활성화:** 표준 답변과 SCIM 토큰"
           },
-          "groups": {
-            "text": "사용자 그룹이 제거됩니다. 그룹과 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬은 공개됩니다."
+          "intro": {
+            "text": "이 배포에서 액세스 제어가 제거됩니다. **재인덱싱이 시작되어** 검색 결과에 변경 사항이 반영되며, 인덱스가 크면 시간이 걸릴 수 있습니다."
           },
-          "license": {
-            "text": "이 배포에서 라이선스가 제거됩니다."
+          "madePublic": {
+            "text": "**공개:** 모든 커넥터와 사용자 그룹에 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬"
           },
-          "title": "Community Edition으로 다운그레이드"
+          "reset": {
+            "text": "**기본값으로 재설정:** 사용자 지정 브랜딩과 채팅 보존 정책"
+          },
+          "title": "Community Edition으로 다운그레이드",
+          "warning": {
+            "text": "동기화된 권한이나 사용자 그룹으로 제한되었던 문서가 **모든 사용자에게 표시**됩니다. 이 작업은 되돌릴 수 없습니다."
+          }
         }
       },
       "footer": {
@@ -12300,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "{name} 펼치기/접기"
+      },
+      "status": {
+        "loading": "결과를 불러오는 중…",
+        "incomplete": "일부 결과를 표시하지 못했습니다. 파일을 열어 작업 공간을 확인하세요.",
+        "error": "결과를 새로 고치지 못했습니다. 다시 시도하세요."
       }
     },
     "chatPanel": {
@@ -12445,17 +12459,11 @@
         "description": "빌드 중 생성된 파일이 여기에 표시됩니다",
         "title": "아직 파일이 없습니다"
       },
-      "emptyDirectory": {
-        "label": "이 디렉터리에 파일이 없습니다"
-      },
       "error": {
         "title": "파일 불러오기 오류"
       },
       "loading": {
         "label": "파일을 불러오는 중..."
-      },
-      "loadingChildren": {
-        "label": "불러오는 중..."
       },
       "preparing": {
         "description": "개발 환경을 설정하는 중",
@@ -12615,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} 닫기"
+      },
       "artifactsEmpty": {
         "tooltip": "무언가를 만들기 시작하면 아티팩트가 표시됩니다!"
       },
@@ -12638,6 +12649,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "슬라이드"
+      },
+      "previous": {
+        "label": "이전 슬라이드"
+      },
+      "next": {
+        "label": "다음 슬라이드"
+      },
       "converting": {
         "label": "프레젠테이션 변환 중..."
       },
@@ -13043,9 +13063,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {호출 #건} other {호출 #건}}"
-        },
-        "failed": {
-          "tag": "{count}개 실패"
         },
         "working": {
           "label": "작업 중"

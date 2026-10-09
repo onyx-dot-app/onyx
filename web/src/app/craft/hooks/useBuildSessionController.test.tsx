@@ -25,6 +25,10 @@ const SESSION_ID = "55fa40e0-777e-4fd3-9a0d-cf05dfb616dc";
 describe("useBuildSessionController", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(api.fetchOutputInventory).mockResolvedValue({
+      files: [],
+      complete: true,
+    });
     useBuildSessionStore.setState({
       sessions: new Map(),
       currentSessionId: null,
@@ -39,6 +43,63 @@ describe("useBuildSessionController", () => {
       skillsStale: false,
     });
     useBuildSessionStore.getState().setCurrentSession(SESSION_ID);
+  });
+
+  it("refreshes cached file revisions on entry without opening new outputs", async () => {
+    const store = () => useBuildSessionStore.getState();
+    store().updateSessionData(SESSION_ID, {
+      status: "active",
+      outputInventory: {
+        "outputs/deck.pptx": {
+          path: "outputs/deck.pptx",
+          revision: "old",
+          size: 100,
+        },
+      },
+    });
+    jest.mocked(api.fetchOutputInventory).mockResolvedValue({
+      complete: true,
+      files: [
+        { path: "outputs/deck.pptx", revision: "updated", size: 100 },
+        { path: "outputs/other.pdf", revision: "new", size: 100 },
+      ],
+    });
+
+    renderHook(() =>
+      useBuildSessionController({ existingSessionId: SESSION_ID })
+    );
+    await waitFor(() => {
+      expect(store().sessions.get(SESSION_ID)).toMatchObject({
+        outputInventory: {
+          "outputs/deck.pptx": {
+            path: "outputs/deck.pptx",
+            revision: "updated",
+            size: 100,
+          },
+          "outputs/other.pdf": {
+            path: "outputs/other.pdf",
+            revision: "new",
+            size: 100,
+          },
+        },
+        panelTabs: [],
+        outputPanelOpen: false,
+        filesNeedsRefresh: 1,
+      });
+    });
+  });
+
+  it("does not absorb live outputs on entry or focus during a running turn", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      status: "running",
+      activeTurnId: "live-turn",
+      outputInventory: {},
+    });
+    renderHook(() =>
+      useBuildSessionController({ existingSessionId: SESSION_ID })
+    );
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(api.fetchOutputInventory).not.toHaveBeenCalled();
   });
 
   it("marks skills stale from reads without clearing confirmed stale state", async () => {
@@ -130,5 +191,41 @@ describe("useBuildSessionController", () => {
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
     ).toBe(true);
+  });
+
+  it("ignores a late validity response after the first message claims the sandbox", async () => {
+    const store = () => useBuildSessionStore.getState();
+    store().setCurrentSession(null);
+    useBuildSessionStore.setState({
+      preProvisioning: { status: "ready", sessionId: SESSION_ID },
+      controllerState: {
+        lastTriggeredForUrl: "new-build",
+        loadedSessionId: null,
+      },
+    });
+    let resolveCheck:
+      | ((
+          value: Awaited<ReturnType<typeof api.checkPreProvisionedSession>>
+        ) => void)
+      | undefined;
+    jest.mocked(api.checkPreProvisionedSession).mockReturnValue(
+      new Promise((resolve) => {
+        resolveCheck = resolve;
+      })
+    );
+    renderHook(() => useBuildSessionController({ existingSessionId: null }));
+
+    act(() => window.dispatchEvent(new Event("focus")));
+    expect(api.checkPreProvisionedSession).toHaveBeenCalledWith(SESSION_ID);
+    await act(async () => {
+      await store().consumePreProvisionedSession();
+      resolveCheck?.({ valid: false, session_id: SESSION_ID });
+    });
+
+    expect(store().preProvisioning).toEqual({
+      status: "starting",
+      sessionId: SESSION_ID,
+    });
+    expect(api.createSession).not.toHaveBeenCalled();
   });
 });

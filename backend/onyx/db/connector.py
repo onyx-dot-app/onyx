@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, delete, exists, func, select
+from sqlalchemy import and_, delete, exists, func, select, update
 from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
@@ -344,7 +344,13 @@ def create_initial_default_connector(db_session: Session) -> None:
     db_session.commit()
 
 
-def mark_ccpair_as_pruned(cc_pair_id: int, db_session: Session) -> None:
+def mark_ccpair_as_pruned(
+    cc_pair_id: int,
+    db_session: Session,
+    served_prune_request_at: datetime | None,
+) -> None:
+    """Records a successful prune. Clears the pair's prune request only when
+    the prune was dispatched for that request, so a newer one stays."""
     stmt = select(ConnectorCredentialPair).where(
         ConnectorCredentialPair.id == cc_pair_id
     )
@@ -353,6 +359,15 @@ def mark_ccpair_as_pruned(cc_pair_id: int, db_session: Session) -> None:
         raise ValueError(f"No cc_pair with ID: {cc_pair_id}")
 
     cc_pair.last_pruned = datetime.now(timezone.utc)
+    if served_prune_request_at is not None:
+        db_session.execute(
+            update(ConnectorCredentialPair)
+            .where(
+                ConnectorCredentialPair.id == cc_pair_id,
+                ConnectorCredentialPair.prune_requested_at == served_prune_request_at,
+            )
+            .values(prune_requested_at=None)
+        )
     db_session.commit()
 
 

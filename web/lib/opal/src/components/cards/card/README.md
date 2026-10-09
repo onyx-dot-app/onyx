@@ -150,7 +150,7 @@ Everything from plain mode, **plus**:
 - **Rounding adapts automatically.** When `expanded && expandedContent !== undefined`, the header's bottom corners flatten and the content's top corners flatten so they meet seamlessly. When collapsed (or when `expandedContent` is undefined), the header is fully rounded.
 - **Content background is always transparent.** The `color` prop applies to the header only; the content slot never fills its own background so the page shows through and keeps the two regions visually distinct.
 - **Content has no intrinsic padding.** The `padding` prop applies to the header only. Callers own any padding inside whatever they pass to `expandedContent` — wrap it in a `<div className="p-4">` (or whatever) if you want spacing.
-- **Animation.** Content uses a pure CSS grid `0fr ↔ 1fr` animation with an opacity fade (~200ms ease-out). No `@radix-ui/react-collapsible` dependency. The fold lives in `cards/fold/` as `CardFold` and is shared with [`SelectCard`](../select-card/README.md), which has the same `expandable` API on an interactive header.
+- **Animation.** Content uses a pure CSS grid `0fr ↔ 1fr` animation and a fade. Opening grows the body and squares the header's bottom corners together (150ms), then fades the content in (100ms). Closing fades the content out (100ms), then shrinks the body and rounds the corners together (150ms). No `@radix-ui/react-collapsible` dependency. The fold lives in `cards/fold/` as `CardFold` and is shared with [`SelectCard`](../select-card/README.md), which has the same `expandable` API on an interactive header.
 
 ### Accessibility
 

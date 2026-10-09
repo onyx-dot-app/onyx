@@ -1429,24 +1429,33 @@
           "label": "Passer à Community"
         },
         "modal": {
+          "changes": {
+            "text": "Lors de la rétrogradation :"
+          },
           "confirmButton": {
-            "label": "Passer à Community",
-            "loading": "Changement en cours..."
+            "label": "Rétrograder",
+            "loading": "Rétrogradation..."
           },
-          "connectors": {
-            "text": "Tous les connecteurs deviennent publics. Les documents que les permissions synchronisées ou les groupes gardaient privés deviennent visibles par tous les utilisateurs. Les résultats de recherche suivent une fois l'index réécrit, ce qui peut prendre du temps sur un grand index."
+          "deleted": {
+            "text": "**Supprimés :** groupes d'utilisateurs, clés API des comptes de service, limites de débit de jetons et hooks ;"
           },
-          "description": "Cette action supprime votre licence et toutes les fonctionnalités payantes. Elle est irréversible.",
-          "features": {
-            "text": "Les clés d'API des comptes de service, les limites de débit de jetons et les hooks sont supprimés. Les réponses standard et les jetons SCIM sont désactivés. La personnalisation de la marque et la rétention des conversations sont réinitialisées."
+          "description": "Supprime votre licence et toutes les fonctionnalités payantes.",
+          "disabled": {
+            "text": "**Désactivés :** réponses standard et jetons SCIM ;"
           },
-          "groups": {
-            "text": "Les groupes d'utilisateurs sont supprimés. Les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et skills partagés avec un groupe deviennent publics."
+          "intro": {
+            "text": "Les contrôles d'accès sont supprimés de ce déploiement. **Cela lance une réindexation** pour que les résultats de recherche reflètent le changement, ce qui peut prendre du temps sur un grand index."
           },
-          "license": {
-            "text": "La licence est supprimée de ce déploiement."
+          "madePublic": {
+            "text": "**Rendus publics :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
           },
-          "title": "Passer à Community Edition"
+          "reset": {
+            "text": "**Réinitialisés :** personnalisation de la marque et politique de conservation des conversations."
+          },
+          "title": "Rétrograder vers l'édition Community",
+          "warning": {
+            "text": "Les documents restreints par des permissions synchronisées ou des groupes d'utilisateurs deviennent **visibles par tous les utilisateurs**. Cette action est irréversible."
+          }
         }
       },
       "footer": {
@@ -12300,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Basculer {name}"
+      },
+      "status": {
+        "loading": "Chargement des résultats…",
+        "incomplete": "Certains résultats ne peuvent pas être affichés. Ouvrez Fichiers pour parcourir l’espace de travail.",
+        "error": "Impossible d’actualiser les résultats. Réessayez."
       }
     },
     "chatPanel": {
@@ -12445,17 +12459,11 @@
         "description": "Les fichiers créés pendant la construction apparaîtront ici",
         "title": "Aucun fichier pour l'instant"
       },
-      "emptyDirectory": {
-        "label": "Aucun fichier dans ce répertoire"
-      },
       "error": {
         "title": "Erreur de chargement des fichiers"
       },
       "loading": {
         "label": "Chargement des fichiers..."
-      },
-      "loadingChildren": {
-        "label": "Chargement..."
       },
       "preparing": {
         "description": "Configuration de votre environnement de développement",
@@ -12615,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Fermer {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Commencez à construire quelque chose pour voir des artefacts !"
       },
@@ -12638,6 +12649,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Diapositives"
+      },
+      "previous": {
+        "label": "Diapositive précédente"
+      },
+      "next": {
+        "label": "Diapositive suivante"
+      },
       "converting": {
         "label": "Conversion de la présentation..."
       },
@@ -13043,9 +13063,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# appel} other {# appels}}"
-        },
-        "failed": {
-          "tag": "{count} en échec"
         },
         "working": {
           "label": "En cours"

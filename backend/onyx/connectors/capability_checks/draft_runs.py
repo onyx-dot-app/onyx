@@ -5,6 +5,10 @@ and never writes ``credential_capability_report`` rows. Each check gets a
 draft state from the same readiness decision the persisted runner uses, and
 terminal results are cached so that a form edit re-runs only the checks the
 edit can change.
+
+A draft run with a ``DraftRunPairScope`` is a dry run of a proposed state for
+an existing cc-pair. Its results are cached apart from create-form runs and
+from other pairs.
 """
 
 import math
@@ -25,12 +29,13 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CredentialCapability,
-    compute_connector_config_hash,
 )
 from onyx.connectors.capability_checks.runner import (
     CheckReadinessKind,
     decide_check_readiness,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
+from onyx.connectors.models import InputType
 from onyx.connectors.source_operations import get_source_operations_class
 from onyx.db.enums import AccessType
 
@@ -52,6 +57,7 @@ _DRAFT_RUN_KEY_PREFIX = "capability_check_draft_run"
 _DRAFT_LATEST_RUN_KEY_PREFIX = "capability_check_draft_latest_run"
 _DRAFT_RESULT_KEY_PREFIX = "capability_check_draft_result"
 _DRAFT_START_LOCK_PREFIX = "capability_check_draft_start"
+_CC_PAIR_KEY_PART = "cc_pair:"
 # The config-hash part of the result cache key for checks that never read the
 # config, so that their results survive form edits.
 _CONFIG_INDEPENDENT_HASH = "config_independent"
@@ -148,9 +154,20 @@ class DraftCheckPlan(BaseModel):
     checks: list[DraftCheckState]
 
 
+class DraftRunPairScope(BaseModel):
+    """The existing cc-pair that a dry run proposes a state for."""
+
+    cc_pair_id: int
+    connector_id: int
+    input_type: InputType | None
+
+
 class StoredDraftRun(BaseModel):
     user_id: UUID
     snapshot: DraftCheckRunSnapshot
+    # Set for a dry run of an existing pair. Kept out of the snapshot, so the
+    # create-form endpoint's response does not change.
+    pair_scope: DraftRunPairScope | None = None
     # check_id to its result cache key, for the checks the run task executes.
     result_cache_keys: dict[str, str]
     # While RUNNING: the time by which the task writes the run again. A RUNNING
@@ -219,11 +236,12 @@ def draft_result_cache_key(
     access_type: AccessType | None,
     check: CapabilityCheck[Any],
     form_values: dict[str, Any] | None,
+    cc_pair_id: int | None,
 ) -> str:
     """The result cache key of one check. A check that reads the config,
     directly or through a connector instance, keys on the validated form
     values. Any other check keys on the form values that the source's gateway
-    reads, and on the credential."""
+    reads, and on the credential. A dry run of a pair also keys on the pair."""
     config_hash = _CONFIG_INDEPENDENT_HASH
     if form_values is not None:
         if check.reads_connector_config or check.requires_connector_instance:
@@ -245,11 +263,12 @@ def draft_result_cache_key(
             if gateway_values:
                 config_hash = _config_hash(gateway_values)
     access = access_type.value if access_type is not None else "none"
-    return (
+    key = (
         f"{_DRAFT_RESULT_KEY_PREFIX}:{credential_id}:"
         f"{credential_updated_at.isoformat()}:{source.value}:{check.check_id}:"
         f"{access}:{config_hash}"
     )
+    return key if cc_pair_id is None else f"{key}:{_CC_PAIR_KEY_PART}{cc_pair_id}"
 
 
 def _config_hash(values: dict[str, Any]) -> str:
@@ -315,6 +334,13 @@ def apply_cached_result(
     check_state.message = cached.message
     check_state.duration_ms = cached.duration_ms
     check_state.from_cache = True
+
+
+def cc_pair_draft_key(cc_pair_id: int) -> str:
+    """The draft key of a pair's dry runs: one latest run per user and pair.
+    The ":" keeps it apart from client-chosen create-form keys, which cannot
+    contain one."""
+    return f"{_CC_PAIR_KEY_PART}{cc_pair_id}"
 
 
 def _run_key(run_id: UUID) -> str:

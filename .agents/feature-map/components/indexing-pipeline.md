@@ -333,8 +333,9 @@ enrichment (`_partition_documents_blocked_by_llm_spend_limit`).
 `indexing_pipeline.py`). Chunks are split into sub-batches of at most
 `MAX_CHUNKS_PER_DOC_BATCH` (1000) and each sub-batch is embedded in one call to
 `EmbeddingModel.encode` (`natural_language_processing/search_nlp_models.py`), which
-reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`. Chunk
-titles are deduplicated and embedded once per unique title, not once per chunk.
+reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`. Titles
+get no separate embedding: the title reaches the vector only through the chunk's
+`title_prefix`.
 Each successfully embedded sub-batch is immediately pickled to disk via
 `ChunkBatchStore.save` (`chunk_batch_store.py`) so the full embedded batch never
 sits entirely in process memory; `store.stream()` re-reads it lazily for the write
@@ -446,9 +447,15 @@ case it kills the now-orphaned subprocess.
 the indexing pipeline directly. It re-enumerates the source's live document IDs
 (`extract_ids_from_runnable_connector`, a `SLIM_RETRIEVAL` connector call, no
 content fetched), diffs them against `get_documents_for_connector_credential_pair`,
-and for every ID present locally but absent from the source, dispatches
+and for every ID present locally but absent from the listing, dispatches
 `DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` (`redis_connector_prune.py:generate_tasks`) on the
-`connector_deletion` queue.
+`connector_deletion` queue. When the pair has an `indexing_start` and the
+connector's listing filters by the same date as indexing
+(`connectors/interfaces.py:prune_listing_honors_indexing_start`), the listing
+starts at `indexing_start`. The prune then also removes documents that still
+exist at the source but were last updated before the start. A dated listing
+omits unchanged folders, so `pruning/tasks.py:_get_live_hierarchy_node_ids`
+keeps the hierarchy nodes above each kept document.
 
 **`document_by_cc_pair_cleanup_task`** (`background/celery/tasks/shared/tasks.py`) is
 the actual removal path, shared by both pruning and connector deletion. It reads

@@ -117,14 +117,12 @@ class _ContentVecEmbedder:
         out = []
         for chunk in chunks:
             text = generate_enriched_content_for_chunk_embedding(chunk)
-            title = chunk.source_document.get_title_for_document_index()
             out.append(
                 IndexChunk.model_construct(
                     **shallow_model_dump(chunk),
                     embeddings=ChunkEmbedding(
                         full_embedding=_vec(text), mini_chunk_embeddings=[]
                     ),
-                    title_embedding=_vec(title) if title else None,
                 )
             )
         return out
@@ -606,7 +604,6 @@ def test_reembed_pairs_embeddings_by_identity_not_position() -> None:
                         ),
                         mini_chunk_embeddings=[],
                     ),
-                    title_embedding=None,
                 )
                 for chunk in chunks
             ]
@@ -638,13 +635,13 @@ def test_reembed_pairs_embeddings_by_identity_not_position() -> None:
 
 def test_re_embed_preserves_all_fields_swaps_only_vectors() -> None:
     """re_embed_chunks returns the whole stored chunk as a DocumentChunk with only
-    content_vector/title_vector recomputed — every other field is copied through
+    content_vector recomputed — every other field is copied through
     (so the FUTURE write is a faithful copy with new embeddings). Empty in -> out."""
     metadata_list = convert_metadata_dict_to_list_of_strings({"author": "Jane"})
     stored = _stored_chunk(
         "body text", title="My Title", metadata_list=metadata_list, chunk_index=3
     )
-    fake_cv, fake_tv = [0.5, 0.5], [0.9, 0.9]
+    fake_cv = [0.5, 0.5]
 
     class _FakeEmbedder:
         def embed_chunks(self, chunks: list[DocAwareChunk]) -> list[IndexChunk]:
@@ -654,7 +651,6 @@ def test_re_embed_preserves_all_fields_swaps_only_vectors() -> None:
                     embeddings=ChunkEmbedding(
                         full_embedding=fake_cv, mini_chunk_embeddings=[]
                     ),
-                    title_embedding=fake_tv,
                 )
                 for chunk in chunks
             ]
@@ -666,9 +662,8 @@ def test_re_embed_preserves_all_fields_swaps_only_vectors() -> None:
         [stored], ReembedStrategy.MODEL_ONLY, embedder, present_tokenizer=_TOKENIZER
     )
 
-    # only the two vectors are new
+    # only the content vector is new
     assert result.content_vector == fake_cv
-    assert result.title_vector == fake_tv
     # every other field is the stored chunk's, unchanged
     for field in DocumentChunkWithoutVectors.model_fields:
         assert getattr(result, field) == getattr(  # ods: ignore[getattr]

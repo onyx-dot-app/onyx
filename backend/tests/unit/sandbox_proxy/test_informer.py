@@ -3,7 +3,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from kubernetes import client
 
-from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup, _identity_from_pod
+from onyx.sandbox_proxy.sandbox_identity.kubernetes import (
+    K8sInformerLookup,
+    _identity_from_pod,
+)
 
 
 def _make_pod(
@@ -148,7 +151,9 @@ def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
         def stop(self) -> None:
             pass
 
-    with patch("onyx.sandbox_proxy.identity_k8s.watch.Watch", _StubWatch):
+    with patch(
+        "onyx.sandbox_proxy.sandbox_identity.kubernetes.watch.Watch", _StubWatch
+    ):
         lookup._run()
 
     assert lookup._initial_sync_done.is_set()

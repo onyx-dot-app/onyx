@@ -43,7 +43,8 @@ Drive. Saving creates the connector and kicks off an initial index run. The
 admin watches the connector's status move from indexing to a document count and
 a "last successful index" timestamp on the connector status page. From then on,
 a background job polls for new and changed documents on a schedule the admin
-sets, and a separate job prunes documents that were deleted at the source.
+sets, and a separate job prunes documents that were deleted at the source, or
+that fall before the connector's indexing start.
 
 For connectors that implement `validate_connector_settings` or named capability
 checks (§4), the admin sees a validation error at connector-creation time if
@@ -295,6 +296,14 @@ loads `all_indexed_document_ids` for the cc-pair from Postgres, calls
 `doc_ids_to_remove = all_indexed_document_ids - all_connector_doc_ids.keys()`.
 See §5 for the invariant this depends on.
 
+When the pair has an `indexing_start`, `extract_ids_from_runnable_connector`
+lists only the documents from that time on, if
+`connectors/interfaces.py:prune_listing_honors_indexing_start` says the
+connector's listing filters by the same date as indexing. A slim connector
+opts in with `BaseConnector.slim_listing_honors_indexing_start`. Such a prune
+also removes documents that still exist at the source but were last updated
+before the start. Other connectors list every document.
+
 ### 4.6 Three representative shapes
 
 Do not read all 58 connectors. These three (chosen for the README) span the
@@ -313,36 +322,96 @@ not a source object but a thread shared across mailboxes, so its run has a
 shape the table above does not cover:
 
 - **Thread key.** Every message copy carries a `conversationIndex`; its 22-byte
-  root is the same in every mailbox that holds the thread (`threads.py:thread_key`).
-  Copies are matched message by message on the Internet Message-ID
+  root is the same in every mailbox that holds the thread (`threads.py:thread_key`),
+  and the first message's index is the root alone (`is_thread_root`). Copies
+  are matched message by message on the Internet Message-ID
   (`OutlookMessageIdentity.match_id`).
-- **Listing, then bucketing, then building.** Each mailbox's folders are read
-  through delta pages of metadata only. The rows go to a per-run `ThreadTable`
-  in the file store (`listing-N.jsonl`), are re-read and hashed by thread key
-  into buckets of 50k rows (`bucket-B-C.jsonl`, resumable through
-  a manifest file), and each bucket is grouped so every copy of a thread is in
-  hand without holding the tenant in memory. The checkpoint
-  (`OutlookCheckpoint`) holds cursors and counters only, 202 KB at 3,000
-  mailboxes in the synthetic scale run.
-- **Builder and readers.** Candidates are the copies holding the thread's newest
-  message. The builder is the largest candidate (`threads.py:choose_builder`),
-  its newest 100 indexable messages (found among the newest 500) make the
-  document `outlook-thread:<key>`, and the
-  readers are the candidates holding every one of them (`readers_of`). A copy
-  that lacks a message (a private reply it never received) gets
-  `outlook-thread:<key>:<mailbox id>`, readable by its owner only
-  (`partial_copies`).
-- **Polls.** Only mailboxes with new mail are listed. Every holder of the
-  newest message is among them, so builder and readers are complete, but a
-  holder that received none of the new mail is not. `_unlisted_copies` finds
-  those from the builder's sender and recipients within the run's mailbox
-  roster (a file in the table), looks each up by Message-ID
-  (`find_message_by_internet_message_id`) and writes its own document, or
-  counts it as a reader when it holds every message of the thread's.
-- **Prune and permission sync.** `_slim_docs` runs the same listing, bucketing
-  and grouping read-only and yields ids and readers, so the slim diff (§4.5)
-  and the doc sync see the same documents indexing built, eight mailboxes side
-  by side like the listing.
+- **Decided per mailbox, from headers.** Each mailbox is walked on its own,
+  eight side by side. Its folders are read through delta pages of metadata
+  with the sender and recipients (`CHANGE_SELECT`), one page per checkpoint
+  step, and the rows are held in the connector process (`_MailboxListing`)
+  until the last folder is done. The checkpoint (`OutlookCheckpoint`) holds
+  cursors only; a process that resumes an attempt has no listing for the
+  mailboxes in flight and walks them again from the start (`_resumable`).
+  Nothing is written outside the process: no file store, no database.
+- **Builder, readers, copies.** `threads.py:plan_documents` turns one
+  mailbox's copy of a thread into documents. The first message names the
+  builder (`designated_builder`: its sender when the run walks that mailbox,
+  else the lowest named mailbox id, passing over any mailbox the run cannot
+  open, probed once per process by `_mailbox_available`). The builder's
+  newest 100 indexable messages make `outlook-thread:<key>`, readable by the
+  mailboxes named on every one of them: named, not holding, so a recipient
+  who deleted a message or never received it still reads the thread. A mailbox the first message names but a later message
+  left out gets `outlook-thread:<key>:<mailbox id>` from the builder, holding
+  the messages that name it. Whatever the builder cannot see, a copy without
+  the first message, a thread whose first message names no walked mailbox, a
+  holder it does not name, or a reply that left the builder out, is written
+  by its own mailbox as `outlook-thread:<key>:<mailbox id>:own`.
+- **Known limits.** The builder's copy is the thread. A reply the builder
+  deleted or filed in an excluded folder is indexed nowhere, since the other
+  holders assume a message naming the builder is the builder's to write. A
+  thread whose builder mailbox no longer holds its first message is not
+  built at all; the other holders keep only their own documents of the
+  replies that left the builder out. The
+  builder's first message sits in its Sent Items, so excluding that folder
+  has the same effect on every thread the mailbox started. The listing in
+  memory is bounded by one mailbox per worker, eight at once, and by
+  `MAX_LISTING_ROWS_PER_MAILBOX` (250k): a larger mailbox is a recorded
+  failure for indexing and aborts a slim walk. A checkpoint from the earlier
+  table-based walk starts the attempt over.
+- **Polls.** Only messages in the window are listed, so each conversation
+  with new mail is read whole through its outline (`_conversation_outline`),
+  the oldest message fetched separately when the outline stops short of it,
+  and decided by the same function. Readers come from the newest 100
+  messages, so the daily permission sync can widen a document's readers
+  before the next poll rebuilds its text.
+- **Prune and permission sync.** `_slim_docs` lists each mailbox the same way,
+  in memory one mailbox per worker, and yields the ids and readers
+  `plan_documents` gives, so the slim diff (§4.5) and the doc sync see the
+  documents indexing built.
+
+### 4.6.2 Teams: channels side by side, then organizers
+
+`teams/connector.py:TeamsConnector` indexes four kinds of document from one
+credential: channel threads, channel files, meeting transcripts and the days
+of meeting chats.
+
+- **Teams, then channels.** The first step lists every team
+  (`listing.collect_all_teams`). The first team step probes the export API
+  once and keeps the answer in `TeamsCheckpoint.export`. With it, a team step
+  streams four teams at a time, the documents of each team yielded as it finishes (`export.py:ExportSource`): every message of
+  every channel changed in the window, replies included, grouped into threads;
+  a thread whose root was created inside the window is complete in the stream,
+  an older one that changed anywhere gets its replies from Graph, and its root
+  too when the stream lacks it. A team whose stream Graph refuses, or that
+  streams past 100k messages, goes to the channel walk; a probe team that is gone or locked walks its channels and the next team probes again, and a 402 mid-stream sends every team left to the channel walk.
+  An app the export API refuses walks every team the same way: the team's
+  channels into `todo_channels`, then a channel
+  step walks one delta page of up to `max_workers` channels at once
+  (`TeamsCheckpoint.active`, `_channel_step`, `_advance_channel`), the roots
+  of the page, one replies call per root and the images pasted into them.
+  Cursors are advanced on copies and written back only when every channel
+  finished its page, so a raise in one leaves the step to be retried. A
+  checkpoint saved by the one-channel walk joins `active` when it is loaded.
+- **Files.** After a channel's last page, or its team's export stream, its
+  library is read on a worker thread, `max_workers` workers draining the
+  finished channels a channel at a time, each file yielded as it is read
+  (`FileSource.index`): the folder children, each file's text,
+  and its readers through a SharePoint REST context kept per site and per
+  thread, so the files of several channels are read side by side.
+- **Organizers.** The meeting side follows the channels: a page of licensed
+  users per step, then 32 organizers per step drained by eight workers from a
+  queue (`sources.drain`), each organizer read for its transcripts and the
+  days of its meeting chats that changed. On a poll, never the first index,
+  one chats export stream per organizer says which chats changed
+  (`meeting_chats.fetch_touched_days`), so a quiet chat costs no request; an
+  app the export API refuses, or a stream refused or past 250k messages, asks
+  each chat what changed. A slow organizer holds back only its own worker.
+- **Prune and permission sync.** `_slim_docs` relists the channels through the
+  delta, ids only and no replies, in batches of four channels per worker that
+  `max_workers` workers drain, with or without readers (file readers come
+  through a SharePoint REST context kept per site and per thread), then the
+  organizers the same way.
 
 ### 4.7 The `SourceOperations` gateway pattern
 
@@ -556,7 +625,9 @@ lack of a key, ask instead. The shared helper
 
 - No `ConnectorMissingException` at run time for a source with a registry entry.
 - Index count matches the source's actual document count after a full run.
-- A prune run removes only documents actually deleted at the source.
+- A prune run removes only documents deleted at the source, or, for a
+  connector whose listing honors the indexing start, documents last updated
+  before it.
 - A resumed checkpointed run does not reprocess documents from before the
   checkpoint, and does not skip documents added after it.
 

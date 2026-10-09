@@ -89,7 +89,6 @@ Per the frontend rule in `CLAUDE.md`, always call these through the web server
 | `USING_AWS_MANAGED_OPENSEARCH` | false | Changes shard/replica counts (`schema.py:DocumentSchema.get_index_settings_based_on_environment`) and gates IAM auth. |
 | `OPENSEARCH_TEXT_ANALYZER` | `"english"` | Stemming/tokenization analyzer for `title`/`content`. Changing it needs a reindex of existing indices. |
 | `OPENSEARCH_INDEX_NUM_SHARDS` / `OPENSEARCH_INDEX_NUM_REPLICAS` | environment-dependent | Override shard/replica counts. |
-| `HYBRID_SEARCH_SUBQUERY_CONFIGURATION` | `2` (`CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD`) | Integer enum value. `1` is the title-vector variant. Chooses which subqueries and weight set hybrid search uses (`opensearch/constants.py`). An invalid value blocks app start. |
 | `HYBRID_SEARCH_NORMALIZATION_PIPELINE` | `1` (`MIN_MAX`) | Integer enum value. `2` is `ZSCORE`. Chooses the OpenSearch normalization technique (`opensearch/constants.py`). |
 | `ENABLE_CC_PAIR_ACCESS_FILTER` | false | Fallback for the `cc_pair_access_filter` `enabled` runtime flag. True turns on shadow mode (see §4.3). The `enforce` flag has no env var and defaults to false. |
 | `DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES` | 500 | Candidates fetched per hybrid subquery before fusion. |
@@ -138,9 +137,11 @@ used for query responses that exclude vectors.
 Field-name constants (all in `opensearch/schema.py`), grouped by role:
 
 - Content and vectors: `TITLE_FIELD_NAME`, `CONTENT_FIELD_NAME` (`text`, stemmed by
-  `OPENSEARCH_TEXT_ANALYZER`), `TITLE_VECTOR_FIELD_NAME`, `CONTENT_VECTOR_FIELD_NAME`
-  (`knn_vector`, HNSW/`cosinesimil`/`lucene` engine, `EF_CONSTRUCTION`/`M` from
-  `opensearch/constants.py`).
+  `OPENSEARCH_TEXT_ANALYZER`), `CONTENT_VECTOR_FIELD_NAME` (`knn_vector`,
+  HNSW/`cosinesimil`/`lucene` engine, `EF_CONSTRUCTION`/`M` from
+  `opensearch/constants.py`). `TITLE_VECTOR_FIELD_NAME` is no longer mapped or
+  written; indices created before its removal still store it until reindexed, so
+  searches keep excluding it from `_source`.
 - Access control: `PUBLIC_FIELD_NAME`, `ACCESS_CONTROL_LIST_FIELD_NAME`,
   `HIDDEN_FIELD_NAME`.
 - Identity and chunking: `DOCUMENT_ID_FIELD_NAME`, `CHUNK_INDEX_FIELD_NAME`,
@@ -242,8 +243,8 @@ contiguous chunk range, assuming non-overlapping chunking).
 
 For OpenSearch, one hybrid call is built by
 `search.py:DocumentQuery.get_hybrid_search_query`. It assembles keyword and vector
-subqueries (`_get_hybrid_search_subqueries`, shape controlled by
-`HYBRID_SEARCH_SUBQUERY_CONFIGURATION`), wraps them in an OpenSearch `hybrid` compound
+subqueries (`_get_hybrid_search_subqueries`: a `content_vector` k-NN query and a
+combined title/content keyword query), wraps them in an OpenSearch `hybrid` compound
 query with a shared `pagination_depth` and a single AND-ed `filter.bool.filter` list,
 and excludes the vector fields from `_source` on the way back out.
 
@@ -251,13 +252,8 @@ Score combination happens in an OpenSearch **search pipeline**, not in applicati
 code: `get_normalization_pipeline_name_and_config` selects `min_max` or `z_score`
 normalization (`HYBRID_SEARCH_NORMALIZATION_PIPELINE`), and both build a
 `normalization-processor` with `combination.technique = "arithmetic_mean"` and
-`_get_hybrid_search_normalization_weights()` as the per-subquery weights. Two weight
-sets exist, one per subquery configuration:
-
-- `CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD` (default): content-vector 0.5,
-  combined keyword 0.5.
-- `TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD`: title-vector 0.1,
-  content-vector 0.45, combined keyword 0.45.
+`_get_hybrid_search_normalization_weights()` as the per-subquery weights:
+content-vector 0.5, combined keyword 0.5.
 
 `_get_hybrid_search_normalization_weights` asserts the weights it returns sum to
 `1.0`, and a code comment states the weight order must match the subquery order
@@ -296,7 +292,8 @@ where the old and new filters disagree. In `ENFORCE` mode,
 `_get_enforced_cc_pair_access` swaps in the cc-pair filter, which tests
 `cc_pair_ids` against the user's open and ACL cc-pairs. Chunks with no cc-pair (user
 files) fall back to the old ACL filter. Even in `OFF` mode, the filter exists to hide
-`SYNC_RESTRICTED` cc-pairs (`hidden_restricted_cc_pair_ids`). See [[permission-sync]].
+`SYNC_RESTRICTED` cc-pairs and cc-pairs awaiting their first permission sync
+(`hidden_restricted_cc_pair_ids`). See [[access-control]] §4.3a.
 Chunks get `cc_pair_ids` at index time. The beat task
 `cc_pair_ids_backfill` fills older chunks without re-embedding, with progress in the
 KV store (`KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY`), restarted per `SearchSettings`
@@ -389,8 +386,8 @@ comment reads `# No longer used`. See §9.
    `_get_acl_visibility_filter`; that is the only place ACL and public-doc visibility
    is enforced at the index layer. See [[access-control]].
 3. **Hybrid normalization weights must sum to 1.0.** Enforced by an `assert` in
-   `_get_hybrid_search_normalization_weights`; a new subquery configuration that
-   forgets this crashes on the first call, not silently.
+   `_get_hybrid_search_normalization_weights`; a weight change that forgets this
+   crashes on the first call, not silently.
 4. **Weight order must match subquery order.** The normalization pipeline associates
    weights with clauses positionally, with no other binding.
 5. **A schema change needs a migration path for existing indices**, because
@@ -445,7 +442,7 @@ comment reads `# No longer used`. See §9.
 | If your change… | Also check |
 |---|---|
 | adds a chunk field | `opensearch/schema.py` mapping, `DocumentChunk`/`DocumentChunkWithoutVectors`, the writer in [[indexing-pipeline]], any query/filter that should read it, and a migration path for indices created before the change |
-| changes hybrid weights or the subquery configuration | run a retrieval-quality eval before shipping; the weights-sum-to-1.0 assert catches arithmetic mistakes but not quality regressions |
+| changes hybrid weights or subqueries | run a retrieval-quality eval before shipping; the weights-sum-to-1.0 assert catches arithmetic mistakes but not quality regressions |
 | adds a filter | `_get_search_filters` and every one of its private helper functions that builds one clause; the hybrid, keyword, semantic, and random query builders all call the same function, so a filter added there applies everywhere automatically, but a filter added ad hoc to just one query builder will not |
 | changes `SearchSettings` | `create_search_settings`, `update_search_settings`, the reindex request models in `server/manage/search_settings.py`, and `EmbeddingModel.from_db_model` if the field feeds the embedder |
 | touches the swap state machine (`IndexModelStatus` or `IndexReclaimStatus`) | `swap_index.py:_perform_index_swap`, every `advance_to_*` helper's prior-state guard, and the reclaim beat task; a broken guard can double-delete or skip the soak window |

@@ -1429,24 +1429,33 @@
           "label": "Downgrade to Community"
         },
         "modal": {
+          "changes": {
+            "text": "When you downgrade:"
+          },
           "confirmButton": {
             "label": "Downgrade",
             "loading": "Downgrading..."
           },
-          "connectors": {
-            "text": "Every connector becomes public. Documents that synced permissions or groups kept private become visible to all users. Search results follow once the index is rewritten, which can take a while on a large index."
+          "deleted": {
+            "text": "**Deleted:** User groups, service account API keys, token rate limits, and hooks;"
           },
-          "description": "This removes your license and every paid feature. It cannot be undone.",
-          "features": {
-            "text": "Service account API keys, token rate limits and hooks are deleted. Standard answers and SCIM tokens are turned off. Custom branding and chat retention are reset."
+          "description": "Removes your license and every paid feature.",
+          "disabled": {
+            "text": "**Disabled:** Standard answers and SCIM tokens;"
           },
-          "groups": {
-            "text": "User groups are removed. Agents, document sets, LLM providers, MCP servers and skills shared with a group become public."
+          "intro": {
+            "text": "Access controls are removed from this deployment. **This starts a re-index** so search results reflect the change, which can take a while on a large index."
           },
-          "license": {
-            "text": "The license is removed from this deployment."
+          "madePublic": {
+            "text": "**Made public:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
           },
-          "title": "Downgrade to Community Edition"
+          "reset": {
+            "text": "**Reset to defaults:** Custom branding and chat retention policy."
+          },
+          "title": "Downgrade to Community Edition",
+          "warning": {
+            "text": "Documents restricted by synced permissions or user groups become **visible to all users**. This cannot be undone."
+          }
         }
       },
       "footer": {
@@ -12300,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Toggle {name}"
+      },
+      "status": {
+        "loading": "Loading outputs…",
+        "incomplete": "Some outputs could not be listed. Open Files to browse the workspace.",
+        "error": "Could not refresh outputs. Try again."
       }
     },
     "chatPanel": {
@@ -12445,17 +12459,11 @@
         "description": "Files created during the build will appear here",
         "title": "No files yet"
       },
-      "emptyDirectory": {
-        "label": "No files in this directory"
-      },
       "error": {
         "title": "Error loading files"
       },
       "loading": {
         "label": "Loading files..."
-      },
-      "loadingChildren": {
-        "label": "Loading..."
       },
       "preparing": {
         "description": "Setting up your development environment",
@@ -12615,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Close {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Start building something to see artifacts!"
       },
@@ -12638,6 +12649,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Slides"
+      },
+      "previous": {
+        "label": "Previous slide"
+      },
+      "next": {
+        "label": "Next slide"
+      },
       "converting": {
         "label": "Converting presentation..."
       },
@@ -13043,9 +13063,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# call} other {# calls}}"
-        },
-        "failed": {
-          "tag": "{count} failed"
         },
         "working": {
           "label": "Working"
