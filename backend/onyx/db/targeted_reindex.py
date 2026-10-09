@@ -21,12 +21,15 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
-from sqlalchemy import select, tuple_
+from sqlalchemy import select, tuple_, update
 from sqlalchemy.orm import Session
 
 from onyx.connectors.models import ConnectorFailure, DocumentFailure
 from onyx.db.enums import IndexingStatus
-from onyx.db.index_attempt import get_connector_config_hash_for_cc_pair
+from onyx.db.index_attempt import (
+    error_type_for_failure,
+    get_connector_config_hash_for_cc_pair,
+)
 from onyx.db.models import (
     ConnectorCredentialPair,
     IndexAttempt,
@@ -359,6 +362,45 @@ def resolve_failure_derived_targets(
         e.is_resolved = True
 
     return len(error_rows), summary
+
+
+def record_latest_target_failures(
+    db_session: Session,
+    job_id: int,
+    failures: dict[tuple[int, str], ConnectorFailure],
+) -> None:
+    """Overwrite the message and error type of each still-open source error
+    the connector failed again, so the errors list shows the current
+    reason. The caller commits."""
+    if not failures:
+        return
+
+    target_rows: list[TargetedReindexJobTarget] = (
+        db_session.query(TargetedReindexJobTarget)
+        .filter(
+            TargetedReindexJobTarget.targeted_reindex_job_id == job_id,
+            TargetedReindexJobTarget.source_error_id.isnot(None),
+            tuple_(
+                TargetedReindexJobTarget.cc_pair_id,
+                TargetedReindexJobTarget.document_id,
+            ).in_(list(failures)),
+        )
+        .all()
+    )
+    for target in target_rows:
+        failure: ConnectorFailure = failures[(target.cc_pair_id, target.document_id)]
+        # Checked in the UPDATE: a concurrent index can resolve the row first.
+        db_session.execute(
+            update(IndexAttemptError)
+            .where(
+                IndexAttemptError.id == target.source_error_id,
+                IndexAttemptError.is_resolved.is_(False),
+            )
+            .values(
+                failure_message=failure.failure_message,
+                error_type=error_type_for_failure(failure),
+            )
+        )
 
 
 def targets_to_connector_failures(

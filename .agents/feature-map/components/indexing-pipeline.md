@@ -114,6 +114,9 @@ One row per failed document or entity within an attempt. Carries `document_id` o
 `entity_id`, the failure message, and `is_resolved` (flipped when a later
 successful index of the same document clears the error;
 `_resolve_indexing_document_errors` and `_resolve_indexing_entity_errors`).
+When a targeted reindex retries the row and the connector fails the document
+again, the row stays open and takes the connector's new message and
+`error_type` (`onyx/db/targeted_reindex.py:record_latest_target_failures`).
 
 ### `IndexAttemptStageMetric` (`onyx/db/models.py`, written via `onyx/db/index_attempt_metrics.py`)
 
