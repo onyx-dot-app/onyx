@@ -294,7 +294,7 @@ switches. Retained iframes stay in stable DOM order. Closed tabs, evicted tabs, 
 prior sessions release their viewer caches. Closing the panel releases its bodies
 after the animation. Hidden file viewers retain their displayed revision and load
 the latest revision on activation. Files without inventory revisions revalidate
-when their preview mounts. Each successful PowerPoint conversion response gives
+when their preview mounts or becomes active. Each successful PowerPoint conversion response gives
 slide images a fresh browser cache token; unchanged retained viewers reuse it.
 PDF previews release their object URL on replacement or unmount. Presentation
 keyboard navigation stays inside the active viewer.

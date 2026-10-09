@@ -16,6 +16,7 @@ interface PdfPreviewProps {
   filePath: string;
   revision?: string;
   refreshKey?: number;
+  isActive?: boolean;
 }
 
 /**
@@ -29,6 +30,7 @@ export default function PdfPreview({
   filePath,
   revision,
   refreshKey,
+  isActive = true,
 }: PdfPreviewProps) {
   const t = useTranslations("craft.pdfPreview");
   const {
@@ -50,7 +52,8 @@ export default function PdfPreview({
       return response.blob();
     },
     revision,
-    refreshKey
+    refreshKey,
+    isActive
   );
   const [objectUrl, setObjectUrl] = useState<{
     blob: Blob;

@@ -219,8 +219,9 @@ Idle session entry and focus reconcile metadata without selecting files.
 
 Each retained file viewer owns a private SWR cache with one current payload.
 `web/src/lib/build/hooks.ts:useFilePreview` owns revision-aware payload replacement.
-File revisions and explicit reloads replace that payload. An unchanged retained
-viewer reuses its data and DOM across tab switches. Closing or evicting a viewer
+File revisions and explicit reloads replace that payload. A retained viewer with an unchanged
+revision reuses its data and DOM across tab switches. Files without revisions
+revalidate on activation while keeping their current content visible. Closing or evicting a viewer
 releases its cache; reopening fetches fresh bytes. SWR retries failed requests and
 rejects superseded responses. Viewers show only results and errors for their
 accepted revision and reload counter. Cache misses and reloads bypass the

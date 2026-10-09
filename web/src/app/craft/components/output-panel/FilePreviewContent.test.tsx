@@ -224,3 +224,43 @@ it("coalesces hidden text edits to the latest revision", async () => {
   await screen.findByText("latest");
   expect(fetchFileContent).toHaveBeenCalledTimes(2);
 });
+
+it("revalidates retained source files on activation without resetting their scroll", async () => {
+  jest.mocked(fetchFileContent).mockReset().mockResolvedValue({
+    content: "original source",
+    mimeType: "text/plain",
+    isImage: false,
+  });
+  const view = (isActive: boolean) => (
+    <FilePreviewContent
+      sessionId="retained-source"
+      filePath="web/src/app/page.tsx"
+      isActive={isActive}
+    />
+  );
+  const { rerender } = render(view(true));
+  const source = await screen.findByText("original source");
+  const scroller = source.parentElement;
+  if (!scroller) throw new Error("Missing source scroll container");
+  scroller.scrollTop = 120;
+  rerender(view(false));
+  expect(fetchFileContent).toHaveBeenCalledTimes(1);
+
+  // Reopening an unchanged file must keep its DOM and scroll position.
+  rerender(view(true));
+  await waitFor(() => expect(fetchFileContent).toHaveBeenCalledTimes(2));
+  expect(screen.getByText("original source")).toBe(source);
+  expect(scroller.scrollTop).toBe(120);
+
+  rerender(view(false));
+  jest.mocked(fetchFileContent).mockResolvedValue({
+    content: "updated source",
+    mimeType: "text/plain",
+    isImage: false,
+  });
+  rerender(view(true));
+  await screen.findByText("updated source");
+  expect(fetchFileContent).toHaveBeenCalledTimes(3);
+  expect(screen.getByText("updated source")).toBe(source);
+  expect(scroller.scrollTop).toBe(120);
+});
