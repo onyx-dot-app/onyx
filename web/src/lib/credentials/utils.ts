@@ -69,6 +69,33 @@ export function realmFields(
   return Object.entries(spec.fields).filter(([, field]) => field.realm);
 }
 
+/** A realm as typed or stored, compared without case or a trailing slash. */
+function normalizeRealm(value: string): string {
+  return value.trim().replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * Whether a saved account works where the form says: for each realm field
+ * the form fills in, the account's value (or the field's default when it has
+ * none) is the same. An empty form field restricts nothing.
+ */
+export function credentialMatchesRealm(
+  fields: [string, CredentialSpecField][],
+  credentialJson: Readonly<Record<string, unknown>>,
+  formValues: Readonly<Record<string, unknown>>
+): boolean {
+  return fields.every(([key, field]) => {
+    const typed = formValues[key];
+    if (typeof typed !== "string" || typed.trim() === "") return true;
+    const stored = credentialJson[key];
+    const realm =
+      typeof stored === "string" && stored.trim() !== ""
+        ? stored
+        : (field.defaultValue ?? "");
+    return normalizeRealm(realm) === normalizeRealm(typed);
+  });
+}
+
 /** A method's fields, in the order the method lists them. */
 export function methodFields(
   spec: CredentialSpec,
