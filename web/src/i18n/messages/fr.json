@@ -12482,7 +12482,7 @@
       },
       "csv": {
         "truncated": "Aperçu limité à {rows, number} lignes, {columns, number} colonnes et {cells, number} cellules. Téléchargez le fichier original pour toutes les données.",
-        "malformed": "Ce CSV contient un champ entre guillemets incomplet. Téléchargez le fichier original pour le vérifier."
+        "malformed": "Ce CSV contient un champ entre guillemets non valide. Téléchargez le fichier original pour le vérifier."
       }
     },
     "filesTab": {

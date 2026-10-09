@@ -49,9 +49,7 @@ it("bounds the combined number of rendered cells", () => {
 
 it("reports malformed CSV instead of rendering a plausible partial table", () => {
   render(<CsvPreview content={'a,b\n"unfinished'} />);
-  expect(screen.getByRole("alert")).toHaveTextContent(
-    "incomplete quoted field"
-  );
+  expect(screen.getByRole("alert")).toHaveTextContent("invalid quoted field");
   expect(screen.queryByRole("cell")).not.toBeInTheDocument();
 });
 
@@ -77,4 +75,15 @@ it("uses the selected locale to format numeric preview limits", () => {
   expect(screen.getByText(/Preview limited/)).toHaveTextContent(
     "1.000 rows, 100 columns, and 5.000 cells"
   );
+});
+
+it("rejects trailing quoted-field text in the bounded Craft parser", () => {
+  expect(() => parseCsv('"account"oops,balance')).toThrow(
+    "Malformed CSV: text after a quoted field"
+  );
+});
+it("shows malformed input feedback instead of modified CSV cells", () => {
+  render(<CsvPreview content={'"account"oops,balance'} />);
+  expect(screen.getByRole("alert")).toHaveTextContent("invalid quoted field");
+  expect(screen.queryByRole("cell")).not.toBeInTheDocument();
 });

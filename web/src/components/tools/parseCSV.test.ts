@@ -82,3 +82,23 @@ describe("parseCSV", () => {
     expect(parseCSV("")).toEqual([]);
   });
 });
+
+it.each(['"account"oops,balance', '""oops,balance', '"account" ,balance'])(
+  "rejects trailing text after a closed quoted field: %s",
+  (content) => {
+    expect(() => parseCSV(content)).toThrow(
+      "Malformed CSV: text after a quoted field"
+    );
+  }
+);
+it("rejects quotes within an unquoted field", () => {
+  expect(() => parseCSV('account"oops,balance')).toThrow(
+    "Malformed CSV: quote in an unquoted field"
+  );
+});
+it("accepts separators and record endings after a closed quoted field", () => {
+  expect(parseCSV('"account","balance"\r\n"checking","42"')).toEqual([
+    ["account", "balance"],
+    ["checking", "42"],
+  ]);
+});

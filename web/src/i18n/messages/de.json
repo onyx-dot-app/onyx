@@ -12482,7 +12482,7 @@
       },
       "csv": {
         "truncated": "Vorschau auf {rows, number} Zeilen, {columns, number} Spalten und {cells, number} Zellen begrenzt. Laden Sie das Original für alle Daten herunter.",
-        "malformed": "Diese CSV-Datei enthält ein unvollständiges Feld in Anführungszeichen. Laden Sie das Original zur Prüfung herunter."
+        "malformed": "Diese CSV-Datei enthält ein ungültiges Feld in Anführungszeichen. Laden Sie das Original zur Prüfung herunter."
       }
     },
     "filesTab": {

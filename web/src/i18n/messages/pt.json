@@ -12482,7 +12482,7 @@
       },
       "csv": {
         "truncated": "Prévia limitada a {rows, number} linhas, {columns, number} colunas e {cells, number} células. Baixe o original para todos os dados.",
-        "malformed": "Este CSV contém um campo entre aspas incompleto. Baixe o original para verificá-lo."
+        "malformed": "Este CSV contém um campo entre aspas inválido. Baixe o original para verificá-lo."
       }
     },
     "filesTab": {

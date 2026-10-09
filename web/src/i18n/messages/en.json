@@ -12482,7 +12482,7 @@
       },
       "csv": {
         "truncated": "Preview limited to {rows, number} rows, {columns, number} columns, and {cells, number} cells. Download the original for all data.",
-        "malformed": "This CSV contains an incomplete quoted field. Download the original to inspect it."
+        "malformed": "This CSV contains an invalid quoted field. Download the original to inspect it."
       }
     },
     "filesTab": {
