@@ -6,8 +6,11 @@ import {
   LOCALE_COOKIE_NAME,
   isSupportedLocale,
   runtimeLocale,
+  type Locale,
 } from "@/i18n/config";
 import englishMessages from "@/i18n/messages/en.json";
+import type { Settings } from "@/lib/settings/types";
+import { fetchSS } from "@/lib/utilsSS";
 
 type MessageTree = { [key: string]: string | MessageTree };
 
@@ -33,12 +36,27 @@ function withEnglishFallback(base: MessageTree, overlay: MessageTree) {
 // objects of the same shape; the i18n catalog test enforces this.
 const english = englishMessages as MessageTree;
 
+// Only consulted when the request carries no usable locale cookie: anonymous
+// access or a first render before GET /me sets it. Any failure means English.
+async function workspaceDefaultLocale(): Promise<Locale> {
+  try {
+    const response = await fetchSS("/settings");
+    if (!response.ok) return DEFAULT_LOCALE;
+    const settings: Pick<Settings, "default_language"> = await response.json();
+    return isSupportedLocale(settings.default_language)
+      ? settings.default_language
+      : DEFAULT_LOCALE;
+  } catch {
+    return DEFAULT_LOCALE;
+  }
+}
+
 export default getRequestConfig(async () => {
   const cookieStore = await cookies();
   const cookieLocale = cookieStore.get(LOCALE_COOKIE_NAME)?.value;
   const locale = isSupportedLocale(cookieLocale)
     ? cookieLocale
-    : DEFAULT_LOCALE;
+    : await workspaceDefaultLocale();
 
   const messages =
     locale === DEFAULT_LOCALE

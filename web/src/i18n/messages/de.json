@@ -1783,6 +1783,10 @@
         "description": "Agentisches Recherchesystem, das im Web und in verbundenen Quellen arbeitet. Verbraucht deutlich mehr Token pro Abfrage.",
         "title": "Deep Research"
       },
+      "defaultLanguage": {
+        "description": "Die Sprache der Benutzeroberfläche für Benutzer, die in ihren Einstellungen keine gewählt haben.",
+        "title": "Standardsprache"
+      },
       "disableDefaultChat": {
         "description": "Dadurch starten Benutzer immer in einem Agenten. Neue Chats werden in ihrem ersten angehefteten Agenten erstellt. Legen Sie empfohlene Agenten fest, um neuen Benutzern den Einstieg zu erleichtern.",
         "title": "Standard-Chat deaktivieren"
@@ -13834,7 +13838,8 @@
       "title": "Sprache",
       "toasts": {
         "updateFailed": "Die Spracheinstellung konnte nicht aktualisiert werden"
-      }
+      },
+      "workspaceDefault": "Standard ({language})"
     },
     "layout": {
       "header": {

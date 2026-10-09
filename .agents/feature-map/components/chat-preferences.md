@@ -56,12 +56,12 @@ controls.
 
 | Method | Path | Handler | Scope |
 |---|---|---|---|
-| PATCH | `/admin/settings` | `backend/onyx/server/settings/api.py` | Admin. Workspace `Settings` blob (company name/description, `auto_detect_search_filters`, `multi_model_chat_enabled`, `deep_research_enabled`, `search_ui_enabled`, retention, query-history policy, file limits, `anonymous_user_enabled`, `disable_default_assistant`). |
+| PATCH | `/admin/settings` | `backend/onyx/server/settings/api.py` | Admin. Workspace `Settings` blob (company name/description, `auto_detect_search_filters`, `multi_model_chat_enabled`, `deep_research_enabled`, `search_ui_enabled`, retention, query-history policy, file limits, `anonymous_user_enabled`, `disable_default_assistant`, `default_language`). |
 | GET | `/settings` | `backend/onyx/server/settings/api.py` | Public read of the same blob, consumed by both admin and app UI. |
 | GET `/admin/default-assistant/configuration`, PATCH `/admin/default-assistant` | `backend/onyx/server/features/default_assistant/api.py:get_default_assistant_configuration`, `update_default_assistant` | Admin. Default persona's `tool_ids` and `system_prompt`. |
 | POST/DELETE | `/admin/llm/default-chat-naming` | `backend/onyx/server/manage/llm/api.py` | Admin. Sets or clears the model used to auto-name new chats; unrelated to prompt content but lives on this page. |
 | PATCH | `/user/personalization` | `backend/onyx/server/manage/users.py:update_user_personalization_api` | User. `personal_name`, `personal_role`, `use_memories`, `enable_memory_tool`, `memories`, `user_preferences` in one call. |
-| PATCH | `/user/language` | `backend/onyx/server/manage/users.py:update_user_language_api` | User. Also sets the `NEXT_LOCALE` cookie via `set_locale_cookie`. |
+| PATCH | `/user/language` | `backend/onyx/server/manage/users.py:update_user_language_api` | User. `null` clears the preference so the user follows `Settings.default_language`. Also sets the `NEXT_LOCALE` cookie to the effective language (`settings/store.py:resolve_user_language`) via `set_locale_cookie`. `GET /me` reconciles the same cookie. |
 | PATCH | `/shortcut-enabled`, `/temperature-override-enabled`, `/temperature-default`, `/reasoning-effort-default`, `/auto-scroll`, `/paste-as-tile`, `/user/theme-preference`, `/user/chat-background`, `/user/default-app-mode`, `/user/default-model` | `backend/onyx/server/manage/users.py` | User. One column each, all in `backend/onyx/db/user_preferences.py`. |
 | GET/POST/PATCH/DELETE | `/input_prompt`, `/input_prompt/{id}`, `/input_prompt/{id}/hide` | `backend/onyx/server/features/input_prompt/api.py` (`basic_router`) | User. Create, edit, delete their own shortcuts; `hide` disables a public one for themselves without deleting it. |
 | DELETE | `/admin/input_prompt/{id}` | `backend/onyx/server/features/input_prompt/api.py` (`admin_router`) | Admin. Delete a public shortcut. There is no admin *create* endpoint (see §9). |
@@ -91,7 +91,7 @@ They do not change the assembly template (see [[context-assembly]] §4.1).
 | `use_memories` | `bool`, default `True` | `process_message.py` (strips memories from prompt context if `False`, see §4.3) |
 | `enable_memory_tool` | `bool`, default `True` | `tool_constructor.py` (gates injecting `MemoryTool`, see §4.4) |
 | `user_preferences` | `Text \| None` | `db/memory.py:get_memories` → `UserMemoryContext.user_preferences` |
-| `language` | `str`, default `"en"` | `db/memory.py:supported_language_or_none` → `UserInfo.language` |
+| `language` | `str \| None`, `None` = follow `Settings.default_language` | `settings/store.py:resolve_user_language` → `db/memory.py:supported_language_or_none` → `UserInfo.language` |
 | `temperature_default`, `temperature_override_enabled` | `float \| None`, `bool \| None` | LLM call params, not the prompt text |
 | `reasoning_effort_default` | `ReasoningEffort \| None` | LLM call params |
 | `default_model`, `default_app_mode`, `theme_preference`, `chat_background`, `auto_scroll`, `shortcut_enabled`, `paste_as_tile` | various | UI/session behavior, not the prompt |
@@ -148,7 +148,7 @@ Every row is one setting, traced from its UI control through storage to where
 | Personal name / role | `web/src/views/SettingsPage.tsx:GeneralSettings` | `User.personal_name`, `User.personal_role` | `db/memory.py:get_memories` → `UserInfo.name/role` → `BASIC_INFORMATION_PROMPT` (§4.2) |
 | Organization profile (department, title, city, ...) | Not set by a user; captured from the IdP login snapshot | Directory snapshot read by `auth/login_claims_capture.py:get_idp_profile` | `UserInfo.organization_profile` → `ORGANIZATION_PROFILE_PROMPT` |
 | Team name / team context | Admin, `/admin/chat-preferences` ("Team Context" section) | `Settings.company_name`, `Settings.company_description` (KV store) | `prompts/prompt_utils.py:get_company_context` → `TEAM_INFORMATION_PROMPT` |
-| Language | User, `GeneralSettings` language selector; `PATCH /user/language` | `User.language` | `db/memory.py:supported_language_or_none` → `UserInfo.language` → `prompt_utils.py:build_language_section` |
+| Language | Admin default at `/admin/chat-preferences` ("Default Language"); user override in the `GeneralSettings` language selector, `PATCH /user/language` | `Settings.default_language` (KV store), `User.language` (`None` = follow the default) | `settings/store.py:resolve_user_language` → `db/memory.py:supported_language_or_none` → `UserInfo.language` → `prompt_utils.py:build_language_section` |
 | User preferences (free text) | User, `ChatPreferencesSettings` "Personal Preferences" field | `User.user_preferences` | `UserMemoryContext.user_preferences` → `USER_PREFERENCES_PROMPT` |
 | Memories | Written automatically by `MemoryTool`; read toggle is user-controlled | `Memory` table | `UserMemoryContext.memories` → `USER_MEMORIES_PROMPT` (only if `user.use_memories`, §4.3) |
 | Default agent system prompt | Admin, `/admin/chat-preferences` "System Prompt" modal | `Persona.system_prompt` for the default persona | `prompt_utils.py:get_default_base_system_prompt` → base of `build_system_prompt` |

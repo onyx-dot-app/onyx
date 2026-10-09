@@ -1783,6 +1783,10 @@
         "description": "Sistema de investigación agéntica que trabaja en la web y en las fuentes conectadas. Usa muchos más tokens por consulta.",
         "title": "Investigación profunda"
       },
+      "defaultLanguage": {
+        "description": "El idioma de la interfaz para los usuarios que no han elegido uno en su configuración.",
+        "title": "Idioma predeterminado"
+      },
       "disableDefaultChat": {
         "description": "Esto obliga a los usuarios a empezar siempre dentro de un agente. Los chats nuevos se crearán en su primer agente fijado. Destaca algunos agentes para ayudar a los usuarios nuevos a empezar.",
         "title": "Desactivar el chat predeterminado"
@@ -13834,7 +13838,8 @@
       "title": "Idioma",
       "toasts": {
         "updateFailed": "No se pudo actualizar la preferencia de idioma"
-      }
+      },
+      "workspaceDefault": "Predeterminado ({language})"
     },
     "layout": {
       "header": {

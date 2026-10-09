@@ -1783,6 +1783,10 @@
         "description": "웹과 연결된 소스 전반을 조사하는 에이전트 기반 리서치 시스템입니다. 질의당 훨씬 많은 token을 사용합니다.",
         "title": "심층 리서치"
       },
+      "defaultLanguage": {
+        "description": "개인 설정에서 언어를 선택하지 않은 사용자에게 적용되는 UI 언어입니다.",
+        "title": "기본 언어"
+      },
       "disableDefaultChat": {
         "description": "사용자가 항상 에이전트에서 시작하도록 강제합니다. 새 채팅은 사용자가 처음 고정한 에이전트에서 생성됩니다. 새 사용자가 쉽게 시작하도록 추천 에이전트를 설정하세요.",
         "title": "기본 채팅 비활성화"
@@ -13834,7 +13838,8 @@
       "title": "언어",
       "toasts": {
         "updateFailed": "언어 설정을 변경하지 못했습니다"
-      }
+      },
+      "workspaceDefault": "워크스페이스 기본값 ({language})"
     },
     "layout": {
       "header": {

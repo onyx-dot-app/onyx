@@ -9,6 +9,7 @@ from onyx.configs.app_configs import (
     MAX_ALLOWED_UPLOAD_SIZE_MB,
 )
 from onyx.configs.constants import QueryHistoryType
+from onyx.db.enums import SupportedLanguage
 from onyx.server.features.notifications.models import NotificationResponse
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -96,6 +97,9 @@ class Settings(BaseModel):
     # Workspace default for Craft access; per-user User.craft_enabled
     # overrides win. The deployment-level Craft gate still applies on top.
     craft_default_enabled: bool = True
+
+    # Workspace UI language for users without a stored User.language.
+    default_language: SupportedLanguage = SupportedLanguage.EN
 
     # Workspace-wide switch for the LLM gateway (/api/gateway — direct model
     # API access for external tools like Claude Code or Cursor). When False,

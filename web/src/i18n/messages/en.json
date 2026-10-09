@@ -1783,6 +1783,10 @@
         "description": "Agentic research system that works across the web and connected sources. Uses significantly more tokens per query.",
         "title": "Deep Research"
       },
+      "defaultLanguage": {
+        "description": "The UI language for users who have not chosen one in their own settings.",
+        "title": "Default Language"
+      },
       "disableDefaultChat": {
         "description": "This forces users to always start in an agent. New chats will be created in their first pinned agent. Set featured agents to help new users get started.",
         "title": "Disable Default Chat"
@@ -13834,7 +13838,8 @@
       "title": "Language",
       "toasts": {
         "updateFailed": "Failed to update language preference"
-      }
+      },
+      "workspaceDefault": "Default ({language})"
     },
     "layout": {
       "header": {

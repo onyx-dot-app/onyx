@@ -1783,6 +1783,10 @@
         "description": "Sistema de pesquisa agêntico que atua na web e nas fontes conectadas. Usa muito mais tokens por consulta.",
         "title": "Pesquisa profunda"
       },
+      "defaultLanguage": {
+        "description": "O idioma da interface para usuários que não escolheram um nas próprias configurações.",
+        "title": "Idioma padrão"
+      },
       "disableDefaultChat": {
         "description": "Isso obriga os usuários a sempre começar em um agente. Os novos chats serão criados no primeiro agente fixado. Defina agentes em destaque para ajudar os novos usuários a começar.",
         "title": "Desativar o chat padrão"
@@ -13834,7 +13838,8 @@
       "title": "Idioma",
       "toasts": {
         "updateFailed": "Não foi possível atualizar a preferência de idioma"
-      }
+      },
+      "workspaceDefault": "Padrão ({language})"
     },
     "layout": {
       "header": {

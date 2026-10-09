@@ -295,7 +295,8 @@ class ThemePreferenceRequest(BaseModel):
 
 
 class LanguageRequest(BaseModel):
-    language: SupportedLanguage
+    # None clears the preference so the user follows the workspace default.
+    language: SupportedLanguage | None
 
 
 class DefaultAppModeRequest(BaseModel):
