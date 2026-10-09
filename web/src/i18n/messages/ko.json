@@ -2746,6 +2746,9 @@
           "rerunFailed": {
             "toast": "검사를 시작할 수 없습니다. 다시 시도하세요."
           }
+        },
+        "realm": {
+          "defaultHint": "입력하지 않으면 {value}을(를) 사용합니다"
         }
       },
       "credentialRequired": {

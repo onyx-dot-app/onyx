@@ -2746,6 +2746,9 @@
           "rerunFailed": {
             "toast": "تعذّر بدء الفحوصات. حاول مرة أخرى."
           }
+        },
+        "realm": {
+          "defaultHint": "إن لم يُحدَّد، فسيُستخدم {value}"
         }
       },
       "credentialRequired": {

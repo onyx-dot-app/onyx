@@ -169,6 +169,8 @@ interface CredentialFieldsRendererProps {
    * inside a larger form. Unset, they are the form's own values.
    */
   namePrefix?: string;
+  /** Field keys this renderer leaves out, e.g. ones drawn elsewhere. */
+  exclude?: ReadonlySet<string>;
 }
 
 export function CredentialFieldsRenderer({
@@ -177,6 +179,7 @@ export function CredentialFieldsRenderer({
   authMethod,
   setAuthMethod,
   namePrefix,
+  exclude,
 }: CredentialFieldsRendererProps) {
   const t = useTranslations("admin");
   const { values, setValues, setFieldValue } =
@@ -233,15 +236,17 @@ export function CredentialFieldsRenderer({
                   )}
                 />
               )}
-              {methodFields(spec, method).map(([key, field]) => (
-                <CredentialField
-                  key={key}
-                  source={source}
-                  fieldKey={key}
-                  field={field}
-                  namePrefix={namePrefix}
-                />
-              ))}
+              {methodFields(spec, method)
+                .filter(([key]) => !exclude?.has(key))
+                .map(([key, field]) => (
+                  <CredentialField
+                    key={key}
+                    source={source}
+                    fieldKey={key}
+                    field={field}
+                    namePrefix={namePrefix}
+                  />
+                ))}
             </Section>
           </Tabs.Content>
         ))}
@@ -251,15 +256,17 @@ export function CredentialFieldsRenderer({
 
   return (
     <>
-      {Object.entries(spec.fields).map(([key, field]) => (
-        <CredentialField
-          key={key}
-          source={source}
-          fieldKey={key}
-          field={field}
-          namePrefix={namePrefix}
-        />
-      ))}
+      {Object.entries(spec.fields)
+        .filter(([key]) => !exclude?.has(key))
+        .map(([key, field]) => (
+          <CredentialField
+            key={key}
+            source={source}
+            fieldKey={key}
+            field={field}
+            namePrefix={namePrefix}
+          />
+        ))}
     </>
   );
 }
