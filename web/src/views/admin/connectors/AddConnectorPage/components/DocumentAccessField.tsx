@@ -38,6 +38,8 @@ interface DocumentAccessFieldProps {
   connector: ConfigurableSources;
   currentCredential?: CredentialValues | null;
   disabled?: boolean;
+  /** Keep the loaded access type: do not move it to the sync default. */
+  keepInitialAccess?: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ export default function DocumentAccessField({
   connector,
   currentCredential,
   disabled,
+  keepInitialAccess = false,
 }: DocumentAccessFieldProps) {
   const t = useTranslations("admin.connectorsList.settings.documentAccess");
   const tRestriction = useTranslations("admin.connector.groupRestriction");
@@ -144,7 +147,7 @@ export default function DocumentAccessField({
 
   // Sync is the default wherever it is offered and enabled, until the user
   // picks an option themselves.
-  const userChoseRef = useRef(false);
+  const userChoseRef = useRef(keepInitialAccess);
   const syncAvailable = showAutoSync && !isSyncDisabledByAuth;
   useEffect(() => {
     if (userChoseRef.current || !syncAvailable) return;

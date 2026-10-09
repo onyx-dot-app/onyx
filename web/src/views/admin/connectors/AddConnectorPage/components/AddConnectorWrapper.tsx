@@ -61,6 +61,7 @@ import {
 } from "@/lib/connectors/connectors";
 import {
   connectorConfigFromForm,
+  connectorFormControlFieldNames,
   createConnectorInitialValues,
   createConnectorValidationSchema,
   isLoadState,
@@ -107,6 +108,7 @@ import {
   useResetConnectorChecks,
 } from "@/lib/connectors/checks/hooks";
 import type { ConnectorEditTarget } from "@/lib/connectors/edit/types";
+import { editInitialValues } from "@/lib/connectors/edit/prefill";
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
@@ -223,9 +225,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
     : 600; // 25 days fallback until settings load
 
   // The picked saved account. Clicking a saved card picks it; typing into
-  // the new account drops the pick (see AuthenticationAccountSection).
+  // the new account drops the pick (see AuthenticationAccountSection). Edit
+  // mode starts on the pair's credential.
   const [currentCredential, setCurrentCredential] =
-    useState<Credential<any> | null>(null);
+    useState<Credential<any> | null>(edit?.ccPair.credential ?? null);
 
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -243,12 +246,21 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   );
   // Form keys that are not connector config: tab controls, and the typed
   // account, which Create sends as the credential.
-  const formControlFieldNames = new Set([
-    ...[...configuration.values, ...configuration.advanced_values]
-      .filter((field) => field.type === "tab")
-      .map((field) => field.name),
+  const formControlFieldNames = connectorFormControlFieldNames(configuration, [
     NEW_ACCOUNT_FIELD,
   ]);
+
+  // Edit mode fills the form with the pair's state once, at mount.
+  const [editValues] = useState(() =>
+    edit
+      ? editInitialValues(
+          connector,
+          configuration,
+          edit.ccPair,
+          edit.dataAccessGroupIds
+        )
+      : null
+  );
 
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
@@ -583,7 +595,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   return (
     <Formik
-      initialValues={initialValues}
+      initialValues={editValues ?? initialValues}
       validationSchema={createConnectorValidationSchema(
         connector,
         isScopedManager,
@@ -844,6 +856,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 connector={connector}
                                 currentCredential={formCredential}
                                 disabled={!formUnlocked}
+                                editing={edit !== undefined}
                               />
 
                               {connector !== "file" && (

@@ -13,6 +13,11 @@ interface ConnectorSettingsSectionProps {
   currentCredential: CredentialValues | null;
   /** Freezes the section while the page locks the configuration. */
   disabled?: boolean;
+  /**
+   * The form edits a saved pair: its access stays as loaded, and its manage
+   * groups are not part of the edit.
+   */
+  editing?: boolean;
 }
 
 /** The connector's name, who can read its documents, and who manages it. */
@@ -20,6 +25,7 @@ export default function ConnectorSettingsSection({
   connector,
   currentCredential,
   disabled,
+  editing = false,
 }: ConnectorSettingsSectionProps) {
   const t = useTranslations("admin.connectorsList.settings");
 
@@ -48,14 +54,18 @@ export default function ConnectorSettingsSection({
               connector={connector}
               currentCredential={currentCredential}
               disabled={disabled}
+              keepInitialAccess={editing}
             />
           </Section>
         </Card>
 
-        {/* Shown on every tier; below Business its groups are locked. */}
-        <Card border="solid" rounding={4} padding={4} disabled={disabled}>
-          <ManageAccessField disabled={disabled} />
-        </Card>
+        {/* Shown on every tier; below Business its groups are locked. Edit
+            mode leaves the manage groups alone. */}
+        {!editing && (
+          <Card border="solid" rounding={4} padding={4} disabled={disabled}>
+            <ManageAccessField disabled={disabled} />
+          </Card>
+        )}
       </Section>
     </Collapsible>
   );
