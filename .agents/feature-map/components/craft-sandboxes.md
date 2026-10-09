@@ -744,3 +744,8 @@ Thumbnail caches are excluded from session snapshots.
 
 Both Docker and Kubernetes exclude thumbnail caches from new session snapshots.
 The converter discards renders whose source changed and records the published source revision.
+
+The snapshot exclusion applies only to the cache at outputs/.document-thumbnails.
+Nested user directories with this name stay in snapshots.
+Both providers validate converter status and session-relative JPEG paths through one response parser.
+Thumbnail size checks use the source revision captured after acquiring the conversion lock.

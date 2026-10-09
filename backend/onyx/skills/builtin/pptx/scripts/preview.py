@@ -108,6 +108,9 @@ def _generate_preview(
     deadline: float | None = None,
 ) -> None:
     revision: tuple[int, int, int, int, int] = _source_revision(document_path)
+    if first_page_only and revision[2] > 20 * 1024 * 1024:
+        print("ERROR_TOO_LARGE")
+        return
     revision_path: Path = cache_dir / ".source-revision.json"
     cached_slides: list[str] = _find_slides(cache_dir)
     if cached_slides:

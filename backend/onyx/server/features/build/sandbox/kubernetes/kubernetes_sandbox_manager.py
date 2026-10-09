@@ -78,6 +78,7 @@ from onyx.server.features.build.configs import (
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
     document_preview_command,
+    parse_document_preview_response,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
@@ -2145,8 +2146,8 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
         """Convert PDF or PowerPoint to page images using soffice + pdftoppm in the pod.
 
         Runs preview.py in the sandbox container which:
-        1. Checks if cached slides exist and are newer than the PPTX
-        2. If not, converts PPTX -> PDF -> JPEG slides
+        1. Checks whether cached pages match the document revision
+        2. If not, converts PowerPoint to PDF and rasterizes PDF pages
         3. Returns list of slide image paths
         """
         pod_name = self._get_pod_name(str(sandbox_id))
@@ -2187,42 +2188,10 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
                 tty=False,
             )
 
-            lines = [line.strip() for line in resp.strip().split("\n") if line.strip()]
-
-            if not lines:
-                raise ValueError("Empty response from PPTX conversion")
-
-            if lines[0] == "ERROR_NOT_FOUND":
-                raise ValueError(f"File not found: {document_path}")
-
-            if lines[0] == "ERROR_ACCESS_DENIED":
-                raise ValueError("Access denied: source escapes session workspace")
-            if lines[0] == "ERROR_TOO_LARGE":
-                raise ValueError("Document exceeds thumbnail size limit")
-            if lines[0] == "ERROR_TIMEOUT":
-                raise ValueError("Document thumbnail conversion timed out")
-            if lines[0] == "ERROR_SOURCE_CHANGED":
-                raise ValueError("Document changed while rendering; retry preview")
-            if lines[0] == "ERROR_NO_PDF":
-                raise ValueError("soffice did not produce a PDF file")
-
-            cached = lines[0] == "CACHED"
-            # Skip the status line, rest are file paths
-            abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
-
-            # Convert absolute paths to session-relative paths
-            prefix = f"{session_root}/"
-            rel_paths = []
-            for p in abs_paths:
-                if p.startswith(prefix):
-                    rel_paths.append(p[len(prefix) :])
-                elif p.endswith(".jpg"):
-                    rel_paths.append(p)
-
-            return (rel_paths, cached)
+            return parse_document_preview_response(resp, session_root)
 
         except ApiException as e:
-            raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
+            raise RuntimeError(f"Failed to generate document preview: {e}") from e
 
     def _ensure_agents_md_attachments_section(
         self, sandbox_id: UUID, session_id: UUID

@@ -23,12 +23,7 @@ def test_preserved_mtime_edit_replaces_cached_slides(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.syspath_prepend(str(_SCRIPT.parent))
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
-        "pptx_preview", _SCRIPT
-    )
-    assert spec is not None and spec.loader is not None
-    preview: ModuleType = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(preview)
+    preview: ModuleType = _load_preview()
 
     source: Path = tmp_path / "report.pptx"
     source.write_bytes(b"first")
@@ -110,12 +105,7 @@ def test_thumbnail_renders_only_first_page_and_preserves_pdf_source(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.syspath_prepend(str(_SCRIPT.parent))
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
-        "document_thumbnail", _SCRIPT
-    )
-    assert spec is not None and spec.loader is not None
-    preview: ModuleType = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(preview)
+    preview: ModuleType = _load_preview()
     source: Path = tmp_path / f"report.{extension}"
     source.write_bytes(b"source document")
     cache: Path = tmp_path / "thumbnails"
@@ -158,12 +148,7 @@ def test_thumbnail_rejects_source_symlink_outside_session(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.syspath_prepend(str(_SCRIPT.parent))
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
-        "confined_thumbnail", _SCRIPT
-    )
-    assert spec is not None and spec.loader is not None
-    preview: ModuleType = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(preview)
+    preview: ModuleType = _load_preview()
     outside: Path = tmp_path / "private.pdf"
     outside.write_bytes(b"private")
     session: Path = tmp_path / "session"
@@ -194,12 +179,7 @@ def test_thumbnail_rejects_oversized_document_before_rendering(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.syspath_prepend(str(_SCRIPT.parent))
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
-        "bounded_thumbnail", _SCRIPT
-    )
-    assert spec is not None and spec.loader is not None
-    preview: ModuleType = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(preview)
+    preview: ModuleType = _load_preview()
     source: Path = tmp_path / "large.pdf"
     with source.open("wb") as stream:
         stream.truncate(20 * 1024 * 1024 + 1)
@@ -402,3 +382,30 @@ def test_change_during_publish_cannot_make_old_revision_current(
     preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
     assert capsys.readouterr().out.splitlines()[0] == "CACHED"
     assert converter.call_count == 2
+
+
+def test_document_growing_before_lock_acquisition_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    preview: ModuleType = _load_preview()
+    source: Path = tmp_path / "growing.pdf"
+    source.write_bytes(b"initial small PDF")
+    cache: Path = tmp_path / "cache"
+    monkeypatch.setattr(
+        sys, "argv", [str(_SCRIPT), str(source), str(cache), "--first-page"]
+    )
+    real_flock: Callable[[int, int], None] = preview.fcntl.flock
+
+    def acquire_after_growth(fd: int, operation: int) -> None:
+        with source.open("wb") as document:
+            document.truncate(21 * 1024 * 1024)
+        real_flock(fd, operation)
+
+    converter: MagicMock = MagicMock()
+    monkeypatch.setattr(preview.fcntl, "flock", acquire_after_growth)
+    monkeypatch.setattr(preview, "_run_conversion", converter)
+    preview.main()
+    assert capsys.readouterr().out.strip() == "ERROR_TOO_LARGE"
+    converter.assert_not_called()

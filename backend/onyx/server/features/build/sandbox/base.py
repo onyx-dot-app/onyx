@@ -20,6 +20,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import cache
+from pathlib import PurePosixPath
 from uuid import UUID
 
 from onyx.server.features.build.configs import TURN_BUDGET_FILE_NAME
@@ -103,6 +104,43 @@ def document_preview_command(
         "--session-root",
         session_root,
     ]
+
+
+def parse_document_preview_response(
+    output: str, session_root: str
+) -> tuple[list[str], bool]:
+    """Validate the converter protocol and return session-relative page paths."""
+    lines: list[str] = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError("Empty response from document conversion")
+    errors: dict[str, str] = {
+        "ERROR_NOT_FOUND": "Document not found",
+        "ERROR_ACCESS_DENIED": "Access denied: source escapes session workspace",
+        "ERROR_TOO_LARGE": "Document exceeds thumbnail size limit",
+        "ERROR_TIMEOUT": "Document thumbnail conversion timed out",
+        "ERROR_SOURCE_CHANGED": "Document changed while rendering; retry preview",
+        "ERROR_NO_PDF": "soffice did not produce a PDF file",
+    }
+    if lines[0] in errors:
+        raise ValueError(errors[lines[0]])
+    if lines[0] not in {"CACHED", "GENERATED"}:
+        raise ValueError("Invalid document conversion status")
+    if len(lines) == 1:
+        raise ValueError("Document conversion produced no pages")
+    root: PurePosixPath = PurePosixPath(session_root)
+    paths: list[str] = []
+    for value in lines[1:]:
+        path: PurePosixPath = PurePosixPath(value)
+        if ".." in path.parts or not path.is_relative_to(root):
+            raise ValueError("Access denied: preview escapes session workspace")
+        if (
+            not path.name.startswith("slide-")
+            or path.suffix != ".jpg"
+            or not path.stem[6:].isdigit()
+        ):
+            raise ValueError("Invalid document preview page path")
+        paths.append(str(path.relative_to(root)))
+    return paths, lines[0] == "CACHED"
 
 
 class SandboxManager(_ServeMixin, ABC):
@@ -817,8 +855,8 @@ class SandboxManager(_ServeMixin, ABC):
     ) -> tuple[list[str], bool]:
         """Convert a PDF or PowerPoint file to page JPEG images for preview, with caching.
 
-        Checks if cache_dir already has slides. If the presentation is newer than the
-        cached images (or no cache exists), runs soffice -> pdftoppm pipeline.
+        Reuses pages matching the source revision. Otherwise, converts PowerPoint
+        to PDF and rasterizes the PDF with pdftoppm.
 
         Args:
             sandbox_id: The sandbox ID

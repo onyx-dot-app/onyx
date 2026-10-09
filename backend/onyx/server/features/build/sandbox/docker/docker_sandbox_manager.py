@@ -103,6 +103,7 @@ from onyx.server.features.build.configs import (
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
     document_preview_command,
+    parse_document_preview_response,
 )
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
@@ -2078,38 +2079,9 @@ echo WRITE_OK"""
                 ),
             )
         except ExecError as e:
-            raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
+            raise RuntimeError(f"Failed to generate document preview: {e}") from e
 
-        lines = [
-            line.strip()
-            for line in result.stdout_text.strip().split("\n")
-            if line.strip()
-        ]
-        if not lines:
-            raise ValueError("Empty response from PPTX conversion.")
-        if lines[0] == "ERROR_NOT_FOUND":
-            raise ValueError(f"File not found: {document_path}")
-        if lines[0] == "ERROR_ACCESS_DENIED":
-            raise ValueError("Access denied: source escapes session workspace")
-        if lines[0] == "ERROR_TOO_LARGE":
-            raise ValueError("Document exceeds thumbnail size limit")
-        if lines[0] == "ERROR_TIMEOUT":
-            raise ValueError("Document thumbnail conversion timed out")
-        if lines[0] == "ERROR_SOURCE_CHANGED":
-            raise ValueError("Document changed while rendering; retry preview")
-        if lines[0] == "ERROR_NO_PDF":
-            raise ValueError("soffice did not produce a PDF file.")
-
-        cached = lines[0] == "CACHED"
-        abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
-        prefix = f"{session_root}/"
-        rel_paths: list[str] = []
-        for p in abs_paths:
-            if p.startswith(prefix):
-                rel_paths.append(p[len(prefix) :])
-            elif p.endswith(".jpg"):
-                rel_paths.append(p)
-        return rel_paths, cached
+        return parse_document_preview_response(result.stdout_text, session_root)
 
 
 class _GeneratorReader:

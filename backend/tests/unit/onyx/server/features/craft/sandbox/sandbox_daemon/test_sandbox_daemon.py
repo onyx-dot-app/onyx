@@ -1418,6 +1418,8 @@ def test_snapshot_create_excludes_generated_dirs_from_size_check_and_archive(
     (session_path / "outputs/apps/admin/node_modules/pkg").mkdir(parents=True)
     (session_path / "outputs/apps/admin/.next/cache").mkdir(parents=True)
     (session_path / "attachments/node_modules/pkg").mkdir(parents=True)
+    (session_path / "outputs/user/.document-thumbnails").mkdir(parents=True)
+    (session_path / "outputs/user/.document-thumbnails/owned.txt").write_bytes(b"keep")
     (session_path / "outputs/.document-thumbnails/report").mkdir(parents=True)
     (session_path / "outputs/apps/admin/app/page.tsx").write_text("ok\n")
     (session_path / "outputs/apps/admin/node_modules/pkg/index.js").write_bytes(
@@ -1437,6 +1439,7 @@ def test_snapshot_create_excludes_generated_dirs_from_size_check_and_archive(
     with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
         members = tar.getnames()
     assert "outputs/apps/admin/app/page.tsx" in members
+    assert "outputs/user/.document-thumbnails/owned.txt" in members
     assert "attachments/node_modules/pkg/index.js" in members
     assert not any(
         member.startswith("outputs/apps/admin/node_modules") for member in members

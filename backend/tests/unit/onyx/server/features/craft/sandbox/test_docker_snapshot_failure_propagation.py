@@ -73,6 +73,8 @@ def test_docker_archive_excludes_output_thumbnail_cache(
     (session_path / "outputs/.document-thumbnails/report").mkdir(parents=True)
     (session_path / "attachments/.document-thumbnails").mkdir(parents=True)
     (session_path / "outputs/report.pdf").write_bytes(b"source")
+    (session_path / "outputs/user/.document-thumbnails").mkdir(parents=True)
+    (session_path / "outputs/user/.document-thumbnails/owned.txt").write_bytes(b"keep")
     (session_path / "outputs/.document-thumbnails/report/slide-1.jpg").write_bytes(
         b"generated"
     )
@@ -117,5 +119,6 @@ def test_docker_archive_excludes_output_thumbnail_cache(
     with tarfile.open(fileobj=io.BytesIO(archives[0]), mode="r:gz") as archive:
         names: list[str] = archive.getnames()
     assert "outputs/report.pdf" in names
+    assert "outputs/user/.document-thumbnails/owned.txt" in names
     assert "attachments/.document-thumbnails/user-file.txt" in names
     assert not any(name.startswith("outputs/.document-thumbnails") for name in names)
