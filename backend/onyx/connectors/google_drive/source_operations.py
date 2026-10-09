@@ -275,9 +275,6 @@ _PERM_SYNC_CAPABILITIES = frozenset(
         CredentialCapability.EXTERNAL_GROUP_SYNC,
     }
 )
-_PERM_SYNC_CHECKS_PENDING = (
-    "Not yet tested: the permission-sync checks land in the next PR."
-)
 _DEGRADES_ON_DENIAL = (
     "Hierarchy and shortcut reads treat a denial as a missing item, so a probe "
     "cannot fail on permissions."
@@ -353,7 +350,6 @@ class GoogleDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_ALL_CAPABILITIES,
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def authenticate(self) -> GoogleDriveAuth:
@@ -551,7 +547,6 @@ class GoogleDriveSourceOperations(SourceOperations):
             CredentialCapability.EXTERNAL_GROUP_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_drives(
@@ -637,7 +632,6 @@ class GoogleDriveSourceOperations(SourceOperations):
             CredentialCapability.EXTERNAL_GROUP_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_drive_members(
@@ -660,7 +654,6 @@ class GoogleDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_PERM_SYNC_CAPABILITIES,
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_file_permissions(
@@ -756,7 +749,6 @@ class GoogleDriveSourceOperations(SourceOperations):
             CredentialCapability.EXTERNAL_GROUP_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_user_emails(self, *, query: str | None = None) -> Iterator[str]:
@@ -776,7 +768,6 @@ class GoogleDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def get_admin_user(self) -> GoogleDirectoryUser:
@@ -796,7 +787,6 @@ class GoogleDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_groups(self) -> Iterator[str]:
@@ -815,7 +805,6 @@ class GoogleDriveSourceOperations(SourceOperations):
             CredentialCapability.EXTERNAL_GROUP_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_group_members(self, *, group_email: str) -> Iterator[GoogleGroupMember]:
@@ -831,7 +820,6 @@ class GoogleDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_folders_with_permissions(
