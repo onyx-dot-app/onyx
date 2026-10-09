@@ -9,6 +9,7 @@ from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
+from onyx.connectors.sharepoint import connector_utils
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.sharepoint.connector_utils import validate_site_url_host
 from tests.unit.onyx.connectors.sharepoint.sharepoint_gateway_fakes import (
@@ -18,6 +19,14 @@ from tests.unit.onyx.connectors.sharepoint.sharepoint_gateway_fakes import (
 SITE_URL = "https://tenant.sharepoint.com/sites/MySite"
 ONEDRIVE_URL = "https://tenant-my.sharepoint.com/personal/alice_tenant_com"
 SUFFIX = "sharepoint.com"
+
+
+@pytest.fixture(autouse=True)
+def _no_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The SSRF guard resolves the host, which the fake tenants have no DNS for."""
+    monkeypatch.setattr(
+        connector_utils, "validate_outbound_http_url", lambda *_, **__: None
+    )
 
 
 def test_accepts_the_configured_tenant_host() -> None:
@@ -77,14 +86,14 @@ def test_national_clouds_keep_working(
     connector_with_gateway(connector)
 
     assert connector.sharepoint_domain_suffix == suffix
-    connector._validate_site_url_host(site_url)
-    connector._validate_site_url_host(f"https://tenant-my.{suffix}/personal/alice")
+    connector._validate_site_url(site_url)
+    connector._validate_site_url(f"https://tenant-my.{suffix}/personal/alice")
 
     with pytest.raises(ConnectorValidationError):
-        connector._validate_site_url_host(f"https://victim.{suffix}/sites/MySite")
+        connector._validate_site_url(f"https://victim.{suffix}/sites/MySite")
     # The commercial cloud host is a different tenant boundary.
     with pytest.raises(ConnectorValidationError):
-        connector._validate_site_url_host(SITE_URL)
+        connector._validate_site_url(SITE_URL)
 
 
 def test_suffix_is_enforced_before_credentials_load() -> None:
@@ -95,15 +104,15 @@ def test_suffix_is_enforced_before_credentials_load() -> None:
         authority_host=DEFAULT_AUTHORITY_HOST,
     )
 
-    connector._validate_site_url_host("https://any.sharepoint.com/sites/MySite")
+    connector._validate_site_url("https://any.sharepoint.com/sites/MySite")
     with pytest.raises(ConnectorValidationError):
-        connector._validate_site_url_host("https://attacker.example/sites/MySite")
+        connector._validate_site_url("https://attacker.example/sites/MySite")
 
 
 def test_tenant_host_is_enforced_once_credentials_load() -> None:
     connector = SharepointConnector(sites=[SITE_URL])
     connector_with_gateway(connector)
 
-    connector._validate_site_url_host(SITE_URL)
+    connector._validate_site_url(SITE_URL)
     with pytest.raises(ConnectorValidationError, match="tenant's SharePoint host"):
-        connector._validate_site_url_host("https://any.sharepoint.com/sites/MySite")
+        connector._validate_site_url("https://any.sharepoint.com/sites/MySite")

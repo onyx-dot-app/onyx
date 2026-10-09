@@ -7,7 +7,7 @@ from collections import deque
 from collections.abc import Generator, Iterable
 from datetime import datetime, timezone
 from typing import Any, cast
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import SplitResult, quote, unquote, urlsplit
 
 from pydantic import AliasChoices, BaseModel, Field
 from typing_extensions import override
@@ -68,7 +68,8 @@ from onyx.connectors.sharepoint.connector_utils import (
     SharepointPermissionCache,
     get_sharepoint_external_access,
     get_sharepoint_hierarchy_node_external_access,
-    validate_site_url_host,
+    validate_content_types,
+    validate_site_url,
 )
 from onyx.connectors.sharepoint.models import SharepointDrive
 from onyx.connectors.sharepoint.source_operations import (
@@ -84,7 +85,6 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
@@ -101,11 +101,14 @@ SHARED_DOCUMENTS_MAP = {
 # "personal", OneDrive for Business returns "business".
 ONEDRIVE_PRIMARY_DRIVE_TYPES = frozenset({"personal", "business"})
 PERSONAL_SITE_URL_MARKER = "/personal/"
+# A listed site on the OneDrive host is a personal site, which this connector
+# leaves to the OneDrive connector.
+ONEDRIVE_HOST_MARKER = "-my.sharepoint"
 
 ASPX_EXTENSION = ".aspx"
 
 
-def _is_site_excluded(site_url: str, excluded_site_patterns: list[str]) -> bool:
+def is_site_excluded(site_url: str, excluded_site_patterns: list[str]) -> bool:
     """Check if a site URL matches any of the exclusion glob patterns."""
     for pattern in excluded_site_patterns:
         if fnmatch.fnmatch(site_url, pattern) or fnmatch.fnmatch(
@@ -251,7 +254,7 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
 GRAPH_INVALID_REQUEST_CODE = "invalidRequest"
 
 
-def _is_graph_invalid_request(error: MicrosoftGraphError) -> bool:
+def is_graph_invalid_request(error: MicrosoftGraphError) -> bool:
     """True for the generic Graph ``invalidRequest`` 400, which has no
     actionable inner code. The site-pages endpoint answers it when a page has
     a corrupt canvas layout (duplicate web-part ids, SharePoint/sp-dev-docs#8822)."""
@@ -556,11 +559,11 @@ def _convert_sitepage_to_slim_document(
     treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
     """Convert a SharePoint site page to a SlimDocument object."""
-    page_id = site_page.get("id")
+    page_id: str | None = site_page.get("id")
     if page_id is None:
         raise ValueError("Site page ID is required")
 
-    external_access = get_sharepoint_external_access(
+    external_access: ExternalAccess = get_sharepoint_external_access(
         reader=ops,
         site_url=site_url,
         permission_cache=permission_cache,
@@ -573,6 +576,135 @@ def _convert_sitepage_to_slim_document(
         external_access=external_access,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         doc_created_at=parse_graph_datetime(site_page.get("createdDateTime")),
+    )
+
+
+def _strip_share_link_tokens(path: str) -> list[str]:
+    # Share links often include a token prefix like /:f:/r/ or /:x:/r/.
+    segments: list[str] = [segment for segment in path.split("/") if segment]
+    if segments and segments[0].startswith(":"):
+        segments = segments[1:]
+        if segments and segments[0] in {"r", "s", "g"}:
+            segments = segments[1:]
+    return segments
+
+
+def _normalize_sharepoint_url(url: str) -> tuple[str | None, list[str]]:
+    try:
+        parsed: SplitResult = urlsplit(url)
+    except ValueError:
+        logger.warning("Sharepoint URL '%s' could not be parsed", url)
+        return None, []
+
+    if not parsed.scheme or not parsed.netloc:
+        logger.warning(
+            "Sharepoint URL '%s' is not a valid absolute URL (missing scheme or host)",
+            url,
+        )
+        return None, []
+
+    path_segments: list[str] = _strip_share_link_tokens(parsed.path)
+    return f"{parsed.scheme}://{parsed.netloc}", path_segments
+
+
+def extract_site_descriptors(site_urls: list[str]) -> list[SiteDescriptor]:
+    """The site, library and folder each URL names. A URL that names no site
+    is logged and dropped."""
+    site_data_list: list[SiteDescriptor] = []
+    for url in site_urls:
+        base_url, parts = _normalize_sharepoint_url(url.strip())
+        if base_url is None:
+            continue
+
+        lower_parts: list[str] = [part.lower() for part in parts]
+        site_type_index: int | None = None
+        for site_token in ("sites", "teams", "personal"):
+            if site_token in lower_parts:
+                site_type_index = lower_parts.index(site_token)
+                break
+
+        if site_type_index is None or len(parts) <= site_type_index + 1:
+            logger.warning(
+                "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name>, /teams/<name>, or /personal/<name>)",
+                url,
+            )
+            continue
+
+        site_path: list[str] = parts[: site_type_index + 2]
+        remaining_parts: list[str] = parts[site_type_index + 2 :]
+        site_url: str = f"{base_url}/" + "/".join(site_path)
+
+        # Extract drive name and folder path
+        drive_name: str | None
+        folder_path: str | None
+        if remaining_parts:
+            drive_name = unquote(remaining_parts[0])
+            folder_path = (
+                "/".join(unquote(part) for part in remaining_parts[1:])
+                if len(remaining_parts) > 1
+                else None
+            )
+        else:
+            drive_name = None
+            folder_path = None
+
+        site_data_list.append(
+            SiteDescriptor(
+                url=site_url,
+                drive_name=drive_name,
+                folder_path=folder_path,
+            )
+        )
+    return site_data_list
+
+
+def select_site_drive(
+    site_descriptor: SiteDescriptor,
+    configured_url_name: str,
+    drives: Iterable[SharepointDrive],
+) -> SiteDrive | None:
+    """The library a site URL names by its URL segment, or the primary
+    OneDrive of a personal site. None when no library matches."""
+    listed: list[SharepointDrive] = list(drives)
+    matched: list[SharepointDrive] = _drives_matching_url_name(
+        listed, configured_url_name
+    )
+    if len(matched) > 1:
+        raise ValueError(
+            f"Drive URL segment '{configured_url_name}' is ambiguous in "
+            f"site '{site_descriptor.url}'"
+        )
+
+    is_personal_site: bool = PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower()
+    if not matched and is_personal_site and listed:
+        matched = [
+            d
+            for d in listed
+            if (d.drive_type or "").lower() in ONEDRIVE_PRIMARY_DRIVE_TYPES
+        ]
+        if len(matched) > 1:
+            raise ValueError(
+                f"Could not unambiguously resolve the primary OneDrive for "
+                f"personal site '{site_descriptor.url}'"
+            )
+
+    if not matched:
+        logger.warning("Drive '%s' not found", configured_url_name)
+        return None
+
+    drive: SharepointDrive = matched[0]
+    logger.info("Found drive: %s (web_url: %s)", drive.name, drive.web_url)
+    return site_drive_from_graph(drive)
+
+
+def site_drive_from_graph(drive: SharepointDrive) -> SiteDrive:
+    if not drive.id or not drive.name or not drive.web_url:
+        raise ValueError("Graph drive is missing required traversal metadata")
+    return SiteDrive(
+        drive_id=drive.id,
+        list_id=drive.list_id,
+        display_name=SHARED_DOCUMENTS_MAP.get(drive.name, drive.name),
+        web_url=drive.web_url,
     )
 
 
@@ -612,9 +744,7 @@ class SharepointConnector(
         self.treat_sharing_link_as_public = treat_sharing_link_as_public
         # Read by EE group sync: also enumerate every Entra group in the tenant.
         self.exhaustive_ad_enumeration = exhaustive_ad_enumeration
-        self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(
-            sites
-        )
+        self.site_descriptors: list[SiteDescriptor] = extract_site_descriptors(sites)
         self._ops: SharepointSourceOperations | None = None
         self.include_site_pages = include_site_pages
         self.include_site_documents = include_site_documents
@@ -634,38 +764,17 @@ class SharepointConnector(
             )
 
     def validate_connector_settings(self) -> None:
-        # Validate that at least one content type is enabled
-        if not self.include_site_documents and not self.include_site_pages:
-            raise ConnectorValidationError(
-                "At least one content type must be enabled. "
-                "Please check either 'Include Site Documents' or 'Include Site Pages' (or both)."
-            )
-
-        # Ensure sites are sharepoint urls
+        validate_content_types(self.include_site_documents, self.include_site_pages)
         for site_url in self.sites:
-            if not site_url.startswith("https://") or not (
-                "/sites/" in site_url
-                or "/teams/" in site_url
-                or "/personal/" in site_url
-            ):
-                raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint/OneDrive URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site, https://your-tenant.sharepoint.com/teams/your-team or https://your-tenant-my.sharepoint.com/personal/your-user)"
-                )
-            try:
-                validate_outbound_http_url(site_url, https_only=True)
-            except (SSRFException, ValueError) as e:
-                raise ConnectorValidationError(
-                    f"Invalid site URL '{site_url}': {e}"
-                ) from e
-            self._validate_site_url_host(site_url)
+            self._validate_site_url(site_url)
 
-    def _validate_site_url_host(self, site_url: str) -> None:
+    def _validate_site_url(self, site_url: str) -> None:
         """The tenant host is known once credentials are loaded. Before that
         only the cloud suffix is checked."""
         tenant_domain = (
             self._ops.resolve_tenant_domain() if self._ops is not None else None
         )
-        validate_site_url_host(site_url, self.sharepoint_domain_suffix, tenant_domain)
+        validate_site_url(site_url, self.sharepoint_domain_suffix, tenant_domain)
 
     def probe_role_assignments_permission(self) -> None:
         """Verify the Azure AD app can read SharePoint RoleAssignments.
@@ -760,81 +869,6 @@ class SharepointConnector(
             raise ConnectorMissingCredentialError("Sharepoint")
         return self._ops
 
-    @staticmethod
-    def _strip_share_link_tokens(path: str) -> list[str]:
-        # Share links often include a token prefix like /:f:/r/ or /:x:/r/.
-        segments = [segment for segment in path.split("/") if segment]
-        if segments and segments[0].startswith(":"):
-            segments = segments[1:]
-            if segments and segments[0] in {"r", "s", "g"}:
-                segments = segments[1:]
-        return segments
-
-    @staticmethod
-    def _normalize_sharepoint_url(url: str) -> tuple[str | None, list[str]]:
-        try:
-            parsed = urlsplit(url)
-        except ValueError:
-            logger.warning("Sharepoint URL '%s' could not be parsed", url)
-            return None, []
-
-        if not parsed.scheme or not parsed.netloc:
-            logger.warning(
-                "Sharepoint URL '%s' is not a valid absolute URL (missing scheme or host)",
-                url,
-            )
-            return None, []
-
-        path_segments = SharepointConnector._strip_share_link_tokens(parsed.path)
-        return f"{parsed.scheme}://{parsed.netloc}", path_segments
-
-    @staticmethod
-    def _extract_site_and_drive_info(site_urls: list[str]) -> list[SiteDescriptor]:
-        site_data_list = []
-        for url in site_urls:
-            base_url, parts = SharepointConnector._normalize_sharepoint_url(url.strip())
-            if base_url is None:
-                continue
-
-            lower_parts = [part.lower() for part in parts]
-            site_type_index = None
-            for site_token in ("sites", "teams", "personal"):
-                if site_token in lower_parts:
-                    site_type_index = lower_parts.index(site_token)
-                    break
-
-            if site_type_index is None or len(parts) <= site_type_index + 1:
-                logger.warning(
-                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name>, /teams/<name>, or /personal/<name>)",
-                    url,
-                )
-                continue
-
-            site_path = parts[: site_type_index + 2]
-            remaining_parts = parts[site_type_index + 2 :]
-            site_url = f"{base_url}/" + "/".join(site_path)
-
-            # Extract drive name and folder path
-            if remaining_parts:
-                drive_name = unquote(remaining_parts[0])
-                folder_path = (
-                    "/".join(unquote(part) for part in remaining_parts[1:])
-                    if len(remaining_parts) > 1
-                    else None
-                )
-            else:
-                drive_name = None
-                folder_path = None
-
-            site_data_list.append(
-                SiteDescriptor(
-                    url=site_url,
-                    drive_name=drive_name,
-                    folder_path=folder_path,
-                )
-            )
-        return site_data_list
-
     def _resolve_drive(
         self,
         site_descriptor: SiteDescriptor,
@@ -842,53 +876,7 @@ class SharepointConnector(
     ) -> SiteDrive | None:
         drives = self._list_drives_for_site(site_descriptor.url)
         logger.info("Found drives: %s", [d.name for d in drives])
-        return self._select_drive(site_descriptor, configured_url_name, drives)
-
-    def _select_drive(
-        self,
-        site_descriptor: SiteDescriptor,
-        configured_url_name: str,
-        drives: Iterable[SharepointDrive],
-    ) -> SiteDrive | None:
-        drives = list(drives)
-        matched = _drives_matching_url_name(drives, configured_url_name)
-        if len(matched) > 1:
-            raise ValueError(
-                f"Drive URL segment '{configured_url_name}' is ambiguous in "
-                f"site '{site_descriptor.url}'"
-            )
-
-        is_personal_site = PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower()
-        if not matched and is_personal_site and drives:
-            matched = [
-                d
-                for d in drives
-                if (d.drive_type or "").lower() in ONEDRIVE_PRIMARY_DRIVE_TYPES
-            ]
-            if len(matched) > 1:
-                raise ValueError(
-                    f"Could not unambiguously resolve the primary OneDrive for "
-                    f"personal site '{site_descriptor.url}'"
-                )
-
-        if not matched:
-            logger.warning("Drive '%s' not found", configured_url_name)
-            return None
-
-        drive = matched[0]
-        logger.info("Found drive: %s (web_url: %s)", drive.name, drive.web_url)
-        return self._site_drive_from_graph(drive)
-
-    @staticmethod
-    def _site_drive_from_graph(drive: SharepointDrive) -> SiteDrive:
-        if not drive.id or not drive.name or not drive.web_url:
-            raise ValueError("Graph drive is missing required traversal metadata")
-        return SiteDrive(
-            drive_id=drive.id,
-            list_id=drive.list_id,
-            display_name=SHARED_DOCUMENTS_MAP.get(drive.name, drive.name),
-            web_url=drive.web_url,
-        )
+        return select_site_drive(site_descriptor, configured_url_name, drives)
 
     def _fetch_driveitems(
         self,
@@ -914,14 +902,14 @@ class SharepointConnector(
         logger.debug("Found drives: %s", [d.name for d in drives])
 
         if site_descriptor.drive_name:
-            resolved = self._select_drive(
+            resolved = select_site_drive(
                 site_descriptor, site_descriptor.drive_name, drives
             )
             if resolved is None:
                 return
             site_drives = [resolved]
         else:
-            site_drives = [self._site_drive_from_graph(drive) for drive in drives]
+            site_drives = [site_drive_from_graph(drive) for drive in drives]
 
         for drive in site_drives:
             configured_folder = None
@@ -964,7 +952,7 @@ class SharepointConnector(
             return site_descriptors
         result = []
         for sd in site_descriptors:
-            if _is_site_excluded(sd.url, self.excluded_sites):
+            if is_site_excluded(sd.url, self.excluded_sites):
                 logger.info("Excluding site by denylist: %s", sd.url)
                 continue
             result.append(sd)
@@ -980,7 +968,7 @@ class SharepointConnector(
         site_descriptors = [
             SiteDescriptor(url=site_url, drive_name=None, folder_path=None)
             for site_url in site_urls
-            if "-my.sharepoint" not in site_url
+            if ONEDRIVE_HOST_MARKER not in site_url
         ]
         return self._filter_excluded_sites(site_descriptors)
 
@@ -1011,7 +999,7 @@ class SharepointConnector(
                 if e.status == 404:
                     logger.warning("Site page not found: %s", next_link or site_id)
                     break
-                if _is_graph_invalid_request(e):
+                if is_graph_invalid_request(e):
                     logger.warning(
                         "$expand=canvasLayout on the LIST endpoint returned 400 for site %s. Falling back to per-page expansion.",
                         site_descriptor.url,
@@ -1111,7 +1099,7 @@ class SharepointConnector(
                 site_id=site_id, page_id=page_id, expand_canvas=True
             )
         except MicrosoftGraphError as e:
-            if _is_graph_invalid_request(e):
+            if is_graph_invalid_request(e):
                 page_name = fallback_page.get("name", page_id)
                 logger.warning(
                     "$expand=canvasLayout failed for page '%s' (%s). Indexing metadata only.",
@@ -1445,7 +1433,7 @@ class SharepointConnector(
         if cache is not None and site_url in cache:
             return cache[site_url]
         drives = self._list_drives_for_site(site_url)
-        result = [self._site_drive_from_graph(drive) for drive in drives]
+        result = [site_drive_from_graph(drive) for drive in drives]
         if cache is not None:
             cache[site_url] = result
         return result
@@ -2195,12 +2183,12 @@ class SharepointConnector(
         The recorded link only reliably yields the *site*: Graph returns the
         ``_layouts/15/Doc.aspx`` form as ``webUrl`` for Office documents, so the
         library/folder is not recoverable from the URL. We parse the site via
-        ``_extract_site_and_drive_info``, list its drives, and probe each by item
+        ``extract_site_descriptors``, list its drives, and probe each by item
         id until one resolves — all under the existing ``Sites.Read.All`` grant.
         ``site_drives_cache`` memoizes the per-site drive listing since targets
         cluster heavily by site. Raises ``ValueError`` if no drive resolves it.
         """
-        descriptors = self._extract_site_and_drive_info([document_link])
+        descriptors = extract_site_descriptors([document_link])
         if not descriptors:
             raise ValueError(f"Could not parse a site from link '{document_link}'")
         site_url = descriptors[0].url
@@ -2259,7 +2247,7 @@ class SharepointConnector(
         dedup: SharepointConnectorCheckpoint,
         include_permissions: bool,
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
-        descriptors = self._extract_site_and_drive_info([document_link])
+        descriptors = extract_site_descriptors([document_link])
         if not descriptors:
             raise ValueError(
                 f"Could not parse a site from site-page link '{document_link}'"
