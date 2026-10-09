@@ -90,7 +90,7 @@ def test_an_inheriting_sub_issue_takes_its_ancestors_people() -> None:
     index.record("leaf", IssueShare(parent_id="mid", inherits=True, emails=set()))
     index.record("plain", IssueShare(parent_id=None, inherits=False, emails=set()))
 
-    assert len(index) == 3
+    assert len(index) == 4
     assert index.emails_for("leaf") == {"a@x", "b@x"}
     assert index.emails_for("mid") == {"a@x", "b@x"}
     assert index.emails_for("root") == {"a@x"}

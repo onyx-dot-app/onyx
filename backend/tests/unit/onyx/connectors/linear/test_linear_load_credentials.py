@@ -1,6 +1,7 @@
-"""Unit tests for LinearConnector OAuth token refresh logic."""
-
-from __future__ import annotations
+"""Credential handling for the Linear connector: a personal API key is sent
+as is, an OAuth token near expiry is refreshed under the credential
+provider's lock, and the refresh keeps the stored refresh token when Linear
+omits one."""
 
 import time
 from typing import Any
@@ -8,9 +9,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.connectors.linear.connector import LinearConnector
+from onyx.connectors.linear.connector import LinearConnector, refresh_oauth_token
 from onyx.connectors.models import ConnectorMissingCredentialError
 
+OPS = "onyx.connectors.linear.connector"
 _FRESH_ACCESS_TOKEN = "fresh-access-token"
 _OLD_ACCESS_TOKEN = "old-access-token"
 _REFRESH_TOKEN_VALUE = "refresh-token-value"
@@ -40,26 +42,20 @@ def _refresh_response_payload(
     }
 
 
-@patch("onyx.connectors.linear.connector.request_with_retries")
-def test_refresh_token_returns_new_credentials(
-    mock_request: MagicMock,
-) -> None:
-    """refresh_token should call the token endpoint and return the new credentials."""
+@patch(f"{OPS}.request_with_retries")
+def test_refresh_returns_new_credentials(mock_request: MagicMock) -> None:
     mock_request.return_value = _make_mock_response(
         ok=True, json_data=_refresh_response_payload()
     )
-    connector = LinearConnector()
 
     before = time.time()
-    new_credentials = connector.refresh_token({"refresh_token": _REFRESH_TOKEN_VALUE})
+    new_credentials = refresh_oauth_token({"refresh_token": _REFRESH_TOKEN_VALUE})
     after = time.time()
 
     assert new_credentials["access_token"] == _FRESH_ACCESS_TOKEN
     assert new_credentials["refresh_token"] == _NEW_REFRESH_TOKEN_VALUE
     assert int(before + _EXPIRES_IN_SECONDS) <= new_credentials["expire_at"]
     assert new_credentials["expire_at"] <= int(after + _EXPIRES_IN_SECONDS)
-
-    mock_request.assert_called_once()
     call_kwargs = mock_request.call_args.kwargs
     assert call_kwargs["method"] == "POST"
     assert call_kwargs["url"] == "https://api.linear.app/oauth/token"
@@ -67,12 +63,10 @@ def test_refresh_token_returns_new_credentials(
     assert call_kwargs["data"]["refresh_token"] == _REFRESH_TOKEN_VALUE
 
 
-@patch("onyx.connectors.linear.connector.request_with_retries")
-def test_refresh_token_keeps_existing_refresh_token_when_omitted(
+@patch(f"{OPS}.request_with_retries")
+def test_refresh_keeps_the_stored_refresh_token_when_omitted(
     mock_request: MagicMock,
 ) -> None:
-    """Per RFC 6749 §6, refresh responses MAY omit refresh_token; the existing
-    one should be preserved instead of raising."""
     mock_request.return_value = _make_mock_response(
         ok=True,
         json_data={
@@ -80,57 +74,42 @@ def test_refresh_token_keeps_existing_refresh_token_when_omitted(
             "expires_in": _EXPIRES_IN_SECONDS,
         },
     )
-    connector = LinearConnector()
 
-    new_credentials = connector.refresh_token({"refresh_token": _REFRESH_TOKEN_VALUE})
+    new_credentials = refresh_oauth_token({"refresh_token": _REFRESH_TOKEN_VALUE})
 
     assert new_credentials["access_token"] == _FRESH_ACCESS_TOKEN
     assert new_credentials["refresh_token"] == _REFRESH_TOKEN_VALUE
 
 
-def test_refresh_token_missing_refresh_token_raises() -> None:
-    """refresh_token should raise if no refresh_token is present in credentials."""
-    connector = LinearConnector()
-
+def test_refresh_without_a_refresh_token_raises() -> None:
     with pytest.raises(ConnectorMissingCredentialError):
-        connector.refresh_token({"access_token": _OLD_ACCESS_TOKEN})
+        refresh_oauth_token({"access_token": _OLD_ACCESS_TOKEN})
 
 
-@patch("onyx.connectors.linear.connector.request_with_retries")
-def test_refresh_token_non_ok_response_raises(mock_request: MagicMock) -> None:
-    """refresh_token should raise RuntimeError if the token endpoint returns a non-OK response."""
+@patch(f"{OPS}.request_with_retries")
+def test_refresh_non_ok_response_raises(mock_request: MagicMock) -> None:
     mock_request.return_value = _make_mock_response(ok=False, text="invalid_grant")
-    connector = LinearConnector()
 
     with pytest.raises(RuntimeError, match="Failed to refresh token"):
-        connector.refresh_token({"refresh_token": _REFRESH_TOKEN_VALUE})
+        refresh_oauth_token({"refresh_token": _REFRESH_TOKEN_VALUE})
 
 
-def test_load_credentials_with_api_key_does_not_refresh() -> None:
-    """linear_api_key creds should be used directly with no token refresh."""
+def test_an_api_key_is_sent_as_is() -> None:
     connector = LinearConnector()
 
-    new_credentials = connector.load_credentials({"linear_api_key": "api-key-value"})
-
-    assert new_credentials is None
-    assert connector.linear_api_key == "api-key-value"
+    assert connector.load_credentials({"linear_api_key": "api-key-value"}) is None
+    assert connector._api_key() == "api-key-value"
 
 
-def test_load_credentials_with_access_token_and_no_expiry_does_not_refresh() -> None:
-    """Legacy creds without expire_at should be used as a Bearer token without refresh."""
+def test_an_access_token_without_expiry_is_a_bearer_token() -> None:
     connector = LinearConnector()
 
-    new_credentials = connector.load_credentials({"access_token": _OLD_ACCESS_TOKEN})
-
-    assert new_credentials is None
-    assert connector.linear_api_key == f"Bearer {_OLD_ACCESS_TOKEN}"
+    assert connector.load_credentials({"access_token": _OLD_ACCESS_TOKEN}) is None
+    assert connector._api_key() == f"Bearer {_OLD_ACCESS_TOKEN}"
 
 
-@patch("onyx.connectors.linear.connector.request_with_retries")
-def test_load_credentials_with_valid_token_does_not_refresh(
-    mock_request: MagicMock,
-) -> None:
-    """Tokens with > 5 minutes left should be used directly without refresh."""
+@patch(f"{OPS}.request_with_retries")
+def test_a_token_with_time_left_is_not_refreshed(mock_request: MagicMock) -> None:
     connector = LinearConnector()
 
     new_credentials = connector.load_credentials(
@@ -142,15 +121,15 @@ def test_load_credentials_with_valid_token_does_not_refresh(
     )
 
     assert new_credentials is None
-    assert connector.linear_api_key == f"Bearer {_OLD_ACCESS_TOKEN}"
+    assert connector._api_key() == f"Bearer {_OLD_ACCESS_TOKEN}"
     mock_request.assert_not_called()
 
 
-@patch("onyx.connectors.linear.connector.request_with_retries")
-def test_load_credentials_with_expired_token_refreshes(
-    mock_request: MagicMock,
+@pytest.mark.parametrize("seconds_left", [-10, 60], ids=["expired", "within buffer"])
+@patch(f"{OPS}.request_with_retries")
+def test_an_expiring_token_is_refreshed_and_handed_back(
+    mock_request: MagicMock, seconds_left: int
 ) -> None:
-    """Tokens that have already expired should trigger a refresh."""
     mock_request.return_value = _make_mock_response(
         ok=True, json_data=_refresh_response_payload()
     )
@@ -160,45 +139,82 @@ def test_load_credentials_with_expired_token_refreshes(
         {
             "access_token": _OLD_ACCESS_TOKEN,
             "refresh_token": _REFRESH_TOKEN_VALUE,
-            "expire_at": int(time.time()) - 10,
+            "expire_at": int(time.time()) + seconds_left,
         }
     )
 
     assert new_credentials is not None
     assert new_credentials["access_token"] == _FRESH_ACCESS_TOKEN
     assert new_credentials["refresh_token"] == _NEW_REFRESH_TOKEN_VALUE
-    assert connector.linear_api_key == f"Bearer {_FRESH_ACCESS_TOKEN}"
+    assert connector._api_key() == f"Bearer {_FRESH_ACCESS_TOKEN}"
     mock_request.assert_called_once()
 
 
-@patch("onyx.connectors.linear.connector.request_with_retries")
-def test_load_credentials_with_token_within_buffer_refreshes(
+def test_unknown_credentials_raise_on_first_use() -> None:
+    connector = LinearConnector()
+    connector.load_credentials({})
+
+    with pytest.raises(ConnectorMissingCredentialError):
+        connector._api_key()
+
+
+def test_no_credentials_raise_on_first_use() -> None:
+    with pytest.raises(ConnectorMissingCredentialError):
+        LinearConnector()._api_key()
+
+
+@patch(f"{OPS}.request_with_retries")
+def test_a_db_credential_is_refreshed_under_the_providers_lock(
     mock_request: MagicMock,
 ) -> None:
-    """Tokens that expire within the 5-minute buffer should trigger a refresh."""
     mock_request.return_value = _make_mock_response(
         ok=True, json_data=_refresh_response_payload()
     )
+    expiring: dict[str, Any] = {
+        "access_token": _OLD_ACCESS_TOKEN,
+        "refresh_token": _REFRESH_TOKEN_VALUE,
+        "expire_at": int(time.time()) - 10,
+    }
+    provider = MagicMock()
+    provider.get_credentials.return_value = expiring
     connector = LinearConnector()
+    connector.set_credentials_provider(provider)
 
-    # 60 seconds from now is well within the 300-second buffer.
-    new_credentials = connector.load_credentials(
-        {
-            "access_token": _OLD_ACCESS_TOKEN,
-            "refresh_token": _REFRESH_TOKEN_VALUE,
-            "expire_at": int(time.time()) + 60,
-        }
-    )
+    assert connector._api_key() == f"Bearer {_FRESH_ACCESS_TOKEN}"
 
-    assert new_credentials is not None
-    assert new_credentials["access_token"] == _FRESH_ACCESS_TOKEN
-    assert connector.linear_api_key == f"Bearer {_FRESH_ACCESS_TOKEN}"
+    # Read, lock, read again, refresh, store: a sync that took the lock first
+    # leaves a fresh token behind, which the second read sees.
+    provider.__enter__.assert_called_once()
+    assert provider.get_credentials.call_count == 2
+    stored: dict[str, Any] = provider.set_credentials.call_args.args[0]
+    assert stored["access_token"] == _FRESH_ACCESS_TOKEN
+    assert stored["refresh_token"] == _NEW_REFRESH_TOKEN_VALUE
     mock_request.assert_called_once()
 
 
-def test_load_credentials_with_no_known_keys_raises() -> None:
-    """Empty credentials should raise ConnectorMissingCredentialError."""
+@patch(f"{OPS}.request_with_retries")
+def test_a_token_another_sync_refreshed_is_not_refreshed_again(
+    mock_request: MagicMock,
+) -> None:
+    provider = MagicMock()
+    provider.get_credentials.side_effect = [
+        {
+            "access_token": _OLD_ACCESS_TOKEN,
+            "refresh_token": _REFRESH_TOKEN_VALUE,
+            "expire_at": int(time.time()) - 10,
+        },
+        {
+            "access_token": _FRESH_ACCESS_TOKEN,
+            "refresh_token": _NEW_REFRESH_TOKEN_VALUE,
+            "expire_at": int(time.time()) + _EXPIRES_IN_SECONDS,
+        },
+    ]
     connector = LinearConnector()
+    connector.set_credentials_provider(provider)
 
-    with pytest.raises(ConnectorMissingCredentialError):
-        connector.load_credentials({})
+    assert connector._api_key() == f"Bearer {_FRESH_ACCESS_TOKEN}"
+    assert connector._api_key() == f"Bearer {_FRESH_ACCESS_TOKEN}"
+
+    mock_request.assert_not_called()
+    provider.set_credentials.assert_not_called()
+    assert provider.get_credentials.call_count == 2

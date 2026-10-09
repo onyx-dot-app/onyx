@@ -1,6 +1,6 @@
 """The Linear doc sync feeds the connector's permission-aware walk to the
 shared sync, which turns it into access rows and hides what the walk no
-longer lists, and stores a credential refreshed on load."""
+longer lists, on the DB credential provider shared with indexing."""
 
 from unittest.mock import MagicMock, patch
 
@@ -11,8 +11,7 @@ from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import SlimDocument
 
-MODULE = "ee.onyx.external_permissions.linear.connector"
-UTILS = "ee.onyx.external_permissions.utils"
+CONNECTOR = "ee.onyx.external_permissions.linear.connector"
 
 TEAM = ExternalAccess(
     external_user_emails=set(), external_user_group_ids={"team-1"}, is_public=False
@@ -29,77 +28,30 @@ def _cc_pair() -> MagicMock:
     return cc_pair
 
 
-def _credential() -> MagicMock:
-    credential = MagicMock()
-    credential.credential_json.get_value.return_value = {
-        "linear_api_key": "lin_api_test"
-    }
-    return credential
-
-
-def _session() -> MagicMock:
-    session = MagicMock()
-    session.__enter__.return_value = session
-    return session
-
-
 def test_the_walk_becomes_access_rows_and_unlisted_issues_go_private() -> None:
     connector = MagicMock()
-    connector.load_credentials.return_value = None
     connector.retrieve_all_slim_docs_perm_sync.return_value = iter(
         [[SlimDocument(id="issue-1", external_access=TEAM)]]
     )
+    provider = MagicMock()
 
     with (
-        patch(f"{MODULE}.LinearConnector", return_value=connector) as factory,
-        patch(f"{UTILS}.get_session_with_current_tenant", return_value=_session()),
-        patch(f"{UTILS}.fetch_credential_by_id_for_update", return_value=_credential()),
-        patch(f"{UTILS}.backend_update_credential_json") as store,
+        patch(f"{CONNECTOR}.LinearConnector", return_value=connector) as factory,
+        patch(f"{CONNECTOR}.build_db_credentials_provider", return_value=provider),
     ):
         rows = list(
             linear_doc_sync(_cc_pair(), MagicMock(), lambda: ["issue-1", "gone"], None)
         )
 
-    store.assert_not_called()
-
     factory.assert_called_once_with(team_keys=["ENG"])
-    connector.load_credentials.assert_called_once_with(
-        {"linear_api_key": "lin_api_test"}
-    )
+    connector.set_credentials_provider.assert_called_once_with(provider)
     assert rows == [
         DocExternalAccess(doc_id="issue-1", external_access=TEAM),
         DocExternalAccess(doc_id="gone", external_access=ExternalAccess.empty()),
     ]
 
 
-def test_a_refreshed_credential_is_stored_for_the_next_run() -> None:
-    connector = MagicMock()
-    connector.load_credentials.return_value = {"access_token": "fresh"}
-    connector.retrieve_all_slim_docs_perm_sync.return_value = iter([])
-    credential = _credential()
-    session = _session()
-
-    with (
-        patch(f"{MODULE}.LinearConnector", return_value=connector),
-        patch(f"{UTILS}.get_session_with_current_tenant", return_value=session),
-        patch(
-            f"{UTILS}.fetch_credential_by_id_for_update", return_value=credential
-        ) as fetch,
-        patch(f"{UTILS}.backend_update_credential_json") as store,
-    ):
-        list(linear_doc_sync(_cc_pair(), MagicMock(), list, None))
-
-    # The row stays locked from the read through the refresh write.
-    fetch.assert_called_once_with(3, session)
-    connector.load_credentials.assert_called_once_with(
-        {"linear_api_key": "lin_api_test"}
-    )
-    store.assert_called_once_with(
-        credential, DocumentSource.LINEAR, {"access_token": "fresh"}, session
-    )
-
-
-def test_linear_is_registered_for_doc_sync_after_the_first_index() -> None:
+def test_linear_is_registered_for_doc_sync_without_waiting_for_an_index() -> None:
     config = get_source_perm_sync_config(DocumentSource.LINEAR)
     assert config is not None and config.doc_sync_config is not None
     assert (
