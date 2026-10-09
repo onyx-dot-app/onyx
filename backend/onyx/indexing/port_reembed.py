@@ -38,6 +38,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from sqlalchemy import inspect
+
 from onyx.configs.constants import RETURN_SEPARATOR, DocumentSource
 from onyx.connectors.models import (
     Document,
@@ -126,19 +128,42 @@ def select_reembed_strategy(
     return ReembedStrategy.MODEL_ONLY
 
 
+# SearchSettings columns that may differ without changing a stored content vector.
+# Every other column must match for COPY_VECTORS, so a newly added column forces a
+# re-embed until it is listed here. The contextual-RAG columns are listed because
+# select_reembed_strategy handles them before this check.
+VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS: frozenset[str] = frozenset(
+    {
+        "id",
+        "status",
+        "index_name",
+        "switchover_type",
+        "use_port_flow",
+        "port_backfill_source_id",
+        "reclaim_status",
+        "reclaim_stopped_reading_at",
+        "reclaim_attempts",
+        "reclaim_last_error",
+        "pending_cc_pair_deletions",
+        "vector_quantization",
+        "enable_contextual_rag",
+        "contextual_rag_model_configuration_id",
+    }
+)
+
+
 def _stored_vectors_reusable(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> bool:
-    """True when every setting that shapes a content vector is unchanged, so the
-    PRESENT vector is what re-embedding under FUTURE would produce."""
-    return (
-        present_ss.model_name == future_ss.model_name
-        and present_ss.model_dim == future_ss.model_dim
-        and present_ss.normalize == future_ss.normalize
-        and present_ss.query_prefix == future_ss.query_prefix
-        and present_ss.passage_prefix == future_ss.passage_prefix
-        and present_ss.provider_type == future_ss.provider_type
-        and present_ss.reduced_dimension == future_ss.reduced_dimension
+    """True when every SearchSettings column outside
+    VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS is unchanged, so the PRESENT vector is
+    what re-embedding under FUTURE would produce."""
+    present_state = inspect(present_ss)
+    future_state = inspect(future_ss)
+    return all(
+        present_state.attrs[column.key].value == future_state.attrs[column.key].value
+        for column in inspect(SearchSettings).column_attrs
+        if column.key not in VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS
     )
 
 

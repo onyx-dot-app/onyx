@@ -15,6 +15,7 @@ from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import inspect
 
 from onyx.configs.constants import RETURN_SEPARATOR, DocumentSource
 from onyx.configs.model_configs import (
@@ -44,6 +45,7 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 from onyx.indexing.port_reembed import (
     CONTEXTUAL_RAG_REEMBED_TRACE_NAME,
+    VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS,
     AugmentationReembedContext,
     ReembedStrategy,
     _bare_contents,
@@ -242,6 +244,33 @@ def test_select_reembed_strategy_copies_vectors_on_quantization_only_change() ->
         )
         is ReembedStrategy.AUGMENTATION
     )
+
+
+_SEARCH_SETTINGS_COLUMNS: list[str] = sorted(
+    column.key for column in inspect(SearchSettings).column_attrs
+)
+
+
+def test_vector_neutral_columns_are_search_settings_columns() -> None:
+    """A renamed or removed column must not linger in the neutral list."""
+    assert VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS <= set(_SEARCH_SETTINGS_COLUMNS)
+
+
+@pytest.mark.parametrize("column", _SEARCH_SETTINGS_COLUMNS)
+def test_single_column_change_copies_only_if_vector_neutral(column: str) -> None:
+    """Changing one column copies vectors only when the column is listed as
+    vector-neutral; any other column, including one added later, re-embeds."""
+    present: SearchSettings = _vector_ss(VectorQuantization.NONE)
+    future: SearchSettings = _vector_ss(VectorQuantization.NONE)
+    setattr(future, column, object())
+    expected: ReembedStrategy
+    if column == "enable_contextual_rag":
+        expected = ReembedStrategy.AUGMENTATION
+    elif column in VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS:
+        expected = ReembedStrategy.COPY_VECTORS
+    else:
+        expected = ReembedStrategy.MODEL_ONLY
+    assert select_reembed_strategy(present, future) is expected
 
 
 def test_split_copyable_chunks_reembeds_only_stripped_context() -> None:
