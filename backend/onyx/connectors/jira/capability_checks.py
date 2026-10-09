@@ -173,13 +173,12 @@ def _is_cloud_site(config: JiraConnectorConfig) -> bool:
 
 
 class _SiteAuthCheck(_JiraCheck):
-    """Signs in the way the connector does (``myself``).
+    """Signs in the way the connector does.
 
     One check per token type: a scoped API token resolves the cloud id
     (``tenant_info``) and calls ``api.atlassian.com``; other tokens call the
-    site URL. ``myself`` needs a user scope that indexing does not, so a
-    scoped token without it still proves sign-in; jira_projects_visible
-    checks the indexing scope.
+    site URL. A scoped token signs in with a project listing, which needs only
+    the indexing scope; ``myself`` needs a user scope that indexing does not.
     """
 
     def __init__(self, *, scoped: bool) -> None:
@@ -214,7 +213,10 @@ class _SiteAuthCheck(_JiraCheck):
     def run(self, context: CapabilityCheckContext) -> None:
         gateway: JiraSourceOperations = _gateway(context)
         try:
-            gateway.get_myself()
+            if self._scoped:
+                gateway.list_projects()
+            else:
+                gateway.get_myself()
             return
         except requests.HTTPError as e:
             # Only the scoped token's tenant_info call raises a raw HTTPError.
@@ -242,9 +244,6 @@ class _SiteAuthCheck(_JiraCheck):
                 "Check the site URL."
             ) from e
         except JiraApiError as e:
-            if e.status_code == 401 and _SCOPE_MISMATCH_TEXT in (e.text or ""):
-                # The token signed in; it only lacks the user scope of myself.
-                return
             self._raise_for_sign_in_error(context, gateway, e)
         except (ValueError, KeyError) as e:
             if not self._scoped:

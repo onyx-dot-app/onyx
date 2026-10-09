@@ -137,7 +137,7 @@ def test_scoped_auth_fails_for_a_site_that_is_not_cloud() -> None:
     response.status_code = 404
     response.url = f"{_DC_URL}/_edge/tenant_info"
     gateway: MagicMock = _gateway(is_cloud=True)
-    gateway.get_myself.side_effect = requests.HTTPError(response=response)
+    gateway.list_projects.side_effect = requests.HTTPError(response=response)
 
     result: CapabilityCheckResult = _run(
         "jira_scoped_token_auth",
@@ -149,11 +149,23 @@ def test_scoped_auth_fails_for_a_site_that_is_not_cloud() -> None:
     assert "cloud id" in result.message
 
 
-def test_scoped_auth_passes_without_the_user_scope() -> None:
-    """``myself`` needs a user scope; a token with only read:jira-work still
-    signs in and indexes."""
+def test_scoped_auth_signs_in_with_the_indexing_scope() -> None:
+    """A scoped token signs in with a project listing, not ``myself``, whose
+    user scope indexing does not need."""
     gateway: MagicMock = _gateway(is_cloud=True)
-    gateway.get_myself.side_effect = _api_error(
+
+    result: CapabilityCheckResult = _run(
+        "jira_scoped_token_auth", gateway, _config(scoped_token=True)
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    gateway.list_projects.assert_called_once()
+    gateway.get_myself.assert_not_called()
+
+
+def test_scoped_auth_fails_without_the_indexing_scope() -> None:
+    gateway: MagicMock = _gateway(is_cloud=True)
+    gateway.list_projects.side_effect = _api_error(
         401, '{"code":401,"message":"Unauthorized; scope does not match"}'
     )
 
@@ -161,12 +173,13 @@ def test_scoped_auth_passes_without_the_user_scope() -> None:
         "jira_scoped_token_auth", gateway, _config(scoped_token=True)
     )
 
-    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_type == "InsufficientPermissionsError"
 
 
 def test_scoped_auth_fails_when_tenant_info_is_not_json() -> None:
     gateway: MagicMock = _gateway(is_cloud=True)
-    gateway.get_myself.side_effect = requests.exceptions.JSONDecodeError(
+    gateway.list_projects.side_effect = requests.exceptions.JSONDecodeError(
         "Expecting value", "<html>", 0
     )
 

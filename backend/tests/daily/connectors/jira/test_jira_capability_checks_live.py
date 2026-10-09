@@ -159,9 +159,14 @@ def test_invalid_configs_fail(
     check_id: str,
     message: str,
 ) -> None:
+    # A None override removes the key.
     credential_json: dict[str, Any] = {
-        **_credential(test_secrets, False),
-        **credential_override,
+        key: value
+        for key, value in {
+            **_credential(test_secrets, False),
+            **credential_override,
+        }.items()
+        if value is not None
     }
 
     by_id: dict[str, CapabilityCheckResult] = _results(

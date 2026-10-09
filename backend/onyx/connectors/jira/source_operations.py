@@ -61,9 +61,8 @@ class JiraApiError(Exception):
 
 def rest_api_version(credentials: Mapping[str, Any]) -> str:
     """The REST API version a credential uses: Cloud with an account email,
-    Server / Data Center without one. A blank or null email (an edited Data
-    Center credential stores ``null``) counts as no email."""
-    if credentials.get(JIRA_USER_EMAIL_KEY):
+    Server / Data Center without one."""
+    if JIRA_USER_EMAIL_KEY in credentials:
         return JIRA_CLOUD_API_VERSION
     return JIRA_SERVER_API_VERSION
 
@@ -180,10 +179,9 @@ class JiraSourceOperations(SourceOperations):
         options: dict[str, str | bool | Any] = {
             "rest_api_version": rest_api_version(credentials)
         }
-        email: str | None = credentials.get(JIRA_USER_EMAIL_KEY)
-        if email:
+        if JIRA_USER_EMAIL_KEY in credentials:
             return JIRA(
-                basic_auth=(email, api_token),
+                basic_auth=(credentials[JIRA_USER_EMAIL_KEY], api_token),
                 server=api_url,
                 options=options,
             )
