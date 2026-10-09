@@ -125,9 +125,8 @@ plus the aggregate `BATCH_TOTAL` and the derived, never-written
 `BATCH_UNACCOUNTED`. `StageScope` marks each as `ATTEMPT_LEVEL` (one event) or
 `BATCH_LEVEL` (many, per docprocessing task).
 
-The `ix_stage_metric_updated_id` index on `(time_last_event, id)` serves the fleet
-telemetry collector. It reads changed rows in pages
-(`db/fleet_telemetry.py:stage_metric_page`) and never writes them (§4.10).
+The fleet telemetry collection pass reads the rows of recent attempts that changed
+(`db/fleet_telemetry.py:stage_rows`) and never writes them (§4.10).
 
 ### `Document`, `DocumentByConnectorCredentialPair`, `Tag` (`onyx/db/models.py`, `onyx/db/document.py`, `onyx/db/tag.py`)
 
@@ -502,14 +501,14 @@ this component only describes how a `UserFile` reaches the vector index.
 
 ### 4.10 Fleet telemetry counters
 
-The fetch, prepare, embed, and write steps send per-batch counter deltas to the
-process's fleet sender through `utils/fleet_telemetry.py:emit_stage_counter`:
-fetch in `run_docfetching.py:_emit_fetch_telemetry`, prepare in
-`indexing_pipeline.py:index_doc_batch`, embed in `indexing_pipeline.py:embed_and_stream`,
-and write in `opensearch/client.py:_MeasuredBulkClient` ([[document-index]] §4.2).
-These calls never raise into the pipeline. The sender combines the deltas per
-attempt and stage ([[observability]] §4.11). Attempt state reaches the fleet only
-from the collector's reads of `IndexAttempt` rows.
+The fetch, embed, and write steps send per-batch counter deltas to the process's
+fleet sender through `utils/fleet_telemetry.py:emit_stage_counter`: fetch in
+`run_docfetching.py:_timed_connector_runs`, embed in
+`indexing_pipeline.py:embed_and_stream`, and write in
+`opensearch/client.py:_report_written_chunks` ([[document-index]] §4.2). These
+calls never raise into the pipeline. The sender sums the deltas per attempt and
+stage ([[observability]] §4.11). Attempt state reaches the fleet only from the
+collection pass's reads of `IndexAttempt` rows.
 
 A spawned docfetching process starts its own sender in `job_client.py:_initializer`
 and stops it with a bounded wait (`EXIT_FLUSH_SECONDS`) in that function's `finally`
@@ -597,7 +596,7 @@ that block, so it calls `stop_telemetry` itself first.
   generation once this pipeline's attempts against it reach the swap criterion.
 - [[cc-pairs-and-credentials]]: the admin connector-status page reads `IndexAttempt`
   rows this component writes.
-- [[observability]]: the fleet telemetry collector reads `IndexAttempt`,
+- [[observability]]: the fleet telemetry collection pass reads `IndexAttempt`,
   `IndexAttemptError`, and `IndexAttemptStageMetric` rows (`db/fleet_telemetry.py`),
   and the pipeline sends stage counters to the fleet sender (§4.10).
 - Nothing in the retrieval or chat path calls into this component directly; it is a
@@ -618,7 +617,7 @@ that block, so it calls `stop_telemetry` itself first.
 | changes dedup gating in `get_docs_to_update` | both the connector-triggered path (`ignore_time_skip=False`) and the docprocessing path (always `ignore_time_skip=True`), plus the FUTURE-write path (`ignore_content_hash_gate=True`) |
 | changes pruning or deletion's document-removal task | both callers (`pruning/tasks.py` and `connector_deletion/tasks.py`) share `document_by_cc_pair_cleanup_task`; a change there affects both flows even though they trigger differently |
 | changes the reindex-port re-embed logic | `port_reembed.py`'s two strategies must still match what the chunker/embedder currently produce for a fresh index, or the ported chunks will diverge from a true reindex |
-| renames or drops an `IndexAttempt`, `IndexAttemptError`, or `IndexAttemptStageMetric` column | the fleet collector's SQL (`db/fleet_telemetry.py:attempt_page`, `stage_metric_page`) and [[observability]] §7; only the collector fails, so no indexing test catches it |
+| renames or drops an `IndexAttempt`, `IndexAttemptError`, or `IndexAttemptStageMetric` column | the fleet queries (`db/fleet_telemetry.py:attempt_rows`, `stage_rows`) and [[observability]] §7; only the collection pass fails, so no indexing test catches it |
 
 ---
 

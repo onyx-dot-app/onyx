@@ -112,9 +112,8 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
 | `backend/onyx/tracing/`, `server/manage/tracing/`, `db/tracing.py`, `server/metrics/`, `docs/METRICS.md`, `docs/AUDIT_LOGGING.md` | observability |
 | `backend/onyx/db/llm_usage.py`, `db/usage.py`, `db/user_usage.py`, `db/system_usage.py`, `server/features/usage/`, `docs/usage/` | observability |
-| `backend/onyx/utils/fleet_telemetry.py`, `fleet_query_telemetry.py`, `fleet_telemetry_collector.py`, `fleet_telemetry_kubernetes.py`, `fleet_telemetry_aws.py`, `fleet_telemetry_resources.py`, `instance_identity.py`, `telemetry.py`, `timing.py`, `backend/onyx/db/fleet_enrollment.py` | observability |
+| `backend/onyx/utils/fleet_telemetry.py`, `fleet_query_telemetry.py`, `fleet_telemetry_collector.py`, `fleet_telemetry_resources.py`, `telemetry.py`, `timing.py`, `backend/onyx/db/fleet_enrollment.py` | observability |
 | `backend/onyx/db/fleet_telemetry.py` | observability, indexing-pipeline |
-| `backend/onyx/utils/fleet_telemetry_opensearch.py` | observability, document-index |
 | `backend/onyx/db/token_limit.py`, `server/token_rate_limits/`, `server/usage_limits.py`, `server/tenant_usage_limits.py` | rate-and-usage-limits |
 | `backend/ee/onyx/server/billing/`, `backend/ee/onyx/server/license/`, `backend/ee/onyx/utils/tier.py` | billing, editions-and-gating |
 | `backend/ee/onyx/db/community_downgrade.py` | billing, access-control |
@@ -201,7 +200,7 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `deployment/` | the deployed component. For Craft, also `docs/craft/infra/`. |
-| `deployment/helm/charts/onyx/templates/fleet-telemetry.yaml`, `deployment/fleet-telemetry.md` | observability |
+| `deployment/fleet-telemetry.md` | observability |
 | `.github/workflows/` | CI. Not a product component; verify by reading the workflow. |
 | `cli/`, `tools/`, `scripts/` | developer tooling. Not a product component. |
 

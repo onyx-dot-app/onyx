@@ -170,7 +170,7 @@ backend verifies the JWT in `auth/users.py:_check_for_saml_and_jwt` and
 `origin: "widget"` on the send-message body maps to
 `MessageOrigin.WIDGET` (`backend/onyx/server/query_and_chat/models.py:MessageOrigin`).
 The backend uses it for telemetry only. When the request uses an API key or PAT,
-`chat_backend.py:_caller_origin` replaces it with `MessageOrigin.API`.
+`chat_backend.py:handle_send_chat_message` overrides it to `MessageOrigin.API`.
 JWT-passthrough requests keep `WIDGET`.
 
 ### 4.3 Chrome extension: side panel to answer

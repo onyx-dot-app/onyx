@@ -125,9 +125,8 @@ this document.
   raising `WorkerShutdown` on timeout. `on_worker_ready` and `on_worker_shutdown`
   touch/remove a file-based readiness probe (`app_base.py:make_probe_path`,
   checked by `celery_k8s_probe.py`'s `main_readiness`/`main_liveness`).
-  They also start and stop the worker's fleet telemetry sender
-  (`utils/fleet_telemetry.py:start_telemetry`, `stop_telemetry`). The stop does
-  not wait for delivery. See [[observability]] §4.11.
+  `on_worker_ready` also starts the worker's fleet telemetry sender
+  (`utils/fleet_telemetry.py:start_telemetry`). See [[observability]] §4.11.
   `LivenessProbe` (`app_base.py:LivenessProbe`) is a Celery bootstep that
   refreshes the liveness file every 15 seconds.
 - The primary worker additionally holds a singleton Redis lock,
@@ -200,8 +199,8 @@ seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
   sync attempt against an entity (`entity_id` + `SyncType`, e.g. `PRUNING`).
   `insert_sync_record` cancels any prior `IN_PROGRESS` record for the same
   entity/type, and sets its end time, before creating the new one
-  (`db/sync_record.py:insert_sync_record`). The fleet collector finds the
-  cancellation by that end time (`db/fleet_telemetry.py:job_page`).
+  (`db/sync_record.py:insert_sync_record`). The fleet collection pass finds the
+  cancellation by that end time (`db/fleet_telemetry.py:job_rows`).
 - `BackgroundError` (`onyx/db/models.py:BackgroundError`, via
   `onyx/db/background_error.py:create_background_error`): a message plus an
   optional `cc_pair_id`. Written through
@@ -428,10 +427,12 @@ See [[document-index]] for the cached admin warnings it supplies.
   fallback path.
 - [[chat-persistence]]: `chat_ttl_deletion` queue (Light worker).
 - [[observability]]: `monitoring` worker, Prometheus metrics, `BackgroundError`
-  rows. The fleet telemetry collector reads Celery queue depths from the broker
-  (`utils/fleet_telemetry_collector.py:FleetCollector.collect_queues`) and
-  `SyncRecord` rows (`db/fleet_telemetry.py:job_page`). `DISABLE_TELEMETRY` stops
-  only fleet telemetry; the `monitoring` tasks still run.
+  rows. The per-tenant `collect-fleet-telemetry` beat entry runs
+  `tasks/monitoring/tasks.py:collect_fleet_telemetry` on the `monitoring` queue,
+  which reads `SyncRecord` rows (`db/fleet_telemetry.py:job_rows`).
+  `monitor_celery_queues` also sends the queue depths to the fleet
+  (`tasks/monitoring/tasks.py:_report_queue_depths`). `DISABLE_TELEMETRY` removes
+  only the fleet entry; the other `monitoring` tasks still run.
 
 ---
 

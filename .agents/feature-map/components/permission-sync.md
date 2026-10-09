@@ -565,10 +565,10 @@ document to the wrong person.
 - [[auth-and-identity]]: `batch_add_ext_perm_user_if_not_exists`
   (`onyx/db/users.py`) can create a `User` row for someone who has never
   logged into Onyx, purely because a sync mentioned their email.
-- [[observability]]: the fleet telemetry collector reads
+- [[observability]]: the fleet telemetry collection pass reads
   `DocPermissionSyncAttempt` and `ExternalGroupPermissionSyncAttempt` rows as fleet
-  job snapshots (`db/fleet_telemetry.py:job_page`, `active_job_page`). No
-  permission-sync code path calls the fleet sender.
+  job snapshots (`db/fleet_telemetry.py:job_rows`). No permission-sync code path
+  calls the fleet sender.
 
 ---
 

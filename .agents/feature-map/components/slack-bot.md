@@ -79,17 +79,15 @@ thread left off.
 ### Background process
 
 `backend/onyx/onyxbot/slack/listener.py` runs as its own long-lived process
-(`listener.py:main`, not an ASGI app). One `SlackbotHandler` per pod
+(`if __name__ == "__main__"`, not an ASGI app). One `SlackbotHandler` per pod
 manages a `TenantSocketModeClient` per `(tenant_id, slack_bot_id)` pair, acquiring
 tenants via a Redis lock (`OnyxRedisLocks.SLACK_BOT_LOCK`,
 `config.py:TENANT_LOCK_EXPIRATION` = 1800s) so exactly one pod owns a tenant's
 Slack bots at a time, up to `MAX_TENANTS_PER_POD` (default 50).
 
-`listener.py:main` starts the process's fleet telemetry sender
+The `__main__` block starts the process's fleet telemetry sender
 (`utils/fleet_telemetry.py:start_telemetry`) before it creates the
-`SlackbotHandler` and its message-processing threads. Its `finally` block calls
-`stop_telemetry` on a normal exit, a startup failure, and a signal exit. The stop
-does not wait for delivery.
+`SlackbotHandler` and its message-processing threads.
 
 ### Environment configuration (`backend/onyx/configs/onyxbot_configs.py`)
 
@@ -366,8 +364,8 @@ that point is not the message's original asker.
   `ChatSession`/`ChatMessage` rows via the same tables `save_chat_turn` writes.
 - [[rate-and-usage-limits]]: `check_token_rate_limits(usage_user)` runs
   before each answer; see §9 for why it must be called inline.
-- [[observability]]: the fleet telemetry sender that `listener.py:main` starts and
-  stops (§2), which carries the Slack answers' query events.
+- [[observability]]: the fleet telemetry sender that `listener.py` starts (§2),
+  which carries the Slack answers' query events.
 
 **Depended on by**
 - [[chat-persistence]]: seeded web sessions from
