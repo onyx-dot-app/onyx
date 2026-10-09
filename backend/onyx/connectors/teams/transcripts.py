@@ -71,6 +71,13 @@ ACCESS_POLICY_MESSAGES = (
     "application access policy",
     "not allowed to perform operations on the user",
 )
+# Graph names a missing grant in the message, so a 403 without such words is
+# not a permissions problem.
+PERMISSION_MESSAGES = (
+    "missing role permissions",
+    "insufficient privileges",
+    "insufficient permissions",
+)
 
 TRANSCRIPT_PAGE_SIZE = 50
 # Graph walks the listing newest first in slices of about 35 days, about 2
@@ -134,10 +141,29 @@ def transcripts_disabled(error: requests.HTTPError) -> bool:
     return graph_inner_error_code(error) == TRANSCRIPT_ACCESS_DISABLED_CODE
 
 
+def _message_names(error: requests.HTTPError, markers: tuple[str, ...]) -> bool:
+    message = graph_error_message(error).lower()
+    return any(marker in message for marker in markers)
+
+
 def access_policy_missing(error: requests.HTTPError) -> bool:
     """The organizer is outside the application access policy naming this app."""
-    message = graph_error_message(error).lower()
-    return any(marker in message for marker in ACCESS_POLICY_MESSAGES)
+    return _message_names(error, ACCESS_POLICY_MESSAGES)
+
+
+def permission_missing(error: requests.HTTPError) -> bool:
+    """Graph says the app lacks a grant."""
+    return status(error) == 403 and _message_names(error, PERMISSION_MESSAGES)
+
+
+def unexplained_refusal(error: requests.HTTPError) -> bool:
+    """A 403 that names no cause. A missing grant, access policy or tenant
+    setting each name themselves, so this one is Microsoft's to fix."""
+    return status(error) == 403 and not (
+        transcripts_disabled(error)
+        or access_policy_missing(error)
+        or permission_missing(error)
+    )
 
 
 def _graph_timestamp(moment: SecondsSinceUnixEpoch) -> str:
@@ -257,6 +283,12 @@ def transcript_access(
 # setup check asks for recent transcripts only.
 _TRANSCRIPT_PROBE_WINDOW_S = 30 * 24 * 60 * 60
 
+_UNEXPLAINED_REFUSAL = (
+    "Microsoft Graph refused the call without naming a cause. The problem is on "
+    "Microsoft's side: a missing permission, access policy or tenant setting "
+    "gets a refusal that names it."
+)
+
 _TRANSCRIPTS_DISABLED = (
     "Include Meeting Transcripts needs the tenant setting that allows Graph API "
     "access to transcripts, which a Teams administrator has turned off."
@@ -273,11 +305,13 @@ def _transcript_refusal(error: requests.HTTPError) -> str:
             "An application access policy naming this app must be granted to the "
             "organizer (or the whole tenant) for meeting transcripts."
         )
-    if status(error) == 403:
+    if permission_missing(error):
         return (
             "Include Meeting Transcripts needs the OnlineMeetingTranscript.Read.All "
             f"and OnlineMeetings.Read.All application permissions. {graph_said(error)}"
         )
+    if status(error) == 403:
+        return f"{_UNEXPLAINED_REFUSAL} {graph_said(error)}"
     return f"Graph answered {status(error)}. {graph_said(error)}"
 
 
@@ -304,6 +338,7 @@ class TranscriptSource(OrganizerSource):
                 "covers."
             )
         graph_client = self._session.graph()
+        transcript: Transcript | None = None
         try:
             probe_start = time.time() - _TRANSCRIPT_PROBE_WINDOW_S
             transcript = next(
@@ -317,6 +352,14 @@ class TranscriptSource(OrganizerSource):
         except requests.HTTPError as e:
             if transcripts_disabled(e) or access_policy_missing(e):
                 raise ConnectorValidationError(_transcript_refusal(e))
+            if unexplained_refusal(e):
+                if transcript is None:
+                    raise UnexpectedValidationError(_transcript_refusal(e))
+                # The listing answered, so setup is fine. Indexing records a
+                # refused transcript as a failed document and a refused meeting
+                # as organizer-only.
+                logger.warning(_transcript_refusal(e))
+                return
             if status(e) in (401, 403):
                 raise InsufficientPermissionsError(_transcript_refusal(e))
             raise UnexpectedValidationError(f"Could not read a transcript: {e}")
@@ -453,7 +496,9 @@ class TranscriptSource(OrganizerSource):
         except requests.HTTPError as e:
             if transcripts_disabled(e):
                 raise ConnectorValidationError(_TRANSCRIPTS_DISABLED) from e
-            if not listing.lost_access(e):
+            # A refusal with no cause is Microsoft's and passes lost_access, so
+            # the walk fails rather than prune transcripts the app can still read.
+            if unexplained_refusal(e) or not listing.lost_access(e):
                 raise
             logger.warning(
                 "Could not list the transcripts of %s, so their indexed "

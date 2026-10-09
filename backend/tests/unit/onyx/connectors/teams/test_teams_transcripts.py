@@ -72,6 +72,15 @@ NO_POLICY: Refusal = (
     "Forbidden",
     "No application access policy found for this app",
 )
+# How Graph refuses for want of a grant: the message names the missing role.
+MISSING_ROLE: Refusal = (
+    403,
+    "Forbidden",
+    "Missing role permissions on the request. API requires one of "
+    "'OnlineMeetingTranscript.Read.All'.",
+)
+# How Graph refuses when it names no cause: the whole message is "UnknownError".
+UNNAMED_403: Refusal = (403, "Forbidden", "UnknownError")
 PLAIN_403: Refusal = (403, "Forbidden", "Forbidden")
 # How Graph refuses a transcript's content when the organizer has no policy.
 NO_POLICY_ON_CONTENT: Refusal = (
@@ -374,6 +383,22 @@ def test_a_content_refusal_for_want_of_a_policy_names_the_policy() -> None:
     assert "OnlineMeetingTranscript" not in items[0].failure_message
 
 
+def test_an_unnamed_refusal_is_blamed_on_microsoft() -> None:
+    # The grants would otherwise be blamed for a refusal that names no cause.
+    client: MagicMock = graph_client(
+        _routes(_transcript()),
+        contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): UNNAMED_403},
+    )
+
+    items, _ = _walk_transcripts(connector(client, include_meeting_transcripts=True))
+
+    assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
+    assert items[0].failed_document is not None
+    message: str = items[0].failure_message
+    assert "Microsoft's side" in message
+    assert "OnlineMeetingTranscript" not in message
+
+
 def test_the_tenant_setting_stops_the_walk() -> None:
     routes = _routes()
     routes.pop(_transcripts_url("user-1", WINDOW))
@@ -389,7 +414,8 @@ def test_the_tenant_setting_stops_the_walk() -> None:
     ("refusal", "named"),
     [
         (NO_POLICY, "application access policy"),
-        (PLAIN_403, "OnlineMeetingTranscript"),
+        (MISSING_ROLE, "OnlineMeetingTranscript"),
+        (UNNAMED_403, "Microsoft's side"),
         # A user who is gone: no grant to name, so the status and Graph's words.
         (404, "Graph answered 404. Graph said:"),
     ],
@@ -411,8 +437,8 @@ def test_a_refused_organizer_is_one_recorded_failure(
     assert items[0].failed_entity.entity_id == "user-1"
     assert named in items[0].failure_message
     # A refusal the connector cannot name still carries Graph's own words.
-    if refusal == PLAIN_403:
-        assert "Graph said: Forbidden, Forbidden" in items[0].failure_message
+    if refusal == UNNAMED_403:
+        assert "Graph said: Forbidden, UnknownError" in items[0].failure_message
 
 
 def test_documents_flow_before_a_later_listing_page_is_refused() -> None:
@@ -525,6 +551,19 @@ def test_a_refused_organizer_lists_nothing_and_the_slim_walk_goes_on() -> None:
     # The app lost user-1's transcripts, so none is listed and pruning removes
     # them. The other organizer is still listed.
     assert slim == [transcript_document_id("user-2", "t9")]
+
+
+def test_an_unnamed_listing_refusal_fails_the_slim_walk_instead_of_pruning() -> None:
+    routes: dict[str, Any] = {ALL_USERS_URL: {"value": [ADA]}}
+    refused: dict[str, Refusal] = {
+        _transcripts_url("user-1", LOOKBACK_WINDOW): UNNAMED_403
+    }
+    client: MagicMock = graph_client(routes, refused=refused)
+
+    # The app can still read these transcripts once Microsoft recovers, so the
+    # walk must not list nothing and let pruning remove them.
+    with pytest.raises(requests.HTTPError):
+        _slim_ids(connector(client, include_meeting_transcripts=True))
 
 
 def test_a_listing_refused_after_it_answered_fails_the_slim_walk() -> None:
@@ -892,6 +931,15 @@ def test_a_window_older_than_graph_serves_asks_for_nothing() -> None:
     assert client.execute_request_direct.call_count == 0
 
 
+def _probe_routes() -> dict[str, Any]:
+    """One organizer with one recent transcript: what the setup probe reads."""
+    return {
+        ALL_USERS_URL: {"value": [ADA]},
+        _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": [_transcript()]},
+        MEETING_URL: _meeting(),
+    }
+
+
 class TestValidation:
     def _connector(
         self,
@@ -943,11 +991,7 @@ class TestValidation:
         assert "every enabled user" not in caplog.text
 
     def test_a_transcript_is_read_end_to_end(self) -> None:
-        routes = {
-            ALL_USERS_URL: {"value": [ADA]},
-            _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": [_transcript()]},
-            MEETING_URL: _meeting(),
-        }
+        routes = _probe_routes()
 
         _validate_organizers(
             self._connector(
@@ -955,12 +999,45 @@ class TestValidation:
             )
         )
 
+    def test_an_unnamed_refusal_does_not_block_setup(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        routes = _probe_routes()
+
+        with caplog.at_level(logging.WARNING):
+            _validate_organizers(
+                self._connector(
+                    routes,
+                    contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): UNNAMED_403},
+                )
+            )
+
+        assert "Microsoft's side" in caplog.text
+
+    def test_a_named_cause_still_fails_setup_with_an_unnamed_message(self) -> None:
+        routes = _probe_routes()
+        disabled_unnamed: Refusal = (
+            403,
+            "GraphAccessToTranscriptsDisabled",
+            "UnknownError",
+        )
+
+        with pytest.raises(ConnectorValidationError, match="turned off"):
+            _validate_organizers(
+                self._connector(
+                    routes,
+                    contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): disabled_unnamed},
+                )
+            )
+
     @pytest.mark.parametrize(
         ("refusal", "error", "named"),
         [
             (SETTING_OFF, ConnectorValidationError, "turned off"),
             (NO_POLICY, ConnectorValidationError, "access policy"),
-            (PLAIN_403, InsufficientPermissionsError, "OnlineMeetingTranscript"),
+            (MISSING_ROLE, InsufficientPermissionsError, "OnlineMeetingTranscript"),
+            (UNNAMED_403, UnexpectedValidationError, "Microsoft's side"),
+            (PLAIN_403, UnexpectedValidationError, "Microsoft's side"),
             (503, UnexpectedValidationError, "Could not read"),
         ],
     )
@@ -983,7 +1060,7 @@ class TestValidation:
             InsufficientPermissionsError, match="OnlineMeetings.Read.All"
         ):
             _validate_organizers(
-                self._connector(routes, refused={MEETING_URL: PLAIN_403})
+                self._connector(routes, refused={MEETING_URL: MISSING_ROLE})
             )
 
     def test_no_user_to_probe_keeps_the_pair_active(self) -> None:
