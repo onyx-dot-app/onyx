@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Formik } from "formik";
+import { Formik, type FormikErrors } from "formik";
 import * as Yup from "yup";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -352,6 +352,233 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     initialValues[NEW_ACCOUNT_FIELD] = initialNewAccountValues(typedSpec);
   }
 
+  /**
+   * Whether the form's errors allow Create. A typed account's errors do not
+   * while a saved account is picked: the typed one is not used then.
+   */
+  const blockingErrorsEmpty = (errors: FormikErrors<unknown>): boolean =>
+    Object.keys(errors).every(
+      (key) => key === NEW_ACCOUNT_FIELD && currentCredential !== null
+    );
+
+  const createConnectorFromForm = async (
+    values: typeof initialValues
+  ): Promise<void> => {
+    const {
+      name,
+      groups,
+      group_roles,
+      data_access_group_ids,
+      access_type: formAccessType,
+      restrict_access_to_groups,
+      restriction_group_ids,
+      pruneFreq,
+      indexingStart,
+      refreshFreq,
+      auto_sync_options,
+      ...connector_specific_config
+    } = values;
+
+    const wireAccess = toWireAccess(formAccessType, {
+      restrict_access_to_groups,
+      restriction_group_ids,
+    });
+    const access_type = wireAccess.access_type;
+    // A private connector's readers; its `groups` are its managers, each
+    // with a role.
+    const dataAccess =
+      access_type === "private" ? data_access_group_ids : undefined;
+    const manageAccess = toManageAccess(groups, group_roles);
+
+    // Apply special transforms according to application logic
+    const transformedConnectorSpecificConfig = Object.entries(
+      connector_specific_config
+    ).reduce(
+      (acc, [key, value]) => {
+        if (formControlFieldNames.has(key)) {
+          return acc;
+        }
+        // Filter out empty strings from arrays
+        if (Array.isArray(value)) {
+          value = (value as any[]).filter(
+            (item) => typeof item !== "string" || item.trim() !== ""
+          );
+        }
+        const matchingConfigValue = configuration.values.find(
+          (configValue) => configValue.name === key
+        );
+        if (
+          matchingConfigValue &&
+          "transform" in matchingConfigValue &&
+          matchingConfigValue.transform
+        ) {
+          acc[key] = matchingConfigValue.transform(value as string[]);
+        } else {
+          acc[key] = value;
+        }
+        return acc;
+      },
+      {} as Record<string, any>
+    );
+
+    // Apply advanced configuration-specific transforms.
+    const advancedConfiguration: any = {
+      // The backend stores whole seconds.
+      pruneFreq: Math.round((pruneFreq ?? defaultPruneFreqHours) * 3600),
+      indexingStart: convertStringToDateTime(indexingStart),
+      refreshFreq: Math.round((refreshFreq ?? defaultRefreshFreqMinutes) * 60),
+    };
+
+    // File-specific handling
+    const selectedFiles = Array.isArray(values.file_locations)
+      ? values.file_locations
+      : values.file_locations
+        ? [values.file_locations]
+        : [];
+
+    // Google sites-specific handling
+    if (connector == "google_sites") {
+      const response = await submitGoogleSite(
+        selectedFiles,
+        values?.base_url,
+        advancedConfiguration.refreshFreq,
+        advancedConfiguration.pruneFreq,
+        advancedConfiguration.indexingStart,
+        values.access_type,
+        groups,
+        name,
+        dataAccess,
+        manageAccess
+      );
+      if (response) {
+        onSuccess();
+      }
+      return;
+    }
+    // File-specific handling
+    if (connector == "file") {
+      setUploading(true);
+      try {
+        const response = await submitFiles(
+          selectedFiles,
+          name,
+          access_type,
+          groups,
+          dataAccess,
+          manageAccess
+        );
+        if (response) {
+          onSuccess();
+        }
+      } catch (error) {
+        toast.error(t("add.fileUploadFailed.toast"));
+      } finally {
+        setUploading(false);
+      }
+
+      return;
+    }
+
+    setCreatingConnector(true);
+    try {
+      const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
+        setTimeout(
+          () => resolve({ isTimeout: true }),
+          CONNECTOR_CREATION_TIMEOUT_MS
+        )
+      );
+
+      const connectorData: ConnectorBase<any> = {
+        connector_specific_config: transformedConnectorSpecificConfig,
+        input_type: isLoadState(connector) ? "load_state" : "poll", // single case
+        name: name,
+        source: connector,
+        access_type: access_type,
+        refresh_freq: advancedConfiguration.refreshFreq || null,
+        prune_freq: advancedConfiguration.pruneFreq || null,
+        indexing_start: advancedConfiguration.indexingStart || null,
+        groups: groups,
+      };
+      const connectorCreationPromise = (async () => {
+        const credential = noCredentials ? null : accountFor(values);
+        if (!credential) {
+          const { errorDetail, isSuccess, response } =
+            await submitConnector<any>(connectorData, undefined, true);
+
+          // Store the connector id immediately for potential timeout
+          if (response?.id) {
+            connectorIdRef.current = response.id;
+          }
+          if (isSuccess) {
+            onSuccess();
+          } else {
+            toast.error(t("add.error.toast", { detail: errorDetail ?? "" }));
+          }
+          timeoutErrorHappenedRef.current = false;
+          return;
+        }
+
+        // With credential: one request creates the connector and pairs
+        // it, saving a typed account on the way.
+        const credentialRef = toCredentialRef(credential);
+        if (credentialRef) {
+          const createResponse = await createConnectorWithCredential({
+            connector: connectorData,
+            pairing: credentialPairMetadata(
+              name,
+              access_type,
+              groups,
+              auto_sync_options,
+              undefined,
+              access_type === SYNC_RESTRICTED_ACCESS_TYPE
+                ? wireAccess.restriction_group_ids
+                : dataAccess,
+              manageAccess
+            ),
+            credential: toCredentialRequest(credentialRef, savedDraft),
+            credentialSharing: isDraftCredential(credential)
+              ? credential.sharing
+              : undefined,
+          });
+          if (createResponse.ok) {
+            onSuccess();
+          } else if (!timeoutErrorHappenedRef.current) {
+            // Only show error if timeout didn't happen
+            const errorData = await createResponse.json();
+            toast.error(errorData.detail || errorData.message);
+          }
+        }
+
+        timeoutErrorHappenedRef.current = false;
+        return;
+      })();
+
+      const result = (await Promise.race([
+        connectorCreationPromise,
+        timeoutPromise,
+      ])) as {
+        isTimeout?: true;
+      };
+
+      if (result.isTimeout) {
+        timeoutErrorHappenedRef.current = true;
+        toast.error(
+          t("add.timeout.toast", {
+            seconds: CONNECTOR_CREATION_TIMEOUT_MS / 1000,
+          })
+        );
+
+        if (connectorIdRef.current) {
+          await deleteConnector(connectorIdRef.current);
+          connectorIdRef.current = null;
+        }
+      }
+      return;
+    } finally {
+      setCreatingConnector(false);
+    }
+  };
+
   return (
     <Formik
       initialValues={initialValues}
@@ -369,231 +596,12 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
           stringPairDuplicateKey: keyValueT("duplicateKey"),
         }
       ).shape({
-        // With a saved pick, the typed account is not used, so it must not
-        // block Create. With no pick it is the only account, and its errors
-        // show.
-        [NEW_ACCOUNT_FIELD]:
-          accountSchema && !currentCredential ? accountSchema : Yup.mixed(),
+        // Always checked, so its fields can show errors. With a saved pick
+        // the typed account is not used, and Create ignores its errors (see
+        // `blockingErrorsEmpty`).
+        [NEW_ACCOUNT_FIELD]: accountSchema ?? Yup.mixed(),
       })}
-      onSubmit={async (values) => {
-        const {
-          name,
-          groups,
-          group_roles,
-          data_access_group_ids,
-          access_type: formAccessType,
-          restrict_access_to_groups,
-          restriction_group_ids,
-          pruneFreq,
-          indexingStart,
-          refreshFreq,
-          auto_sync_options,
-          ...connector_specific_config
-        } = values;
-
-        const wireAccess = toWireAccess(formAccessType, {
-          restrict_access_to_groups,
-          restriction_group_ids,
-        });
-        const access_type = wireAccess.access_type;
-        // A private connector's readers; its `groups` are its managers, each
-        // with a role.
-        const dataAccess =
-          access_type === "private" ? data_access_group_ids : undefined;
-        const manageAccess = toManageAccess(groups, group_roles);
-
-        // Apply special transforms according to application logic
-        const transformedConnectorSpecificConfig = Object.entries(
-          connector_specific_config
-        ).reduce(
-          (acc, [key, value]) => {
-            if (formControlFieldNames.has(key)) {
-              return acc;
-            }
-            // Filter out empty strings from arrays
-            if (Array.isArray(value)) {
-              value = (value as any[]).filter(
-                (item) => typeof item !== "string" || item.trim() !== ""
-              );
-            }
-            const matchingConfigValue = configuration.values.find(
-              (configValue) => configValue.name === key
-            );
-            if (
-              matchingConfigValue &&
-              "transform" in matchingConfigValue &&
-              matchingConfigValue.transform
-            ) {
-              acc[key] = matchingConfigValue.transform(value as string[]);
-            } else {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, any>
-        );
-
-        // Apply advanced configuration-specific transforms.
-        const advancedConfiguration: any = {
-          // The backend stores whole seconds.
-          pruneFreq: Math.round((pruneFreq ?? defaultPruneFreqHours) * 3600),
-          indexingStart: convertStringToDateTime(indexingStart),
-          refreshFreq: Math.round(
-            (refreshFreq ?? defaultRefreshFreqMinutes) * 60
-          ),
-        };
-
-        // File-specific handling
-        const selectedFiles = Array.isArray(values.file_locations)
-          ? values.file_locations
-          : values.file_locations
-            ? [values.file_locations]
-            : [];
-
-        // Google sites-specific handling
-        if (connector == "google_sites") {
-          const response = await submitGoogleSite(
-            selectedFiles,
-            values?.base_url,
-            advancedConfiguration.refreshFreq,
-            advancedConfiguration.pruneFreq,
-            advancedConfiguration.indexingStart,
-            values.access_type,
-            groups,
-            name,
-            dataAccess,
-            manageAccess
-          );
-          if (response) {
-            onSuccess();
-          }
-          return;
-        }
-        // File-specific handling
-        if (connector == "file") {
-          setUploading(true);
-          try {
-            const response = await submitFiles(
-              selectedFiles,
-              name,
-              access_type,
-              groups,
-              dataAccess,
-              manageAccess
-            );
-            if (response) {
-              onSuccess();
-            }
-          } catch (error) {
-            toast.error(t("add.fileUploadFailed.toast"));
-          } finally {
-            setUploading(false);
-          }
-
-          return;
-        }
-
-        setCreatingConnector(true);
-        try {
-          const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
-            setTimeout(
-              () => resolve({ isTimeout: true }),
-              CONNECTOR_CREATION_TIMEOUT_MS
-            )
-          );
-
-          const connectorData: ConnectorBase<any> = {
-            connector_specific_config: transformedConnectorSpecificConfig,
-            input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-            name: name,
-            source: connector,
-            access_type: access_type,
-            refresh_freq: advancedConfiguration.refreshFreq || null,
-            prune_freq: advancedConfiguration.pruneFreq || null,
-            indexing_start: advancedConfiguration.indexingStart || null,
-            groups: groups,
-          };
-          const connectorCreationPromise = (async () => {
-            const credential = noCredentials ? null : accountFor(values);
-            if (!credential) {
-              const { errorDetail, isSuccess, response } =
-                await submitConnector<any>(connectorData, undefined, true);
-
-              // Store the connector id immediately for potential timeout
-              if (response?.id) {
-                connectorIdRef.current = response.id;
-              }
-              if (isSuccess) {
-                onSuccess();
-              } else {
-                toast.error(
-                  t("add.error.toast", { detail: errorDetail ?? "" })
-                );
-              }
-              timeoutErrorHappenedRef.current = false;
-              return;
-            }
-
-            // With credential: one request creates the connector and pairs
-            // it, saving a typed account on the way.
-            const credentialRef = toCredentialRef(credential);
-            if (credentialRef) {
-              const createResponse = await createConnectorWithCredential({
-                connector: connectorData,
-                pairing: credentialPairMetadata(
-                  name,
-                  access_type,
-                  groups,
-                  auto_sync_options,
-                  undefined,
-                  access_type === SYNC_RESTRICTED_ACCESS_TYPE
-                    ? wireAccess.restriction_group_ids
-                    : dataAccess,
-                  manageAccess
-                ),
-                credential: toCredentialRequest(credentialRef, savedDraft),
-                credentialSharing: isDraftCredential(credential)
-                  ? credential.sharing
-                  : undefined,
-              });
-              if (createResponse.ok) {
-                onSuccess();
-              } else if (!timeoutErrorHappenedRef.current) {
-                // Only show error if timeout didn't happen
-                const errorData = await createResponse.json();
-                toast.error(errorData.detail || errorData.message);
-              }
-            }
-
-            timeoutErrorHappenedRef.current = false;
-            return;
-          })();
-
-          const result = (await Promise.race([
-            connectorCreationPromise,
-            timeoutPromise,
-          ])) as {
-            isTimeout?: true;
-          };
-
-          if (result.isTimeout) {
-            timeoutErrorHappenedRef.current = true;
-            toast.error(
-              t("add.timeout.toast", {
-                seconds: CONNECTOR_CREATION_TIMEOUT_MS / 1000,
-              })
-            );
-
-            if (connectorIdRef.current) {
-              await deleteConnector(connectorIdRef.current);
-              connectorIdRef.current = null;
-            }
-          }
-          return;
-        } finally {
-          setCreatingConnector(false);
-        }
-      }}
+      onSubmit={createConnectorFromForm}
     >
       {(formikProps) => {
         const busy = uploading || creatingConnector;
@@ -667,12 +675,21 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                         disabled={
                           credentialsLoading ||
                           credentialsFailed ||
-                          !formikProps.isValid ||
+                          !blockingErrorsEmpty(formikProps.errors) ||
                           !createReady ||
                           busy
                         }
                         icon={busy ? IconLoader : undefined}
-                        onClick={() => formikProps.handleSubmit()}
+                        onClick={async () => {
+                          const errors = await formikProps.validateForm();
+                          if (blockingErrorsEmpty(errors)) {
+                            // Formik's own submit stops at any error.
+                            await createConnectorFromForm(formikProps.values);
+                          } else {
+                            // Marks every field touched, so its error shows.
+                            formikProps.handleSubmit();
+                          }
+                        }}
                       >
                         {t("header.connectButton.label")}
                       </Button>,
