@@ -25,6 +25,7 @@ import {
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import {
+  credentialMatchesRealm,
   realmFields,
   shouldRedirectToOAuth,
   toCredentialRef,
@@ -99,8 +100,9 @@ export default function AuthenticationAccountSection({
   // The source's fields when a new account is typed into this form; `null`
   // when it saves through its own account form instead.
   const typedSpec = typedAccountSpec(connector);
+  const accountRealmFields = typedSpec ? realmFields(typedSpec) : [];
   const realmKeys: ReadonlySet<string> = new Set(
-    typedSpec ? realmFields(typedSpec).map(([key]) => key) : []
+    accountRealmFields.map(([key]) => key)
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { values } = useFormikContext<Record<string, unknown>>();
@@ -109,8 +111,28 @@ export default function AuthenticationAccountSection({
     NEW_ACCOUNT_FIELD
   );
 
-  // Typing into the new account chooses it: the saved pick is dropped.
-  const newAccountKey: string = JSON.stringify(newAccountValues ?? null);
+  // The realm, filled in first above, restricts the saved accounts to the
+  // ones that work there.
+  const realmValues: Record<string, unknown> = newAccountValues ?? {};
+  const isSelectable = (credential: Credential<any>): boolean =>
+    credentialMatchesRealm(
+      accountRealmFields,
+      credential.credential_json ?? {},
+      realmValues
+    );
+  const pickOutsideRealm: boolean =
+    currentCredential !== null && !isSelectable(currentCredential);
+  useEffect(() => {
+    if (pickOutsideRealm) onCredentialChange(null);
+  }, [pickOutsideRealm, onCredentialChange]);
+
+  // Typing into the new account chooses it: the saved pick is dropped. The
+  // realm is not part of it, as it applies to saved accounts too.
+  const newAccountKey: string = JSON.stringify(
+    Object.entries(newAccountValues ?? {}).filter(
+      ([key]) => !realmKeys.has(key)
+    )
+  );
   const lastNewAccountKey = useRef<string>(newAccountKey);
   useEffect(() => {
     if (newAccountKey === lastNewAccountKey.current) return;
@@ -250,6 +272,7 @@ export default function AuthenticationAccountSection({
                 source={connector}
                 sourceName={displayName}
                 selected={credential.id === selectedSavedId}
+                selectable={isSelectable(credential)}
                 onSelect={() => onSwap(credential)}
                 onDeselect={() => onCredentialChange(null)}
                 onDelete={() => onDeleteCredential(credential)}

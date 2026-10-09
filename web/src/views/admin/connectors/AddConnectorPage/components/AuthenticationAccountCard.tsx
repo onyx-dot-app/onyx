@@ -71,6 +71,11 @@ interface AuthenticationAccountCardProps {
   sourceName: string;
   /** Whether the connector will use this account. */
   selected: boolean;
+  /**
+   * Whether the account can be picked: it works in the realm the form names.
+   * One that cannot is disabled, and its details still open.
+   */
+  selectable: boolean;
   /** Called when the user picks this account. */
   onSelect: () => void;
   /** Called when the user picks the selected account again, to drop it. */
@@ -92,6 +97,7 @@ export default function AuthenticationAccountCard({
   source,
   sourceName,
   selected,
+  selectable,
   onSelect,
   onDeselect,
   onDelete,
@@ -189,6 +195,7 @@ export default function AuthenticationAccountCard({
         expandableContentHeight="full"
         // The "Selected" label marks the pick; the card itself does not.
         state="filled"
+        disabled={!selectable}
         border="solid"
         rounding={4}
         padding={2}
@@ -318,14 +325,16 @@ export default function AuthenticationAccountCard({
                 {t("selected.label")}
               </Button>
             ) : (
-              // Repeats the card's own action, so it leaves the tab order.
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgArrowRightCircle}
-                tabIndex={-1}
-              >
-                {t("useButton.label")}
-              </Button>
+              selectable && (
+                // Repeats the card's own action, so it leaves the tab order.
+                <Button
+                  prominence="tertiary"
+                  rightIcon={SvgArrowRightCircle}
+                  tabIndex={-1}
+                >
+                  {t("useButton.label")}
+                </Button>
+              )
             )}
             <Button
               icon={expanded ? SvgChevronUp : SvgChevronDown}

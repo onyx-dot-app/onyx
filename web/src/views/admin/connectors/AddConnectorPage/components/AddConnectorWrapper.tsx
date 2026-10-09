@@ -773,12 +773,6 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                               <AccountRealmFields
                                 source={connector}
                                 fields={accountRealmFields}
-                                savedCredential={
-                                  formCredential &&
-                                  !isDraftCredential(formCredential)
-                                    ? formCredential
-                                    : null
-                                }
                               />
                               <Divider
                                 paddingParallel={0}

@@ -11,6 +11,8 @@ import {
   getEditableCredentialFields,
   shouldRedirectToOAuth,
   bindingCheckCredentialId,
+  credentialMatchesRealm,
+  realmFields,
   toCredentialRequest,
 } from "@/lib/credentials/utils";
 import {
@@ -293,5 +295,34 @@ describe("naming a credential in a request", () => {
       credential_id: 3,
     });
     expect(bindingCheckCredentialId({ credential_id: 3 }, saved)).toBe(3);
+  });
+});
+
+describe("credentialMatchesRealm", () => {
+  // GitHub's realm is optional and defaults to github.com.
+  const fields = realmFields(CREDENTIAL_SPECS.github);
+  const at = (url: string) => ({ github_base_url: url });
+
+  it("restricts nothing while the realm is empty", () => {
+    expect(credentialMatchesRealm(fields, at("https://a.com"), {})).toBe(true);
+    expect(credentialMatchesRealm(fields, at("https://a.com"), at(" "))).toBe(
+      true
+    );
+  });
+
+  it("matches the same realm without case or a trailing slash", () => {
+    expect(
+      credentialMatchesRealm(fields, at("https://A.com/"), at("https://a.com"))
+    ).toBe(true);
+    expect(
+      credentialMatchesRealm(fields, at("https://b.com"), at("https://a.com"))
+    ).toBe(false);
+  });
+
+  it("reads an account without its own realm as the default", () => {
+    expect(credentialMatchesRealm(fields, {}, at("https://github.com"))).toBe(
+      true
+    );
+    expect(credentialMatchesRealm(fields, {}, at("https://a.com"))).toBe(false);
   });
 });
