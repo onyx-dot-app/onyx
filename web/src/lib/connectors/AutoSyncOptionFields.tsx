@@ -20,6 +20,7 @@ export const autoSyncConfigBySource: Record<
   box: {},
   confluence: {},
   jira: {},
+  jira_service_management: {},
   google_drive: {},
   gmail: {},
   github: {},
