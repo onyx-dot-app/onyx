@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import BrowserContext, Playwright, TimeoutError
+from playwright.sync_api import Error as PlaywrightError
 from pydantic import TypeAdapter
 from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
@@ -34,6 +35,7 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.security.models import web_connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
+from onyx.utils.os_reaper import reap_zombie_children
 
 # Re-exported for backwards compatibility with existing tests/callers that
 # patch these names on `onyx.connectors.web.connector`.
@@ -114,6 +116,15 @@ class ScrapeSessionContext:
         if self.playwright:
             self.playwright.stop()
             self.playwright = None
+
+        # Teardown orphans Chromium helpers onto the docfetching subreaper;
+        # drain them now instead of letting zombies pile up until the run ends
+        reap_zombie_children()
+
+
+def _is_download_error(e: Exception) -> bool:
+    """page.goto() on a file link (ZIP, DOCX, ...) fails this way, every time."""
+    return isinstance(e, PlaywrightError) and "Download is starting" in str(e)
 
 
 class ScrapeResult:
@@ -733,6 +744,14 @@ class WebConnector(LoadConnector, SlimConnector):
                             SlimDocument(id=result.doc.id) if slim else result.doc
                         )
                 except Exception as e:
+                    if _is_download_error(e):
+                        # A download link, not a page: deterministic, so neither
+                        # retry nor relaunch the browser (the context is fine)
+                        session_ctx.last_error = (
+                            f"Skipped '{initial_url}': not a renderable page"
+                        )
+                        logger.warning(session_ctx.last_error)
+                        break
                     session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
                     logger.exception(session_ctx.last_error)
                     session_ctx.initialize()
