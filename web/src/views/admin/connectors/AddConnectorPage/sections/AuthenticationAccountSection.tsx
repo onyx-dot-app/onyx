@@ -309,16 +309,18 @@ export default function AuthenticationAccountSection({
         padding={0}
         rightChildren={
           <Section flexDirection="row" alignItems="center" gap={0} width="fit">
-            <Content
-              icon={SvgListTree}
-              title={t("add.savedAccounts.label", {
-                count: credentials?.length ?? 0,
-              })}
-              sizePreset="main-ui"
-              variant="body"
-              color="muted"
-              width="fit"
-            />
+            <div className="p-2">
+              <Content
+                icon={SvgListTree}
+                title={t("add.savedAccounts.label", {
+                  count: credentials?.length ?? 0,
+                })}
+                sizePreset="main-ui"
+                variant="body"
+                color="muted"
+                width="fit"
+              />
+            </div>
             <Button
               icon={accountsExpanded ? SvgFold : SvgExpand}
               prominence="tertiary"
