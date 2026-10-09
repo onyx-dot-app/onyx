@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Generator
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import Table, create_engine
@@ -184,7 +184,7 @@ class TestComputeCostCents:
         """Entries vendoring both `context_over_200k` and a `tiers` block with
         a different threshold bill the explicit tier — the legacy block only
         fills in when no context tiers exist."""
-        cost = {
+        cost: dict[str, Any] = {
             "input": 2.0,
             "output": 10.0,
             "context_over_200k": {"input": 4.0, "output": 15.0},
@@ -218,7 +218,7 @@ class TestComputeCostCents:
         assert out_cents == pytest.approx(1_000 * 15.0 / 1_000_000 * 100)
 
     def test_legacy_200k_block_applies_when_no_tier_entries(self) -> None:
-        cost = {
+        cost: dict[str, Any] = {
             "input": 2.0,
             "output": 10.0,
             "context_over_200k": {"input": 4.0, "output": 15.0},
@@ -235,7 +235,7 @@ class TestComputeCostCents:
     def test_negative_tier_rate_defers_to_base_rate(self) -> None:
         """A -1 'unknown price' sentinel in a tier rate behaves like a missing
         rate — the base rate applies instead of recording zero."""
-        cost = {
+        cost: dict[str, Any] = {
             "input": 2.0,
             "output": 10.0,
             "tiers": [
