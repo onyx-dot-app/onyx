@@ -20,7 +20,7 @@ from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.linear.models import LinearTeam, WorkspaceMembers
 
 MODULE = "onyx.connectors.linear.connector"
-UTILS = "ee.onyx.external_permissions.utils"
+CONNECTOR = "ee.onyx.external_permissions.linear.connector"
 
 
 def _user(email: str, **flags: bool) -> dict[str, Any]:
@@ -163,20 +163,16 @@ def test_a_cursor_that_stops_advancing_is_refused() -> None:
         connector.list_teams()
 
 
-def test_the_sync_builds_the_connector_from_the_pair() -> None:
+def test_the_sync_builds_the_connector_on_the_db_provider() -> None:
     cc_pair = MagicMock()
     cc_pair.connector.source = DocumentSource.LINEAR
     cc_pair.connector.connector_specific_config = {"team_keys": ["ENG"]}
-    credential = MagicMock()
-    credential.credential_json.get_value.return_value = {
-        "linear_api_key": "lin_api_test"
-    }
-    session = MagicMock()
-    session.__enter__.return_value = session
+    cc_pair.credential.id = 3
+    provider = MagicMock()
     with (
-        patch(f"{MODULE}._make_query") as query,
-        patch(f"{UTILS}.get_session_with_current_tenant", return_value=session),
-        patch(f"{UTILS}.fetch_credential_by_id_for_update", return_value=credential),
+        patch(
+            f"{CONNECTOR}.build_db_credentials_provider", return_value=provider
+        ) as build,
         patch(
             "ee.onyx.external_permissions.linear.group_sync.team_groups",
             return_value=iter([]),
@@ -184,10 +180,11 @@ def test_the_sync_builds_the_connector_from_the_pair() -> None:
     ):
         assert list(linear_group_sync("tenant", cc_pair)) == []
 
-    query.assert_not_called()
-    connector = groups.call_args.args[0]
+    build.assert_called_once_with(DocumentSource.LINEAR, 3)
+    connector: Any = groups.call_args.args[0]
+    assert isinstance(connector, LinearConnector)
     assert connector.team_keys == ["ENG"]
-    assert connector.linear_api_key == "lin_api_test"
+    assert connector._credentials_provider is provider
 
 
 def test_linear_is_registered_for_group_sync() -> None:

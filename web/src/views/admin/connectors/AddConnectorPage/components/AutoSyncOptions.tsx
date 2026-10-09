@@ -17,7 +17,7 @@ export default function AutoSyncOptions({
   const noticeBySource: Partial<Record<ValidAutoSyncSource, string>> = {
     linear: t("linear.syncNotice"),
   };
-  const notice = noticeBySource[connectorType];
+  const notice: string | undefined = noticeBySource[connectorType];
   const { fields } = autoSyncConfigBySource[connectorType];
 
   if (!notice && !fields) {

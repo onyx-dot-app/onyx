@@ -3,7 +3,7 @@ for a public team, the private parent's members too for a restricted
 sub-team, and the people the issue is shared with. Sharing covers the whole
 sub-issue tree, so a sub-issue that inherits takes its ancestors' people."""
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.linear.models import (
@@ -28,7 +28,7 @@ def workspace_members_group_id(organization_id: str) -> str:
 def member_emails(users: Iterable[LinearUser]) -> set[str]:
     """Deactivated users keep their membership rows and an app user is nobody
     to grant, so both are left out."""
-    emails = (
+    emails: Iterator[str] = (
         user.email.strip().lower() for user in users if user.active and not user.app
     )
     return {email for email in emails if email}
@@ -53,9 +53,11 @@ def issue_access(
 
 class SharedAccessIndex:
     """The shares of every issue that names anyone or inherits, kept until the
-    walk ends because a sub-issue can page before its parent. An ancestor the
-    walk never saw, because a scoped connector left its team or project out,
-    is read on demand through `load` and kept for the next sub-issue."""
+    walk ends because a sub-issue can page before its parent. Every walked
+    issue id is kept too, so a parent the walk saw is never read again. An
+    ancestor the walk never saw, because a scoped connector left its team or
+    project out, is read on demand through `load` and kept for the next
+    sub-issue. `len` counts everything kept."""
 
     def __init__(self, load: Callable[[str], IssueShare]) -> None:
         self._shares: dict[str, IssueShare] = {}
@@ -68,7 +70,7 @@ class SharedAccessIndex:
             self._shares[issue_id] = share
 
     def __len__(self) -> int:
-        return len(self._shares)
+        return len(self._seen)
 
     def emails_for(self, issue_id: str) -> set[str]:
         emails: set[str] = set()
