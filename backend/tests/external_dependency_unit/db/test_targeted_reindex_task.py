@@ -64,7 +64,7 @@ def _patch_processor(
     Pass `landed_doc_ids` to simulate successful reindex of specific
     docs. `connector_failures` are reported before `raises` is raised.
     """
-    reported_failures = connector_failures or {}
+    reported_failures: dict[str, ConnectorFailure] = connector_failures or {}
 
     def _process(
         *, connector_failures: dict[str, ConnectorFailure], **_kwargs: object
