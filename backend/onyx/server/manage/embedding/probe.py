@@ -5,7 +5,10 @@ from onyx.natural_language_processing.exceptions import (
     EmbeddingRequestFailedError,
     EmbeddingRequestRejectedError,
 )
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
+from onyx.natural_language_processing.search_nlp_models import (
+    AuthenticationError,
+    EmbeddingModel,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MODEL_SERVER_HOST, MODEL_SERVER_PORT
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
@@ -46,6 +49,14 @@ def probe_embedding_dimension(
             ["Testing Embedding"], text_type=EmbedTextType.QUERY
         )
         return len(embeddings[0])
+
+    except AuthenticationError as e:
+        error_msg: str = (
+            f"The embedding provider rejected the API key: {e}. "
+            "Check the key, or the gateway's virtual key."
+        )
+        logger.warning(error_msg)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg) from e
 
     except EmbeddingRequestRejectedError as e:
         error_msg: str = f"The embedding provider rejected the model {model_name}: {e}"

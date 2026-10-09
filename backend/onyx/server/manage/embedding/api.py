@@ -58,7 +58,7 @@ def test_embedding_configuration(
 ) -> TestEmbeddingResponse:
     auth = _build_request_auth(test_llm_request)
     api_key = test_llm_request.api_key
-    if api_key is None and auth.requires_api_key:
+    if api_key is None and auth.uses_api_key:
         existing = fetch_embedding_provider(db_session, test_llm_request.provider_type)
         if existing is not None and existing.api_key is not None:
             api_key = existing.api_key.get_value(apply_mask=False)
@@ -139,7 +139,7 @@ def put_cloud_embedding_provider(
     db_session: Session = Depends(get_session),
 ) -> CloudEmbeddingProvider:
     auth = _build_request_auth(provider)
-    if not auth.requires_api_key:
+    if not auth.uses_api_key:
         provider = provider.model_copy(
             update={"api_key": None, "api_key_changed": True}
         )

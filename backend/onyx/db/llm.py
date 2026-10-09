@@ -311,7 +311,7 @@ def upsert_cloud_embedding_provider(
                     existing_provider.provider_type,
                     None,
                     existing_provider.vertex_config,
-                ).requires_api_key
+                ).uses_api_key
             ):
                 updates["vertex_config"] = None
             else:

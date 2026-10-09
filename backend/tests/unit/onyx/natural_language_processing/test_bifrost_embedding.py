@@ -9,10 +9,7 @@ import httpx
 import pytest
 from tenacity import stop_after_attempt, wait_none
 
-from onyx.natural_language_processing.embedding_auth import (
-    ApiKeyEmbeddingAuth,
-    build_embedding_auth,
-)
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.exceptions import (
     EmbeddingRequestFailedError,
     EmbeddingRequestRejectedError,
@@ -337,15 +334,21 @@ async def test_a_missing_embedding_in_the_response_is_an_error() -> None:
     assert len(gateway.requests) == 1
 
 
-def test_bifrost_auth_allows_a_missing_key() -> None:
-    auth = build_embedding_auth(EmbeddingProvider.BIFROST, None)
-    assert isinstance(auth, ApiKeyEmbeddingAuth)
-    auth.validate_credentials()
-    assert auth.resolve_credentials().api_key.get_secret_value() == ""
+@pytest.mark.asyncio
+async def test_a_keyless_gateway_sends_no_authorization_header() -> None:
+    gateway = _FakeGateway()
+    async with _bifrost(gateway, "https://bifrost.example", None) as embedding:
+        await embedding.embed(
+            texts=["a"],
+            text_type=EmbedTextType.QUERY,
+            model_name="openai/text-embedding-3-small",
+        )
+
+    assert "Authorization" not in gateway.requests[0].headers
 
 
-def test_other_api_key_providers_still_require_a_key() -> None:
-    auth = build_embedding_auth(EmbeddingProvider.LITELLM, None)
+def test_sdk_providers_still_require_a_key() -> None:
+    auth = build_embedding_auth(EmbeddingProvider.OPENAI, None)
     with pytest.raises(ValueError, match="API key not provided"):
         auth.validate_credentials()
 

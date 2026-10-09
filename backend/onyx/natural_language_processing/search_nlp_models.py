@@ -15,6 +15,7 @@ import voyageai
 from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
 from httpx import HTTPError
+from pydantic import SecretStr
 from requests import JSONDecodeError, RequestException, Response
 from tenacity import (
     retry,
@@ -403,10 +404,18 @@ class CloudEmbedding:
             api_key[:4] + "********" + api_key[-4:] if api_key else None
         )
 
-    def _resolve_api_key(self) -> str:
+    def _resolve_optional_api_key(self) -> str | None:
+        """The API key, or None for a gateway that runs without auth."""
         if not isinstance(self.auth, ApiKeyEmbeddingAuth):
             raise ValueError("This provider does not use API-key authentication.")
-        return self.auth.resolve_credentials().api_key.get_secret_value()
+        api_key: SecretStr | None = self.auth.resolve_credentials().api_key
+        return api_key.get_secret_value() if api_key is not None else None
+
+    def _resolve_api_key(self) -> str:
+        api_key: str | None = self._resolve_optional_api_key()
+        if api_key is None:
+            raise ValueError("API key not provided for cloud model")
+        return api_key
 
     async def _embed_openai(
         self, texts: list[str], model: str | None, reduced_dimension: int | None
@@ -625,7 +634,7 @@ class CloudEmbedding:
 
         headers = (
             {}
-            if not (api_key := self._resolve_api_key())
+            if not (api_key := self._resolve_optional_api_key())
             else {"Authorization": f"Bearer {api_key}"}
         )
 
@@ -662,7 +671,7 @@ class CloudEmbedding:
         )
         headers: dict[str, str] = (
             {}
-            if not (api_key := self._resolve_api_key())
+            if not (api_key := self._resolve_optional_api_key())
             else {"Authorization": f"Bearer {api_key}"}
         )
 

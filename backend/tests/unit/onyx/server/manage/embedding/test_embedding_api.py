@@ -1,11 +1,15 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.db.models import SearchSettings
+from onyx.error_handling.exceptions import OnyxError
 from onyx.natural_language_processing.embedding_auth import (
     ApiKeyEmbeddingAuth,
     VertexEmbeddingAuth,
 )
+from onyx.natural_language_processing.search_nlp_models import AuthenticationError
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from onyx.server.manage.embedding.api import (
     list_embedding_models,
@@ -179,4 +183,57 @@ def test_workload_identity_connection_test_never_loads_saved_key() -> None:
         run_embedding_test(request, _=MagicMock(), db_session=MagicMock())
     fetch.assert_not_called()
     assert isinstance(model.call_args.kwargs["auth"], VertexEmbeddingAuth)
-    assert not model.call_args.kwargs["auth"].requires_api_key
+    assert not model.call_args.kwargs["auth"].uses_api_key
+
+
+def test_gateway_connection_test_reuses_saved_api_key() -> None:
+    # Editing a Bifrost connection sends no key; the stored virtual key must be used.
+    stored = SimpleNamespace(api_key=_build_sensitive_value("sk-bf-stored"))
+    request = EmbeddingTestRequest(
+        provider_type=EmbeddingProvider.BIFROST,
+        api_url="https://bifrost.example",
+        model_name="openai/text-embedding-3-small",
+    )
+    with (
+        patch(
+            "onyx.server.manage.embedding.api.fetch_embedding_provider",
+            return_value=stored,
+        ) as fetch,
+        patch("onyx.server.manage.embedding.probe.EmbeddingModel") as model,
+    ):
+        run_embedding_test(request, _=MagicMock(), db_session=MagicMock())
+    fetch.assert_called_once()
+    auth = model.call_args.kwargs["auth"]
+    assert isinstance(auth, ApiKeyEmbeddingAuth)
+    api_key = auth.resolve_credentials().api_key
+    assert api_key is not None
+    assert api_key.get_secret_value() == "sk-bf-stored"
+
+
+def test_saving_a_gateway_without_a_new_key_keeps_the_stored_key() -> None:
+    request = CloudEmbeddingProviderCreationRequest(
+        provider_type=EmbeddingProvider.BIFROST,
+        api_url="https://bifrost.example",
+        api_key=None,
+        api_key_changed=False,
+    )
+    with patch(
+        "onyx.server.manage.embedding.api.upsert_cloud_embedding_provider"
+    ) as save:
+        put_cloud_embedding_provider(request, _=MagicMock(), db_session=MagicMock())
+    saved = save.call_args.args[1]
+    assert saved.api_key_changed is False
+
+
+def test_a_rejected_key_names_the_key_as_the_problem() -> None:
+    request = EmbeddingTestRequest(
+        provider_type=EmbeddingProvider.BIFROST,
+        api_key="sk-bf-wrong",
+        api_url="https://bifrost.example",
+        model_name="openai/text-embedding-3-small",
+    )
+    with patch("onyx.server.manage.embedding.probe.EmbeddingModel") as model:
+        model.return_value.encode.side_effect = AuthenticationError(provider="bifrost")
+        with pytest.raises(OnyxError) as exc:
+            run_embedding_test(request, _=MagicMock(), db_session=MagicMock())
+    assert "rejected the API key" in exc.value.detail
