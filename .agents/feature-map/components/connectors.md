@@ -383,10 +383,9 @@ of meeting chats.
   users per step, then eight organizers at a time, each reading its
   transcripts and the days of its meeting chats that changed.
 - **Prune and permission sync.** `_slim_docs` relists the channels through the
-  delta, ids only and no replies, `max_workers` channels at a time for ids and
-  one at a time with readers (file readers come through the SharePoint REST
-  client, which is not safe across threads), then the organizers eight at a
-  time.
+  delta, ids only and no replies, `max_workers` channels at a time with or
+  without readers (file readers come through a SharePoint REST context kept
+  per site and per thread), then the organizers eight at a time.
 
 ### 4.7 The `SourceOperations` gateway pattern
 
