@@ -1,6 +1,7 @@
 """Requests the connector-edit apply step puts on a cc-pair: a restart of its
-index attempts, a prune, and a prune after the next full re-index. Callers
-commit, so the requests land in the same transaction as the edit."""
+index attempts, a prune, a prune after the next full re-index, and an access
+change. Callers commit, so the requests land in the same transaction as the
+edit."""
 
 from datetime import datetime, timedelta
 
@@ -8,11 +9,18 @@ from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ConnectorCredentialPairStatus, IndexingMode, IndexingStatus
+from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    IndexingMode,
+    IndexingStatus,
+)
 from onyx.db.index_attempt import cancel_waiting_index_attempt__no_commit
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 _RESTART_CANCEL_REASON = "Connector configuration changed."
 
@@ -177,3 +185,59 @@ def get_reindex_request_backoff(
         failure_count=failure_count,
         retry_after=last_failed_at + request_retry_delay(failure_count),
     )
+
+
+def apply_access_change__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+    access_type: AccessType,
+    data_access_group_ids: set[int],
+    visible_group_ids: set[int] | None,
+) -> None:
+    """Moves the pair to access_type with these data-access groups. It does
+    not run the access gates; the caller runs validate_pairing_access first.
+
+    Entering a perm-synced type from another type makes both permission syncs
+    due and marks the pair as awaiting its first permission sync, so it grants
+    nothing until its chunks carry the synced access. A source with no doc
+    permission sync (Salesforce checks access after search) gets no mark,
+    since nothing would clear it. Leaving one clears the
+    mark and keeps the synced ACLs. SYNC <-> SYNC_RESTRICTED keeps the mark as
+    it is: the ACLs are already synced. visible_group_ids is as in
+    set_cc_pair_data_access_groups__no_commit; a type without data access
+    loses all its groups."""
+    has_data_access = access_type in AccessType.data_access_types()
+    if data_access_group_ids and not has_data_access:
+        raise ValueError(f"Access type {access_type} takes no data-access groups")
+
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    previous_access_type = cc_pair.access_type
+    cc_pair.access_type = access_type
+    if access_type.is_perm_synced() and not previous_access_type.is_perm_synced():
+        cc_pair.last_time_perm_sync = None
+        cc_pair.last_time_external_group_sync = None
+        if fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.sync_params",
+            "source_requires_doc_sync",
+            noop_return_value=False,
+        )(cc_pair.connector.source):
+            cc_pair.perm_sync_pending_since = func.now()
+    elif not access_type.is_perm_synced():
+        cc_pair.perm_sync_pending_since = None
+    db_session.flush()
+
+    fetch_ee_implementation_or_noop(
+        "onyx.db.cc_pair_data_access", "set_cc_pair_data_access_groups__no_commit"
+    )(
+        db_session,
+        cc_pair_id=cc_pair_id,
+        requested_group_ids=data_access_group_ids,
+        visible_group_ids=visible_group_ids if has_data_access else None,
+    )
+    fetch_ee_implementation_or_noop(
+        "onyx.db.cc_pair_data_access", "assert_restricted_cc_pairs_keep_a_group"
+    )(db_session, [cc_pair_id])
+
+    if access_type != previous_access_type:
+        # Rewrites the chunks' public field and group: entries.
+        mark_cc_pair_documents_for_sync__no_commit(db_session, [cc_pair_id])

@@ -292,7 +292,8 @@ where the old and new filters disagree. In `ENFORCE` mode,
 `_get_enforced_cc_pair_access` swaps in the cc-pair filter, which tests
 `cc_pair_ids` against the user's open and ACL cc-pairs. Chunks with no cc-pair (user
 files) fall back to the old ACL filter. Even in `OFF` mode, the filter exists to hide
-`SYNC_RESTRICTED` cc-pairs (`hidden_restricted_cc_pair_ids`). See [[permission-sync]].
+`SYNC_RESTRICTED` cc-pairs and cc-pairs awaiting their first permission sync
+(`hidden_restricted_cc_pair_ids`). See [[access-control]] §4.3a.
 Chunks get `cc_pair_ids` at index time. The beat task
 `cc_pair_ids_backfill` fills older chunks without re-embedding, with progress in the
 KV store (`KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY`), restarted per `SearchSettings`
