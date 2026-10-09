@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgCheckSquare, SvgLinkedDots, SvgUserKey } from "@opal/icons";
@@ -21,8 +21,8 @@ interface ExistingAccountSummaryCardProps {
 }
 
 /**
- * The picked saved account while the account section is folded: its name,
- * the connectors that use it and its owner. Clicking it opens the section.
+ * The picked saved account while the account section is folded. It shows the
+ * same details as its full card. Clicking it opens the section.
  */
 export default function ExistingAccountSummaryCard({
   credential,
@@ -32,6 +32,12 @@ export default function ExistingAccountSummaryCard({
 }: ExistingAccountSummaryCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const { user } = useUser();
+  const format = useFormatter();
+  const addedOn: string = format.dateTime(new Date(credential.time_created), {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
   // The creator, by display name where they set one, as on the full card.
   const ownerName: string | null =
     credential.user_id === null
@@ -43,7 +49,8 @@ export default function ExistingAccountSummaryCard({
 
   return (
     <SelectCard
-      state="selected"
+      // The full card's details, without its selected look.
+      state="filled"
       border="solid"
       rounding={4}
       padding={2}
@@ -57,6 +64,7 @@ export default function ExistingAccountSummaryCard({
             icon={getSourceMetadata(source).icon}
             title={title}
             suffix={t("sourceSuffix", { source: sourceName })}
+            description={t("addedOn.label", { date: addedOn })}
             sizePreset="main-ui"
             variant="section"
           />
