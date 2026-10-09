@@ -3025,7 +3025,10 @@
           "sync": {
             "description": "{appName} 会与来源同步权限。用户只能搜索他们在来源中可见的内容。",
             "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
-            "title": "与 {source} 同步"
+            "title": "与 {source} 同步",
+            "sourceNotice": {
+              "notion": "Notion 不共享页面权限。每条结果都会在搜索时通过用户自己的 Notion MCP 连接进行检查。请将 Notion MCP (https://mcp.notion.com/mcp) 注册为按用户 OAuth 的 MCP 服务器，并请每位用户完成连接。未连接的用户看不到此连接器的任何结果。"
+            }
           },
           "title": "文档访问"
         },

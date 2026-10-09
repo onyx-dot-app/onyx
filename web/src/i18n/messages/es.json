@@ -3025,7 +3025,10 @@
           "sync": {
             "description": "{appName} sincroniza los permisos con la fuente. Los usuarios solo pueden buscar lo que pueden ver en la fuente.",
             "disabledReason": "El método de autenticación de la credencial actual no admite la sincronización automática de permisos. Cambia el método de autenticación de la credencial a uno compatible.",
-            "title": "Sincronizar con {source}"
+            "title": "Sincronizar con {source}",
+            "sourceNotice": {
+              "notion": "Notion no comparte los permisos de las páginas. Cada resultado se comprueba en el momento de la búsqueda a través de la conexión Notion MCP del propio usuario. Registra Notion MCP (https://mcp.notion.com/mcp) como servidor MCP con OAuth por usuario y pide a cada usuario que lo conecte. Los usuarios que no se hayan conectado no verán resultados de este conector."
+            }
           },
           "title": "Acceso a documentos"
         },

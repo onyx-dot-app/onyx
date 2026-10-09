@@ -5,6 +5,7 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
+import asyncio
 from collections.abc import Callable, Coroutine
 from enum import Enum
 from typing import Any, Dict, TypeVar
@@ -228,6 +229,43 @@ def call_mcp_tool(
     """Call a specific tool on the MCP server"""
     return _call_mcp_client_function_sync(
         _call_mcp_tool(tool_name, arguments),
+        server_url,
+        connection_headers,
+        transport,
+        auth,
+    )
+
+
+def _call_mcp_tools(
+    calls: list[tuple[str, dict[str, Any]]], max_parallel: int
+) -> MCPClientFunction[list[CallToolResult]]:
+    async def call_tools(session: ClientSession) -> list[CallToolResult]:
+        await session.initialize()
+        semaphore = asyncio.Semaphore(max_parallel)
+
+        async def call_one(tool_name: str, arguments: dict[str, Any]) -> CallToolResult:
+            async with semaphore:
+                return await session.call_tool(tool_name, arguments)
+
+        return list(
+            await asyncio.gather(*(call_one(name, args) for name, args in calls))
+        )
+
+    return call_tools
+
+
+def call_mcp_tools_in_one_session(
+    server_url: str,
+    calls: list[tuple[str, dict[str, Any]]],
+    max_parallel: int,
+    connection_headers: dict[str, str] | None = None,
+    transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
+    auth: OAuthClientProvider | None = None,
+) -> list[CallToolResult]:
+    """Raw results of several tool calls over one session, in call order, so
+    callers see each result's isError instead of flattened text."""
+    return _call_mcp_client_function_sync(
+        _call_mcp_tools(calls, max_parallel),
         server_url,
         connection_headers,
         transport,

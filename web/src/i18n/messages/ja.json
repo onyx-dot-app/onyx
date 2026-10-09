@@ -3025,7 +3025,10 @@
           "sync": {
             "description": "{appName}はソースと権限を同期します。ユーザーはソースで閲覧できるものだけを検索できます。",
             "disabledReason": "現在の認証情報の認証方式は権限の自動同期に対応していません。対応している認証方式に変更してください。",
-            "title": "{source}と同期"
+            "title": "{source}と同期",
+            "sourceNotice": {
+              "notion": "Notion はページの権限を共有しません。各結果は検索時にユーザー自身の Notion MCP 接続を通じて確認されます。Notion MCP (https://mcp.notion.com/mcp) をユーザーごとの OAuth MCP サーバーとして登録し、各ユーザーに接続を依頼してください。接続していないユーザーには、このコネクタの結果は表示されません。"
+            }
           },
           "title": "ドキュメントへのアクセス"
         },

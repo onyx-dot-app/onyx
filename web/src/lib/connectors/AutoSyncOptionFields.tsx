@@ -1,7 +1,8 @@
 import type { ValidAutoSyncSource } from "@/lib/connectors/types/source";
 
 interface AutoSyncConfig {
-  notice?: string;
+  // Key under admin.connectorsList.settings.documentAccess.sync.sourceNotice.
+  noticeKey?: "notion";
   // Each key is posted as auto_sync_options.<key>, so it has to match the name
   // the backend reads.
   fields?: Record<
@@ -31,4 +32,5 @@ export const autoSyncConfigBySource: Record<
   canvas: {},
   onedrive: {},
   zoom: {},
+  notion: { noticeKey: "notion" },
 };

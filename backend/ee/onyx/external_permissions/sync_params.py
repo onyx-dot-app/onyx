@@ -167,6 +167,12 @@ def _load_censor_salesforce_chunks() -> CensoringFuncType:
     return censor_salesforce_chunks
 
 
+def _load_censor_notion_chunks() -> CensoringFuncType:
+    from ee.onyx.external_permissions.notion.censoring import censor_notion_chunks
+
+    return censor_notion_chunks
+
+
 def _load_sharepoint_doc_sync() -> DocSyncFuncType:
     from ee.onyx.external_permissions.sharepoint.doc_sync import sharepoint_doc_sync
 
@@ -356,6 +362,14 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         censoring_config=CensoringConfig(
             chunk_censoring_func=_lazy_censoring(_load_censor_salesforce_chunks),
             censors_private_connectors=True,
+        ),
+    ),
+    # Notion exposes no page permissions, so each result is checked through the
+    # user's own Notion MCP connection at query time.
+    DocumentSource.NOTION: SyncConfig(
+        censoring_config=CensoringConfig(
+            chunk_censoring_func=_lazy_censoring(_load_censor_notion_chunks),
+            censors_private_connectors=False,
         ),
     ),
     # Domain sign-in rules: groups filled from the account's user roster.

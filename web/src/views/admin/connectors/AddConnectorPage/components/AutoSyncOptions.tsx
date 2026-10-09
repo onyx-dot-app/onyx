@@ -1,5 +1,6 @@
 import { Text } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
+import { useTranslations } from "next-intl";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import type { ValidAutoSyncSource } from "@/lib/connectors/types/source";
 import { autoSyncConfigBySource } from "@/lib/connectors/AutoSyncOptionFields";
@@ -12,17 +13,20 @@ interface AutoSyncOptionsProps {
 export default function AutoSyncOptions({
   connectorType,
 }: AutoSyncOptionsProps) {
-  const { notice, fields } = autoSyncConfigBySource[connectorType];
+  const tNotice = useTranslations(
+    "admin.connectorsList.settings.documentAccess.sync.sourceNotice"
+  );
+  const { noticeKey, fields } = autoSyncConfigBySource[connectorType];
 
-  if (!notice && !fields) {
+  if (!noticeKey && !fields) {
     return null;
   }
 
   return (
     <Section gap={3} alignItems="stretch" height="fit">
-      {notice && (
+      {noticeKey && (
         <Text font="secondary-body" color="text-03" as="p">
-          {notice}
+          {tNotice(noticeKey)}
         </Text>
       )}
       {Object.entries(fields ?? {}).map(([key, config]) => {

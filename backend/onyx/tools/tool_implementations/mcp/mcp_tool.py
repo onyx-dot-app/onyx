@@ -5,7 +5,7 @@ from typing import Any
 from mcp.client.auth import OAuthClientProvider
 
 from onyx.chat.emitter import Emitter
-from onyx.db.enums import MCPAuthenticationType, MCPTransport
+from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.llm.models import ToolDefinition
 from onyx.server.features.mcp.client import call_mcp_tool
@@ -17,8 +17,7 @@ from onyx.server.features.mcp.models import (
 )
 from onyx.server.features.mcp.oauth import (
     MCPReauthenticationRequired,
-    make_oauth_provider,
-    refresh_mcp_oauth_token_if_expired,
+    mcp_call_auth,
 )
 from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
@@ -215,35 +214,11 @@ class MCPTool(Tool[None]):
                     llm_facing_response=llm_facing_response,
                 )
 
-            # For OAuth servers, construct OAuthClientProvider so the MCP SDK
-            # can refresh expired tokens automatically
-            auth: OAuthClientProvider | None = None
-            if (
-                self.mcp_server.auth_type == MCPAuthenticationType.OAUTH
-                and credentials.connection_config_id is not None
-                and self._user_id
-            ):
-                if self.mcp_server.transport == MCPTransport.SSE:
-                    # httpx.Auth refresh can't run over an open SSE stream;
-                    # refresh proactively here instead. Non-fatal on failure.
-                    try:
-                        refreshed_header = refresh_mcp_oauth_token_if_expired(
-                            self.mcp_server,
-                            credentials.connection_config_id,
-                        )
-                        if refreshed_header:
-                            headers["Authorization"] = refreshed_header
-                    except Exception:
-                        logger.exception(
-                            "MCP tool '%s': proactive SSE OAuth token refresh failed; using existing token",
-                            self._name,
-                        )
-                else:
-                    auth = make_oauth_provider(
-                        self.mcp_server,
-                        credentials.connection_config_id,
-                        None,
-                    )
+            auth: OAuthClientProvider | None = (
+                mcp_call_auth(self.mcp_server, credentials, headers)
+                if self._user_id
+                else None
+            )
 
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,

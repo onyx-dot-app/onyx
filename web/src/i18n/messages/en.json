@@ -3025,7 +3025,10 @@
           "sync": {
             "description": "{appName} syncs permissions with the source. Users can search only what they can see in the source.",
             "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
-            "title": "Sync with {source}"
+            "title": "Sync with {source}",
+            "sourceNotice": {
+              "notion": "Notion shares no page permissions. Each result is checked at search time through the user's own Notion MCP connection. Register Notion MCP (https://mcp.notion.com/mcp) as a per-user OAuth MCP server and ask each user to connect it. Users who have not connected it see no results from this connector."
+            }
           },
           "title": "Document Access"
         },
