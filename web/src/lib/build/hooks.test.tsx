@@ -327,3 +327,35 @@ it("accepts an in-flight preview result while hidden and reuses it on reopen", a
   expect(load).toHaveBeenCalledTimes(1);
   expect(result.current.data).toBe("finished");
 });
+
+it("reuses matching revisions across remounts and refreshes changed revisions", async () => {
+  const cache = new Map<string, State>();
+  const load = jest.fn().mockResolvedValue("cached thumbnail");
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <SWRConfig value={{ provider: () => cache }}>{children}</SWRConfig>
+  );
+  const first = renderHook(
+    () => useFilePreview("thumbnail", load, { revision: "v1" }),
+    { wrapper }
+  );
+  await waitFor(() =>
+    expect(first.result.current.data).toBe("cached thumbnail")
+  );
+  first.unmount();
+  const second = renderHook(
+    () => useFilePreview("thumbnail", load, { revision: "v1" }),
+    { wrapper }
+  );
+  expect(second.result.current.data).toBe("cached thumbnail");
+  expect(load).toHaveBeenCalledTimes(1);
+  second.unmount();
+  load.mockResolvedValue("updated thumbnail");
+  const third = renderHook(
+    () => useFilePreview("thumbnail", load, { revision: "v2" }),
+    { wrapper }
+  );
+  await waitFor(() =>
+    expect(third.result.current.data).toBe("updated thumbnail")
+  );
+  expect(load).toHaveBeenCalledTimes(2);
+});

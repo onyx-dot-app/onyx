@@ -27,7 +27,7 @@ export function useFilePreview<T>(
     | undefined
   >();
   const request = { key, revision, refreshKey, isActive };
-  const previousRequest = useRef(request);
+  const previousRequest = useRef<typeof request | null>(null);
   const active = useRef<boolean>(isActive);
   active.current = isActive;
   const {
@@ -68,7 +68,7 @@ export function useFilePreview<T>(
           options
         );
       },
-      revalidateOnMount: isActive,
+      revalidateOnMount: isActive ? undefined : false,
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       revalidateIfStale: revision === undefined,
@@ -92,10 +92,13 @@ export function useFilePreview<T>(
     previousRequest.current = { key, revision, refreshKey, isActive };
     if (
       isActive &&
-      previous.key === key &&
-      (previous.revision !== revision ||
-        previous.refreshKey !== refreshKey ||
-        (!previous.isActive && (revision === undefined || error || !isCurrent)))
+      (previous
+        ? previous.key === key &&
+          (previous.revision !== revision ||
+            previous.refreshKey !== refreshKey ||
+            (!previous.isActive &&
+              (revision === undefined || error || !isCurrent)))
+        : result !== undefined && !isCurrent)
     ) {
       // SWR discards an older in-flight request when this revalidation starts.
       void mutate().catch(() => undefined);
