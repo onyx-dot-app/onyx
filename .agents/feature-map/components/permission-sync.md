@@ -403,9 +403,15 @@ makes a domain-wide share resolvable at read time; see §5.2 and §9.
 
 Salesforce has `doc_sync_config=None` and `censoring_config` set
 (`sync_params.py:_SOURCE_TO_SYNC_CONFIG[DocumentSource.SALESFORCE]`). Per
-[[access-control]] §4.5, this makes every Salesforce document pass the ACL
-filter for everyone (`ee/onyx/access/access.py:_get_access_for_documents`,
-`is_only_censored` branch), and access is narrowed **after** retrieval instead:
+[[access-control]] §4.5, this makes every Salesforce document indexed under a
+perm-synced cc_pair pass the ACL filter for everyone
+(`ee/onyx/access/access.py:_get_access_for_documents`, `is_only_censored`
+branch, keyed on `db/document.py:get_document_access_types`), and access is
+narrowed **after** retrieval instead. Documents under only private or public
+Salesforce connectors keep those ACLs. Documents under a public connector are
+never censored, while private-only ones still are
+(`CensoringConfig.censors_private_connectors`), since older indexes hold the
+open ACL for them:
 `ee/onyx/external_permissions/salesforce/postprocessing.py:censor_salesforce_chunks`
 is invoked per user, per chunk, by
 `ee/onyx/external_permissions/post_query_censoring.py:_post_query_chunk_censoring`,

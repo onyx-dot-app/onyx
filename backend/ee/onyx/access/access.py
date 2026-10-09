@@ -16,7 +16,12 @@ from onyx.access.access import _get_acl_for_user as get_acl_for_user_without_gro
 from onyx.access.access import collect_user_file_access
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_external_group, prefix_user_group
-from onyx.db.document import get_document_sources, get_documents_by_ids
+from onyx.db.document import (
+    get_document_access_types,
+    get_document_sources,
+    get_documents_by_ids,
+)
+from onyx.db.enums import AccessType
 from onyx.db.models import User, UserFile
 from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.utils.logger import setup_logger
@@ -68,6 +73,10 @@ def _get_access_for_documents(
     )
 
     all_public_ext_u_group_ids = set(fetch_public_external_group_ids(db_session))
+    doc_id_to_access_types: dict[str, set[AccessType]] = get_document_access_types(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
 
     access_map = {}
     for document_id, non_ee_access in non_ee_access_dict.items():
@@ -77,11 +86,18 @@ def _get_access_for_documents(
             logger.error("Document %s has no source", document_id)
             continue
 
+        # A censoring-only source checks access at query time, so its perm-synced
+        # documents are open at retrieval. Documents under only private or public
+        # connectors keep their own ACLs.
         perm_sync_config = get_source_perm_sync_config(source)
         is_only_censored = (
-            perm_sync_config
+            perm_sync_config is not None
             and perm_sync_config.censoring_config is not None
             and perm_sync_config.doc_sync_config is None
+            and any(
+                access_type.is_perm_synced()
+                for access_type in doc_id_to_access_types.get(document_id, set())
+            )
         )
 
         ext_u_emails = (
@@ -98,8 +114,6 @@ def _get_access_for_documents(
 
         # If the document is determined to be "public" externally (through a SYNC connector)
         # then it's given the same access level as if it were marked public within Onyx
-        # If its censored, then it's public anywhere during the search and then permissions are
-        # applied after the search
         is_public_anywhere = (
             document.is_public
             or non_ee_access.is_public
@@ -111,7 +125,7 @@ def _get_access_for_documents(
         access_map[document_id] = DocumentAccess.build(
             user_emails=list(non_ee_access.user_emails),
             user_groups=user_group_info.get(document_id, []),
-            is_public=is_public_anywhere,  # ty: ignore[invalid-argument-type]
+            is_public=is_public_anywhere,
             external_user_emails=list(ext_u_emails),
             external_user_group_ids=list(ext_u_groups),
         )

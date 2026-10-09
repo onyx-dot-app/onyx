@@ -243,8 +243,9 @@ indexing/adapters/document_indexing_adapter.py:DocumentIndexingAdapter.prepare_e
                       manage groups, which changes nothing; perm-synced pairs give none)
                     - external_user_emails / external_user_group_ids from the Document row
                     - is_public widened to True if the document is public in the source
-                      system, or "censoring only" applies for this source (see §4.5), or
-                      one of its external groups is in fetch_public_external_group_ids
+                      system, or "censoring only" applies for this source and the document
+                      is under a perm-synced cc-pair (see §4.5), or one of its external
+                      groups is in fetch_public_external_group_ids
 
 DocMetadataAwareIndexChunk.from_index_chunk(access=<DocumentAccess>, ...)
   └─ opensearch_document_index.py:generate_opensearch_filtered_access_control_list(access)
@@ -411,23 +412,40 @@ access, not field-level access, at index time; a user may be allowed to see a
 record but not every field on it. For these sources,
 `_get_access_for_documents` marks the document `is_public` at the index level
 ("is_only_censored" in the EE `_get_access_for_documents`, when a source's
-`perm_sync_config.censoring_config` is set but `doc_sync_config` is not) so it
-passes the ACL clause for everyone, then narrows the actual field content after
-retrieval:
+`perm_sync_config.censoring_config` is set but `doc_sync_config` is not, and
+the document is indexed under a perm-synced cc-pair per
+`db/document.py:get_document_access_types`) so it passes the ACL clause for
+everyone, then narrows the actual field content after retrieval. A document
+the same source indexes under only private or public cc-pairs keeps those
+ACLs:
 
 `ee/onyx/external_permissions/post_query_censoring.py:_post_query_chunk_censoring`
-groups the retrieved chunks by source, and for each source with censoring
-enabled, calls that source's `censor_chunks_for_source` function
-(`CensoringFuncType`, `perm_sync_types.py`) with the user's email. A chunk
-missing from the censoring function's output is dropped, not degraded; a
-censoring function that raises drops every chunk for that source rather than
-leaking anything. Anonymous users get every chunk from a censored source
-dropped outright, without calling the censoring function at all.
+selects the retrieved chunks whose document is not under a public cc-pair and
+is under a perm-synced one, has no cc-pair left, or is under only private
+cc-pairs of a source whose `CensoringConfig.censors_private_connectors` is set
+(`_get_censored_document_ids`, fail closed), groups them by source,
+and for each source calls that source's `censor_chunks_for_source` function
+(`CensoringFuncType`, `perm_sync_types.py`) with the user's email. Every other
+chunk passes through untouched. A chunk missing from the censoring function's
+output is dropped, not degraded; a censoring function that raises drops every
+censored chunk for that source rather than leaking anything. Anonymous users
+get every censored chunk dropped outright, without calling the censoring
+function at all. A document under both a public and a perm-synced cc-pair is
+public at the index level and is not censored, since the public cc-pair
+already grants everyone the whole record. One under both a private and a
+perm-synced cc-pair is public at the index level and censored, so the source's
+own check decides. Salesforce sets `censors_private_connectors`, so its
+private-only documents are censored as well: indexes built before the ACL was
+keyed on access type still hold the open ACL for them.
 
-This runs inside `search_pipeline` (`context/search/pipeline.py`), after the
-index query returns and before results reach rank fusion, via
+`access/access.py:censor_chunks_for_user` wraps the EE hook via
 `fetch_ee_implementation_or_noop`, so it is a genuine no-op in CE, not a
-degraded check.
+degraded check. Every path that hands chunk content to a user runs it, since
+the index ACL alone lets censoring-only chunks through: `search_pipeline`
+(`context/search/pipeline.py`, after the index query returns and before rank
+fusion), the `/document/document-size-info` and `/document/chunk-info` reads
+(`server/documents/document.py`), and the Open URL tool's indexed-document
+fetch (`tools/tool_implementations/open_url/open_url_tool.py`).
 
 ---
 
