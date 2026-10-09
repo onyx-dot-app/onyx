@@ -11,7 +11,7 @@ from onyx.connectors.linear.source_operations import LinearSourceOperations
 
 # A project URL ends in the slug and the project's slug id:
 # https://linear.app/<workspace>/project/<slug>-<slug id>
-_PROJECT_URL_SLUG_ID = re.compile(
+_PROJECT_URL_SLUG_ID: re.Pattern[str] = re.compile(
     r"linear\.app/[^/]+/project/[^/?#]*?([0-9a-f]{12})(?:[/?#]|$)"
 )
 
