@@ -1,7 +1,5 @@
-import json
 from typing import Any
 
-from google.auth.transport.requests import AuthorizedSession
 from pydantic import BaseModel
 
 from onyx.connectors.models import TextSection
@@ -80,36 +78,8 @@ def _extract_text_from_table(table: dict[str, Any]) -> str:
     return "\n".join(row_strs)
 
 
-DOCS_API_DOCUMENT_URL = "https://docs.googleapis.com/v1/documents/{doc_id}"
-_DOCS_FETCH_TIMEOUT_SECONDS = 60
-_DOCS_FETCH_CHUNK_SIZE = 1024 * 1024
-
-
-def get_document_sections(
-    authorized_session: AuthorizedSession,
-    doc_id: str,
-    max_response_bytes: int,
-) -> list[TextSection] | None:
-    """Extract heading-aware sections from a Google Doc.
-
-    Streams the Docs-API response; returns None if it exceeds `max_response_bytes`.
-    """
-    with authorized_session.get(
-        DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
-        params={"includeTabsContent": "true"},
-        stream=True,
-        timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
-    ) as response:
-        response.raise_for_status()
-        buffer = bytearray()
-        for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
-            if not chunk:
-                continue
-            if len(buffer) + len(chunk) > max_response_bytes:
-                return None
-            buffer.extend(chunk)
-
-    doc = json.loads(buffer)
+def get_document_sections(doc: dict[str, Any], doc_id: str) -> list[TextSection]:
+    """Extract heading-aware sections from a Docs API document."""
     tabs = doc.get("tabs", {})
     sections: list[TextSection] = []
     for tab in tabs:

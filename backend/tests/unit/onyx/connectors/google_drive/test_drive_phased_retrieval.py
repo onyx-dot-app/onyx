@@ -10,7 +10,6 @@ from collections import Counter
 from unittest.mock import patch
 
 import pytest
-from googleapiclient.errors import HttpError
 
 from onyx.connectors.google_drive import connector as connector_mod
 from onyx.connectors.google_drive.connector import (
@@ -25,10 +24,11 @@ from onyx.connectors.google_drive.drive_access import (
 from onyx.connectors.google_drive.models import (
     DriveRetrievalPhase,
     DriveRetrievalStage,
+    ImpersonationError,
     RetrievedDriveFile,
     StageCompletion,
 )
-from onyx.connectors.google_utils.resources import ImpersonationError
+from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
 from onyx.connectors.models import SlimDocument
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
 from tests.unit.onyx.connectors.google_drive.fake_drive import (
@@ -418,7 +418,7 @@ def test_server_error_on_member_read_fails_the_run() -> None:
     tenant.failing_member_reads = {"d1"}
     connector = _full_org_connector()
 
-    with tenant.patch(connector), pytest.raises(HttpError):
+    with tenant.patch(connector), pytest.raises(GoogleDriveHttpError):
         run_to_completion(connector)
 
 
