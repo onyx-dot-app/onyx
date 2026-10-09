@@ -35,6 +35,7 @@ from onyx.connectors.interfaces import (
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.jira.access import get_project_permissions
+from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
     JiraSourceOperations,
@@ -158,12 +159,13 @@ def _handle_jira_search_error(e: JiraApiError, jql: str) -> None:
         InsufficientPermissionsError: For HTTP 403 errors
         JiraApiError: Re-raises the original error for other status codes
     """
-    error_text = e.text or ""
+    error_text: str = e.text or ""
+    error_payload: Any
     try:
         error_payload = json.loads(error_text)
     except ValueError:
         error_payload = None
-    error_messages = (
+    error_messages: Any = (
         error_payload.get("errorMessages", [])
         if isinstance(error_payload, dict)
         else []
@@ -226,7 +228,7 @@ def _perform_jql_search_v3(
     # leaving that out for now to avoid rate limit issues
     if not ids_done:
         try:
-            page = source_operations.search_issue_ids(
+            page: JiraIssueIdPage = source_operations.search_issue_ids(
                 jql=jql, next_page_token=nextPageToken
             )
         except JiraApiError as e:
@@ -256,7 +258,7 @@ def _perform_jql_search_v2(
     Unfortunately, jira server/data center will forever use the v2 APIs that are now deprecated.
     """
     try:
-        issues = source_operations.search_issues(
+        issues: list[JiraIssue] = source_operations.search_issues(
             jql=jql, start_at=start, max_results=max_results, fields=fields
         )
     except JiraApiError as e:
@@ -277,7 +279,7 @@ def process_jira_issue(
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
 ) -> Document | None:
-    issue_key = _issue_key(issue)
+    issue_key: str = _issue_key(issue)
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
     if labels_to_skip:
         if any(label in issue_labels for label in labels_to_skip):
@@ -289,9 +291,9 @@ def process_jira_issue(
             )
             return None
 
-    description = rich_text(get_issue_field(issue, "description"))
+    description: str = rich_text(get_issue_field(issue, "description"))
 
-    comments = get_comment_strs(
+    comments: list[str] = get_comment_strs(
         issue=issue,
         comment_email_blacklist=comment_email_blacklist,
     )
@@ -313,7 +315,7 @@ def process_jira_issue(
     metadata_dict: dict[str, str | list[str]] = {}
     people = set()
 
-    creator = get_issue_field(issue, _FIELD_REPORTER)
+    creator: Any = get_issue_field(issue, _FIELD_REPORTER)
     if creator is not None and (
         basic_expert_info := best_effort_basic_expert_info(creator)
     ):
@@ -322,7 +324,7 @@ def process_jira_issue(
         if email := basic_expert_info.get_email():
             metadata_dict[_FIELD_REPORTER_EMAIL] = email
 
-    assignee = get_issue_field(issue, _FIELD_ASSIGNEE)
+    assignee: Any = get_issue_field(issue, _FIELD_ASSIGNEE)
     if assignee is not None and (
         basic_expert_info := best_effort_basic_expert_info(assignee)
     ):
@@ -351,18 +353,18 @@ def process_jira_issue(
     if resolutiondate := get_issue_field(issue, _FIELD_RESOLUTION_DATE):
         metadata_dict[_FIELD_RESOLUTION_DATE_KEY] = resolutiondate
 
-    parent = get_issue_field(issue, _FIELD_PARENT)
+    parent: Any = get_issue_field(issue, _FIELD_PARENT)
     if parent is not None:
         metadata_dict[_FIELD_PARENT] = parent[_FIELD_KEY]
 
-    project = get_issue_field(issue, _FIELD_PROJECT)
+    project: Any = get_issue_field(issue, _FIELD_PROJECT)
     if project is not None:
         metadata_dict[_FIELD_PROJECT_NAME] = project["name"]
         metadata_dict[_FIELD_PROJECT] = project[_FIELD_KEY]
     else:
         logger.error("Project should exist but does not for %s", issue_key)
 
-    summary = get_issue_field(issue, "summary")
+    summary: Any = get_issue_field(issue, "summary")
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
@@ -470,7 +472,7 @@ class JiraConnector(
     def _is_epic(self, issue: JiraIssue) -> bool:
         """Check if issue is an Epic. A parent reference has the same shape
         (``key`` plus a few ``fields``), so this works for parents too."""
-        issuetype = get_named_field(issue, _FIELD_ISSUETYPE)
+        issuetype: str | None = get_named_field(issue, _FIELD_ISSUETYPE)
         return issuetype is not None and issuetype.lower() == "epic"
 
     def _yield_project_hierarchy_node(
@@ -532,7 +534,7 @@ class JiraConnector(
         seen_hierarchy_node_ids.add(parent_key)
 
         # Get summary if available
-        parent_summary = get_issue_field(parent, "summary")
+        parent_summary: Any = get_issue_field(parent, "summary")
         display_name = (
             f"{parent_key}: {parent_summary}" if parent_summary else parent_key
         )
@@ -554,7 +556,7 @@ class JiraConnector(
             - Epic key if issue's parent is an Epic
             - Project key otherwise (for top-level issues or non-epic parents)
         """
-        parent = get_issue_field(issue, _FIELD_PARENT)
+        parent: Any = get_issue_field(issue, _FIELD_PARENT)
         if parent is None:
             # No parent, directly under project
             return project_key

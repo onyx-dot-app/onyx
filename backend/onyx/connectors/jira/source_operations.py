@@ -75,7 +75,7 @@ def is_cloud_credential(credentials: Mapping[str, Any]) -> bool:
 
 def _error_text(error: Exception) -> str | None:
     if isinstance(error, JIRAError):
-        text = error.text
+        text: Any = error.text
         return text if isinstance(text, str) or text is None else str(text)
     if isinstance(error, requests.HTTPError) and error.response is not None:
         return error.response.text
@@ -107,7 +107,7 @@ def _bulk_fetch_request(
         "issueIdsOrKeys": issue_ids,
         "fields": fields.split(",") if fields else ["*all"],
     }
-    resp = client._session.post(  # ty: ignore[unresolved-attribute]
+    resp: requests.Response = client._session.post(  # ty: ignore[unresolved-attribute]
         client._get_url("issue/bulkfetch"), json=payload
     )
     return resp.json()["issues"]
@@ -128,15 +128,15 @@ def _bulk_fetch_batch(
             )
             raise
 
-        mid = len(issue_ids) // 2
+        mid: int = len(issue_ids) // 2
         logger.warning(
             "Jira bulk-fetch JSON decode failed for batch of %s issues. Splitting into sub-batches of %s and %s.",
             len(issue_ids),
             mid,
             len(issue_ids) - mid,
         )
-        left = _bulk_fetch_batch(client, issue_ids[:mid], fields)
-        right = _bulk_fetch_batch(client, issue_ids[mid:], fields)
+        left: list[dict[str, Any]] = _bulk_fetch_batch(client, issue_ids[:mid], fields)
+        right: list[dict[str, Any]] = _bulk_fetch_batch(client, issue_ids[mid:], fields)
         return left + right
 
 
@@ -192,7 +192,7 @@ class JiraSourceOperations(SourceOperations):
             return self._cached_client
         with self._client_build_lock():
             if self._cached_client is None:
-                api_url = self._api_url()
+                api_url: str = self._api_url()
                 with _translate_errors():
                     self._cached_client = self._build_client(api_url)
         return self._cached_client
@@ -240,7 +240,7 @@ class JiraSourceOperations(SourceOperations):
         (``search/jql``). The SDK does not support this endpoint."""
         # https://community.atlassian.com/forums/Jira-articles/
         # Avoiding-Pitfalls-A-Guide-to-Smooth-Migration-to-Enhanced-JQL/ba-p/2985433
-        client = self._client()
+        client: JIRA = self._client()
         params: dict[str, str | int | None] = {
             "jql": jql,
             "maxResults": _MAX_RESULTS_FETCH_IDS,
@@ -248,11 +248,11 @@ class JiraSourceOperations(SourceOperations):
             "fields": "id",
         }
         with _translate_errors():
-            response = client._session.get(  # ty: ignore[unresolved-attribute]
+            response: requests.Response = client._session.get(  # ty: ignore[unresolved-attribute]
                 client._get_url("search/jql"), params=params
             )
             response.raise_for_status()
-            response_json = response.json()
+            response_json: dict[str, Any] = response.json()
         return JiraIssueIdPage(
             issue_ids=[str(issue["id"]) for issue in response_json["issues"]],
             next_page_token=response_json.get("nextPageToken"),
@@ -269,7 +269,7 @@ class JiraSourceOperations(SourceOperations):
         """Cloud only: the raw issues for these ids (``issue/bulkfetch``), in
         batches of at most 100. ``fields`` is a comma-separated list; None
         fetches all fields."""
-        client = self._client()
+        client: JIRA = self._client()
         raw_issues: list[dict[str, Any]] = []
         for batch in chunked(issue_ids, _JIRA_BULK_FETCH_LIMIT):
             try:
@@ -302,7 +302,7 @@ class JiraSourceOperations(SourceOperations):
             max_results,
         )
         with _translate_errors():
-            issues = self._client().search_issues(
+            issues: Any = self._client().search_issues(
                 jql_str=jql,
                 startAt=start_at,
                 maxResults=max_results,

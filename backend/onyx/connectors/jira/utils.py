@@ -39,7 +39,7 @@ def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
 
 def get_issue_field(issue: dict[str, Any], field: str) -> Any:
     """A field of a raw issue, or None when the issue does not have it."""
-    fields = issue.get("fields")
+    fields: Any = issue.get("fields")
     if not isinstance(fields, dict):
         return None
     return fields.get(field)
@@ -47,9 +47,9 @@ def get_issue_field(issue: dict[str, Any], field: str) -> Any:
 
 def get_named_field(issue: dict[str, Any], field: str) -> str | None:
     """The ``name`` of an object field of a raw issue (priority, status, ...)."""
-    value = get_issue_field(issue, field)
+    value: Any = get_issue_field(issue, field)
     if isinstance(value, dict):
-        name = value.get("name")
+        name: Any = value.get("name")
         return name if isinstance(name, str) else None
     return None
 
@@ -109,11 +109,11 @@ def extract_jira_project(url: str) -> tuple[str, str]:
 def get_comment_strs(
     issue: dict[str, Any], comment_email_blacklist: tuple[str, ...] = ()
 ) -> list[str]:
-    comment_field = get_issue_field(issue, "comment") or {}
-    comment_strs = []
+    comment_field: dict[str, Any] = get_issue_field(issue, "comment") or {}
+    comment_strs: list[str] = []
     for comment in comment_field.get("comments", []):
         try:
-            author = comment.get("author") or {}
+            author: dict[str, Any] = comment.get("author") or {}
             if author.get("emailAddress") in comment_email_blacklist:
                 continue  # Skip adding comment if author's email is in blacklist
 
