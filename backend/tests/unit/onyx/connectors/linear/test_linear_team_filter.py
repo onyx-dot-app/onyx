@@ -13,8 +13,8 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.linear.config import LinearConnectorConfig
 from onyx.connectors.linear.connector import LinearConnector
 
-OPS = "onyx.connectors.linear.source_operations"
-PROJECT_URL = "https://linear.app/acme/project/chat-ui-improvements-f90f2bc07871"
+OPS: str = "onyx.connectors.linear.source_operations"
+PROJECT_URL: str = "https://linear.app/acme/project/chat-ui-improvements-f90f2bc07871"
 LAST_PAGE: dict[str, Any] = {"hasNextPage": False, "endCursor": None}
 
 
