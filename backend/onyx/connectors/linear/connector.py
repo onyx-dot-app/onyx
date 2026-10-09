@@ -1,6 +1,7 @@
 import os
 import re
 import time
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -18,6 +19,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
     time_str_to_utc,
 )
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
@@ -78,15 +80,185 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
     )
 
 
+def _run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str, Any]:
+    """The query's data. Linear answers 200 with an `errors` list for a bad
+    query, so that is raised here rather than read as an empty result."""
+    response = _make_query({"query": query, "variables": variables}, api_key)
+    body: dict[str, Any] = response.json()
+    if body.get("errors"):
+        raise RuntimeError(f"Linear GraphQL errors: {body['errors']}")
+    return body["data"]
+
+
+# Linear caps a query's complexity at 10,000 points. A listing page fits at 100.
+_LISTING_PAGE_SIZE = 100
+# A walk still paging past this is a cursor cycling rather than ending.
+_MAX_PAGES = 100_000
+
+_PAGE_INFO = """
+    pageInfo {
+        hasNextPage
+        endCursor
+    }
+"""
+_TEAMS_BY_KEY_QUERY = f"""
+    query TeamsByKey($keys: [String!], $first: Int, $after: String) {{
+        teams(first: $first, after: $after, filter: {{ key: {{ in: $keys }} }}) {{
+            nodes {{ key }}
+            {_PAGE_INFO}
+        }}
+    }}
+"""
+_PROJECTS_QUERY = f"""
+    query ProjectsInScope($filter: ProjectFilter, $first: Int, $after: String) {{
+        projects(first: $first, after: $after, filter: $filter) {{
+            nodes {{ name slugId }}
+            {_PAGE_INFO}
+        }}
+    }}
+"""
+# A project URL ends in the slug and the project's slug id:
+# https://linear.app/<workspace>/project/<slug>-<slug id>
+_PROJECT_URL_SLUG_ID = re.compile(
+    r"linear\.app/[^/]+/project/[^/?#]*?([0-9a-f]{12})(?:[/?#]|$)"
+)
+
+
+def _project_scope(entries: list[str] | None) -> tuple[list[str], list[str]]:
+    """The project names, and the slug ids of the entries given as URLs."""
+    names: set[str] = set()
+    slug_ids: set[str] = set()
+    for entry in entries or []:
+        entry = entry.strip()
+        if not entry:
+            continue
+        match = _PROJECT_URL_SLUG_ID.search(entry)
+        if match:
+            slug_ids.add(match.group(1))
+        else:
+            names.add(entry)
+    return sorted(names), sorted(slug_ids)
+
+
 class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
     supports_manual_credentials = True
 
     def __init__(
         self,
+        team_keys: list[str] | None = None,
+        projects: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
+        # Linear matches keys case-sensitively and only ever issues upper case.
+        self.team_keys = sorted(
+            {key.strip().upper() for key in team_keys or [] if key.strip()}
+        )
+        self.project_names, self.project_slug_ids = _project_scope(projects)
         self.batch_size = batch_size
         self.linear_api_key: str | None = None
+
+    def _api_key(self) -> str:
+        if self.linear_api_key is None:
+            raise ConnectorMissingCredentialError("Linear")
+        return self.linear_api_key
+
+    def validate_connector_settings(self) -> None:
+        """A team or project Linear does not answer for is misspelled or is in
+        a private team the token's user is not in. Linear hides both the same
+        way, so the messages name the two causes."""
+        if self.team_keys:
+            self._validate_teams()
+        project_filter: dict[str, Any] | None = self._project_filter()
+        if project_filter is not None:
+            self._validate_projects(project_filter)
+
+    def _validate_teams(self) -> None:
+        found: set[str] = {
+            team["key"]
+            for data in self._pages(
+                _TEAMS_BY_KEY_QUERY, {"keys": self.team_keys}, ("teams",)
+            )
+            for team in data["teams"]["nodes"]
+        }
+        missing: list[str] = sorted(set(self.team_keys) - found)
+        if missing:
+            raise ConnectorValidationError(
+                f"Linear teams not found: {', '.join(missing)}. Check the key, "
+                "or connect as a member if the team is private."
+            )
+
+    def _validate_projects(self, project_filter: dict[str, Any]) -> None:
+        projects: list[dict[str, Any]] = [
+            project
+            for data in self._pages(
+                _PROJECTS_QUERY, {"filter": project_filter}, ("projects",)
+            )
+            for project in data["projects"]["nodes"]
+        ]
+        found_names: set[str] = {project["name"] for project in projects}
+        found_slug_ids: set[str] = {project["slugId"] for project in projects}
+        missing: list[str] = sorted(
+            (set(self.project_names) - found_names)
+            | (set(self.project_slug_ids) - found_slug_ids)
+        )
+        if missing:
+            raise ConnectorValidationError(
+                f"Linear projects not found: {', '.join(missing)}. Check the "
+                "name or URL, or connect as a member if the project's team is "
+                "private."
+            )
+
+    def _project_filter(self) -> dict[str, Any] | None:
+        clauses: list[dict[str, Any]] = []
+        if self.project_names:
+            clauses.append({"name": {"in": self.project_names}})
+        if self.project_slug_ids:
+            clauses.append({"slugId": {"in": self.project_slug_ids}})
+        if not clauses:
+            return None
+        return clauses[0] if len(clauses) == 1 else {"or": clauses}
+
+    def _issue_filter(
+        self, start: datetime | None = None, end: datetime | None = None
+    ) -> dict[str, Any]:
+        updated_at: dict[str, str] = {}
+        if start is not None:
+            updated_at["gte"] = start.isoformat()
+        if end is not None:
+            updated_at["lte"] = end.isoformat()
+        issue_filter: dict[str, Any] = {"updatedAt": updated_at}
+        if self.team_keys:
+            issue_filter["team"] = {"key": {"in": self.team_keys}}
+        project_filter: dict[str, Any] | None = self._project_filter()
+        if project_filter is not None:
+            issue_filter["project"] = project_filter
+        return issue_filter
+
+    def _pages(
+        self,
+        query: str,
+        variables: dict[str, Any],
+        path: tuple[str, ...],
+        page_size: int = _LISTING_PAGE_SIZE,
+    ) -> Iterator[dict[str, Any]]:
+        """Each page's data, following the connection at `path` to its end."""
+        api_key: str = self._api_key()
+        cursor: str | None = None
+        for _ in range(_MAX_PAGES):
+            data: dict[str, Any] = _run_query(
+                query, {**variables, "first": page_size, "after": cursor}, api_key
+            )
+            yield data
+            connection: dict[str, Any] = data
+            for key in path:
+                connection = connection[key]
+            page_info: dict[str, Any] = connection["pageInfo"]
+            if not page_info["hasNextPage"]:
+                return
+            if page_info["endCursor"] == cursor:
+                raise RuntimeError(f"Linear stopped advancing the {path[-1]} cursor")
+            cursor = page_info["endCursor"]
+        raise RuntimeError(f"Linear kept paging {path[-1]} past {_MAX_PAGES} pages")
 
     @classmethod
     def oauth_id(cls) -> DocumentSource:
@@ -215,31 +387,13 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
     def _process_issues(
         self, start_str: datetime | None = None, end_str: datetime | None = None
     ) -> GenerateDocumentsOutput:
-        if self.linear_api_key is None:
-            raise ConnectorMissingCredentialError("Linear")
-
-        lte_filter = f'lte: "{end_str}"' if end_str else ""
-        gte_filter = f'gte: "{start_str}"' if start_str else ""
-        updatedAtFilter = f"""
-            {lte_filter}
-            {gte_filter}
-        """
-
-        query = (
-            """
-            query IterateIssueBatches($first: Int, $after: String) {
+        query = """
+            query IterateIssueBatches($first: Int, $after: String, $filter: IssueFilter) {
                 issues(
                     orderBy: updatedAt,
                     first: $first,
                     after: $after,
-                    filter: {
-                        updatedAt: {
-        """
-            + updatedAtFilter
-            + """
-                        },
-
-                    }
+                    filter: $filter
                 ) {
                     edges {
                         node {
@@ -265,6 +419,9 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                             trashed
                             snoozedUntilAt
                             team {
+                                name
+                            }
+                            project {
                                 name
                             }
                             creator {
@@ -302,24 +459,15 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                 }
             }
         """
-        )
 
-        has_more = True
-        endCursor = None
-        while has_more:
-            graphql_query = {
-                "query": query,
-                "variables": {
-                    "first": self.batch_size,
-                    "after": endCursor,
-                },
-            }
-            logger.debug("Requesting issues from Linear with query: %s", graphql_query)
-
-            response = _make_query(graphql_query, self.linear_api_key)
-            response_json = response.json()
-            logger.debug("Raw response from Linear: %s", response_json)
-            edges = response_json["data"]["issues"]["edges"]
+        for data in self._pages(
+            query,
+            {"filter": self._issue_filter(start_str, end_str)},
+            ("issues",),
+            self.batch_size,
+        ):
+            logger.debug("Raw response from Linear: %s", data)
+            edges: list[dict[str, Any]] = data["issues"]["edges"]
 
             documents: list[Document | HierarchyNode] = []
             for edge in edges:
@@ -369,6 +517,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                             k: str(v)
                             for k, v in {
                                 "team": (node.get("team") or {}).get("name"),
+                                "project": (node.get("project") or {}).get("name"),
                                 "creator": node.get("creator"),
                                 "assignee": node.get("assignee"),
                                 "state": (node.get("state") or {}).get("name"),
@@ -384,9 +533,6 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                     )
                 )
             yield documents
-
-            endCursor = response_json["data"]["issues"]["pageInfo"]["endCursor"]
-            has_more = response_json["data"]["issues"]["pageInfo"]["hasNextPage"]
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         yield from self._process_issues()

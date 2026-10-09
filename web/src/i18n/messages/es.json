@@ -2634,6 +2634,17 @@
           "description": "Host de Microsoft Graph. Usa https://graph.microsoft.us para GCC High o DoD."
         }
       },
+      "linear": {
+        "description": "Configurar el conector de Linear",
+        "teams": {
+          "label": "Equipos",
+          "description": "Claves de equipo de Linear (p. ej. ENG) a indexar. Déjalo vacío para indexar todos los equipos que el usuario conectado puede ver."
+        },
+        "projects": {
+          "label": "Proyectos",
+          "description": "Nombres o URL de proyectos de Linear a indexar. Déjalo vacío para indexar todos los proyectos. Si también hay equipos, un issue debe coincidir con ambos."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "Autorizar con {source}",
