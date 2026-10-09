@@ -2709,6 +2709,9 @@
           "useButton": {
             "label": "계정 사용"
           },
+          "unsupportedRealm": {
+            "label": "지원되지 않는 사이트 도메인"
+          },
           "expandButton": {
             "ariaLabel": "계정 세부 정보 표시"
           },
