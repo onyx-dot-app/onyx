@@ -38,8 +38,11 @@ from onyx.indexing.port_reembed import (
 )
 from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
 from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE, MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 # Cap per bulk write so it can't run long unheartbeated and get a live port stall-failed.
 _PORT_WRITE_PAGE_SIZE = 1000
@@ -280,6 +283,12 @@ class PortCopier:
     ) -> None:
         self._strategy = select_reembed_strategy(
             present_search_settings, future_search_settings
+        )
+        logger.info(
+            "Porting %s into %s with the %s strategy",
+            present_search_settings.index_name,
+            future_search_settings.index_name,
+            self._strategy.value,
         )
         self._present_client = OpenSearchIndexClient(
             index_name=present_search_settings.index_name
