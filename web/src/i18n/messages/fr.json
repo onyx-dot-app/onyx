@@ -2689,6 +2689,12 @@
         "retryButton": {
           "label": "Réessayer"
         },
+        "draftSummary": {
+          "newAccountSuffix": "(Nouveau compte)",
+          "editButton": {
+            "label": "Modifier le compte"
+          }
+        },
         "savedAccounts": {
           "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}",
           "expandButton": {

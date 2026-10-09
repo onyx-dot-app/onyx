@@ -2689,6 +2689,12 @@
         "retryButton": {
           "label": "다시 시도"
         },
+        "draftSummary": {
+          "newAccountSuffix": "(새 계정)",
+          "editButton": {
+            "label": "계정 편집"
+          }
+        },
         "savedAccounts": {
           "label": "{count, plural, one {저장된 계정 #개} other {저장된 계정 #개}}",
           "expandButton": {

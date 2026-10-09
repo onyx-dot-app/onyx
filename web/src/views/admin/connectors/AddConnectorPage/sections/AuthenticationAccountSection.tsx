@@ -46,6 +46,7 @@ import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStd
 import {
   credentialMatchesBoundFields,
   getCredentialSpec,
+  isDraftCredential,
   realmFields,
   shouldRedirectToOAuth,
   toCredentialRef,
@@ -56,6 +57,8 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { credentialBoundFieldNames } from "@/lib/connectors/utils";
 import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage/components/AuthenticationAccountCard";
 import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
+import DraftAccountSummaryCard from "@/views/admin/connectors/AddConnectorPage/components/DraftAccountSummaryCard";
+import ExistingAccountSummaryCard from "@/views/admin/connectors/AddConnectorPage/components/ExistingAccountSummaryCard";
 
 interface AuthenticationAccountSectionProps {
   /** The source being set up. */
@@ -323,7 +326,13 @@ export default function AuthenticationAccountSection({
   const pickedSavedCredential: SimilarCredential | null =
     credentials?.find((credential) => credential.id === selectedSavedId) ??
     null;
-  const newAccountChosen: boolean = selectedSavedId === null && newAccountReady;
+  const chosenDraft: DraftCredential | null =
+    selectedSavedId === null &&
+    newAccountReady &&
+    checkedCredential !== null &&
+    isDraftCredential(checkedCredential)
+      ? checkedCredential
+      : null;
 
   // One card creates a credential. Its header toggles it; the fold below is a
   // plain container, so a click in the open form cannot fold it away. The
@@ -380,7 +389,12 @@ export default function AuthenticationAccountSection({
           )}
         </div>
       }
-      onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
+      onClick={() => {
+        // Folded, the card opens the whole section with its form.
+        if (!accountsExpanded) setAccountsExpanded(true);
+        if (isCreating) close();
+        else selectMethod(defaultMethod);
+      }}
     >
       <Section padding={2} width="full">
         <Content
@@ -462,11 +476,22 @@ export default function AuthenticationAccountSection({
               {newAccountCard}
             </Section>
           ) : pickedSavedCredential ? (
-            // Folded, only the chosen account shows.
-            renderSavedCard(pickedSavedCredential)
-          ) : newAccountChosen ? (
-            // TODO: the folded summary of a typed account, still to design.
-            newAccountCard
+            <ExistingAccountSummaryCard
+              credential={pickedSavedCredential}
+              source={connector}
+              sourceName={displayName}
+              onExpand={() => setAccountsExpanded(true)}
+            />
+          ) : chosenDraft ? (
+            <DraftAccountSummaryCard
+              draft={chosenDraft}
+              source={connector}
+              sourceName={displayName}
+              onEdit={() => {
+                setAccountsExpanded(true);
+                selectMethod(defaultMethod);
+              }}
+            />
           ) : (
             newAccountCard
           )}

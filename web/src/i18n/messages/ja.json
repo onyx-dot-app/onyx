@@ -2689,6 +2689,12 @@
         "retryButton": {
           "label": "再試行"
         },
+        "draftSummary": {
+          "newAccountSuffix": "(新しいアカウント)",
+          "editButton": {
+            "label": "アカウントを編集"
+          }
+        },
         "savedAccounts": {
           "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}",
           "expandButton": {

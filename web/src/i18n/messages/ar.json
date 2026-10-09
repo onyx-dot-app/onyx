@@ -2689,6 +2689,12 @@
         "retryButton": {
           "label": "إعادة المحاولة"
         },
+        "draftSummary": {
+          "newAccountSuffix": "(حساب جديد)",
+          "editButton": {
+            "label": "تعديل الحساب"
+          }
+        },
         "savedAccounts": {
           "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}",
           "expandButton": {

@@ -2689,6 +2689,12 @@
         "retryButton": {
           "label": "重试"
         },
+        "draftSummary": {
+          "newAccountSuffix": "(新账户)",
+          "editButton": {
+            "label": "编辑账户"
+          }
+        },
         "savedAccounts": {
           "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}",
           "expandButton": {
