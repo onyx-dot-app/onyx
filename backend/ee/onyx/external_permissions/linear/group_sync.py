@@ -7,8 +7,12 @@ from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.linear.connector import linear_connector
-from onyx.connectors.linear.access import member_emails, workspace_members_group_id
-from onyx.connectors.linear.models import WorkspaceUsers
+from onyx.connectors.linear.access import (
+    complete_workspace_users,
+    member_emails,
+    workspace_members_group_id,
+)
+from onyx.connectors.linear.models import LinearUser, WorkspaceUsers
 from onyx.connectors.linear.source_operations import LinearSourceOperations
 from onyx.db.models import ConnectorCredentialPair
 
@@ -23,21 +27,13 @@ def linear_group_sync(
 def team_groups(
     ops: LinearSourceOperations,
 ) -> Generator[ExternalUserGroup, None, None]:
-    """Raises on a users listing shorter than the workspace's own count: a
-    group filled from part of it would revoke access for everyone left out."""
     workspace: WorkspaceUsers = ops.list_workspace_users()
-    if len(workspace.users) < workspace.user_count:
-        raise RuntimeError(
-            f"Linear listed {len(workspace.users)} of the "
-            f"{workspace.user_count} users it reported"
-        )
+    users: list[LinearUser] = complete_workspace_users(workspace)
     # Bare ids: the source prefix is added when the groups are stored, which
     # is how they meet the ids the doc sync writes on an issue.
     yield ExternalUserGroup(
         id=workspace_members_group_id(workspace.organization_id),
-        user_emails=sorted(
-            member_emails(user for user in workspace.users if not user.guest)
-        ),
+        user_emails=sorted(member_emails(user for user in users if not user.guest)),
     )
     for team in ops.list_teams():
         members: set[str] = member_emails(ops.list_team_members(team_id=team.id))

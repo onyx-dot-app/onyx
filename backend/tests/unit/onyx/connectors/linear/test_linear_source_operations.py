@@ -132,6 +132,21 @@ def test_a_cursor_that_stops_advancing_is_refused() -> None:
         ops.list_teams()
 
 
+def test_a_walk_reads_the_key_before_every_page() -> None:
+    ops = LinearSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, "linear", {"linear_api_key": "k"}
+        )
+    )
+    with (
+        patch.object(LinearSourceOperations, "_api_key", return_value="k") as key,
+        patch(f"{OPS}._make_query", side_effect=[_page([], "c1"), _page([], None)]),
+    ):
+        assert ops.list_teams() == []
+
+    assert key.call_count == 2
+
+
 def test_team_members_are_paged_per_team() -> None:
     ops = LinearSourceOperations(
         credentials_provider=OnyxStaticCredentialsProvider(

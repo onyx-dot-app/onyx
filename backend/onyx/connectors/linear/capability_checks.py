@@ -21,8 +21,9 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.linear.access import complete_workspace_users
 from onyx.connectors.linear.config import LinearConnectorConfig
-from onyx.connectors.linear.models import LinearViewer
+from onyx.connectors.linear.models import LinearViewer, WorkspaceUsers
 from onyx.connectors.linear.scope import (
     issue_filter,
     missing_projects,
@@ -234,17 +235,18 @@ class _WorkspaceUsersCheck(CapabilityCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id="linear_workspace_users",
-            display_name="Workspace users are listable",
+            display_name="Workspace users are listable in full",
             requires_connector_instance=False,
             remediation=_GUEST_REMEDIATION,
             docs_link=_DOCS_LINK,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        _probe(
+        workspace: WorkspaceUsers = _probe(
             _gateway(context).list_workspace_users,
             "The credential cannot list the workspace's users.",
         )
+        complete_workspace_users(workspace)
 
 
 class _TeamMembersCheck(CapabilityCheck):

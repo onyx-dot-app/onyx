@@ -9,6 +9,11 @@ from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.linear.capability_checks import (
+    build_linear_doc_permission_sync_checks,
+    build_linear_group_sync_checks,
+)
+from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_doc_permission_sync_checks,
     build_onedrive_group_sync_checks,
@@ -89,6 +94,26 @@ def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
         check.run(context)
 
 
+def validate_linear_perm_sync(connector: LinearConnector) -> None:
+    """Scheduled syncs validate through here, not the named-check runner, so
+    the same checks run before each sync: a user who became a guest after
+    setup would otherwise hide every issue outside the guest's own teams."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.LINEAR,
+        credential_json={},
+        connector=connector,
+        connector_specific_config={
+            "team_keys": connector.team_keys,
+            "projects": connector.projects,
+        },
+        source_operations=connector.ops,
+    )
+    for check in (
+        build_linear_doc_permission_sync_checks() + build_linear_group_sync_checks()
+    ):
+        check.run(context)
+
+
 def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
     """
     Permission sync reads each recording's share settings, its registered
@@ -110,6 +135,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     CanvasConnector: validate_canvas_perm_sync,
     ConfluenceConnector: validate_confluence_perm_sync,
     GoogleDriveConnector: validate_drive_perm_sync,
+    LinearConnector: validate_linear_perm_sync,
     OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
     ZoomConnector: validate_zoom_perm_sync,
