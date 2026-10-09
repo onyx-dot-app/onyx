@@ -38,7 +38,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.jira.config import JiraConnectorConfig
 from onyx.connectors.jira.connector import build_jql_query, jira_error_messages
-from onyx.connectors.jira.models import JiraIssueIdPage
+from onyx.connectors.jira.models import JiraGroupMemberSample, JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
     JiraGroupPage,
@@ -536,7 +536,9 @@ def build_jira_indexing_checks() -> list[CapabilityCheck]:
 # the members of each group. Both map Jira users to Onyx users by email.
 
 _PERMISSION_SYNC_SCOPES = "`read:jira-user` and `manage:jira-configuration`"
+_PUBLIC_HOLDER_TYPES = frozenset({HOLDER_TYPE_ANYONE, HOLDER_TYPE_APPLICATION_ROLE})
 _SAMPLE_USERS = 5
+_SAMPLE_ROLES = 3
 _SAMPLE_GROUPS = 3
 _GROUP_MEMBER_PAGE_SIZE = 50
 _ATLASSIAN_ACCOUNT_TYPE = "atlassian"
@@ -753,25 +755,25 @@ def _user_lookup_id(gateway: JiraSourceOperations, user: dict[str, Any]) -> str 
     return None
 
 
-def _read_first_role(
-    context: CapabilityCheckContext,
-    config: JiraConnectorConfig,
-    project_key: str,
-    scheme: dict[str, Any],
-) -> dict[str, Any] | None:
-    """The first project role that holds Browse Projects, or None when no role
-    does. Raises the validation family on a failed read."""
-    role_ids: list[str] = [
+def _browse_role_ids(scheme: dict[str, Any]) -> list[str]:
+    return [
         role_id
         for holder in _browse_holders(scheme)
         if holder.get("type") == HOLDER_TYPE_PROJECT_ROLE
         and (role_id := _role_id(holder))
     ]
-    if not role_ids:
-        return None
+
+
+def _read_role(
+    context: CapabilityCheckContext,
+    config: JiraConnectorConfig,
+    project_key: str,
+    role_id: str,
+) -> dict[str, Any]:
+    """Reads one project role. Raises the validation family on a failed read."""
     try:
         return _gateway(context).get_project_role(
-            project_key=project_key, role_id=role_ids[0]
+            project_key=project_key, role_id=role_id
         )
     except JiraApiError as e:
         _raise_for_api_error(
@@ -781,11 +783,20 @@ def _read_first_role(
                 f"`{project_key}`. {_perm_sync_hint(config, _ADMIN_HINT)}"
             ),
             not_found=(
-                f"Jira does not return the role {role_ids[0]} of the project "
+                f"Jira does not return the role {role_id} of the project "
                 f"`{project_key}` to this credential. "
                 f"{_perm_sync_hint(config, _ADMIN_HINT)}"
             ),
         )
+
+
+def _is_public(scheme: dict[str, Any]) -> bool:
+    """True when anyone or every licensed user can browse the project.
+    Permission sync then returns public access without reading roles or
+    users."""
+    return any(
+        holder.get("type") in _PUBLIC_HOLDER_TYPES for holder in _browse_holders(scheme)
+    )
 
 
 class _ProjectRolesReadCheck(_JiraCheck):
@@ -802,17 +813,15 @@ class _ProjectRolesReadCheck(_JiraCheck):
     def run(self, context: CapabilityCheckContext) -> None:
         config: JiraConnectorConfig = self.config(context)
         project_key, scheme = _read_scheme_for_dependent_check(context, config)
-        role: dict[str, Any] | None = _read_first_role(
-            context, config, project_key, scheme
-        )
-        if role is not None and not isinstance(role.get("actors"), list):
+        role_ids: list[str] = _browse_role_ids(scheme)
+        if _is_public(scheme) or not role_ids:
+            return
+        role: dict[str, Any] = _read_role(context, config, project_key, role_ids[0])
+        if not isinstance(role.get("actors"), list):
             raise InsufficientPermissionsError(
                 f"Jira returned a role of the project `{project_key}` without its "
                 f"members. {_perm_sync_hint(config, _ADMIN_HINT)}"
             )
-
-
-_PUBLIC_HOLDER_TYPES = frozenset({HOLDER_TYPE_ANYONE, HOLDER_TYPE_APPLICATION_ROLE})
 
 
 def _is_group_actor(actor: dict[str, Any]) -> bool:
@@ -828,7 +837,9 @@ class _PermissionUserEmailsCheck(_JiraCheck):
 
     Passes for a public project (``anyone`` or ``applicationRole``), which syncs
     without reading users, and for a project with group grants, which give
-    access through group sync."""
+    access through group sync. Fails only when every sampled user hides the
+    email and the sample covers every user the sync reads; a partial sample
+    with hidden emails is INDETERMINATE."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -847,7 +858,7 @@ class _PermissionUserEmailsCheck(_JiraCheck):
         project_key, scheme = _read_scheme_for_dependent_check(context, config)
         holders: list[dict[str, Any]] = _browse_holders(scheme)
         holder_types: set[str] = {str(holder.get("type")) for holder in holders}
-        if holder_types & _PUBLIC_HOLDER_TYPES or HOLDER_TYPE_GROUP in holder_types:
+        if _is_public(scheme) or HOLDER_TYPE_GROUP in holder_types:
             return
         # Direct user grants carry the expanded user.
         emails: list[str | None] = [
@@ -856,10 +867,12 @@ class _PermissionUserEmailsCheck(_JiraCheck):
             if holder.get("type") == HOLDER_TYPE_USER
             and isinstance(holder.get("user"), dict)
         ]
+        role_ids: list[str] = _browse_role_ids(scheme)
         try:
-            role: dict[str, Any] | None = _read_first_role(
-                context, config, project_key, scheme
-            )
+            roles: list[dict[str, Any]] = [
+                _read_role(context, config, project_key, role_id)
+                for role_id in role_ids[:_SAMPLE_ROLES]
+            ]
         except ConnectorValidationError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read the project roles, so this check cannot run. "
@@ -867,7 +880,8 @@ class _PermissionUserEmailsCheck(_JiraCheck):
             ) from e
         actors: list[dict[str, Any]] = [
             actor
-            for actor in (role.get("actors") if role is not None else None) or []
+            for role in roles
+            for actor in role.get("actors") or []
             if isinstance(actor, dict)
         ]
         if any(_is_group_actor(actor) for actor in actors):
@@ -875,6 +889,9 @@ class _PermissionUserEmailsCheck(_JiraCheck):
         role_users: list[dict[str, Any]] = [
             user for actor in actors if (user := _role_actor_user(actor))
         ]
+        complete_sample: bool = (
+            len(role_ids) <= _SAMPLE_ROLES and len(role_users) <= _SAMPLE_USERS
+        )
         for user in role_users[:_SAMPLE_USERS]:
             lookup_id: str | None = _user_lookup_id(gateway, user)
             if not lookup_id:
@@ -895,6 +912,12 @@ class _PermissionUserEmailsCheck(_JiraCheck):
                 continue
             emails.append(details.get("emailAddress"))
         if emails and not any(emails):
+            if not complete_sample:
+                raise UnexpectedValidationError(
+                    f"The sampled users who can browse the project `{project_key}` "
+                    "have no visible email. Permission sync reads more users, so "
+                    f"Onyx cannot verify the rest. {_email_hint(gateway)}"
+                )
             raise InsufficientPermissionsError(
                 f"No user who can browse the project `{project_key}` has a visible "
                 "email, so their access cannot map to Onyx users. "
@@ -937,12 +960,12 @@ def _list_groups_for_dependent_check(
 
 def _sample_group_members(
     context: CapabilityCheckContext, config: JiraConnectorConfig
-) -> list[dict[str, Any]]:
-    """The first page of members of the first groups that have members."""
+) -> JiraGroupMemberSample:
     gateway: JiraSourceOperations = _gateway(context)
-    for group_name in _list_groups_for_dependent_check(context, config)[
-        :_SAMPLE_GROUPS
-    ]:
+    group_names: list[str] = _list_groups_for_dependent_check(context, config)
+    members: list[dict[str, Any]] = []
+    complete: bool = len(group_names) <= _SAMPLE_GROUPS
+    for group_name in group_names[:_SAMPLE_GROUPS]:
         try:
             page: dict[str, Any] = gateway.get_group_members_page(
                 group_name=group_name,
@@ -964,10 +987,12 @@ def _sample_group_members(
                     "Upgrade Jira"
                 ),
             )
-        members: Any = page.get("values")
-        if isinstance(members, list) and members:
-            return members
-    return []
+        page_members: Any = page.get("values")
+        if isinstance(page_members, list):
+            members.extend(m for m in page_members if isinstance(m, dict))
+        if not page.get("isLast", True):
+            complete = False
+    return JiraGroupMemberSample(members=members, complete=complete)
 
 
 class _GroupListingCheck(_JiraCheck):
@@ -1041,10 +1066,10 @@ class _GroupMembershipCheck(_JiraCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         config: JiraConnectorConfig = self.config(context)
-        if not _sample_group_members(context, config):
+        if not _sample_group_members(context, config).members:
             # The reads succeeded: the first groups can be empty.
             raise UnexpectedValidationError(
-                "The first listed groups have no members, so Onyx cannot verify "
+                "The sampled groups have no members, so Onyx cannot verify "
                 "that group members are readable."
             )
 
@@ -1064,7 +1089,7 @@ class _GroupMemberEmailsCheck(_JiraCheck):
     def run(self, context: CapabilityCheckContext) -> None:
         config: JiraConnectorConfig = self.config(context)
         try:
-            members: list[dict[str, Any]] = _sample_group_members(context, config)
+            sample: JiraGroupMemberSample = _sample_group_members(context, config)
         except ConnectorValidationError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read group members, so this check cannot run. "
@@ -1073,10 +1098,16 @@ class _GroupMemberEmailsCheck(_JiraCheck):
         # Group sync skips app and customer accounts.
         people: list[dict[str, Any]] = [
             member
-            for member in members
+            for member in sample.members
             if member.get("accountType") in (None, _ATLASSIAN_ACCOUNT_TYPE)
         ]
         if people and not any(member.get("emailAddress") for member in people):
+            if not sample.complete:
+                raise UnexpectedValidationError(
+                    "The sampled group members have no visible email. Group sync "
+                    "reads more groups and members, so Onyx cannot verify the "
+                    f"rest. {_email_hint(_gateway(context))}"
+                )
             raise InsufficientPermissionsError(
                 "No member of the sampled group has a visible email, so group "
                 f"members cannot map to Onyx users. {_email_hint(_gateway(context))}"

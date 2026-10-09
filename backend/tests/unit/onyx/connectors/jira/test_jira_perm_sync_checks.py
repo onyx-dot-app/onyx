@@ -317,6 +317,51 @@ def test_permission_user_emails_reads_direct_user_grants() -> None:
     gateway.get_user.assert_not_called()
 
 
+def test_permission_user_emails_is_indeterminate_for_a_partial_sample() -> None:
+    """Sync reads every role user; hidden emails in a sample prove nothing."""
+    gateway = _gateway()
+    gateway.get_project_role.return_value = {
+        "actors": [{"actorUser": {"accountId": f"acc-{i}"}} for i in range(6)]
+    }
+    gateway.get_user.return_value = {"accountType": "atlassian", "emailAddress": ""}
+
+    result = _run("jira_permission_user_emails", gateway)
+
+    assert result.status == CapabilityCheckStatus.INDETERMINATE
+
+
+def test_permission_user_emails_reads_every_role_up_to_the_sample() -> None:
+    gateway = _gateway()
+    gateway.get_project_permission_scheme.return_value = {
+        "permissions": [
+            _browse({"type": "projectRole", "value": str(role_id)})
+            for role_id in range(4)
+        ]
+    }
+    gateway.get_user.return_value = {"accountType": "atlassian", "emailAddress": ""}
+
+    result = _run("jira_permission_user_emails", gateway)
+
+    assert gateway.get_project_role.call_count == 3
+    assert result.status == CapabilityCheckStatus.INDETERMINATE
+
+
+def test_project_roles_read_skips_public_projects() -> None:
+    gateway = _gateway()
+    gateway.get_project_permission_scheme.return_value = {
+        "permissions": [
+            _browse({"type": "applicationRole"}),
+            _browse({"type": "projectRole", "value": "10003"}),
+        ]
+    }
+    gateway.get_project_role.side_effect = _api_error(403)
+
+    result = _run("jira_project_roles_read", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    gateway.get_project_role.assert_not_called()
+
+
 # --- group sync ---
 
 
@@ -386,3 +431,25 @@ def test_group_member_emails_fails_when_emails_are_hidden() -> None:
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert "User email visibility" in result.message
+
+
+@pytest.mark.parametrize(
+    "group_names,is_last",
+    [(["devs"], False), (["a", "b", "c", "d"], True)],
+    ids=["more-pages", "more-groups"],
+)
+def test_group_member_emails_is_indeterminate_for_a_partial_sample(
+    group_names: list[str], is_last: bool
+) -> None:
+    gateway = _gateway(is_cloud=False)
+    gateway.list_groups.return_value = JiraGroupPage(
+        group_names=group_names, total=len(group_names)
+    )
+    gateway.get_group_members_page.return_value = {
+        "values": [{"name": "jdoe"}],
+        "isLast": is_last,
+    }
+
+    result = _run("jira_group_member_emails", gateway)
+
+    assert result.status == CapabilityCheckStatus.INDETERMINATE
