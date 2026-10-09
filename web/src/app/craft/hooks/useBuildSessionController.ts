@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import {
+  canReuseSession,
+  useBuildSessionStore,
+} from "@/app/craft/hooks/useBuildSessionStore";
 import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
 import { useSandboxStatusReconciler } from "@/app/craft/hooks/useSandboxStatusReconciler";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
@@ -118,13 +121,17 @@ export function useBuildSessionController({
         const session = await fetchSession(sessionId, {
           checkWorkspace: false,
         });
-        if (!session.skills_stale) return;
         const currentSession = useBuildSessionStore
           .getState()
           .sessions.get(sessionId);
-        if (currentSession?.skillsStaleRevision !== skillsStaleRevision) return;
+        if (
+          currentSession?.instanceId !== cachedSession.instanceId ||
+          currentSession.turnGeneration !== cachedSession.turnGeneration ||
+          currentSession.skillsStaleRevision !== skillsStaleRevision
+        )
+          return;
         updateSessionData(sessionId, {
-          skillsStale: true,
+          skillsStale: session.skills_stale,
         });
       } catch {
         // Keep the usable cached session on transient refresh failures.
@@ -189,7 +196,7 @@ export function useBuildSessionController({
       const currentState = useBuildSessionStore.getState();
       const cachedSession = currentState.sessions.get(existingSessionId);
 
-      if (cachedSession?.isLoaded) {
+      if (canReuseSession(cachedSession)) {
         setCurrentSession(existingSessionId);
         return;
       }

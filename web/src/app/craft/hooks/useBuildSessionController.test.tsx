@@ -45,6 +45,36 @@ describe("useBuildSessionController", () => {
     useBuildSessionStore.getState().setCurrentSession(SESSION_ID);
   });
 
+  it("retries a failed restore only after leaving and revisiting the session", async () => {
+    const store = () => useBuildSessionStore.getState();
+    store().updateSessionData(SESSION_ID, {
+      status: "idle",
+      sandbox: { id: "failed-sandbox", status: "failed" } as never,
+    });
+    store().createSession("another-session", { isLoaded: true });
+    const loadSession = jest.fn(async (sessionId: string) => {
+      store().setCurrentSession(sessionId);
+    });
+    const originalLoad = store().loadSession;
+    useBuildSessionStore.setState({ loadSession });
+    try {
+      const { result, rerender } = renderHook(
+        ({ sessionId }: { sessionId: string }) =>
+          useBuildSessionController({ existingSessionId: sessionId }),
+        { initialProps: { sessionId: SESSION_ID } }
+      );
+      expect(result.current.isLoading).toBe(false);
+      expect(loadSession).not.toHaveBeenCalled();
+
+      rerender({ sessionId: "another-session" });
+      rerender({ sessionId: SESSION_ID });
+      await waitFor(() => expect(loadSession).toHaveBeenCalledTimes(1));
+      expect(loadSession).toHaveBeenCalledWith(SESSION_ID);
+    } finally {
+      useBuildSessionStore.setState({ loadSession: originalLoad });
+    }
+  });
+
   it("refreshes cached file revisions on entry without opening new outputs", async () => {
     const store = () => useBuildSessionStore.getState();
     store().updateSessionData(SESSION_ID, {
@@ -102,7 +132,7 @@ describe("useBuildSessionController", () => {
     expect(api.fetchOutputInventory).not.toHaveBeenCalled();
   });
 
-  it("marks skills stale from reads without clearing confirmed stale state", async () => {
+  it("clears the notice when the server confirms the runtime is current", async () => {
     jest.mocked(api.fetchSession).mockResolvedValue({
       skills_stale: true,
     } as never);
@@ -131,7 +161,7 @@ describe("useBuildSessionController", () => {
     await act(async () => Promise.resolve());
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("does not restore stale state after an intervening reload", async () => {

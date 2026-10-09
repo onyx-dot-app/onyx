@@ -383,6 +383,14 @@ resending does not scrap the interrupted turn's rendered output today.
 
 ### 4.5 History durability
 
+Session loading reads persisted messages before waiting for runtime discovery or sandbox restoration.
+Runtime failures keep the loaded transcript and permit another load when the user revisits.
+Sleeping, terminated, and failed cached sandboxes also load again on entry.
+Load responses must match the session instance, turn generation, and latest load generation.
+Restoration refreshes directory caches only after the webapp readiness check completes.
+Cached skill notices accept server state only if no newer turn or skill reload intervened.
+
+
 Two distinct persistence surfaces, per `docs/craft/features/streaming/
 preserve-opencode-sessions.md` and confirmed against
 `session/sandbox_lifecycle.py`:

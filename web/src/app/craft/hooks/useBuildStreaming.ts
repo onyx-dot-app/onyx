@@ -787,6 +787,8 @@ export function useBuildStreaming() {
                 status: "active",
                 streamItems: [],
                 isInterrupting: false,
+                pendingCompletedTurnId:
+                  options?.expectedTurnId ?? session?.activeTurnId ?? null,
                 activeTurnId: null,
                 activeTurnIndex: null,
                 activeTurnLocalOwner: false,

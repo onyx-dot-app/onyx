@@ -1,3 +1,5 @@
+/** @jest-environment jsdom */
+import { waitFor } from "@tests/setup/test-utils";
 import {
   useBuildSessionStore,
   waitForWebappReady,
@@ -593,6 +595,260 @@ describe("loadSession restore status", () => {
     expect(session?.activeTurnId).toBeNull();
     expect(session?.activeTurnLocalOwner).toBe(false);
   });
+
+  it("shows persisted history before runtime discovery completes", async () => {
+    const runtime = deferred<Awaited<ReturnType<typeof api.fetchSession>>>();
+    mockedApi.fetchSession.mockReturnValueOnce(runtime.promise);
+    mockedApi.fetchMessages.mockResolvedValueOnce([
+      {
+        id: "persisted-user",
+        type: "user",
+        content: "Saved conversation",
+        created_at: "2026-10-09T00:00:00Z",
+      },
+    ] as never);
+    mockedApi.restoreSession.mockResolvedValueOnce(runningSession() as never);
+    const loading = useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    await waitFor(() => {
+      const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+      expect(session?.isLoaded).toBe(true);
+      expect(session?.messages[0]?.content).toBe("Saved conversation");
+    });
+    expect(mockedApi.restoreSession).not.toHaveBeenCalled();
+    expect(mockedApi.fetchArtifacts).not.toHaveBeenCalled();
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.sandbox
+    ).toBeNull();
+
+    runtime.resolve(sleepingSession() as never);
+    await loading;
+    expect(mockedApi.restoreSession).toHaveBeenCalledWith(SESSION_ID);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      isLoaded: true,
+      sandbox: { status: "running" },
+      filesNeedsRefresh: 1,
+    });
+  });
+
+  it("retains loaded history after runtime discovery fails and retries on revisit", async () => {
+    mockedApi.fetchSession
+      .mockRejectedValueOnce(new Error("Runtime unavailable"))
+      .mockResolvedValueOnce(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "persisted-user",
+        type: "user",
+        content: "Saved conversation",
+        created_at: "2026-10-09T00:00:00Z",
+      },
+    ] as never);
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      isLoaded: true,
+      error: "Runtime unavailable",
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.messages[0]
+        ?.content
+    ).toBe("Saved conversation");
+
+    useBuildSessionStore.getState().setCurrentSession("another-session");
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    expect(mockedApi.fetchSession).toHaveBeenCalledTimes(2);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      isLoaded: true,
+      error: null,
+      sandbox: { status: "running" },
+    });
+  });
+
+  it("invalidates even an empty directory cache only after restoration finishes", async () => {
+    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+    const restore = deferred<Awaited<ReturnType<typeof api.restoreSession>>>();
+    const started = deferred<void>();
+    mockedApi.restoreSession.mockImplementation(() => {
+      started.resolve();
+      return restore.promise;
+    });
+    const loading = useBuildSessionStore.getState().loadSession(SESSION_ID);
+    await started.promise;
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      sandbox: { status: "restoring" },
+      filesNeedsRefresh: 0,
+    });
+    restore.resolve(runningSession() as never);
+    await loading;
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      sandbox: { status: "running" },
+      filesNeedsRefresh: 1,
+    });
+  });
+
+  it("keeps newer session data when concurrent force loads finish out of order", async () => {
+    const older = deferred<Awaited<ReturnType<typeof api.fetchSession>>>();
+    const newer = deferred<Awaited<ReturnType<typeof api.fetchSession>>>();
+    mockedApi.fetchSession
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const latestMessages = [
+      {
+        id: "latest-message",
+        type: "user",
+        content: "latest transcript",
+        created_at: "2026-10-09T00:00:00Z",
+      },
+    ];
+    mockedApi.fetchMessages.mockResolvedValue(latestMessages as never);
+    const first = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    const second = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    newer.resolve({ ...runningSession(), agent_model: "new-model" } as never);
+    await second;
+    const latestSession = useBuildSessionStore
+      .getState()
+      .sessions.get(SESSION_ID);
+    expect(latestSession).toMatchObject({
+      agentModel: "new-model",
+      sandbox: { status: "running" },
+    });
+    expect(latestSession?.messages[0]?.content).toBe("latest transcript");
+
+    mockedApi.fetchMessages.mockResolvedValue([]);
+    older.resolve({
+      ...sleepingSession(),
+      agent_model: "old-model",
+    } as never);
+    await first;
+    expect(useBuildSessionStore.getState().sessions.get(SESSION_ID)).toBe(
+      latestSession
+    );
+    expect(mockedApi.restoreSession).not.toHaveBeenCalled();
+    expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores runtime discovery for a deleted and recreated session", async () => {
+    const runtime = deferred<Awaited<ReturnType<typeof api.fetchSession>>>();
+    mockedApi.fetchSession.mockReturnValueOnce(runtime.promise);
+    const loading = useBuildSessionStore.getState().loadSession(SESSION_ID);
+    await waitFor(() => {
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)?.isLoaded
+      ).toBe(true);
+    });
+    const oldInstance = useBuildSessionStore
+      .getState()
+      .sessions.get(SESSION_ID)?.instanceId;
+    useBuildSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: null,
+    });
+    useBuildSessionStore.getState().createSession(SESSION_ID, {
+      isLoaded: true,
+      agentModel: "replacement-model",
+    });
+    const replacement = useBuildSessionStore
+      .getState()
+      .sessions.get(SESSION_ID);
+    expect(replacement?.instanceId).not.toBe(oldInstance);
+    runtime.resolve(sleepingSession() as never);
+    await loading;
+    expect(useBuildSessionStore.getState().sessions.get(SESSION_ID)).toBe(
+      replacement
+    );
+    expect(mockedApi.restoreSession).not.toHaveBeenCalled();
+    expect(mockedApi.fetchArtifacts).not.toHaveBeenCalled();
+  });
+
+  it.each(["restore", "readiness"] as const)(
+    "ignores a %s response after a newer turn starts",
+    async (stage) => {
+      mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+      const restore =
+        deferred<Awaited<ReturnType<typeof api.restoreSession>>>();
+      const readiness =
+        deferred<Awaited<ReturnType<typeof api.fetchWebappInfo>>>();
+      mockedApi.restoreSession.mockReturnValueOnce(restore.promise);
+      mockedApi.fetchWebappInfo.mockReset();
+      mockedApi.fetchWebappInfo.mockReturnValueOnce(readiness.promise);
+      const loading = useBuildSessionStore.getState().loadSession(SESSION_ID);
+      await waitFor(() => expect(mockedApi.restoreSession).toHaveBeenCalled());
+      if (stage === "readiness") {
+        restore.resolve(runningSession() as never);
+        await waitFor(() =>
+          expect(mockedApi.fetchWebappInfo).toHaveBeenCalled()
+        );
+      }
+      useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+        turnGeneration: 1,
+        status: "running",
+        activeTurnId: "newer-turn",
+      });
+      const current = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+      restore.resolve(runningSession() as never);
+      readiness.resolve(webappInfo(true, true) as never);
+      await loading;
+      expect(useBuildSessionStore.getState().sessions.get(SESSION_ID)).toBe(
+        current
+      );
+      expect(mockedApi.fetchArtifacts).not.toHaveBeenCalled();
+    }
+  );
+
+  it("retries a failed restoration when the session is revisited", async () => {
+    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+    mockedApi.restoreSession
+      .mockRejectedValueOnce(new Error("restore unavailable"))
+      .mockResolvedValueOnce(runningSession() as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      isLoaded: true,
+      sandbox: { status: "failed" },
+    });
+
+    useBuildSessionStore.getState().setCurrentSession("another-session");
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    expect(mockedApi.restoreSession).toHaveBeenCalledTimes(2);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      isLoaded: true,
+      sandbox: { status: "running" },
+    });
+  });
+
+  it("clears cached stale-skill state when loading a current runtime", async () => {
+    mockedApi.fetchSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: false,
+    } as never);
+    useBuildSessionStore
+      .getState()
+      .createSession(SESSION_ID, { skillsStale: true, isLoaded: false });
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(false);
+  });
 });
 
 describe("loadSession preferPersisted (interrupt reconciliation)", () => {
@@ -776,5 +1032,206 @@ describe("waitForWebappReady", () => {
     await jest.advanceTimersByTimeAsync(30000);
     await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("loadSession completed transcript handoff", () => {
+  const user = {
+    id: "user-db",
+    type: "user" as const,
+    content: "Build it",
+    timestamp: new Date(),
+    turn_index: 0,
+  };
+  const answer = {
+    id: "agent-msg-local",
+    type: "assistant" as const,
+    content: "The complete answer.",
+    timestamp: new Date(),
+    turn_index: 0,
+    message_metadata: {
+      streamItems: [
+        {
+          type: "text",
+          id: "text-local",
+          content: "The complete answer.",
+          isStreaming: false,
+        },
+      ],
+    },
+  };
+
+  beforeEach(() => {
+    useBuildSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: null,
+    });
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchActiveTurn.mockResolvedValue(null);
+    mockedApi.fetchArtifacts.mockResolvedValue([]);
+    mockedApi.fetchOutputInventory.mockResolvedValue({
+      files: [],
+      complete: true,
+    });
+    useBuildSessionStore.getState().createSession(SESSION_ID, {
+      status: "active",
+      isLoaded: true,
+      messages: [user, answer],
+      pendingCompletedTurnId: "completed-turn",
+    });
+  });
+
+  it("keeps the completed response until its server turn completes, then uses the canonical transcript once", async () => {
+    mockedApi.fetchActiveTurn.mockResolvedValue({
+      turn_id: "completed-turn",
+      turn_index: 0,
+    } as never);
+    mockedApi.fetchMessages.mockResolvedValue([user]);
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      messages: [user, answer],
+      status: "active",
+      activeTurnId: null,
+      pendingCompletedTurnId: "completed-turn",
+    });
+    // Canonical content can differ from the streamed response; completion, not text equality, releases ownership.
+    const persisted = {
+      ...answer,
+      id: "answer-db",
+      content: "Canonical answer.",
+      message_metadata: {
+        streamItems: [
+          {
+            type: "text",
+            id: "text-db",
+            content: "Canonical answer.",
+            isStreaming: false,
+          },
+        ],
+      },
+    };
+    mockedApi.fetchActiveTurn.mockResolvedValue(null);
+    mockedApi.fetchMessages.mockResolvedValue([user, persisted]);
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      messages: [user, persisted],
+      pendingCompletedTurnId: null,
+    });
+    expect(mockedApi.fetchActiveTurn.mock.invocationCallOrder[1]).toBeLessThan(
+      mockedApi.fetchMessages.mock.invocationCallOrder[1] ?? Infinity
+    );
+  });
+
+  it("keeps a completed response when server completion cannot be checked", async () => {
+    mockedApi.fetchActiveTurn.mockRejectedValue(
+      new Error("turn endpoint unavailable")
+    );
+    mockedApi.fetchMessages.mockResolvedValue([user]);
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      messages: [user, answer],
+      pendingCompletedTurnId: "completed-turn",
+    });
+  });
+
+  it("honors preferPersisted instead of retaining a completed local response", async () => {
+    mockedApi.fetchMessages.mockResolvedValue([user]);
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true, preferPersisted: true });
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({ messages: [user], pendingCompletedTurnId: null });
+  });
+
+  it("preserves a response completed after the load started, even when its earlier lookup reported no turn", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      status: "running",
+      activeTurnId: "completed-turn",
+      pendingCompletedTurnId: null,
+    });
+    const messages = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+    mockedApi.fetchMessages.mockReturnValue(messages.promise);
+    const load = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mockedApi.fetchMessages).toHaveBeenCalled();
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      status: "active",
+      activeTurnId: null,
+      pendingCompletedTurnId: "completed-turn",
+    });
+    messages.resolve([user]);
+    await load;
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      messages: [user, answer],
+      pendingCompletedTurnId: "completed-turn",
+      status: "active",
+    });
+  });
+
+  it("keeps a newer live turn's identity when completion lookup fails", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      status: "running",
+      activeTurnId: "next-turn",
+      activeTurnIndex: 1,
+      activeTurnLocalOwner: true,
+    });
+    mockedApi.fetchActiveTurn.mockRejectedValue(
+      new Error("turn endpoint unavailable")
+    );
+    mockedApi.fetchMessages.mockResolvedValue([user]);
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      messages: [user, answer],
+      status: "running",
+      activeTurnId: "next-turn",
+      activeTurnIndex: 1,
+      activeTurnLocalOwner: true,
+    });
+  });
+
+  it("rejects a load response from an older turn", async () => {
+    const messages = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+    mockedApi.fetchMessages.mockReturnValue(messages.promise);
+    const load = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    await Promise.resolve();
+    await Promise.resolve();
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      turnGeneration: 1,
+      status: "running",
+      activeTurnId: "next-turn",
+    });
+    messages.resolve([user]);
+    await load;
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      messages: [user, answer],
+      status: "running",
+      activeTurnId: "next-turn",
+    });
   });
 });

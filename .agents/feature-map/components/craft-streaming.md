@@ -245,6 +245,12 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 
 ---
 
+A completed local transcript stays visible while its server turn remains active or cannot be checked.
+Session loading checks turn completion before reading persisted messages.
+Once completion is confirmed, persisted history replaces the local transcript and clears the pending turn marker.
+Interrupt reconciliation explicitly requests persisted history and bypasses this completion hold.
+Responses from earlier session instances, loads, or turns cannot replace current session data.
+
 ### Output inventory and panel navigation
 
 The frontend keeps a temporary output inventory in each Zustand session.

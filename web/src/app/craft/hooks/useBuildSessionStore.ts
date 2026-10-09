@@ -630,11 +630,13 @@ export type OutputTabType = "preview" | "files" | "artifacts";
 
 export interface BuildSessionData {
   id: string;
+  instanceId: string;
   status: SessionStatus;
   messages: BuildMessage[];
   artifacts: Artifact[];
   /** Active backend turn, if this session is currently running. */
   activeTurnId: string | null;
+  pendingCompletedTurnId: string | null;
   /** The user-message turn index for the active backend turn. */
   activeTurnIndex: number | null;
   /** True when this tab created the active turn and already owns its stream. */
@@ -666,6 +668,7 @@ export interface BuildSessionData {
    * when it changes, so a stale reconcile can't clobber the superseding turn.
    */
   turnGeneration: number;
+  loadGeneration: number;
   error: string | null;
   webappUrl: string | null;
   /** Backend sandbox state plus transient client-owned lifecycle states. */
@@ -1037,6 +1040,18 @@ interface BuildSessionStore {
   navigateTabForward: (sessionId: string) => void;
 }
 
+export function canReuseSession(
+  session: BuildSessionData | undefined
+): boolean {
+  return (
+    session?.isLoaded === true &&
+    session.error === null &&
+    session.sandbox?.status !== "sleeping" &&
+    session.sandbox?.status !== "terminated" &&
+    session.sandbox?.status !== "failed"
+  );
+}
+
 // =============================================================================
 // Initial State Factory
 // =============================================================================
@@ -1050,6 +1065,7 @@ const createInitialSessionData = (
   messages: [],
   artifacts: [],
   activeTurnId: null,
+  pendingCompletedTurnId: null,
   activeTurnIndex: null,
   activeTurnLocalOwner: false,
   streamItems: [],
@@ -1057,6 +1073,7 @@ const createInitialSessionData = (
   isInterrupting: false,
   wasInterrupted: false,
   turnGeneration: 0,
+  loadGeneration: 0,
   error: null,
   webappUrl: null,
   sandbox: null,
@@ -1094,6 +1111,7 @@ const createInitialSessionData = (
   filePreviewRefreshKeys: {},
   outputSelectionLocked: false,
   ...initialData,
+  instanceId: genId("session-state"),
 });
 
 // =============================================================================
@@ -1635,100 +1653,84 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // Check if already loaded in cache
     const existingSession = sessions.get(sessionId);
-    if (existingSession?.isLoaded && options?.force !== true) {
+    if (canReuseSession(existingSession) && options?.force !== true) {
       setCurrentSession(sessionId);
       return;
     }
 
     // Set as current and mark as loading
     setCurrentSession(sessionId);
-    const skillsStaleRevision =
-      get().sessions.get(sessionId)!.skillsStaleRevision;
+    const loadingSession = get().sessions.get(sessionId);
+    if (!loadingSession) return;
+    const loadGeneration = loadingSession.loadGeneration + 1;
+    updateSessionData(sessionId, { loadGeneration });
+    const isCurrentLoad = () => {
+      const current = get().sessions.get(sessionId);
+      return (
+        current?.instanceId === loadingSession.instanceId &&
+        current.turnGeneration === loadingSession.turnGeneration &&
+        current.loadGeneration === loadGeneration
+      );
+    };
+    const skillsStaleRevision = loadingSession.skillsStaleRevision;
     const canApplySkillsStale = () =>
       get().sessions.get(sessionId)?.skillsStaleRevision ===
       skillsStaleRevision;
 
     try {
-      // First fetch session to check sandbox status
-      let sessionData = await fetchSession(sessionId);
-
-      // Check if session needs to be restored:
-      // - Sandbox is sleeping, terminated, or failed (the backend treats
-      //   failed as reprovisionable — restore retries the attempt)
-      // - Sandbox is running but session workspace is not loaded
-      const needsRestore =
-        sessionData.sandbox?.status === "sleeping" ||
-        sessionData.sandbox?.status === "terminated" ||
-        sessionData.sandbox?.status === "failed" ||
-        (sessionData.sandbox?.status === "running" &&
-          !sessionData.session_loaded_in_sandbox);
-
-      if (needsRestore) {
-        // Show sandbox as "restoring" while we load messages + restore
-        updateSessionData(sessionId, {
-          status: "creating",
-          sandbox: sessionData.sandbox
-            ? { ...sessionData.sandbox, status: "restoring" }
-            : null,
-        });
-      }
-
-      // Messages come from DB and don't need the sandbox running.
-      // Artifacts need sandbox filesystem, so skip during restore.
-      const messages = await fetchMessages(sessionId);
+      // Capture runtime failures while history loads independently.
+      const runtimeRequest = Promise.allSettled([fetchSession(sessionId)]);
       let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
+      let activeTurnLookupSucceeded = false;
       try {
         activeTurn = await fetchActiveTurn(sessionId);
+        activeTurnLookupSucceeded = true;
       } catch (err) {
         console.warn("Failed to fetch active turn:", err);
       }
-      const artifacts = needsRestore ? [] : await fetchArtifacts(sessionId);
-      if (!needsRestore) {
-        const current = get().sessions.get(sessionId);
-        if (
-          current?.outputInventory === null ||
-          current?.status !== "running"
-        ) {
-          void get().refreshOutputInventory(sessionId, { silent: true });
-        }
-      }
+      if (!isCurrentLoad()) return;
+      // Server completion follows the final transcript commit. Observe it before reading messages.
+      const messages = await fetchMessages(sessionId);
+      if (!isCurrentLoad()) return;
 
       // Preserve optimistic messages if actively streaming (pre-provisioned flow).
       const currentSession = get().sessions.get(sessionId);
       const currentSessionIsLive =
         currentSession?.status === "running" ||
         currentSession?.status === "creating";
-      const hasOptimisticMessages =
-        (currentSession?.messages?.length ?? 0) > 0 && currentSessionIsLive;
-      const isStreaming = hasOptimisticMessages;
+      const isStreaming =
+        currentSessionIsLive && (currentSession?.messages.length ?? 0) > 0;
       // settle() (the only preferPersisted caller) runs on a live "running"
       // session, so the isStreaming status branch below already keeps status live,
       // leaving settle the sole owner of the flip to "active" (else auto-send races).
-      const useDbMessages = !isStreaming || options?.preferPersisted === true;
+      const pendingCompletedTurnId = currentSession?.pendingCompletedTurnId;
+      // A completion learned during this load requires a later transcript read.
+      const keepCompletedTranscript =
+        !currentSessionIsLive &&
+        options?.preferPersisted !== true &&
+        pendingCompletedTurnId != null &&
+        (loadingSession.pendingCompletedTurnId !== pendingCompletedTurnId ||
+          !activeTurnLookupSucceeded ||
+          activeTurn?.turn_id === pendingCompletedTurnId);
+      const useDbMessages =
+        (!isStreaming && !keepCompletedTranscript) ||
+        options?.preferPersisted === true;
 
-      // Construct webapp URL
-      let webappUrl: string | null = null;
-      const hasWebapp = artifacts.some(
-        (a) => a.type === "nextjs_app" || a.type === "web_app"
-      );
-      if (hasWebapp && sessionData.nextjs_port) {
-        webappUrl = `http://localhost:${sessionData.nextjs_port}`;
-      }
+      const resolvedActiveTurnId = keepCompletedTranscript
+        ? null
+        : (activeTurn?.turn_id ??
+          (useDbMessages ? null : currentSession!.activeTurnId));
+      const resolvedActiveTurnIndex = keepCompletedTranscript
+        ? null
+        : (activeTurn?.turn_index ??
+          (useDbMessages ? null : currentSession!.activeTurnIndex));
 
-      const resolvedActiveTurnId =
-        activeTurn?.turn_id ??
-        (useDbMessages ? null : currentSession!.activeTurnId);
-      const resolvedActiveTurnIndex =
-        activeTurn?.turn_index ??
-        (useDbMessages ? null : currentSession!.activeTurnIndex);
-
-      const status = isStreaming
-        ? currentSession!.status
-        : activeTurn
-          ? "running"
-          : needsRestore
-            ? "creating"
-            : mapApiSessionStatus(sessionData.status);
+      const status =
+        isStreaming || keepCompletedTranscript
+          ? currentSession!.status
+          : activeTurn
+            ? "running"
+            : currentSession!.status;
       const persistedMessages = useDbMessages
         ? consolidateMessagesIntoTurns(messages)
         : currentSession!.messages;
@@ -1746,25 +1748,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const subagents = useDbMessages
         ? buildSubagentsFromMessages(messages)
         : currentSession!.subagents;
-      const sandbox =
-        needsRestore && sessionData.sandbox
-          ? { ...sessionData.sandbox, status: "restoring" as const }
-          : sessionData.sandbox;
-
       updateSessionData(sessionId, {
         status,
         messages: resolvedMessages,
         streamItems,
         subagents,
-        artifacts,
-        webappUrl,
-        sandbox,
-        agentProvider: sessionData.agent_provider,
-        agentModel: sessionData.agent_model,
-        ...(sessionData.skills_stale &&
-          canApplySkillsStale() && { skillsStale: true }),
-        origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
+        pendingCompletedTurnId: useDbMessages
+          ? null
+          : currentSession!.pendingCompletedTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
         activeTurnLocalOwner: useDbMessages
           ? false
@@ -1776,12 +1768,70 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         isLoaded: true,
       });
 
+      const [runtimeResult] = await runtimeRequest;
+      if (!isCurrentLoad()) return;
+      if (runtimeResult.status === "rejected") throw runtimeResult.reason;
+      let sessionData = runtimeResult.value;
+      const runtimeSession = get().sessions.get(sessionId);
+      if (!runtimeSession) return;
+      const needsRestore =
+        sessionData.sandbox?.status === "sleeping" ||
+        sessionData.sandbox?.status === "terminated" ||
+        sessionData.sandbox?.status === "failed" ||
+        (sessionData.sandbox?.status === "running" &&
+          !sessionData.session_loaded_in_sandbox);
+      updateSessionData(sessionId, {
+        status:
+          isStreaming ||
+          keepCompletedTranscript ||
+          runtimeSession.status !== status ||
+          runtimeSession.activeTurnId !== resolvedActiveTurnId ||
+          runtimeSession.pendingCompletedTurnId !==
+            (useDbMessages ? null : currentSession!.pendingCompletedTurnId)
+            ? runtimeSession.status
+            : activeTurn
+              ? "running"
+              : needsRestore
+                ? "creating"
+                : mapApiSessionStatus(sessionData.status),
+        sandbox:
+          needsRestore && sessionData.sandbox
+            ? { ...sessionData.sandbox, status: "restoring" }
+            : sessionData.sandbox,
+        agentProvider: sessionData.agent_provider,
+        agentModel: sessionData.agent_model,
+        ...(canApplySkillsStale() && { skillsStale: sessionData.skills_stale }),
+        origin: sessionData.origin,
+      });
+      if (!needsRestore) {
+        const artifacts = await fetchArtifacts(sessionId);
+        if (!isCurrentLoad()) return;
+        const hasWebapp = artifacts.some(
+          (artifact) =>
+            artifact.type === "nextjs_app" || artifact.type === "web_app"
+        );
+        updateSessionData(sessionId, {
+          artifacts,
+          webappUrl:
+            hasWebapp && sessionData.nextjs_port
+              ? `http://localhost:${sessionData.nextjs_port}`
+              : null,
+        });
+        if (
+          get().sessions.get(sessionId)?.outputInventory === null ||
+          runtimeSession.status !== "running"
+        )
+          void get().refreshOutputInventory(sessionId, { silent: true });
+      }
+
       if (needsRestore) {
         const skillsStaleRevisionBeforeRestore =
           get().sessions.get(sessionId)?.skillsStaleRevision;
         try {
           sessionData = await restoreSession(sessionId);
+          if (!isCurrentLoad()) return;
         } catch (restoreErr) {
+          if (!isCurrentLoad()) return;
           // Only a genuine restore failure marks the sandbox failed.
           console.error("Sandbox restore failed:", restoreErr);
           updateSessionData(sessionId, {
@@ -1813,8 +1863,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         // remount still runs: worst case the iframe lands on the offline page,
         // which reloads itself until the server responds.
         await waitForWebappReady(sessionId);
+        if (!isCurrentLoad()) return;
         updateSessionData(sessionId, {
           sandbox: sessionData.sandbox,
+          filesNeedsRefresh:
+            (get().sessions.get(sessionId)?.filesNeedsRefresh ?? 0) + 1,
           webappNeedsRemount:
             (get().sessions.get(sessionId)?.webappNeedsRemount || 0) + 1,
         });
@@ -1822,6 +1875,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         // An artifact-fetch failure must NOT flip the sandbox to "failed".
         try {
           const restoredArtifacts = await fetchArtifacts(sessionId);
+          if (!isCurrentLoad()) return;
           updateSessionData(sessionId, { artifacts: restoredArtifacts });
           void get().refreshOutputInventory(sessionId, { silent: true });
         } catch (artifactsErr) {
@@ -1832,6 +1886,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         }
       }
     } catch (err) {
+      if (!isCurrentLoad()) return;
       console.error("Failed to load session:", err);
       updateSessionData(sessionId, {
         error: (err as Error).message,
