@@ -52,7 +52,8 @@ export default function PptxPreview({
       imageRevision: crypto.randomUUID(),
     }),
     revision,
-    refreshKey
+    refreshKey,
+    isActive
   );
 
   const slideCount = data?.slide_count ?? 0;

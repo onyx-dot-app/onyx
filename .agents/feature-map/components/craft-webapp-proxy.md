@@ -217,14 +217,27 @@ use the same component and revision source. These production callers make revisi
 cache reuse active; explicit reload counters change independently of file revisions.
 Idle session entry and focus reconcile metadata without selecting files.
 
-Each mounted file viewer owns a private SWR cache with one current payload.
+Each retained file viewer owns a private SWR cache with one current payload.
 `web/src/lib/build/hooks.ts:useFilePreview` owns revision-aware payload replacement.
-File revisions and explicit reloads replace that payload. Mounted viewers reuse
-unchanged data. Unmounting a viewer releases its cache; remounting fetches fresh
-bytes. SWR retries failed requests and rejects superseded responses. Viewers show
-only results and errors for their accepted revision and reload counter. Cache misses and reloads bypass the
+File revisions and explicit reloads replace that payload. A retained viewer with an unchanged
+revision reuses its data and DOM across tab switches. Files without revisions
+revalidate on activation while keeping their current content visible. Closing or evicting a viewer
+releases its cache; reopening fetches fresh bytes. SWR retries failed requests and
+rejects superseded responses. Viewers show only results and errors for their
+accepted revision and reload counter. Cache misses and reloads bypass the
 browser cache when fetching artifacts. PDF object URLs are revoked when replaced
-or when their viewer unmounts.
+or when their viewer unmounts. Unversioned PDF activation reads compare bytes
+with the displayed PDF. Identical bytes reuse its Blob and object URL, preserving
+the iframe and reading position. Changed bytes replace the displayed PDF.
+
+The output panel keeps its five most recently visited tab bodies mounted, including
+pinned tabs and file previews. Inactive bodies keep their layout but are invisible,
+inert, and hidden from assistive technology. Stable DOM order prevents iframe reloads
+on tab switches. Closing a tab, changing sessions, closing the panel after its
+animation, or visiting a sixth tab releases the corresponding retained bodies.
+Hidden file viewers retain their accepted revision and payload. Activation loads
+the latest revision once; intermediate hidden edits do not trigger conversions.
+Webapp iframes remain live while retained.
 
 Files owns a private directory cache keyed by session and path. Each expanded
 directory manages its own cancellable request. Requests have a ten-second deadline;

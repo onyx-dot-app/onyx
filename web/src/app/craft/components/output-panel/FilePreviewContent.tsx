@@ -60,9 +60,13 @@ export function FilePreviewContent({
       {/\.pptx?$/i.test(filePath) ? (
         <PptxPreview {...accepted} isActive={isActive} />
       ) : /\.pdf$/i.test(filePath) ? (
-        <PdfPreview {...accepted} />
+        <PdfPreview {...accepted} isActive={isActive} />
       ) : (
-        <FetchedFilePreview {...accepted} fullHeight={fullHeight} />
+        <FetchedFilePreview
+          {...accepted}
+          fullHeight={fullHeight}
+          isActive={isActive}
+        />
       )}
     </SWRConfig>
   );
@@ -73,6 +77,7 @@ function FetchedFilePreview({
   sessionId,
   filePath,
   fullHeight,
+  isActive,
   revision,
   refreshKey,
 }: FilePreviewContentProps) {
@@ -81,7 +86,8 @@ function FetchedFilePreview({
     SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     () => fetchFileContent(sessionId, filePath),
     revision,
-    refreshKey
+    refreshKey,
+    isActive
   );
 
   if (isLoading || error || !data || data.error) {

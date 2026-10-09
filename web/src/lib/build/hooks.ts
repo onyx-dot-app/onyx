@@ -6,9 +6,10 @@ export function useFilePreview<T>(
   key: string,
   load: () => Promise<T>,
   revision?: string,
-  refreshKey = 0
+  refreshKey = 0,
+  isActive = true
 ) {
-  const request = { key, revision, refreshKey };
+  const request = { key, revision, refreshKey, isActive };
   const previousRequest = useRef(request);
   const {
     data: result,
@@ -30,6 +31,11 @@ export function useFilePreview<T>(
       }
     },
     {
+      // Structural comparison cannot distinguish different Blob contents.
+      compare: (previous, next) =>
+        previous?.revision === next?.revision &&
+        previous?.refreshKey === next?.refreshKey &&
+        Object.is(previous?.data, next?.data),
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       revalidateIfStale: revision === undefined,
@@ -38,15 +44,17 @@ export function useFilePreview<T>(
 
   useEffect(() => {
     const previous = previousRequest.current;
-    previousRequest.current = { key, revision, refreshKey };
+    previousRequest.current = { key, revision, refreshKey, isActive };
     if (
       previous.key === key &&
-      (previous.revision !== revision || previous.refreshKey !== refreshKey)
+      (previous.revision !== revision ||
+        previous.refreshKey !== refreshKey ||
+        (isActive && !previous.isActive && revision === undefined))
     ) {
       // SWR discards an older in-flight request when this revalidation starts.
       void mutate();
     }
-  }, [key, revision, refreshKey, mutate]);
+  }, [key, revision, refreshKey, isActive, mutate]);
 
   const isCurrent =
     result?.revision === revision && result?.refreshKey === refreshKey;

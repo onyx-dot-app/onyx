@@ -335,6 +335,30 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const selectedContentId: string | null = activePanel
     ? panelTabId(activePanel)
     : effectiveActiveTab;
+  const [visitedTabs, setVisitedTabs] = useState<{
+    sessionId: string | null;
+    ids: string[];
+  }>({ sessionId: contentSessionId, ids: [] });
+  const availableContentIds: string[] = [
+    ...tabs.map((tab) => tab.value),
+    ...panelTabs.map(panelTabId),
+  ];
+  const retainedIds: string[] =
+    visitedTabs.sessionId === contentSessionId
+      ? visitedTabs.ids.filter(
+          (id) => availableContentIds.includes(id) && id !== selectedContentId
+        )
+      : [];
+  if (selectedContentId && shouldRenderContent)
+    retainedIds.push(selectedContentId);
+  const mountedIds: string[] = shouldRenderContent ? retainedIds.slice(-5) : [];
+  if (
+    visitedTabs.sessionId !== contentSessionId ||
+    visitedTabs.ids.length !== mountedIds.length ||
+    visitedTabs.ids.some((id, index) => id !== mountedIds[index])
+  ) {
+    setVisitedTabs({ sessionId: contentSessionId, ids: mountedIds });
+  }
 
   const [isExportingDocx, setIsExportingDocx] = useState(false);
 
@@ -662,53 +686,59 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
         onScopeChange={mutate}
       />
 
+      {/* Keep DOM order stable: moving an existing iframe can reload it. */}
       <div className="relative flex-1 overflow-hidden rounded-b-08">
-        {shouldRenderContent && (
-          <div
-            key={`${contentSessionId}:${selectedContentId}`}
-            className="absolute inset-0"
-            aria-hidden={!isOpen}
-            inert={!isOpen}
-          >
-            {activePanel && session ? (
-              <FilePreviewContent
-                sessionId={session.id}
-                filePath={activePanel.path}
-                revision={session.outputInventory?.[activePanel.path]?.revision}
-                refreshKey={
-                  session.filePreviewRefreshKeys[activePanel.path] ?? 0
-                }
-                isActive={isOpen}
-              />
-            ) : effectiveActiveTab === "preview" ? (
-              !session ? (
-                <CraftingLoader />
-              ) : (
-                <PreviewTab
-                  webappUrl={iframeUrl}
-                  webappState={webappState}
-                  refreshKey={previewRefreshKey + webappNeedsRemount}
+        {[...mountedIds].sort().map((id) => {
+          const isActive = isOpen && id === selectedContentId;
+          const fileTab = panelTabs.find((tab) => panelTabId(tab) === id);
+          return (
+            <div
+              key={`${contentSessionId}:${id}`}
+              className={cn(
+                "absolute inset-0",
+                !isActive && "invisible pointer-events-none"
+              )}
+              aria-hidden={!isActive}
+              inert={!isActive}
+            >
+              {fileTab && session ? (
+                <FilePreviewContent
+                  sessionId={session.id}
+                  filePath={fileTab.path}
+                  revision={session.outputInventory?.[fileTab.path]?.revision}
+                  refreshKey={session.filePreviewRefreshKeys[fileTab.path] ?? 0}
+                  isActive={isActive}
                 />
-              )
-            ) : effectiveActiveTab === "files" ? (
-              <FilesTab
-                sessionId={contentSessionId}
-                onFileClick={session ? handleFileClick : undefined}
-                onRefreshingChange={handleFilesRefreshingChange}
-                refreshKey={filesRefreshKey}
-                isPreProvisioned={!session && !!preProvisionedSessionId}
-                isProvisioning={!session && isPreProvisioning}
-                isActive={isOpen}
-              />
-            ) : effectiveActiveTab === "artifacts" ? (
-              <ArtifactsTab
-                artifacts={artifacts}
-                sessionId={session?.id ?? null}
-                isActive={isOpen}
-              />
-            ) : null}
-          </div>
-        )}
+              ) : id === "preview" ? (
+                !session ? (
+                  <CraftingLoader />
+                ) : (
+                  <PreviewTab
+                    webappUrl={iframeUrl}
+                    webappState={webappState}
+                    refreshKey={previewRefreshKey + webappNeedsRemount}
+                  />
+                )
+              ) : id === "files" ? (
+                <FilesTab
+                  sessionId={contentSessionId}
+                  onFileClick={session ? handleFileClick : undefined}
+                  onRefreshingChange={handleFilesRefreshingChange}
+                  refreshKey={filesRefreshKey}
+                  isPreProvisioned={!session && !!preProvisionedSessionId}
+                  isProvisioning={!session && isPreProvisioning}
+                  isActive={isActive}
+                />
+              ) : id === "artifacts" ? (
+                <ArtifactsTab
+                  artifacts={artifacts}
+                  sessionId={session?.id ?? null}
+                  isActive={isActive}
+                />
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

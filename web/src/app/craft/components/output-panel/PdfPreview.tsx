@@ -16,6 +16,7 @@ interface PdfPreviewProps {
   filePath: string;
   revision?: string;
   refreshKey?: number;
+  isActive?: boolean;
 }
 
 /**
@@ -29,8 +30,13 @@ export default function PdfPreview({
   filePath,
   revision,
   refreshKey,
+  isActive = true,
 }: PdfPreviewProps) {
   const t = useTranslations("craft.pdfPreview");
+  const [objectUrl, setObjectUrl] = useState<{
+    blob: Blob;
+    url: string;
+  } | null>(null);
   const {
     data: blob,
     error,
@@ -47,15 +53,33 @@ export default function PdfPreview({
           response.status,
           null
         );
-      return response.blob();
+      const nextBlob = await response.blob();
+      const displayedBlob = objectUrl?.blob;
+      if (
+        revision === undefined &&
+        displayedBlob &&
+        displayedBlob.size === nextBlob.size &&
+        displayedBlob.type === nextBlob.type
+      ) {
+        const [displayedBytes, nextBytes] = await Promise.all([
+          displayedBlob.arrayBuffer(),
+          nextBlob.arrayBuffer(),
+        ]);
+        const next = new Uint8Array(nextBytes);
+        // Keep the iframe's URL when an activation read returns identical bytes.
+        if (
+          new Uint8Array(displayedBytes).every(
+            (byte, index) => byte === next[index]
+          )
+        )
+          return displayedBlob;
+      }
+      return nextBlob;
     },
     revision,
-    refreshKey
+    refreshKey,
+    isActive
   );
-  const [objectUrl, setObjectUrl] = useState<{
-    blob: Blob;
-    url: string;
-  } | null>(null);
 
   // Object URLs belong only to the mounted viewer.
   useEffect(() => {

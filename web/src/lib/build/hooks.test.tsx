@@ -133,3 +133,40 @@ it("ignores a late failure after the next revision succeeds", async () => {
   expect(result.current.data).toBe(blob);
   expect(result.current.error).toBeUndefined();
 });
+
+it.each([undefined, "known-revision"])(
+  "revalidates on activation only without a revision (%s)",
+  async (revision) => {
+    const replacement = deferred<string>();
+    const load = jest
+      .fn<Promise<string>, []>()
+      .mockResolvedValueOnce("original")
+      .mockReturnValueOnce(replacement.promise);
+    const { result, rerender } = renderHook(
+      ({ isActive }) => useFilePreview("retained", load, revision, 0, isActive),
+      {
+        initialProps: { isActive: true },
+        wrapper: function RetainedProvider({ children }) {
+          return (
+            <SWRConfig value={{ provider: () => new Map() }}>
+              {children}
+            </SWRConfig>
+          );
+        },
+      }
+    );
+    await waitFor(() => expect(result.current.data).toBe("original"));
+    rerender({ isActive: false });
+    expect(load).toHaveBeenCalledTimes(1);
+    rerender({ isActive: true });
+    expect(result.current.data).toBe("original");
+    expect(result.current.isLoading).toBe(false);
+    expect(load).toHaveBeenCalledTimes(revision === undefined ? 2 : 1);
+    await act(async () => replacement.resolve("updated"));
+    expect(result.current.data).toBe(
+      revision === undefined ? "updated" : "original"
+    );
+    rerender({ isActive: true });
+    expect(load).toHaveBeenCalledTimes(revision === undefined ? 2 : 1);
+  }
+);

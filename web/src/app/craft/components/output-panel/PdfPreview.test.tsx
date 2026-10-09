@@ -1,16 +1,31 @@
-import { act, render, screen } from "@tests/setup/test-utils";
+import { Blob as NodeBlob } from "node:buffer";
+import {
+  act,
+  deferred,
+  render,
+  screen,
+  waitFor,
+} from "@tests/setup/test-utils";
 import { skipRetryOnAuthError } from "@/lib/fetcher";
 import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
 
+const originalBlob = globalThis.Blob;
 const originalCreateObjectURL = URL.createObjectURL;
 const originalRevokeObjectURL = URL.revokeObjectURL;
 
 beforeEach(() => {
+  // JSDOM lacks Blob.arrayBuffer(); use Node's binary implementation.
+  Object.defineProperty(globalThis, "Blob", {
+    configurable: true,
+    writable: true,
+    value: NodeBlob,
+  });
   URL.createObjectURL = jest.fn().mockReturnValue("blob:preview");
   URL.revokeObjectURL = jest.fn();
 });
 
 afterEach(() => {
+  globalThis.Blob = originalBlob;
   URL.createObjectURL = originalCreateObjectURL;
   URL.revokeObjectURL = originalRevokeObjectURL;
   jest.restoreAllMocks();
@@ -111,3 +126,51 @@ it.each([401, 402, 403])(
     }
   }
 );
+
+it("keeps an unversioned PDF iframe for identical bytes and replaces changed bytes", async () => {
+  const originalBytes = new Uint8Array([37, 80, 68, 70, 0, 255]);
+  const changedBytes = new Uint8Array([37, 80, 68, 70, 0, 254]);
+  const unchangedResponse = deferred<Response>();
+  const fetch = jest
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(new Response(originalBytes))
+    .mockReturnValueOnce(unchangedResponse.promise)
+    .mockResolvedValueOnce(new Response(changedBytes));
+  URL.createObjectURL = jest
+    .fn()
+    .mockReturnValueOnce("blob:original")
+    .mockReturnValueOnce("blob:changed");
+  const view = (isActive: boolean) => (
+    <PdfPreview
+      sessionId="unversioned-pdf"
+      filePath="web/report.pdf"
+      isActive={isActive}
+    />
+  );
+  const { rerender, unmount } = render(view(true));
+  const frame = await screen.findByTitle("report.pdf");
+  rerender(view(false));
+  rerender(view(true));
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(screen.getByTitle("report.pdf")).toBe(frame);
+  await act(async () => unchangedResponse.resolve(new Response(originalBytes)));
+  expect(screen.getByTitle("report.pdf")).toBe(frame);
+  expect(frame).toHaveAttribute("src", "blob:original");
+  expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+  // Equal byte lengths must not hide an actual edit.
+  rerender(view(false));
+  rerender(view(true));
+  await waitFor(() =>
+    expect(screen.getByTitle("report.pdf")).toHaveAttribute(
+      "src",
+      "blob:changed"
+    )
+  );
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:original");
+  unmount();
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:changed");
+});
