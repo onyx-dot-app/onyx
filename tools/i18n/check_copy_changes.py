@@ -8,7 +8,7 @@ import os
 import subprocess
 from pathlib import Path
 
-CATALOG_PATH = Path("web/src/i18n/messages")
+CATALOG_PATH: Path = Path("web/src/i18n/messages")
 
 
 def flatten(value: object, prefix: str = "") -> dict[str, str]:
@@ -25,7 +25,7 @@ def flatten(value: object, prefix: str = "") -> dict[str, str]:
 
 
 def read_catalog(path: Path, base: str | None = None) -> dict[str, str]:
-    source = (
+    source: str = (
         subprocess.check_output(["git", "show", f"{base}:{path.as_posix()}"], text=True)
         if base
         else path.read_text()
@@ -34,16 +34,18 @@ def read_catalog(path: Path, base: str | None = None) -> dict[str, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default=os.environ.get("PRE_COMMIT_FROM_REF", "HEAD"))
-    args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
     base: str = args.base
-    previous = read_catalog(CATALOG_PATH / "en.json", base)
-    current = read_catalog(CATALOG_PATH / "en.json")
-    changed = [key for key, text in current.items() if previous.get(key) != text]
+    previous: dict[str, str] = read_catalog(CATALOG_PATH / "en.json", base)
+    current: dict[str, str] = read_catalog(CATALOG_PATH / "en.json")
+    changed: list[str] = [
+        key for key, text in current.items() if previous.get(key) != text
+    ]
     if not changed:
         return 0
-    baseline_paths = set(
+    baseline_paths: set[str] = set(
         subprocess.check_output(
             [
                 "git",
@@ -61,8 +63,10 @@ def main() -> int:
     for path in sorted(CATALOG_PATH.glob("*.json")):
         if path.name == "en.json":
             continue
-        old = read_catalog(path, base) if path.as_posix() in baseline_paths else {}
-        new = read_catalog(path)
+        old: dict[str, str] = (
+            read_catalog(path, base) if path.as_posix() in baseline_paths else {}
+        )
+        new: dict[str, str] = read_catalog(path)
         failures.extend(
             f"{path.stem}: {key}"
             for key in changed

@@ -7,15 +7,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-CHECKER = Path(__file__).with_name("check_copy_changes.py").resolve()
+CHECKER: Path = Path(__file__).with_name("check_copy_changes.py").resolve()
 
 
 class CopyChangesTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
-        self.catalogs = self.root / "web/src/i18n/messages"
+        self.root: Path = Path(self.temp.name)
+        self.catalogs: Path = self.root / "web/src/i18n/messages"
         self.catalogs.mkdir(parents=True)
         self.git("init", "-q")
         self.write("en", {"title": "Hello", "other": "Keep"})
@@ -54,7 +54,7 @@ class CopyChangesTest(unittest.TestCase):
         self.write("en", {"title": "Welcome", "other": "Keep"})
         self.write("fr", {"title": "Bienvenue", "other": "Garder"})
         self.write("de", {"title": "Hallo", "other": "Anders"})
-        result = self.check()
+        result: subprocess.CompletedProcess[str] = self.check()
         self.assertEqual(result.returncode, 1)
         self.assertIn("de: nested.title", result.stdout)
         self.assertNotIn("fr: nested.title", result.stdout)
@@ -71,7 +71,7 @@ class CopyChangesTest(unittest.TestCase):
         self.assertEqual(self.check().returncode, 1)
 
     def test_branch_base_checks_committed_copy(self) -> None:
-        base = self.git("rev-parse", "HEAD").strip()
+        base: str = self.git("rev-parse", "HEAD").strip()
         self.write("en", {"title": "Welcome"})
         self.git("add", ".")
         self.git(
