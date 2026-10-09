@@ -9112,6 +9112,181 @@
         "uploadFailed": {
           "toast": "파일을 업로드할 수 없습니다: {detail}"
         }
+      },
+      "planFailed": {
+        "toast": "계획을 계산할 수 없습니다: {detail}"
+      },
+      "typedAccount": {
+        "toast": "변경 사항을 검토하기 전에 새 계정을 저장하거나 저장된 계정을 선택하세요."
+      },
+      "applied": {
+        "toast": "변경 사항을 적용했습니다."
+      },
+      "plan": {
+        "title": "계획 검토",
+        "description": "{count, plural, other {커넥터에 색인된 문서가 #개 있습니다.}}",
+        "changes": {
+          "list": "변경됨: {fields}",
+          "none": "변경된 내용이 없습니다."
+        },
+        "stale": {
+          "title": "커넥터가 변경되었습니다",
+          "description": "이 계획을 계산한 후 커넥터가 변경되었습니다. 적용하기 전에 계획을 다시 계산하세요.",
+          "replanButton": {
+            "label": "다시 계획"
+          }
+        },
+        "applyFailed": {
+          "title": "변경 사항을 적용할 수 없습니다"
+        },
+        "validation": {
+          "title": "유효성 검사",
+          "blocks": "새 설정이 유효성 검사에 실패했습니다. 적용하기 전에 수정하세요.",
+          "warns": "일부 선택 검사에 실패했습니다. 그래도 적용할 수 있습니다.",
+          "error": {
+            "title": "설정이 유효하지 않습니다"
+          }
+        },
+        "warnings": {
+          "title": "경고"
+        },
+        "notes": {
+          "title": "참고"
+        },
+        "reconciliation": {
+          "title": "범위 변경을 조정할 방법 선택",
+          "description": "{fields} 변경으로 문서가 추가되는지 제거되는지 계획에서 알 수 없습니다. 적용 시 수행할 작업을 선택하세요.",
+          "option": {
+            "prune": {
+              "title": "정리",
+              "description": "더 이상 범위에 없는 문서를 제거합니다."
+            },
+            "full_reindex": {
+              "title": "전체 재색인",
+              "description": "시작일부터 모두 다시 색인하여 이제 범위에 있는 문서를 추가합니다."
+            },
+            "both": {
+              "title": "전체 재색인 후 정리",
+              "description": "모두 다시 색인한 다음 더 이상 범위에 없는 문서를 제거합니다."
+            },
+            "nothing": {
+              "title": "아무것도 하지 않음",
+              "description": "색인된 문서를 유지합니다. 이후 실행에서는 새 설정을 사용합니다."
+            }
+          }
+        },
+        "credential": {
+          "title": "자격 증명 변경",
+          "description": "이전 자격 증명으로 색인된 문서를 어떻게 처리할지 선택하세요.",
+          "option": {
+            "keep_indexed": {
+              "title": "색인된 문서 유지",
+              "description": "이후 실행에서 새 자격 증명을 사용합니다. 빠른 방법입니다."
+            },
+            "full_reindex_and_prune": {
+              "title": "전체 재색인 및 정리",
+              "description": "새 자격 증명으로 모두 다시 색인한 다음 볼 수 없는 문서를 제거합니다."
+            }
+          }
+        },
+        "steps": {
+          "title": "단계",
+          "description": "적용 시 수행하는 작업 순서입니다. 선택 단계는 끌 수 있습니다.",
+          "none": "적용하면 설정이 저장됩니다. 색인 작업은 필요하지 않습니다.",
+          "required": {
+            "label": "필수"
+          },
+          "optional": {
+            "label": "선택"
+          },
+          "include": {
+            "ariaLabel": "단계 실행: {step}"
+          },
+          "fields": "필드: {fields}",
+          "window": "기간: {start} ~ {end}",
+          "windowFromStart": "기간: {end}까지 전체",
+          "kind": {
+            "access_groups": {
+              "title": "데이터 액세스 그룹 업데이트",
+              "description": "검색에 새 그룹이 즉시 적용됩니다."
+            },
+            "access_type": {
+              "title": "액세스 유형 변경",
+              "description": "문서를 읽을 수 있는 사람이 바뀝니다."
+            },
+            "enter_perm_sync": {
+              "title": "권한 동기화 시작",
+              "description": "첫 번째 권한 동기화가 완료될 때까지 문서가 숨겨집니다."
+            },
+            "leave_perm_sync": {
+              "title": "권한 동기화 중지",
+              "description": "원본의 권한이 더 이상 문서를 읽을 수 있는 사람을 결정하지 않습니다."
+            },
+            "restart_attempt": {
+              "title": "실행 중인 색인 시도 다시 시작",
+              "description": "실행 중인 시도가 중지되고 새 설정으로 새 시도가 시작됩니다."
+            },
+            "full_reindex_then_prune": {
+              "title": "전체 재색인 후 정리",
+              "description": "모두 다시 색인한 다음 원본이 더 이상 반환하지 않는 문서를 제거합니다."
+            },
+            "full_reindex": {
+              "title": "전체 재색인",
+              "description": "시작일부터 모두 다시 색인합니다."
+            },
+            "scoped_backfill": {
+              "title": "추가된 항목 백필",
+              "description": "추가된 항목의 기록만 색인합니다."
+            },
+            "window_backfill": {
+              "title": "이전 기간 백필",
+              "description": "새 시작일과 이전 시작일 사이의 기간을 색인합니다."
+            },
+            "prune": {
+              "title": "정리",
+              "description": "원본이 더 이상 반환하지 않는 문서를 제거합니다."
+            }
+          },
+          "reason": {
+            "identity_changed": "문서 ID 변경",
+            "behavior_changed": "처리 방식 변경",
+            "scope_widened": "범위 확대",
+            "scope_narrowed": "범위 축소",
+            "items_added_or_changed": "항목 추가 또는 변경",
+            "items_removed": "항목 제거",
+            "opaque_scope_choice": "범위 선택",
+            "indexing_start_earlier": "더 이른 시작일",
+            "credential_full_path": "자격 증명 전체 경로",
+            "access_changed": "액세스 변경",
+            "permissions_fetched_during_indexing": "권한은 색인 중에 가져옴",
+            "attempt_running": "시도 실행 중",
+            "scoped_backfill_superseded": "이전 백필이 대체됨",
+            "admin_added": "직접 추가함",
+            "indexing_start_later": "더 늦은 시작 날짜"
+          }
+        },
+        "extra": {
+          "title": "추가 작업",
+          "description": "계획에 필요하지 않은 작업을 추가합니다.",
+          "fullReindex": {
+            "title": "전체 재색인 추가",
+            "description": "시작일부터 모두 다시 색인합니다."
+          },
+          "prune": {
+            "title": "정리 추가",
+            "description": "원본이 더 이상 반환하지 않는 문서를 제거합니다."
+          }
+        },
+        "backButton": {
+          "label": "편집으로 돌아가기"
+        },
+        "applyButton": {
+          "label": "적용"
+        },
+        "blocked": {
+          "validation": "먼저 유효성 검사 실패를 수정하세요.",
+          "reconciliation": "먼저 범위 변경을 조정할 방법을 선택하세요."
+        }
       }
     }
   },

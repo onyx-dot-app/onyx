@@ -1,5 +1,11 @@
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import type { FileUploadResponse } from "@/lib/fileConnector";
+import type {
+  ConnectorEditApplyRequest,
+  ConnectorEditApplyResponse,
+  ConnectorEditPlanResponse,
+  ConnectorEditProposal,
+} from "@/lib/connectors/edit/types";
 
 function editUrl(ccPairId: number, path: string): string {
   return `/api/manage/admin/cc-pair/${ccPairId}/edit/${path}`;
@@ -36,4 +42,68 @@ export async function stageEditFiles(
   });
   if (!response.ok) throw new Error(await errorDetailOf(response));
   return response.json();
+}
+
+export type PlanEditOutcome =
+  | { kind: "planned"; plan: ConnectorEditPlanResponse }
+  | { kind: "error"; detail: string };
+
+/** Computes and stores the plan for the proposed state. Writes nothing. */
+export async function planConnectorEdit(
+  ccPairId: number,
+  proposal: ConnectorEditProposal
+): Promise<PlanEditOutcome> {
+  try {
+    const response = await fetch(editUrl(ccPairId, "plan"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(proposal),
+    });
+    if (!response.ok) {
+      return { kind: "error", detail: await errorDetailOf(response) };
+    }
+    return { kind: "planned", plan: await response.json() };
+  } catch (error) {
+    return { kind: "error", detail: String(error) };
+  }
+}
+
+const EDIT_PLAN_STALE = "EDIT_PLAN_STALE";
+
+/**
+ * How an apply ended. `stale`: the pair changed after planning, so the
+ * admin must plan again.
+ */
+export type ApplyEditOutcome =
+  | { kind: "applied"; response: ConnectorEditApplyResponse }
+  | { kind: "stale"; detail: string }
+  | { kind: "error"; detail: string };
+
+export async function applyConnectorEdit(
+  ccPairId: number,
+  request: ConnectorEditApplyRequest
+): Promise<ApplyEditOutcome> {
+  try {
+    const response = await fetch(editUrl(ccPairId, "apply"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    if (response.ok) {
+      return { kind: "applied", response: await response.json() };
+    }
+    let body: ErrorResponseBody = {};
+    try {
+      body = await response.json();
+    } catch {
+      // A body that is not JSON keeps the status as the detail.
+    }
+    const detail = body.detail ?? body.message ?? `${response.status}`;
+    const stale =
+      body.error_code === EDIT_PLAN_STALE ||
+      (body.error_code === undefined && response.status === 409);
+    return stale ? { kind: "stale", detail } : { kind: "error", detail };
+  } catch (error) {
+    return { kind: "error", detail: String(error) };
+  }
 }

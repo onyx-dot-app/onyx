@@ -108,8 +108,21 @@ import {
   useConnectorChecks,
   useResetConnectorChecks,
 } from "@/lib/connectors/checks/hooks";
-import type { ConnectorEditTarget } from "@/lib/connectors/edit/types";
-import { editInitialValues } from "@/lib/connectors/edit/prefill";
+import type {
+  ConnectorEditPlanResponse,
+  ConnectorEditProposal,
+  ConnectorEditTarget,
+} from "@/lib/connectors/edit/types";
+import {
+  buildEditProposal,
+  editInitialValues,
+  type ConnectorFormValues,
+} from "@/lib/connectors/edit/prefill";
+import {
+  applyConnectorEdit,
+  planConnectorEdit,
+} from "@/lib/connectors/edit/svc";
+import EditPlanModal from "@/views/admin/connectors/EditConnectorPage/EditPlanModal";
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
@@ -280,6 +293,56 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
+  // Edit mode: the plan shown for review, with the proposal it was computed
+  // for, so a stale plan can be computed again.
+  const [planning, setPlanning] = useState(false);
+  const [editPlan, setEditPlan] = useState<{
+    proposal: ConnectorEditProposal;
+    plan: ConnectorEditPlanResponse;
+  } | null>(null);
+
+  const planEdit = async (
+    target: ConnectorEditTarget,
+    proposal: ConnectorEditProposal
+  ) => {
+    setPlanning(true);
+    try {
+      const outcome = await planConnectorEdit(target.ccPair.id, proposal);
+      if (outcome.kind === "error") {
+        toast.error(editT("planFailed.toast", { detail: outcome.detail }));
+        return;
+      }
+      setEditPlan({ proposal, plan: outcome.plan });
+    } finally {
+      setPlanning(false);
+    }
+  };
+
+  /**
+   * Plans the edit the form proposes. The plan takes a saved account only, so
+   * a typed one must be saved first.
+   */
+  const submitEdit = async (
+    values: ConnectorFormValues,
+    target: ConnectorEditTarget,
+    targetInitialValues: ConnectorFormValues
+  ): Promise<void> => {
+    const account = accountFor(values);
+    if (account !== null && isDraftCredential(account)) {
+      toast.error(editT("typedAccount.toast"));
+      return;
+    }
+    await planEdit(
+      target,
+      buildEditProposal({
+        values,
+        initialValues: targetInitialValues,
+        configuration,
+        ccPair: target.ccPair,
+        credentialId: account?.id ?? target.ccPair.credential.id,
+      })
+    );
+  };
 
   // Connector creation timeout management
   const timeoutErrorHappenedRef = useRef<boolean>(false);
@@ -601,11 +664,14 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   };
 
   /**
-   * What the header button and Formik's submit run. Edit mode never creates
-   * a connector.
+   * What the header button and Formik's submit run. Edit mode plans the edit
+   * and never creates a connector.
    */
   const submitForm = async (values: typeof initialValues): Promise<void> => {
-    if (edit) return;
+    if (edit) {
+      if (editValues) await submitEdit(values, edit, editValues);
+      return;
+    }
     await createConnectorFromForm(values);
   };
 
@@ -639,7 +705,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
       onSubmit={submitForm}
     >
       {(formikProps) => {
-        const busy = uploading || creatingConnector;
+        const busy = uploading || creatingConnector || planning;
         const formCredential = accountFor(formikProps.values);
         const canCreate = noCredentials || formCredential !== null;
         const newAccountReady =
@@ -927,6 +993,25 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           </Disabled>
                         </Section>
                       </>
+                    )}
+                    {edit && editPlan && (
+                      <EditPlanModal
+                        key={editPlan.plan.plan_id}
+                        planResponse={editPlan.plan}
+                        onApply={async (request) => {
+                          const outcome = await applyConnectorEdit(
+                            edit.ccPair.id,
+                            request
+                          );
+                          if (outcome.kind === "applied") {
+                            toast.success(editT("applied.toast"));
+                            router.push(`/admin/connector/${edit.ccPair.id}`);
+                          }
+                          return outcome;
+                        }}
+                        onReplan={() => planEdit(edit, editPlan.proposal)}
+                        onClose={() => setEditPlan(null)}
+                      />
                     )}
                   </SettingsLayouts.Body>
                 </SettingsLayouts.Root>

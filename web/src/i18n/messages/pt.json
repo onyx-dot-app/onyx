@@ -9112,6 +9112,181 @@
         "uploadFailed": {
           "toast": "Não foi possível enviar os arquivos: {detail}"
         }
+      },
+      "planFailed": {
+        "toast": "Não foi possível calcular o plano: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Salve a nova conta antes de revisar as alterações ou escolha uma conta salva."
+      },
+      "applied": {
+        "toast": "As alterações foram aplicadas."
+      },
+      "plan": {
+        "title": "Revisar o plano",
+        "description": "{count, plural, one {O conector tem # documento indexado.} other {O conector tem # documentos indexados.}}",
+        "changes": {
+          "list": "Alterado: {fields}",
+          "none": "Nada mudou."
+        },
+        "stale": {
+          "title": "O conector mudou",
+          "description": "O conector mudou depois que este plano foi calculado. Calcule o plano novamente antes de aplicar.",
+          "replanButton": {
+            "label": "Planejar novamente"
+          }
+        },
+        "applyFailed": {
+          "title": "Não foi possível aplicar as alterações"
+        },
+        "validation": {
+          "title": "Validação",
+          "blocks": "As novas configurações falharam na validação. Corrija-as antes de aplicar.",
+          "warns": "Algumas verificações opcionais falharam. Você ainda pode aplicar.",
+          "error": {
+            "title": "As configurações não são válidas"
+          }
+        },
+        "warnings": {
+          "title": "Avisos"
+        },
+        "notes": {
+          "title": "Observações"
+        },
+        "reconciliation": {
+          "title": "Escolha como conciliar a mudança de escopo",
+          "description": "O plano não consegue saber se a alteração em {fields} adiciona ou remove documentos. Escolha o que a aplicação faz.",
+          "option": {
+            "prune": {
+              "title": "Remover",
+              "description": "Remover os documentos que não estão mais no escopo."
+            },
+            "full_reindex": {
+              "title": "Reindexação completa",
+              "description": "Indexar tudo novamente desde a data de início para adicionar os documentos que agora estão no escopo."
+            },
+            "both": {
+              "title": "Reindexação completa e depois remoção",
+              "description": "Indexar tudo novamente e depois remover os documentos que não estão mais no escopo."
+            },
+            "nothing": {
+              "title": "Não fazer nada",
+              "description": "Manter os documentos indexados. As próximas execuções usam as novas configurações."
+            }
+          }
+        },
+        "credential": {
+          "title": "Alteração de credencial",
+          "description": "Escolha o que acontece com os documentos indexados com a credencial antiga.",
+          "option": {
+            "keep_indexed": {
+              "title": "Manter os documentos indexados",
+              "description": "As próximas execuções usam a nova credencial. Este é o caminho rápido."
+            },
+            "full_reindex_and_prune": {
+              "title": "Reindexação completa e remoção",
+              "description": "Indexar tudo novamente com a nova credencial e depois remover os documentos que ela não consegue ver."
+            }
+          }
+        },
+        "steps": {
+          "title": "Etapas",
+          "description": "O que a aplicação faz, em ordem. Você pode desativar as etapas opcionais.",
+          "none": "A aplicação salva as configurações. Nenhuma indexação é necessária.",
+          "required": {
+            "label": "Obrigatória"
+          },
+          "optional": {
+            "label": "Opcional"
+          },
+          "include": {
+            "ariaLabel": "Executar a etapa: {step}"
+          },
+          "fields": "Campos: {fields}",
+          "window": "Janela: de {start} a {end}",
+          "windowFromStart": "Janela: tudo até {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Atualizar os grupos de acesso a dados",
+              "description": "A pesquisa aplica os novos grupos imediatamente."
+            },
+            "access_type": {
+              "title": "Alterar o tipo de acesso",
+              "description": "Muda quem pode ler os documentos."
+            },
+            "enter_perm_sync": {
+              "title": "Iniciar a sincronização de permissões",
+              "description": "Os documentos ficam ocultos até a primeira sincronização de permissões terminar."
+            },
+            "leave_perm_sync": {
+              "title": "Parar a sincronização de permissões",
+              "description": "As permissões da origem não decidem mais quem lê os documentos."
+            },
+            "restart_attempt": {
+              "title": "Reiniciar a tentativa de indexação em andamento",
+              "description": "A tentativa em andamento para, e uma nova começa com as novas configurações."
+            },
+            "full_reindex_then_prune": {
+              "title": "Reindexação completa e depois remoção",
+              "description": "Indexar tudo novamente e depois remover os documentos que a origem não retorna mais."
+            },
+            "full_reindex": {
+              "title": "Reindexação completa",
+              "description": "Indexar tudo novamente desde a data de início."
+            },
+            "scoped_backfill": {
+              "title": "Preencher os itens adicionados",
+              "description": "Indexar somente o histórico dos itens adicionados."
+            },
+            "window_backfill": {
+              "title": "Preencher a janela anterior",
+              "description": "Indexar o período entre a nova e a antiga data de início."
+            },
+            "prune": {
+              "title": "Remover",
+              "description": "Remover os documentos que a origem não retorna mais."
+            }
+          },
+          "reason": {
+            "identity_changed": "Os IDs dos documentos mudam",
+            "behavior_changed": "O processamento mudou",
+            "scope_widened": "Escopo ampliado",
+            "scope_narrowed": "Escopo reduzido",
+            "items_added_or_changed": "Itens adicionados ou alterados",
+            "items_removed": "Itens removidos",
+            "opaque_scope_choice": "Sua escolha de escopo",
+            "indexing_start_earlier": "Data de início anterior",
+            "credential_full_path": "Caminho completo da credencial",
+            "access_changed": "O acesso mudou",
+            "permissions_fetched_during_indexing": "As permissões vêm com a indexação",
+            "attempt_running": "Uma tentativa está em andamento",
+            "scoped_backfill_superseded": "Um preenchimento anterior é substituído",
+            "admin_added": "Adicionado por você",
+            "indexing_start_later": "Data de início posterior"
+          }
+        },
+        "extra": {
+          "title": "Trabalho extra",
+          "description": "Adicione trabalho de que o plano não precisa.",
+          "fullReindex": {
+            "title": "Adicionar uma reindexação completa",
+            "description": "Indexar tudo novamente desde a data de início."
+          },
+          "prune": {
+            "title": "Adicionar uma remoção",
+            "description": "Remover os documentos que a origem não retorna mais."
+          }
+        },
+        "backButton": {
+          "label": "Voltar à edição"
+        },
+        "applyButton": {
+          "label": "Aplicar"
+        },
+        "blocked": {
+          "validation": "Corrija primeiro as falhas de validação.",
+          "reconciliation": "Escolha primeiro como conciliar a mudança de escopo."
+        }
       }
     }
   },
