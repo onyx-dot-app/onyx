@@ -287,3 +287,78 @@ def test_twelvelabs_pegasus_override_present() -> None:
         assert model_obj["supports_reasoning"] is False
     finally:
         _reset_caches()
+
+
+def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
+    """Providers vendored from sources without a mode concept (e.g.
+    vercel_ai_gateway) ship no mode field; embed/rerank ids must infer a
+    non-chat mode or gateway model lists would offer them as chat models."""
+    mock_catalog: dict[str, Any] = {
+        "vercel_ai_gateway": {
+            "models": {
+                "cohere/embed-v5.0-fast": {
+                    "limit": {"context": 512, "output": 512},
+                },
+                "cohere/rerank-v4-pro": {
+                    "limit": {"context": 128_000, "output": 0},
+                },
+                "cohere/command-a": {
+                    "limit": {"context": 256_000, "output": 8_000},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            for embed_name in ("cohere/embed-v5.0-fast", "cohere/rerank-v4-pro"):
+                obj = find_model_obj(model_map, "vercel_ai_gateway", embed_name)
+                assert obj is not None
+                assert obj["mode"] == "embedding"
+                assert (
+                    find_model_obj(
+                        model_map, "vercel_ai_gateway", embed_name, chat_only=True
+                    )
+                    is None
+                )
+                assert model_catalog.is_embedding_model_name(embed_name) is True
+                assert embed_name not in model_catalog.iter_models(
+                    "vercel_ai_gateway", mode="chat"
+                )
+                assert embed_name in model_catalog.iter_models(
+                    "vercel_ai_gateway", mode="embedding"
+                )
+
+            chat = find_model_obj(model_map, "vercel_ai_gateway", "cohere/command-a")
+            assert chat is not None
+            assert chat["mode"] == "chat"
+            assert model_catalog.is_embedding_model_name("cohere/command-a") is False
+        finally:
+            _reset_caches()
+
+
+def test_explicit_mode_wins_over_name_heuristic() -> None:
+    """A vendored mode beats the name fallback — an upstream 'chat' entry
+    named *-embed stays chat."""
+    mock_catalog: dict[str, Any] = {
+        "wandb": {
+            "models": {
+                "vendor/embed-named-chat": {
+                    "mode": "chat",
+                    "limit": {"context": 8_000},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "wandb", "vendor/embed-named-chat")
+            assert obj is not None
+            assert obj["mode"] == "chat"
+        finally:
+            _reset_caches()

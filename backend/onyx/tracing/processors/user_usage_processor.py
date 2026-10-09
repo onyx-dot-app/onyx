@@ -250,7 +250,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                 record.incognito,
                 record.window_start,
             )
-            part = (
+            part: tuple[int, int, int, int, int] = (
                 record.input_tokens,
                 record.output_tokens,
                 record.cache_read_tokens,
@@ -286,7 +286,7 @@ class UserUsageTracingProcessor(TracingProcessor):
 
     @staticmethod
     def _write_record(db_session: Session, record: _UsageRecord) -> None:
-        parts = record.cost_parts or (
+        parts: tuple[tuple[int, int, int, int, int], ...] = record.cost_parts or (
             (
                 record.input_tokens,
                 record.output_tokens,
@@ -295,7 +295,8 @@ class UserUsageTracingProcessor(TracingProcessor):
                 record.image_count,
             ),
         )
-        input_cost = output_cost = 0.0
+        input_cost: float = 0.0
+        output_cost: float = 0.0
         for p_in, p_out, p_read, p_write, p_images in parts:
             part_in, part_out = compute_cost_cents(
                 model=record.model,

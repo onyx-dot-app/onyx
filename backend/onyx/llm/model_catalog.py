@@ -158,17 +158,33 @@ def provider_names() -> list[str]:
     return sorted(_catalog())
 
 
+def _catalog_mode(entry: dict[str, Any], model_name: str) -> str:
+    """Entries vendored from sources without a mode concept (models.dev-only
+    providers like vercel_ai_gateway) ship no mode; without one every
+    embedding/rerank entry would resolve as a chat model. Infer non-chat
+    classes from the id — the same name heuristic is_embedding_model_name
+    already applies to uncataloged models."""
+    mode: Any = entry.get("mode")
+    if mode:
+        return mode
+    return (
+        "embedding"
+        if _EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1])
+        else "chat"
+    )
+
+
 def iter_models(provider: str, mode: str | None = None) -> list[str]:
     """Real model ids under a provider (aliases excluded). Pass ``mode``
     (e.g. "chat") to restrict to that kind; entries without a mode field
-    are chat models."""
+    count as chat unless the id looks non-chat."""
     models = _catalog().get(provider, {}).get("models", {})
     if mode is None:
         return sorted(models)
     return sorted(
         model_id
         for model_id, entry in models.items()
-        if entry.get("mode", "chat") == mode
+        if _catalog_mode(entry, model_id) == mode
     )
 
 
@@ -232,13 +248,17 @@ def find_model_cost(provider: str, model_name: str) -> dict[str, Any] | None:
     return entry.get("cost") if entry else None
 
 
-def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
+def _compat_entry(
+    provider: str, entry: dict[str, Any], model_name: str
+) -> dict[str, Any]:
     """Render a catalog entry in the legacy litellm.model_cost shape consumed
     by model_capabilities and the model name parser."""
     limit = entry.get("limit") or {}
     modalities = entry.get("modalities") or {}
     inputs = modalities.get("input") or []
     display_name = re.sub(r"\s*\(latest\)\s*$", "", entry.get("name") or "")
+
+    mode: str = _catalog_mode(entry, model_name)
 
     # Meta-models (openrouter/auto and friends) route each request to a
     # pool endpoint smaller than their advertised pool-max limits. Emitting
@@ -254,7 +274,7 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
     context: Any = limit.get("context")
     if (
         not unbounded
-        and (entry.get("mode") or "chat") == "chat"
+        and mode == "chat"
         and isinstance(limit_output, (int, float))
         and isinstance(context, (int, float))
         and context > 0
@@ -264,7 +284,7 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "litellm_provider": provider,
-        "mode": entry.get("mode") or "chat",
+        "mode": mode,
         "max_input_tokens": limit.get("input") or limit.get("context"),
         "max_tokens": limit.get("context"),
         "max_output_tokens": None if unbounded else limit_output,
@@ -298,14 +318,14 @@ def build_model_map() -> dict[str, dict[str, Any]]:
     for provider in ordered_providers:
         section = catalog[provider]
         for model_id, entry in section["models"].items():
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, model_id)
             model_map[f"{provider}/{model_id}"] = compat
             model_map.setdefault(model_id, compat)
         for alias, target in section["aliases"].items():
             entry = section["models"].get(target)
             if entry is None:
                 continue
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, alias)
             model_map[f"{provider}/{alias}"] = compat
             model_map.setdefault(alias, compat)
 
