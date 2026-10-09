@@ -10,28 +10,26 @@ import { Text, type TextFont } from "@opal/components";
 // Types
 // ---------------------------------------------------------------------------
 
-interface TextButtonProps
-  extends
-    Pick<InteractiveStatelessProps, "passive">,
-    WithoutStyles<Omit<HTMLAttributes<HTMLElement>, "color" | "children">> {
-  /** Font preset. Default: `"main-ui-body"`. */
-  font?: TextFont;
+type TextButtonProps = Pick<InteractiveStatelessProps, "passive"> &
+  WithoutStyles<Omit<HTMLAttributes<HTMLElement>, "color" | "children">> & {
+    /** Font preset. Default: `"main-ui-body"`. */
+    font?: TextFont;
 
-  /** Prevent text wrapping. Default: `true` (unlike `Text`, which defaults to `false`). */
-  nowrap?: boolean;
+    /** Prevent text wrapping. Default: `true` (unlike `Text`, which defaults to `false`). */
+    nowrap?: boolean;
 
-  /** Destination URL. When provided, the component renders as a link. */
-  href?: string;
+    /** Destination URL. When provided, the component renders as a link. */
+    href?: string;
 
-  /** Anchor `target` attribute (e.g. `"_blank"`). Only meaningful with `href`. */
-  target?: string;
+    /** Anchor `target` attribute (e.g. `"_blank"`). Only meaningful with `href`. */
+    target?: string;
 
-  /** Applies disabled styling and suppresses clicks/navigation. */
-  disabled?: boolean;
+    /** Applies disabled styling and suppresses clicks/navigation. */
+    disabled?: boolean;
 
-  /** Plain string or `markdown()` for inline markdown. */
-  children: string | RichStr;
-}
+    /** Plain string or `markdown()` for inline markdown. */
+    children: string | RichStr;
+  };
 
 // ---------------------------------------------------------------------------
 // TextButton
