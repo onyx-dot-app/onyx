@@ -502,6 +502,7 @@ Frontend attachments in `web/src/app/craft/contexts/UploadFilesContext.tsx` use 
 Late upload, listing, and deletion responses cannot change another visit.
 ChatPanel ends the attachment visit on unmount, including pending welcome files and navigation to Craft apps.
 Pending deletions use session and path guards across visits; listings omit those paths until deletion finishes.
+Clearing sent attachments blocks stale deletion recovery and invalidates pending attachment listings for that visit.
 Pending welcome attachments upload when the first session becomes available.
 
 ### 4.8 User library

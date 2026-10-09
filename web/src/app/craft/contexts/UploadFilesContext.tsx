@@ -319,6 +319,8 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   const isUploadingPendingRef = useRef(false);
   const fetchingSessionRef = useRef<string | null>(null);
   const activeScopeRef = useRef(activeScope);
+  const dismissedAttachmentScopeRef = useRef<AttachmentScope | null>(null);
+  const attachmentClearRevisionRef = useRef<number>(0);
   // Track active deletions to prevent refetch race condition
   const activeDeletionsRef = useRef<Set<string>>(new Set());
   // When true, skip the refetch that runs after clearFiles (e.g. Enter to dismiss file)
@@ -437,6 +439,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     async (sessionId: string, replace: boolean): Promise<void> => {
       const scope: AttachmentScope = activeScopeRef.current;
       if (scope.sessionId !== sessionId) return;
+      const clearRevision: number = attachmentClearRevisionRef.current;
       // Request deduplication
       if (fetchingSessionRef.current === sessionId) return;
 
@@ -444,7 +447,11 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
       try {
         const listing = await fetchDirectoryListing(sessionId, "attachments");
-        if (activeScopeRef.current !== scope) return;
+        if (
+          activeScopeRef.current !== scope ||
+          attachmentClearRevisionRef.current !== clearRevision
+        )
+          return;
 
         // Use deterministic IDs based on session and path for stable React keys
         const attachments: BuildFile[] = listing.entries
@@ -489,7 +496,11 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
           });
         }
       } catch (error) {
-        if (activeScopeRef.current !== scope) return;
+        if (
+          activeScopeRef.current !== scope ||
+          attachmentClearRevisionRef.current !== clearRevision
+        )
+          return;
         const { type } = classifyError(error, t);
         if (type !== UploadErrorType.NOT_FOUND) {
           console.error(
@@ -589,6 +600,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     (sessionId: string | null, preserveFiles: boolean) => {
       const nextScope: AttachmentScope = { sessionId };
       activeScopeRef.current = nextScope;
+      dismissedAttachmentScopeRef.current = null;
       fetchingSessionRef.current = null;
       isUploadingPendingRef.current = false;
       if (!preserveFiles) {
@@ -714,6 +726,8 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         })
         .catch((error) => {
           activeDeletionsRef.current.delete(deletionKey);
+          if (dismissedAttachmentScopeRef.current === activeScopeRef.current)
+            return;
           if (activeScopeRef.current !== scope) {
             if (activeScopeRef.current.sessionId === activeSessionId)
               void fetchExistingAttachmentsInternal(activeSessionId, false);
@@ -749,7 +763,11 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   const clearFiles = useCallback(
     (options?: { suppressRefetch?: boolean }) => {
       if (activeScopeRef.current !== activeScope) return;
-      if (options?.suppressRefetch) suppressRefetchRef.current = true;
+      if (options?.suppressRefetch) {
+        suppressRefetchRef.current = true;
+        dismissedAttachmentScopeRef.current = activeScope;
+        attachmentClearRevisionRef.current += 1;
+      }
       setCurrentMessageFiles([]);
     },
     [activeScope]

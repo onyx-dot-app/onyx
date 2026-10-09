@@ -459,3 +459,50 @@ it("refetches current attachments when an earlier visit's deletion fails", async
   expect(fetchDirectoryListing).toHaveBeenCalledTimes(3);
   expect(deleteFile).toHaveBeenCalledTimes(1);
 });
+
+it.each(["before recovery", "during recovery"] as const)(
+  "keeps sent attachments cleared when an old deletion fails %s",
+  async (stage) => {
+    const deletion: ReturnType<typeof deferred<void>> = deferred<void>();
+    const recovery: ReturnType<typeof deferred<DirectoryListing>> =
+      deferred<DirectoryListing>();
+    jest.mocked(deleteFile).mockReturnValue(deletion.promise);
+    jest.mocked(fetchDirectoryListing).mockResolvedValue({
+      path: "attachments",
+      entries: [
+        ...listing("removed.txt").entries,
+        ...listing("sent.txt").entries,
+      ],
+    });
+    const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+    act(() => result.current.setActiveSession("session-a"));
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles).toHaveLength(2)
+    );
+    const removed: BuildFile | undefined =
+      result.current.currentMessageFiles.find(
+        (file) => file.name === "removed.txt"
+      );
+    if (!removed) throw new Error("Attachment missing");
+    act(() => result.current.removeFile(removed.id));
+    act(() => result.current.endSessionVisit());
+    act(() => result.current.setActiveSession("session-a"));
+    await waitFor(() =>
+      expect(
+        result.current.currentMessageFiles.map((file) => file.name)
+      ).toEqual(["sent.txt"])
+    );
+    jest.mocked(fetchDirectoryListing).mockReturnValue(recovery.promise);
+    if (stage === "before recovery")
+      act(() => result.current.clearFiles({ suppressRefetch: true }));
+    await act(async () => deletion.reject(new Error("network unavailable")));
+    if (stage === "during recovery") {
+      expect(fetchDirectoryListing).toHaveBeenCalledTimes(3);
+      act(() => result.current.clearFiles({ suppressRefetch: true }));
+    }
+    await act(async () => recovery.resolve(listing("sent.txt")));
+    expect(result.current.currentMessageFiles).toEqual([]);
+    if (stage === "before recovery")
+      expect(fetchDirectoryListing).toHaveBeenCalledTimes(2);
+  }
+);
