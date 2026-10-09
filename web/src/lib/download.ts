@@ -11,11 +11,11 @@ export function downloadFile(
   filename: string,
   opts: { content: string | Blob; mimeType?: string } | { url: string }
 ): void {
-  const a = document.createElement("a");
+  const a: HTMLAnchorElement = document.createElement("a");
   let objectUrl: string | undefined;
 
   if ("content" in opts) {
-    const blob =
+    const blob: Blob =
       typeof opts.content === "string"
         ? new Blob([opts.content], { type: opts.mimeType ?? "text/plain" })
         : opts.content;
@@ -29,7 +29,7 @@ export function downloadFile(
   a.click();
   document.body.removeChild(a);
   if (objectUrl) {
-    const url = objectUrl;
+    const url: string = objectUrl;
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 }
