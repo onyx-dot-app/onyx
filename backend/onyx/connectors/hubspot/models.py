@@ -13,6 +13,9 @@ class HubSpotObjectSpec(BaseModel):
     document_noun: str
     # Search filters on this. Contacts name it differently.
     modified_date_property: str
+    # The private-app scope that reads the type. HubSpot names the ticket scope
+    # plain `tickets`, outside the crm.objects.* pattern.
+    read_scope: str
 
 
 class HubSpotPage(BaseModel, Generic[_ItemT]):

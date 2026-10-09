@@ -17,6 +17,7 @@ from onyx.connectors.confluence.capability_checks import (
 from onyx.connectors.google_drive.capability_checks import (
     build_google_drive_indexing_checks,
 )
+from onyx.connectors.hubspot.capability_checks import build_hubspot_indexing_checks
 from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
 from onyx.connectors.linear.capability_checks import build_linear_indexing_checks
 from onyx.connectors.onedrive.capability_checks import build_onedrive_indexing_checks
@@ -34,6 +35,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.GOOGLE_DRIVE: build_google_drive_indexing_checks(),
     DocumentSource.ONEDRIVE: build_onedrive_indexing_checks(),
     DocumentSource.OUTLOOK: build_outlook_indexing_checks(),
+    DocumentSource.HUBSPOT: build_hubspot_indexing_checks(),
     DocumentSource.JIRA: build_jira_indexing_checks(),
     DocumentSource.LINEAR: build_linear_indexing_checks(),
 }
