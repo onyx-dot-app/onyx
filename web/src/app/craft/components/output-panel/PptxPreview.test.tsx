@@ -1,3 +1,4 @@
+import { SWRConfig } from "swr";
 import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
 import {
   render,
@@ -427,4 +428,41 @@ it("resizes thumbnails with quick pointer release and keyboard limits", async ()
   pointer("pointermove", 160);
   pointer("pointercancel", 250);
   expect(divider).toHaveAttribute("aria-valuenow", "160");
+});
+
+it("reattaches thumbnail sizing after a failed activation read recovers", async () => {
+  const observe = jest.spyOn(ResizeObserver.prototype, "observe");
+  const preview = {
+    slide_count: 1,
+    slide_paths: ["slide-1.jpg"],
+    cached: true,
+  };
+  jest
+    .mocked(fetchPptxPreview)
+    .mockResolvedValueOnce(preview)
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue(preview);
+  const view = (isActive = true) => (
+    <SWRConfig value={{ shouldRetryOnError: false }}>
+      <PptxPreview
+        sessionId="resize-recovery"
+        filePath="outputs/deck.pptx"
+        isActive={isActive}
+      />
+    </SWRConfig>
+  );
+  try {
+    const { rerender } = render(view());
+    await screen.findByRole("separator");
+    const firstCalls = observe.mock.calls.length;
+    rerender(view(false));
+    rerender(view());
+    await screen.findByText("Cannot preview presentation");
+    rerender(view(false));
+    rerender(view());
+    await screen.findByRole("separator");
+    expect(observe.mock.calls.length).toBeGreaterThan(firstCalls);
+  } finally {
+    observe.mockRestore();
+  }
 });

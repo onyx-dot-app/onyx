@@ -9,50 +9,15 @@ import {
   type FilePreviewScrollPosition,
 } from "@/app/craft/components/output-panel/FilePreviewScrollArea";
 
-const MAX_ROWS = 1000;
-const MAX_COLUMNS = 100;
-const MAX_CHARACTERS = 2_000_000;
+import { parseCsv as parseCsvContent } from "@/lib/csv";
 
-interface CsvParseResult {
-  rows: string[][];
-  truncated: boolean;
-}
-
-/** Parses RFC 4180 cells, including quoted newlines, with bounded work. */
-export function parseCsv(content: string): CsvParseResult {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let quoted = false;
-  let truncated = content.length > MAX_CHARACTERS;
-  const source = content.slice(0, MAX_CHARACTERS).replace(/^\uFEFF/, "");
-  for (let index = 0; index < source.length; index++) {
-    const char = source[index];
-    if (char === '"') {
-      if (quoted && source[index + 1] === '"') {
-        cell += '"';
-        index++;
-      } else if (quoted || cell === "") quoted = !quoted;
-      else cell += char;
-    } else if (!quoted && (char === "," || char === "\n" || char === "\r")) {
-      if (row.length < MAX_COLUMNS) row.push(cell);
-      else truncated = true;
-      cell = "";
-      if (char !== ",") {
-        if (char === "\r" && source[index + 1] === "\n") index++;
-        rows.push(row);
-        row = [];
-        if (rows.length >= MAX_ROWS)
-          return { rows, truncated: index < source.length - 1 || truncated };
-      }
-    } else cell += char;
-  }
-  if (cell || row.length || (source.length > 0 && !/[\r\n]$/.test(source))) {
-    if (row.length < MAX_COLUMNS) row.push(cell);
-    else truncated = true;
-    rows.push(row);
-  }
-  return { rows, truncated };
+export function parseCsv(content: string) {
+  return parseCsvContent(content, {
+    maxRows: 1000,
+    maxColumns: 100,
+    maxCharacters: 2_000_000,
+    maxCells: 5000,
+  });
 }
 
 interface CsvPreviewProps extends FilePreviewScrollPosition {
@@ -66,7 +31,14 @@ export function CsvPreview({
   isActive,
 }: CsvPreviewProps) {
   const t = useTranslations("craft.filePreview");
-  const { rows, truncated } = useMemo(() => parseCsv(content), [content]);
+  const parsed = useMemo(() => {
+    try {
+      return { result: parseCsv(content), error: false };
+    } catch {
+      return { result: { rows: [], truncated: false }, error: true };
+    }
+  }, [content]);
+  const { rows, truncated } = parsed.result;
   return (
     <FilePreviewScrollArea
       initialScrollTop={initialScrollTop}
@@ -75,6 +47,13 @@ export function CsvPreview({
       padding={0}
       paddingX={4}
     >
+      {parsed.error && (
+        <div role="alert">
+          <Text font="secondary-body" color="text-03">
+            {t("csv.malformed")}
+          </Text>
+        </div>
+      )}
       {truncated && (
         <Text font="secondary-body" color="text-03">
           {t("csv.truncated")}

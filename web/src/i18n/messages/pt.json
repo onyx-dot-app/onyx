@@ -12481,7 +12481,8 @@
         "label": "Sem conteúdo"
       },
       "csv": {
-        "truncated": "A prévia mostra as primeiras 1.000 linhas e 100 colunas. Baixe o original para obter todos os dados."
+        "truncated": "Prévia limitada a 1.000 linhas, 100 colunas e 5.000 células. Baixe o original para todos os dados.",
+        "malformed": "Este CSV contém um campo entre aspas incompleto. Baixe o original para verificá-lo."
       }
     },
     "filesTab": {

@@ -52,11 +52,14 @@ export default function PptxPreview({
   } | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(112);
   const [layoutWidth, setLayoutWidth] = useState(0);
-  const minimumWidth = 88;
-  const maximumWidth = layoutWidth
+  const minimumWidth: number = 88;
+  const maximumWidth: number = layoutWidth
     ? Math.max(minimumWidth, Math.min(320, layoutWidth * 0.4))
     : 320;
-  const width = Math.max(minimumWidth, Math.min(maximumWidth, sidebarWidth));
+  const width: number = Math.max(
+    minimumWidth,
+    Math.min(maximumWidth, sidebarWidth)
+  );
   const selectedThumbnailRef = useRef<HTMLDivElement>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imageLoading, setImageLoading] = useState(true);
@@ -72,6 +75,8 @@ export default function PptxPreview({
     isActive
   );
 
+  const layoutVisible: boolean =
+    !isLoading && !error && Boolean(data?.slide_count);
   useEffect(() => {
     const layout = layoutRef.current;
     if (!layout) return;
@@ -80,12 +85,13 @@ export default function PptxPreview({
     });
     observer.observe(layout);
     return () => observer.disconnect();
-  }, [Boolean(data?.slide_count)]);
+  }, [layoutVisible]);
 
   function resizeAt(clientX: number) {
     const gesture = resizeGesture.current;
     if (!gesture) return;
-    const delta = (clientX - gesture.startX) * (direction === "rtl" ? -1 : 1);
+    const delta: number =
+      (clientX - gesture.startX) * (direction === "rtl" ? -1 : 1);
     setSidebarWidth(
       Math.max(minimumWidth, Math.min(maximumWidth, gesture.width + delta))
     );

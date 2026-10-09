@@ -52,11 +52,32 @@ export function parseSpreadsheetPreview(
     if (
       typeof parsed !== "object" ||
       parsed === null ||
-      !Array.isArray((parsed as SpreadsheetPreviewData).sheets)
+      !("sheets" in parsed) ||
+      !Array.isArray(parsed.sheets)
     ) {
       return null;
     }
-    return parsed as SpreadsheetPreviewData;
+    const sheets: unknown[] = parsed.sheets;
+    const validated: SpreadsheetSheet[] = [];
+    for (const sheet of sheets) {
+      if (
+        typeof sheet !== "object" ||
+        sheet === null ||
+        !("name" in sheet) ||
+        typeof sheet.name !== "string" ||
+        !("csv" in sheet) ||
+        typeof sheet.csv !== "string" ||
+        !("truncated" in sheet) ||
+        typeof sheet.truncated !== "boolean"
+      )
+        return null;
+      validated.push({
+        name: sheet.name,
+        csv: sheet.csv,
+        truncated: sheet.truncated,
+      });
+    }
+    return { sheets: validated };
   } catch {
     return null;
   }
