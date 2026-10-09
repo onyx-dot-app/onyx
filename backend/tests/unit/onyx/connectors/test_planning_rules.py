@@ -4,8 +4,10 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.config_diff import (
+    ConfigFieldChange,
     build_source_scoped_backfill_config,
     classify_source_config_change,
+    source_change_override,
 )
 from onyx.connectors.field_policy import FieldClass, ScopeDirection
 from onyx.connectors.github.config import GithubConnectorConfig
@@ -18,6 +20,22 @@ _BITBUCKET_WORKSPACE = {"workspace": "onyx"}
 _DRUPAL_SITE = {"base_url": "https://wiki.example.com"}
 _ASANA_WORKSPACE = {"asana_workspace_id": "w"}
 _JIRA_SITE = {"jira_base_url": "https://example.atlassian.net"}
+
+
+def _classify(
+    source: DocumentSource, old: dict[str, Any], new: dict[str, Any]
+) -> list[ConfigFieldChange]:
+    return classify_source_config_change(
+        source, old, new, source_change_override(source, old, new)
+    )
+
+
+def _scoped_backfill_config(
+    source: DocumentSource, old: dict[str, Any], new: dict[str, Any]
+) -> dict[str, Any] | None:
+    return build_source_scoped_backfill_config(
+        source, old, new, source_change_override(source, old, new)
+    )
 
 
 def test_every_rule_reads_the_config_class_of_its_source() -> None:
@@ -332,7 +350,7 @@ def test_source_rule_directions(
     new: dict[str, Any],
     expected: dict[str, ScopeDirection],
 ) -> None:
-    changes = classify_source_config_change(source, old, new)
+    changes = _classify(source, old, new)
 
     assert {change.field_name: change.scope_direction for change in changes} == (
         expected
@@ -356,7 +374,7 @@ def test_github_branch_and_repositories_are_stripped(
 
 def test_github_whitespace_is_not_a_change() -> None:
     assert (
-        classify_source_config_change(
+        _classify(
             DocumentSource.GITHUB,
             {"repo_owner": "onyx", "repositories": "a", "branch": "main"},
             {"repo_owner": "onyx", "repositories": " a ", "branch": " main "},
@@ -366,7 +384,7 @@ def test_github_whitespace_is_not_a_change() -> None:
 
 
 def test_github_scoped_backfill_for_added_repositories() -> None:
-    delta = build_source_scoped_backfill_config(
+    delta = _scoped_backfill_config(
         DocumentSource.GITHUB,
         {"repo_owner": "onyx", "repositories": "a", "include_issues": True},
         {"repo_owner": "onyx", "repositories": "a,b", "include_issues": True},
@@ -377,7 +395,7 @@ def test_github_scoped_backfill_for_added_repositories() -> None:
 
 def test_salesforce_scoped_backfill_holds_only_added_types() -> None:
     # {} resolves to Account, so only Contact is new.
-    delta = build_source_scoped_backfill_config(
+    delta = _scoped_backfill_config(
         DocumentSource.SALESFORCE, {}, {"requested_objects": ["Account", "Contact"]}
     )
 
@@ -397,7 +415,7 @@ def test_testrail_zero_and_blank_limits_are_none() -> None:
 def test_rule_direction_blocks_scoped_backfill() -> None:
     # The default rules would widen meeting_organizers by one item.
     assert (
-        build_source_scoped_backfill_config(
+        _scoped_backfill_config(
             DocumentSource.TEAMS,
             {"meeting_organizers": ["a"], "transcript_organizers": ["x"]},
             {"meeting_organizers": ["a", "b"], "transcript_organizers": ["x"]},

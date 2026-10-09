@@ -24,6 +24,7 @@ from onyx.connectors.capability_checks.models import (
     ProposedPairingValidation,
 )
 from onyx.connectors.edit_plan import orchestration
+from onyx.connectors.edit_plan.constants import EDIT_PLAN_TTL_SECONDS
 from onyx.connectors.edit_plan.models import (
     EditNoteKind,
     EditStepKind,
@@ -32,7 +33,6 @@ from onyx.connectors.edit_plan.models import (
 from onyx.connectors.edit_plan.orchestration import plan_connector_edit
 from onyx.connectors.edit_plan.state import fetch_current_pair_state
 from onyx.connectors.edit_plan.store import (
-    EDIT_PLAN_TTL_SECONDS,
     ensure_base_state_matches,
     load_edit_plan,
 )

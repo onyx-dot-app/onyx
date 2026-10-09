@@ -8,6 +8,7 @@ from onyx.connectors.config_diff import (
     build_scoped_backfill_config,
     classify_config_change,
     find_field_policy_gaps,
+    rule_change_override,
 )
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import (
@@ -92,7 +93,8 @@ def _only_change(
     config_class: type[ConnectorConfig] = _Config,
     rule: PlanningRule | None = None,
 ) -> ConfigFieldChange:
-    changes = classify_config_change(config_class, old, new, rule)
+    override = rule_change_override(config_class, old, new, rule) if rule else None
+    changes = classify_config_change(config_class, old, new, override)
     assert len(changes) == 1, changes
     return changes[0]
 
@@ -298,11 +300,10 @@ def test_rule_returning_none_uses_the_default_rules() -> None:
 
 
 def test_rule_leaves_fields_it_does_not_name_to_the_default_rules() -> None:
+    old = {"query": "a", "spaces": ["x"]}
+    new = {"query": "a OR b", "spaces": ["x", "y"]}
     changes = classify_config_change(
-        _Config,
-        {"query": "a", "spaces": ["x"]},
-        {"query": "a OR b", "spaces": ["x", "y"]},
-        _QUERY_RULE,
+        _Config, old, new, rule_change_override(_Config, old, new, _QUERY_RULE)
     )
 
     by_name = {change.field_name: change for change in changes}
@@ -314,12 +315,25 @@ def test_rule_leaves_fields_it_does_not_name_to_the_default_rules() -> None:
 
 def test_rule_naming_a_non_scope_field_raises() -> None:
     with pytest.raises(ValueError):
-        classify_config_change(_Config, {}, {"parse_tables": True}, _NON_SCOPE_RULE)
+        classify_config_change(
+            _Config,
+            {},
+            {"parse_tables": True},
+            rule_change_override(_Config, {}, {"parse_tables": True}, _NON_SCOPE_RULE),
+        )
 
 
 def test_rule_is_skipped_when_a_config_does_not_validate() -> None:
+    old: dict[str, Any] = {"legacy_key": 1}
+    new: dict[str, Any] = {"parse_tables": True}
+    assert rule_change_override(_Config, old, new, _NON_SCOPE_RULE) is None
     changes = classify_config_change(
-        _Config, {"legacy_key": 1}, {"parse_tables": True}, _NON_SCOPE_RULE
+        _Config,
+        old,
+        new,
+        ConnectorChangeOverride(
+            scope_directions={"parse_tables": ScopeDirection.WIDEN}
+        ),
     )
 
     assert {change.field_name for change in changes} == {"legacy_key", "parse_tables"}

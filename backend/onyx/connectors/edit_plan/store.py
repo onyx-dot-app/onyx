@@ -11,11 +11,10 @@ import json
 from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
+from onyx.connectors.edit_plan.constants import EDIT_PLAN_TTL_SECONDS
 from onyx.connectors.edit_plan.models import PairState, StoredEditPlan
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-
-EDIT_PLAN_TTL_SECONDS = 24 * 60 * 60
 
 _EDIT_PLAN_KEY_PREFIX = "connector_edit_plan"
 

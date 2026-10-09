@@ -12,6 +12,7 @@ from onyx.access.access import source_should_fetch_permissions_during_indexing
 from onyx.access.cc_pair_access import get_cc_pair_access_mode
 from onyx.connectors.capability_checks.creation import get_cc_pair_dry_run_results
 from onyx.connectors.capability_checks.models import ProposedPairingValidation
+from onyx.connectors.config_diff import load_source_rule_data
 from onyx.connectors.edit_plan.models import (
     CurrentPairState,
     EditPlanInputs,
@@ -30,6 +31,7 @@ from onyx.connectors.factory import (
     validate_proposed_pairing,
 )
 from onyx.connectors.pairing_access import validate_pairing_access
+from onyx.connectors.planning_rule import PlanningData
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.context.search.models import CCPairAccessMode
 from onyx.db.connector_edit_requests import has_restartable_attempt
@@ -114,11 +116,13 @@ def plan_connector_edit(
     Raises:
         OnyxError: The pair or credential does not exist, the edit cannot be
             planned (see ``ensure_edit_is_plannable``), the config does not
-            match the source's config model, or the access gates reject the
-            proposed access.
+            match the source's config model, the source's planning rule
+            rejects its data (e.g. a file that was not staged for the edit),
+            or the access gates reject the proposed access.
     """
     current = fetch_current_pair_state(db_session, cc_pair_id)
     ensure_edit_is_plannable(current, proposed)
+    rule_data: PlanningData | None = None
     if proposed.connector_specific_config != current.connector_specific_config:
         try:
             validate_connector_config(
@@ -126,6 +130,13 @@ def plan_connector_edit(
             )
         except pydantic.ValidationError as e:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+        rule_data = load_source_rule_data(
+            db_session,
+            current.source,
+            cc_pair_id,
+            current.connector_specific_config,
+            proposed.connector_specific_config,
+        )
     if (
         proposed.access_type != current.access_type
         or proposed.data_access_group_ids != current.data_access_group_ids
@@ -164,6 +175,7 @@ def plan_connector_edit(
         now=datetime.now(timezone.utc),
         validation=validation,
         dry_run_results=dry_run_results,
+        rule_data=rule_data,
     )
     stored = StoredEditPlan(
         plan_id=uuid4(),
