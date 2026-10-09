@@ -4,12 +4,10 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import psutil
 
-if TYPE_CHECKING:
-    from onyx.utils.fleet_telemetry import BoundedTelemetry
+from onyx.utils.fleet_telemetry import BoundedTelemetry, fingerprint
 
 # Disk usage is read for the mount that holds application data.
 _DISK_MOUNT: str = os.environ.get("ONYX_TELEMETRY_DISK_MOUNT", "/")
@@ -25,7 +23,7 @@ def _number(path: str) -> int | None:
         return None
 
 
-def collect_process_resource(client: "BoundedTelemetry") -> None:
+def collect_process_resource(client: BoundedTelemetry) -> None:
     global _last_cpu
     try:
         process = psutil.Process()
@@ -59,7 +57,7 @@ def collect_process_resource(client: "BoundedTelemetry") -> None:
         client.emit(
             "resource",
             {
-                "service_instance_id": client.fingerprint(
+                "service_instance_id": fingerprint(
                     str(os.getpid()) + ":" + os.uname().nodename
                 ),
                 "memory_bytes": memory,

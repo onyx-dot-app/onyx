@@ -1389,12 +1389,14 @@ def main() -> None:
     # Initialize the SqlEngine
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
-    set_is_ee_if_available()
     # Start telemetry before the handler starts message-processing threads.
     start_telemetry("slack")
     try:
+        # Initialize the tenant handler which will manage tenant connections
         logger.info("Starting SlackbotHandler")
-        tenant_handler: SlackbotHandler = SlackbotHandler()
+        tenant_handler = SlackbotHandler()
+
+        set_is_ee_if_available()
         setup_tracing()
 
         try:

@@ -5,7 +5,6 @@ source database role and container resource limits. Source failures only drop
 telemetry; bounded reads never hold source transactions open between polls.
 """
 
-import argparse
 import hashlib
 import json
 import os
@@ -38,23 +37,23 @@ from onyx.db.fleet_telemetry import (
     stage_metric_page,
     tenant_schemas,
 )
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.fleet_telemetry import (
     CELERY_QUEUES,
     CONNECTOR_CONFIG_COUNTS,
     CONNECTOR_INTERVAL_SECONDS,
     CONNECTOR_ROW_SETTINGS,
-    EXIT_FLUSH_SECONDS,
     QUEUE_INTERVAL_SECONDS,
     RESOURCE_INTERVAL_SECONDS,
     SAFE_BOOLEAN_SETTINGS,
     SAFE_NUMBER_SETTINGS,
     BoundedTelemetry,
+    fingerprint,
     normalize_email_domain,
     poll_due,
     start_telemetry,
     stop_telemetry,
 )
-from onyx.utils.variable_functionality import set_is_ee_if_available
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 SOURCE_EVENT_REVISION: int = 1
@@ -122,7 +121,7 @@ def safe_attempt_error_data(
     data: dict[str, Any] = {
         "error_count": max(row["error_count"] or 0, int(row["has_error"])),
         "error_code": category,
-        "error_fingerprint": client.fingerprint(
+        "error_fingerprint": fingerprint(
             "attempt:" + str(row["connector_type"]) + ":" + category
         ),
     }
@@ -170,7 +169,7 @@ def safe_connector_data(
         "state": row["state"],
         "doc_count": row.get("doc_count") or 0,
         "last_success_at": _iso(row.get("last_success_at")),
-        "config_hash": client.fingerprint(_canonical_json(metadata)),
+        "config_hash": fingerprint(_canonical_json(metadata)),
         "metadata": metadata,
     }
 
@@ -249,20 +248,17 @@ class FleetCollector:
         durable_id: bool,
         observed_at: datetime | None = None,
     ) -> bool:
-        identity: str = f"{self.client.config.deployment_id}:{schema}:{event_type}:{entity}:{revision.isoformat()}:{SOURCE_EVENT_REVISION}"
+        customer: str | None = self.client.customer_uuid
+        if customer is None:
+            # Durable event IDs live in the namespace that enrollment assigns.
+            return False
+        identity: str = f"{self.client.deployment_id}:{schema}:{event_type}:{entity}:{revision.isoformat()}:{SOURCE_EVENT_REVISION}"
         if durable_id and observed_at is not None:
             # Active source rows may update counters without a revision timestamp,
-            # so a keyed hash of the event data tells their snapshots apart.
-            identity += ":" + self.client.fingerprint(_canonical_json(data))
+            # so a hash of the event data tells their snapshots apart.
+            identity += ":" + fingerprint(_canonical_json(data))
         event_id: str | None = (
-            str(
-                uuid.uuid5(
-                    uuid.UUID(self.client.config.customer_uuid),
-                    identity,
-                )
-            )
-            if durable_id
-            else None
+            str(uuid.uuid5(uuid.UUID(customer), identity)) if durable_id else None
         )
         metadata_key: tuple[str, str, str] = (event_type, schema, entity)
         signature: str = ""
@@ -615,7 +611,7 @@ class FleetCollector:
 
         url: str | None = _REDIS_URL
         tls_options: dict[str, Any] = {}
-        if not url and (not self.client.config.auto_enroll or self.shard_index != 0):
+        if not url and self.shard_index != 0:
             return
         if not url:
             from urllib.parse import quote
@@ -783,25 +779,17 @@ class FleetCollector:
 
 
 def main() -> None:
-    parser: argparse.ArgumentParser = argparse.ArgumentParser()
-    parser.add_argument("--once", action="store_true")
-    args: argparse.Namespace = parser.parse_args()
     stopped: threading.Event = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stopped.set())
     signal.signal(signal.SIGINT, lambda *_: stopped.set())
-    if DISABLE_TELEMETRY:
-        # Keep long-running containers idle instead of entering a restart loop.
-        if not args.once:
-            stopped.wait()
-        return
-    # Select the edition before identity storage resolves the secret codec, like
-    # every other Onyx process does at startup.
-    set_is_ee_if_available()
-    client: BoundedTelemetry | None = start_telemetry("collector")
-    while client is None and not stopped.wait(2):
+    client: BoundedTelemetry | None = None
+    if not DISABLE_TELEMETRY:
+        # The sender reads the deployment key through the application engine.
+        SqlEngine.init_engine(pool_size=1, max_overflow=0)
         client = start_telemetry("collector")
     if client is None:
-        stop_telemetry()
+        # Wait idle instead of exiting, so the container does not restart in a loop.
+        stopped.wait()
         return
     schemas: list[str] = [
         value
@@ -820,17 +808,15 @@ def main() -> None:
     )
     try:
         while not stopped.is_set():
-            collector.tick()
-            if kubernetes is not None:
-                kubernetes.tick()
-            if args.once:
-                # One-shot runs report collector health and wait briefly for delivery.
-                client.emit("heartbeat", {**client.delivery_health(), **client.health})
-                break
+            # Source reads start once the sender has enrolled.
+            if client.customer_uuid is not None:
+                collector.tick()
+                if kubernetes is not None:
+                    kubernetes.tick()
             stopped.wait(2)
     finally:
         collector.engine.dispose()
-        stop_telemetry(flush_timeout=EXIT_FLUSH_SECONDS if args.once else 0.0)
+        stop_telemetry()
 
 
 if __name__ == "__main__":

@@ -3,26 +3,18 @@
 import gzip
 import io
 import json
-from dataclasses import replace
 from typing import Any
+from unittest.mock import patch
 
-from onyx.utils.fleet_telemetry import BoundedTelemetry, TelemetryConfig
+from onyx.utils import fleet_telemetry
+from onyx.utils.fleet_telemetry import BoundedTelemetry
 
-# An explicit identity, so senders deliver without enrollment.
-TEST_CONFIG: TelemetryConfig = TelemetryConfig(
-    endpoint="http://localhost:8787",
-    token="test-token",
-    customer_uuid="11111111-1111-4111-8111-111111111111",
-    deployment_id="test-deployment",
-    privacy_key=b"installation-secret-not-central-token",
-)
-
-
-def make_sender(*, capacity: int = 16, report_process: bool = True) -> BoundedTelemetry:
-    """A sender with no delivery thread. Tests deliver with `flush_once`."""
-    return BoundedTelemetry(
-        replace(TEST_CONFIG, capacity=capacity), report_process=report_process
-    )
+TEST_KEY: str = "a" * 64
+# What the fleet service answers to `/v1/enroll`.
+TEST_ENROLLMENT: dict[str, str] = {
+    "customer_uuid": "11111111-1111-4111-8111-111111111111",
+    "deployment_id": "auto-11111111111141118111111111111111",
+}
 
 
 class Response:
@@ -41,13 +33,25 @@ class Response:
         self.raw.close()
 
 
+def make_sender(*, capacity: int = 16, report_process: bool = True) -> BoundedTelemetry:
+    """An enrolled sender with no delivery thread. Tests deliver with `flush_once`."""
+    sender: BoundedTelemetry = BoundedTelemetry(
+        "api", capacity=capacity, report_process=report_process
+    )
+    with patch.object(fleet_telemetry, "deployment_key", return_value=TEST_KEY):
+        sender._enroll(lambda *_args, **_kwargs: Response(TEST_ENROLLMENT))
+    return sender
+
+
 def posted_events(request: dict[str, Any]) -> list[dict[str, Any]]:
     """The events in the gzip JSON body of one delivery request."""
     return json.loads(gzip.decompress(request["data"]))["events"]
 
 
-def accept_all(*_args: Any, **kwargs: Any) -> Response:
-    """A delivery transport that accepts every event of the request."""
+def accept_all(url: str, **kwargs: Any) -> Response:
+    """A delivery transport that enrolls and accepts every event of the request."""
+    if url.endswith("/v1/enroll"):
+        return Response(TEST_ENROLLMENT)
     events: list[dict[str, Any]] = posted_events(kwargs)
     return Response(
         {"results": [{"index": i, "status": "accepted"} for i in range(len(events))]}
@@ -60,6 +64,7 @@ class RecordingTransport:
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
 
-    def __call__(self, *args: Any, **kwargs: Any) -> Response:
-        self.events.extend(posted_events(kwargs))
-        return accept_all(*args, **kwargs)
+    def __call__(self, url: str, **kwargs: Any) -> Response:
+        if not url.endswith("/v1/enroll"):
+            self.events.extend(posted_events(kwargs))
+        return accept_all(url, **kwargs)

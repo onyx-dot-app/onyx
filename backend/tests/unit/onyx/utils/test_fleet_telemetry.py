@@ -15,22 +15,12 @@ import pytest
 from onyx.utils import fleet_query_telemetry as query
 from onyx.utils import fleet_telemetry as fleet
 from tests.utils.fleet_telemetry import (
-    TEST_CONFIG,
     RecordingTransport,
     Response,
     accept_all,
     make_sender,
     posted_events,
 )
-
-
-def _set_explicit_identity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Provision the test identity the way an operator does, in the environment."""
-    monkeypatch.setenv("ONYX_TELEMETRY_ENDPOINT", TEST_CONFIG.endpoint)
-    monkeypatch.setenv("ONYX_TELEMETRY_TOKEN", TEST_CONFIG.token)
-    monkeypatch.setenv("ONYX_TELEMETRY_CUSTOMER_UUID", TEST_CONFIG.customer_uuid)
-    monkeypatch.setenv("ONYX_TELEMETRY_DEPLOYMENT_ID", TEST_CONFIG.deployment_id)
-    monkeypatch.setenv("ONYX_TELEMETRY_PRIVACY_KEY", TEST_CONFIG.privacy_key.decode())
 
 
 def test_hot_emission_sheds_without_io_threads_or_wait(
@@ -211,8 +201,8 @@ def test_emit_latency_and_bounded_memory_under_overload() -> None:
             },
         )
         elapsed.append(time.perf_counter_ns() - started)
-    assert len(sender._queue) == sender.config.capacity
-    assert sender.dropped == 5000 - sender.config.capacity
+    assert len(sender._queue) == sender.capacity
+    assert sender.dropped == 5000 - sender.capacity
     assert statistics.quantiles(elapsed, n=100)[98] < 1_000_000
 
 
@@ -544,31 +534,6 @@ def test_create_only_bulk_conflicts_are_not_write_errors(
     }
 
 
-def test_instance_domain_is_startup_hmac_of_canonical_host_only(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _set_explicit_identity(monkeypatch)
-    monkeypatch.setenv(
-        "ONYX_TELEMETRY_INSTANCE_DOMAIN",
-        "https://PRIVATE.Example/private-folder?private-token=yes",
-    )
-    config = fleet.TelemetryConfig.from_env("api")
-    assert config is not None
-    sender = fleet.BoundedTelemetry(config)
-    assert config.instance_domain_hash == sender.fingerprint("private.example")
-    sender.emit("heartbeat", {"dropped_events": 0})
-    event = sender._take_batch()[0]
-    assert event["instance_domain"] == config.instance_domain_hash
-    assert "PRIVATE" not in json.dumps(event) and "private-folder" not in json.dumps(
-        event
-    )
-    monkeypatch.setenv(
-        "ONYX_TELEMETRY_INSTANCE_DOMAIN", "https://private-password@private.example"
-    )
-    invalid = fleet.TelemetryConfig.from_env("api")
-    assert invalid is not None and invalid.instance_domain_hash is None
-
-
 def test_generic_fetch_yields_and_failures_pass_through_without_metadata_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -772,7 +737,6 @@ def test_deployment_kill_switch_prevents_sender_startup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", True)
-    _set_explicit_identity(monkeypatch)
     monkeypatch.setattr(fleet, "_client", None)
     sender = Mock(
         side_effect=AssertionError("Disabled telemetry must not create a sender")

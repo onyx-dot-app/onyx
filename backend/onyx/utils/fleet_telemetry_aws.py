@@ -1,7 +1,7 @@
 """Optional bounded CloudWatch reads in the isolated collector only.
 
-Resource IDs stay in local configuration. Central telemetry receives a keyed
-hash and a fixed service role. Allocations must describe the same metric scope
+Resource IDs stay in local configuration. Central telemetry receives a hash
+and a fixed service role. Allocations must describe the same metric scope
 (instance/node, not an unrelated cluster total); absent allocations stay null.
 """
 
@@ -9,10 +9,9 @@ import json
 import math
 import os
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from onyx.utils.fleet_telemetry import BoundedTelemetry
+from onyx.utils.fleet_telemetry import BoundedTelemetry, fingerprint
 
 _METRICS: dict[str, tuple[str, str, str, dict[str, str]]] = {
     "rds": (
@@ -91,7 +90,7 @@ def _target(
     return namespace, service, metrics, dimensions
 
 
-def collect_aws_resources(client: "BoundedTelemetry") -> bool | None:
+def collect_aws_resources(client: BoundedTelemetry) -> bool | None:
     """At most 32 resources, one bounded AWS request with zero retries."""
     try:
         raw: str = os.environ.get("ONYX_TELEMETRY_AWS_RESOURCES_JSON", "[]")
@@ -174,7 +173,7 @@ def collect_aws_resources(client: "BoundedTelemetry") -> bool | None:
             disk_limit: float | None = _allocation(resource, "disk_limit_bytes")
             cpu_limit: float | None = _allocation(resource, "cpu_limit_cores")
             data: dict[str, Any] = {
-                "service_instance_id": client.fingerprint(
+                "service_instance_id": fingerprint(
                     "aws:"
                     + resource["kind"]
                     + ":"

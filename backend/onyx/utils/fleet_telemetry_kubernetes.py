@@ -13,6 +13,7 @@ import requests
 from onyx.utils.fleet_telemetry import (
     RESOURCE_INTERVAL_SECONDS,
     BoundedTelemetry,
+    fingerprint,
     is_valid_version,
     poll_due,
     read_json_body,
@@ -230,7 +231,7 @@ class KubernetesCollector:
                         self._limits
                     ) >= 2000:
                         self._limits.pop(next(iter(self._limits)))
-                    identity = self.client.fingerprint(
+                    identity = fingerprint(
                         self.namespace + ":" + uid + ":" + name
                     )
                     self._limits[(pod_name, name)] = (
@@ -244,7 +245,7 @@ class KubernetesCollector:
                 name = status.get("name", "")
                 if not isinstance(name, str) or len(name) > 128:
                     continue
-                identity = self.client.fingerprint(
+                identity = fingerprint(
                     self.namespace + ":" + uid + ":" + name
                 )
                 restarts = status.get("restartCount", 0)

@@ -2,7 +2,6 @@
 
 import json
 import time
-from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
@@ -36,11 +35,36 @@ def stub_source(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(source, "MULTI_TENANT", False)
 
 
-def _auto_enrolled_sender() -> fleet.BoundedTelemetry:
-    # With no explicit Redis URL, only an automatic identity reads queues.
-    sender: fleet.BoundedTelemetry = make_sender()
-    sender.config = replace(sender.config, auto_enroll=True)
-    return sender
+@pytest.mark.parametrize("explicit_url", [False, True])
+def test_database_reads_inherit_tls_without_overriding_explicit_url(
+    monkeypatch: pytest.MonkeyPatch, explicit_url: bool
+) -> None:
+    from onyx.db import fleet_telemetry
+    from onyx.db.engine import pg_ssl
+
+    monkeypatch.setattr(pg_ssl, "USE_IAM_AUTH", False)
+    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLMODE", "verify-full")
+    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLROOTCERT", "/test/ca.crt")
+    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLCERT", "/test/client.crt")
+    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLKEY", "/test/client.key")
+    monkeypatch.setattr(
+        fleet_telemetry,
+        "TELEMETRY_DATABASE_URL",
+        "postgresql://explicit" if explicit_url else None,
+    )
+    factory: Mock = Mock(side_effect=RuntimeError("connection intercepted"))
+    monkeypatch.setattr(fleet_telemetry, "create_engine", factory)
+    with pytest.raises(RuntimeError, match="connection intercepted"):
+        fleet_telemetry.collector_engine("postgresql://test")
+    options: dict[str, Any] = factory.call_args.kwargs["connect_args"]
+    assert options["connect_timeout"] == 2
+    if explicit_url:
+        assert not any(key.startswith("ssl") for key in options)
+    else:
+        assert options["sslmode"] == "verify-full"
+        assert options["sslrootcert"] == "/test/ca.crt"
+        assert options["sslcert"] == "/test/client.crt"
+        assert options["sslkey"] == "/test/client.key"
 
 
 @pytest.mark.parametrize("explicit_url", [False, True])
@@ -58,7 +82,7 @@ def test_queue_collection_inherits_tls_without_overriding_explicit_url(
     monkeypatch.setattr(
         source, "_REDIS_URL", "rediss://custom:6380/15" if explicit_url else None
     )
-    sender: fleet.BoundedTelemetry = _auto_enrolled_sender()
+    sender: fleet.BoundedTelemetry = make_sender()
     collector: FleetCollector = FleetCollector(sender, "postgresql://test", ["public"])
     factory: Mock = Mock(side_effect=RuntimeError("connection intercepted"))
     monkeypatch.setattr("redis.Redis.from_url", factory)
@@ -87,7 +111,7 @@ def test_no_vector_db_deployments_do_not_read_queues(
     monkeypatch.setattr(source, "_REDIS_URL", "redis://localhost:1/0")
     factory: Mock = Mock(side_effect=AssertionError("read a missing broker"))
     monkeypatch.setattr("redis.Redis.from_url", factory)
-    sender: fleet.BoundedTelemetry = _auto_enrolled_sender()
+    sender: fleet.BoundedTelemetry = make_sender()
     collector: FleetCollector = FleetCollector(sender, "postgresql://test", ["public"])
     collector.collect_queues()
     factory.assert_not_called()
@@ -153,11 +177,6 @@ def test_source_configuration_returns_only_structural_metadata() -> None:
         "include_shared_drives": True,
         "refresh_seconds": 60,
     }
-    assert make_sender().fingerprint("same") == sender.fingerprint("same")
-    other = fleet.BoundedTelemetry(
-        replace(sender.config, privacy_key=b"another-installation-private-secret")
-    )
-    assert other.fingerprint("same") != sender.fingerprint("same")
 
 
 @pytest.mark.parametrize(
@@ -473,20 +492,44 @@ def test_safe_attempt_error_data_counts_fatal_errors_and_only_known_stages(
     assert "PRIVATE" not in json.dumps(data)
 
 
-@pytest.mark.parametrize("once", [False, True])
-def test_disabled_collector_does_not_start_or_open_sources(
-    monkeypatch: pytest.MonkeyPatch, once: bool
+def test_disabled_collector_waits_idle_without_opening_sources(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(source, "DISABLE_TELEMETRY", True)
-    monkeypatch.setattr("sys.argv", ["collector"] + (["--once"] if once else []))
     blocked = Mock(
         side_effect=AssertionError("Disabled collector must do no collection")
     )
     monkeypatch.setattr(source, "start_telemetry", blocked)
     monkeypatch.setattr(source, "FleetCollector", blocked)
+    monkeypatch.setattr(source.SqlEngine, "init_engine", blocked)
     monkeypatch.setattr(source.signal, "signal", Mock())
     stopped = Mock()
     monkeypatch.setattr(source.threading, "Event", Mock(return_value=stopped))
     source.main()
     blocked.assert_not_called()
-    assert stopped.wait.call_count == (0 if once else 1)
+    stopped.wait.assert_called_once_with()
+
+
+def test_collector_reads_sources_only_after_enrollment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sender: fleet.BoundedTelemetry = fleet.BoundedTelemetry("collector")
+    collector = Mock()
+    monkeypatch.setattr(source, "DISABLE_TELEMETRY", False)
+    monkeypatch.setattr(source.SqlEngine, "init_engine", Mock())
+    monkeypatch.setattr(source, "start_telemetry", Mock(return_value=sender))
+    monkeypatch.setattr(source, "stop_telemetry", Mock())
+    monkeypatch.setattr(source, "FleetCollector", Mock(return_value=collector))
+    monkeypatch.setattr(source.signal, "signal", Mock())
+    stopped = Mock()
+    stopped.is_set.side_effect = [False, False, True]
+    monkeypatch.setattr(source.threading, "Event", Mock(return_value=stopped))
+
+    def enroll(_seconds: float) -> bool:
+        # The sender enrolls between the first and second pass.
+        sender._customer = "11111111-1111-4111-8111-111111111111"
+        return False
+
+    stopped.wait.side_effect = enroll
+    source.main()
+    collector.tick.assert_called_once_with()

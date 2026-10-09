@@ -1,5 +1,4 @@
 import uuid
-from dataclasses import replace
 from typing import Any
 from unittest.mock import Mock
 
@@ -8,7 +7,7 @@ import pytest
 from onyx.onyxbot.slack import listener
 from onyx.utils import fleet_telemetry as fleet
 from onyx.utils.fleet_query_telemetry import QueryObservation
-from tests.utils.fleet_telemetry import TEST_CONFIG, RecordingTransport
+from tests.utils.fleet_telemetry import TEST_KEY, RecordingTransport
 
 
 @pytest.mark.parametrize("exit_mode", ["normal", "signal", "startup_error"])
@@ -17,11 +16,7 @@ def test_listener_starts_sender_before_handlers_and_closes_on_exit(
 ) -> None:
     monkeypatch.setattr(fleet, "DISABLE_TELEMETRY", False)
     monkeypatch.setattr(fleet, "_client", None)
-    monkeypatch.setattr(
-        fleet.TelemetryConfig,
-        "from_env",
-        lambda service: replace(TEST_CONFIG, service=service),
-    )
+    monkeypatch.setattr(fleet, "deployment_key", Mock(return_value=TEST_KEY))
     # Run the real lifecycle and queue, without starting network delivery.
     monkeypatch.setattr(fleet.BoundedTelemetry, "start", Mock())
     monkeypatch.setattr(listener.SqlEngine, "init_engine", Mock())

@@ -329,37 +329,37 @@ def test_stage_summaries_page_by_update_and_reconcile_without_source_payloads(
         engine.dispose()
 
 
-def test_automatic_identity_is_persistent_and_race_safe(
+@pytest.mark.usefixtures("db_session")
+def test_deployment_key_is_persistent_and_race_safe(
     source_schema: tuple[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
     from onyx.db import fleet_enrollment
-    from onyx.utils.fleet_telemetry import automatic_config
 
     url, schema = source_schema
     engine = create_engine(url)
     with engine.begin() as connection:
         connection.execute(
             text(
-                f'CREATE TABLE "{schema}".encrypted_key_value_store '
-                "(LIKE public.encrypted_key_value_store INCLUDING ALL)"
+                f'CREATE TABLE "{schema}".key_value_store '
+                "(LIKE public.key_value_store INCLUDING ALL)"
             )
         )
     monkeypatch.setattr(fleet_enrollment, "POSTGRES_DEFAULT_SCHEMA", schema)
-    monkeypatch.setattr(fleet_enrollment, "build_connection_string", lambda **_: url)
-    # Application processes select their edition at startup, before enrollment.
-    monkeypatch.setattr(fleet_enrollment, "edition_selected", lambda: True)
+    # Processes that start together must all report as one deployment.
     with ThreadPoolExecutor(max_workers=4) as workers:
-        seeds = list(
-            workers.map(lambda _: fleet_enrollment.installation_seed(), range(4))
+        keys = list(
+            workers.map(
+                lambda _: fleet_enrollment.get_or_create_deployment_key(), range(4)
+            )
         )
-    assert len(set(seeds)) == 1
-    assert fleet_enrollment.installation_seed() == seeds[0]
-    first = automatic_config("api", seeds[0])
-    restarted = automatic_config("collector", seeds[0])
-    assert first and restarted
-    assert first.customer_uuid == restarted.customer_uuid
-    assert first.token == restarted.token
-    assert first.token != first.privacy_key.decode()
+    assert len(set(keys)) == 1 and len(keys[0]) == 64
+    assert fleet_enrollment.get_or_create_deployment_key() == keys[0]
+    with engine.connect() as connection:
+        stored = connection.execute(
+            text(f'SELECT value FROM "{schema}".key_value_store WHERE key = :key'),
+            {"key": fleet_enrollment.DEPLOYMENT_KEY_NAME},
+        ).scalar_one()
+    assert stored == keys[0]
     engine.dispose()
