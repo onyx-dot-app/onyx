@@ -184,6 +184,24 @@ def test_an_event_the_service_cannot_store_is_dropped_after_its_retries(
     assert sender.dropped == 1 and not sender._pending
 
 
+def test_a_discarded_batch_leaves_the_next_batch_its_retries(
+    clock: list[float],
+) -> None:
+    sender = make_sender()
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+    always_retry = Mock(side_effect=lambda *_args, **_kwargs: _reply("retry"))
+    for _ in range(fleet._MAX_RETRIES):
+        assert not sender.flush_once(always_retry)
+        clock[0] += 300
+    # The service refuses the retried batch as a whole.
+    assert not sender.flush_once(Mock(return_value=Response({}, status=422)))
+    assert not sender._pending
+    clock[0] += 300
+    assert sender.emit("heartbeat", {"dropped_events": 1})
+    assert not sender.flush_once(always_retry)
+    assert [event["data"] for event in sender._pending] == [{"dropped_events": 1}]
+
+
 def test_emit_latency_and_bounded_memory_under_overload() -> None:
     sender = make_sender()
     elapsed = []

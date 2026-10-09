@@ -506,6 +506,8 @@ class BoundedTelemetry:
                 self._enroll(transport)
             if not self._pending:
                 self._pending = self._sum_stages(self._take_batch())
+                # A new batch has used none of its retries.
+                self._retries = 0
             if not self._pending:
                 return True
             response: requests.Response = transport(
@@ -558,7 +560,6 @@ class BoundedTelemetry:
             self._back_off()
             return False
         self.failures = 0
-        self._retries = 0
         self.dropped += max(0, len(self._pending) - sent)
         self._pending = []
         return True
