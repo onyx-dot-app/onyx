@@ -106,6 +106,7 @@ import {
   useConnectorChecks,
   useResetConnectorChecks,
 } from "@/lib/connectors/checks/hooks";
+import type { ConnectorEditTarget } from "@/lib/connectors/edit/types";
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
@@ -198,16 +199,20 @@ async function submitConnector<T>(
   }
 }
 
-interface AddConnectorFormProps {
+export interface AddConnectorFormProps {
   connector: ConfigurableSources;
+  /** Set in edit mode: the form edits this pair instead of creating one. */
+  edit?: ConnectorEditTarget;
 }
 
 /**
  * The setup form for one valid, non-federated source. It is its own
- * component so its hooks never run behind the wrapper's early returns.
+ * component so its hooks never run behind the wrapper's early returns. The
+ * edit page renders it in edit mode.
  */
-function AddConnectorForm({ connector }: AddConnectorFormProps) {
+export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const t = useTranslations("admin.connectorsList");
+  const editT = useTranslations("admin.connectorEdit");
   const oneDriveT = useTranslations("admin.connectorsList.oneDrive");
   // The string-pair editor (InputKeyValue) shows these same messages.
   const keyValueT = useTranslations("opal.keyValue");
@@ -567,6 +572,15 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     }
   };
 
+  /**
+   * What the header button and Formik's submit run. Edit mode never creates
+   * a connector.
+   */
+  const submitForm = async (values: typeof initialValues): Promise<void> => {
+    if (edit) return;
+    await createConnectorFromForm(values);
+  };
+
   return (
     <Formik
       initialValues={initialValues}
@@ -589,7 +603,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
         // `blockingErrorsEmpty`).
         [NEW_ACCOUNT_FIELD]: accountSchema ?? Yup.mixed(),
       })}
-      onSubmit={createConnectorFromForm}
+      onSubmit={submitForm}
     >
       {(formikProps) => {
         const busy = uploading || creatingConnector;
@@ -633,18 +647,24 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                     icon={sourceMetadata.icon}
                     moreIcon1={SvgArrowExchange}
                     moreIcon2={Logo}
-                    title={displayName}
+                    title={
+                      edit
+                        ? editT("header.title", { name: edit.ccPair.name })
+                        : displayName
+                    }
                     // Failed, the page offers nothing to set up, so the header drops
                     // its docs pointer; the Connect button stays, disabled.
                     description={
-                      credentialsFailed
-                        ? t("header.description", {
-                            source: displayName,
-                            appName: settings.appName,
-                            hasDocs: "false",
-                            url: "",
-                          })
-                        : headerDescription
+                      edit
+                        ? editT("header.description", { source: displayName })
+                        : credentialsFailed
+                          ? t("header.description", {
+                              source: displayName,
+                              appName: settings.appName,
+                              hasDocs: "false",
+                              url: "",
+                            })
+                          : headerDescription
                     }
                     divider
                     actions={[
@@ -652,7 +672,13 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                         key="cancel"
                         prominence="secondary"
                         disabled={busy}
-                        onClick={() => router.push("/admin/connectors")}
+                        onClick={() =>
+                          router.push(
+                            edit
+                              ? `/admin/connector/${edit.ccPair.id}`
+                              : "/admin/connectors"
+                          )
+                        }
                       >
                         {t("header.cancelButton.label")}
                       </Button>,
@@ -672,18 +698,20 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                           const errors = await formikProps.validateForm();
                           if (blockingErrorsEmpty(errors)) {
                             // Formik's own submit stops at any error.
-                            await createConnectorFromForm(formikProps.values);
+                            await submitForm(formikProps.values);
                           } else {
                             // Marks every field touched, so its error shows.
                             formikProps.handleSubmit();
                           }
                         }}
                       >
-                        {t("header.connectButton.label")}
+                        {edit
+                          ? editT("header.reviewButton.label")
+                          : t("header.connectButton.label")}
                       </Button>,
                     ]}
                   >
-                    {hasFederatedOption && (
+                    {hasFederatedOption && !edit && (
                       <MessageCard
                         variant="info"
                         title={t("add.federated.tooltip.title")}

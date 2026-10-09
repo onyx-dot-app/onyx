@@ -9076,6 +9076,25 @@
         "inProgress": "Checks in progress...",
         "waiting": "Waiting for connector settings..."
       }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Edit connector"
+      },
+      "header": {
+        "title": "Edit {name}",
+        "description": "Change the settings of this {source} connector. You review the plan before the changes are applied.",
+        "reviewButton": {
+          "label": "Review changes"
+        }
+      },
+      "loadError": {
+        "title": "Could not load the connector",
+        "description": "Reload the page, or go back to the connector.",
+        "backButton": {
+          "label": "Back to the connector"
+        }
+      }
     }
   },
   "agents": {

@@ -9076,6 +9076,25 @@
         "inProgress": "チェックを実行中...",
         "waiting": "コネクタ設定を待機中..."
       }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "コネクタを編集"
+      },
+      "header": {
+        "title": "{name} を編集",
+        "description": "この {source} コネクタの設定を変更します。変更を適用する前にプランを確認します。",
+        "reviewButton": {
+          "label": "変更を確認"
+        }
+      },
+      "loadError": {
+        "title": "コネクタを読み込めませんでした",
+        "description": "ページを再読み込みするか、コネクタに戻ってください。",
+        "backButton": {
+          "label": "コネクタに戻る"
+        }
+      }
     }
   },
   "agents": {

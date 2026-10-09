@@ -53,6 +53,7 @@ import { useStatusChange } from "@/lib/connectors/ccPair/hooks";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
 import {
+  SvgEdit,
   SvgPauseCircle,
   SvgPlayCircle,
   SvgRefreshCw,
@@ -89,6 +90,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
+  const editT = useTranslations("admin.connectorEdit");
   const locale = useLocale();
   const router = useRouter();
   const { user } = useUser();
@@ -535,6 +537,19 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
 
         <div className="ms-auto flex gap-x-2">
+          {!isDeleting && can(ccPair, "edit") && (
+            <Button
+              prominence="secondary"
+              icon={SvgEdit}
+              onClick={() =>
+                router.push(
+                  `/admin/connectors/${ccPair.connector.source}/edit/${ccPair.id}`
+                )
+              }
+            >
+              {editT("editButton.label")}
+            </Button>
+          )}
           {can(ccPair, "operate") && (
             <Dropdown>
               <Dropdown.Trigger asChild>

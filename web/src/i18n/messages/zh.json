@@ -9076,6 +9076,25 @@
         "inProgress": "检查进行中...",
         "waiting": "正在等待连接器设置..."
       }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "编辑连接器"
+      },
+      "header": {
+        "title": "编辑 {name}",
+        "description": "更改此 {source} 连接器的设置。应用更改前，你将先查看计划。",
+        "reviewButton": {
+          "label": "查看更改"
+        }
+      },
+      "loadError": {
+        "title": "无法加载连接器",
+        "description": "请重新加载页面，或返回连接器。",
+        "backButton": {
+          "label": "返回连接器"
+        }
+      }
     }
   },
   "agents": {

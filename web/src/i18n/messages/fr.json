@@ -9076,6 +9076,25 @@
         "inProgress": "Vérifications en cours...",
         "waiting": "En attente des paramètres du connecteur..."
       }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Modifier le connecteur"
+      },
+      "header": {
+        "title": "Modifier {name}",
+        "description": "Modifiez les paramètres de ce connecteur {source}. Vous vérifiez le plan avant l'application des modifications.",
+        "reviewButton": {
+          "label": "Vérifier les modifications"
+        }
+      },
+      "loadError": {
+        "title": "Impossible de charger le connecteur",
+        "description": "Rechargez la page ou revenez au connecteur.",
+        "backButton": {
+          "label": "Retour au connecteur"
+        }
+      }
     }
   },
   "agents": {

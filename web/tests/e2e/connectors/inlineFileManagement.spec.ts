@@ -73,14 +73,16 @@ test.describe("InlineFileManagement", () => {
     await page.waitForLoadState("networkidle");
 
     await expect(page.getByText(/Files \(/)).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole("button", { name: /edit/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Edit", exact: true })
+    ).toBeVisible();
   });
 
   test("should enter and exit edit mode", async ({ page }) => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
     await expect(page.getByRole("button", { name: /cancel/i })).toBeVisible();
     await expect(
       page.getByRole("button", { name: /save changes/i })
@@ -89,14 +91,16 @@ test.describe("InlineFileManagement", () => {
       page.getByRole("button", { name: /add files/i })
     ).toBeVisible();
     await page.getByRole("button", { name: /cancel/i }).click();
-    await expect(page.getByRole("button", { name: /edit/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Edit", exact: true })
+    ).toBeVisible();
   });
 
   test("should add files and show them as pending", async ({ page }) => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -112,7 +116,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -128,7 +132,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -157,7 +161,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -165,7 +169,9 @@ test.describe("InlineFileManagement", () => {
       "This file should be discarded"
     );
     await page.getByRole("button", { name: /cancel/i }).click();
-    await expect(page.getByRole("button", { name: /edit/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Edit", exact: true })
+    ).toBeVisible();
     await expect(page.getByText("discard-test.txt")).not.toBeVisible();
   });
 });

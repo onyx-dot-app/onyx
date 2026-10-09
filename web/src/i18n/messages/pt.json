@@ -9076,6 +9076,25 @@
         "inProgress": "Verificações em andamento...",
         "waiting": "Aguardando as configurações do conector..."
       }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Editar conector"
+      },
+      "header": {
+        "title": "Editar {name}",
+        "description": "Altere as configurações deste conector do {source}. Você revisa o plano antes de aplicar as alterações.",
+        "reviewButton": {
+          "label": "Revisar alterações"
+        }
+      },
+      "loadError": {
+        "title": "Não foi possível carregar o conector",
+        "description": "Recarregue a página ou volte ao conector.",
+        "backButton": {
+          "label": "Voltar ao conector"
+        }
+      }
     }
   },
   "agents": {
