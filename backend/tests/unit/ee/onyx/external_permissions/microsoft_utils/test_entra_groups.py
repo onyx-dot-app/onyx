@@ -4,8 +4,8 @@ import json
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import requests
 from office365.graph_client import GraphClient
+from requests.structures import CaseInsensitiveDict
 
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
     ResolvedEntraGroup,
@@ -156,21 +156,27 @@ def test_expand_names_nested_groups_for_onyx(_mock_sleep: MagicMock) -> None:
     assert user_emails == set()
 
 
-def _graph_page(body: dict[str, Any]) -> requests.Response:
-    response = requests.Response()
+def _graph_page(body: dict[str, Any]) -> MagicMock:
+    """What requests hands the SDK for one Graph page."""
+    response: MagicMock = MagicMock()
     response.status_code = 200
-    response.headers["Content-Type"] = "application/json"
-    response._content = json.dumps(body).encode()
+    response.headers = CaseInsensitiveDict({"Content-Type": "application/json"})
+    response.content = json.dumps(body).encode()
+    response.text = json.dumps(body)
+    response.json.return_value = body
+    response.raise_for_status.return_value = None
     return response
 
 
 def test_nested_groups_are_listed_through_the_group_cast() -> None:
     """Only member groups are requested and every page is read, so a large
     group's users are never paged."""
-    parent_id = "11111111-1111-1111-1111-111111111111"
-    second_id = "33333333-3333-3333-3333-333333333333"
-    members_url = f"{GRAPH_API_BASE}/groups/{parent_id}/members/microsoft.graph.group"
-    pages = [
+    parent_id: str = "11111111-1111-1111-1111-111111111111"
+    second_id: str = "33333333-3333-3333-3333-333333333333"
+    members_url: str = (
+        f"{GRAPH_API_BASE}/groups/{parent_id}/members/microsoft.graph.group"
+    )
+    pages: list[MagicMock] = [
         _graph_page(
             {
                 "value": [{"id": NESTED_GROUP_ID, "displayName": "Platform"}],
@@ -179,7 +185,9 @@ def test_nested_groups_are_listed_through_the_group_cast() -> None:
         ),
         _graph_page({"value": [{"id": second_id, "displayName": "Infra"}]}),
     ]
-    client = GraphClient(lambda: {"access_token": "token", "token_type": "Bearer"})
+    client: GraphClient = GraphClient(
+        lambda: {"access_token": "token", "token_type": "Bearer"}
+    )
 
     with patch(
         "office365.runtime.client_request.requests.get", side_effect=pages

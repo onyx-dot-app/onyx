@@ -20,6 +20,7 @@ individual connector.
 
 import re
 from collections.abc import Generator
+from typing import Any
 from urllib.parse import quote
 
 from office365.directory.object_collection import DirectoryObjectCollection
@@ -140,7 +141,7 @@ def list_nested_entra_groups(
 ) -> set[ResolvedEntraGroup]:
     """One group's direct member groups. Graph filters to groups server side,
     so a group of thousands of users costs one page instead of every member."""
-    group_id = resolve_group_id(graph_client, identifier)
+    group_id: str | None = resolve_group_id(graph_client, identifier)
     if not group_id:
         logger.error("Failed to get Entra group id for %s", identifier)
         return set()
@@ -150,16 +151,16 @@ def list_nested_entra_groups(
         # Iterating the collection itself re-fetches pages and re-fires this
         # callback, so only the page just loaded is read.
         for member in members.current_page:
-            member_data = member.to_json()
-            member_id = member_data.get("id")
-            display_name = member_data.get("displayName")
+            member_data: dict[str, Any] = member.to_json()
+            member_id: str | None = member_data.get("id")
+            display_name: str | None = member_data.get("displayName")
             if not member_id or not display_name:
                 logger.error("Nested group without an id or name: %s", member_data)
                 continue
-            name = resolve_entra_group_name(graph_client, member_id, display_name)
+            name: str = resolve_entra_group_name(graph_client, member_id, display_name)
             groups.add(ResolvedEntraGroup(id=member_id, name=name))
 
-    member_groups = DirectoryObjectCollection(
+    member_groups: DirectoryObjectCollection = DirectoryObjectCollection(
         graph_client,
         ResourcePath(
             "microsoft.graph.group", graph_client.groups[group_id].members.resource_path
