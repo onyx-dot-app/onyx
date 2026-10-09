@@ -5,10 +5,14 @@ from enum import Enum
 from functools import cached_property
 from typing import Any, Generic
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.capability_checks.findings import (
+    CheckFinding,
+    parse_known_findings,
+)
 from onyx.connectors.capability_checks.form_state import (
     ConfigT,
     FormState,
@@ -175,8 +179,10 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.validates_binding = validates_binding
 
     @abstractmethod
-    def run(self, context: CapabilityCheckContext) -> None:
-        """Probes the capability; raises on failure, returns on success."""
+    def run(self, context: CapabilityCheckContext) -> list[CheckFinding] | None:
+        """Probes the capability; raises on failure, returns on success. A
+        passing check may return findings: what the credential and config
+        reach (``findings.py``)."""
 
     @property
     def reads_connector_config(self) -> bool:
@@ -237,6 +243,13 @@ class CapabilityCheckResult(BaseModel):
     # config. It does not count toward the verdict.
     applicable: bool = True
     validates_binding: bool = False
+    # What a passing check found. Empty for every other status.
+    findings: list[CheckFinding] = []
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def _known_findings(cls, findings: Any) -> Any:
+        return parse_known_findings(findings)
 
 
 class CredentialCapabilityReport(BaseModel):
