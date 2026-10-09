@@ -1,3 +1,5 @@
+import type { SpreadsheetSheet, SpreadsheetPreviewData } from "@/lib/types";
+
 export interface CsvParseResult {
   rows: string[][];
   truncated: boolean;
@@ -67,4 +69,53 @@ export function parseCsv(
     rows.push(row);
   }
   return { rows, truncated };
+}
+
+export function parseSpreadsheetPreview(
+  jsonText: string
+): SpreadsheetPreviewData | null {
+  try {
+    const parsed: unknown = JSON.parse(jsonText);
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("sheets" in parsed) ||
+      !Array.isArray(parsed.sheets)
+    ) {
+      return null;
+    }
+    const sheets: unknown[] = parsed.sheets;
+    const validated: SpreadsheetSheet[] = [];
+    for (const sheet of sheets) {
+      if (
+        typeof sheet !== "object" ||
+        sheet === null ||
+        !("name" in sheet) ||
+        typeof sheet.name !== "string" ||
+        !("csv" in sheet) ||
+        typeof sheet.csv !== "string" ||
+        !("truncated" in sheet) ||
+        typeof sheet.truncated !== "boolean"
+      )
+        return null;
+      validated.push({
+        name: sheet.name,
+        csv: sheet.csv,
+        truncated: sheet.truncated,
+      });
+    }
+    return { sheets: validated };
+  } catch {
+    return null;
+  }
+}
+
+/** Separates malformed CSV from a valid empty spreadsheet. */
+export function parseSpreadsheetCsv(content: string) {
+  try {
+    // Preserve cell whitespace and remove only one final record separator.
+    return { rows: parseCsv(content.replace(/\r?\n$/, "")).rows, error: false };
+  } catch {
+    return { rows: [], error: true };
+  }
 }

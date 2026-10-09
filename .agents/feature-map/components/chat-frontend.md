@@ -530,3 +530,5 @@ hoc for a one-off check.
   `foldSidebarForMultiModel`) and restores the prior fold state only when the user drops
   back to a single model; a change to the multi-model exit path that skips this can leave
   the sidebar stuck folded.
+
+Shared spreadsheet payload validation lives in `web/src/lib/csv.ts`. Invalid CSV shows a spreadsheet error instead of an empty sheet.

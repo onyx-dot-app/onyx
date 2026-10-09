@@ -3,11 +3,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { cn } from "@opal/utils";
 
-export interface FilePreviewScrollPosition {
-  initialScrollTop?: number;
-  onScrollTopChange?: (scrollTop: number) => void;
-  isActive?: boolean;
-}
+import type { FilePreviewScrollPosition } from "@/app/craft/components/output-panel/types";
 
 interface FilePreviewScrollAreaProps extends FilePreviewScrollPosition {
   children: ReactNode;

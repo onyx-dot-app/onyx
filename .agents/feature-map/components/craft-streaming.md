@@ -514,3 +514,5 @@ work against the default Kubernetes backend, follow
   make the attach endpoint wait rather than force a restart; this is
   deliberate (avoids double-driving a healthy turn) but reads as latency if
   you don't know the constant.
+
+Welcome inline previews offer an original-file download. Presentation slide images own loading state by their URL.

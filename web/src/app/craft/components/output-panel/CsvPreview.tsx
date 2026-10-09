@@ -4,11 +4,9 @@ import { memo, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 
-import {
-  FilePreviewScrollArea,
-  type FilePreviewScrollPosition,
-} from "@/app/craft/components/output-panel/FilePreviewScrollArea";
+import { FilePreviewScrollArea } from "@/app/craft/components/output-panel/FilePreviewScrollArea";
 
+import type { FilePreviewScrollPosition } from "@/app/craft/components/output-panel/types";
 import { parseCsv } from "@/lib/csv";
 
 const PREVIEW_LIMITS = {

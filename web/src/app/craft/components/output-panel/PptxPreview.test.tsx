@@ -466,3 +466,20 @@ it("reattaches thumbnail sizing after a failed activation read recovers", async 
     observe.mockRestore();
   }
 });
+
+it("owns loading readiness by slide image URL", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 2,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg"],
+    cached: true,
+  });
+  render(
+    <PptxPreview sessionId="image-readiness" filePath="outputs/deck.pptx" />
+  );
+  fireEvent.load(await screen.findByRole("img"));
+  expect(screen.getByRole("img")).toHaveClass("opacity-100");
+  fireEvent.click(screen.getByRole("button", { name: "Slide 2 of 2" }));
+  expect(screen.getByRole("img")).toHaveClass("opacity-0");
+  fireEvent.load(screen.getByRole("img"));
+  expect(screen.getByRole("img")).toHaveClass("opacity-100");
+});

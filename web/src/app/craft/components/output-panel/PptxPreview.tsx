@@ -62,7 +62,6 @@ export default function PptxPreview({
   );
   const selectedThumbnailRef = useRef<HTMLDivElement>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [imageLoading, setImageLoading] = useState(true);
 
   const { data, error, isLoading } = useFilePreview(
     SWR_KEYS.buildSessionPptxPreview(sessionId, filePath),
@@ -129,14 +128,8 @@ export default function PptxPreview({
   const slideCount = data?.slide_count ?? 0;
   const activeSlide = Math.min(currentSlide, Math.max(0, slideCount - 1));
 
-  // An updated deck can have fewer slides than the current selection.
-  useEffect(() => {
-    if (data) {
-      setCurrentSlide((index) =>
-        Math.min(index, Math.max(0, data.slide_count - 1))
-      );
-    }
-  }, [data]);
+  // Keep the selection in bounds before rendering a replacement deck.
+  if (data && currentSlide !== activeSlide) setCurrentSlide(activeSlide);
 
   const goToPrev = useCallback(() => {
     setCurrentSlide((prev) => Math.max(0, prev - 1));
@@ -151,11 +144,6 @@ export default function PptxPreview({
   useEffect(() => {
     setCurrentSlide(0);
   }, [filePath]);
-
-  // Reset image loading state when slide changes
-  useEffect(() => {
-    setImageLoading(true);
-  }, [currentSlide, data]);
 
   useEffect(() => {
     if (isActive) {
@@ -321,28 +309,14 @@ export default function PptxPreview({
         <div className="pointer-events-none w-1 border-e border-border-02 group-hover:bg-border-01 group-focus-visible:bg-border-01" />
       </div>
       <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
-        <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden">
-          {imageLoading && (
-            <div className="absolute">
-              <Text font="secondary-body" color="text-03">
-                {t("loadingSlide.label")}
-              </Text>
-            </div>
-          )}
-          <img
-            src={slideUrl}
-            alt={t("slide.counter", {
-              current: activeSlide + 1,
-              total: slideCount,
-            })}
-            className={cn(
-              "max-w-full max-h-full object-contain transition-opacity",
-              imageLoading ? "opacity-0" : "opacity-100"
-            )}
-            onLoad={() => setImageLoading(false)}
-            onError={() => setImageLoading(false)}
-          />
-        </div>
+        <SlideImage
+          key={slideUrl}
+          src={slideUrl}
+          alt={t("slide.counter", {
+            current: activeSlide + 1,
+            total: slideCount,
+          })}
+        />
         {slideCount > 1 && (
           <div className="flex items-center justify-center gap-3 p-2 border-t border-border-02">
             <Button
@@ -370,6 +344,37 @@ export default function PptxPreview({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface SlideImageProps {
+  src: string;
+  alt: string;
+}
+
+function SlideImage({ src, alt }: SlideImageProps) {
+  const t = useTranslations("craft.pptxPreview");
+  const [loading, setLoading] = useState(true);
+  return (
+    <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden">
+      {loading && (
+        <div className="absolute">
+          <Text font="secondary-body" color="text-03">
+            {t("loadingSlide.label")}
+          </Text>
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={cn(
+          "max-w-full max-h-full object-contain transition-opacity",
+          loading ? "opacity-0" : "opacity-100"
+        )}
+        onLoad={() => setLoading(false)}
+        onError={() => setLoading(false)}
+      />
     </div>
   );
 }

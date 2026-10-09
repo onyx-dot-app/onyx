@@ -15,21 +15,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
-import { parseCsv } from "@/lib/csv";
+import { parseSpreadsheetPreview, parseSpreadsheetCsv } from "@/lib/csv";
+import type { SpreadsheetSheet } from "@/lib/types";
 import { SvgAlertCircle } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { fetchChatFile } from "@/lib/chat/svc";
-
-export interface SpreadsheetSheet {
-  name: string;
-  csv: string;
-  truncated: boolean;
-}
-
-export interface SpreadsheetPreviewData {
-  sheets: SpreadsheetSheet[];
-}
 
 const SPREADSHEET_EXTENSIONS = [".xlsx", ".xlsm"];
 
@@ -44,64 +35,24 @@ export function isSpreadsheetFileName(
   return SPREADSHEET_EXTENSIONS.some((ext) => lowered.endsWith(ext));
 }
 
-export function parseSpreadsheetPreview(
-  jsonText: string
-): SpreadsheetPreviewData | null {
-  try {
-    const parsed: unknown = JSON.parse(jsonText);
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      !("sheets" in parsed) ||
-      !Array.isArray(parsed.sheets)
-    ) {
-      return null;
-    }
-    const sheets: unknown[] = parsed.sheets;
-    const validated: SpreadsheetSheet[] = [];
-    for (const sheet of sheets) {
-      if (
-        typeof sheet !== "object" ||
-        sheet === null ||
-        !("name" in sheet) ||
-        typeof sheet.name !== "string" ||
-        !("csv" in sheet) ||
-        typeof sheet.csv !== "string" ||
-        !("truncated" in sheet) ||
-        typeof sheet.truncated !== "boolean"
-      )
-        return null;
-      validated.push({
-        name: sheet.name,
-        csv: sheet.csv,
-        truncated: sheet.truncated,
-      });
-    }
-    return { sheets: validated };
-  } catch {
-    return null;
-  }
-}
-
 interface SheetTableProps {
   sheet: SpreadsheetSheet;
 }
 
 function SheetTable({ sheet }: SheetTableProps) {
   const t = useTranslations("common.spreadsheet");
-  let rows: string[][] = [];
-  try {
-    // Drop at most one trailing newline; trimming any further would mutate
-    // cell data (significant leading/trailing whitespace).
-    rows = parseCsv(sheet.csv.replace(/\r?\n$/, "")).rows;
-  } catch (error) {
-    console.error(
-      `Failed to parse CSV for spreadsheet preview sheet "${sheet.name}":`,
-      error
-    );
-    rows = [];
-  }
+  const { rows, error: parseError } = parseSpreadsheetCsv(sheet.csv);
   const headers = rows[0];
+
+  if (parseError) {
+    return (
+      <div role="alert" className="py-8">
+        <Text font="main-ui-body" color="text-03">
+          {t("error.title")}
+        </Text>
+      </div>
+    );
+  }
 
   if (!headers || headers.length === 0) {
     return (
@@ -315,3 +266,6 @@ function SpreadsheetContent({
 export default SpreadsheetContent;
 
 const spreadsheetCache = new Map<string, SpreadsheetSheet[]>();
+
+export { parseSpreadsheetPreview } from "@/lib/csv";
+export type { SpreadsheetSheet, SpreadsheetPreviewData } from "@/lib/types";
