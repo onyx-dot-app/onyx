@@ -1,7 +1,7 @@
 # Onyx local-dev overlay for kind/minikube/k3d.
 #
-# Shrinks resources and disables prod-only features so the chart fits on a
-# laptop. Pairs with telepresence intercept so api_server / celery / web run
+# Reserves resources for responsive development and disables prod-only features.
+# Pairs with telepresence intercept so api_server / celery / web run
 # in your vscode debugger while the rest of the stack runs in-cluster.
 #
 # See docs/craft/dev/local-kubernetes.md for the full workflow.
@@ -16,7 +16,21 @@ global:
 # ---- Persistence (kept on, sized for a laptop) ----
 
 postgresql:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
   cluster:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
     storage:
       size: 2Gi
 
@@ -26,11 +40,11 @@ opensearch:
     size: 5Gi
   resources:
     requests:
-      cpu: 250m
-      memory: 1Gi
-    limits:
-      cpu: 1000m
+      cpu: 1
       memory: 2Gi
+    limits:
+      cpu: 2
+      memory: 4Gi
   opensearchJavaOpts: "-Xmx1g -Xms1g"
 
 minio:
@@ -40,11 +54,20 @@ minio:
   # Upstream chart defaults to a 16 GiB memory request.
   resources:
     requests:
-      cpu: 100m
+      cpu: 250m
       memory: 256Mi
     limits:
-      cpu: 500m
+      cpu: 1
       memory: 1Gi
+
+objectStore:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
 
 # ---- Networking (port-forward instead of ingress) ----
 
@@ -88,11 +111,11 @@ sandboxProxy:
   replicaCount: 1
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 250m
+      cpu: 500m
       memory: 512Mi
+    limits:
+      cpu: 2
+      memory: 1Gi
 
 # The sandbox image is `kind load`ed with pullPolicy IfNotPresent, so there is
 # no registry pull to front-run — and without the local image overrides the
@@ -191,28 +214,29 @@ inferenceCapability:
   replicaCount: 1
   resources:
     requests:
-      cpu: 250m
+      cpu: 1
       memory: 1Gi
     limits:
-      cpu: 1000m
+      cpu: 2
       memory: 2Gi
 
 indexCapability:
   replicaCount: 1
   resources:
     requests:
-      cpu: 250m
+      cpu: 1
       memory: 1Gi
     limits:
-      cpu: 1000m
+      cpu: 2
       memory: 2Gi
 
 redis:
   redisStandalone:
     resources:
       requests:
-        cpu: 50m
-        memory: 64Mi
+        cpu: 100m
+        memory: 128Mi
+      # The chart sets Redis maxmemory to 400 MB; leave room for process overhead.
       limits:
-        cpu: 250m
-        memory: 256Mi
+        cpu: "1"
+        memory: 512Mi

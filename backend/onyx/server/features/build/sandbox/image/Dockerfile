@@ -182,6 +182,12 @@ USER sandbox
 RUN curl -fsSL -o /tmp/opencode-install.sh https://opencode.ai/install && \
     bash /tmp/opencode-install.sh --version "${OPENCODE_VERSION}" --no-modify-path && \
     rm /tmp/opencode-install.sh
+# OpenCode installs this SDK in each config directory during cold initialization.
+RUN npm install --prefix /workspace/templates/opencode --ignore-scripts --no-audit --no-fund \
+    --save-exact "@opencode-ai/plugin@${OPENCODE_VERSION}" && \
+    mkdir -p /home/sandbox/.config/opencode && \
+    cp -a /workspace/templates/opencode/. /home/sandbox/.config/opencode/ && \
+    cp -a /workspace/templates/opencode/. /home/sandbox/.opencode/
 # Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN cd /workspace/templates/outputs/web && \
     bun install --frozen-lockfile && \

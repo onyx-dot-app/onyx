@@ -229,6 +229,11 @@ that creates `/workspace/sessions/$id/{outputs,attachments}`, symlinks `.opencod
 `user_library` to the sandbox-wide managed directories, writes `AGENTS.md` and
 `opencode.json`, and (if the session has a port) writes `start-webapp.sh`. It
 never scaffolds or starts the dev server itself (`[[craft-webapp-proxy]]` owns that).
+New session config directories copy the image's preinstalled OpenCode plugin SDK
+from `/workspace/templates/opencode`. Existing dependencies and package manifests
+remain intact. Older images without this template use OpenCode's install fallback.
+Configuration regeneration also seeds the SDK after snapshot restore.
+SDK files stay outside snapshots, which contain outputs and attachments.
 A completion sentinel (`ONYX_WORKSPACE_SETUP_COMPLETE`) is the only reliable
 success signal, because the K8s exec client returns buffered output without
 raising on a nonzero exit or timeout (`session_workspace.py` module docstring).

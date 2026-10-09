@@ -141,6 +141,7 @@ from onyx.server.features.build.sandbox.session_workspace import (
     MANAGED_SKILLS_PATH,
     MANAGED_USER_LIBRARY_PATH,
     SESSIONS_ROOT,
+    build_opencode_dependency_setup_script,
     build_session_workspace_setup_script,
     build_workspace_exists_check_script,
 )
@@ -1597,6 +1598,7 @@ fi
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
+{build_opencode_dependency_setup_script(session_path)}
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' {shlex.quote(agents_md)} > {session_path}/AGENTS.md
