@@ -69,8 +69,9 @@ LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
         "id": FOLDER_ID,
         "parentReference": {"driveId": DRIVE, "siteId": None},
     },
+    # Literal on purpose: the drive resource answers with a capital P.
     DRIVE_URL: {
-        SHAREPOINT_IDS_PROPERTY: {"listId": LIST_ID, "siteUrl": SITE_URL},
+        "sharePointIds": {"listId": LIST_ID, "siteUrl": SITE_URL},
     },
 }
 MEMBERS = {MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]}}
@@ -909,7 +910,7 @@ def test_a_library_with_malformed_identity_is_one_channel_failure(
 ) -> None:
     routes = {
         **_channel_routes(message("m1", "Plan")),
-        DRIVE_URL: {SHAREPOINT_IDS_PROPERTY: {"listId": {"bad": "shape"}}},
+        DRIVE_URL: {"sharePointIds": {"listId": {"bad": "shape"}}},
     }
 
     items = walk_channel(connector(graph_client(routes), include_attachments=True))

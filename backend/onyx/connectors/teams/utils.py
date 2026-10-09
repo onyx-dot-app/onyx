@@ -468,6 +468,11 @@ def fetch_messages(
         yield Message(**_sanitize_message_user_display_name(value))
 
 
+# Graph answers a drive's identity under this key, with a capital P, while
+# drive items and lists answer under SHAREPOINT_IDS_PROPERTY.
+DRIVE_SHAREPOINT_IDS_PROPERTY: str = "sharePointIds"
+
+
 def resolve_channel_library(
     graph_client: GraphClient, team_id: str, channel_id: str
 ) -> ChannelLibrary:
@@ -492,7 +497,9 @@ def resolve_channel_library(
         request_url=f"drives/{drive_id}?$select={SHAREPOINT_IDS_PROPERTY}",
     )
     try:
-        sharepoint_ids = parse_graph_sharepoint_ids(drive.get(SHAREPOINT_IDS_PROPERTY))
+        sharepoint_ids = parse_graph_sharepoint_ids(
+            drive.get(DRIVE_SHAREPOINT_IDS_PROPERTY)
+        )
     except ValueError as e:
         raise ChannelFilesUnavailable(
             f"Document library {drive_id} returned malformed identity"
