@@ -7,6 +7,7 @@ import {
   UploadFilesProvider,
   useUploadFilesContext,
   UploadFileStatus,
+  type BuildFile,
 } from "@/app/craft/contexts/UploadFilesContext";
 import {
   fetchDirectoryListing,
@@ -428,4 +429,33 @@ it("keeps a pending deletion out of listings after revisiting its session", asyn
   expect(deleteFile).toHaveBeenCalledTimes(1);
   await act(async () => deletion.resolve());
   expect(result.current.currentMessageFiles).toEqual([]);
+});
+
+it("refetches current attachments when an earlier visit's deletion fails", async () => {
+  const deletion: ReturnType<typeof deferred<void>> = deferred<void>();
+  jest.mocked(deleteFile).mockReturnValue(deletion.promise);
+  jest.mocked(fetchDirectoryListing).mockResolvedValue(listing("original.txt"));
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  act(() => result.current.setActiveSession("session-a"));
+  await waitFor(() =>
+    expect(result.current.currentMessageFiles).toHaveLength(1)
+  );
+  const file: BuildFile | undefined = result.current.currentMessageFiles[0];
+  if (!file) throw new Error("Attachment missing");
+  act(() => result.current.removeFile(file.id));
+  act(() => result.current.endSessionVisit());
+  act(() => result.current.setActiveSession("session-a"));
+  await waitFor(() => expect(fetchDirectoryListing).toHaveBeenCalledTimes(2));
+  expect(result.current.currentMessageFiles).toEqual([]);
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockResolvedValue(listing("canonical.txt"));
+  await act(async () => deletion.reject(new Error("network unavailable")));
+  await waitFor(() =>
+    expect(
+      result.current.currentMessageFiles.map((entry) => entry.name)
+    ).toEqual(["canonical.txt"])
+  );
+  expect(fetchDirectoryListing).toHaveBeenCalledTimes(3);
+  expect(deleteFile).toHaveBeenCalledTimes(1);
 });

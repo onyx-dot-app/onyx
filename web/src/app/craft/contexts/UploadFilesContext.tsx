@@ -714,7 +714,11 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         })
         .catch((error) => {
           activeDeletionsRef.current.delete(deletionKey);
-          if (activeScopeRef.current !== scope) return;
+          if (activeScopeRef.current !== scope) {
+            if (activeScopeRef.current.sessionId === activeSessionId)
+              void fetchExistingAttachmentsInternal(activeSessionId, false);
+            return;
+          }
           console.error(
             "[UploadFilesContext] Failed to delete file from sandbox:",
             error
@@ -731,7 +735,12 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
           });
         });
     },
-    [activeScope, activeSessionId, triggerFilesRefresh]
+    [
+      activeScope,
+      activeSessionId,
+      triggerFilesRefresh,
+      fetchExistingAttachmentsInternal,
+    ]
   );
 
   /**
