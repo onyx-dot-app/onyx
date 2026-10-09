@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
+from onyx.connectors.capability_checks.models import ProposedPairingValidation
 from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
@@ -331,6 +332,105 @@ def validate_connector_credential_bindings(
         )
 
 
+# Pairing validation does not apply to these sources.
+_SOURCES_WITHOUT_PAIRING_VALIDATION = frozenset(
+    {DocumentSource.INGESTION_API, DocumentSource.MOCK_CONNECTOR}
+)
+
+
+def _build_and_validate_connector(
+    db_session: Session,
+    *,
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+    access_type: AccessType,
+    run_legacy_validation: bool,
+) -> None:
+    """Checks the credential binding and builds the connector. Construction
+    validates parts of the config (for example the Microsoft hosts), so it
+    gates the named checks too. With ``run_legacy_validation``, also runs the
+    connector's settings validation, and its perm-sync validation for a
+    perm-synced access type."""
+    validate_credential_binding(source, connector_specific_config, credential)
+    runnable_connector = instantiate_connector(
+        db_session=db_session,
+        source=source,
+        input_type=input_type,
+        connector_specific_config=connector_specific_config,
+        credential=credential,
+    )
+    if not run_legacy_validation:
+        return
+    runnable_connector.validate_connector_settings()
+    if access_type.is_perm_synced():
+        runnable_connector.validate_perm_sync()
+
+
+def validate_proposed_pairing(
+    db_session: Session,
+    *,
+    connector_id: int | None,
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+    access_type: AccessType,
+) -> ProposedPairingValidation:
+    """Validates a proposed pairing as creation does, from the given values
+    instead of the stored connector.
+
+    Writes no capability report, starts no background run, and records no
+    validation outcome. Like any construction, ``instantiate_connector`` can
+    still store a credential that the connector refreshed.
+    """
+    if INTEGRATION_TESTS_MODE or source in _SOURCES_WITHOUT_PAIRING_VALIDATION:
+        return ProposedPairingValidation()
+
+    # Inline imports: see validate_ccpair_for_user.
+    from onyx.connectors.capability_checks.creation import (
+        run_named_checks_within_budget,
+    )
+    from onyx.connectors.capability_checks.registry import (
+        has_named_capability_checks,
+    )
+
+    use_named_checks = has_named_capability_checks(source)
+    try:
+        _build_and_validate_connector(
+            db_session,
+            source=source,
+            input_type=input_type,
+            connector_specific_config=connector_specific_config,
+            credential=credential,
+            access_type=access_type,
+            run_legacy_validation=not use_named_checks,
+        )
+    except ValidationError as e:
+        return ProposedPairingValidation(validation_error=str(e))
+    except Exception as e:
+        logger.exception(
+            "Unexpected error while validating a proposed %s pairing", source
+        )
+        return ProposedPairingValidation(validation_error=str(e))
+
+    if not use_named_checks:
+        return ProposedPairingValidation()
+    run = run_named_checks_within_budget(
+        connector_id=connector_id,
+        source=source,
+        input_type=input_type,
+        connector_specific_config=connector_specific_config,
+        credential=credential,
+        access_type=access_type,
+    )
+    return ProposedPairingValidation(
+        check_results=run.finished_results,
+        unfinished_check_ids=run.unfinished_check_ids,
+    )
+
+
 def validate_ccpair_for_user(
     connector_id: int,
     credential_id: int,
@@ -352,10 +452,7 @@ def validate_ccpair_for_user(
     if not connector:
         raise ValueError("Connector not found")
 
-    if (
-        connector.source == DocumentSource.INGESTION_API
-        or connector.source == DocumentSource.MOCK_CONNECTOR
-    ):
+    if connector.source in _SOURCES_WITHOUT_PAIRING_VALIDATION:
         return True
 
     if not credential:
@@ -365,6 +462,7 @@ def validate_ccpair_for_user(
     # lazy ORM attribute loads can raise (e.g. ``PendingRollbackError``) and
     # replace the exception being handled.
     source = connector.source
+    input_type = connector.input_type
     connector_specific_config = connector.connector_specific_config
 
     def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
@@ -397,20 +495,15 @@ def validate_ccpair_for_user(
         and has_named_capability_checks(source)
     )
     try:
-        validate_credential_binding(source, connector_specific_config, credential)
-        # Construction validates parts of the config (for example the Microsoft
-        # hosts), so it gates both paths.
-        runnable_connector = instantiate_connector(
-            db_session=db_session,
-            source=connector.source,
-            input_type=connector.input_type,
-            connector_specific_config=connector.connector_specific_config,
+        _build_and_validate_connector(
+            db_session,
+            source=source,
+            input_type=input_type,
+            connector_specific_config=connector_specific_config,
             credential=credential,
+            access_type=access_type,
+            run_legacy_validation=not use_named_checks,
         )
-        if not use_named_checks:
-            runnable_connector.validate_connector_settings()
-            if access_type.is_perm_synced():
-                runnable_connector.validate_perm_sync()
     except ValidationError as e:
         _record_outcome(e, perm_sync_validated=False)
         raise
@@ -426,7 +519,7 @@ def validate_ccpair_for_user(
         return validate_pairing_with_named_checks(
             connector_id=connector_id,
             source=source,
-            input_type=connector.input_type,
+            input_type=input_type,
             connector_specific_config=connector_specific_config,
             credential=credential,
             access_type=access_type,

@@ -254,6 +254,37 @@ class CredentialCapabilityReport(BaseModel):
     check_results: list[CapabilityCheckResult]
 
 
+class NamedCheckRun(BaseModel):
+    """The outcome of the named checks after the blocking budget."""
+
+    # Results of the checks that finished, reused draft results included.
+    finished_results: list[CapabilityCheckResult]
+    # Checks that were still running at the end of the budget.
+    unfinished_check_ids: frozenset[str]
+
+    @property
+    def failed_required_results(self) -> list[CapabilityCheckResult]:
+        """The finished required checks that failed. Only these block a
+        pairing."""
+        return [
+            result
+            for result in self.finished_results
+            if result.required and result.status == CapabilityCheckStatus.FAILED
+        ]
+
+
+class ProposedPairingValidation(BaseModel):
+    """The result of validating a pairing state that is not stored."""
+
+    # Set when the credential binding, the connector construction, or the
+    # legacy validation failed. The named checks do not run then.
+    validation_error: str | None = None
+    # Named checks only: the finished results, and the checks still running at
+    # the end of the blocking budget.
+    check_results: list[CapabilityCheckResult] = []
+    unfinished_check_ids: frozenset[str] = frozenset()
+
+
 def compute_connector_config_hash(config: dict[str, Any] | None) -> str | None:
     """Returns the sha256 of the canonical config JSON a report ran with.
 
