@@ -2689,9 +2689,6 @@
         "retryButton": {
           "label": "다시 시도"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {저장된 계정 #개} other {저장된 계정 #개}}"
-        },
         "timeout": {
           "toast": "{seconds}초 후 작업 시간이 초과되었습니다. 설정에 오류가 있는지 확인하세요."
         },

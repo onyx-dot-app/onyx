@@ -2689,9 +2689,6 @@
         "retryButton": {
           "label": "Retry"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
-        },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
         },

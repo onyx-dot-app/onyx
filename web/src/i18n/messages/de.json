@@ -2689,9 +2689,6 @@
         "retryButton": {
           "label": "Erneut versuchen"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}"
-        },
         "timeout": {
           "toast": "Zeitüberschreitung des Vorgangs nach {seconds} Sekunden. Prüfen Sie Ihre Konfiguration auf Fehler."
         },
