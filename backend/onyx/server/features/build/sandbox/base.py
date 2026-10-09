@@ -80,7 +80,18 @@ SandboxEvent = (
 
 @cache
 def _document_preview_source() -> str:
-    return (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_text()
+    helper: str = (BUILTIN_SKILLS_PATH / "pptx/scripts/office/soffice.py").read_text()
+    bootstrap: str = (
+        "import sys, types\n"
+        "office = types.ModuleType('office')\n"
+        "office.__path__ = []\n"
+        "soffice = types.ModuleType('office.soffice')\n"
+        f"exec({helper!r}, soffice.__dict__)\n"
+        "office.soffice = soffice\n"
+        "sys.modules['office'] = office\n"
+        "sys.modules['office.soffice'] = soffice\n"
+    )
+    return bootstrap + (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_text()
 
 
 def document_preview_command(
@@ -92,7 +103,6 @@ def document_preview_command(
     first_page_only: bool = False,
 ) -> list[str]:
     """Run the packaged converter without replacing the agent's managed skills."""
-    # The unchanged office helper remains in the managed skill's scripts directory.
     source: str = f"__file__ = {json.dumps(script_path)}\n" + _document_preview_source()
     return [
         "python",
@@ -120,6 +130,7 @@ def parse_document_preview_response(
         "ERROR_TIMEOUT": "Document thumbnail conversion timed out",
         "ERROR_SOURCE_CHANGED": "Document changed while rendering; retry preview",
         "ERROR_NO_PDF": "soffice did not produce a PDF file",
+        "ERROR_CONVERSION": "Document conversion failed",
     }
     if lines[0] in errors:
         raise ValueError(errors[lines[0]])

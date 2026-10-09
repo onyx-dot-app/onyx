@@ -125,9 +125,8 @@ def test_provider_command_uses_current_packaged_converter_without_skill_push() -
         first_page_only=True,
     )
     assert command[:2] == ["python", "-c"]
-    assert (
-        command[2].split("\n", 1)[1]
-        == (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_text()
+    assert command[2].endswith(
+        (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_text()
     )
     assert command[3:] == [
         "/session/annual report.pdf",

@@ -72,7 +72,15 @@ def test_preserved_mtime_edit_replaces_cached_slides(
     convert_mock: MagicMock = MagicMock(side_effect=convert)
     rasterize_mock: MagicMock = MagicMock(side_effect=rasterize)
     monkeypatch.setattr("office.soffice.run_soffice", convert_mock)
-    monkeypatch.setattr(preview.subprocess, "run", rasterize_mock)
+
+    def bounded_conversion(
+        command: list[str], _deadline: float, _env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        if command[0] == "soffice":
+            return convert_mock(command[1:])
+        return rasterize_mock(command)
+
+    monkeypatch.setattr(preview, "_run_conversion", bounded_conversion)
 
     preview.main()
     assert capsys.readouterr().out.splitlines()[0] == "CACHED"
@@ -248,8 +256,7 @@ def test_failed_conversion_keeps_last_published_thumbnail(
         "_run_conversion",
         MagicMock(return_value=subprocess.CompletedProcess([], 1)),
     )
-    with pytest.raises(SystemExit):
-        preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+    preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
     assert published.read_bytes() == b"last good thumbnail"
     assert not list(cache.glob(".render-*"))
 
@@ -409,3 +416,49 @@ def test_document_growing_before_lock_acquisition_is_rejected(
     preview.main()
     assert capsys.readouterr().out.strip() == "ERROR_TOO_LARGE"
     converter.assert_not_called()
+
+
+@pytest.mark.parametrize("first_page", [False, True])
+def test_malformed_pdf_reports_protocol_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    first_page: bool,
+) -> None:
+    preview: ModuleType = _load_preview()
+    source: Path = tmp_path / "broken.pdf"
+    source.write_bytes(b"malformed PDF")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(_SCRIPT),
+            str(source),
+            str(tmp_path / "cache"),
+            *(["--first-page"] if first_page else []),
+        ],
+    )
+    monkeypatch.setattr(
+        preview,
+        "_run_conversion",
+        MagicMock(return_value=subprocess.CompletedProcess([], 1, "", "invalid PDF")),
+    )
+    preview.main()
+    assert capsys.readouterr().out.strip() == "ERROR_CONVERSION"
+
+
+def test_full_preview_lock_wait_has_a_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    preview: ModuleType = _load_preview()
+    source: Path = tmp_path / "report.pptx"
+    source.write_bytes(b"presentation")
+    monkeypatch.setattr(
+        sys, "argv", [str(_SCRIPT), str(source), str(tmp_path / "cache")]
+    )
+    monkeypatch.setattr(preview, "FULL_PREVIEW_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(preview.fcntl, "flock", MagicMock(side_effect=BlockingIOError))
+    preview.main()
+    assert capsys.readouterr().out.strip() == "ERROR_TIMEOUT"

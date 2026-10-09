@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 CONVERSION_DPI: int = 150
 THUMBNAIL_TIMEOUT_SECONDS: float = 30.0
+FULL_PREVIEW_TIMEOUT_SECONDS: float = 120.0
 
 
 class PreviewArguments(argparse.Namespace):
@@ -72,8 +73,8 @@ def main() -> None:
         return
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    deadline: float | None = (
-        time.monotonic() + THUMBNAIL_TIMEOUT_SECONDS if first_page_only else None
+    deadline: float | None = time.monotonic() + (
+        THUMBNAIL_TIMEOUT_SECONDS if first_page_only else FULL_PREVIEW_TIMEOUT_SECONDS
     )
     with (cache_dir / ".conversion.lock").open("a") as lock:
         try:
@@ -218,7 +219,8 @@ def _render_preview(
         )
         if result.returncode != 0:
             print("CONVERSION_ERROR", file=sys.stderr)
-            sys.exit(1)
+            print("ERROR_CONVERSION")
+            return False
 
         # Find the generated PDF
         pdfs: list[Path] = sorted(cache_dir.glob("*.pdf"))
@@ -245,7 +247,8 @@ def _render_preview(
     )
     if result.returncode != 0:
         print("CONVERSION_ERROR", file=sys.stderr)
-        sys.exit(1)
+        print("ERROR_CONVERSION")
+        return False
 
     # Clean up PDF
     if pdf_file != document_path:

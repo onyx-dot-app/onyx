@@ -749,3 +749,7 @@ The snapshot exclusion applies only to the cache at outputs/.document-thumbnails
 Nested user directories with this name stay in snapshots.
 Both providers validate converter status and session-relative JPEG paths through one response parser.
 Thumbnail size checks use the source revision captured after acquiring the conversion lock.
+
+The converter bundles its LibreOffice helper so disabled presentation skills do not affect previews.
+Full-slide previews share a 120-second lock and conversion deadline.
+Conversion failures return a protocol error handled as a client error.
