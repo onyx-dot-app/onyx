@@ -12459,17 +12459,11 @@
         "description": "构建过程中创建的文件将显示在这里",
         "title": "暂无文件"
       },
-      "emptyDirectory": {
-        "label": "此目录中没有文件"
-      },
       "error": {
         "title": "加载文件出错"
       },
       "loading": {
         "label": "正在加载文件..."
-      },
-      "loadingChildren": {
-        "label": "加载中..."
       },
       "preparing": {
         "description": "正在设置您的开发环境",

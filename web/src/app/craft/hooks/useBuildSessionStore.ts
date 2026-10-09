@@ -2778,14 +2778,6 @@ export const useWebappNeedsRemount = () =>
     return sessions.get(currentSessionId)?.webappNeedsRemount ?? 0;
   });
 
-// Files refresh selector
-export const useFilesNeedsRefresh = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return 0;
-    return sessions.get(currentSessionId)?.filesNeedsRefresh ?? 0;
-  });
-
 // Panel tab selectors
 export const usePanelTabs = () =>
   useBuildSessionStore((state) => {

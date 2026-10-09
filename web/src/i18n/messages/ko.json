@@ -12459,17 +12459,11 @@
         "description": "빌드 중 생성된 파일이 여기에 표시됩니다",
         "title": "아직 파일이 없습니다"
       },
-      "emptyDirectory": {
-        "label": "이 디렉터리에 파일이 없습니다"
-      },
       "error": {
         "title": "파일 불러오기 오류"
       },
       "loading": {
         "label": "파일을 불러오는 중..."
-      },
-      "loadingChildren": {
-        "label": "불러오는 중..."
       },
       "preparing": {
         "description": "개발 환경을 설정하는 중",

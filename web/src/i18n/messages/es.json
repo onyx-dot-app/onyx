@@ -12459,17 +12459,11 @@
         "description": "Los archivos creados durante la compilación aparecerán aquí",
         "title": "Aún no hay archivos"
       },
-      "emptyDirectory": {
-        "label": "No hay archivos en este directorio"
-      },
       "error": {
         "title": "Error al cargar los archivos"
       },
       "loading": {
         "label": "Cargando archivos..."
-      },
-      "loadingChildren": {
-        "label": "Cargando..."
       },
       "preparing": {
         "description": "Configurando tu entorno de desarrollo",

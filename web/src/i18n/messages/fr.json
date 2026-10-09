@@ -12459,17 +12459,11 @@
         "description": "Les fichiers créés pendant la construction apparaîtront ici",
         "title": "Aucun fichier pour l'instant"
       },
-      "emptyDirectory": {
-        "label": "Aucun fichier dans ce répertoire"
-      },
       "error": {
         "title": "Erreur de chargement des fichiers"
       },
       "loading": {
         "label": "Chargement des fichiers..."
-      },
-      "loadingChildren": {
-        "label": "Chargement..."
       },
       "preparing": {
         "description": "Configuration de votre environnement de développement",
