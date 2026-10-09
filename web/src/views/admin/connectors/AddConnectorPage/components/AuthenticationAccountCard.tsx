@@ -334,7 +334,7 @@ export default function AuthenticationAccountCard({
                 {t("useButton.label")}
               </Button>
             ) : (
-              <Text font="main-ui-action" color="text-03">
+              <Text font="secondary-body" color="text-03">
                 {t("unsupportedRealm.label")}
               </Text>
             )}
