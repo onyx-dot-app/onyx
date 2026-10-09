@@ -219,8 +219,8 @@ in every connector SDK.
 
 Perm-sync capability checks (`validate_perm_sync` probes and named checks) are
 dispatched from `ee/onyx/connectors/capability_checks.py` and `perm_sync_valid.py`. The
-check implementations live in the connector modules. Confluence, OneDrive, Outlook, and
-Slack have named perm-sync checks. See [[connectors]] §4.8.
+check implementations live in the connector modules. Confluence, Google Drive, OneDrive,
+Outlook, and Slack have named perm-sync checks. See [[connectors]] §4.8.
 
 ### 4.2 Doc sync flow
 
