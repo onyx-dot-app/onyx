@@ -233,8 +233,9 @@ class UserDirectory:
         self._graph_client = graph_client
         # None records an id Graph did not name, so it is not asked for again.
         self._principal_names: dict[str, str | None] = {}
-        # Workers share one directory, and two asking for the same unknown ids
-        # would each pay for the lookup.
+        # Workers share one directory. The lock guards the cache alone, so one
+        # slow lookup stalls no one else. Two workers may both fetch the same
+        # new ids, which beats serializing on Graph.
         self._lock = threading.Lock()
 
     def principal_names(self, user_ids: list[str]) -> dict[str, str]:
@@ -247,9 +248,15 @@ class UserDirectory:
                 for uid in dict.fromkeys(user_ids)
                 if uid not in self._principal_names
             ]
-            for start in range(0, len(unknown), USER_LOOKUP_BATCH_SIZE):
-                batch = unknown[start : start + USER_LOOKUP_BATCH_SIZE]
-                self._principal_names.update(self._lookup(batch))
+        found: dict[str, str | None] = {}
+        for start in range(0, len(unknown), USER_LOOKUP_BATCH_SIZE):
+            found.update(self._lookup(unknown[start : start + USER_LOOKUP_BATCH_SIZE]))
+        with self._lock:
+            # A name wins over an omission in either order: two lookups may
+            # race, and a user Graph named once must stay a reader.
+            for uid, name in found.items():
+                if name is not None or uid not in self._principal_names:
+                    self._principal_names[uid] = name
             return {
                 uid: name
                 for uid in user_ids
