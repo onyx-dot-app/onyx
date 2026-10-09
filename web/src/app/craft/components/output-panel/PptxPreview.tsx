@@ -51,9 +51,7 @@ export default function PptxPreview({
       ...(await fetchPptxPreview(sessionId, filePath)),
       imageRevision: crypto.randomUUID(),
     }),
-    revision,
-    refreshKey,
-    isActive
+    { revision, refreshKey, isActive }
   );
 
   const slideCount = data?.slide_count ?? 0;
@@ -115,7 +113,7 @@ export default function PptxPreview({
     }
   }
 
-  if (isLoading) {
+  if (!data && isLoading) {
     return (
       <Section
         height="full"
@@ -130,7 +128,7 @@ export default function PptxPreview({
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <Section
         height="full"
@@ -172,7 +170,17 @@ export default function PptxPreview({
   const slideUrl = `${buildArtifactUrl(sessionId, slidePath)}?revision=${data.imageRevision}`;
 
   return (
-    <div className="h-full min-h-0 flex overflow-hidden">
+    <div className="relative h-full min-h-0 flex overflow-hidden">
+      {error && (
+        <div
+          role="alert"
+          className="absolute top-0 inset-x-0 bg-background-neutral-00 px-4 py-2"
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("error.title")}
+          </Text>
+        </div>
+      )}
       <div
         role="toolbar"
         aria-label={t("slides.label")}

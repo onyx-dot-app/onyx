@@ -85,12 +85,10 @@ function FetchedFilePreview({
   const { data, error, isLoading } = useFilePreview(
     SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     () => fetchFileContent(sessionId, filePath),
-    revision,
-    refreshKey,
-    isActive
+    { revision, refreshKey, isActive }
   );
 
-  if (isLoading || error || !data || data.error) {
+  if (!data || data.error) {
     let title: string | undefined;
     let description = t("noContent.label");
     if (isLoading) {
@@ -151,10 +149,20 @@ function FetchedFilePreview({
   }
 
   return (
-    <div className={cn("p-4", fullHeight && "h-full overflow-auto")}>
+    <div className={cn("relative p-4", fullHeight && "h-full overflow-auto")}>
       <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
         {data.content}
       </pre>
+      {error && (
+        <div
+          role="alert"
+          className="absolute top-0 inset-x-0 bg-background-neutral-00 px-4 py-2"
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("error.inline", { message: error.message })}
+          </Text>
+        </div>
+      )}
     </div>
   );
 }

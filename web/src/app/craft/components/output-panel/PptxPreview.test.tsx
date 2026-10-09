@@ -58,7 +58,7 @@ it("waits for an updated conversion and reloads slide images at the same paths",
     />
   );
   await waitFor(() => expect(fetchPptxPreview).toHaveBeenCalledTimes(2));
-  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.getByRole("img")).toBeInTheDocument();
   await act(async () => {
     finishConversion(converted);
   });

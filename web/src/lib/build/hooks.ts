@@ -1,20 +1,38 @@
 import { useEffect, useRef } from "react";
 import useSWR from "swr";
+import {
+  isAuthStatusError,
+  isNotFoundError,
+  skipRetryOnAuthError,
+} from "@/lib/fetcher";
+
+interface FilePreviewOptions {
+  revision?: string;
+  refreshKey?: number;
+  isActive?: boolean;
+  onRefreshingChange?: (refreshing: boolean) => void;
+}
 
 /** One payload per viewer. Revalidation replaces bytes, rather than caching every revision. */
 export function useFilePreview<T>(
   key: string,
   load: () => Promise<T>,
-  revision?: string,
-  refreshKey = 0,
-  isActive = true
+  {
+    revision,
+    refreshKey = 0,
+    isActive = true,
+    onRefreshingChange,
+  }: FilePreviewOptions = {}
 ) {
   const request = { key, revision, refreshKey, isActive };
   const previousRequest = useRef(request);
+  const active = useRef(isActive);
+  active.current = isActive;
   const {
     data: result,
     error,
     mutate,
+    isValidating,
   } = useSWR<
     { revision: string | undefined; refreshKey: number; data: T },
     Error & { revision: string | undefined; refreshKey: number }
@@ -36,35 +54,67 @@ export function useFilePreview<T>(
         previous?.revision === next?.revision &&
         previous?.refreshKey === next?.refreshKey &&
         Object.is(previous?.data, next?.data),
+      onErrorRetry: (error, key, config, revalidate, options) => {
+        if (!active.current) return;
+        skipRetryOnAuthError(
+          error,
+          key,
+          config,
+          (retryOptions) => {
+            if (active.current) revalidate(retryOptions);
+          },
+          options
+        );
+      },
+      revalidateOnMount: isActive,
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       revalidateIfStale: revision === undefined,
     }
   );
 
+  const isCurrent =
+    result?.revision === revision && result?.refreshKey === refreshKey;
   useEffect(() => {
     const previous = previousRequest.current;
     previousRequest.current = { key, revision, refreshKey, isActive };
     if (
+      isActive &&
       previous.key === key &&
       (previous.revision !== revision ||
         previous.refreshKey !== refreshKey ||
-        (isActive && !previous.isActive && revision === undefined))
+        (!previous.isActive && (revision === undefined || error || !isCurrent)))
     ) {
       // SWR discards an older in-flight request when this revalidation starts.
-      void mutate();
+      void mutate().catch(() => undefined);
     }
-  }, [key, revision, refreshKey, isActive, mutate]);
+  }, [
+    key,
+    revision,
+    refreshKey,
+    isActive,
+    isValidating,
+    error,
+    isCurrent,
+    mutate,
+  ]);
 
-  const isCurrent =
-    result?.revision === revision && result?.refreshKey === refreshKey;
   const currentError: Error | undefined =
     error?.revision === revision && error?.refreshKey === refreshKey
       ? error
       : undefined;
+  const isLoading = (!isCurrent || isValidating) && !currentError;
+  useEffect(() => {
+    onRefreshingChange?.(isActive && isLoading);
+    return () => onRefreshingChange?.(false);
+  }, [isActive, isLoading, onRefreshingChange]);
+
   return {
-    data: isCurrent ? result?.data : undefined,
+    data:
+      isAuthStatusError(error) || isNotFoundError(error)
+        ? undefined
+        : result?.data,
     error: currentError,
-    isLoading: !isCurrent && !currentError,
+    isLoading,
   };
 }

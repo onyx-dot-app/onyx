@@ -76,9 +76,7 @@ export default function PdfPreview({
       }
       return nextBlob;
     },
-    revision,
-    refreshKey,
-    isActive
+    { revision, refreshKey, isActive }
   );
 
   // Object URLs belong only to the mounted viewer.
@@ -93,7 +91,7 @@ export default function PdfPreview({
   }, [blob]);
   const blobUrl = objectUrl?.blob === blob ? objectUrl?.url : undefined;
 
-  if (error) {
+  if (error && !blob) {
     return (
       <Section
         height="full"
@@ -114,7 +112,7 @@ export default function PdfPreview({
     );
   }
 
-  if (isLoading || !blobUrl) {
+  if ((!blob && isLoading) || !blobUrl) {
     return (
       <Section
         height="full"
@@ -130,10 +128,22 @@ export default function PdfPreview({
   }
 
   return (
-    <iframe
-      src={blobUrl}
-      title={filePath.split("/").pop() || t("frame.title")}
-      className={cn("w-full h-full border-none")}
-    />
+    <div className="relative h-full">
+      <iframe
+        src={blobUrl}
+        title={filePath.split("/").pop() || t("frame.title")}
+        className={cn("w-full h-full border-none")}
+      />
+      {error && (
+        <div
+          role="alert"
+          className="absolute top-0 inset-x-0 bg-background-neutral-00 px-4 py-2"
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("error.description")}
+          </Text>
+        </div>
+      )}
+    </div>
   );
 }
