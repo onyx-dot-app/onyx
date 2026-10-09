@@ -20,6 +20,7 @@ export enum EmbeddingProviderName {
   GOOGLE = "google",
   LITELLM = "litellm",
   AZURE = "azure",
+  BIFROST = "bifrost",
 
   // Self-hosted
   NOMIC = "nomic",

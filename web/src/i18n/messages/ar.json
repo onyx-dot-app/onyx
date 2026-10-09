@@ -5121,6 +5121,16 @@
           "title": "عنوان URL الهدف"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "عنوان URL الأساسي لبوابة Bifrost. يرسل {appName} طلبات التضمين إلى نقطة النهاية /v1/embeddings الخاصة بها.",
+          "title": "عنوان URL الأساسي"
+        },
+        "modelName": {
+          "description": "معرّف نموذج Bifrost، مثل openai/text-embedding-3-large. عند الحفظ، يضمّن {appName} نصًا تجريبيًا للتأكد من أن هذا نموذج تضمين ولمعرفة أبعاده.",
+          "editDescription": "يستخدم {appName} هذا النموذج حاليًا. عند الحفظ يتم اختباره مع عنوان URL والمفتاح الجديدين. لاستخدام نموذج آخر، اختره من قائمة النماذج."
+        }
+      },
       "cancelReindexModal": {
         "description": "سيؤدي الإلغاء إلى العودة لنموذج التضمين السابق وستفقد كل تقدم إعادة الفهرسة.",
         "submit": {

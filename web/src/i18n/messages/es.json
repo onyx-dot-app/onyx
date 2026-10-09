@@ -5121,6 +5121,16 @@
           "title": "URL de destino"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "La URL base de tu gateway de Bifrost. {appName} envía las solicitudes de embeddings a su endpoint /v1/embeddings.",
+          "title": "URL base"
+        },
+        "modelName": {
+          "description": "El ID del modelo en Bifrost, por ejemplo openai/text-embedding-3-large. Al guardar, {appName} genera el embedding de un texto de prueba para comprobar que es un modelo de embeddings y obtener su dimensión.",
+          "editDescription": "{appName} usa este modelo ahora. Al guardar, se prueba con la nueva URL y la nueva clave. Para usar otro modelo, selecciónalo en la lista de modelos."
+        }
+      },
       "cancelReindexModal": {
         "description": "Si cancelas, se volverá al modelo de embeddings anterior y se perderá todo el progreso de la reindexación.",
         "submit": {
