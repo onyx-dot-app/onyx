@@ -3365,6 +3365,10 @@
         "accountEmailField": {
           "subDescription": "请使用拥有该 API 令牌的账户邮箱。"
         },
+        "nameField": {
+          "title": "显示名称",
+          "placeholder": "为你的身份验证账户命名"
+        },
         "apiTokenField": {
           "subDescription": "粘贴你的 API 令牌以访问 {source}。"
         },

@@ -3365,6 +3365,10 @@
         "accountEmailField": {
           "subDescription": "API トークンを所有するアカウントのメールアドレスを使用してください。"
         },
+        "nameField": {
+          "title": "表示名",
+          "placeholder": "認証アカウントに名前を付けてください"
+        },
         "apiTokenField": {
           "subDescription": "{source} にアクセスするための API トークンを貼り付けてください。"
         },

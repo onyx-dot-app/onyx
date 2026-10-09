@@ -21,8 +21,13 @@ import {
  */
 export const NEW_ACCOUNT_FIELD = "new_account";
 
-/** The new account's fields, and who may reuse it. */
-export type NewAccountValues = ShareAccountFormValues & Record<string, unknown>;
+/** The new account's display name, kept apart from its credential values. */
+export const NEW_ACCOUNT_NAME_FIELD = "name";
+
+/** The new account's fields, its display name, and who may reuse it. */
+export type NewAccountValues = ShareAccountFormValues & {
+  name: string;
+} & Record<string, unknown>;
 
 export type NewAccountSchema = ReturnType<typeof createValidationSchema>;
 
@@ -56,6 +61,7 @@ export function initialNewAccountValues(
   return {
     ...initialCredentialValues(spec),
     ...(authMethod !== undefined && { authentication_method: authMethod }),
+    name: "",
     share: DEFAULT_SHARE_AUDIENCE,
     groups: [],
   };
@@ -80,7 +86,7 @@ export function typedDraft(
   if (schema === null || values === undefined || !schema.isValidSync(values)) {
     return null;
   }
-  const { share, groups, ...fields } = values;
+  const { share, groups, name, ...fields } = values;
   return {
     source,
     credential_json: Object.fromEntries(
@@ -88,6 +94,10 @@ export function typedDraft(
         ([, value]) => value !== null && value !== ""
       )
     ),
-    sharing: shareAccountPayload({ share, groups }),
+    sharing: {
+      ...shareAccountPayload({ share, groups }),
+      // Blank leaves the account untitled.
+      name: name.trim() || null,
+    },
   };
 }

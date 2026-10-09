@@ -3365,6 +3365,10 @@
         "accountEmailField": {
           "subDescription": "API 토큰을 소유한 계정의 이메일을 사용하세요."
         },
+        "nameField": {
+          "title": "표시 이름",
+          "placeholder": "인증 계정의 이름을 입력하세요"
+        },
         "apiTokenField": {
           "subDescription": "{source}에 액세스하려면 API 토큰을 붙여 넣으세요."
         },

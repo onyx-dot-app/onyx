@@ -3365,6 +3365,10 @@
         "accountEmailField": {
           "subDescription": "Usa el correo de la cuenta a la que pertenece el token de API."
         },
+        "nameField": {
+          "title": "Nombre visible",
+          "placeholder": "Ponle nombre a tu cuenta de autenticación"
+        },
         "apiTokenField": {
           "subDescription": "Pega tu token de API para acceder a {source}."
         },

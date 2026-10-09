@@ -3365,6 +3365,10 @@
         "accountEmailField": {
           "subDescription": "Use the account email that owns the API token."
         },
+        "nameField": {
+          "title": "Display Name",
+          "placeholder": "Name your authentication account"
+        },
         "apiTokenField": {
           "subDescription": "Paste your API token to access {source}."
         },
