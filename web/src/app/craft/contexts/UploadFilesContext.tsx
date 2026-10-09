@@ -82,10 +82,7 @@ function formatBytes(bytes: number): string {
 }
 
 /** Validation result for a single file */
-interface FileValidationResult {
-  valid: boolean;
-  error?: string;
-}
+type FileValidationResult = { valid: true } | { valid: false; error: string };
 
 /** Translator bound to the craft.uploadFiles namespace */
 type UploadTranslate = ReturnType<typeof useTranslations<"craft.uploadFiles">>;
@@ -151,7 +148,7 @@ function createFailedFile(file: File, error: string): BuildFile {
 }
 
 // Create optimistic file from File object
-const createOptimisticFile = (file: File): BuildFile => {
+function createOptimisticFile(file: File): BuildFile {
   const tempId = generateTempId();
   return {
     id: tempId,
@@ -162,7 +159,7 @@ const createOptimisticFile = (file: File): BuildFile => {
     created_at: new Date().toISOString(),
     file,
   };
-};
+}
 
 /**
  * Error types for better error handling
@@ -175,13 +172,15 @@ export enum UploadErrorType {
   UNKNOWN = "UNKNOWN",
 }
 
+interface ClassifiedUploadError {
+  type: UploadErrorType;
+  message: string;
+}
+
 function classifyError(
   error: unknown,
   t: UploadTranslate
-): {
-  type: UploadErrorType;
-  message: string;
-} {
+): ClassifiedUploadError {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
     if (message.includes("401") || message.includes("unauthorized")) {
@@ -205,6 +204,15 @@ function classifyError(
     return { type: UploadErrorType.UNKNOWN, message: error.message };
   }
   return { type: UploadErrorType.UNKNOWN, message: t("errors.uploadFailed") };
+}
+
+function isLocalAttachment(file: BuildFile): boolean {
+  return (
+    file.status === UploadFileStatus.UPLOADING ||
+    file.status === UploadFileStatus.PENDING ||
+    file.status === UploadFileStatus.PROCESSING ||
+    file.id.startsWith("temp_")
+  );
 }
 
 /**
@@ -287,7 +295,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     []
   );
   const currentMessageFilesRef = useRef<BuildFile[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeScope, setActiveScope] = useState<{ sessionId: string | null }>({
+    sessionId: null,
+  });
+  const activeSessionId = activeScope.sessionId;
 
   // Get triggerFilesRefresh from the store to refresh the file explorer
   const triggerFilesRefresh = useBuildSessionStore(
@@ -300,7 +311,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
   const isUploadingPendingRef = useRef(false);
   const fetchingSessionRef = useRef<string | null>(null);
-  const prevSessionRef = useRef<string | null>(null);
+  const activeScopeRef = useRef(activeScope);
   // Track active deletions to prevent refetch race condition
   const activeDeletionsRef = useRef<Set<string>>(new Set());
   // When true, skip the refetch that runs after clearFiles (e.g. Enter to dismiss file)
@@ -330,82 +341,83 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   // Internal operations (not exposed to consumers)
   // =========================================================================
 
-  /**
-   * Upload pending files to the given session.
-   * Internal function - called automatically by effects.
-   * Reads current files from state internally to avoid stale closures.
-   */
-  const uploadPendingFilesInternal = useCallback(
-    async (sessionId: string): Promise<void> => {
-      if (isUploadingPendingRef.current) return;
-
-      const currentFiles = currentMessageFilesRef.current;
-      const pendingFiles = currentFiles.filter(
-        (f) => f.status === UploadFileStatus.PENDING && f.file
+  // Immediate and pending uploads share completion and session-scope checks.
+  const uploadAttachedFiles = useCallback(
+    async (sessionId: string, files: BuildFile[]): Promise<void> => {
+      const scope = activeScopeRef.current;
+      if (scope.sessionId !== sessionId) return;
+      const results = await Promise.all(
+        files.map(async (file) => {
+          if (!file.file) return undefined;
+          try {
+            const result = await uploadFileApi(sessionId, file.file);
+            return { id: file.id, success: true as const, result };
+          } catch (error) {
+            return {
+              id: file.id,
+              success: false as const,
+              errorMessage: classifyError(error, t).message,
+            };
+          }
+        })
       );
-
-      if (pendingFiles.length === 0) return;
-
-      isUploadingPendingRef.current = true;
-      // Functional update so a concurrent add/remove in the same batch is
-      // never clobbered. The ref syncs from state in its own effect.
-      setCurrentMessageFiles((prev) =>
-        prev.map((f) =>
-          pendingFiles.some((pf) => pf.id === f.id)
-            ? { ...f, status: UploadFileStatus.UPLOADING }
-            : f
+      if (results.some((result) => result?.success))
+        triggerFilesRefresh(sessionId);
+      if (activeScopeRef.current !== scope) return;
+      const resultsById = new Map(
+        results.flatMap((result) =>
+          result ? [[result.id, result] as const] : []
         )
       );
-
-      try {
-        // Upload in parallel
-        const results = await Promise.all(
-          pendingFiles.map(async (file) => {
-            try {
-              const result = await uploadFileApi(sessionId, file.file!);
-              return { id: file.id, success: true as const, result };
-            } catch (error) {
-              const { message } = classifyError(error, t);
-              return {
-                id: file.id,
-                success: false as const,
-                errorMessage: message,
+      setCurrentMessageFiles((previous) =>
+        previous.map((file) => {
+          const result = resultsById.get(file.id);
+          if (!result) return file;
+          return result.success
+            ? {
+                ...file,
+                status: UploadFileStatus.COMPLETED,
+                path: result.result.path,
+                name: result.result.filename,
+                file: undefined,
+              }
+            : {
+                ...file,
+                status: UploadFileStatus.FAILED,
+                error: result.errorMessage,
               };
-            }
-          })
-        );
-
-        // Update statuses
-        setCurrentMessageFiles((prev) =>
-          prev.map((f) => {
-            const result = results.find((r) => r.id === f.id);
-            if (!result) return f;
-            return result.success
-              ? {
-                  ...f,
-                  status: UploadFileStatus.COMPLETED,
-                  path: result.result.path,
-                  name: result.result.filename,
-                  file: undefined, // Clear blob to free memory
-                }
-              : {
-                  ...f,
-                  status: UploadFileStatus.FAILED,
-                  error: result.errorMessage,
-                };
-          })
-        );
-
-        // Refresh file explorer if any uploads succeeded
-        const anySucceeded = results.some((r) => r.success);
-        if (anySucceeded) {
-          triggerFilesRefresh(sessionId);
-        }
-      } finally {
-        isUploadingPendingRef.current = false;
-      }
+        })
+      );
     },
     [triggerFilesRefresh, t]
+  );
+
+  const uploadPendingFilesInternal = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const scope = activeScopeRef.current;
+      if (scope.sessionId !== sessionId || isUploadingPendingRef.current)
+        return;
+      const pendingFiles = currentMessageFilesRef.current.filter(
+        (file) => file.status === UploadFileStatus.PENDING && file.file
+      );
+      if (pendingFiles.length === 0) return;
+      isUploadingPendingRef.current = true;
+      const pendingIds = new Set(pendingFiles.map((file) => file.id));
+      setCurrentMessageFiles((files) =>
+        files.map((file) =>
+          pendingIds.has(file.id)
+            ? { ...file, status: UploadFileStatus.UPLOADING }
+            : file
+        )
+      );
+      try {
+        await uploadAttachedFiles(sessionId, pendingFiles);
+      } finally {
+        if (activeScopeRef.current === scope)
+          isUploadingPendingRef.current = false;
+      }
+    },
+    [uploadAttachedFiles]
   );
 
   /**
@@ -414,6 +426,8 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    */
   const fetchExistingAttachmentsInternal = useCallback(
     async (sessionId: string, replace: boolean): Promise<void> => {
+      const scope = activeScopeRef.current;
+      if (scope.sessionId !== sessionId) return;
       // Request deduplication
       if (fetchingSessionRef.current === sessionId) return;
 
@@ -421,6 +435,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
       try {
         const listing = await fetchDirectoryListing(sessionId, "attachments");
+        if (activeScopeRef.current !== scope) return;
 
         // Use deterministic IDs based on session and path for stable React keys
         const attachments: BuildFile[] = listing.entries
@@ -441,14 +456,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
           // backend listing yet due to race conditions)
           setCurrentMessageFiles((prev) => {
             // Keep files that are still in-flight or don't have a path yet
-            const localOnlyFiles = prev.filter(
-              (f) =>
-                f.status === UploadFileStatus.UPLOADING ||
-                f.status === UploadFileStatus.PENDING ||
-                f.status === UploadFileStatus.PROCESSING ||
-                // Keep recently uploaded files (have temp ID, not fetched from backend)
-                f.id.startsWith("temp_")
-            );
+            const localOnlyFiles = prev.filter(isLocalAttachment);
 
             // Merge: backend attachments + local-only files (avoiding duplicates by path)
             const backendPaths = new Set(attachments.map((f) => f.path));
@@ -468,6 +476,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
           });
         }
       } catch (error) {
+        if (activeScopeRef.current !== scope) return;
         const { type } = classifyError(error, t);
         if (type !== UploadErrorType.NOT_FOUND) {
           console.error(
@@ -477,18 +486,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         }
         if (replace) {
           // On error, only clear files that aren't being processed locally
-          setCurrentMessageFiles((prev) =>
-            prev.filter(
-              (f) =>
-                f.status === UploadFileStatus.UPLOADING ||
-                f.status === UploadFileStatus.PENDING ||
-                f.status === UploadFileStatus.PROCESSING ||
-                f.id.startsWith("temp_")
-            )
-          );
+          setCurrentMessageFiles((prev) => prev.filter(isLocalAttachment));
         }
       } finally {
-        fetchingSessionRef.current = null;
+        if (activeScopeRef.current === scope) fetchingSessionRef.current = null;
       }
     },
     [t]
@@ -498,32 +499,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   // Effects - Automatic state machine transitions
   // =========================================================================
 
-  /**
-   * Effect: Handle session changes
-   *
-   * When activeSessionId changes:
-   * - If changed to a DIFFERENT non-null session: fetch attachments (replace mode)
-   * - If changed to null: do nothing (don't clear - session might be temporarily null during revalidation)
-   *
-   * This prevents unnecessary fetches/clears when the focus handler temporarily
-   * resets the pre-provisioned session state.
-   */
   useEffect(() => {
-    const prevSession = prevSessionRef.current;
-    const currentSession = activeSessionId;
-
-    // Only update ref when we have a non-null session (ignore temporary nulls)
-    if (currentSession) {
-      // Session changed to a different non-null value
-      if (currentSession !== prevSession) {
-        prevSessionRef.current = currentSession;
-        fetchExistingAttachmentsInternal(currentSession, true);
-      }
-    }
-    // When session becomes null, don't clear files or update ref.
-    // This handles the case where pre-provisioning temporarily resets on focus.
-    // Files will be cleared when user actually navigates away or logs out.
-  }, [activeSessionId, fetchExistingAttachmentsInternal]);
+    if (activeScope.sessionId)
+      fetchExistingAttachmentsInternal(activeScope.sessionId, true);
+  }, [activeScope, fetchExistingAttachmentsInternal]);
 
   /**
    * Effect: Auto-upload pending files when session becomes available
@@ -534,7 +513,12 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     if (activeSessionId && hasPendingFiles) {
       uploadPendingFilesInternal(activeSessionId);
     }
-  }, [activeSessionId, hasPendingFiles, uploadPendingFilesInternal]);
+  }, [
+    activeScope,
+    activeSessionId,
+    hasPendingFiles,
+    uploadPendingFilesInternal,
+  ]);
 
   /**
    * Effect: Refetch attachments after files are cleared
@@ -568,7 +552,6 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     if (
       filesWereCleared &&
       activeSessionId &&
-      prevSessionRef.current === activeSessionId &&
       !hasActiveDeletions &&
       !shouldSuppressRefetch
     ) {
@@ -588,7 +571,19 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    * Set the active session. Triggers fetching/clearing as needed.
    */
   const setActiveSession = useCallback((sessionId: string | null) => {
-    setActiveSessionId(sessionId);
+    const previous = activeScopeRef.current;
+    if (previous.sessionId === sessionId) return;
+    const nextScope = { sessionId };
+    activeScopeRef.current = nextScope;
+    fetchingSessionRef.current = null;
+    isUploadingPendingRef.current = false;
+    activeDeletionsRef.current.clear();
+    if (previous.sessionId !== null) {
+      currentMessageFilesRef.current = [];
+      setCurrentMessageFiles([]);
+    }
+    suppressRefetchRef.current = false;
+    setActiveScope(nextScope);
   }, []);
 
   /**
@@ -597,6 +592,8 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    */
   const uploadFiles = useCallback(
     async (files: File[]): Promise<BuildFile[]> => {
+      const scope = activeScopeRef.current;
+      if (scope !== activeScope) return [];
       // Get current files for batch validation
       const existingFiles = currentMessageFiles;
 
@@ -605,7 +602,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       if (!batchValidation.valid) {
         // Create failed files for all with the batch error
         const failedFiles = files.map((f) =>
-          createFailedFile(f, batchValidation.error!)
+          createFailedFile(f, batchValidation.error)
         );
         setCurrentMessageFiles((prev) => [...prev, ...failedFiles]);
         return failedFiles;
@@ -620,7 +617,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         if (validation.valid) {
           validFiles.push(file);
         } else {
-          failedFiles.push(createFailedFile(file, validation.error!));
+          failedFiles.push(createFailedFile(file, validation.error));
         }
       }
 
@@ -643,56 +640,8 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       const sessionId = activeSessionId;
 
       if (sessionId) {
-        // Session available - upload immediately
-        const uploadPromises = optimisticFiles.map(async (optimisticFile) => {
-          try {
-            const result = await uploadFileApi(sessionId, optimisticFile.file!);
-            return {
-              id: optimisticFile.id,
-              success: true as const,
-              result,
-            };
-          } catch (error) {
-            const { message } = classifyError(error, t);
-            return {
-              id: optimisticFile.id,
-              success: false as const,
-              errorMessage: message,
-            };
-          }
-        });
-
-        const results = await Promise.all(uploadPromises);
-
-        // Batch update all file statuses
-        setCurrentMessageFiles((prev) =>
-          prev.map((f) => {
-            const uploadResult = results.find((r) => r.id === f.id);
-            if (!uploadResult) return f;
-
-            if (uploadResult.success) {
-              return {
-                ...f,
-                status: UploadFileStatus.COMPLETED,
-                path: uploadResult.result.path,
-                name: uploadResult.result.filename,
-                file: undefined, // Clear blob to free memory
-              };
-            } else {
-              return {
-                ...f,
-                status: UploadFileStatus.FAILED,
-                error: uploadResult.errorMessage,
-              };
-            }
-          })
-        );
-
-        // Refresh file explorer if any uploads succeeded
-        const anySucceeded = results.some((r) => r.success);
-        if (anySucceeded) {
-          triggerFilesRefresh(sessionId);
-        }
+        await uploadAttachedFiles(sessionId, optimisticFiles);
+        if (activeScopeRef.current !== scope) return [];
       } else {
         // No session yet - mark as PENDING (effect will auto-upload when session available)
         setCurrentMessageFiles((prev) =>
@@ -706,85 +655,66 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
       return [...failedFiles, ...optimisticFiles];
     },
-    [activeSessionId, currentMessageFiles, triggerFilesRefresh, t]
+    [activeScope, activeSessionId, currentMessageFiles, uploadAttachedFiles, t]
   );
 
-  /**
-   * Remove a file. Uses activeSessionId internally for sandbox deletion.
-   */
   const removeFile = useCallback(
     (fileId: string) => {
-      // Track this deletion to prevent refetch race condition
-      activeDeletionsRef.current.add(fileId);
-
+      const scope = activeScopeRef.current;
+      if (scope !== activeScope || activeDeletionsRef.current.has(fileId))
+        return;
       const currentFiles = currentMessageFilesRef.current;
-      const removedIndex = currentFiles.findIndex((f) => f.id === fileId);
-      if (removedIndex === -1) {
-        activeDeletionsRef.current.delete(fileId);
-        return;
-      }
-
+      const removedIndex = currentFiles.findIndex((file) => file.id === fileId);
       const removedFile = currentFiles[removedIndex];
-      if (!removedFile) {
-        activeDeletionsRef.current.delete(fileId);
-        return;
-      }
+      if (!removedFile) return;
 
-      // Functional update keeps concurrent same-batch changes. The ref syncs
-      // from state in its own effect.
-      setCurrentMessageFiles((prev) => prev.filter((f) => f.id !== fileId));
+      // Removal must not trigger the refetch used after sending a message.
+      suppressRefetchRef.current = true;
+      setCurrentMessageFiles((files) =>
+        files.filter((file) => file.id !== fileId)
+      );
+      if (!removedFile.path || !activeSessionId) return;
 
-      // After state update, trigger backend deletion if needed
-      // Use setTimeout to ensure state update has completed
-      setTimeout(() => {
-        if (removedFile?.path && activeSessionId) {
-          const filePath = removedFile.path;
-          const fileToRestore = removedFile;
-          const indexToRestore = removedIndex;
-
-          deleteFileApi(activeSessionId, filePath)
-            .then(() => {
-              // Deletion succeeded - remove from active deletions
-              activeDeletionsRef.current.delete(fileId);
-              // Refresh file explorer
-              triggerFilesRefresh(activeSessionId);
-            })
-            .catch((error) => {
-              console.error(
-                "[UploadFilesContext] Failed to delete file from sandbox:",
-                error
-              );
-              // Remove from active deletions
-              activeDeletionsRef.current.delete(fileId);
-              // Rollback: restore the file at its original position
-              setCurrentMessageFiles((prev) => {
-                // Check if file was already re-added (e.g., by another operation)
-                if (prev.some((f) => f.id === fileToRestore.id)) return prev;
-
-                const newFiles = [...prev];
-                const insertIndex = Math.min(indexToRestore, newFiles.length);
-                newFiles.splice(insertIndex, 0, fileToRestore);
-                return newFiles;
-              });
-            });
-        } else {
-          // No backend deletion needed - remove from active deletions immediately
+      activeDeletionsRef.current.add(fileId);
+      deleteFileApi(activeSessionId, removedFile.path)
+        .then(() => {
+          triggerFilesRefresh(activeSessionId);
+          if (activeScopeRef.current !== scope) return;
           activeDeletionsRef.current.delete(fileId);
-        }
-      }, 0);
+        })
+        .catch((error) => {
+          if (activeScopeRef.current !== scope) return;
+          console.error(
+            "[UploadFilesContext] Failed to delete file from sandbox:",
+            error
+          );
+          activeDeletionsRef.current.delete(fileId);
+          setCurrentMessageFiles((files) => {
+            if (files.some((file) => file.id === removedFile.id)) return files;
+            const restoredFiles = [...files];
+            restoredFiles.splice(
+              Math.min(removedIndex, files.length),
+              0,
+              removedFile
+            );
+            return restoredFiles;
+          });
+        });
     },
-    [activeSessionId, triggerFilesRefresh]
+    [activeScope, activeSessionId, triggerFilesRefresh]
   );
 
   /**
    * Clear all files from the input bar.
    */
-  const clearFiles = useCallback((options?: { suppressRefetch?: boolean }) => {
-    if (options?.suppressRefetch) {
-      suppressRefetchRef.current = true;
-    }
-    setCurrentMessageFiles([]);
-  }, []);
+  const clearFiles = useCallback(
+    (options?: { suppressRefetch?: boolean }) => {
+      if (activeScopeRef.current !== activeScope) return;
+      if (options?.suppressRefetch) suppressRefetchRef.current = true;
+      setCurrentMessageFiles([]);
+    },
+    [activeScope]
+  );
 
   // =========================================================================
   // Context value

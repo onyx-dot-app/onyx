@@ -498,6 +498,10 @@ Drive file), inserted `PENDING` before the action executes
 `UNKNOWN` (`sweep_stale_pending_receipts`) so a crashed recorder never looks
 like a silently-still-in-progress send.
 
+Frontend attachments in `web/src/app/craft/contexts/UploadFilesContext.tsx` use a separate scope for each session visit.
+Late upload, listing, and deletion responses cannot change another visit.
+Pending welcome attachments upload when the first session becomes available.
+
 ### 4.8 User library
 
 Upload/CRUD lives in `user_library/api.py` (thin HTTP layer) over
