@@ -187,7 +187,8 @@ export default function AuthenticationAccountCard({
         expandable
         expanded={expanded}
         expandableContentHeight="full"
-        state={selected ? "selected" : "filled"}
+        // The "Selected" label marks the pick; the card itself does not.
+        state="filled"
         border="solid"
         rounding={4}
         padding={2}
