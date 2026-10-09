@@ -6,6 +6,7 @@ import pydantic
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.sealed import DraftCredential
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -15,7 +16,10 @@ from onyx.connectors.capability_checks.recorder import (
 )
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
-from onyx.connectors.credentials_provider import build_db_credentials_provider
+from onyx.connectors.credentials_provider import (
+    OnyxStaticCredentialsProvider,
+    build_db_credentials_provider,
+)
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.interfaces import (
     BaseConnector,
@@ -34,6 +38,7 @@ from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -219,6 +224,33 @@ def instantiate_connector(
     return connector
 
 
+def instantiate_connector_with_draft_credential(
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential_json: dict[str, Any],
+) -> BaseConnector:
+    """``instantiate_connector`` for a draft credential: values in the source's
+    own keys that were never saved. Nothing is written back, so a refreshed
+    token lives only as long as the connector."""
+    connector_class = identify_connector_class(source, input_type)
+    connector = connector_class(
+        **build_connector_kwargs(source, connector_specific_config)
+    )
+    if isinstance(connector, CredentialsConnector):
+        connector.set_credentials_provider(
+            OnyxStaticCredentialsProvider(
+                tenant_id=get_current_tenant_id(),
+                connector_name=source,
+                credential_json=credential_json,
+            )
+        )
+    else:
+        connector.load_credentials(credential_json)
+    connector.set_allow_images(get_image_extraction_and_analysis_enabled())
+    return connector
+
+
 def _credential_binding_class(
     source: DocumentSource,
 ) -> type[CredentialBinding] | None:
@@ -249,11 +281,12 @@ def parse_credential_binding(
 def validate_credential_binding(
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
-    credential: Credential,
+    credential: Credential | DraftCredential,
 ) -> None:
     """Raises ``ConnectorValidationError`` if the config's credential-bound
     values cannot be used with the credential, or cannot be checked because they
-    do not match the source's binding model."""
+    do not match the source's binding model. A draft credential is checked on
+    its own values, which are already in the source's keys."""
     # A source without a connector class fails at instantiation with a clearer
     # error.
     binding_class = _credential_binding_class(source)
@@ -270,6 +303,9 @@ def validate_credential_binding(
             f"The connector's credential-bound settings are invalid: {e}"
         ) from e
     if not credential.credential_json:
+        return
+    if isinstance(credential, DraftCredential):
+        binding.validate_credential(credential.credential_json)
         return
     emit_credential_access(
         credential_type="connector", provider=str(source), row_id=credential.id

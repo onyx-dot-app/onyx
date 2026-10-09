@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import threading
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,7 +20,11 @@ def monitor_process(process_name: str, process: subprocess.Popen) -> None:
 
 
 def run_jobs() -> None:
+    # Run Celery with this interpreter rather than a `celery` on PATH, which
+    # launchers that do not activate the virtualenv (e.g. Zed) lack.
     cmd_worker_primary = [
+        sys.executable,
+        "-m",
         "celery",
         "-A",
         "onyx.background.celery.versioned_apps.primary",
@@ -34,6 +39,8 @@ def run_jobs() -> None:
     ]
 
     cmd_worker_light = [
+        sys.executable,
+        "-m",
         "celery",
         "-A",
         "onyx.background.celery.versioned_apps.light",
@@ -48,6 +55,8 @@ def run_jobs() -> None:
     ]
 
     cmd_worker_docprocessing = [
+        sys.executable,
+        "-m",
         "celery",
         "-A",
         "onyx.background.celery.versioned_apps.docprocessing",
@@ -61,6 +70,8 @@ def run_jobs() -> None:
     ]
 
     cmd_worker_docfetching = [
+        sys.executable,
+        "-m",
         "celery",
         "-A",
         "onyx.background.celery.versioned_apps.docfetching",
@@ -74,6 +85,8 @@ def run_jobs() -> None:
     ]
 
     cmd_worker_heavy = [
+        sys.executable,
+        "-m",
         "celery",
         "-A",
         "onyx.background.celery.versioned_apps.heavy",
@@ -88,6 +101,8 @@ def run_jobs() -> None:
     ]
 
     cmd_worker_monitoring = [
+        sys.executable,
+        "-m",
         "celery",
         "-A",
         "onyx.background.celery.versioned_apps.monitoring",
@@ -102,6 +117,8 @@ def run_jobs() -> None:
     ]
 
     cmd_worker_user_file_processing = [
+        sys.executable,
+        "-m",
         "celery",
         "-A",
         "onyx.background.celery.versioned_apps.user_file_processing",
@@ -116,6 +133,8 @@ def run_jobs() -> None:
     ]
 
     cmd_worker_scheduled_tasks = [
+        sys.executable,
+        "-m",
         "celery",
         "-A",
         "onyx.background.celery.versioned_apps.scheduled_tasks",
@@ -130,6 +149,8 @@ def run_jobs() -> None:
     ]
 
     cmd_beat = [
+        sys.executable,
+        "-m",
         "celery",
         "-A",
         "onyx.background.celery.versioned_apps.beat",

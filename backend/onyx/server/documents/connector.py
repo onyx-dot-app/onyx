@@ -149,6 +149,12 @@ from onyx.file_store.file_store import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.cc_pair import authorize_pairing
+from onyx.server.documents.credential import assert_credential_share_within_scope
+from onyx.server.documents.draft_credentials import (
+    EXACTLY_ONE_CREDENTIAL,
+    resolve_draft_credential,
+)
 from onyx.server.documents.models import (
     AuthStatus,
     AuthUrl,
@@ -163,7 +169,9 @@ from onyx.server.documents.models import (
     ConnectorSnapshot,
     ConnectorStatus,
     ConnectorUpdateRequest,
+    ConnectorWithCredentialCreateRequest,
     CredentialBase,
+    CredentialSharing,
     CredentialSnapshot,
     DocsCountOperator,
     FailedConnectorIndexingStatus,
@@ -1739,6 +1747,154 @@ def create_connector_with_mock_credential(
     except ValueError as e:
         _discard_unpaired_creation(db_session, connector_id, credential_id)
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+
+
+@router.post("/admin/connector-with-credential")
+def create_connector_with_credential(
+    request: ConnectorWithCredentialCreateRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse[int]:
+    """Creates a connector and pairs it with a credential: a saved one
+    (``credential_id``), or a new one (typed ``credential_json`` or an OAuth
+    ``draft_credential``) that is saved here, with ``credential_sharing``, for
+    the first time. A failure leaves neither the connector nor a new credential
+    behind."""
+    tenant_id = get_current_tenant_id()
+    connector_data = request.connector
+    manage_access = authorize_pairing(request.pairing, user, db_session)
+    validate_pairing_access(
+        db_session,
+        user=user,
+        source=connector_data.source,
+        access_type=request.pairing.access_type,
+        data_access_group_ids=request.pairing.data_access,
+    )
+
+    # A new credential (typed values or an OAuth draft), saved by this request.
+    new_credential: CredentialBase | None = None
+    resolved = resolve_draft_credential(
+        credential_json=request.credential_json,
+        draft_credential=request.draft_credential,
+        source=connector_data.source,
+        user=user,
+    )
+    if resolved is not None:
+        draft, _ = resolved
+        sharing = request.credential_sharing or CredentialSharing()
+        new_credential = CredentialBase(
+            credential_json=draft.credential_json,
+            source=draft.source,
+            admin_public=sharing.admin_public,
+            curator_public=sharing.curator_public,
+            groups=sharing.groups,
+            name=sharing.name,
+        )
+        assert_credential_share_within_scope(new_credential, user, db_session)
+    elif request.credential_id is not None:
+        # GATE 2 on the credential: validation builds and probes the connector.
+        if (
+            fetch_credential_by_id_for_user(request.credential_id, user, db_session)
+            is None
+        ):
+            raise OnyxError(
+                OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+                f"Credential {request.credential_id} does not exist or is not "
+                "accessible.",
+            )
+
+    connector_id: int | None = None
+    # Only a credential made here is discarded on failure.
+    new_credential_id: int | None = None
+    try:
+        _validate_connector_request(connector_data)
+        connector_id = create_connector(
+            db_session=db_session,
+            connector_data=connector_data.to_connector_base(),
+        ).id
+        if new_credential is not None:
+            # Committed before validation, which reads it on its own sessions.
+            credential_id = create_credential(
+                credential_data=new_credential, user=user, db_session=db_session
+            ).id
+            new_credential_id = credential_id
+        elif request.credential_id is not None:
+            credential_id = request.credential_id
+        else:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, EXACTLY_ONE_CREDENTIAL)
+
+        validate_ccpair_for_user(
+            connector_id, credential_id, request.pairing.access_type, db_session
+        )
+        response = add_credential_to_connector(
+            db_session=db_session,
+            user=user,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            cc_pair_name=request.pairing.name,
+            access_type=request.pairing.access_type,
+            auto_sync_options=request.pairing.auto_sync_options,
+            manage_access=manage_access,
+            data_access_group_ids=request.pairing.data_access,
+            processing_mode=request.pairing.processing_mode,
+        )
+        if not response.success:
+            raise OnyxError(OnyxErrorCode.CONFLICT, response.message)
+    except ValidationError as e:
+        # The base class: a transient source failure raises the unexpected
+        # variant, and it must free the name the same way.
+        _discard_unpaired_creation(db_session, connector_id, new_credential_id)
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
+            "Connector validation error: " + str(e),
+        )
+    except ValueError as e:
+        _discard_unpaired_creation(db_session, connector_id, new_credential_id)
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+    except OnyxError:
+        _discard_unpaired_creation(db_session, connector_id, new_credential_id)
+        raise
+
+    maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
+    client_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_INDEXING,
+        priority=OnyxCeleryPriority.HIGH,
+        kwargs={"tenant_id": tenant_id},
+    )
+    mt_cloud_telemetry(
+        tenant_id=tenant_id,
+        distinct_id=str(user.id),
+        event=MilestoneRecordType.CREATED_CONNECTOR,
+    )
+    actor = actor_from_user(user)
+    emit_audit_event(
+        AuditAction.CONNECTOR_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=actor,
+        resource_type="connector",
+        resource_id=connector_id,
+        extra={"source": connector_data.source.value},
+    )
+    if new_credential_id is not None:
+        emit_audit_event(
+            AuditAction.CREDENTIAL_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor,
+            resource_type="credential",
+            resource_id=new_credential_id,
+            extra={"source": connector_data.source.value},
+        )
+    emit_audit_event(
+        AuditAction.CC_PAIR_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=actor,
+        resource_type="cc_pair",
+        resource_id=response.data,
+        extra={"connector_id": connector_id, "credential_id": credential_id},
+    )
+    return response
 
 
 def _discard_unpaired_creation(

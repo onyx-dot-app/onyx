@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.auth.sealed import seal_draft_credential
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import CredentialBindingFieldErrorKind
 from onyx.db.models import Credential, User
@@ -16,7 +17,9 @@ from onyx.server.documents.credential_capabilities import (
     CredentialBindingCheckRequest,
     CredentialBindingCheckResponse,
     CredentialBindingRejectionCode,
+    DraftCredentialBindingCheckRequest,
     check_credential_binding,
+    check_draft_credential_binding,
 )
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
@@ -178,3 +181,35 @@ def test_source_without_a_connector_is_rejected(
     finally:
         db_session.delete(credential)
         db_session.commit()
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_draft_credential_is_checked_on_its_own_values(
+    users: tuple[User, User],
+) -> None:
+    admin, other = users
+    draft = seal_draft_credential(
+        {"confluence_access_token": "fake_token", "wiki_base": _AUTHORIZED_SITE},
+        user_id=admin.id,
+        source=DocumentSource.CONFLUENCE,
+    )
+
+    def check(user: User, site: str) -> CredentialBindingCheckResponse:
+        return check_draft_credential_binding(
+            DraftCredentialBindingCheckRequest(
+                source=DocumentSource.CONFLUENCE,
+                connector_specific_config={"wiki_base": site, "is_cloud": True},
+                draft_credential=draft,
+            ),
+            user=user,
+        )
+
+    assert check(admin, _AUTHORIZED_SITE) == CredentialBindingCheckResponse(
+        field_errors={}, rejection=None
+    )
+    rejected = check(admin, "https://other.atlassian.net/wiki")
+    assert rejected.rejection is not None
+    assert rejected.rejection.code == CredentialBindingRejectionCode.BINDING_REJECTED
+    with pytest.raises(OnyxError) as error:
+        check(other, _AUTHORIZED_SITE)
+    assert error.value.error_code == OnyxErrorCode.INVALID_INPUT

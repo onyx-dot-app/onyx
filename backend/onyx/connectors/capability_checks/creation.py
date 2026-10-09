@@ -25,6 +25,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     CachedDraftResult,
     DraftCheckStateKind,
     cached_check_result,
+    credential_cache_identity,
     draft_result_cache_key,
     get_cached_draft_result,
 )
@@ -85,8 +86,7 @@ def _cached_draft_results(
     for check in checks:
         cached = get_cached_draft_result(
             draft_result_cache_key(
-                credential_id=credential.id,
-                credential_updated_at=credential.time_updated,
+                credential_identity=credential_cache_identity(credential),
                 source=source,
                 access_type=access_type,
                 check=check,

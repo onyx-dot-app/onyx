@@ -8,8 +8,10 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.orm import Session
 
+from onyx.auth.sealed import seal_draft_credential
 from onyx.background.celery.tasks.capability_checks import (
     tasks as capability_check_tasks,
 )
@@ -39,6 +41,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import capability_check_runs
 from onyx.server.documents.credential_capabilities import (
     DraftCheckRunRequest,
+    cancel_draft_check_run,
     get_draft_check_run,
     start_draft_check_run,
 )
@@ -167,6 +170,26 @@ def _start(
             draft_key=draft_key,
             form_state=form_state,
             rerun=rerun,
+        ),
+        user=user,
+        db_session=db_session,
+    )
+
+
+def _start_draft(
+    db_session: Session,
+    user: User,
+    draft_credential: str,
+    form_state: dict[str, Any],
+    draft_key: str,
+) -> DraftCheckRunSnapshot:
+    return start_draft_check_run(
+        DraftCheckRunRequest(
+            source=DocumentSource.SLACK,
+            draft_credential=draft_credential,
+            access_type=AccessType.PUBLIC,
+            draft_key=draft_key,
+            form_state=form_state,
         ),
         user=user,
         db_session=db_session,
@@ -335,6 +358,169 @@ def test_newer_run_supersedes_the_older_one_mid_run(
     # The task stopped before the check after the supersede.
     assert harness.runs == [_TOKEN]
     assert _states(snapshot)[_CHANNELS] == DraftCheckStateKind.PENDING
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_cancel_stops_the_run_before_its_next_check(
+    db_session: Session,
+    harness: _Harness,
+    users: tuple[User, User],
+    slack_credential: Credential,
+) -> None:
+    admin, _ = users
+    started = _start(
+        db_session, admin, slack_credential, {"channels": ["a"]}, uuid4().hex
+    )
+    harness.on_token_run = lambda: cancel_draft_check_run(started.run_id, user=admin)
+
+    harness.run_last_task()
+
+    snapshot = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
+    assert snapshot.status == DraftRunStatus.SUPERSEDED
+    # The running check finished; the next one never started.
+    assert harness.runs == [_TOKEN]
+    assert _states(snapshot)[_CHANNELS] == DraftCheckStateKind.PENDING
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_only_the_starting_user_cancels_the_run(
+    db_session: Session,
+    harness: _Harness,
+    users: tuple[User, User],
+    slack_credential: Credential,
+) -> None:
+    admin, other = users
+    started = _start(db_session, admin, slack_credential, {}, uuid4().hex)
+
+    with pytest.raises(OnyxError) as error:
+        cancel_draft_check_run(started.run_id, user=other)
+
+    assert error.value.error_code == OnyxErrorCode.NOT_FOUND
+    snapshot = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
+    assert snapshot.status == DraftRunStatus.RUNNING
+    harness.send_task.assert_called_once()
+
+
+@pytest.mark.usefixtures("tenant_context", "harness")
+def test_cancelling_a_replaced_run_leaves_the_newer_one_running(
+    db_session: Session,
+    users: tuple[User, User],
+    slack_credential: Credential,
+) -> None:
+    admin, _ = users
+    draft_key = uuid4().hex
+    first = _start(db_session, admin, slack_credential, {}, draft_key)
+    second = _start(db_session, admin, slack_credential, {"channels": ["b"]}, draft_key)
+
+    cancel_draft_check_run(first.run_id, user=admin)
+
+    snapshot = get_draft_check_run(second.run_id, user=admin, db_session=db_session)
+    assert snapshot.status == DraftRunStatus.RUNNING
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_draft_credential_runs_its_checks_without_a_saved_row(
+    db_session: Session,
+    harness: _Harness,
+    users: tuple[User, User],
+) -> None:
+    admin, _ = users
+    draft = seal_draft_credential(
+        {"slack_bot_token": "xoxb-draft-secret"},
+        user_id=admin.id,
+        source=DocumentSource.SLACK,
+    )
+
+    started = _start_draft(db_session, admin, draft, {}, uuid4().hex)
+
+    assert started.credential_id is None
+    # The broker only ever sees the sealed form.
+    task_kwargs = harness.send_task.call_args.kwargs["kwargs"]
+    assert task_kwargs["draft_credential"] == draft
+    assert "xoxb-draft-secret" not in str(task_kwargs)
+    harness.run_last_task()
+    done = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
+    assert done.status == DraftRunStatus.COMPLETED
+    assert _states(done)[_TOKEN] == DraftCheckStateKind.PASSED
+    assert harness.runs == [_TOKEN]
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_typed_values_run_their_checks_sealed_for_the_worker(
+    db_session: Session,
+    harness: _Harness,
+    users: tuple[User, User],
+) -> None:
+    admin, _ = users
+
+    started = start_draft_check_run(
+        DraftCheckRunRequest(
+            source=DocumentSource.SLACK,
+            credential_json={"slack_bot_token": "xoxb-typed-secret"},
+            access_type=AccessType.PUBLIC,
+            draft_key=uuid4().hex,
+            form_state={},
+        ),
+        user=admin,
+        db_session=db_session,
+    )
+
+    assert started.credential_id is None
+    # The server sealed the typed values; the broker never sees them.
+    task_kwargs = harness.send_task.call_args.kwargs["kwargs"]
+    assert task_kwargs["draft_credential"]
+    assert "xoxb-typed-secret" not in str(task_kwargs)
+    harness.run_last_task()
+    done = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
+    assert done.status == DraftRunStatus.COMPLETED
+
+
+@pytest.mark.usefixtures("tenant_context", "harness")
+def test_another_users_draft_credential_is_rejected(
+    db_session: Session,
+    users: tuple[User, User],
+) -> None:
+    admin, other = users
+    draft = seal_draft_credential(
+        {"slack_bot_token": "x"}, user_id=admin.id, source=DocumentSource.SLACK
+    )
+
+    with pytest.raises(OnyxError) as error:
+        _start_draft(db_session, other, draft, {}, uuid4().hex)
+
+    assert error.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+@pytest.mark.usefixtures("tenant_context", "harness")
+def test_a_draft_credential_of_another_source_is_rejected(
+    db_session: Session,
+    users: tuple[User, User],
+) -> None:
+    admin, _ = users
+    draft = seal_draft_credential({}, user_id=admin.id, source=DocumentSource.WEB)
+
+    with pytest.raises(OnyxError) as error:
+        _start_draft(db_session, admin, draft, {}, uuid4().hex)
+
+    assert error.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+@pytest.mark.parametrize(
+    "credential_fields",
+    [
+        {},
+        {"credential_id": 1, "draft_credential": "sealed"},
+        {"credential_id": 1, "credential_json": {}},
+    ],
+)
+def test_a_run_needs_exactly_one_credential(credential_fields: dict[str, Any]) -> None:
+    with pytest.raises(PydanticValidationError):
+        DraftCheckRunRequest(
+            source=DocumentSource.SLACK,
+            draft_key="key",
+            form_state={},
+            **credential_fields,
+        )
 
 
 @pytest.mark.usefixtures("tenant_context")

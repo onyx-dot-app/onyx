@@ -12,10 +12,11 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
+from onyx.auth.sealed import DraftCredential
 from onyx.configs.constants import (
     DocumentSource,
 )
@@ -62,9 +63,15 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.capability_check_runs import (
     CapabilityRunEnqueueError,
+    cancel_draft_capability_check_run,
     plan_draft_capability_checks,
     start_capability_check_run,
     start_draft_capability_check_run,
+)
+from onyx.server.documents.draft_credentials import (
+    EXACTLY_ONE_CREDENTIAL,
+    names_exactly_one_credential,
+    resolve_draft_credential,
 )
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
@@ -430,6 +437,55 @@ def check_credential_binding(
     credential = _fetch_credential_usable_for_source(
         credential_id, request.source, user, db_session
     )
+    return _check_binding(request, credential)
+
+
+class DraftCredentialBindingCheckRequest(CredentialBindingCheckRequest):
+    # Exactly one: typed values, or a sealed OAuth draft.
+    credential_json: dict[str, Any] | None = None
+    draft_credential: str | None = None
+
+    @model_validator(mode="after")
+    def _one_credential(self) -> "DraftCredentialBindingCheckRequest":
+        if (self.credential_json is None) == (self.draft_credential is None):
+            raise ValueError(
+                "Give exactly one of credential_json and draft_credential."
+            )
+        return self
+
+
+@router.post("/admin/draft-credential/binding-check")
+def check_draft_credential_binding(
+    request: DraftCredentialBindingCheckRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+) -> CredentialBindingCheckResponse:
+    """``check_credential_binding`` for a new credential, which has no id."""
+    if request.source not in CONNECTOR_CLASS_MAP:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{request.source.value} has no connector configuration.",
+        )
+    resolved = resolve_draft_credential(
+        credential_json=request.credential_json,
+        draft_credential=request.draft_credential,
+        source=request.source,
+        user=user,
+    )
+    if resolved is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Give exactly one of credential_json and draft_credential.",
+        )
+    draft, _ = resolved
+    return _check_binding(request, draft)
+
+
+def _check_binding(
+    request: CredentialBindingCheckRequest,
+    credential: Credential | DraftCredential,
+) -> CredentialBindingCheckResponse:
     field_errors = credential_binding_field_errors(
         request.source, request.connector_specific_config
     )
@@ -494,7 +550,11 @@ class DraftCheckRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: DocumentSource
-    credential_id: int
+    # Exactly one: a saved credential, typed values, or a sealed OAuth draft
+    # (see onyx/server/documents/draft_credentials.py).
+    credential_id: int | None = None
+    credential_json: dict[str, Any] | None = None
+    draft_credential: str | None = None
     access_type: AccessType | None = None
     # Client-chosen id of one form session. A new run for the same key
     # supersedes the earlier one.
@@ -503,6 +563,14 @@ class DraftCheckRunRequest(BaseModel):
     # Cached results to ignore. The client sends FAILED when the admin asks to
     # create, so a fix made at the source is seen, and ALL to re-run every check.
     rerun: DraftRerunMode = DraftRerunMode.NONE
+
+    @model_validator(mode="after")
+    def _one_credential(self) -> "DraftCheckRunRequest":
+        if not names_exactly_one_credential(
+            self.credential_id, self.credential_json, self.draft_credential
+        ):
+            raise ValueError(EXACTLY_ONE_CREDENTIAL)
+        return self
 
 
 @router.post("/admin/connector-checks/runs")
@@ -525,13 +593,27 @@ def start_draft_check_run(
             OnyxErrorCode.INVALID_INPUT,
             f"{request.source.value} has no connector configuration.",
         )
-    credential = _fetch_credential_usable_for_source(
-        request.credential_id, request.source, user, db_session
+    credential: Credential | DraftCredential
+    sealed: str | None = None
+    resolved = resolve_draft_credential(
+        credential_json=request.credential_json,
+        draft_credential=request.draft_credential,
+        source=request.source,
+        user=user,
     )
+    if resolved is not None:
+        credential, sealed = resolved
+    elif request.credential_id is not None:
+        credential = _fetch_credential_usable_for_source(
+            request.credential_id, request.source, user, db_session
+        )
+    else:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, EXACTLY_ONE_CREDENTIAL)
     try:
         return start_draft_capability_check_run(
             user_id=user.id,
             credential=credential,
+            sealed_draft_credential=sealed,
             source=request.source,
             config_class=mapping.config_class,
             access_type=request.access_type,
@@ -546,6 +628,22 @@ def start_draft_check_run(
         ) from e
 
 
+@router.post("/admin/connector-checks/runs/{run_id}/cancel")
+def cancel_draft_check_run(
+    run_id: UUID,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+) -> None:
+    """Stops a draft run, e.g. when the form drops the credential it ran with.
+    Only the user who started the run may stop it."""
+    if not cancel_draft_capability_check_run(run_id=run_id, user_id=user.id):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Capability check run {run_id} does not exist or has expired.",
+        )
+
+
 @router.get("/admin/connector-checks/runs/{run_id}")
 def get_draft_check_run(
     run_id: UUID,
@@ -555,12 +653,13 @@ def get_draft_check_run(
     db_session: Session = Depends(get_session),
 ) -> DraftCheckRunSnapshot:
     """Returns a draft run's per-check progress. Only the user who started the
-    run may read it, and only while they can still see its credential."""
+    run may read it, and only while they can still see its credential. A run on
+    a draft credential has no saved credential to see: its starter made it."""
     snapshot = read_draft_run_for_user(run_id, user.id)
     # GATE 2 again: the check messages come from the credential.
-    if (
-        snapshot is None
-        or fetch_credential_by_id_for_user(snapshot.credential_id, user, db_session)
+    if snapshot is None or (
+        snapshot.credential_id is not None
+        and fetch_credential_by_id_for_user(snapshot.credential_id, user, db_session)
         is None
     ):
         raise OnyxError(
