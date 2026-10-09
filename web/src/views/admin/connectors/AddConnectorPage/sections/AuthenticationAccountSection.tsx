@@ -9,6 +9,7 @@ import {
   InputTypeIn,
   SelectCard,
   Tabs,
+  Text,
 } from "@opal/components";
 import {
   Content,
@@ -19,7 +20,7 @@ import {
 } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { SvgListTree, SvgPlusCircle } from "@opal/icons";
+import { SvgChevronDown, SvgChevronUp, SvgPlusCircle } from "@opal/icons";
 import type { Credential, DraftCredential } from "@/lib/credentials/types";
 import {
   useCredentialCheckReports,
@@ -110,7 +111,9 @@ export default function AuthenticationAccountSection({
     isAuthorizing,
   } = useCredentialSetup(connector);
   const checkReports = useCredentialCheckReports(connector);
-  const [showSavedAccounts, setShowSavedAccounts] = useState<boolean>(true);
+  // Opens the saved accounts. Folding also closes the new-account card,
+  // which stays on the page.
+  const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
 
   // The create card's one label, whatever the number of routes; the tabs
   // inside it name the routes.
@@ -267,6 +270,15 @@ export default function AuthenticationAccountSection({
     methods[0] ??
     CredentialCreationMethod.Manual;
 
+  // With no saved account to pick, the new-account card starts open. With
+  // saved accounts, it starts closed, so the user picks one first.
+  const startedRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (startedRef.current || credentials === undefined) return;
+    startedRef.current = true;
+    if (credentials.length === 0) selectMethod(defaultMethod);
+  }, [credentials, defaultMethod, selectMethod]);
+
   /**
    * The routes in tab order. Typing a token in leads, because it is the
    * route every source shares and the one the card opens on;
@@ -297,18 +309,27 @@ export default function AuthenticationAccountSection({
         variant="section"
         padding={0}
         rightChildren={
-          <Button
-            icon={SvgListTree}
-            prominence="internal"
-            // Held in its hover look while the list is open.
-            interaction={showSavedAccounts ? "hover" : "rest"}
-            aria-expanded={showSavedAccounts}
-            onClick={() => setShowSavedAccounts((shown) => !shown)}
-          >
-            {t("add.savedAccountsButton.label", {
-              count: credentials?.length ?? 0,
-            })}
-          </Button>
+          <Section flexDirection="row" alignItems="center" gap={0} width="fit">
+            <Text font="main-ui-body" color="text-03">
+              {t("add.savedAccounts.label", {
+                count: credentials?.length ?? 0,
+              })}
+            </Text>
+            <Button
+              icon={accountsExpanded ? SvgChevronUp : SvgChevronDown}
+              prominence="tertiary"
+              aria-label={
+                accountsExpanded
+                  ? t("add.savedAccounts.collapseButton.ariaLabel")
+                  : t("add.savedAccounts.expandButton.ariaLabel")
+              }
+              aria-expanded={accountsExpanded}
+              onClick={() => {
+                if (accountsExpanded) close();
+                setAccountsExpanded(!accountsExpanded);
+              }}
+            />
+          </Section>
         }
       />
 
@@ -321,7 +342,7 @@ export default function AuthenticationAccountSection({
             {/* Hidden accounts animate away, then leave the page. The fold
             holds the cards' gap, so a closed one leaves no space behind. A
             div, as Section's own padding would override the bottom one. */}
-            <Fold open={showSavedAccounts && credentials.length > 0}>
+            <Fold open={accountsExpanded && credentials.length > 0}>
               <div className="flex flex-col gap-2 pb-2">
                 {credentials.map((credential) => (
                   <AuthenticationAccountCard

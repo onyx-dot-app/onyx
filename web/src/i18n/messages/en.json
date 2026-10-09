@@ -2689,8 +2689,14 @@
         "retryButton": {
           "label": "Retry"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}",
+          "expandButton": {
+            "ariaLabel": "Show saved accounts"
+          },
+          "collapseButton": {
+            "ariaLabel": "Hide saved accounts"
+          }
         },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"

@@ -2689,8 +2689,14 @@
         "retryButton": {
           "label": "إعادة المحاولة"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}",
+          "expandButton": {
+            "ariaLabel": "إظهار الحسابات المحفوظة"
+          },
+          "collapseButton": {
+            "ariaLabel": "إخفاء الحسابات المحفوظة"
+          }
         },
         "timeout": {
           "toast": "انتهت مهلة العملية بعد {seconds} ثانية. هل تتحقق من إعداداتك بحثًا عن أخطاء؟"

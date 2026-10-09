@@ -2689,8 +2689,14 @@
         "retryButton": {
           "label": "Reintentar"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}",
+          "expandButton": {
+            "ariaLabel": "Mostrar cuentas guardadas"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar cuentas guardadas"
+          }
         },
         "timeout": {
           "toast": "La operación agotó el tiempo de espera tras {seconds} segundos. ¿Quieres revisar tu configuración por si hay errores?"

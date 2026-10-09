@@ -2689,8 +2689,14 @@
         "retryButton": {
           "label": "再試行"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}",
+          "expandButton": {
+            "ariaLabel": "保存済みアカウントを表示"
+          },
+          "collapseButton": {
+            "ariaLabel": "保存済みアカウントを非表示"
+          }
         },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"
