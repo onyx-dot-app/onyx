@@ -54,7 +54,6 @@ import {
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import { isEmptyField } from "@/lib/connectors/bindingGate";
 import { credentialBoundFieldNames } from "@/lib/connectors/utils";
 import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage/components/AuthenticationAccountCard";
 import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
@@ -135,32 +134,8 @@ export default function AuthenticationAccountSection({
     accountRealmFields.map(([key]) => key)
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { values, setFieldError, setFieldTouched } =
-    useFormikContext<Record<string, unknown>>();
+  const { values } = useFormikContext<Record<string, unknown>>();
 
-  /** Clears the new account's errors and touched marks; its values stay. */
-  function clearNewAccountErrors() {
-    const accountValues: Record<string, unknown> = newAccountValues ?? {};
-    // A field with a value keeps its error; only an empty one clears.
-    for (const key of Object.keys(accountValues)) {
-      if (!isEmptyField(accountValues, key)) continue;
-      const path = `${NEW_ACCOUNT_FIELD}.${key}`;
-      void setFieldTouched(path, false, false);
-      setFieldError(path, undefined);
-    }
-  }
-
-  // The new account's errors clear when a saved account is picked, and when
-  // the new-account card closes. Only those changes clear them, not each
-  // change to the errors.
-  const pickedId: number | null = currentCredential?.id ?? null;
-  useEffect(() => {
-    if (pickedId !== null) clearNewAccountErrors();
-  }, [pickedId]);
-  const newAccountOpen: boolean = openMethod !== null;
-  useEffect(() => {
-    if (!newAccountOpen) clearNewAccountErrors();
-  }, [newAccountOpen]);
   const newAccountValues: NewAccountValues | undefined = getIn(
     values,
     NEW_ACCOUNT_FIELD
