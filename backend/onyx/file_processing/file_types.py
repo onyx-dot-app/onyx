@@ -1,3 +1,6 @@
+import mimetypes
+import os
+
 PRESENTATION_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 )
@@ -5,17 +8,38 @@ PRESENTATION_MIME_TYPE = (
 SPREADSHEET_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+# Macro-enabled Excel workbooks (.xlsm) — parseable by openpyxl just like xlsx.
+# Stored lowercase; chat MIME classification normalizes to lowercase before
+# membership checks.
+SPREADSHEET_MACRO_MIME_TYPE = "application/vnd.ms-excel.sheet.macroenabled.12"
+SPREADSHEET_MIME_TYPES = {SPREADSHEET_MIME_TYPE, SPREADSHEET_MACRO_MIME_TYPE}
 WORD_PROCESSING_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
 PDF_MIME_TYPE = "application/pdf"
 PLAIN_TEXT_MIME_TYPE = "text/plain"
 
+# Server images lack /etc/mime.types, so mimetypes cannot resolve Office files.
+_OFFICE_MIME_TYPES_BY_EXTENSION: dict[str, str] = {
+    ".xlsx": SPREADSHEET_MIME_TYPE,
+    ".xlsm": SPREADSHEET_MACRO_MIME_TYPE,
+    ".docx": WORD_PROCESSING_MIME_TYPE,
+    ".pptx": PRESENTATION_MIME_TYPE,
+}
+
+
+def guess_mime_type(filename: str) -> str | None:
+    extension = os.path.splitext(filename)[1].lower()
+    return (
+        _OFFICE_MIME_TYPES_BY_EXTENSION.get(extension)
+        or mimetypes.guess_type(filename)[0]
+    )
+
 
 class OnyxMimeTypes:
     IMAGE_MIME_TYPES = {"image/jpg", "image/jpeg", "image/png", "image/webp"}
     CSV_MIME_TYPES = {"text/csv"}
-    TABULAR_MIME_TYPES = CSV_MIME_TYPES | {SPREADSHEET_MIME_TYPE}
+    TABULAR_MIME_TYPES = CSV_MIME_TYPES | SPREADSHEET_MIME_TYPES
     TEXT_MIME_TYPES = {
         PLAIN_TEXT_MIME_TYPE,
         "text/markdown",

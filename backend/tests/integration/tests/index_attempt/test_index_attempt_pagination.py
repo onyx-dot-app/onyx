@@ -100,8 +100,7 @@ def test_index_attempt_pagination(reset: None) -> None:  # noqa: ARG001
         base_time=base_time,
     )
 
-    for attempt in generated_attempts:
-        all_attempt_ids.append(attempt.id)
+    all_attempt_ids.extend(attempt.id for attempt in generated_attempts)
 
     # Verify basic pagination with different page sizes
     print("Verifying basic pagination with page size 5")

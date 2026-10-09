@@ -10,14 +10,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import Any
-from typing import Generic
-from typing import NoReturn
-from typing import TypeVar
+from typing import Any, Generic, NoReturn, TypeVar
 from unittest.mock import MagicMock
 
-from onyx.utils.encryption import mask_credential_dict
-from onyx.utils.encryption import mask_string
+from onyx.utils.encryption import mask_credential_dict, mask_string
 
 T = TypeVar("T", str, dict[str, Any])
 

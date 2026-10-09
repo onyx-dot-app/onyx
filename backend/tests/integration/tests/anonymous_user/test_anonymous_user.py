@@ -2,8 +2,7 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestSettings
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestSettings, DATestUser
 
 
 def test_me_endpoint_returns_anonymous_user_when_enabled(
@@ -23,7 +22,7 @@ def test_me_endpoint_returns_anonymous_user_when_enabled(
     data = response.json()
     assert data["is_anonymous_user"] is True
     assert data["email"] == "anonymous@onyx.app"
-    assert data["role"] == "limited"
+    assert data["account_type"] == "ANONYMOUS"
 
 
 def test_me_endpoint_returns_403_when_anonymous_disabled(
@@ -58,7 +57,7 @@ def test_me_endpoint_returns_authenticated_user_info(
     data = response.json()
     assert data.get("is_anonymous_user") is not True
     assert data["email"] == admin_user.email
-    assert data["role"] == "admin"
+    assert "admin" in data["effective_permissions"]
 
 
 def test_anonymous_user_can_access_persona_when_enabled(
@@ -106,7 +105,7 @@ def test_anonymous_user_reads_settings_when_enabled(
     reset: None,  # noqa: ARG001
 ) -> None:
     """Anonymous users must be able to read /settings so admin-controlled
-    preferences (e.g. disable_default_assistant / "Always Start with an Agent")
+    preferences (e.g. disable_default_assistant / "Disable Default Chat")
     actually take effect for them instead of silently falling back to FE
     defaults."""
     admin_user: DATestUser = UserManager.create(name="admin_user")

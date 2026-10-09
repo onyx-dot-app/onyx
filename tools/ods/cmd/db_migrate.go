@@ -58,7 +58,9 @@ Examples:
 			if len(args) > 0 {
 				revision = args[0]
 			}
-			runDBUpgrade(revision, opts)
+			if err := runDBUpgrade(revision, opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -67,10 +69,10 @@ Examples:
 	return cmd
 }
 
-func runDBUpgrade(revision string, opts *MigrateOptions) {
+func runDBUpgrade(revision string, opts *MigrateOptions) error {
 	schema, valid := getAlembicSchema(opts.Schema)
 	if !valid {
-		log.Fatalf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+		return fatalErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
 	}
 
 	log.Infof("Upgrading database to revision: %s", revision)
@@ -79,10 +81,11 @@ func runDBUpgrade(revision string, opts *MigrateOptions) {
 	}
 
 	if err := alembic.Upgrade(revision, schema); err != nil {
-		log.Fatalf("Failed to upgrade database: %v", err)
+		return fatalErrorf("Failed to upgrade database: %w", err)
 	}
 
 	log.Info("Upgrade completed successfully")
+	return nil
 }
 
 // NewDBDowngradeCommand creates the db downgrade command.
@@ -102,7 +105,9 @@ Examples:
   ods db downgrade --schema private # Downgrade private schema`,
 		Args: cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			runDBDowngrade(args[0], opts)
+			if err := runDBDowngrade(args[0], opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -111,10 +116,10 @@ Examples:
 	return cmd
 }
 
-func runDBDowngrade(revision string, opts *MigrateOptions) {
+func runDBDowngrade(revision string, opts *MigrateOptions) error {
 	schema, valid := getAlembicSchema(opts.Schema)
 	if !valid {
-		log.Fatalf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+		return fatalErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
 	}
 
 	log.Infof("Downgrading database to revision: %s", revision)
@@ -123,10 +128,11 @@ func runDBDowngrade(revision string, opts *MigrateOptions) {
 	}
 
 	if err := alembic.Downgrade(revision, schema); err != nil {
-		log.Fatalf("Failed to downgrade database: %v", err)
+		return fatalErrorf("Failed to downgrade database: %w", err)
 	}
 
 	log.Info("Downgrade completed successfully")
+	return nil
 }
 
 // NewDBCurrentCommand creates the db current command.
@@ -142,7 +148,9 @@ Examples:
   ods db current
   ods db current --schema private`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runDBCurrent(opts)
+			if err := runDBCurrent(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -151,10 +159,10 @@ Examples:
 	return cmd
 }
 
-func runDBCurrent(opts *MigrateOptions) {
+func runDBCurrent(opts *MigrateOptions) error {
 	schema, valid := getAlembicSchema(opts.Schema)
 	if !valid {
-		log.Fatalf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+		return fatalErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
 	}
 
 	if schema == alembic.SchemaPrivate {
@@ -162,8 +170,9 @@ func runDBCurrent(opts *MigrateOptions) {
 	}
 
 	if err := alembic.Current(schema); err != nil {
-		log.Fatalf("Failed to get current revision: %v", err)
+		return fatalErrorf("Failed to get current revision: %w", err)
 	}
+	return nil
 }
 
 // HistoryOptions holds options for the history command.
@@ -186,7 +195,9 @@ Examples:
   ods db history --verbose
   ods db history --schema private`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runDBHistory(opts)
+			if err := runDBHistory(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -196,10 +207,10 @@ Examples:
 	return cmd
 }
 
-func runDBHistory(opts *HistoryOptions) {
+func runDBHistory(opts *HistoryOptions) error {
 	schema, valid := getAlembicSchema(opts.Schema)
 	if !valid {
-		log.Fatalf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+		return fatalErrorf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
 	}
 
 	if schema == alembic.SchemaPrivate {
@@ -207,6 +218,7 @@ func runDBHistory(opts *HistoryOptions) {
 	}
 
 	if err := alembic.History(schema, opts.Verbose); err != nil {
-		log.Fatalf("Failed to get migration history: %v", err)
+		return fatalErrorf("Failed to get migration history: %w", err)
 	}
+	return nil
 }

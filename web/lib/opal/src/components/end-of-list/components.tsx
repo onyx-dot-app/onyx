@@ -11,11 +11,11 @@ interface EndOfListProps {
 function EndOfList({ title }: EndOfListProps) {
   return (
     <div className="opal-end-of-list">
-      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-      <Text font="secondary-body" color="text-03" nowrap>
+      <Divider paddingParallel={0} paddingPerpendicular={0} />
+      <Text font="secondary-body" color="text-03" wordWrap="whitespace-nowrap">
         {title}
       </Text>
-      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+      <Divider paddingParallel={0} paddingPerpendicular={0} />
     </div>
   );
 }

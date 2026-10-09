@@ -25,18 +25,35 @@ type PortSpec struct {
 	AppFormat     string // format string for AppVar value (empty = "%d")
 }
 
+// AppValue formats a host port the way .vscode/.env expects it.
+func (s PortSpec) AppValue(port int) string {
+	if s.AppFormat == "" {
+		return strconv.Itoa(port)
+	}
+	return fmt.Sprintf(s.AppFormat, port)
+}
+
 // ServiceSpec describes an infrastructure service managed by Docker Compose.
 type ServiceSpec struct {
 	Name  string // docker compose service name (e.g., "relational_db")
 	Ports []PortSpec
 }
 
+var (
+	RelationalDB = ServiceSpec{Name: "relational_db", Ports: []PortSpec{
+		{ContainerPort: 5432, DefaultHost: 5432, ComposeVar: "POSTGRES_HOST_PORT", AppVar: "POSTGRES_PORT"},
+	}}
+	// The only file store in dev. `ods object-store migrate` moves a checkout's
+	// old MinIO files across once; the dev stack itself never starts MinIO.
+	ObjectStore = ServiceSpec{Name: "object-store", Ports: []PortSpec{
+		{ContainerPort: 8333, DefaultHost: 9004, ComposeVar: "OBJECT_STORE_HOST_PORT", AppVar: "S3_ENDPOINT_URL", AppFormat: "http://localhost:%d"},
+	}}
+)
+
 // InfraServices is the single source of truth for infrastructure dependencies.
 // compose, env, and port discovery all derive from this list.
 var InfraServices = []ServiceSpec{
-	{Name: "relational_db", Ports: []PortSpec{
-		{ContainerPort: 5432, DefaultHost: 5432, ComposeVar: "POSTGRES_HOST_PORT", AppVar: "POSTGRES_PORT"},
-	}},
+	RelationalDB,
 	{Name: "cache", Ports: []PortSpec{
 		{ContainerPort: 6379, DefaultHost: 6379, ComposeVar: "REDIS_HOST_PORT", AppVar: "REDIS_PORT"},
 	}},
@@ -46,14 +63,16 @@ var InfraServices = []ServiceSpec{
 	{Name: "inference_model_server", Ports: []PortSpec{
 		{ContainerPort: 9000, DefaultHost: 9000, ComposeVar: "MODEL_SERVER_HOST_PORT", AppVar: "MODEL_SERVER_PORT"},
 	}},
-	{Name: "minio", Ports: []PortSpec{
-		{ContainerPort: 9000, DefaultHost: 9004, ComposeVar: "MINIO_API_HOST_PORT", AppVar: "S3_ENDPOINT_URL", AppFormat: "http://localhost:%d"},
-		{ContainerPort: 9001, DefaultHost: 9005, ComposeVar: "MINIO_CONSOLE_HOST_PORT"},
-	}},
+	ObjectStore,
 	{Name: "indexing_model_server", Ports: []PortSpec{}},
 	{Name: "code-interpreter", Ports: []PortSpec{
 		{ContainerPort: 8000, DefaultHost: 8000, ComposeVar: "CODE_INTERPRETER_HOST_PORT", AppVar: "CODE_INTERPRETER_BASE_URL", AppFormat: "http://localhost:%d"},
 	}},
+}
+
+// ContainerName is the Docker Compose name of a service's container.
+func ContainerName(project, service string) string {
+	return fmt.Sprintf("%s-%s-1", project, service)
 }
 
 // InfraServiceNames returns the Docker Compose service names for all
@@ -101,11 +120,7 @@ func (r *ResolvedPorts) AppEnv() map[string]string {
 		if spec.AppVar == "" {
 			continue
 		}
-		format := spec.AppFormat
-		if format == "" {
-			format = "%d"
-		}
-		env[spec.AppVar] = fmt.Sprintf(format, r.ports[i])
+		env[spec.AppVar] = spec.AppValue(r.ports[i])
 	}
 	return env
 }
@@ -152,17 +167,17 @@ func normalizeProjectName(name string) string {
 
 // FindAvailablePorts resolves host ports for each port spec in InfraServices.
 // For each port it first checks whether the project's container is already
-// running with a mapped host port (via ``docker port``) and reuses it. Only
+// running with a mapped host port (via `docker port`) and reuses it. Only
 // when the container is not running does it probe for a free port. A global
 // claimed set prevents cross-service collisions (e.g., inference_model_server
-// and minio both defaulting near port 9000).
+// and object-store both defaulting near port 9000).
 func FindAvailablePorts() (*ResolvedPorts, error) {
 	resolved := NewResolvedPorts()
 	claimed := make(map[int]bool)
 	projName := ProjectName()
 
 	for _, svc := range InfraServices {
-		container := fmt.Sprintf("%s-%s-1", projName, svc.Name)
+		container := ContainerName(projName, svc.Name)
 		for _, spec := range svc.Ports {
 			if hp, err := GetHostPort(container, spec.ContainerPort); err == nil {
 				claimed[hp] = true

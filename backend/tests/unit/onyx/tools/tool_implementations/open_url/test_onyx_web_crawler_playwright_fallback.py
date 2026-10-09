@@ -8,12 +8,13 @@ one-shot headless render and re-parse.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import onyx.tools.tool_implementations.open_url.onyx_web_crawler as crawler_module
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import FailureReason
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    FailureReason,
+    OnyxWebCrawler,
+)
 from onyx.utils.playwright_fetch import RenderedPage
 
 SUCCESS_HTML = "<html><head><title>Real Page</title></head><body><p>Hello world, this is real content from the page after rendering.</p></body></html>"
@@ -42,6 +43,7 @@ def _mock_response(
     merged_headers = {"Content-Type": content_type, **(headers or {})}
     resp.headers = merged_headers
     resp.content = content
+    resp.raw.read1.side_effect = [content, b""]
     resp.apparent_encoding = None
     resp.encoding = None
     return resp

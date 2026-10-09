@@ -6,9 +6,7 @@ UniqueViolation errors, which would occur if the upsert logic
 isn't properly implemented.
 """
 
-from concurrent.futures import as_completed
-from concurrent.futures import Future
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Union
 from uuid import uuid4
 
@@ -17,10 +15,8 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import Document
-from onyx.db.models import Tag
-from onyx.db.tag import create_or_add_document_tag
-from onyx.db.tag import create_or_add_document_tag_list
+from onyx.db.models import Document, Tag
+from onyx.db.tag import create_or_add_document_tag, create_or_add_document_tag_list
 
 
 def _create_test_document(db_session: Session, doc_id: str) -> Document:
@@ -253,11 +249,12 @@ class TestTagRaceCondition:
 
         # Run both types of operations concurrently
         with ThreadPoolExecutor(max_workers=num_documents * 2) as executor:
-            futures: list[Future[Union[Tag | None] | list[Tag]]] = []
-            for doc_id in doc_ids_single:
-                futures.append(executor.submit(create_single_tag, doc_id))
-            for doc_id in doc_ids_list:
-                futures.append(executor.submit(create_list_tag, doc_id))
+            futures: list[Future[Union[Tag | None] | list[Tag]]] = [
+                executor.submit(create_single_tag, doc_id) for doc_id in doc_ids_single
+            ]
+            futures.extend(
+                executor.submit(create_list_tag, doc_id) for doc_id in doc_ids_list
+            )
 
             for future in as_completed(futures):
                 try:

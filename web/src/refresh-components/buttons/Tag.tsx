@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
@@ -40,32 +40,18 @@ export default function Tag({
 }: TagProps) {
   const styles = variantStyles[variant];
 
-  return (
-    <div
-      ref={ref}
-      className={cn(
-        styles.container,
-        "rounded-08",
-        "bg-background-tint-02 hover:bg-background-tint-03",
-        "focus-visible:shadow-[0_0_0_2px_var(--background-tint-04)]",
-        "outline-hidden transition-colors",
-        onClick || variant === "display" ? "cursor-pointer" : undefined,
-        className
-      )}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={
-        onClick
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onClick();
-              }
-            }
-          : undefined
-      }
-    >
+  const tagClassName = cn(
+    styles.container,
+    "rounded-08",
+    "bg-background-tint-02 hover:bg-background-tint-03",
+    "focus-visible:shadow-[0_0_0_2px_var(--background-tint-04)]",
+    "outline-hidden transition-colors",
+    onClick || variant === "display" ? "cursor-pointer" : undefined,
+    className
+  );
+
+  const body = (
+    <>
       {Icon && <Icon className={styles.icon} />}
       <Text {...styles.text}>{label}</Text>
       {onRemove && (
@@ -81,6 +67,29 @@ export default function Tag({
           <SvgX className="size-3" />
         </button>
       )}
+    </>
+  );
+
+  if (!onClick) {
+    return (
+      <div ref={ref} className={tagClassName}>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    // The tag can hold its own remove button, so it stays a div with button
+    // semantics rather than a <button> wrapping a <button>.
+    <div
+      ref={ref}
+      className={tagClassName}
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={clickOnKeyDown(onClick)}
+    >
+      {body}
     </div>
   );
 }

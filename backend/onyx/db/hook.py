@@ -1,19 +1,14 @@
 import datetime
 from uuid import UUID
 
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.constants import UNSET
-from onyx.db.constants import UnsetType
-from onyx.db.enums import HookFailStrategy
-from onyx.db.enums import HookPoint
-from onyx.db.models import Hook
-from onyx.db.models import HookExecutionLog
+from onyx.db.constants import UNSET, UnsetType
+from onyx.db.enums import HookFailStrategy, HookPoint
+from onyx.db.models import Hook, HookExecutionLog
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 

@@ -5,9 +5,9 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.settings import store as settings_store
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
+    DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
+    Settings,
 )
-from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
-from onyx.server.settings.models import Settings
 
 
 class _FakeKvStore:
@@ -168,3 +168,28 @@ def test_load_settings_default_clamped_to_max(
     settings = settings_store.load_settings()
 
     assert settings.user_file_max_upload_size_mb == 50
+
+
+@pytest.mark.parametrize("stored_value", [None, False, True])
+@pytest.mark.parametrize("vector_db_disabled", [False, True])
+def test_load_settings_reports_opensearch_indexing_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    stored_value: bool | None,
+    vector_db_disabled: bool,
+) -> None:
+    """`opensearch_indexing_enabled` is deprecated and always True. API clients
+    such as the Terraform provider still read it, so a stale stored value must
+    not leak through."""
+    stored = (
+        None
+        if stored_value is None
+        else Settings(opensearch_indexing_enabled=stored_value).model_dump()
+    )
+    monkeypatch.setattr(settings_store, "get_kv_store", lambda: _FakeKvStore(stored))
+    monkeypatch.setattr(settings_store, "get_cache_backend", lambda: _FakeCache())
+    monkeypatch.setattr(settings_store, "DISABLE_VECTOR_DB", vector_db_disabled)
+
+    settings = settings_store.load_settings()
+
+    assert settings.opensearch_indexing_enabled is True
+    assert settings.model_dump()["opensearch_indexing_enabled"] is True

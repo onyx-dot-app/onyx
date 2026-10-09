@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "onyx.fullname" . }}-mcp-server-service
+  name: {{ include "onyx.resourceName" (list . "mcp-server-service") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- if .Values.mcpServer.deploymentLabels }}

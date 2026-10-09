@@ -7,8 +7,7 @@ bypassed."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import onyx.server.query_and_chat.token_limit as token_limit
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

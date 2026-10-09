@@ -1,7 +1,5 @@
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentBase
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, DocumentBase, TextSection
 
 
 def _minimal_doc_kwargs(metadata: dict) -> dict:

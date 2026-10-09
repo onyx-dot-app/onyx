@@ -84,7 +84,7 @@ class CanvasApiClient:
         # full_url is used when following pagination (Canvas returns the
         # next-page URL in the Link header).  For the first request we build
         # the URL from the endpoint name instead.
-        url = full_url if full_url else self._build_url(endpoint)
+        url = full_url or self._build_url(endpoint)
         headers = self._build_headers()
 
         response = rl_requests.get(

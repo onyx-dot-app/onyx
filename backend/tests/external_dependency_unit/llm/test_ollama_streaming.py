@@ -13,8 +13,7 @@ protocol drift.
 import pytest
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from tests.utils.secret_names import TestSecret
 
@@ -49,12 +48,10 @@ def test_streaming_separates_reasoning_content_from_visible_content(
         model_name=_THINKING_MODEL,
         api_base="https://ollama.com",
         max_input_tokens=8192,
-        timeout=120,
     )
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Think briefly about what 12 * 7 is, then respond with just the number."
             ),
@@ -63,7 +60,7 @@ def test_streaming_separates_reasoning_content_from_visible_content(
 
     reasoning_parts: list[str] = []
     content_parts: list[str] = []
-    for chunk in llm.stream(prompt=prompt):
+    for chunk in llm.stream_raw(prompt=prompt, stall_timeout_s=120):
         delta = chunk.choice.delta
         rc = delta.reasoning_content
         content = delta.content

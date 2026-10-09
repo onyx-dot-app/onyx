@@ -1,14 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { SettingsLayouts } from "@opal/layouts";
+import { useTranslations } from "next-intl";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/loaders";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
+import { useCreateModal } from "@opal/components";
 import { SvgGlobe } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { MessageCard } from "@opal/components";
@@ -50,6 +50,7 @@ const route = ADMIN_ROUTES.WEB_SEARCH;
 // ---------------------------------------------------------------------------
 
 export default function WebSearchPage() {
+  const t = useTranslations("admin.webSearch");
   const [activeProvider, setActiveProvider] =
     useState<ProviderModalState | null>(null);
   const [disconnectTarget, setDisconnectTarget] =
@@ -78,21 +79,31 @@ export default function WebSearchPage() {
   const tavilyContentProvider = contentProviders.find(
     (p) => p.provider_type === "tavily"
   );
+  const firecrawlSearchProvider = searchProviders.find(
+    (p) => p.provider_type === "firecrawl"
+  );
+  const firecrawlContentProvider = contentProviders.find(
+    (p) => p.provider_type === "firecrawl"
+  );
   const openSearchModal = (
     providerType: WebSearchProviderType,
     provider?: WebSearchProviderView
   ) => {
     const hasStoredKey = !!provider?.masked_api_key;
-    // Exa and Tavily share one API key across the search and content sides, so
-    // pre-fill the search modal from the stored content-provider key when the
-    // search side has none yet (the backend syncs the two on save).
+    // Exa, Tavily and Firecrawl share one API key across the search and content
+    // sides, so pre-fill the search modal from the stored content-provider key
+    // when the search side has none yet (the backend syncs the two on save).
+    const sharedContentProviders = new Map<
+      WebSearchProviderType,
+      WebContentProviderView | undefined
+    >([
+      ["exa", exaContentProvider],
+      ["tavily", tavilyContentProvider],
+      ["firecrawl", firecrawlContentProvider],
+    ]);
     const sharedContentMaskedKey = hasStoredKey
       ? null
-      : providerType === "exa"
-        ? (exaContentProvider?.masked_api_key ?? null)
-        : providerType === "tavily"
-          ? (tavilyContentProvider?.masked_api_key ?? null)
-          : null;
+      : (sharedContentProviders.get(providerType)?.masked_api_key ?? null);
 
     const effectiveProvider: WebSearchProviderView | null =
       provider ??
@@ -162,13 +173,13 @@ export default function WebSearchPage() {
           provider.provider_type,
           provider.name
         ),
-        subtitle: "Custom integration",
+        subtitle: t("customIntegration.subtitle"),
         logo: undefined,
         provider,
       }));
 
     return [...ordered, ...additional];
-  }, [searchProviders]);
+  }, [searchProviders, t]);
 
   const combinedContentProviders = useMemo(() => {
     const byType = new Map(
@@ -197,7 +208,10 @@ export default function WebSearchPage() {
           provider_type: "firecrawl",
           is_active: false,
           config: null,
-          masked_api_key: null,
+          masked_api_key:
+            firecrawlSearchProvider?.masked_api_key ??
+            firecrawlContentProvider?.masked_api_key ??
+            null,
         } satisfies WebContentProviderView;
       }
 
@@ -243,6 +257,8 @@ export default function WebSearchPage() {
     exaContentProvider,
     tavilySearchProvider,
     tavilyContentProvider,
+    firecrawlSearchProvider,
+    firecrawlContentProvider,
   ]);
 
   const currentContentProviderType =
@@ -252,7 +268,7 @@ export default function WebSearchPage() {
     const message =
       searchProvidersError?.message ||
       contentProvidersError?.message ||
-      "Unable to load web search configuration.";
+      t("loadError.description");
 
     const detail =
       (searchProvidersError instanceof FetchError &&
@@ -268,14 +284,14 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Search settings for external search across the internet."
+          title={t("header.title")}
+          description={t("header.description")}
           divider
         />
         <SettingsLayouts.Body>
           <MessageCard
             variant="error"
-            title="Failed to load web search settings"
+            title={t("loadError.title")}
             description={detail ?? message}
           />
         </SettingsLayouts.Body>
@@ -288,8 +304,8 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Search settings for external search across the internet."
+          title={t("header.title")}
+          description={t("header.description")}
           divider
         />
         <SettingsLayouts.Body>
@@ -305,7 +321,7 @@ export default function WebSearchPage() {
       await mutateSearchProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError.message");
       toast.error(message);
     }
   }
@@ -316,7 +332,7 @@ export default function WebSearchPage() {
       await mutateSearchProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError.message");
       toast.error(message);
     }
   }
@@ -329,7 +345,7 @@ export default function WebSearchPage() {
       await mutateContentProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError.message");
       toast.error(message);
     }
   }
@@ -343,7 +359,7 @@ export default function WebSearchPage() {
       await mutateContentProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError.message");
       toast.error(message);
     }
   }
@@ -353,16 +369,16 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Search settings for external search across the internet."
+          title={t("header.title")}
+          description={t("header.description")}
           divider
         />
 
         <SettingsLayouts.Body>
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Search Engine"
-              description="External search engine API used for web search result URLs, snippets, and metadata."
+              title={t("searchEngine.title")}
+              description={t("searchEngine.description")}
               sizePreset="main-content"
               variant="section"
             />
@@ -372,13 +388,16 @@ export default function WebSearchPage() {
                 variant="info"
                 title={
                   hasConfiguredSearchProvider
-                    ? "Select a search engine to enable web search."
-                    : "Connect a search engine to set up web search."
+                    ? t("searchEngine.selectPrompt.title")
+                    : t("searchEngine.connectPrompt.title")
                 }
               />
             )}
 
-            <div className="flex flex-col gap-2">
+            <div
+              className="flex flex-col gap-2"
+              data-testid="search-provider-list"
+            >
               {combinedSearchProviders.map(
                 ({
                   key,
@@ -470,22 +489,27 @@ export default function WebSearchPage() {
 
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Web Crawler"
-              description="Used to read the full contents of search result pages."
+              title={t("crawler.title")}
+              description={t("crawler.description")}
               sizePreset="main-content"
               variant="section"
             />
 
-            <div className="flex flex-col gap-2">
+            <div
+              className="flex flex-col gap-2"
+              data-testid="content-provider-list"
+            >
               {combinedContentProviders.map((provider) => {
                 const label =
                   provider.name ||
                   CONTENT_PROVIDER_DETAILS[provider.provider_type]?.label ||
                   provider.provider_type;
 
-                const subtitle =
-                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.subtitle ||
-                  provider.provider_type;
+                const subtitleKey =
+                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.subtitleKey;
+                const subtitle = subtitleKey
+                  ? t(subtitleKey)
+                  : provider.provider_type;
 
                 const providerId = provider.id;
                 const isConfigured = isContentProviderConfigured(
@@ -525,7 +549,7 @@ export default function WebSearchPage() {
                     title={label}
                     description={subtitle}
                     status={status}
-                    selectedLabel="Current Crawler"
+                    selectedLabel={t("crawler.currentCrawler.label")}
                     onConnect={() => {
                       openContentModal(provider.provider_type, provider);
                     }}

@@ -1,8 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.configs.constants import FederatedConnectorSource
 
@@ -31,9 +30,9 @@ class AuthorizeUrlResponse(BaseModel):
 
 
 class OAuthCallbackResult(BaseModel):
-    access_token: str | None = None
+    # Never carries the access or refresh token: those are stored encrypted
+    # server side and the browser has no use for them.
     expires_at: datetime | None = None
-    refresh_token: str | None = None
     token_type: str | None = None
     scope: str | None = None
     source: FederatedConnectorSource | None = None

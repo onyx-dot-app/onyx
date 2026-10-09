@@ -9,13 +9,18 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.onyxbot.slack.blocks import _build_sources_blocks
 
 
-def _make_saved_doc(updated_at: datetime | None) -> SavedSearchDoc:
+def _make_saved_doc(
+    updated_at: datetime | None,
+    semantic_identifier: str = "Example Doc",
+    link: str | None = "https://example.com",
+    primary_owner: str = "user@example.com",
+) -> SavedSearchDoc:
     return SavedSearchDoc(
         db_doc_id=1,
         document_id="doc-1",
         chunk_ind=0,
-        semantic_identifier="Example Doc",
-        link="https://example.com",
+        semantic_identifier=semantic_identifier,
+        link=link,
         blurb="Some blurb",
         source_type=DocumentSource.FILE,
         boost=0,
@@ -24,7 +29,7 @@ def _make_saved_doc(updated_at: datetime | None) -> SavedSearchDoc:
         score=0.0,
         match_highlights=[],
         updated_at=updated_at,
-        primary_owners=["user@example.com"],
+        primary_owners=[primary_owner],
         secondary_owners=None,
         is_relevant=None,
         relevance_explanation=None,
@@ -64,8 +69,46 @@ def test_build_sources_blocks_formats_naive_timestamp(
         f"By user@example.com | {captured['result']}"
     )
     assert context_block["elements"][1]["text"] == expected_text
+    assert context_block["elements"][1]["verbatim"] is True
 
     assert "doc" in captured
     formatted_timestamp: datetime = captured["doc"]
     expected_timestamp: datetime = naive_timestamp.replace(tzinfo=pytz.utc)
     assert formatted_timestamp == expected_timestamp
+
+
+def test_build_sources_blocks_keeps_link_syntax_flat() -> None:
+    document = _make_saved_doc(
+        updated_at=None,
+        semantic_identifier="Run [portal](https://n.e) <https://a.e>",
+        link="https://example.com/a|b>c",
+    )
+
+    blocks = _build_sources_blocks(cited_documents=[(1, document)])
+
+    text = blocks[1].to_dict()["elements"][1]["text"]
+    assert "*<https://example.com/a%7Cb&gt;c|[1] Run portal https://a.e>*" in text
+    assert text.count("<") == 1
+    assert text.count(">") == 1
+
+
+def test_build_sources_blocks_handles_missing_document_link() -> None:
+    document = _make_saved_doc(updated_at=None, link=None)
+
+    blocks = _build_sources_blocks(cited_documents=[(1, document)])
+
+    markdown = blocks[1].to_dict()["elements"][1]
+    assert markdown["text"] == "Example Doc"
+    assert markdown["verbatim"] is True
+
+
+def test_build_sources_blocks_defangs_owner_mentions() -> None:
+    document = _make_saved_doc(
+        updated_at=None,
+        primary_owner="<@U123> <!channel> @here",
+    )
+
+    blocks = _build_sources_blocks(cited_documents=[(1, document)])
+
+    text = blocks[1].to_dict()["elements"][1]["text"]
+    assert "By &lt;@U123&gt; &lt;!channel&gt; @here" in text

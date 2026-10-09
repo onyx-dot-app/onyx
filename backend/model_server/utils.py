@@ -1,13 +1,9 @@
 import asyncio
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Callable, Generator, Iterator
 from functools import wraps
 from pathlib import Path
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
 import torch
 
@@ -33,7 +29,7 @@ def simple_log_function_time(
                 start_time = time.time()
                 result = await func(*args, **kwargs)
                 elapsed_time_str = str(time.time() - start_time)
-                log_name = func_name or func.__name__
+                log_name = func_name or func.__name__  # ty: ignore[unresolved-attribute]
                 args_str = f" args={args} kwargs={kwargs}" if include_args else ""
                 final_log = f"{log_name}{args_str} took {elapsed_time_str} seconds"
                 if debug_only:
@@ -50,7 +46,7 @@ def simple_log_function_time(
                 start_time = time.time()
                 result = func(*args, **kwargs)
                 elapsed_time_str = str(time.time() - start_time)
-                log_name = func_name or func.__name__
+                log_name = func_name or func.__name__  # ty: ignore[unresolved-attribute]
                 args_str = f" args={args} kwargs={kwargs}" if include_args else ""
                 final_log = f"{log_name}{args_str} took {elapsed_time_str} seconds"
                 if debug_only:

@@ -1,3 +1,4 @@
+import type { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import {
   SvgFileText,
@@ -6,9 +7,20 @@ import {
   SvgPlug,
   SvgSparkle,
 } from "@opal/icons";
-import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import type { PickerEntry, PickerSections } from "@/lib/skills/picker";
-import type { PlusMenuItem } from "@/sections/input/PlusMenuButton";
+import {
+  pickerEntryKey,
+  type PickerEntry,
+  type PickerSections,
+} from "@/lib/skills/picker";
+import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
+import type {
+  PlusMenuFlyoutItem,
+  PlusMenuItem,
+} from "@/sections/input/PlusMenuButton";
+
+export type EntryMenuTranslate = ReturnType<
+  typeof useTranslations<"craft.entryMenu">
+>;
 
 interface LibraryFile {
   id: string;
@@ -36,21 +48,22 @@ export function buildEntryMenuItems(
     onBrowseApps,
     libraryFiles = [],
     onManageLibrary,
-  }: EntryMenuHandlers
+  }: EntryMenuHandlers,
+  t: EntryMenuTranslate
 ): Array<PlusMenuItem | null> {
   // Skills and Apps always show; when empty they prompt the user to browse/connect.
   const items: Array<PlusMenuItem | null> = [
     {
       key: "files",
       icon: SvgPaperclip,
-      label: "Add files or photos",
+      label: t("addFiles.label"),
       onSelect: onAttachFiles,
     },
     null,
     {
       key: "skills",
       icon: SvgSparkle,
-      label: "Skills",
+      label: t("skills.label"),
       flyoutItems:
         sections.skills.length > 0
           ? sections.skills.map((skill) => ({
@@ -64,7 +77,7 @@ export function buildEntryMenuItems(
               {
                 key: "skills-empty",
                 icon: SvgSparkle,
-                label: "Browse skills",
+                label: t("browseSkills.label"),
                 onSelect: onBrowseSkills,
               },
             ],
@@ -72,28 +85,15 @@ export function buildEntryMenuItems(
     {
       key: "apps",
       icon: SvgPlug,
-      label: "Apps",
-      flyoutItems:
-        sections.apps.length > 0
-          ? sections.apps.map((app) => ({
-              key: app.slug,
-              icon: getAppTypeLogo(app.appType),
-              label: app.name,
-              rightContent: app.authenticated ? undefined : (
-                <Text font="secondary-body" color="text-03">
-                  Connect
-                </Text>
-              ),
-              onSelect: () => onSelectEntry(app),
-            }))
-          : [
-              {
-                key: "apps-empty",
-                icon: SvgPlug,
-                label: "Connect an app",
-                onSelect: onBrowseApps,
-              },
-            ],
+      label: t("apps.label"),
+      flyoutItems: buildAppFlyoutItems(
+        sections,
+        {
+          onSelectEntry,
+          onBrowseApps,
+        },
+        t
+      ),
     },
   ];
 
@@ -101,7 +101,7 @@ export function buildEntryMenuItems(
     items.push({
       key: "library",
       icon: SvgFolder,
-      label: "Library",
+      label: t("library.label"),
       flyoutItems: [
         // TODO(craft-library): file rows open the manage modal until per-file attach is wired.
         ...libraryFiles.map((file) => ({
@@ -113,7 +113,7 @@ export function buildEntryMenuItems(
         {
           key: "manage",
           icon: SvgFolder,
-          label: "Manage library…",
+          label: t("manageLibrary.label"),
           onSelect: onManageLibrary,
         },
       ],
@@ -121,4 +121,49 @@ export function buildEntryMenuItems(
   }
 
   return items;
+}
+
+interface AppFlyoutHandlers {
+  onSelectEntry: (entry: PickerEntry) => void;
+  onBrowseApps: () => void;
+}
+
+/** Apps and craft-enabled MCP servers share this flyout — the agent reaches
+ * both the same way from the user's point of view. MCP rows are labelled so the
+ * two never read as one kind of thing. */
+function buildAppFlyoutItems(
+  sections: PickerSections,
+  { onSelectEntry, onBrowseApps }: AppFlyoutHandlers,
+  t: EntryMenuTranslate
+): PlusMenuFlyoutItem[] {
+  const connectHint = (authenticated: boolean) =>
+    authenticated ? undefined : (
+      <Text font="secondary-body" color="text-03">
+        {t("connect.hint")}
+      </Text>
+    );
+
+  const items: PlusMenuFlyoutItem[] = [
+    ...sections.apps,
+    ...sections.mcpServers,
+  ].map((entry) => ({
+    key: pickerEntryKey(entry),
+    icon: pickerEntryIcon(entry),
+    label: entry.name,
+    // Only MCP rows are labelled; apps are the default kind on this page.
+    description: entry.kind === "mcp" ? t("mcpServer.description") : undefined,
+    rightContent: connectHint(entry.authenticated),
+    onSelect: () => onSelectEntry(entry),
+  }));
+
+  return items.length > 0
+    ? items
+    : [
+        {
+          key: "apps-empty",
+          icon: SvgPlug,
+          label: t("connectApp.label"),
+          onSelect: onBrowseApps,
+        },
+      ];
 }

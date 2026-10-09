@@ -1,8 +1,7 @@
 import os
 from typing import Any
 
-from kubernetes import client
-from kubernetes import config
+from kubernetes import client, config
 from urllib3.util.retry import Retry
 
 from onyx.utils.logger import setup_logger

@@ -1,13 +1,31 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.db.models import SearchSettings
-from onyx.server.manage.embedding.api import list_embedding_models
-from onyx.server.manage.embedding.api import list_embedding_providers
-from onyx.utils.encryption import decrypt_bytes_to_string
-from onyx.utils.encryption import encrypt_string_to_bytes
-from onyx.utils.encryption import mask_string
+from onyx.natural_language_processing.embedding_auth import (
+    ApiKeyEmbeddingAuth,
+    VertexEmbeddingAuth,
+)
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
+from onyx.server.manage.embedding.api import (
+    list_embedding_models,
+    list_embedding_providers,
+    put_cloud_embedding_provider,
+)
+from onyx.server.manage.embedding.api import (
+    test_embedding_configuration as run_embedding_test,
+)
+from onyx.server.manage.embedding.models import (
+    CloudEmbeddingProviderCreationRequest,
+)
+from onyx.server.manage.embedding.models import (
+    TestEmbeddingRequest as EmbeddingTestRequest,
+)
+from onyx.utils.encryption import (
+    decrypt_bytes_to_string,
+    encrypt_string_to_bytes,
+    mask_string,
+)
 from onyx.utils.sensitive import SensitiveValue
 from shared_configs.enums import EmbeddingProvider
 
@@ -32,6 +50,7 @@ def _build_search_settings(raw_api_key: str) -> SimpleNamespace:
             api_url="",
             api_version=None,
             deployment_name=None,
+            vertex_config=None,
         ),
         api_url="",
     )
@@ -82,6 +101,7 @@ def test_list_embedding_providers_uses_sensitive_value_masking_once() -> None:
         api_url="",
         api_version=None,
         deployment_name=None,
+        vertex_config=None,
     )
 
     with patch(
@@ -103,3 +123,60 @@ def test_search_settings_api_key_property_returns_raw_value_for_runtime_use() ->
 
     api_key_property = SearchSettings.__dict__["api_key"]
     assert api_key_property.fget(fake_search_settings) == raw_api_key
+
+
+def test_switch_to_workload_identity_clears_stored_json_key() -> None:
+    request = CloudEmbeddingProviderCreationRequest(
+        provider_type=EmbeddingProvider.GOOGLE,
+        api_key="old key must be discarded",
+        api_key_changed=False,
+        vertex_config=VertexEmbeddingConfig(
+            auth_method="workload_identity", project_id="my-project"
+        ),
+    )
+    with patch(
+        "onyx.server.manage.embedding.api.upsert_cloud_embedding_provider"
+    ) as save:
+        put_cloud_embedding_provider(request, _=MagicMock(), db_session=MagicMock())
+    saved = save.call_args.args[1]
+    assert saved.api_key is None
+    assert saved.api_key_changed is True
+    assert saved.vertex_config == request.vertex_config
+
+
+def test_connection_test_reuses_saved_api_key() -> None:
+
+    stored = SimpleNamespace(api_key=_build_sensitive_value("stored-secret"))
+    request = EmbeddingTestRequest(
+        provider_type=EmbeddingProvider.OPENAI, model_name="text-embedding-3-small"
+    )
+    with (
+        patch(
+            "onyx.server.manage.embedding.api.fetch_embedding_provider",
+            return_value=stored,
+        ),
+        patch("onyx.server.manage.embedding.api.EmbeddingModel") as model,
+    ):
+        run_embedding_test(request, _=MagicMock(), db_session=MagicMock())
+    auth = model.call_args.kwargs["auth"]
+    assert isinstance(auth, ApiKeyEmbeddingAuth)
+    assert auth.resolve_credentials().api_key.get_secret_value() == "stored-secret"
+
+
+def test_workload_identity_connection_test_never_loads_saved_key() -> None:
+
+    request = EmbeddingTestRequest(
+        provider_type=EmbeddingProvider.GOOGLE,
+        model_name="gemini-embedding-2",
+        vertex_config=VertexEmbeddingConfig(
+            auth_method="workload_identity", project_id="target"
+        ),
+    )
+    with (
+        patch("onyx.server.manage.embedding.api.fetch_embedding_provider") as fetch,
+        patch("onyx.server.manage.embedding.api.EmbeddingModel") as model,
+    ):
+        run_embedding_test(request, _=MagicMock(), db_session=MagicMock())
+    fetch.assert_not_called()
+    assert isinstance(model.call_args.kwargs["auth"], VertexEmbeddingAuth)
+    assert not model.call_args.kwargs["auth"].requires_api_key

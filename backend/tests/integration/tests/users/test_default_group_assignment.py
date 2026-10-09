@@ -6,7 +6,6 @@ Verifies that:
 - account_type is set to STANDARD for email/password registrations
 """
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -16,11 +15,11 @@ from tests.integration.common_utils.test_models import DATestUser
 def test_default_group_assignment_on_registration(reset: None) -> None:  # noqa: ARG001
     # Register first user — should become admin
     admin_user: DATestUser = UserManager.create(name="first_user")
-    assert admin_user.role == UserRole.ADMIN
+    assert admin_user.is_admin
 
     # Register second user — should become basic
     basic_user: DATestUser = UserManager.create(name="second_user")
-    assert basic_user.role == UserRole.BASIC
+    assert not basic_user.is_admin
 
     # Fetch all groups including default ones
     all_groups = UserGroupManager.get_all(

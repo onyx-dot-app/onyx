@@ -2,20 +2,17 @@
 
 import json
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 from pydantic import BaseModel
 
 from ee.onyx.hooks.executor import _execute_hook_impl as execute_hook
-from onyx.db.enums import HookFailStrategy
-from onyx.db.enums import HookPoint
+from onyx.db.enums import HookFailStrategy, HookPoint
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.hooks.executor import HookSkipped
-from onyx.hooks.executor import HookSoftFailed
+from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingResponse
 
 # ---------------------------------------------------------------------------

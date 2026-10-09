@@ -1,0 +1,35 @@
+Search Results
+
+Your query matched 3 documents across two sources. Use onyx-
+cli ask for a direct answer (https://docs.onyx.app/cli), or
+grep search again.
+
+Top result
+
+│ The retention policy changed in Q3: documents older than
+│ 90d are archived automatically.
+
+Steps to reproduce:
+
+1. Configure the connector
+2. Wait for indexing:
+   • check the index_attempt table
+   • watch the worker logs
+3. Run a search
+
+│ python
+│ def search(query: str) -> list[Doc]:
+│     return client.search(query, top_k=10)
+
+Source       │ Docs │ Status 
+─────────────┼──────┼────────
+Confluence   │  120 │ synced 
+Google Drive │ 3401 │ syncing
+
+────────────────────────────────────────────────────────────
+
+☑ connector configured
+☐ permissions verified
+
+Final note with an image [image: architecture diagram] and
+wide text: 汉字宽度测试 emoji 🎉 done.

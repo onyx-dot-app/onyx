@@ -145,4 +145,30 @@ describe("processRawChatHistory", () => {
     );
     expect(tree.get(1)!.packets).toEqual([]);
   });
+
+  it("carries processing_duration_seconds through so the timeline can label it", () => {
+    const tree = processRawChatHistory(
+      [
+        bm({
+          message_id: 1,
+          message_type: "assistant",
+          parent_message: null,
+          processing_duration_seconds: 7.5,
+        }),
+        bm({ message_id: 2, message_type: "assistant", parent_message: 1 }),
+      ],
+      [],
+    );
+    expect(tree.get(1)!.processingDurationSeconds).toBe(7.5);
+    // Absent on older rows; the header then falls back to "Thought for some time".
+    expect(tree.get(2)!.processingDurationSeconds).toBeUndefined();
+  });
+
+  it("leaves streamingStartedAt unset on hydrated turns", () => {
+    const tree = processRawChatHistory(
+      [bm({ message_id: 1, message_type: "assistant", parent_message: null })],
+      [],
+    );
+    expect(tree.get(1)!.streamingStartedAt).toBeUndefined();
+  });
 });

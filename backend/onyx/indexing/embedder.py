@@ -1,30 +1,29 @@
 import time
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections import defaultdict
 
 import sentry_sdk
 
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorStopSignal
-from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorStopSignal,
+    DocumentFailure,
+)
 from onyx.db.models import SearchSettings
 from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_embedding,
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import IndexChunk
+from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
 from onyx.utils.timing import log_function_time
-from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
-from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
-from shared_configs.model_server_models import Embedding
+from shared_configs.configs import (
+    INDEXING_MODEL_SERVER_HOST,
+    INDEXING_MODEL_SERVER_PORT,
+)
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 logger = setup_logger()
 
@@ -46,6 +45,7 @@ class IndexingEmbedder(ABC):
         deployment_name: str | None,
         reduced_dimension: int | None,
         callback: IndexingHeartbeatInterface | None,
+        embedding_model: EmbeddingModel | None = None,
     ):
         self.model_name = model_name
         self.normalize = normalize
@@ -57,7 +57,7 @@ class IndexingEmbedder(ABC):
         self.api_version = api_version
         self.deployment_name = deployment_name
 
-        self.embedding_model = EmbeddingModel(
+        self.embedding_model = embedding_model or EmbeddingModel(
             model_name=model_name,
             query_prefix=query_prefix,
             passage_prefix=passage_prefix,
@@ -99,6 +99,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         deployment_name: str | None = None,
         reduced_dimension: int | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        embedding_model: EmbeddingModel | None = None,
     ):
         super().__init__(
             model_name,
@@ -112,6 +113,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             deployment_name,
             reduced_dimension,
             callback,
+            embedding_model,
         )
 
     @log_function_time()
@@ -157,31 +159,6 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             request_id=request_id,
         )
 
-        chunk_titles = {
-            chunk.source_document.get_title_for_document_index() for chunk in chunks
-        }
-
-        # Drop any None or empty strings
-        # If there is no title or the title is empty, the title embedding field will be null
-        # which is ok, it just won't contribute at all to the scoring.
-        chunk_titles_list = [title for title in chunk_titles if title]
-
-        # Cache the Title embeddings to only have to do it once
-        title_embed_dict: dict[str, Embedding] = {}
-        if chunk_titles_list:
-            title_embeddings = self.embedding_model.encode(
-                chunk_titles_list,
-                text_type=EmbedTextType.PASSAGE,
-                tenant_id=tenant_id,
-                request_id=request_id,
-            )
-            title_embed_dict.update(
-                {
-                    title: vector
-                    for title, vector in zip(chunk_titles_list, title_embeddings)
-                }
-            )
-
         # Mapping embeddings to chunks
         embedded_chunks: list[IndexChunk] = []
         embedding_ind_start = 0
@@ -193,32 +170,12 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                 embedding_ind_start : embedding_ind_start + num_embeddings
             ]
 
-            title = chunk.source_document.get_title_for_document_index()
-
-            title_embedding = None
-            if title:
-                if title in title_embed_dict:
-                    # Using cached value to avoid recalculating for every chunk
-                    title_embedding = title_embed_dict[title]
-                else:
-                    logger.error(
-                        "Title had to be embedded separately, this should not happen!"
-                    )
-                    title_embedding = self.embedding_model.encode(
-                        [title],
-                        text_type=EmbedTextType.PASSAGE,
-                        tenant_id=tenant_id,
-                        request_id=request_id,
-                    )[0]
-                    title_embed_dict[title] = title_embedding
-
             new_embedded_chunk = IndexChunk.model_construct(
                 **shallow_model_dump(chunk),
                 embeddings=ChunkEmbedding(
                     full_embedding=chunk_embeddings[0],
                     mini_chunk_embeddings=chunk_embeddings[1:],
                 ),
-                title_embedding=title_embedding,
             )
             embedded_chunks.append(new_embedded_chunk)
             embedding_ind_start += num_embeddings
@@ -243,6 +200,13 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             deployment_name=search_settings.deployment_name,
             reduced_dimension=search_settings.reduced_dimension,
             callback=callback,
+            embedding_model=EmbeddingModel.from_db_model(
+                search_settings,
+                server_host=INDEXING_MODEL_SERVER_HOST,
+                server_port=INDEXING_MODEL_SERVER_PORT,
+                retrim_content=True,
+                callback=callback,
+            ),
         )
 
 

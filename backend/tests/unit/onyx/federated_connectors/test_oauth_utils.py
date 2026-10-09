@@ -9,12 +9,13 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
-from onyx.federated_connectors.oauth_utils import generate_oauth_state
-from onyx.federated_connectors.oauth_utils import OAUTH_STATE_TTL
-from onyx.federated_connectors.oauth_utils import OAuthSession
-from onyx.federated_connectors.oauth_utils import verify_oauth_state
+from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.federated_connectors.oauth_utils import (
+    OAUTH_STATE_TTL,
+    OAuthSession,
+    generate_oauth_state,
+    verify_oauth_state,
+)
 
 
 class _MemoryCacheBackend(CacheBackend):
@@ -26,6 +27,9 @@ class _MemoryCacheBackend(CacheBackend):
 
     def get(self, key: str) -> bytes | None:
         return self._store.get(key)
+
+    def getdel(self, key: str) -> bytes | None:
+        return self._store.pop(key, None)
 
     def set(
         self,
@@ -39,6 +43,17 @@ class _MemoryCacheBackend(CacheBackend):
         else:
             self._store[key] = str(value).encode()
 
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        if key in self._store:
+            return False
+        self.set(key, value, ex=ex)
+        return True
+
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
 
@@ -47,6 +62,12 @@ class _MemoryCacheBackend(CacheBackend):
 
     def expire(self, key: str, seconds: int) -> None:
         pass
+
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        if self.get(key) != expected:
+            return False
+        self.expire(key, seconds)
+        return True
 
     def ttl(self, key: str) -> int:
         return -2 if key not in self._store else -1

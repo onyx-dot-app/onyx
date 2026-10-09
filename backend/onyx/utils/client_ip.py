@@ -19,8 +19,7 @@ import ipaddress
 from contextvars import ContextVar
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.base import RequestResponseEndpoint
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 

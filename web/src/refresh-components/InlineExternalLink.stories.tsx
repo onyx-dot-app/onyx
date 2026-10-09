@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import InlineExternalLink from "./InlineExternalLink";
 
 const meta: Meta<typeof InlineExternalLink> = {
@@ -24,7 +24,7 @@ export const CustomClassName: Story = {
   args: {
     href: "https://github.com/onyx-dot-app/onyx",
     children: "GitHub Repository",
-    className: "text-action-link-05 underline hover:opacity-80",
+    className: "text-action-selection-05 underline hover:opacity-80",
   },
 };
 

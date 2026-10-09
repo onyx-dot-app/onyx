@@ -254,14 +254,16 @@ func TestSaveCreatesParentDirs(t *testing.T) {
 }
 
 func TestAPIURL(t *testing.T) {
+	t.Setenv(EnvAPIPrefix, "/api")
 	cases := []struct {
 		input string
 		want  string
 	}{
 		{"https://cloud.onyx.app", "https://cloud.onyx.app/api"},
 		{"https://cloud.onyx.app/", "https://cloud.onyx.app/api"},
+		{"https://cloud.onyx.app/api", "https://cloud.onyx.app/api"},
+		{"https://cloud.onyx.app/api/", "https://cloud.onyx.app/api"},
 		{"http://localhost:8080", "http://localhost:8080/api"},
-		{"http://localhost:3000", "http://localhost:3000/api"},
 	}
 	for _, tc := range cases {
 		got := APIURL(tc.input)
@@ -271,20 +273,42 @@ func TestAPIURL(t *testing.T) {
 	}
 }
 
+func TestAPIURLCustomPrefix(t *testing.T) {
+	t.Setenv(EnvAPIPrefix, "/onyx/api")
+	for _, input := range []string{
+		"https://onyx.example",
+		"https://onyx.example/onyx/api",
+	} {
+		got := APIURL(input)
+		if got != "https://onyx.example/onyx/api" {
+			t.Errorf("APIURL(%q) = %q", input, got)
+		}
+	}
+}
+
 func TestAPIURLEmptyPrefix(t *testing.T) {
-	t.Setenv("ONYX_API_PREFIX", "")
+	t.Setenv(EnvAPIPrefix, "")
+	if got := APIURL("http://localhost:8080/"); got != "http://localhost:8080" {
+		t.Errorf("APIURL() = %q", got)
+	}
+}
+
+func TestOnyxWebURL(t *testing.T) {
+	t.Setenv(EnvAPIPrefix, "/api")
 	cases := []struct {
 		input string
 		want  string
 	}{
-		{"http://localhost:8080", "http://localhost:8080"},
-		{"http://localhost:8080/", "http://localhost:8080"},
+		{"https://cloud.onyx.app/api", "https://cloud.onyx.app"},
+		{"https://cloud.onyx.app/api/", "https://cloud.onyx.app"},
+		{"https://onyx.example/base/api", "https://onyx.example/base"},
 		{"https://cloud.onyx.app", "https://cloud.onyx.app"},
+		{"http://localhost:8080", "http://localhost:8080"},
 	}
 	for _, tc := range cases {
-		got := APIURL(tc.input)
+		got := OnyxWebURL(tc.input)
 		if got != tc.want {
-			t.Errorf("APIURL(%q) = %q, want %q", tc.input, got, tc.want)
+			t.Errorf("OnyxWebURL(%q) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
 }

@@ -1,6 +1,6 @@
 ---
 name: slack
-description: Read, search, and post Slack messages on the connected user's behalf via the Slack Web API.
+description: Read, search, post, and upload files to Slack on the connected user's behalf via the Slack Web API.
 ---
 
 # Slack
@@ -58,6 +58,16 @@ python slack_api.py search "deploy failed" [--count N]
 ```
 python slack_api.py post C0123456789 "Hello from Onyx"
 ```
+
+### Upload a file (write)
+
+```
+python slack_api.py upload C0123456789 ./chart.png --comment "Latest chart" --title "Chart"
+```
+
+Shares a local file into the channel/DM (add `--thread-ts` to reply in a
+thread) via Slack's external upload flow (`files.getUploadURLExternal` ->
+upload -> `files.completeUploadExternal`).
 
 ## Output
 

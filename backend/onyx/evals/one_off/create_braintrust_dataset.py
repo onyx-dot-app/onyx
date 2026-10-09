@@ -16,9 +16,7 @@ import argparse
 import csv
 import os
 import sys
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List
 
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
 

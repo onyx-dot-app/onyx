@@ -18,22 +18,21 @@ return the job_id + per-request counts for the API response.
 
 from collections.abc import Sequence
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy import tuple_
+from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import ConnectorFailure, DocumentFailure
 from onyx.db.enums import IndexingStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
-from onyx.db.models import TargetedReindexJob
-from onyx.db.models import TargetedReindexJobTarget
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
+    TargetedReindexJob,
+    TargetedReindexJobTarget,
+)
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.utils.logger import setup_logger
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { render } from "@testing-library/react";
+import { render } from "@tests/setup/test-utils";
 import SubagentView from "@/app/craft/components/SubagentView";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import type { BuildMessage } from "@/app/craft/types/streamingTypes";

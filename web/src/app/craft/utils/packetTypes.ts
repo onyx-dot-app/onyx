@@ -190,7 +190,7 @@ export interface ParsedSubagentStarted {
 export interface ParsedConnectAppRequest {
   type: "connect_app_request";
   requestId: string;
-  appSlug: string;
+  externalAppId: number;
   reason: string | null;
 }
 

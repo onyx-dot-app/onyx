@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useMemo } from "react";
 import {
   CustomToolDelta,
   Packet,
@@ -11,43 +11,37 @@ interface AuthError {
 }
 
 export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
-  const stateRef = useRef<{ processedCount: number; errors: AuthError[] }>({
-    processedCount: 0,
-    errors: [],
-  });
+  // Keyed on the packet array so re-renders between packet batches reuse
+  // the same result identity instead of rescanning.
+  return useMemo(() => computeAuthErrors(rawPackets), [rawPackets]);
+}
 
-  // Reset if packets shrunk (e.g. new message)
-  if (rawPackets.length < stateRef.current.processedCount) {
-    stateRef.current = { processedCount: 0, errors: [] };
-  }
+function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
+  const errors: AuthError[] = [];
 
-  // Process only new packets (incremental, like usePacketProcessor)
-  if (rawPackets.length > stateRef.current.processedCount) {
-    let newErrors = stateRef.current.errors;
-    for (let i = stateRef.current.processedCount; i < rawPackets.length; i++) {
-      const packet = rawPackets[i]!;
-      if (packet.obj.type === PacketType.CUSTOM_TOOL_DELTA) {
-        const delta = packet.obj as CustomToolDelta;
-        if (delta.error?.is_auth_error) {
-          const alreadyPresent = newErrors.some(
-            (e) =>
-              (delta.tool_id != null && e.toolId === delta.tool_id) ||
-              (delta.tool_id == null && e.toolName === delta.tool_name)
-          );
-          if (!alreadyPresent) {
-            newErrors = [
-              ...newErrors,
-              { toolName: delta.tool_name, toolId: delta.tool_id ?? null },
-            ];
-          }
-        }
-      }
+  for (const packet of rawPackets) {
+    if (packet.obj.type !== PacketType.CUSTOM_TOOL_DELTA) {
+      continue;
     }
-    stateRef.current = {
-      processedCount: rawPackets.length,
-      errors: newErrors,
-    };
+
+    const delta = packet.obj as CustomToolDelta;
+    if (!delta.error?.is_auth_error) {
+      continue;
+    }
+
+    const alreadyPresent = errors.some(
+      (error) =>
+        (delta.tool_id != null && error.toolId === delta.tool_id) ||
+        (delta.tool_id == null && error.toolName === delta.tool_name)
+    );
+
+    if (!alreadyPresent) {
+      errors.push({
+        toolName: delta.tool_name,
+        toolId: delta.tool_id ?? null,
+      });
+    }
   }
 
-  return stateRef.current.errors;
+  return errors;
 }

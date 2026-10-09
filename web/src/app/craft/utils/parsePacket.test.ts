@@ -140,21 +140,34 @@ describe("parsePacket", () => {
     });
   });
 
-  it("parses connect-app requests with their correlation id and slug", () => {
+  it("parses connect-app requests with their correlation id and app ID", () => {
     expect(
       parsePacket({
         type: "connect_app_request",
         request_id: "req-1",
-        app_slug: "google_calendar",
+        external_app_id: 17,
         reason: "to schedule events",
       })
     ).toEqual({
       type: "connect_app_request",
       requestId: "req-1",
-      appSlug: "google_calendar",
+      externalAppId: 17,
       reason: "to schedule events",
     });
   });
+
+  it.each([undefined, null, 0, -1, 1.5, Number.NaN, "17"])(
+    "rejects connect-app requests with invalid app ID %p",
+    (externalAppId) => {
+      expect(
+        parsePacket({
+          type: "connect_app_request",
+          request_id: "req-1",
+          external_app_id: externalAppId,
+        })
+      ).toEqual({ type: "unknown" });
+    }
+  );
 
   it("parses context_usage from persisted (snake_case) and live (camelCase) shapes", () => {
     expect(parsePacket({ type: "context_usage", used_tokens: 15526 })).toEqual({

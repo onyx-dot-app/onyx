@@ -1,13 +1,13 @@
-import {
-  Interactive,
-  type InteractiveStatefulInteraction,
-  type InteractiveStatefulProps,
-} from "@opal/core";
+"use client";
+
+import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import { Text, Tooltip, Button, type TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgX } from "@opal/icons";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
+import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,12 +50,11 @@ function FilterButton({
   interaction,
   ...statefulProps
 }: FilterButtonProps) {
-  // Derive open state: explicit prop > Radix data-state (injected via Slot chain)
-  const dataState = (statefulProps as Record<string, unknown>)["data-state"] as
-    | string
-    | undefined;
-  const resolvedInteraction: InteractiveStatefulInteraction =
-    interaction ?? (dataState === "open" ? "hover" : "rest");
+  const strings = useOpalStrings();
+  const resolvedInteraction = resolveTriggerInteraction(
+    interaction,
+    statefulProps
+  );
 
   const button = (
     <div className="relative">
@@ -68,7 +67,11 @@ function FilterButton({
         <Interactive.Container type="button">
           <div className="flex flex-row items-center gap-1">
             {iconWrapper(Icon, "lg", true)}
-            <Text font="main-ui-action" color="inherit" nowrap>
+            <Text
+              font="main-ui-action"
+              color="inherit"
+              wordWrap="whitespace-nowrap"
+            >
               {children}
             </Text>
             <div style={{ visibility: active ? "hidden" : "visible" }}>
@@ -79,7 +82,7 @@ function FilterButton({
       </Interactive.Stateful>
 
       {active && (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+        <div className="absolute end-2 top-1/2 -translate-y-1/2">
           {/* Force hover state so the X stays visually prominent against
               the inverted selected background — without this it renders
               dimmed and looks disabled. */}
@@ -87,7 +90,7 @@ function FilterButton({
             icon={SvgX}
             size="2xs"
             prominence="tertiary"
-            tooltip="Clear filter"
+            tooltip={strings.clearFilter}
             interaction="hover"
             onClick={(e) => {
               e.stopPropagation();

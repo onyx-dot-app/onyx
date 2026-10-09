@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgCheckAll, SvgChevronDown } from "@opal/icons";
@@ -53,13 +54,13 @@ export default function CraftToolGroup({
   autoCollapse = false,
   defaultOpen,
 }: CraftToolGroupProps) {
+  const t = useTranslations("craft.toolCards.group");
   const aggregate = aggregateStatus(toolCalls);
   // Open while the run is active so streaming calls stay visible and nothing
   // collapses as new calls append; settled groups start collapsed.
   const [isOpen, setIsOpen] = useState(
     defaultOpen ?? aggregate === "in_progress"
   );
-  const failedCount = toolCalls.filter((t) => t.status === "failed").length;
   // Skill groups get a comet while running and a thin border at rest.
   const skillGroup = toolCalls.some(isSkillCall);
   const skillActive = aggregate === "in_progress" && skillGroup;
@@ -85,25 +86,22 @@ export default function CraftToolGroup({
           <CollapsibleTrigger asChild>
             <button
               className={cn(
-                "w-full text-left px-3 py-2 rounded-md",
+                "w-full text-start px-3 py-2 rounded-md",
                 "transition-colors hover:bg-background-tint-02"
               )}
             >
               <div className="flex items-center gap-2 min-w-0 w-full">
                 {renderStatusIcon(toolCalls)}
-                <Text font="main-ui-muted" color="text-04" nowrap>
-                  Working
+                <Text
+                  font="main-ui-muted"
+                  color="text-04"
+                  wordWrap="whitespace-nowrap"
+                >
+                  {t("working.label")}
                 </Text>
-                <span className="ml-auto shrink-0 flex items-center gap-2">
-                  {failedCount > 0 && (
-                    <Tag
-                      title={`${failedCount} failed`}
-                      size="sm"
-                      color="red"
-                    />
-                  )}
+                <span className="ms-auto shrink-0 flex items-center gap-2">
                   <Tag
-                    title={`${toolCalls.length} calls`}
+                    title={t("calls.tag", { count: toolCalls.length })}
                     size="sm"
                     color="gray"
                   />
@@ -120,7 +118,12 @@ export default function CraftToolGroup({
           <CollapsibleContent>
             <div className="flex flex-col border-t-[0.5px] border-border-01">
               {toolCalls.map((toolCall) => (
-                <CraftToolCard key={toolCall.id} toolCall={toolCall} nested />
+                <CraftToolCard
+                  key={toolCall.id}
+                  toolCall={toolCall}
+                  nested
+                  defaultOpen={false}
+                />
               ))}
             </div>
           </CollapsibleContent>

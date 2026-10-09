@@ -10,7 +10,6 @@ best-effort deletes the underlying files after the DB commit.
 """
 
 from collections.abc import Generator
-from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -18,20 +17,25 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.shared.tasks import document_by_cc_pair_cleanup_task
-from onyx.connectors.models import Document
-from onyx.connectors.models import IndexAttemptMetadata
-from onyx.db.document import delete_all_documents_for_connector_credential_pair
-from onyx.db.document import upsert_document_by_connector_credential_pair
+from onyx.connectors.models import Document, IndexAttemptMetadata
+from onyx.db.document import (
+    delete_all_documents_for_connector_credential_pair,
+    get_document_connector_count,
+    upsert_document_by_connector_credential_pair,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.server.onyx_api.ingestion import delete_ingestion_doc
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import get_doc_row
-from tests.external_dependency_unit.indexing_helpers import get_filerecord
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_doc
-from tests.external_dependency_unit.indexing_helpers import stage_file
+from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    get_doc_row,
+    get_filerecord,
+    make_cc_pair,
+    make_doc,
+    stage_file,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers (file-local)
@@ -178,15 +182,13 @@ class TestDeleteIngestionDoc:
         _index_doc(db_session, doc, attempt_metadata)
         assert get_filerecord(db_session, file_id) is not None
 
-        # Patch out Vespa — we're testing the file cleanup, not the document
-        # index integration.
-        with patch(
-            "onyx.server.onyx_api.ingestion.get_all_document_indices",
-            return_value=[],
-        ):
+        # Patch out the document index — we're testing the file cleanup, not
+        # the document index integration.
+        with patch("onyx.server.onyx_api.ingestion.get_default_document_index"):
             delete_ingestion_doc(
                 document_id=doc.id,
-                _=MagicMock(),  # auth dep — not used by the function body
+                # a real admin: the body now feeds this to the GATE 2 cc_pair check
+                user=create_test_user(db_session, "ingestion_delete", is_admin=True),
                 db_session=db_session,
             )
 
@@ -212,11 +214,10 @@ class TestDocumentByCcPairCleanupTask:
 
         assert get_filerecord(db_session, file_id) is not None
 
-        # Patch out Vespa interaction — no chunks were ever written, and we're
+        # Patch out the document index — no chunks were ever written, and we're
         # not testing the document index here.
         with patch(
-            "onyx.background.celery.tasks.shared.tasks.get_all_document_indices",
-            return_value=[],
+            "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
         ):
             result = document_by_cc_pair_cleanup_task.apply(
                 args=(
@@ -256,9 +257,63 @@ class TestDocumentByCcPairCleanupTask:
         db_session.commit()
 
         with patch(
-            "onyx.background.celery.tasks.shared.tasks.get_all_document_indices",
-            return_value=[],
+            "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
         ):
+            results = [
+                document_by_cc_pair_cleanup_task.apply(
+                    args=(
+                        doc.id,
+                        cc_pair.connector_id,
+                        cc_pair.credential_id,
+                        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                    ),
+                )
+                for _ in range(2)
+            ]
+
+        assert all(result.successful() for result in results)
+        # Document row still exists (other cc_pair owns it).
+        assert get_doc_row(db_session, doc.id) is not None
+        # File MUST still exist.
+        record = get_filerecord(db_session, file_id)
+        assert record is not None
+
+    def test_shared_doc_removes_relationship_before_index_update(
+        self,
+        db_session: Session,
+        cc_pair: ConnectorCredentialPair,
+        second_cc_pair: ConnectorCredentialPair,
+        attempt_metadata: IndexAttemptMetadata,
+        full_deployment_setup: None,  # noqa: ARG002
+    ) -> None:
+        doc = make_doc(f"doc-{uuid4().hex[:8]}")
+        _index_doc(db_session, doc, attempt_metadata)
+        upsert_document_by_connector_credential_pair(
+            db_session,
+            second_cc_pair.connector_id,
+            second_cc_pair.credential_id,
+            [doc.id],
+        )
+        db_session.commit()
+        indexed_doc = get_doc_row(db_session, doc.id)
+        assert indexed_doc is not None
+        assert indexed_doc.last_modified is not None
+        indexed_at = indexed_doc.last_modified
+
+        def assert_relationship_removed(_update_requests: object) -> None:
+            db_session.expire_all()
+            stored_doc = get_doc_row(db_session, doc.id)
+            assert stored_doc is not None
+            assert stored_doc.last_modified is not None
+            assert get_document_connector_count(db_session, doc.id) == 1
+            assert stored_doc.last_modified > indexed_at
+
+        with patch(
+            "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
+        ) as mock_get_document_index:
+            mock_get_document_index.return_value.update.side_effect = (
+                assert_relationship_removed
+            )
             result = document_by_cc_pair_cleanup_task.apply(
                 args=(
                     doc.id,
@@ -269,8 +324,52 @@ class TestDocumentByCcPairCleanupTask:
             )
 
         assert result.successful(), result.traceback
-        # Document row still exists (other cc_pair owns it).
-        assert get_doc_row(db_session, doc.id) is not None
-        # File MUST still exist.
-        record = get_filerecord(db_session, file_id)
-        assert record is not None
+
+    def test_index_failure_hands_the_doc_to_reconciliation_on_last_retry(
+        self,
+        db_session: Session,
+        cc_pair: ConnectorCredentialPair,
+        attempt_metadata: IndexAttemptMetadata,
+        full_deployment_setup: None,  # noqa: ARG002
+    ) -> None:
+        """When the index delete keeps failing, the task retries, and on the
+        last attempt it drops the cc_pair link and marks the doc modified so
+        stale-document reconciliation removes it later. The file stays, because
+        the document row still exists."""
+        file_id = stage_file()
+        doc = make_doc(f"doc-{uuid4().hex[:8]}", file_id=file_id)
+        _index_doc(db_session, doc, attempt_metadata)
+        indexed_doc = get_doc_row(db_session, doc.id)
+        assert indexed_doc is not None
+        assert indexed_doc.last_modified is not None
+        indexed_at = indexed_doc.last_modified
+
+        with patch(
+            "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
+        ) as mock_get_document_index:
+            mock_get_document_index.return_value.delete.side_effect = RuntimeError(
+                "document index unavailable"
+            )
+            result = document_by_cc_pair_cleanup_task.apply(
+                args=(
+                    doc.id,
+                    cc_pair.connector_id,
+                    cc_pair.credential_id,
+                    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                ),
+            )
+            delete_calls = mock_get_document_index.return_value.delete.call_count
+
+        assert result.successful(), result.traceback
+        assert result.result is False
+        max_retries = document_by_cc_pair_cleanup_task.max_retries
+        assert max_retries is not None
+        assert delete_calls == max_retries + 1
+
+        db_session.expire_all()
+        assert get_document_connector_count(db_session, doc.id) == 0
+        stored_doc = get_doc_row(db_session, doc.id)
+        assert stored_doc is not None
+        assert stored_doc.last_modified is not None
+        assert stored_doc.last_modified > indexed_at
+        assert get_filerecord(db_session, file_id) is not None

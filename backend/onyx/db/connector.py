@@ -1,24 +1,20 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from sqlalchemy import and_
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import select
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, delete, exists, func, select
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import IndexingMode
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import FederatedConnector
-from onyx.db.models import IndexAttempt
-from onyx.kg.models import KGConnectorData
-from onyx.server.documents.models import ConnectorBase
-from onyx.server.documents.models import ObjectCreationIdResponse
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    FederatedConnector,
+    IndexAttempt,
+    UserGroup__ConnectorCredentialPair,
+)
+from onyx.server.documents.models import ConnectorBase, ObjectCreationIdResponse
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 
@@ -84,6 +80,40 @@ def fetch_connector_by_id(connector_id: int, db_session: Session) -> Connector |
     result = db_session.execute(stmt)
     connector = result.scalar_one_or_none()
     return connector
+
+
+def delete_connector_if_unpaired(db_session: Session, connector_id: int) -> bool:
+    """Remove a connector nobody has paired, inside the caller's transaction.
+    The row lock makes a pair being inserted concurrently either show up here
+    or wait behind the delete and fail on the missing connector. Returns
+    whether the row is gone."""
+    connector = db_session.execute(
+        select(Connector).where(Connector.id == connector_id).with_for_update()
+    ).scalar_one_or_none()
+    if connector is None:
+        return True
+    paired = db_session.scalar(
+        select(exists().where(ConnectorCredentialPair.connector_id == connector_id))
+    )
+    if paired:
+        return False
+    db_session.delete(connector)
+    return True
+
+
+def discard_connector_if_unpaired(db_session: Session, connector_id: int) -> bool:
+    """The cleanup behind a failed creation validation: it runs in its own
+    transaction and never raises, because the caller is inside an exception
+    handler whose validation error is what the user needs to see."""
+    try:
+        with db_session.begin():
+            return delete_connector_if_unpaired(db_session, connector_id)
+    except Exception:
+        logger.exception(
+            "Left connector %s behind after a failed validation", connector_id
+        )
+        db_session.rollback()
+        return False
 
 
 def fetch_ingestion_connector_by_name(
@@ -169,6 +199,17 @@ def delete_connector(
             success=True, message="Connector was already deleted", data=connector_id
         )
 
+    # Manage rows have no ON DELETE CASCADE, so the cc-pair delete below
+    # would fail on them.
+    db_session.execute(
+        delete(UserGroup__ConnectorCredentialPair).where(
+            UserGroup__ConnectorCredentialPair.cc_pair_id.in_(
+                select(ConnectorCredentialPair.id).where(
+                    ConnectorCredentialPair.connector_id == connector_id
+                )
+            )
+        )
+    )
     db_session.delete(connector)
     return StatusResponse(
         success=True, message="Connector deleted successfully", data=connector_id
@@ -376,29 +417,3 @@ def mark_ccpair_with_indexing_trigger(
     except Exception:
         db_session.rollback()
         raise
-
-
-def get_kg_enabled_connectors(db_session: Session) -> list[KGConnectorData]:
-    """
-    Retrieves a list of connector IDs that have not been KG processed for a given tenant.
-    Args:
-        db_session (Session): The database session to use
-    Returns:
-        list[KGConnectorData]: List of connector IDs with KG extraction enabled but have unprocessed documents
-    """
-    try:
-        stmt = select(Connector.id, Connector.source, Connector.kg_coverage_days).where(
-            Connector.kg_processing_enabled
-        )
-        result = db_session.execute(stmt)
-
-        connector_results = [
-            KGConnectorData(id=row[0], source=row[1].lower(), kg_coverage_days=row[2])
-            for row in result.fetchall()
-        ]
-
-        return connector_results
-
-    except Exception as e:
-        logger.error("Error fetching unprocessed connector IDs: %s", str(e))
-        raise e

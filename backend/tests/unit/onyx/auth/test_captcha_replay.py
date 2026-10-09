@@ -1,18 +1,18 @@
 """Unit tests for the reCAPTCHA token replay cache."""
 
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from onyx.auth import captcha as captcha_module
-from onyx.auth.captcha import _replay_cache_key
-from onyx.auth.captcha import _reserve_token_or_raise
-from onyx.auth.captcha import CaptchaAction
-from onyx.auth.captcha import CaptchaVerificationError
-from onyx.auth.captcha import verify_captcha_token
+from onyx.auth.captcha import (
+    CaptchaAction,
+    CaptchaVerificationError,
+    _replay_cache_key,
+    _reserve_token_or_raise,
+    verify_captcha_token,
+)
 
 
 @pytest.mark.asyncio

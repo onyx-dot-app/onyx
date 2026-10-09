@@ -13,8 +13,7 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_file_utils import create_test_text_file
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 
 def _get_minimal_persona(

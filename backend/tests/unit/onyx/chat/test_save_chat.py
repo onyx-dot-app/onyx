@@ -10,13 +10,12 @@ from pytest import MonkeyPatch
 from onyx.chat import save_chat
 from onyx.chat.save_chat import _extract_referenced_file_descriptors
 from onyx.file_store.models import ChatFileType
-from onyx.tools.models import PythonExecutionFile
-from onyx.tools.models import ToolCallInfo
+from onyx.tools.models import PythonExecutionFile, ToolCallInfo
 
 
 def _make_tool_call_info(
     generated_files: list[PythonExecutionFile] | None = None,
-    tool_name: str = "python",
+    tool_name: str = "run_python",
 ) -> ToolCallInfo:
     return ToolCallInfo(
         parent_tool_call_id=None,
@@ -72,6 +71,27 @@ def test_extracts_referenced_file() -> None:
     assert result[0]["id"] == file_id
     assert result[0]["type"] == ChatFileType.IMAGE
     assert result[0]["name"] == "chart.png"
+
+
+def test_generated_spreadsheet_is_tabular_without_system_mime_types(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    # Simulate a server image without /etc/mime.types.
+    monkeypatch.setattr("mimetypes.guess_type", lambda *_a, **_k: (None, None))
+    file_id = "xlsx-123"
+    files = [
+        PythonExecutionFile(
+            filename="report.xlsx",
+            file_link=f"http://localhost/api/chat/file/{file_id}",
+        )
+    ]
+    tool_call = _make_tool_call_info(generated_files=files)
+    message = f"[report.xlsx](http://localhost/api/chat/file/{file_id})"
+
+    result = _extract_referenced_file_descriptors([tool_call], message)
+
+    assert len(result) == 1
+    assert result[0]["type"] == ChatFileType.TABULAR
 
 
 def test_filters_unreferenced_files() -> None:

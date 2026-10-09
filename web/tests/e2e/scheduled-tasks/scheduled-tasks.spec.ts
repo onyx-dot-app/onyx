@@ -1,8 +1,25 @@
 import { test } from "@playwright/test";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
-import { ScheduledTasksPage } from "@tests/e2e/scheduled-tasks/ScheduledTasksPage";
+import { ScheduledTasksPage } from "@tests/e2e/pages/ScheduledTasksPage";
 
 test.describe("Scheduled Tasks", () => {
+  test("pre-approval groups fill the form on desktop and mobile", async ({
+    page,
+  }, testInfo) => {
+    await loginAsWorkerUser(page, testInfo.workerIndex);
+
+    const scheduledTasks = new ScheduledTasksPage(page);
+    await scheduledTasks.mockPreApprovalOptions();
+    await scheduledTasks.gotoList();
+    test.skip(
+      !scheduledTasks.isCraftEnabled(),
+      "Onyx Craft is disabled in this environment (settings.onyx_craft_enabled !== true)"
+    );
+
+    await scheduledTasks.openCreateForm();
+    await scheduledTasks.expectResponsivePreApprovalLayout();
+  });
+
   test("create, run, and verify a run row exists", async ({
     page,
   }, testInfo) => {

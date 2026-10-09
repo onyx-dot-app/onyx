@@ -5,8 +5,10 @@ from typing import Any
 
 import requests
 
-from onyx.tools.tool_implementations.open_url.models import WebContent
-from onyx.tools.tool_implementations.open_url.models import WebContentProvider
+from onyx.tools.tool_implementations.open_url.models import (
+    WebContent,
+    WebContentProvider,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

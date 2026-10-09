@@ -1,13 +1,18 @@
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ElementExternalAccess
-from onyx.access.models import NodeExternalAccess
+from ee.onyx.external_permissions.perm_sync_types import (
+    FetchAllDocumentsFunction,
+    FetchAllDocumentsIdsFunction,
+)
+from ee.onyx.external_permissions.utils import credential_json
+from onyx.access.models import (
+    DocExternalAccess,
+    ElementExternalAccess,
+    NodeExternalAccess,
+)
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.models import HierarchyNode
@@ -49,13 +54,12 @@ def gmail_doc_sync(
     it in postgres so that when it gets created later, the permissions are
     already populated.
     """
-    gmail_connector = GmailConnector(**cc_pair.connector.connector_specific_config)
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
+    gmail_connector = GmailConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
     )
-    gmail_connector.load_credentials(credential_json)
+    gmail_connector.load_credentials(credential_json(cc_pair))
 
     slim_doc_generator = _get_slim_doc_generator(
         cc_pair, gmail_connector, callback=callback

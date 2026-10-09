@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import SkillBadge from "@/app/craft/components/tool-cards/SkillBadge";
 
 const meta: Meta<typeof SkillBadge> = {

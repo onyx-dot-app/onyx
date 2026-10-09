@@ -13,8 +13,8 @@ import type {
   OverridableExtremaSizeVariants,
   ContainerSizeVariants,
   ExtremaSizeVariants,
-  PaddingVariants,
-  RoundingVariants,
+  Rounding,
+  Spacing,
 } from "@opal/types";
 
 /**
@@ -120,69 +120,37 @@ const heightVariants: Record<ExtremaSizeVariants, string> = {
 //   - SelectCard    (padding, rounding)
 // ---------------------------------------------------------------------------
 
-const paddingVariants: Record<PaddingVariants, string> = {
-  lg: "p-6",
-  md: "p-4",
-  sm: "p-2",
-  xs: "p-1",
-  "2xs": "p-0.5",
-  fit: "p-0",
-};
+/**
+ * Converts a spacing step to a CSS length: `N` is `N / 4` rem.
+ *
+ * Kept as a function rather than a class lookup so the scale stays open —
+ * Tailwind cannot build a class name from a runtime value, but arithmetic can.
+ */
+function spacingToRem(spacing: Spacing): string {
+  return `${spacing / 4}rem`;
+}
 
-const paddingXVariants: Record<PaddingVariants, string> = {
-  lg: "px-6",
-  md: "px-4",
-  sm: "px-2",
-  xs: "px-1",
-  "2xs": "px-0.5",
-  fit: "px-0",
-};
-
-const paddingYVariants: Record<PaddingVariants, string> = {
-  lg: "py-6",
-  md: "py-4",
-  sm: "py-2",
-  xs: "py-1",
-  "2xs": "py-0.5",
-  fit: "py-0",
-};
-
-const cardRoundingVariants: Record<RoundingVariants, string> = {
-  xl: "rounded-20",
-  lg: "rounded-16",
-  md: "rounded-12",
-  sm: "rounded-08",
-  xs: "rounded-04",
-};
-
-const cardTopRoundingVariants: Record<RoundingVariants, string> = {
-  xl: "rounded-t-20",
-  lg: "rounded-t-16",
-  md: "rounded-t-12",
-  sm: "rounded-t-08",
-  xs: "rounded-t-04",
-};
-
-const cardBottomRoundingVariants: Record<RoundingVariants, string> = {
-  xl: "rounded-b-20",
-  lg: "rounded-b-16",
-  md: "rounded-b-12",
-  sm: "rounded-b-08",
-  xs: "rounded-b-04",
-};
+/**
+ * Converts a {@link Rounding} step to a CSS length.
+ *
+ * Separate from {@link spacingToRem} because of `"full"` — a pill has no step
+ * on the scale, and folding that case into the spacing converter would make
+ * `padding="full"` mean 62.5rem, which is meaningless.
+ */
+function roundingToRem(rounding: Rounding): string {
+  return rounding === "full" ? "var(--radius-round)" : spacingToRem(rounding);
+}
 
 export {
   type ExtremaSizeVariants,
   type ContainerSizeVariants,
   type OverridableExtremaSizeVariants,
+  type Rounding,
   type SizeVariants,
+  type Spacing,
   containerSizeVariants,
-  paddingVariants,
-  paddingXVariants,
-  paddingYVariants,
-  cardRoundingVariants,
-  cardTopRoundingVariants,
-  cardBottomRoundingVariants,
+  spacingToRem,
+  roundingToRem,
   widthVariants,
   heightVariants,
 };

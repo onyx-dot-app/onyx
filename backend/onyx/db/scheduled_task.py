@@ -12,30 +12,34 @@ that claimed the task so concurrent beat ticks don't double-fire.
 
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import desc
-from sqlalchemy import literal
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, desc, literal, select
+from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskSkipReason
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.models import ScheduledTask
-from onyx.db.models import ScheduledTaskPreApprovedApp
-from onyx.db.models import ScheduledTaskRun
+from onyx.db.enums import (
+    GatedAppKind,
+    ScheduledTaskErrorClass,
+    ScheduledTaskRunStatus,
+    ScheduledTaskSkipReason,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.gated_app import get_or_create_gated_app_id
+from onyx.db.models import (
+    GatedApp,
+    ScheduledTask,
+    ScheduledTaskPreApprovedTarget,
+    ScheduledTaskRun,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.scheduled_tasks.schedule import compute_next_run_at
-from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
+from onyx.server.features.build.scheduled_tasks.schedule import (
+    EditorMode,
+    compute_next_run_at,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -55,7 +59,8 @@ def create_scheduled_task(
     cron_expression: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
-    pre_approved_app_ids: list[int] | None = None,
+    pre_approved_external_app_ids: list[int] | None = None,
+    pre_approved_mcp_server_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
@@ -80,22 +85,59 @@ def create_scheduled_task(
         status=status,
         next_run_at=next_run_at,
     )
-    set_pre_approved_apps(task, pre_approved_app_ids or [])
+    _replace_pre_approved_targets(
+        db_session,
+        task,
+        external_app_ids=pre_approved_external_app_ids or [],
+        mcp_server_ids=pre_approved_mcp_server_ids or [],
+    )
     db_session.add(task)
     db_session.flush()
     return task
 
 
-def set_pre_approved_apps(task: ScheduledTask, app_ids: list[int]) -> None:
-    """Replace a task's pre-approval grants with ``app_ids`` (deduped). Reuses
-    existing rows so re-submitting a granted app is a no-op — recreating it
-    would orphan+reinsert the same unique key in one flush, which Postgres
-    rejects. Removed grants drop via the ``delete-orphan`` cascade.
+def _replace_pre_approved_targets(
+    db_session: Session,
+    task: ScheduledTask,
+    *,
+    external_app_ids: list[int] | None = None,
+    mcp_server_ids: list[int] | None = None,
+) -> None:
+    """Replace supplied target kinds and preserve omitted kinds.
+
+    Reuse unchanged rows to avoid deleting and inserting the same unique key
+    in one flush. The orphan cascade deletes removed grants.
     """
-    existing = {grant.external_app_id: grant for grant in task.pre_approved_apps}
-    task.pre_approved_apps = [
-        existing.get(app_id) or ScheduledTaskPreApprovedApp(external_app_id=app_id)
-        for app_id in dict.fromkeys(app_ids)
+    replacements = {
+        kind: target_ids
+        for kind, target_ids in (
+            (GatedAppKind.EXTERNAL_APP, external_app_ids),
+            (GatedAppKind.MCP_SERVER, mcp_server_ids),
+        )
+        if target_ids is not None
+    }
+    if not replacements:
+        return
+
+    existing_by_target = {
+        grant.gated_app.target_key: grant for grant in task.pre_approved_targets
+    }
+    replacement_grants = [
+        existing_by_target.get((kind, target_id))
+        or ScheduledTaskPreApprovedTarget(
+            gated_app_id=get_or_create_gated_app_id(db_session, kind, target_id)
+        )
+        for kind, target_ids in replacements.items()
+        for target_id in set(target_ids)
+    ]
+    retained_grants = [
+        grant
+        for grant in task.pre_approved_targets
+        if grant.gated_app.kind not in replacements
+    ]
+    task.pre_approved_targets = [
+        *replacement_grants,
+        *retained_grants,
     ]
 
 
@@ -151,7 +193,8 @@ def update_scheduled_task(
     cron_expression: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
-    pre_approved_app_ids: list[int] | None = None,
+    pre_approved_external_app_ids: list[int] | None = None,
+    pre_approved_mcp_server_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Apply a partial update to a scheduled task.
@@ -161,8 +204,8 @@ def update_scheduled_task(
         ``next_run_at`` is recomputed from ``now``.
       - If ``status`` transitions to PAUSED, ``next_run_at`` is set to NULL.
       - If ``status`` transitions to ACTIVE, ``next_run_at`` is recomputed.
-      - ``pre_approved_app_ids`` follows normal patch semantics: supplied
-        replaces the set, omitted leaves it unchanged.
+      - Each pre-approved target field follows normal patch semantics: supplied
+        replaces that target kind, and omitted leaves it unchanged.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
@@ -177,8 +220,12 @@ def update_scheduled_task(
         task.name = name
     if prompt is not None:
         task.prompt = prompt
-    if pre_approved_app_ids is not None:
-        set_pre_approved_apps(task, pre_approved_app_ids)
+    _replace_pre_approved_targets(
+        db_session,
+        task,
+        external_app_ids=pre_approved_external_app_ids,
+        mcp_server_ids=pre_approved_mcp_server_ids,
+    )
     if editor_mode is not None:
         task.editor_mode = editor_mode
     if cron_expression is not None and cron_expression != task.cron_expression:
@@ -267,6 +314,8 @@ def claim_due_scheduled_tasks(
         return []
     stmt = (
         select(ScheduledTask)
+        # The dispatcher gates each task on its owner's Craft access.
+        .options(selectinload(ScheduledTask.user))
         .where(
             ScheduledTask.status == ScheduledTaskStatus.ACTIVE,
             ScheduledTask.deleted.is_(False),
@@ -486,8 +535,10 @@ def find_stuck_runs(
 # Egress-gate pre-approval lookup
 # ---------------------------------------------------------------------------
 
-# (run_id, granted external-app ids) for a RUNNING scheduled run, else None.
-ScheduledRunGrants = tuple[UUID, list[int]] | None
+# (run_id, granted gated targets) for a RUNNING scheduled run, else None. A
+# target is a (kind, id) pair spanning external apps and MCP servers.
+GrantedTarget = tuple[GatedAppKind, int]
+ScheduledRunGrants = tuple[UUID, set[GrantedTarget]] | None
 
 
 def get_live_scheduled_run_grants(
@@ -495,7 +546,7 @@ def get_live_scheduled_run_grants(
     db_session: Session,
     session_id: UUID,
 ) -> ScheduledRunGrants:
-    """``(run_id, pre_approved_app_ids)`` when ``session_id`` is a currently
+    """``(run_id, granted_targets)`` when ``session_id`` is a currently
     RUNNING scheduled run; ``None`` otherwise.
 
     The ``scheduled_task_run`` lookup subsumes the session-origin check
@@ -511,14 +562,16 @@ def get_live_scheduled_run_grants(
     if run is None:
         return None
     run_id, task_id = run
-    app_ids = list(
-        db_session.execute(
-            select(ScheduledTaskPreApprovedApp.external_app_id)
-            .where(ScheduledTaskPreApprovedApp.scheduled_task_id == task_id)
-            .order_by(ScheduledTaskPreApprovedApp.id)
-        ).scalars()
-    )
-    return run_id, app_ids
+    gated_targets = db_session.scalars(
+        select(GatedApp)
+        .join(
+            ScheduledTaskPreApprovedTarget,
+            ScheduledTaskPreApprovedTarget.gated_app_id == GatedApp.id,
+        )
+        .where(ScheduledTaskPreApprovedTarget.scheduled_task_id == task_id)
+    ).all()
+    granted: set[GrantedTarget] = {target.target_key for target in gated_targets}
+    return run_id, granted
 
 
 # ---------------------------------------------------------------------------

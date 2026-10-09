@@ -1,6 +1,4 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
 
@@ -10,15 +8,11 @@ from slack_sdk import WebClient
 from typing_extensions import override
 
 from onyx.context.search.federated.slack_search import slack_retrieval
-from onyx.context.search.models import ChunkIndexRequest
-from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import ChunkIndexRequest, InferenceChunk
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.federated_connectors.interfaces import FederatedConnector
-from onyx.federated_connectors.models import CredentialField
-from onyx.federated_connectors.models import EntityField
-from onyx.federated_connectors.models import OAuthResult
-from onyx.federated_connectors.slack.models import SlackCredentials
-from onyx.federated_connectors.slack.models import SlackEntities
+from onyx.federated_connectors.models import CredentialField, EntityField, OAuthResult
+from onyx.federated_connectors.slack.models import SlackCredentials, SlackEntities
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.utils.logger import setup_logger
 

@@ -26,8 +26,7 @@ import time
 from dataclasses import dataclass
 
 from celery import Task
-from prometheus_client import Counter
-from prometheus_client import Histogram
+from prometheus_client import Counter, Histogram
 
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.server.metrics.celery_task_metrics import _MAX_START_TIME_AGE_SECONDS

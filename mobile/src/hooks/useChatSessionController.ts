@@ -14,6 +14,7 @@ import { getChatSession } from "@/api/chat/sessions";
 import {
   isHeartbeat,
   isPacket,
+  isStreamError,
   resumeChatMessage,
   StreamHttpError,
 } from "@/api/chat/stream";
@@ -38,7 +39,7 @@ async function runResumeStream(
   const node = data
     ? getMessageByMessageId(data.messageTree, runId)
     : undefined;
-  // Single-model only: a multi-model run_id is the user message, not an assistant node.
+  // Single-model only: a multi-model stream_id is the user message, not an assistant node.
   if (!data || !node || node.type !== "assistant") return;
   // local send owns the stream, or another reopen already resumed this run
   if (resumingRuns.has(runId) || data.abortController) return;
@@ -48,8 +49,13 @@ async function runResumeStream(
   const controller = new AbortController();
   store.getState().setAbortController(sessionId, controller);
   store.getState().updateChatState(sessionId, "streaming");
-  // clear the reserved placeholder so it doesn't render above the replayed stream
-  store.getState().patchNode(sessionId, nodeId, { message: "", packets: [] });
+  // clear the reserved placeholder so it doesn't render above the replayed stream. The timer
+  // restarts from here: this client never saw the run's true start (web shows no timer at all here).
+  store.getState().patchNode(sessionId, nodeId, {
+    message: "",
+    packets: [],
+    streamingStartedAt: Date.now(),
+  });
 
   // writes are safe only while this session stays focused and unaborted
   const stillCurrent = () =>
@@ -95,9 +101,28 @@ async function runResumeStream(
       0,
       controller.signal,
     )) {
-      // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during
-      // quiet phases; heartbeats carry no content, so they aren't rendered
+      // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during quiet phases
       if (!stillCurrent()) break;
+      if (isStreamError(event)) {
+        // Errored run: show it immediately rather than waiting on (or getting stuck if it fails)
+        // the snapshot settle below. Matches the live-send path in useChatController.
+        console.warn("resume-stream received a backend error", {
+          sessionId,
+          errorCode: event.error_code ?? null,
+          error: event.error,
+        });
+        pending = [];
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        store.getState().patchNode(sessionId, nodeId, {
+          type: "error",
+          message: event.error,
+          errorCode: event.error_code ?? null,
+        });
+        break;
+      }
       if (isPacket(event) && !isHeartbeat(event)) {
         pending.push(event);
         scheduleFlush();
@@ -132,7 +157,7 @@ async function runResumeStream(
               sessionId,
               processRawChatHistory(settled.messages, settled.packets),
             );
-          // clear the stale current_run so a remount can't re-resume this finished run
+          // clear the stale current_stream so a remount can't re-resume this finished run
           queryClient.setQueryData(
             QUERY_KEYS.chatSession(serverUrl, sessionId),
             settled,
@@ -166,7 +191,7 @@ export function useChatSessionController(sessionId: string | null): void {
     enabled: false,
   });
 
-  const runId = data?.current_run?.run_id ?? null;
+  const runId = data?.current_stream?.stream_id ?? null;
 
   useEffect(() => {
     if (sessionId == null || runId == null) return;

@@ -1,8 +1,6 @@
 from pydantic import BaseModel
 
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
-from shared_configs.enums import RerankerProvider
+from shared_configs.enums import EmbeddingProvider, EmbedTextType, RerankerProvider
 
 Embedding = list[float]
 
@@ -49,16 +47,3 @@ class RerankRequest(BaseModel):
 
 class RerankResponse(BaseModel):
     scores: list[float]
-
-
-class IntentRequest(BaseModel):
-    query: str
-    # Sequence classification threshold
-    semantic_percent_threshold: float
-    # Token classification threshold
-    keyword_percent_threshold: float
-
-
-class IntentResponse(BaseModel):
-    is_keyword: bool
-    keywords: list[str]

@@ -4,8 +4,7 @@ Test cases for onyx/utils/gpu_utils.py with DISABLE_MODEL_SERVER environment var
 
 import os
 from unittest import TestCase
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import requests
 

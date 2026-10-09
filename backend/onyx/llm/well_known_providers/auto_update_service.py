@@ -15,10 +15,10 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
-from onyx.db.llm import fetch_auto_mode_providers
-from onyx.db.llm import sync_auto_mode_models
+from onyx.db.llm import fetch_auto_mode_providers, sync_auto_mode_models
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import ONYX_AIRGAPPED
 
 logger = setup_logger()
 
@@ -55,6 +55,9 @@ def fetch_llm_recommendations_from_github(
     Returns:
         GitHubLLMConfig if successful, None on error.
     """
+    if ONYX_AIRGAPPED:
+        logger.debug("ONYX_AIRGAPPED set, skipping LLM config fetch")
+        return None
     if not AUTO_LLM_CONFIG_URL:
         logger.debug("AUTO_LLM_CONFIG_URL not configured, skipping fetch")
         return None

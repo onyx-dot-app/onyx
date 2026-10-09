@@ -9,8 +9,14 @@
 set -euo pipefail
 
 OPENCODE_PORT=4096
+SANDBOX_LISTEN_HOST="${SANDBOX_LISTEN_HOST:-0.0.0.0}"
 export XDG_DATA_HOME="${OPENCODE_DATA_HOME:-/workspace/.opencode-data}"
 mkdir -p "$XDG_DATA_HOME"
+
+# opencode's bash tool defaults to 120s, which is too tight for legitimately slow
+# tools (e.g. image generation). Raise it so opencode bounds long tools itself
+# rather than the coarser api-server inactivity backstop killing the whole turn.
+export OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS="${OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS:-180000}"
 
 child_pid=
 trap 'if [ -n "$child_pid" ]; then kill -TERM "$child_pid" 2>/dev/null || true; fi; exit 0' SIGTERM SIGINT
@@ -51,9 +57,9 @@ backoff=1
 max_backoff=30
 
 while true; do
-    echo "[entrypoint] starting opencode serve on 0.0.0.0:$OPENCODE_PORT (XDG_DATA_HOME=$XDG_DATA_HOME)"
+    echo "[entrypoint] starting opencode serve on $SANDBOX_LISTEN_HOST:$OPENCODE_PORT (XDG_DATA_HOME=$XDG_DATA_HOME)"
     set +e
-    opencode serve --hostname 0.0.0.0 --port "$OPENCODE_PORT" --print-logs &
+    opencode serve --hostname "$SANDBOX_LISTEN_HOST" --port "$OPENCODE_PORT" --print-logs &
     child_pid=$!
     wait "$child_pid"
     exit_code=$?

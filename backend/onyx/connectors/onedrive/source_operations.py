@@ -1,0 +1,323 @@
+from typing import Any
+from urllib.parse import quote
+
+import requests
+
+from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.microsoft_utils.config import (
+    DEFAULT_AUTHORITY_HOST,
+    DEFAULT_GRAPH_API_HOST,
+)
+from onyx.connectors.microsoft_utils.drive_delta import (
+    DRIVE_DELTA_SELECT_FIELDS,
+    DriveDeltaFetchResult,
+    build_onedrive_delta_request_headers,
+    fetch_drive_delta_checkpoint_page,
+)
+from onyx.connectors.microsoft_utils.drive_items import (
+    DriveItemContent,
+    DriveItemData,
+    extract_drive_item_content,
+)
+from onyx.connectors.microsoft_utils.entra import (
+    ENTRA_GROUP_MEMBER_SELECT,
+    ENTRA_GROUP_SELECT,
+    ENTRA_PAGE_SIZE,
+    ENTRA_USER_SELECT,
+    EntraDirectoryObject,
+    EntraGroup,
+    EntraPage,
+    EntraUser,
+    fetch_entra_page,
+    fetch_entra_user,
+)
+from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MISSING_CREDENTIAL_CODE,
+    microsoft_error_from_exception,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OneDriveAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OneDriveGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_gateway import (
+    MicrosoftGraphAuthConfig,
+    MicrosoftGraphGateway,
+    build_graph_user_url,
+)
+from onyx.connectors.onedrive.models import (
+    OneDriveCredentials,
+    OneDriveDrive,
+    OneDrivePermission,
+    OneDrivePermissionPage,
+    OneDriveTokenInfo,
+    OneDriveUser,
+    OneDriveUserPage,
+)
+from onyx.connectors.source_operations import (
+    OperationConsumes,
+    SourceOperations,
+    source_operation,
+)
+from onyx.file_store.staging import RawFileCallback
+
+GRAPH_API_VERSION = "v1.0"
+CONFIG_AUTHORITY_HOST = "authority_host"
+CONFIG_GRAPH_API_HOST = "graph_api_host"
+CONFIG_USERS = "users"
+
+
+def _user(entra_user: EntraUser) -> OneDriveUser | None:
+    if (
+        not entra_user.user_principal_name
+        or entra_user.account_enabled is False
+        or entra_user.user_type == "Guest"
+    ):
+        return None
+    return OneDriveUser(
+        id=entra_user.id,
+        user_principal_name=entra_user.user_principal_name,
+        mail=entra_user.mail,
+        display_name=entra_user.display_name,
+    )
+
+
+class OneDriveSourceOperations(SourceOperations):
+    source = DocumentSource.ONEDRIVE
+    sdk_modules = ("msal", "requests")
+    config_keys = frozenset({CONFIG_AUTHORITY_HOST, CONFIG_GRAPH_API_HOST})
+
+    _graph_gateway: MicrosoftGraphGateway | None = None
+
+    def _config(self, key: str, default: str) -> str:
+        return str((self.connector_specific_config or {}).get(key) or default).rstrip(
+            "/"
+        )
+
+    def _graph_host(self) -> str:
+        return self._config(CONFIG_GRAPH_API_HOST, DEFAULT_GRAPH_API_HOST)
+
+    def _base(self) -> str:
+        return self._gateway().graph_api_base
+
+    def _credentials(self) -> OneDriveCredentials:
+        try:
+            return OneDriveCredentials.model_validate(
+                self.credentials_provider.get_credentials()
+            )
+        except ValueError as error:
+            raise OneDriveAuthError(MISSING_CREDENTIAL_CODE, str(error)) from error
+
+    def _gateway(self) -> MicrosoftGraphGateway:
+        if self._graph_gateway is not None:
+            return self._graph_gateway
+        credential = self._credentials()
+        self._graph_gateway = MicrosoftGraphGateway(
+            auth_config=MicrosoftGraphAuthConfig(
+                client_id=credential.onedrive_client_id,
+                directory_id=credential.onedrive_directory_id,
+                authority_host=self._config(
+                    CONFIG_AUTHORITY_HOST, DEFAULT_AUTHORITY_HOST
+                ),
+                auth_method=credential.onedrive_authentication_method,
+                client_secret=credential.onedrive_client_secret,
+                private_key_b64=credential.onedrive_private_key,
+                certificate_password=credential.onedrive_certificate_password,
+            ),
+            graph_api_host=self._graph_host(),
+            graph_api_version=GRAPH_API_VERSION,
+        )
+        return self._graph_gateway
+
+    def _token_response(self) -> dict[str, Any]:
+        return self._gateway().token_response()
+
+    def _access_token(self) -> str:
+        return self._gateway().access_token()
+
+    def _client(self) -> GraphApiClient:
+        return self._gateway().client
+
+    def _get(self, url: str, params: dict[str, str] | None = None) -> dict[str, Any]:
+        return self._gateway().get_json(url, params)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def check_token(self) -> OneDriveTokenInfo:
+        response = self._token_response()
+        expires = response.get("expires_in")
+        return OneDriveTokenInfo(
+            expires_in=int(expires) if expires is not None else None
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_users(
+        self, *, next_link: str | None = None, page_size: int = ENTRA_PAGE_SIZE
+    ) -> OneDriveUserPage:
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._base()}/users",
+            item_model=EntraUser,
+            select_fields=ENTRA_USER_SELECT,
+            next_link=next_link,
+            page_size=page_size,
+        )
+        users = [user for item in page.items if (user := _user(item))]
+        return OneDriveUserPage(users=users, next_link=page.next_link)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+        untested=(
+            "Configured-user checks exercise this only when connector config "
+            "contains a user; the coverage spy has an empty config."
+        ),
+    )
+    def get_user(self, *, identifier: str) -> OneDriveUser | None:
+        try:
+            user = fetch_entra_user(
+                self._gateway().get_json,
+                self._base(),
+                identifier,
+            )
+        except OneDriveGraphError as error:
+            if error.status == 404:
+                return None
+            raise
+        return _user(user)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The drive probe needs a user returned by Graph; the coverage spy "
+            "has no tenant users."
+        ),
+    )
+    def get_default_drive(self, *, user_id: str) -> OneDriveDrive | None:
+        try:
+            raw = self._get(f"{build_graph_user_url(self._base(), user_id)}/drive")
+        except OneDriveGraphError as error:
+            if error.status == 404:
+                return None
+            raise
+        return OneDriveDrive(
+            id=raw["id"], name=raw.get("name") or "OneDrive", web_url=raw.get("webUrl")
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The delta probe needs a drive returned by Graph; the coverage spy "
+            "has no tenant users."
+        ),
+    )
+    def get_delta_page(
+        self,
+        *,
+        drive_id: str,
+        page_url: str,
+        page_size: int,
+        allow_full_resync: bool,
+    ) -> DriveDeltaFetchResult:
+        try:
+            return fetch_drive_delta_checkpoint_page(
+                self._client(),
+                page_url=page_url,
+                drive_id=drive_id,
+                request_headers=build_onedrive_delta_request_headers(),
+                page_size=page_size,
+                select_fields=DRIVE_DELTA_SELECT_FIELDS,
+                allow_full_resync=allow_full_resync,
+            )
+        except (requests.RequestException, ValueError) as error:
+            raise microsoft_error_from_exception(error) from error
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "A safe download probe needs a file returned by delta; empty drives "
+            "have no item that capability checks can read."
+        ),
+    )
+    def download_item(
+        self,
+        *,
+        item: DriveItemData,
+        raw_file_callback: RawFileCallback | None = None,
+    ) -> DriveItemContent | None:
+        return extract_drive_item_content(
+            item,
+            SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
+            self._base(),
+            self._access_token(),
+            raw_file_callback,
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Item permission reads need document context unavailable to "
+            "credential checks."
+        ),
+    )
+    def list_permissions(
+        self, *, drive_id: str, item_id: str, next_link: str | None = None
+    ) -> OneDrivePermissionPage:
+        url = (
+            next_link or f"{self._base()}/drives/{drive_id}/items/{item_id}/permissions"
+        )
+        data = self._get(url)
+        return OneDrivePermissionPage(
+            permissions=[
+                OneDrivePermission.model_validate(raw) for raw in data.get("value", [])
+            ],
+            next_link=data.get("@odata.nextLink"),
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_groups(
+        self, *, next_link: str | None = None, page_size: int = ENTRA_PAGE_SIZE
+    ) -> EntraPage[EntraGroup]:
+        return fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._base()}/groups",
+            item_model=EntraGroup,
+            select_fields=ENTRA_GROUP_SELECT,
+            next_link=next_link,
+            page_size=page_size,
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Group expansion needs a concrete group id unavailable to "
+            "credential checks."
+        ),
+    )
+    def list_transitive_group_members(
+        self, *, group_id: str, next_link: str | None = None
+    ) -> EntraPage[EntraDirectoryObject]:
+        return fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._base()}/groups/{quote(group_id)}/transitiveMembers",
+            item_model=EntraDirectoryObject,
+            select_fields=ENTRA_GROUP_MEMBER_SELECT,
+            next_link=next_link,
+        )

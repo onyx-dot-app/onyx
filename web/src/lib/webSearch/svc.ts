@@ -179,7 +179,7 @@ export type ConnectProviderFlowArgs = {
   onError: (message: string) => void;
   onClose: () => void;
 
-  mutate: () => Promise<unknown>;
+  mutate: () => Promise<void>;
 };
 
 export async function connectProviderFlow({

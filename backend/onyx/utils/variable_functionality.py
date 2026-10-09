@@ -1,17 +1,18 @@
 import functools
 import importlib
+import importlib.util
 import inspect
-import os
-from typing import Any
-from typing import TypeVar
+from importlib.machinery import ModuleSpec
+from typing import Any, TypeVar
 
-from onyx.configs.app_configs import API_SERVER_HOST
-from onyx.configs.app_configs import API_SERVER_PROTOCOL
-from onyx.configs.app_configs import API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS
-from onyx.configs.app_configs import APP_API_PREFIX
-from onyx.configs.app_configs import APP_PORT
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import (
+    API_SERVER_HOST,
+    API_SERVER_PROTOCOL,
+    API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS,
+    APP_API_PREFIX,
+    APP_PORT,
+    DEV_MODE,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -33,37 +34,32 @@ class OnyxVersion:
 
 global_version = OnyxVersion()
 
-# Read LICENSE_ENFORCEMENT_ENABLED directly since it's in EE configs
-# This allows EE code to load when license enforcement is enabled,
-# even without ENABLE_PAID_ENTERPRISE_EDITION_FEATURES being set.
-# Eventually, ENABLE_PAID_ENTERPRISE_EDITION_FEATURES will be removed
-# and license enforcement will be the only mechanism for EE features.
-_LICENSE_ENFORCEMENT_ENABLED = (
-    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "true").lower() == "true"
-)
+
+def is_ee_available() -> bool:
+    """Whether this build ships the Enterprise Edition code. The MIT-only mirror
+    strips `ee.onyx` and keeps a bare `ee` package."""
+    try:
+        spec: ModuleSpec | None = importlib.util.find_spec("ee.onyx")
+    except ModuleNotFoundError:
+        # No `ee` package at all.
+        return False
+    # A leftover directory with no `__init__.py` resolves as a namespace
+    # package, which has no origin.
+    return spec is not None and spec.origin is not None
 
 
-def set_is_ee_based_on_env_variable() -> None:
-    """Enable Enterprise Edition based on environment configuration.
-
-    EE is enabled if either:
-    - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true (legacy/rollout flag)
-    - LICENSE_ENFORCEMENT_ENABLED=true (license-based gating)
-
-    When LICENSE_ENFORCEMENT_ENABLED is true, EE code is loaded but access
-    to EE-only features is controlled by the license enforcement middleware.
-    """
-    if global_version.is_ee_version():
+def set_is_ee_if_available() -> None:
+    """Loads the Enterprise Edition code when the build ships it. Loading
+    unlocks nothing: every paid feature is gated on the license, so a
+    deployment with no license behaves as Community Edition."""
+    if global_version.is_ee_version() or not is_ee_available():
         return
 
-    if ENTERPRISE_EDITION_ENABLED:
-        logger.notice(
-            "Enterprise Edition enabled via ENABLE_PAID_ENTERPRISE_EDITION_FEATURES"
-        )
-        global_version.set_ee()
-    elif _LICENSE_ENFORCEMENT_ENABLED:
-        logger.notice("Enterprise Edition enabled via LICENSE_ENFORCEMENT_ENABLED")
-        global_version.set_ee()
+    logger.notice(
+        "Enterprise Edition code is loaded. Paid features stay locked until a "
+        "valid license is applied."
+    )
+    global_version.set_ee()
 
 
 @functools.lru_cache(maxsize=128)
@@ -95,7 +91,9 @@ def fetch_versioned_implementation(module: str, attribute: str) -> Any:
 
     module_full = f"ee.{module}" if is_ee else module
     try:
-        return getattr(importlib.import_module(module_full), attribute)
+        return getattr(  # ods: ignore[getattr]
+            importlib.import_module(module_full), attribute
+        )
     except ModuleNotFoundError as e:
         logger.warning(
             "Failed to fetch versioned implementation for %s.%s: %s",
@@ -114,7 +112,9 @@ def fetch_versioned_implementation(module: str, attribute: str) -> Any:
             # Use the MIT version as a fallback, this allows us to develop MIT
             # versions independently and later add additional EE functionality
             # similar to feature flagging
-            return getattr(importlib.import_module(module), attribute)
+            return getattr(  # ods: ignore[getattr]
+                importlib.import_module(module), attribute
+            )
 
         raise
 

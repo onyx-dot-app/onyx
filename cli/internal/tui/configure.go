@@ -39,6 +39,10 @@ type configState struct {
 }
 
 func enterConfigureMode(m Model) (Model, tea.Cmd) {
+	if RemoteMode {
+		m.viewport.addWarning("/configure is disabled over SSH: it would change the server host's config.")
+		return m, nil
+	}
 	if m.isStreaming {
 		m.viewport.addWarning("Cannot configure while streaming. Press Esc to cancel generation first.")
 		return m, nil

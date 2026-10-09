@@ -7,17 +7,19 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.user_library.api import DeleteFileResponse
-from onyx.server.features.build.user_library.api import UploadResponse
-from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
-from tests.integration.tests.craft.k8s.k8s_fixtures import WorkspaceProxy
-from tests.integration.tests.craft.user_library_http import delete_user_library_file
-from tests.integration.tests.craft.user_library_http import list_user_library_tree
-from tests.integration.tests.craft.user_library_http import make_zip_bytes
-from tests.integration.tests.craft.user_library_http import upload_user_library_files
-from tests.integration.tests.craft.user_library_http import upload_user_library_zip
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+from onyx.server.features.build.user_library.api import (
+    DeleteFileResponse,
+    UploadResponse,
+)
+from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle, WorkspaceProxy
+from tests.integration.tests.craft.user_library_http import (
+    delete_user_library_file,
+    list_user_library_tree,
+    make_zip_bytes,
+    upload_user_library_files,
+    upload_user_library_zip,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,

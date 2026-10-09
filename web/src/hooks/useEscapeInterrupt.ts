@@ -42,7 +42,10 @@ export function useEscapeInterrupt({
 }: UseEscapeInterruptArgs): void {
   // Held in a ref so the listener doesn't tear down on onInterrupt identity churn.
   const onInterruptRef = useRef(onInterrupt);
-  onInterruptRef.current = onInterrupt;
+
+  useEffect(() => {
+    onInterruptRef.current = onInterrupt;
+  }, [onInterrupt]);
 
   useEffect(() => {
     if (!enabled) return;

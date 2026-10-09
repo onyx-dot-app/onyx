@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.models import InternetContentProvider
-from onyx.db.models import InternetSearchProvider
+from onyx.db.models import InternetContentProvider, InternetSearchProvider
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
-from shared_configs.enums import WebContentProviderType
-from shared_configs.enums import WebSearchProviderType
+from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 
 
 def fetch_web_search_providers(db_session: Session) -> list[InternetSearchProvider]:
@@ -206,6 +203,31 @@ def fetch_web_content_provider_by_type(
         InternetContentProvider.provider_type == provider_type.value
     )
     return db_session.scalars(stmt).first()
+
+
+def set_web_search_provider_base_url(
+    *, name: str, base_url: str, db_session: Session
+) -> None:
+    provider = db_session.scalars(
+        select(InternetSearchProvider).where(InternetSearchProvider.name == name)
+    ).first()
+    if provider is None:
+        return
+    provider.config = {**(provider.config or {}), "base_url": base_url}
+    db_session.flush()
+
+
+def set_web_content_provider_base_url(
+    *, name: str, base_url: str, db_session: Session
+) -> None:
+    provider = db_session.scalars(
+        select(InternetContentProvider).where(InternetContentProvider.name == name)
+    ).first()
+    if provider is None:
+        return
+    config = provider.config or WebContentProviderConfig()
+    provider.config = config.model_copy(update={"base_url": base_url})
+    db_session.flush()
 
 
 def _ensure_unique_content_name(

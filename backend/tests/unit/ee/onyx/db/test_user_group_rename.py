@@ -1,12 +1,12 @@
 """Tests for user group rename DB operation."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ee.onyx.db.user_group import rename_user_group
 from onyx.db.models import UserGroup
+from onyx.error_handling.exceptions import OnyxError
 
 
 class TestRenameUserGroup:
@@ -16,7 +16,7 @@ class TestRenameUserGroup:
     @patch(
         "ee.onyx.db.user_group._mark_user_group__cc_pair_relationships_outdated__no_commit"
     )
-    def test_rename_succeeds_and_triggers_sync(
+    def test_rename_succeeds_and_triggers_sync_without_dropping_cc_pairs(
         self, mock_mark_outdated: MagicMock
     ) -> None:
         mock_session = MagicMock()
@@ -29,7 +29,9 @@ class TestRenameUserGroup:
 
         assert result.name == "New Name"
         assert result.is_up_to_date is False
-        mock_mark_outdated.assert_called_once()
+        # Outdated rows are deleted by the sync, which would drop the group's
+        # cc_pairs.
+        mock_mark_outdated.assert_not_called()
         mock_session.commit.assert_called_once()
 
     def test_rename_group_not_found(self) -> None:
@@ -47,7 +49,7 @@ class TestRenameUserGroup:
         mock_group.is_up_to_date = False
         mock_session.scalar.return_value = mock_group
 
-        with pytest.raises(ValueError, match="currently syncing"):
+        with pytest.raises(OnyxError, match="currently syncing"):
             rename_user_group(mock_session, user_group_id=1, new_name="New Name")
 
         mock_session.commit.assert_not_called()

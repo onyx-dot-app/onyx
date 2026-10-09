@@ -43,7 +43,7 @@ interface CardHeaderProps {
  *     description="Search engine"
  *     sizePreset="main-ui"
  *     variant="section"
- *     padding="lg"
+ *     padding={2}
  *     rightChildren={<Button>Connect</Button>}
  *   />
  * </Card.Header>

@@ -1,15 +1,14 @@
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from celery import Celery
-from celery import signals
-from celery import Task
+from celery import Celery, Task, signals
 from celery.apps.worker import Worker
-from celery.signals import celeryd_init
-from celery.signals import worker_init
-from celery.signals import worker_process_init
-from celery.signals import worker_ready
-from celery.signals import worker_shutdown
+from celery.signals import (
+    celeryd_init,
+    worker_init,
+    worker_process_init,
+    worker_ready,
+    worker_shutdown,
+)
 
 import onyx.background.celery.apps.app_base as app_base
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_USER_FILE_PROCESSING_APP_NAME
@@ -109,6 +108,8 @@ celery_app.autodiscover_tasks(
     app_base.filter_task_modules(
         [
             "onyx.background.celery.tasks.user_file_processing",
+            # registers run_user_file_port_attempt on this worker
+            "onyx.background.celery.tasks.port",
         ]
     )
 )

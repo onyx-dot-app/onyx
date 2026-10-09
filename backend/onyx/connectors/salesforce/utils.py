@@ -5,6 +5,7 @@ from typing import Any
 
 NAME_FIELD = "Name"
 MODIFIED_FIELD = "LastModifiedDate"
+CREATED_FIELD = "CreatedDate"
 ID_FIELD = "Id"
 ACCOUNT_OBJECT_TYPE = "Account"
 USER_OBJECT_TYPE = "User"

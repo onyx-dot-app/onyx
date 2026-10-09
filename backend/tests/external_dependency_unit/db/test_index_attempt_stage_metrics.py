@@ -22,8 +22,7 @@ import math
 import statistics
 import time
 from collections.abc import Generator
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import uuid4
 
 import pytest
@@ -33,19 +32,27 @@ from sqlalchemy.orm import Session
 from onyx.db.document import prepare_to_modify_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
-from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
-from onyx.db.index_attempt_metrics import record_single_event
-from onyx.db.index_attempt_metrics import record_stage_aggregate
-from onyx.db.index_attempt_metrics import StageEventBuffer
+from onyx.db.index_attempt_metrics import (
+    StageEventBuffer,
+    get_stage_metrics_for_attempt,
+    record_single_event,
+    record_stage_aggregate,
+)
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptStageMetric,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptStageMetric
-from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
-from onyx.server.documents.models import synthesize_unaccounted
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from onyx.server.documents.models import (
+    IndexAttemptStageMetricSnapshot,
+    synthesize_unaccounted,
+)
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 
 @pytest.fixture

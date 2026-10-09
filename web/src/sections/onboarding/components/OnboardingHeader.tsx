@@ -1,4 +1,7 @@
+"use client";
+
 import React from "react";
+import { useTranslations } from "next-intl";
 import { STEP_CONFIG } from "@/sections/onboarding/constants";
 import {
   OnboardingActions,
@@ -6,9 +9,8 @@ import {
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Card } from "@opal/components";
 import { SvgProgressCircle, SvgX } from "@opal/icons";
-import { Card } from "@/refresh-components/cards";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 
@@ -25,9 +27,12 @@ const OnboardingHeader = React.memo(
     handleHideOnboarding,
     handleFinishOnboarding,
   }: OnboardingHeaderProps) => {
+    const t = useTranslations("onboarding");
     const iconPercentage =
       STEP_CONFIG[onboardingState.currentStep].iconPercentage;
-    const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
+    const stepButtonText = t(
+      STEP_CONFIG[onboardingState.currentStep].buttonTextKey
+    );
     const isWelcomeStep =
       onboardingState.currentStep === OnboardingStep.Welcome;
     const isCompleteStep =
@@ -39,42 +44,51 @@ const OnboardingHeader = React.memo(
     }
 
     return (
-      <Card padding={0.5} data-label="onboarding-header">
-        <ContentAction
-          icon={(props) => (
-            <SvgProgressCircle value={iconPercentage} {...props} />
-          )}
-          title={STEP_CONFIG[onboardingState.currentStep].title}
-          sizePreset="main-ui"
-          variant="body"
-          color="muted"
-          padding="sm"
-          rightChildren={
-            stepButtonText ? (
-              <Section flexDirection="row">
-                {!isWelcomeStep && (
-                  <Text as="p" text03 mainUiBody>
-                    Step {onboardingState.stepIndex} of{" "}
-                    {onboardingState.totalSteps}
-                  </Text>
-                )}
+      <Card
+        border="solid"
+        padding={2}
+        data-label="onboarding-header"
+        rounding={4}
+      >
+        <Section alignItems="start" height="fit">
+          <ContentAction
+            icon={(props) => (
+              <SvgProgressCircle value={iconPercentage} {...props} />
+            )}
+            title={t(STEP_CONFIG[onboardingState.currentStep].titleKey)}
+            sizePreset="main-ui"
+            variant="body"
+            color="muted"
+            padding={1}
+            rightChildren={
+              stepButtonText ? (
+                <Section flexDirection="row">
+                  {!isWelcomeStep && (
+                    <Text as="p" text03 mainUiBody>
+                      {t("header.progress.label", {
+                        current: onboardingState.stepIndex,
+                        total: onboardingState.totalSteps,
+                      })}
+                    </Text>
+                  )}
+                  <Button
+                    disabled={!onboardingState.isButtonActive}
+                    onClick={handleButtonClick}
+                  >
+                    {stepButtonText}
+                  </Button>
+                </Section>
+              ) : (
                 <Button
-                  disabled={!onboardingState.isButtonActive}
-                  onClick={handleButtonClick}
-                >
-                  {stepButtonText}
-                </Button>
-              </Section>
-            ) : (
-              <Button
-                prominence="tertiary"
-                size="sm"
-                icon={SvgX}
-                onClick={handleHideOnboarding}
-              />
-            )
-          }
-        />
+                  prominence="tertiary"
+                  size="sm"
+                  icon={SvgX}
+                  onClick={handleHideOnboarding}
+                />
+              )
+            }
+          />
+        </Section>
       </Card>
     );
   }

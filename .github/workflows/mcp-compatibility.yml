@@ -1,0 +1,188 @@
+name: MCP Compatibility
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      test_alert:
+        description: Send a labeled test alert to the alerts channel
+        type: boolean
+        default: false
+  schedule:
+    - cron: "17 9 * * 1"
+    - cron: "37 9 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-compatibility-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  routing:
+    if: github.event_name != 'schedule' || github.event.schedule == '37 9 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.11.25"
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
+        with:
+          version: v3.19.0
+      - name: Check rendered ingress and real nginx routing
+        run: uv run --frozen --only-group dev pytest -q deployment/tests
+
+  native-clients:
+    if: github.event_name != 'schedule' || github.event.schedule == '37 9 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: backend
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: postgres
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      AUTH_BACKEND: redis
+      CACHE_BACKEND: redis
+      MCP_NATIVE_CLIENTS_REQUIRED: "true"
+      DISABLE_TELEMETRY: "true"
+    services:
+      postgres:
+        image: postgres:15.2-alpine
+        env:
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+            backend/requirements/ee.txt
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "24"
+      - name: Install MCP client CLIs
+        env:
+          CODEX_PACKAGE: ${{ github.event_name == 'schedule' && '@openai/codex@latest' || '@openai/codex@0.161.0' }}
+          CLAUDE_PACKAGE: ${{ github.event_name == 'schedule' && '@anthropic-ai/claude-code@latest' || '@anthropic-ai/claude-code@2.1.293' }}
+        run: |
+          npm install --global "$CODEX_PACKAGE" "$CLAUDE_PACKAGE"
+          codex --version
+          claude --version
+      - name: Apply migrations to the test database
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Check real Claude Code and Codex OAuth connections
+        run: >-
+          pytest -q
+          backend/tests/external_dependency_unit/oauth_provider/test_native_clients.py
+          backend/tests/external_dependency_unit/oauth_provider/test_protocol.py
+
+  compose-smoke:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' && github.event.schedule == '17 9 * * 1')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_FILE: deployment/docker_compose/docker-compose.mcp-ci.yml
+      COMPOSE_PROJECT_NAME: onyx-mcp-ci-${{ github.run_id }}
+      ONYX_BACKEND_IMAGE: onyx-mcp-ci-backend:ci
+      MCP_CANARY_PORT: "18080"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - name: Build the backend under test
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: backend
+          file: backend/Dockerfile
+          target: runtime
+          load: true
+          tags: ${{ env.ONYX_BACKEND_IMAGE }}
+          cache-from: type=gha,scope=mcp-compose-canary
+          cache-to: type=gha,scope=mcp-compose-canary,mode=max
+      - name: Start the isolated MCP stack
+        run: docker compose up -d --no-build --wait --wait-timeout 300
+      - name: Check local discovery and MCP challenge
+        run: >-
+          python3 .github/scripts/check-mcp-compatibility.py
+          --base-url "http://localhost:${MCP_CANARY_PORT}"
+      - name: Dump stack diagnostics
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color
+      - name: Stop the isolated stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  required:
+    name: MCP compatibility
+    if: always() && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+    needs: [routing, native-clients]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require both regression suites
+        env:
+          ROUTING: ${{ needs.routing.result }}
+          CLIENTS: ${{ needs.native-clients.result }}
+        run: test "$ROUTING" = success && test "$CLIENTS" = success
+
+  notify:
+    if: >-
+      always() &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      (contains(needs.*.result, 'failure') || inputs.test_alert)
+    needs: [routing, native-clients, compose-smoke]
+    runs-on: ubuntu-slim
+    environment: ci-protected
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Alert alerts channel
+        uses: ./.github/actions/slack-post-message
+        with:
+          bot-token: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
+          channel: C07K8KBMGKF
+          mention: rohoswagger
+          fail-on-error: "true"
+          text: |-
+            *${{ inputs.test_alert && 'MCP compatibility: alert-delivery test' || 'MCP compatibility checks failed' }}*
+            {mention}
+
+            • Routing: `${{ needs.routing.result }}`
+            • Claude Code / Codex: `${{ needs.native-clients.result }}`
+            • Local Compose discovery: `${{ needs.compose-smoke.result }}`
+
+            <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run and logs>

@@ -4,14 +4,15 @@ Tests the new data source discovery + querying flow and the
 data_source_id -> database_id parent resolution.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from requests.exceptions import HTTPError
 
-from onyx.connectors.notion.connector import NotionConnector
-from onyx.connectors.notion.connector import NotionDataSource
-from onyx.connectors.notion.connector import NotionPage
+from onyx.connectors.notion.connector import (
+    NotionConnector,
+    NotionDataSource,
+    NotionPage,
+)
 
 
 def _make_connector() -> NotionConnector:

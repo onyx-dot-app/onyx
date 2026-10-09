@@ -36,7 +36,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
    - Snapshots tar-streamed through api_server-owned `FileStore` — agent containers never receive S3/MinIO credentials
    - Auto-cleanup of idle sandboxes (background worker uses the same Docker socket)
    - For self-hosted `docker compose` deployments enabled by `install.sh --include-craft`
-   - Sandboxes join only the dedicated `onyx_craft_sandbox` bridge — `postgres` / `redis` / `minio` / model servers are not reachable by compose DNS
+   - Sandboxes join only the dedicated `onyx_craft_sandbox` bridge — `postgres` / `redis` / `object-store` / model servers are not reachable by compose DNS
 
 #### Kubernetes → Docker mapping
 
@@ -54,11 +54,15 @@ The Docker backend is intentionally the closest single-VM analogue of the Kubern
 
 #### Docker mode trust boundary
 
-`api_server` and `background` mount the host Docker socket so they can drive sandbox containers. Anything that can talk to that socket is effectively root on the host — only enable Craft on hosts you fully control. Sandbox containers themselves run unprivileged: `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`).
+`api_server` and `background` mount the host Docker socket so they can drive sandbox containers. Anything that can talk to that socket is effectively root on the host — only enable Craft on hosts you fully control. Sandbox containers themselves run unprivileged: `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL` + `ONYX_API_PREFIX`).
 
-`SANDBOX_API_SERVER_URL` must be the **public** HTTPS URL that the agent reaches Onyx through (same way any onyx-cli client would). Compose hostnames like `http://api_server:8080` do not resolve from inside the sandbox bridge.
+`ONYX_SERVER_URL` is the complete API base URL used by both the host-side
+manager and the sandbox client. The Craft Compose overlay defaults it to
+`http://onyx-craft-api:8080`, a private alias on the sandbox bridge. Public
+reverse-proxy overrides must include their API path prefix, for example
+`https://onyx.your-org.example/api`.
 
-On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which can hand out IAM credentials. `install.sh --include-craft` installs a host-level `DOCKER-USER` iptables rule to drop sandbox→IMDS traffic when it has sudo/iptables access, and prints the manual command otherwise. There is no application-level fallback — fix this at the host firewall.
+On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which can hand out IAM credentials. The installer does NOT block this automatically — require IMDSv2 (`HttpTokens=required`) on the instance and/or add a host-level `DOCKER-USER` iptables rule dropping sandbox→IMDS traffic. There is no application-level fallback — fix this at the host firewall.
 
 ### Directory Structure
 
@@ -99,7 +103,13 @@ Each sandbox includes an OpenCode agent configured with:
 - **LLM Provider**: Anthropic, OpenAI, Google, Bedrock, or Azure
 - **Extended thinking**: High reasoning effort / thinking budgets for complex tasks
 - **Tool permissions**: File operations, bash commands, web access
-- **Disabled tools**: Configurable via `OPENCODE_DISABLED_TOOLS` env var
+- **Disabled tools**: Resolved deployment-wide (not per-user) via the
+  `onyx-craft-opencode-disabled-tools` PostHog multivariate flag, keyed on
+  tenant_id so every user in a deployment gets the same answer (each variant
+  key maps to a fixed tools list in `OPENCODE_DISABLED_TOOLS_VARIANTS`),
+  falling back to the `OPENCODE_DISABLED_TOOLS` env var when PostHog is
+  unavailable or the variant is unset/unrecognized — see
+  `get_opencode_disabled_tools()` in `../utils.py`
 
 Configuration is generated dynamically in `util/opencode_config.py`.
 
@@ -140,6 +150,8 @@ Configuration is generated dynamically in `util/opencode_config.py`.
 SANDBOX_BACKEND=kubernetes|docker          # Default: kubernetes
 
 # OpenCode configuration
+# Fallback default when PostHog is unavailable or the
+# onyx-craft-opencode-disabled-tools flag's variant is unset/unrecognized.
 OPENCODE_DISABLED_TOOLS=question           # Comma-separated list, default: question
 ```
 
@@ -169,10 +181,10 @@ SANDBOX_SERVICE_ACCOUNT_NAME=sandbox      # No storage credentials required
 
 ```bash
 
-# Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
-# compose hostnames like http://api_server:8080 will not resolve from inside the
-# sandbox bridge).
-SANDBOX_API_SERVER_URL=https://onyx.your-org.example
+# Complete API base URL. The Craft Compose overlay defaults to its private
+# http://onyx-craft-api:8080 alias; override only to route through a public
+# reverse proxy.
+ONYX_SERVER_URL=https://onyx.your-org.example/api
 
 # Host path of the Docker socket mounted into api_server/background
 SANDBOX_DOCKER_SOCKET=/var/run/docker.sock      # Default: /var/run/docker.sock
@@ -198,8 +210,6 @@ SANDBOX_DOCKER_CPU_LIMIT=1.0                    # Default: 1.0
 # Idle timeout before cleanup (seconds)
 SANDBOX_IDLE_TIMEOUT_SECONDS=900          # Default: 900 (15 minutes)
 
-# Max concurrent sandboxes per organization
-SANDBOX_MAX_CONCURRENT_PER_ORG=10         # Default: 10
 ```
 
 ## Testing
@@ -222,7 +232,8 @@ uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.
 - Confirm `api_server` actually has the Docker socket: `docker compose exec api_server ls -l /var/run/docker.sock`
 - Confirm the dedicated bridge exists: `docker network inspect onyx_craft_sandbox` (created by `install.sh --include-craft`, or run `docker network create onyx_craft_sandbox` manually)
 - Check sandbox logs: `docker logs sandbox-<id8>`
-- Confirm `SANDBOX_API_SERVER_URL` is a publicly resolvable HTTPS URL (the agent cannot reach `http://api_server:8080` from inside the sandbox bridge)
+- Confirm `ONYX_SERVER_URL` resolves from the sandbox bridge and includes any
+  API path prefix. The Compose default is `http://onyx-craft-api:8080`.
 
 ### Sandbox Stuck in PROVISIONING (Kubernetes)
 
@@ -252,9 +263,9 @@ uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.
 - **Sandbox app containers and sidecar init containers** do not receive FileStore, S3, or MinIO credentials
 - **Network policies** can restrict sandbox egress traffic
 - **Resource limits** prevent resource exhaustion
-- **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`)
-- **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/minio/model servers) is unreachable by DNS from inside a sandbox
-- **EC2 IMDS** must be blocked at the host firewall (`install.sh --include-craft` installs a `DOCKER-USER` iptables rule on EC2 when sudo is available) — there is no app-level fallback
+- **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL` + `ONYX_API_PREFIX`)
+- **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/object-store/model servers) is unreachable by DNS from inside a sandbox
+- **EC2 IMDS** must be blocked at the host level (require IMDSv2 via `HttpTokens=required`, or add a `DOCKER-USER` iptables rule — the installer does not do this automatically) — there is no app-level fallback
 
 ### Credentials Management
 
@@ -312,8 +323,85 @@ The Python venv (built into the sandbox image at `/workspace/.venv`) includes pa
 - HTTP clients: requests, httpx
 - Utilities: python-dotenv, pydantic
 
+## IPv6-only clusters
+
+Craft keeps IPv4 listeners by default. Use these Helm values for an IPv6-only cluster:
+
+```yaml
+sandboxProxy:
+  listenHost: "::"
+  allowGlobalClients: true
+  egressAllowIPv6: true
+  # Replace these example ranges with all your internal network ranges.
+  internalCIDRs:
+    - "10.0.0.0/8"
+    - "2001:db8:100::/56"
+    - "2001:db8:200::/108"
+sandboxPod:
+  listenHost: "::"
+```
+
+The proxy and daemon listeners serve IPv6 only with these settings. Do not use them for IPv4 sandbox clients.
+
+Enable `allowGlobalClients` only when NetworkPolicy restricts proxy ingress to authorized cluster workloads.
+Global IPv6 pod addresses otherwise trigger mitmproxy's global-client restriction. The proxy still requires a known sandbox identity.
+
+Set `internalCIDRs` to all internal VPC, pod, Service, and node ranges, including globally routable IPv6 ranges.
+The chart requires this list when IPv6 egress, global clients, or an IPv6 proxy listener is enabled.
+The proxy also checks it at startup when global clients or an IPv6 listener is enabled.
+The proxy rejects invalid CIDRs at startup.
+
+HTTP requests and CONNECT tunnels use the same destination policy: only public addresses outside these ranges are allowed.
+The exact `ONYX_SERVER_URL` host and port form the only internal destination exception.
+Standard NAT64 addresses with embedded private IPv4 destinations are also blocked.
+
+Configure these settings through Helm. The chart supplies `SANDBOX_PROXY_LISTEN_HOST`,
+`SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS`, and `SANDBOX_LISTEN_HOST` to the relevant containers.
+`SANDBOX_LISTEN_HOST` controls OpenCode, the sidecar, and generated app previews together.
+All listen hosts default to `0.0.0.0`. Generated Next.js apps use the matching address family for their readiness checks.
+Global clients remain blocked by default. `egressAllowIPv6` controls the proxy's NetworkPolicy; it does not change its listener.
+`SANDBOX_PROXY_INTERNAL_CIDRS` supplies comma-separated internal ranges.
+
+The firewall resolves the proxy before lockdown. It prefers IPv4 and accepts IPv6 when no IPv4 address exists.
+Both OUTPUT chains keep a DROP policy and permit loopback and established connections.
+Only the proxy address family permits new TCP connections to its port.
+IPv6 also permits neighbor solicitations and advertisements with hop limit 255. This lets pods reach the proxy with an empty neighbor cache.
+
 ## References
 
 - [OpenCode Documentation](https://docs.opencode.ai)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [shadcn/ui Components](https://ui.shadcn.com)
+
+
+### IPv6-only Docker sandboxes
+
+IPv4 remains the default. Use Docker Engine 28 or later for an IPv6-only sandbox bridge.
+Before the first Craft install, create the external bridge:
+
+```sh
+docker network create --ipv4=false --ipv6 --subnet fd42:6f6e:7978::/64 onyx_craft_sandbox
+```
+
+Set these values in the Compose `.env` file:
+
+```dotenv
+ONYX_SERVER_URL=http://api_server:8080
+SANDBOX_PROXY_LISTEN_HOST=::
+SANDBOX_PROXY_INTERNAL_CIDRS=fd42:6f6e:7978::/64
+```
+
+Add all your internal VPC, host, and Docker ranges to `SANDBOX_PROXY_INTERNAL_CIDRS`.
+The example covers only the new sandbox bridge. The proxy requires a CIDR list for IPv6 listeners.
+Use the normal Craft Compose overlay and installer. They reuse the external bridge.
+Docker networks are immutable; migrate an existing deployment only after draining its sandboxes.
+
+The manager derives the sandbox listener from the bridge. IPv6-only bridges use `::`;
+IPv4 and dual-stack bridges retain `0.0.0.0`. Do not set a separate sandbox listener flag.
+The API and databases keep their existing Compose network. Set `ONYX_SERVER_URL` to `http://api_server:8080`, or your public reverse proxy API base.
+The proxy reaches that endpoint through the same exact host and port exception. Sandboxes remain attached only to their dedicated bridge.
+
+ULA clients work with the default global-client restriction. For globally routable sandbox addresses,
+set `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS=true` only when host firewall rules restrict proxy ingress.
+Known sandbox identity, destination validation, and both firewall chains remain required.
+IPv6 internet access also requires working routing on the Docker host.

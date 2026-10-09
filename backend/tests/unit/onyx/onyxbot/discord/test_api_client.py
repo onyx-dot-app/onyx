@@ -4,9 +4,7 @@ Tests for OnyxAPIClient class functionality.
 """
 
 from typing import Any
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
@@ -14,9 +12,11 @@ import pytest
 from onyx.chat.models import ChatFullResponse
 from onyx.onyxbot.discord.api_client import OnyxAPIClient
 from onyx.onyxbot.discord.constants import API_REQUEST_TIMEOUT
-from onyx.onyxbot.discord.exceptions import APIConnectionError
-from onyx.onyxbot.discord.exceptions import APIResponseError
-from onyx.onyxbot.discord.exceptions import APITimeoutError
+from onyx.onyxbot.discord.exceptions import (
+    APIConnectionError,
+    APIResponseError,
+    APITimeoutError,
+)
 
 
 class MockAsyncContextManager:

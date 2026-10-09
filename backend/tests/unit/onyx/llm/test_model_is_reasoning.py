@@ -1,8 +1,8 @@
 import litellm
 import pytest
 
-from onyx.llm import utils
-from onyx.llm.utils import model_is_reasoning_model
+from onyx.llm import model_capabilities
+from onyx.llm.model_capabilities import model_is_reasoning_model
 
 
 def test_model_is_reasoning_model() -> None:
@@ -15,7 +15,7 @@ def test_model_is_reasoning_model() -> None:
         ("o4-mini", "openai"),
         ("deepseek-reasoner", "deepseek"),
         ("deepseek-r1", "openrouter/deepseek"),
-        ("claude-sonnet-4-20250514", "anthropic"),
+        ("claude-sonnet-4-5", "anthropic"),
     ]
 
     # Models that should NOT be identified as reasoning models
@@ -37,7 +37,7 @@ def test_model_is_reasoning_model() -> None:
         )
 
 
-def test_litellm_fallback_is_memoized(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_probe_fallback_is_memoized(monkeypatch: pytest.MonkeyPatch) -> None:
     """Models missing from the local map fall back to litellm.supports_reasoning,
     which can hit the network — it must run at most once per model per process."""
     calls = []
@@ -47,14 +47,14 @@ def test_litellm_fallback_is_memoized(monkeypatch: pytest.MonkeyPatch) -> None:
         return True
 
     monkeypatch.setattr(litellm, "supports_reasoning", fake_supports_reasoning)
-    monkeypatch.setattr(utils, "_LITELLM_SUPPORTS_REASONING_CACHE", {})
+    monkeypatch.setattr(model_capabilities, "_SUPPORTS_REASONING_PROBE_CACHE", {})
 
     assert model_is_reasoning_model("not-in-map-model", "fakeprov") is True
     assert model_is_reasoning_model("not-in-map-model", "fakeprov") is True
     assert calls == ["fakeprov/not-in-map-model"]
 
 
-def test_litellm_fallback_failure_cached_with_ttl(
+def test_probe_fallback_failure_cached_with_ttl(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An unreachable host costs one attempt per TTL window (not one per
@@ -71,8 +71,8 @@ def test_litellm_fallback_failure_cached_with_ttl(
 
     fake_now = 1000.0
     monkeypatch.setattr(litellm, "supports_reasoning", flaky_supports_reasoning)
-    monkeypatch.setattr(utils, "_LITELLM_SUPPORTS_REASONING_CACHE", {})
-    monkeypatch.setattr(utils.time, "monotonic", lambda: fake_now)
+    monkeypatch.setattr(model_capabilities, "_SUPPORTS_REASONING_PROBE_CACHE", {})
+    monkeypatch.setattr(model_capabilities.time, "monotonic", lambda: fake_now)
 
     # failure cached: second call within TTL does not re-probe
     assert model_is_reasoning_model("unreachable-model", "fakeprov") is False
@@ -80,7 +80,7 @@ def test_litellm_fallback_failure_cached_with_ttl(
     assert len(calls) == 1
 
     # past the TTL, a recovered host is re-probed and the result is permanent
-    fake_now += utils._REASONING_PROBE_FAILURE_TTL_SECONDS + 1
+    fake_now += model_capabilities._REASONING_PROBE_FAILURE_TTL_SECONDS + 1
     should_raise = False
     assert model_is_reasoning_model("unreachable-model", "fakeprov") is True
     assert model_is_reasoning_model("unreachable-model", "fakeprov") is True
@@ -101,8 +101,8 @@ def test_concurrent_cold_misses_probe_once(monkeypatch: pytest.MonkeyPatch) -> N
         return True
 
     monkeypatch.setattr(litellm, "supports_reasoning", slow_supports_reasoning)
-    monkeypatch.setattr(utils, "_LITELLM_SUPPORTS_REASONING_CACHE", {})
-    monkeypatch.setattr(utils, "_REASONING_PROBE_LOCKS", {})
+    monkeypatch.setattr(model_capabilities, "_SUPPORTS_REASONING_PROBE_CACHE", {})
+    monkeypatch.setattr(model_capabilities, "_REASONING_PROBE_LOCKS", {})
 
     results: list[bool] = []
     threads = [
@@ -135,9 +135,11 @@ def test_probe_results_are_tenant_scoped(monkeypatch: pytest.MonkeyPatch) -> Non
         return answers[current_tenant]
 
     monkeypatch.setattr(litellm, "supports_reasoning", per_tenant_supports_reasoning)
-    monkeypatch.setattr(utils, "_LITELLM_SUPPORTS_REASONING_CACHE", {})
-    monkeypatch.setattr(utils, "_REASONING_PROBE_LOCKS", {})
-    monkeypatch.setattr(utils, "get_current_tenant_id", lambda: current_tenant)
+    monkeypatch.setattr(model_capabilities, "_SUPPORTS_REASONING_PROBE_CACHE", {})
+    monkeypatch.setattr(model_capabilities, "_REASONING_PROBE_LOCKS", {})
+    monkeypatch.setattr(
+        model_capabilities, "get_current_tenant_id", lambda: current_tenant
+    )
 
     assert model_is_reasoning_model("shared-name-model", "fakeprov") is True
 

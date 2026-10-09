@@ -17,15 +17,15 @@ import (
 // writing to stdout after Limit bytes. When Limit == 0, it writes directly
 // to stdout. In Quiet mode, it buffers in memory and prints once at the end.
 type Writer struct {
+	buf        strings.Builder // used only in quiet mode
+	Out        io.Writer       // defaults to os.Stdout
+	ErrOut     io.Writer       // defaults to os.Stderr
+	tmpFile    *os.File        // used only in truncation mode (Limit > 0)
 	Limit      int
-	Quiet      bool
-	Out        io.Writer // defaults to os.Stdout
-	ErrOut     io.Writer // defaults to os.Stderr
 	written    int
 	totalBytes int
+	Quiet      bool
 	truncated  bool
-	buf        strings.Builder // used only in quiet mode
-	tmpFile    *os.File        // used only in truncation mode (Limit > 0)
 }
 
 func (w *Writer) out() io.Writer {
@@ -119,6 +119,23 @@ func (w *Writer) Finish() {
 	fmt.Fprintf(w.out(), "Explore:\n")
 	fmt.Fprintf(w.out(), "  cat %s | grep \"<pattern>\"\n", tmpPath)
 	fmt.Fprintf(w.out(), "  cat %s | tail -50\n", tmpPath)
+}
+
+// SaveFull writes content to a new temp file and returns its path.
+func SaveFull(pattern string, content string) (string, error) {
+	f, err := os.CreateTemp("", pattern)
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 // closeTmpFile closes and optionally removes the temp file.

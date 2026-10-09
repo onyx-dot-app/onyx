@@ -4,22 +4,23 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.db.search import create_search_query
 from ee.onyx.secondary_llm_flows.query_expansion import expand_keywords
-from ee.onyx.server.query_and_chat.models import SearchDocWithContent
-from ee.onyx.server.query_and_chat.models import SearchFullResponse
-from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
-from ee.onyx.server.query_and_chat.streaming_models import LLMSelectedDocsPacket
-from ee.onyx.server.query_and_chat.streaming_models import SearchDocsPacket
-from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
-from ee.onyx.server.query_and_chat.streaming_models import SearchQueriesPacket
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import ChunkSearchRequest
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.pipeline import merge_individual_chunks
-from onyx.context.search.pipeline import search_pipeline
+from ee.onyx.server.query_and_chat.models import (
+    SearchDocWithContent,
+    SearchFullResponse,
+    SendSearchQueryRequest,
+)
+from ee.onyx.server.query_and_chat.streaming_models import (
+    LLMSelectedDocsPacket,
+    SearchDocsPacket,
+    SearchErrorPacket,
+    SearchQueriesPacket,
+)
+from onyx.context.search.models import BaseFilters, ChunkSearchRequest, InferenceChunk
+from onyx.context.search.pipeline import merge_individual_chunks, search_pipeline
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.factory import get_default_llm
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.tools.tool_implementations.search.search_utils import (
@@ -60,6 +61,8 @@ def _run_single_search(
         user=user,
         persona_search_info=None,
         db_session=db_session,
+        # Search UI is the only surface that enforces FORCED_DOCUMENT_SET_NAMES.
+        force_configured_document_set_scope=True,
     )
 
 
@@ -78,8 +81,7 @@ def stream_search_query(
     """
     # Get document index.
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     # Determine queries to execute
     original_query = request.search_query
@@ -109,7 +111,7 @@ def stream_search_query(
             db_session=db_session,
             user_id=user.id,
             query=request.search_query,
-            query_expansions=keyword_expansions if keyword_expansions else None,
+            query_expansions=keyword_expansions or None,
         )
 
     # Execute search(es)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheBackend, CacheLock
 
 
 class FakeLock(CacheLock):
@@ -23,6 +22,9 @@ class FakeLock(CacheLock):
     def release(self) -> None:
         self._owned = False
 
+    def extend(self, ttl_seconds: float) -> None:
+        pass
+
     def owned(self) -> bool:
         return self._owned
 
@@ -36,6 +38,10 @@ class FakeCache(CacheBackend):
     def get(self, key: str) -> bytes | None:
         return self.store.get(key)
 
+    def getdel(self, key: str) -> bytes | None:
+        self.expiries.pop(key, None)
+        return self.store.pop(key, None)
+
     def set(
         self,
         key: str,
@@ -46,6 +52,17 @@ class FakeCache(CacheBackend):
         if ex is not None:
             self.expiries[key] = ex
 
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        if key in self.store:
+            return False
+        self.set(key, value, ex=ex)
+        return True
+
     def delete(self, key: str) -> None:
         self.store.pop(key, None)
         self.expiries.pop(key, None)
@@ -55,6 +72,12 @@ class FakeCache(CacheBackend):
 
     def expire(self, key: str, seconds: int) -> None:
         self.expiries[key] = seconds
+
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        if self.get(key) != expected:
+            return False
+        self.expire(key, seconds)
+        return True
 
     def ttl(self, key: str) -> int:
         return 60 if key in self.store else -2

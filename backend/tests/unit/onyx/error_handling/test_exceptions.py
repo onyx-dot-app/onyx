@@ -5,8 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.error_handling.exceptions import register_onyx_exception_handlers
+from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 
 
 class TestOnyxError:

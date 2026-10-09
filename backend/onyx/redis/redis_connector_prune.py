@@ -9,12 +9,14 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import PRUNE_FAILURE_BACKOFF_SECONDS
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_PRUNING_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_PRUNING_LOCK_TIMEOUT,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -222,12 +224,12 @@ class RedisConnectorPrune:
             # Priority on sync's triggered by new indexing should be medium
             result = celery_app.send_task(
                 OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
-                kwargs=dict(
-                    document_id=doc_id,
-                    connector_id=cc_pair.connector_id,
-                    credential_id=cc_pair.credential_id,
-                    tenant_id=self.tenant_id,
-                ),
+                kwargs={
+                    "document_id": doc_id,
+                    "connector_id": cc_pair.connector_id,
+                    "credential_id": cc_pair.credential_id,
+                    "tenant_id": self.tenant_id,
+                },
                 queue=OnyxCeleryQueues.CONNECTOR_DELETION,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,

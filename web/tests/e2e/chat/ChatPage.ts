@@ -20,6 +20,7 @@ export class ChatPage {
   // Message collections
   readonly humanMessages: Locator;
   readonly aiMessages: Locator;
+  readonly usageLimitBanner: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -28,6 +29,7 @@ export class ChatPage {
     this.scrollContainer = page.getByTestId("chat-scroll-container");
     this.humanMessages = page.locator("#onyx-human-message");
     this.aiMessages = page.getByTestId("onyx-ai-message");
+    this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
   }
 
   humanMessage(index = 0): Locator {
@@ -85,5 +87,29 @@ export class ChatPage {
 
   async expectNoHumanMessages(): Promise<void> {
     await expect(this.humanMessages).toHaveCount(0);
+  }
+
+  async sendUntilUsageLimit(maxTurns: number): Promise<void> {
+    for (
+      let turn = 0;
+      turn < maxTurns && !(await this.usageLimitBanner.isVisible());
+      turn++
+    ) {
+      await this.inputBar.fill(`write a few sentences about topic ${turn}`);
+      await this.inputBar.send();
+      await Promise.race([
+        this.usageLimitBanner
+          .waitFor({ state: "visible", timeout: 45_000 })
+          .catch(() => {}),
+        this.aiMessage(turn)
+          .waitFor({ state: "visible", timeout: 45_000 })
+          .catch(() => {}),
+      ]);
+    }
+  }
+
+  async expectAccountUsageLimit(): Promise<void> {
+    await expect(this.usageLimitBanner).toBeVisible();
+    await expect(this.page.getByText(/your account/i)).toBeVisible();
   }
 }

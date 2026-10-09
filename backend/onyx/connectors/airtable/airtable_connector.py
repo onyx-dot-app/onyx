@@ -1,29 +1,26 @@
 import contextvars
 import re
-from concurrent.futures import as_completed
-from concurrent.futures import Future
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from io import BytesIO
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import requests
 from pyairtable import Api as AirtableApi
 from pyairtable.api.types import RecordDict
 from pyairtable.models.schema import TableSchema
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import (
+    AIRTABLE_ATTACHMENT_SIZE_THRESHOLD,
+    INDEX_BATCH_SIZE,
+    REQUEST_TIMEOUT_SECONDS,
+)
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.download import download_file
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
+from onyx.connectors.models import Document, HierarchyNode, ImageSection, TextSection
+from onyx.file_processing.extract_file_text import extract_file_text, get_file_ext
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -56,7 +53,6 @@ DEFAULT_METADATA_FIELD_TYPES = {
     "lookup",
     "count",
     "formula",
-    "date",
 }
 
 
@@ -251,19 +247,31 @@ class AirtableConnector(LoadConnector):
                 if not url:
                     continue
 
+                declared_size: int = attachment.get("size", 0)
+                if declared_size > AIRTABLE_ATTACHMENT_SIZE_THRESHOLD:
+                    logger.warning(
+                        "Skipping attachment %s: declared size %s exceeds %s bytes",
+                        filename,
+                        declared_size,
+                        AIRTABLE_ATTACHMENT_SIZE_THRESHOLD,
+                    )
+                    continue
+
                 @retry_builder(
                     tries=5,
                     delay=1,
                     backoff=2,
                     max_delay=10,
                 )
-                def get_attachment_with_retry(url: str, record_id: str) -> bytes | None:
+                def get_attachment_with_retry(
+                    url: str, record_id: str, filename: str
+                ) -> bytes | None:
                     try:
-                        attachment_response = requests.get(
-                            url, timeout=REQUEST_TIMEOUT_SECONDS
+                        return download_file(
+                            url,
+                            max_size_bytes=AIRTABLE_ATTACHMENT_SIZE_THRESHOLD,
+                            timeout_seconds=REQUEST_TIMEOUT_SECONDS,
                         )
-                        attachment_response.raise_for_status()
-                        return attachment_response.content
                     except requests.exceptions.HTTPError as e:
                         if e.response.status_code == 410:
                             logger.info("Refreshing attachment for %s", filename)
@@ -277,18 +285,18 @@ class AirtableConnector(LoadConnector):
                                 if refreshed_attachment.get("filename") == filename:
                                     new_url = refreshed_attachment.get("url")
                                     if new_url:
-                                        attachment_response = requests.get(
-                                            new_url, timeout=REQUEST_TIMEOUT_SECONDS
+                                        return download_file(
+                                            new_url,
+                                            max_size_bytes=AIRTABLE_ATTACHMENT_SIZE_THRESHOLD,
+                                            timeout_seconds=REQUEST_TIMEOUT_SECONDS,
                                         )
-                                        attachment_response.raise_for_status()
-                                        return attachment_response.content
 
                             logger.error(
                                 "Failed to refresh attachment for %s", filename
                             )
                         raise
 
-                attachment_content = get_attachment_with_retry(url, record_id)
+                attachment_content = get_attachment_with_retry(url, record_id, filename)
                 if attachment_content:
                     try:
                         file_ext = get_file_ext(filename)
@@ -428,6 +436,7 @@ class AirtableConnector(LoadConnector):
         fields = record["fields"]
         sections: list[TextSection] = []
         metadata: dict[str, str | list[str]] = {}
+        created_time = record["createdTime"]
 
         # Get primary field value if it exists
         primary_field_value = (
@@ -491,6 +500,7 @@ class AirtableConnector(LoadConnector):
             sections=(cast(list[TextSection | ImageSection], sections)),
             source=DocumentSource.AIRTABLE,
             semantic_identifier=semantic_id,
+            doc_created_at=time_str_to_utc(created_time),
             metadata=metadata,
             doc_metadata={
                 "hierarchy": {

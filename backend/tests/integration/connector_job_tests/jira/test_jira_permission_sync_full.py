@@ -1,6 +1,5 @@
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
@@ -9,7 +8,7 @@ from tests.integration.connector_job_tests.jira.conftest import JiraTestEnvSetup
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Jira permission sync is enterprise only",
 )
 @pytest.mark.xfail(reason="Needs to be tested for flakiness")

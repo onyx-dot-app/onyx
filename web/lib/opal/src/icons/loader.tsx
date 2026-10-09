@@ -4,14 +4,16 @@ const SvgLoader = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 15 15"
+    viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     stroke="currentColor"
     {...props}
   >
+    {/* A 3/4 ring: from the bottom, round through the left and top, to the
+    right. Static and unsized; IconLoader spins and sizes it. */}
     <path
-      d="M7.41667 14.0833C3.73477 14.0833 0.75 11.0986 0.75 7.41667C0.75 3.73477 3.73477 0.75 7.41667 0.75C11.0986 0.75 14.0833 3.73477 14.0833 7.41667"
+      d="M8 14.6667A6.66667 6.66667 0 1 1 14.6667 8"
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"

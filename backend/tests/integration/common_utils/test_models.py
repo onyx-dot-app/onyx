@@ -4,19 +4,17 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from onyx.auth.schemas import UserRole
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import QAFeedbackType
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
+from onyx.configs.constants import MessageType, QAFeedbackType
+from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.enums import AccessType
-from onyx.server.documents.models import DocumentSource
-from onyx.server.documents.models import IndexAttemptSnapshot
-from onyx.server.documents.models import IndexingStatus
-from onyx.server.documents.models import InputType
+from onyx.server.documents.models import (
+    DocumentSource,
+    IndexAttemptSnapshot,
+    IndexingStatus,
+    InputType,
+)
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 
 """
@@ -59,7 +57,7 @@ class DATestAPIKey(BaseModel):
     api_key_display: str
     api_key: str | None = None  # only present on initial creation
     api_key_name: str | None = None
-    api_key_role: UserRole
+    groups: list[dict] = []
 
     user_id: UUID
     headers: dict
@@ -70,7 +68,7 @@ class DATestUser(BaseModel):
     email: str
     password: str
     headers: dict
-    role: UserRole
+    is_admin: bool
     is_active: bool
     cookies: dict = {}
 
@@ -185,6 +183,7 @@ class DATestChatMessage(BaseModel):
     message: str
     message_type: MessageType | None = None
     files: list | None = None
+    reasoning_tokens: str | None = None
 
 
 class DATestChatSession(BaseModel):
@@ -232,6 +231,9 @@ class StreamedResponse(BaseModel):
 
     # Track heartbeat packets for image generation and other tools
     heartbeat_packets: list[dict[str, Any]]
+
+    # Every placed packet in stream order, as {"placement": {...}, "obj": {...}}
+    packets: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class DATestGatingType(str, Enum):
@@ -317,14 +319,3 @@ class DATestDiscordChannelConfig(BaseModel):
     thread_only_mode: bool = False
     require_bot_invocation: bool = True
     persona_override_id: int | None = None
-
-
-class DATestSkill(BaseModel):
-    id: UUID | None = None
-    slug: str
-    name: str
-    description: str
-    is_public: bool = False
-    enabled: bool = True
-    granted_group_ids: list[int] = Field(default_factory=list)
-    is_personal: bool = False

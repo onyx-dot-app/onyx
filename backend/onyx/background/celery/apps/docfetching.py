@@ -1,25 +1,32 @@
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from celery import Celery
-from celery import signals
-from celery import Task
+from celery import Celery, Task, signals
 from celery.apps.worker import Worker
-from celery.signals import celeryd_init
-from celery.signals import worker_init
-from celery.signals import worker_ready
-from celery.signals import worker_shutdown
+from celery.signals import (
+    celeryd_init,
+    worker_init,
+    worker_ready,
+    worker_shutdown,
+    worker_shutting_down,
+)
 
 import onyx.background.celery.apps.app_base as app_base
+from onyx.background.celery.tasks.docfetching.worker_shutdown import (
+    signal_worker_shutting_down,
+)
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_DOCFETCHING_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
-from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
-from onyx.server.metrics.celery_task_metrics import on_celery_task_rejected
-from onyx.server.metrics.celery_task_metrics import on_celery_task_retry
-from onyx.server.metrics.celery_task_metrics import on_celery_task_revoked
-from onyx.server.metrics.indexing_task_metrics import on_indexing_task_postrun
-from onyx.server.metrics.indexing_task_metrics import on_indexing_task_prerun
+from onyx.server.metrics.celery_task_metrics import (
+    on_celery_task_postrun,
+    on_celery_task_prerun,
+    on_celery_task_rejected,
+    on_celery_task_retry,
+    on_celery_task_revoked,
+)
+from onyx.server.metrics.indexing_task_metrics import (
+    on_indexing_task_postrun,
+    on_indexing_task_prerun,
+)
 from onyx.server.metrics.metrics_server import start_metrics_server
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -65,13 +72,17 @@ def on_task_postrun(
 def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
     # task_retry signal doesn't pass task_id in kwargs; get it from
     # the sender (the task instance) via sender.request.id.
-    task_id = getattr(getattr(sender, "request", None), "id", None)
+    task_id = getattr(  # ods: ignore[getattr]
+        getattr(sender, "request", None),  # ods: ignore[getattr]
+        "id",
+        None,
+    )
     on_celery_task_retry(task_id, sender)
 
 
 @signals.task_revoked.connect
 def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
-    task_name = getattr(sender, "name", None) or str(sender)
+    task_name = getattr(sender, "name", None) or str(sender)  # ods: ignore[getattr]
     on_celery_task_revoked(kwargs.get("task_id"), task_name)
 
 
@@ -82,7 +93,7 @@ def on_task_rejected(sender: Any | None = None, **kwargs: Any) -> None:  # noqa:
     message = kwargs.get("message")
     task_name: str | None = None
     if message is not None:
-        headers = getattr(message, "headers", None) or {}
+        headers = getattr(message, "headers", None) or {}  # ods: ignore[getattr]
         task_name = headers.get("task")
     if task_name is None:
         task_name = "unknown"
@@ -117,6 +128,16 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
     start_metrics_server("docfetching")
     app_base.on_worker_ready(sender, **kwargs)
+
+
+@worker_shutting_down.connect
+def on_worker_shutting_down(**kwargs: Any) -> None:  # noqa: ARG001
+    # SIGTERM (deploy / scale-down). Flag it so the watchdog interrupts its
+    # in-flight attempt for a fast checkpoint resume, not the heartbeat timeout.
+    logger.info(
+        "worker_shutting_down received, flagging docfetching for graceful interrupt."
+    )
+    signal_worker_shutting_down()
 
 
 @worker_shutdown.connect

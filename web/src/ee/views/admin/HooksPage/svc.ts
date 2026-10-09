@@ -5,6 +5,7 @@ import {
   HookUpdateRequest,
   HookValidateResponse,
 } from "@/ee/views/admin/HooksPage/interfaces";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 export class HookAuthError extends Error {}
 export class HookTimeoutError extends Error {}
@@ -12,7 +13,7 @@ export class HookConnectError extends Error {}
 
 async function parseError(res: Response, fallback: string): Promise<Error> {
   try {
-    const body = await res.json();
+    const body: ErrorResponseBody | null = await res.json();
     if (body?.error_code === "CREDENTIAL_INVALID") {
       return new HookAuthError(body?.detail ?? "Invalid API key.");
     }

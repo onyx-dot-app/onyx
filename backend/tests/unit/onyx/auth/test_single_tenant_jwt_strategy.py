@@ -1,8 +1,6 @@
 import uuid
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest
@@ -100,7 +98,10 @@ async def test_read_token_returns_none_for_bad_signature() -> None:
     user = _make_user()
     manager = _make_user_manager(user)
 
-    bad_strategy = SingleTenantJWTStrategy(secret="wrong-secret", lifetime_seconds=3600)
+    bad_strategy = SingleTenantJWTStrategy(
+        secret="wrong-secret-for-jwt-unit-tests-32-bytes",
+        lifetime_seconds=3600,
+    )
     bad_token = await bad_strategy.write_token(user)
 
     result = await strategy.read_token(bad_token, manager)

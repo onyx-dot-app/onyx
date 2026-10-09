@@ -1,19 +1,22 @@
 """Tests for memory tool streaming packet emissions."""
 
 import queue
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.chat.emitter import Emitter
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.session_loading import create_memory_packets
-from onyx.server.query_and_chat.streaming_models import MemoryToolDelta
-from onyx.server.query_and_chat.streaming_models import MemoryToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
-from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrideKwargs
+from onyx.server.query_and_chat.streaming_models import (
+    MemoryToolDelta,
+    MemoryToolStart,
+    SectionEnd,
+)
+from onyx.tools.tool_implementations.memory.memory_tool import (
+    MemoryTool,
+    MemoryToolOverrideKwargs,
+)
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
 

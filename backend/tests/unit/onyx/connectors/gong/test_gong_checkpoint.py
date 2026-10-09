@@ -1,14 +1,11 @@
 import time
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.connectors.gong.connector import GongConnector
-from onyx.connectors.gong.connector import GongConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
+from onyx.connectors.gong.connector import GongConnector, GongConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure, Document
 
 
 def _make_transcript(call_id: str) -> dict[str, Any]:

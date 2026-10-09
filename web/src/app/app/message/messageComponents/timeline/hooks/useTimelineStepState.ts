@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { MemoryToolPacket } from "@/app/app/services/streamingModels";
 import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
 import { constructCurrentMemoryState } from "@/app/app/message/messageComponents/timeline/renderers/memory/memoryStateUtils";
 import { isMemoryToolPackets } from "@/app/app/message/messageComponents/timeline/packetHelpers";
@@ -30,17 +29,14 @@ export function useTimelineStepState(turnGroups: TurnGroup[]): MemoryStepState {
     for (const tg of turnGroups) {
       for (const step of tg.steps) {
         totalSteps++;
-        const isMem = isMemoryToolPackets(step.packets);
-
-        if (!isMem) {
+        if (!isMemoryToolPackets(step.packets)) {
           allMemory = false;
+          continue;
         }
 
-        if (!foundMemory && isMem) {
+        if (!foundMemory) {
           foundMemory = true;
-          const state = constructCurrentMemoryState(
-            step.packets as unknown as MemoryToolPacket[]
-          );
+          const state = constructCurrentMemoryState(step.packets);
           memoryText = state.memoryText;
           memoryOperation = state.operation;
           memoryId = state.memoryId;

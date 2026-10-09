@@ -1,44 +1,208 @@
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
 from typing import TypeVarTuple
+from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import exists
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from sqlalchemy import Select, and_, delete, desc, false, func, or_, select, update
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
-from onyx.configs.constants import DocumentSource
+from onyx.auth.permissions import get_effective_permissions, has_permission
+from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource, NotificationType
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import fetch_credential_by_id
-from onyx.db.credentials import fetch_credential_by_id_for_user
+from onyx.db.connector_alerts import clear_connector_alerts__no_commit
+from onyx.db.credentials import fetch_credential_by_id, fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import ProcessingMode
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexingStatus
-from onyx.db.models import SearchSettings
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    ConnectorManageRole,
+    IndexingMode,
+    Permission,
+    PermissionAuthority,
+    ProcessingMode,
+    SwitchoverType,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    DocumentByConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
+    IndexingStatus,
+    SearchSettings,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__CCPairDataAccess,
+    UserGroup__ConnectorCredentialPair,
+)
+from onyx.db.scoped_permissions import scoped_group_ids_subquery
+from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
+    fetch_versioned_implementation,
+)
 
 logger = setup_logger()
 
 R = TypeVarTuple("R")
+_CONNECTOR_STATE_QUERY_TIMEOUT = "7s"
+
+
+def _build_user_group_cc_pair_access_clause(
+    user_id: UUID,  # noqa: ARG001
+) -> ColumnElement[bool]:
+    """CE has no user groups. The EE version grants pairs where the user is in
+    a data-access group.
+
+    NOTE: EE version in ee.onyx.db.connector_credential_pair."""
+    return false()
+
+
+def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
+    """Pairs whose documents the user may see with no document ACL match
+    ("open" pairs): PUBLIC pairs, and non-perm-synced pairs where the user owns
+    the credential or is in a data-access group of the pair. Perm-synced pairs are
+    never open; their documents need an ACL match. Does not exclude DELETING
+    pairs."""
+    credential_owner = (
+        select(1)
+        .select_from(Credential)
+        .where(
+            Credential.id == ConnectorCredentialPair.credential_id,
+            Credential.user_id == user_id,
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
+    group_access_clause_fn = fetch_versioned_implementation(
+        "onyx.db.connector_credential_pair", "_build_user_group_cc_pair_access_clause"
+    )
+    return or_(
+        ConnectorCredentialPair.access_type == AccessType.PUBLIC,
+        and_(
+            ConnectorCredentialPair.access_type.notin_(AccessType.perm_synced_types()),
+            or_(credential_owner, group_access_clause_fn(user_id)),
+        ),
+    )
+
+
+def build_user_acl_cc_pair_filter(user_id: UUID | None) -> ColumnElement[bool]:
+    """Pairs whose documents the user may see on a document ACL match ("ACL"
+    pairs): SYNC pairs, and SYNC_RESTRICTED pairs where the user is in a
+    data-access group of the pair. Anonymous users (None) get only SYNC pairs.
+    Does not exclude DELETING pairs."""
+    is_sync = ConnectorCredentialPair.access_type == AccessType.SYNC
+    if user_id is None:
+        return is_sync
+    group_access_clause_fn = fetch_versioned_implementation(
+        "onyx.db.connector_credential_pair", "_build_user_group_cc_pair_access_clause"
+    )
+    return or_(
+        is_sync,
+        and_(
+            ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
+            group_access_clause_fn(user_id),
+        ),
+    )
+
+
+def build_restricted_acl_guard(
+    user_id: UUID | None,
+    has_cc_pair: Callable[[ColumnElement[bool]], ColumnElement[bool]],
+) -> ColumnElement[bool]:
+    """For readers that match a document ACL without knowing which pair grants
+    it. The match must not count for an item of a SYNC_RESTRICTED pair the user
+    can't see, unless another pair of the item grants ACL access.
+
+    has_cc_pair(clause) is an EXISTS over the item's pairs that match clause."""
+    visible_acl_pair = and_(
+        ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        build_user_acl_cc_pair_filter(user_id),
+    )
+    hidden_restricted_pair = and_(
+        ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
+        ~visible_acl_pair,
+    )
+    return or_(~has_cc_pair(hidden_restricted_pair), has_cc_pair(visible_acl_pair))
+
+
+def _has_cc_pair_with_access_type(
+    db_session: Session, access_types: list[AccessType]
+) -> bool:
+    return bool(
+        db_session.scalar(
+            select(
+                select(ConnectorCredentialPair.id)
+                .where(ConnectorCredentialPair.access_type.in_(access_types))
+                .exists()
+            )
+        )
+    )
+
+
+def has_perm_synced_cc_pairs(db_session: Session) -> bool:
+    return _has_cc_pair_with_access_type(db_session, AccessType.perm_synced_types())
+
+
+def has_sync_restricted_cc_pairs(db_session: Session) -> bool:
+    return _has_cc_pair_with_access_type(db_session, [AccessType.SYNC_RESTRICTED])
+
+
+class CCPairAccessSets(BaseModel):
+    # Documents of these pairs are visible with no document ACL match.
+    open_cc_pair_ids: set[int]
+    # Documents of these pairs are visible if public or matching the user's ACL.
+    acl_cc_pair_ids: set[int]
+    # SYNC_RESTRICTED pairs that grant the user nothing, DELETING ones included.
+    hidden_restricted_cc_pair_ids: set[int]
+
+
+def get_cc_pair_access_sets_for_user(
+    db_session: Session, user: User
+) -> CCPairAccessSets:
+    """The query-time access rule for a user, as sets of cc-pair ids.
+
+    Open pairs follow build_user_cc_pair_access_filter and ACL pairs follow
+    build_user_acl_cc_pair_filter; anonymous users get only PUBLIC open pairs
+    and SYNC ACL pairs. DELETING pairs are in neither set."""
+    open_clause = (
+        ConnectorCredentialPair.access_type == AccessType.PUBLIC
+        if user.is_anonymous
+        else build_user_cc_pair_access_filter(user.id)
+    )
+    acl_clause = build_user_acl_cc_pair_filter(None if user.is_anonymous else user.id)
+    is_live = ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
+    is_restricted = ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED
+    rows = db_session.execute(
+        select(
+            ConnectorCredentialPair.id,
+            and_(is_live, acl_clause).label("is_acl"),
+            and_(is_live, open_clause).label("is_open"),
+        ).where(or_(and_(is_live, or_(open_clause, acl_clause)), is_restricted))
+    ).tuples()
+    access_sets = CCPairAccessSets(
+        open_cc_pair_ids=set(),
+        acl_cc_pair_ids=set(),
+        hidden_restricted_cc_pair_ids=set(),
+    )
+    for cc_pair_id, is_acl, is_open in rows:
+        if is_acl:
+            access_sets.acl_cc_pair_ids.add(cc_pair_id)
+        elif is_open:
+            access_sets.open_cc_pair_ids.add(cc_pair_id)
+        else:
+            access_sets.hidden_restricted_cc_pair_ids.add(cc_pair_id)
+    return access_sets
 
 
 class ConnectorType(str, Enum):
@@ -46,68 +210,208 @@ class ConnectorType(str, Enum):
     USER_FILE = "user_file"
 
 
+class ConnectorStateSnapshot(BaseModel):
+    cc_pair_id: int
+    cc_pair_name: str
+    status: ConnectorCredentialPairStatus
+    last_successful_index_time: datetime | None
+    last_pruned: datetime | None
+    last_time_perm_sync: datetime | None
+    last_time_external_group_sync: datetime | None
+    total_docs_indexed: int
+    access_type: AccessType
+    indexing_trigger: IndexingMode | None
+    auto_sync_enabled: bool
+    in_repeated_error_state: bool
+    source: DocumentSource
+    credential_id: int
+
+
+def get_connector_state_snapshots(
+    db_session: Session,
+) -> list[ConnectorStateSnapshot]:
+    db_session.execute(
+        select(
+            func.set_config("statement_timeout", _CONNECTOR_STATE_QUERY_TIMEOUT, True)
+        )
+    )
+    rows = db_session.execute(
+        select(
+            ConnectorCredentialPair.id,
+            ConnectorCredentialPair.name,
+            ConnectorCredentialPair.status,
+            ConnectorCredentialPair.last_successful_index_time,
+            ConnectorCredentialPair.last_pruned,
+            ConnectorCredentialPair.last_time_perm_sync,
+            ConnectorCredentialPair.last_time_external_group_sync,
+            ConnectorCredentialPair.total_docs_indexed,
+            ConnectorCredentialPair.access_type,
+            ConnectorCredentialPair.indexing_trigger,
+            ConnectorCredentialPair.auto_sync_options,
+            ConnectorCredentialPair.in_repeated_error_state,
+            Connector.source,
+            Credential.id,
+        )
+        .join(ConnectorCredentialPair.connector)
+        .join(ConnectorCredentialPair.credential)
+        .where(ConnectorCredentialPair.id != DEFAULT_CC_PAIR_ID)
+    ).all()
+
+    return [
+        ConnectorStateSnapshot(
+            cc_pair_id=cc_pair_id,
+            cc_pair_name=cc_pair_name,
+            status=status,
+            last_successful_index_time=last_successful_index_time,
+            last_pruned=last_pruned,
+            last_time_perm_sync=last_time_perm_sync,
+            last_time_external_group_sync=last_time_external_group_sync,
+            total_docs_indexed=total_docs_indexed or 0,
+            access_type=access_type,
+            indexing_trigger=indexing_trigger,
+            auto_sync_enabled=bool(auto_sync_options),
+            in_repeated_error_state=in_repeated_error_state,
+            source=source,
+            credential_id=credential_id,
+        )
+        for (
+            cc_pair_id,
+            cc_pair_name,
+            status,
+            last_successful_index_time,
+            last_pruned,
+            last_time_perm_sync,
+            last_time_external_group_sync,
+            total_docs_indexed,
+            access_type,
+            indexing_trigger,
+            auto_sync_options,
+            in_repeated_error_state,
+            source,
+            credential_id,
+        ) in rows
+    ]
+
+
+class CCPairAccessLevel(str, Enum):
+    """What the caller needs to do with a pair. READ is visibility; OPERATE and
+    EDIT are management, granted by a manage role (see ConnectorManageRole)."""
+
+    READ = "read"
+    OPERATE = "operate"
+    EDIT = "edit"
+
+
+_ROLES_FOR_ACCESS_LEVEL: dict[CCPairAccessLevel, tuple[ConnectorManageRole, ...]] = {
+    CCPairAccessLevel.OPERATE: (
+        ConnectorManageRole.OPERATOR,
+        ConnectorManageRole.EDITOR,
+    ),
+    CCPairAccessLevel.EDIT: (ConnectorManageRole.EDITOR,),
+}
+
+
+def _manage_access_clause(
+    user: User, roles: tuple[ConnectorManageRole, ...]
+) -> ColumnElement[bool]:
+    """Scoped management of a pair, for a caller without global MANAGE_CONNECTORS.
+
+    A scoped manager passes when a group they manage holds one of ``roles`` on the
+    pair, for any access type. The creator of a pair with no manage group is its
+    Editor, so a groupless permission-synced pair does not lock out its creator;
+    that fallback stops once the pair is published or given a manage group."""
+    live_manage_row = and_(
+        UserGroup__ConnectorCredentialPair.cc_pair_id == ConnectorCredentialPair.id,
+        UserGroup__ConnectorCredentialPair.is_current.is_(True),
+    )
+    has_manage_group = (
+        select(UserGroup__ConnectorCredentialPair.cc_pair_id)
+        .where(live_manage_row)
+        .exists()
+    )
+    is_groupless_creator = and_(
+        ConnectorCredentialPair.creator_id == user.id,
+        ConnectorCredentialPair.access_type != AccessType.PUBLIC,
+        ~has_manage_group,
+    )
+    if has_permission(user, Permission.MANAGE_CONNECTORS) is not (
+        PermissionAuthority.SCOPED
+    ):
+        return is_groupless_creator
+
+    has_role_in_managed_group = (
+        select(UserGroup__ConnectorCredentialPair.cc_pair_id)
+        .where(
+            live_manage_row,
+            UserGroup__ConnectorCredentialPair.role.in_(roles),
+            UserGroup__ConnectorCredentialPair.user_group_id.in_(
+                scoped_group_ids_subquery(user)
+            ),
+        )
+        .exists()
+    )
+    return or_(has_role_in_managed_group, is_groupless_creator)
+
+
 def _add_user_filters(
-    stmt: Select[tuple[*R]], user: User, get_editable: bool = True
+    stmt: Select[tuple[*R]], user: User, access_level: CCPairAccessLevel
 ) -> Select[tuple[*R]]:
-    if user.role == UserRole.ADMIN:
+    user_permissions = get_effective_permissions(user)
+
+    if Permission.MANAGE_CONNECTORS in user_permissions:
         return stmt
 
-    # If anonymous user, only show public cc_pairs
+    if access_level is not CCPairAccessLevel.READ:
+        return stmt.where(
+            _manage_access_clause(user, _ROLES_FOR_ACCESS_LEVEL[access_level])
+        )
+
+    # Reads: MANAGE_USER_GROUPS / MANAGE_DOCUMENT_SETS imply only READ_CONNECTORS, so
+    # without this the attach pickers hide private pairs they aren't a member of.
+    if Permission.READ_CONNECTORS in user_permissions:
+        return stmt
+
     if user.is_anonymous:
-        where_clause = ConnectorCredentialPair.access_type == AccessType.PUBLIC
-        return stmt.where(where_clause)
+        return stmt.where(ConnectorCredentialPair.access_type == AccessType.PUBLIC)
 
     stmt = stmt.distinct()
     UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)
     User__UG = aliased(User__UserGroup)
 
-    """
-    Here we select cc_pairs by relation:
-    User -> User__UserGroup -> UserGroup__ConnectorCredentialPair ->
-    ConnectorCredentialPair
-    """
     stmt = stmt.outerjoin(UG__CCpair).outerjoin(
         User__UG,
         User__UG.user_group_id == UG__CCpair.user_group_id,
     )
 
-    """
-    Filter cc_pairs by:
-    - if the user is in the user_group that owns the cc_pair
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out cc_pairs that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all cc_pairs in the groups the user is a curator
-    for (as well as public cc_pairs)
-    """
-
     where_clause = User__UG.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UG.is_curator == True  # noqa: E712
-    if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(
-                User__UserGroup.is_curator == True  # noqa: E712
-            )
-        where_clause &= ~exists().where(
-            UG__CCpair.cc_pair_id == ConnectorCredentialPair.id
-        ).where(~UG__CCpair.user_group_id.in_(user_groups)).correlate(
-            ConnectorCredentialPair
-        )
-        where_clause |= ConnectorCredentialPair.creator_id == user.id
-    else:
-        where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
-        where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC
+    where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
+    where_clause |= build_user_acl_cc_pair_filter(user.id)
 
     return stmt.where(where_clause)
+
+
+def get_manageable_cc_pairs_for_credentials(
+    db_session: Session,
+    user: User,
+    credential_ids: list[int],
+) -> list[ConnectorCredentialPair]:
+    """The pairs using any of these credentials that the user can operate, with
+    their connectors loaded. The single place that decides which connectors the
+    credential usage hints may show."""
+    stmt = (
+        select(ConnectorCredentialPair)
+        .distinct()
+        .options(selectinload(ConnectorCredentialPair.connector))
+        .where(ConnectorCredentialPair.credential_id.in_(credential_ids))
+    )
+    stmt = _add_user_filters(stmt, user, CCPairAccessLevel.OPERATE)
+    return list(db_session.scalars(stmt).unique().all())
 
 
 def get_connector_credential_pairs_for_user(
     db_session: Session,
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
     eager_load_credential: bool = False,
@@ -143,7 +447,7 @@ def get_connector_credential_pairs_for_user(
             load_opts = load_opts.joinedload(Credential.user)
         stmt = stmt.options(load_opts)
 
-    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _add_user_filters(stmt, user, access_level)
 
     if source:
         stmt = stmt.join(ConnectorCredentialPair.connector).where(
@@ -167,7 +471,7 @@ def get_connector_credential_pairs_for_user(
 # after this function to allow lazy loading.
 def get_connector_credential_pairs_for_user_parallel(
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
     eager_load_credential: bool = False,
@@ -181,7 +485,7 @@ def get_connector_credential_pairs_for_user_parallel(
         return get_connector_credential_pairs_for_user(
             db_session=db_session,
             user=user,
-            get_editable=get_editable,
+            access_level=access_level,
             ids=ids,
             eager_load_connector=eager_load_connector,
             eager_load_credential=eager_load_credential,
@@ -247,10 +551,10 @@ def get_connector_credential_pair_for_user(
     connector_id: int,
     credential_id: int,
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
-    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _add_user_filters(stmt, user, access_level)
     stmt = stmt.where(ConnectorCredentialPair.connector_id == connector_id)
     stmt = stmt.where(ConnectorCredentialPair.credential_id == credential_id)
     result = db_session.execute(stmt)
@@ -273,10 +577,10 @@ def get_connector_credential_pair_from_id_for_user(
     cc_pair_id: int,
     db_session: Session,
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair).distinct()
-    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _add_user_filters(stmt, user, access_level)
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
@@ -286,13 +590,104 @@ def verify_user_has_access_to_cc_pair(
     cc_pair_id: int,
     db_session: Session,
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
 ) -> bool:
     stmt = select(ConnectorCredentialPair.id)
-    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _add_user_filters(stmt, user, access_level)
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
     result = db_session.execute(stmt)
     return result.scalars().first() is not None
+
+
+def get_cc_pair_ids_for_document(db_session: Session, document_id: str) -> set[int]:
+    return set(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id)
+            .join(
+                DocumentByConnectorCredentialPair,
+                and_(
+                    DocumentByConnectorCredentialPair.connector_id
+                    == ConnectorCredentialPair.connector_id,
+                    DocumentByConnectorCredentialPair.credential_id
+                    == ConnectorCredentialPair.credential_id,
+                ),
+            )
+            .where(DocumentByConnectorCredentialPair.id == document_id)
+        )
+    )
+
+
+def get_cc_pair_ids_for_connector(db_session: Session, connector_id: int) -> set[int]:
+    return set(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id).where(
+                ConnectorCredentialPair.connector_id == connector_id
+            )
+        )
+    )
+
+
+def get_non_deleting_cc_pair_ids(db_session: Session) -> list[int]:
+    return list(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id)
+            .where(
+                ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
+            )
+            .order_by(ConnectorCredentialPair.id)
+        )
+    )
+
+
+def select_cc_pair_ids_for_user(
+    user: User, access_level: CCPairAccessLevel
+) -> Select[tuple[int]]:
+    """The ids of the pairs the user holds ``access_level`` on, as a statement to
+    run or to use as a subquery."""
+    return _add_user_filters(select(ConnectorCredentialPair.id), user, access_level)
+
+
+def get_managed_cc_pair_ids(
+    cc_pair_ids: set[int],
+    db_session: Session,
+    user: User,
+    access_level: CCPairAccessLevel,
+) -> set[int]:
+    """The subset of ``cc_pair_ids`` the user holds ``access_level`` on."""
+    stmt = select_cc_pair_ids_for_user(user, access_level).where(
+        ConnectorCredentialPair.id.in_(cc_pair_ids)
+    )
+    return set(db_session.scalars(stmt))
+
+
+def verify_user_can_manage_all_cc_pairs(
+    cc_pair_ids: set[int],
+    db_session: Session,
+    user: User,
+    access_level: CCPairAccessLevel,
+) -> bool:
+    # guard: issubset is vacuously true for an empty set, which would authorize anything
+    if not cc_pair_ids:
+        return False
+    return cc_pair_ids.issubset(
+        get_managed_cc_pair_ids(cc_pair_ids, db_session, user, access_level)
+    )
+
+
+def verify_user_can_edit_connector(
+    connector_id: int, db_session: Session, user: User
+) -> bool:
+    """A connector carries no groups, so its pairs decide: the user must be an Editor
+    of every pair on it. A connector with no pairs has no Editor, so only global
+    MANAGE_CONNECTORS passes."""
+    if Permission.MANAGE_CONNECTORS in get_effective_permissions(user):
+        return True
+    return verify_user_can_manage_all_cc_pairs(
+        get_cc_pair_ids_for_connector(db_session, connector_id),
+        db_session,
+        user,
+        CCPairAccessLevel.EDIT,
+    )
 
 
 def get_connector_credential_pair_from_id(
@@ -325,16 +720,41 @@ def get_connector_credential_pairs_for_source(
     return list(db_session.scalars(stmt).unique().all())
 
 
+def _has_unresolved_entity_error() -> ColumnElement[bool]:
+    """Correlates to the enclosing query's IndexAttempt row."""
+    return (
+        select(IndexAttemptError.id)
+        .where(
+            IndexAttemptError.index_attempt_id == IndexAttempt.id,
+            IndexAttemptError.is_resolved.is_(False),
+            IndexAttemptError.entity_id.is_not(None),
+        )
+        .correlate(IndexAttempt)
+        .exists()
+    )
+
+
 def get_last_successful_attempt_poll_range_end(
     cc_pair_id: int,
     earliest_index: float,
     search_settings: SearchSettings,
     db_session: Session,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = False,
 ) -> float:
     """Used to get the latest `poll_range_end` for a given connector and credential.
 
     This can be used to determine the next "start" time for a new index attempt.
+
+    An attempt that completed with errors moves the cursor too, unless one of
+    its unresolved errors is an entity (a whole mailbox or folder) rather than
+    a document: nothing names what that entity's window held, so the window
+    stays open. Failed documents are tracked as IndexAttemptError rows.
+
+    A reindex-port synthetic seed carries PRESENT's poll cursor and IS a valid resume
+    point, so it is considered by default - the FUTURE's first connector attempt resumes
+    from it instead of refetching full history. This differs from the count/latest helpers,
+    which keep `ignore_synthetic_seed=True` because a seed is not a real indexing run.
 
     Note that the attempts time_started is not necessarily correct - that gets set
     separately and is similar but not exactly the same as the `poll_range_end`.
@@ -348,11 +768,19 @@ def get_last_successful_attempt_poll_range_end(
         .filter(
             ConnectorCredentialPair.id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings.id,
-            IndexAttempt.status == IndexingStatus.SUCCESS,
+            or_(
+                IndexAttempt.status == IndexingStatus.SUCCESS,
+                and_(
+                    IndexAttempt.status == IndexingStatus.COMPLETED_WITH_ERRORS,
+                    ~_has_unresolved_entity_error(),
+                ),
+            ),
         )
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_synthetic_seed:
+        query = query.filter(IndexAttempt.is_synthetic_seed.is_(False))
     latest_successful_index_attempt = query.order_by(
         IndexAttempt.poll_range_end.desc()
     ).first()
@@ -382,6 +810,16 @@ def _update_connector_credential_pair(
     if net_docs is not None:
         cc_pair.total_docs_indexed += net_docs
     if status is not None:
+        # Leaving INVALID means the connector was fixed: retire its alerts.
+        if (
+            cc_pair.status == ConnectorCredentialPairStatus.INVALID
+            and status != ConnectorCredentialPairStatus.INVALID
+        ):
+            clear_connector_alerts__no_commit(
+                db_session=db_session,
+                cc_pair_id=cc_pair.id,
+                notif_type=NotificationType.CONNECTOR_INVALID,
+            )
         cc_pair.status = status
 
     db_session.commit()
@@ -499,16 +937,47 @@ def associate_default_cc_pair(db_session: Session) -> None:
 def _relate_groups_to_cc_pair__no_commit(
     db_session: Session,
     cc_pair_id: int,
-    user_group_ids: list[int] | None = None,
+    manage_access: dict[int, ConnectorManageRole],
+) -> None:
+    if not manage_access:
+        return
+
+    assert_not_shared_with_default_group(db_session, manage_access.keys())
+
+    for group_id, role in manage_access.items():
+        db_session.add(
+            UserGroup__ConnectorCredentialPair(
+                user_group_id=group_id, cc_pair_id=cc_pair_id, role=role
+            )
+        )
+
+
+def _relate_data_access_groups_to_cc_pair__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+    user_group_ids: list[int],
 ) -> None:
     if not user_group_ids:
         return
 
-    for group_id in user_group_ids:
-        db_session.add(
-            UserGroup__ConnectorCredentialPair(
-                user_group_id=group_id, cc_pair_id=cc_pair_id
+    assert_not_shared_with_default_group(db_session, user_group_ids)
+    found_group_ids = set(
+        db_session.scalars(
+            select(UserGroup.id).where(
+                UserGroup.id.in_(user_group_ids),
+                UserGroup.is_up_for_deletion.is_(False),
             )
+        )
+    )
+    if missing_group_ids := set(user_group_ids) - found_group_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"User group(s) not found: {sorted(missing_group_ids)}",
+        )
+
+    for group_id in set(user_group_ids):
+        db_session.add(
+            UserGroup__CCPairDataAccess(user_group_id=group_id, cc_pair_id=cc_pair_id)
         )
 
 
@@ -519,7 +988,8 @@ def add_credential_to_connector(
     credential_id: int,
     cc_pair_name: str,
     access_type: AccessType,
-    groups: list[int] | None,
+    manage_access: dict[int, ConnectorManageRole],
+    data_access_group_ids: list[int] | None = None,
     auto_sync_options: dict | None = None,
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.SCHEDULED,
     last_successful_index_time: datetime | None = None,
@@ -539,13 +1009,12 @@ def add_credential_to_connector(
             credential_id,
             user,
             db_session,
-            get_editable=False,
         )
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
 
-    if access_type == AccessType.SYNC:
+    if access_type.is_perm_synced():
         fetch_ee_implementation_or_noop(
             "onyx.utils.tier",
             "require_business_tier_for_sync_access",
@@ -556,9 +1025,9 @@ def add_credential_to_connector(
             "check_if_valid_sync_source",
             noop_return_value=True,
         )(connector.source):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Connector of type {connector.source} does not support SYNC access type",
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Connector of type {connector.source} does not support permission sync",
             )
 
     if credential is None:
@@ -604,8 +1073,32 @@ def add_credential_to_connector(
     _relate_groups_to_cc_pair__no_commit(
         db_session=db_session,
         cc_pair_id=association.id,
-        user_group_ids=groups,
+        manage_access=manage_access,
     )
+    if access_type == AccessType.PRIVATE:
+        # Callers that set only manage groups keep today's meaning: the
+        # manage groups also get data access.
+        _relate_data_access_groups_to_cc_pair__no_commit(
+            db_session=db_session,
+            cc_pair_id=association.id,
+            user_group_ids=(
+                data_access_group_ids
+                if data_access_group_ids is not None
+                else list(manage_access)
+            ),
+        )
+    elif access_type == AccessType.SYNC_RESTRICTED:
+        # With no data-access group the pair would be visible to nobody.
+        if not data_access_group_ids:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "A restricted connector needs at least one data-access group.",
+            )
+        _relate_data_access_groups_to_cc_pair__no_commit(
+            db_session=db_session,
+            cc_pair_id=association.id,
+            user_group_ids=data_access_group_ids,
+        )
 
     db_session.commit()
 
@@ -627,7 +1120,6 @@ def remove_credential_from_connector(
         credential_id,
         user,
         db_session,
-        get_editable=False,
     )
 
     if connector is None:
@@ -644,7 +1136,7 @@ def remove_credential_from_connector(
         connector_id=connector_id,
         credential_id=credential_id,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.EDIT,
     )
 
     if association is not None:
@@ -698,6 +1190,66 @@ def fetch_indexable_standard_connector_credential_pair_ids(
     return list(db_session.scalars(stmt))
 
 
+def compute_wont_port_cc_pair_ids(
+    db_session: Session, switchover_type: SwitchoverType
+) -> list[int]:
+    """cc_pairs whose data will NOT be carried into the new index for this reindex —
+    the complement of the port scope. Derived from the SAME
+    fetch_indexable_standard_connector_credential_pair_ids the reindex/swap use, so a
+    change to what ports is reflected here automatically (no re-encoded status rules).
+    Works out to INVALID always + PAUSED under ACTIVE_ONLY. Excludes DELETING (already
+    being removed) and the default Ingestion cc_pair.
+    """
+    will_port = set(
+        fetch_indexable_standard_connector_credential_pair_ids(
+            db_session,
+            active_cc_pairs_only=(switchover_type == SwitchoverType.ACTIVE_ONLY),
+        )
+    )
+    stmt = select(ConnectorCredentialPair.id).where(
+        ConnectorCredentialPair.id != DEFAULT_CC_PAIR_ID,
+        ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+    )
+    return sorted(cc_id for cc_id in db_session.scalars(stmt) if cc_id not in will_port)
+
+
+def mark_cc_pairs_deleting_if_still_wont_port__no_commit(
+    db_session: Session, cc_pair_ids: list[int]
+) -> list[int]:
+    """Atomically move the given cc_pairs to DELETING, but ONLY those still INVALID or
+    PAUSED, returning the ids actually transitioned. Re-validation and the state change
+    are one conditional UPDATE, so a connector re-activated (-> ACTIVE) after the reclaim
+    consent set was captured is skipped, never clobbered into DELETING (Postgres rechecks
+    the WHERE under the row lock). The caller fires connector deletion only for the
+    returned ids and commits."""
+    if not cc_pair_ids:
+        return []
+    stmt = (
+        update(ConnectorCredentialPair)
+        .where(
+            ConnectorCredentialPair.id.in_(cc_pair_ids),
+            ConnectorCredentialPair.status.in_(
+                [
+                    ConnectorCredentialPairStatus.INVALID,
+                    ConnectorCredentialPairStatus.PAUSED,
+                ]
+            ),
+        )
+        .values(status=ConnectorCredentialPairStatus.DELETING)
+        .returning(ConnectorCredentialPair.id)
+    )
+    transitioned_ids = list(db_session.execute(stmt).scalars().all())
+    # Notifications have no foreign key to the cc_pair, so deleting one cascades nothing.
+    # Without this the INVALID alert outlives the connector it points at, forever.
+    for cc_pair_id in transitioned_ids:
+        clear_connector_alerts__no_commit(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+            notif_type=NotificationType.CONNECTOR_INVALID,
+        )
+    return transitioned_ids
+
+
 def fetch_connector_credential_pair_for_connector(
     db_session: Session,
     connector_id: int,
@@ -712,6 +1264,7 @@ def resync_cc_pair(
     cc_pair: ConnectorCredentialPair,
     search_settings_id: int,
     db_session: Session,
+    commit: bool = True,
 ) -> None:
     """
     Updates state stored in the connector_credential_pair table based on the
@@ -761,4 +1314,5 @@ def resync_cc_pair(
         last_success.time_started if last_success else None
     )
 
-    db_session.commit()
+    if commit:
+        db_session.commit()

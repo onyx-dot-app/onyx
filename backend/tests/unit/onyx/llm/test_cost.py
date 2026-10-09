@@ -1,0 +1,667 @@
+"""Unit tests for split input/output cost and admin per-model overrides (SQLite)."""
+
+import logging
+from collections.abc import Generator
+from typing import cast
+
+import pytest
+from sqlalchemy import Table, create_engine
+from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.orm import Session, sessionmaker
+
+from onyx.db.models import ModelCostOverride
+from onyx.llm import cost as cost_mod
+from onyx.llm import cost_overrides
+from onyx.llm.cost import compute_cost_cents, get_model_price_per_million
+from onyx.tracing.flows import LLMFlow
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+
+@compiles(PGUUID, "sqlite")
+def _compile_pguuid_sqlite(_element: object, _compiler: object, **_kw: object) -> str:
+    return "CHAR(36)"
+
+
+@compiles(PGJSONB, "sqlite")
+def _compile_jsonb_sqlite(_element: object, _compiler: object, **_kw: object) -> str:
+    return "JSON"
+
+
+@pytest.fixture
+def db_session() -> Generator[Session, None, None]:
+    engine: Engine = create_engine("sqlite://")
+    cast(Table, ModelCostOverride.__table__).create(bind=engine)
+    SessionLocal = sessionmaker(bind=engine)
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture(autouse=True)
+def _clear_override_cache() -> Generator[None, None, None]:
+    # Clear process-global override cache.
+    cost_overrides._cache.clear()
+    cost_overrides._last_known_cache.clear()
+    yield
+    cost_overrides._cache.clear()
+    cost_overrides._last_known_cache.clear()
+
+
+class TestComputeCostCents:
+    def test_known_model_splits_input_and_output(self) -> None:
+        # gpt-4o: $2.50/Mtok in, $10.00/Mtok out → 1000 tok each.
+        in_cents, out_cents = compute_cost_cents(
+            model="gpt-4o",
+            provider="openai",
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert in_cents == pytest.approx(0.25)
+        assert out_cents == pytest.approx(1.0)
+
+    def test_unknown_model_returns_zero_no_raise(self) -> None:
+        result = compute_cost_cents(
+            model="totally-made-up-model-xyz",
+            provider="nobody",
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert result == (0.0, 0.0)
+
+    def test_unknown_model_uses_configurable_fallback_rates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model="totally-made-up-model-xyz",
+            provider="nobody",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+            cache_read_tokens=0,
+        )
+        assert in_cents == pytest.approx(200.0)  # 1M * $2/Mtok = $2.00 = 200c
+        assert out_cents == pytest.approx(600.0)  # 1M * $6/Mtok = $6.00 = 600c
+
+    def test_cache_read_tokens_priced_as_input(self) -> None:
+        # gpt-4o $2.50/Mtok in, $1.25/Mtok cache-read:
+        # 1000*2.5e-6 + 2000*1.25e-6 = $0.005 = 0.5c
+        cache_in, cache_out = compute_cost_cents(
+            "gpt-4o",
+            "openai",
+            prompt_tokens=3000,
+            completion_tokens=500,
+            cache_read_tokens=2000,
+        )
+        assert cache_in == pytest.approx(0.5)
+        # Output (500 tok @ $10/Mtok) is unaffected by cache reads.
+        assert cache_out == pytest.approx(0.5)
+
+    def test_cache_creation_tokens_priced_at_the_write_premium(self) -> None:
+        # claude-sonnet-4-5 $3/Mtok in, $3.75/Mtok cache-write:
+        # 1000*3e-6 + 2000*3.75e-6 = $0.0105 = 1.05c. The plain input rate
+        # would yield 0.9c.
+        cents_in, _ = compute_cost_cents(
+            "claude-sonnet-4-5",
+            "anthropic",
+            prompt_tokens=3000,
+            completion_tokens=0,
+            cache_creation_tokens=2000,
+        )
+        assert cents_in == pytest.approx(1.05)
+
+    def test_cache_write_costs_more_than_an_equivalent_read(self) -> None:
+        """Asserts a direction, not exact cents, so a price-table refresh
+        cannot break it."""
+        write_cents, _ = compute_cost_cents(
+            "claude-sonnet-4-5", "anthropic", 1000, 0, cache_creation_tokens=1000
+        )
+        read_cents, _ = compute_cost_cents(
+            "claude-sonnet-4-5", "anthropic", 1000, 0, cache_read_tokens=1000
+        )
+        plain_cents, _ = compute_cost_cents("claude-sonnet-4-5", "anthropic", 1000, 0)
+        assert write_cents > plain_cents > read_cents > 0
+
+    def test_inconsistent_cache_counts_warn_instead_of_billing_silently(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING):
+            compute_cost_cents(
+                "claude-sonnet-4-5",
+                "anthropic",
+                100,
+                0,
+                cache_read_tokens=80,
+                cache_creation_tokens=80,
+            )
+
+        assert "Cache subsets exceed the reported prompt total" in caplog.text
+
+    def test_cache_inclusive_prompt_total_prices_each_segment(self) -> None:
+        # 1000 fresh, 1000 read, 2000 written:
+        # 1000*3e-6 + 1000*0.30e-6 + 2000*3.75e-6 = $0.0108 = 1.08c
+        input_cents, output_cents = compute_cost_cents(
+            model="claude-sonnet-4-5",
+            provider="anthropic",
+            prompt_tokens=4000,
+            completion_tokens=0,
+            cache_read_tokens=1000,
+            cache_creation_tokens=2000,
+        )
+
+        assert input_cents == pytest.approx(1.08)
+        assert output_cents == 0
+
+    def test_long_context_tier_rates_apply_above_the_threshold(self) -> None:
+        """claude-haiku-5-5 bills 5x above 100k context tokens. Below it,
+        base rates apply."""
+        base_in, base_out = compute_cost_cents(
+            "claude-haiku-5-5",
+            "anthropic",
+            prompt_tokens=90_000,
+            completion_tokens=1_000,
+        )
+        # 90k * $0.1/Mtok + 1k * $0.5/Mtok
+        assert base_in == pytest.approx(0.9)
+        assert base_out == pytest.approx(0.05)
+
+        tiered_in, tiered_out = compute_cost_cents(
+            "claude-haiku-5-5",
+            "anthropic",
+            prompt_tokens=150_000,
+            completion_tokens=1_000,
+        )
+        # 150k * $0.5/Mtok + 1k * $2.5/Mtok — fivefold tier rates.
+        assert tiered_in == pytest.approx(7.5)
+        assert tiered_out == pytest.approx(0.25)
+
+    def test_bedrock_model_priced_via_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Bedrock names aren't self-identifying — without custom_llm_provider
+        # litellm raises and the cost silently collapses to $0. litellm's
+        # price map drifts upstream, so stub the lookup and assert the
+        # provider plumbing rather than live prices.
+        import litellm
+
+        def _fake_cost_per_token(
+            model: str,  # noqa: ARG001
+            custom_llm_provider: str | None,
+            prompt_tokens: int,
+            completion_tokens: int,
+            **_kw: object,
+        ) -> tuple[float, float]:
+            assert custom_llm_provider == "bedrock"
+            return prompt_tokens * 1e-6, completion_tokens * 5e-6
+
+        monkeypatch.setattr(litellm, "cost_per_token", _fake_cost_per_token)
+        in_cents, out_cents = compute_cost_cents(
+            model="anthropic.claude-haiku-4-5-20251001-v1:0",
+            provider="bedrock",
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert in_cents == pytest.approx(0.1)
+        assert out_cents == pytest.approx(0.5)
+
+
+class TestUnmappedGatewayModels:
+    """Gateway-hosted names that the catalog does not carry fall back to the
+    configured default rates instead of silently recording zero."""
+
+    GATEWAY_CASES = [
+        ("acme/sonnet-9-ultra", "portkey"),
+        ("acme/gpt-77", "openai_compatible"),
+        ("acme/gemini-9.9-pro", "bifrost"),
+        ("acme/claude-42-opus", "nebius_tokenfactory"),
+    ]
+
+    @pytest.mark.parametrize("model,provider", GATEWAY_CASES)
+    def test_unmapped_gateway_model_uses_fallback_rates_not_zero(
+        self, model: str, provider: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider=provider,
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        )
+        assert in_cents == pytest.approx(200.0)
+        assert out_cents == pytest.approx(600.0)
+
+    @pytest.mark.parametrize("model,provider", GATEWAY_CASES)
+    def test_unmapped_gateway_model_reports_unknown_rates(
+        self, model: str, provider: str
+    ) -> None:
+        price = get_model_price_per_million(model, provider)
+        assert price.input_per_mtok is None
+        assert price.output_per_mtok is None
+
+    def test_unmapped_gateway_model_warns_when_no_fallback_configured(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 0.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 0.0)
+        with caplog.at_level(logging.WARNING):
+            result = compute_cost_cents(
+                model="acme/sonnet-9-ultra",
+                provider="portkey",
+                prompt_tokens=1_000_000,
+                completion_tokens=1_000_000,
+            )
+        assert result == (0.0, 0.0)
+        assert "No price for model" in caplog.text
+
+    @pytest.mark.parametrize(
+        "model,provider",
+        [
+            ("anthropic/claude-sonnet-4.5", "vercel_ai_gateway"),
+            ("anthropic/claude-sonnet-4.5", "openrouter"),
+        ],
+    )
+    def test_mapped_gateway_model_keeps_its_real_price(
+        self, model: str, provider: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Gateways litellm does map must not be diverted to fallback rates."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider=provider,
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert in_cents == pytest.approx(0.3)
+        assert out_cents == pytest.approx(1.5)
+
+
+class TestLocallyHostedProviders:
+    """Self-hosted inference has no per-token vendor charge, so it must bill
+    zero rather than pick up the unpriced-model fallback rates."""
+
+    @pytest.mark.parametrize(
+        "model,provider",
+        [
+            ("gpt-oss:20b", "ollama_chat"),
+            ("llama3.3", "ollama"),
+            ("qwen/qwen3-4b", "lm_studio"),
+        ],
+    )
+    def test_local_provider_bills_zero_despite_fallback_rates(
+        self, model: str, provider: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        assert compute_cost_cents(
+            model=model,
+            provider=provider,
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        ) == (0.0, 0.0)
+
+    def test_local_provider_reports_zero_rates(self) -> None:
+        price = get_model_price_per_million("gpt-oss:20b", "ollama_chat")
+        assert price.input_per_mtok == 0.0
+        assert price.output_per_mtok == 0.0
+
+    @pytest.mark.parametrize(
+        "model", ["gpt-oss:20b-cloud", "deepseek-v3.1:671b-cloud", "glm-4.6:cloud"]
+    )
+    def test_ollama_cloud_model_is_not_billed_as_local(
+        self, model: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ollama Cloud is hosted, billable inference served under the same
+        provider name as local Ollama. litellm has no `ollama_chat/*-cloud`
+        entry, so it must reach the fallback rates, not the zero-cost path."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model=model,
+            provider="ollama_chat",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        )
+        assert in_cents == pytest.approx(200.0)
+        assert out_cents == pytest.approx(600.0)
+
+    def test_ollama_cloud_model_reports_unknown_rates(self) -> None:
+        price = get_model_price_per_million("gpt-oss:20b-cloud", "ollama_chat")
+        assert price.input_per_mtok is None
+        assert price.output_per_mtok is None
+
+    @pytest.mark.parametrize("model", ["gpt-oss:20b-cloud", "gpt-oss:120b-cloud"])
+    def test_bare_ollama_cloud_model_reaches_fallback_rates(
+        self, model: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The catalog carries no `ollama/*-cloud` entries, so cloud models
+        fall back to the configured default rates rather than the zero-cost
+        local path; an admin can pin a real price with a ModelCostOverride."""
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        assert compute_cost_cents(
+            model=model,
+            provider="ollama",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        ) == (200.0, 600.0)
+
+
+class TestImageFlow:
+    def test_image_flow_uses_image_pricing(self) -> None:
+        # dall-e-3 is priced per-image ($0.04 = 4 cents), not per-token.
+        in_cents, out_cents = compute_cost_cents(
+            model="dall-e-3",
+            provider="openai",
+            prompt_tokens=0,
+            completion_tokens=0,
+            flow=LLMFlow.IMAGE_GENERATION,
+        )
+        assert (in_cents + out_cents) == pytest.approx(4.0)
+
+    def test_unpriced_image_model_uses_flat_constant(self) -> None:
+        in_cents, out_cents = compute_cost_cents(
+            model="some-unpriced-image-model",
+            provider="nobody",
+            prompt_tokens=0,
+            completion_tokens=0,
+            flow=LLMFlow.IMAGE_EDIT,
+        )
+        from onyx.configs.app_configs import DEFAULT_IMAGE_COST_CENTS
+
+        assert (in_cents + out_cents) == pytest.approx(DEFAULT_IMAGE_COST_CENTS)
+
+    def test_image_count_multiplies_per_image_price(self) -> None:
+        in_cents, out_cents = compute_cost_cents(
+            model="dall-e-3",
+            provider="openai",
+            prompt_tokens=0,
+            completion_tokens=0,
+            flow=LLMFlow.IMAGE_GENERATION,
+            image_count=3,
+        )
+        assert (in_cents + out_cents) == pytest.approx(12.0)
+
+    def test_token_override_does_not_replace_image_price(
+        self, db_session: Session
+    ) -> None:
+        db_session.add(
+            ModelCostOverride(
+                model="dall-e-3",
+                input_cost_per_mtok=0.0,
+                output_cost_per_mtok=0.0,
+            )
+        )
+        db_session.commit()
+
+        in_cents, out_cents = compute_cost_cents(
+            model="dall-e-3",
+            provider="openai",
+            prompt_tokens=0,
+            completion_tokens=0,
+            flow=LLMFlow.IMAGE_GENERATION,
+            db_session=db_session,
+        )
+        assert (in_cents + out_cents) == pytest.approx(4.0)
+
+
+class TestOverride:
+    def test_override_wins_over_litellm(self, db_session: Session) -> None:
+        db_session.add(
+            ModelCostOverride(
+                model="gpt-4o",
+                input_cost_per_mtok=1.0,  # $1.00/Mtok in
+                output_cost_per_mtok=2.0,  # $2.00/Mtok out
+            )
+        )
+        db_session.commit()
+
+        in_cents, out_cents = compute_cost_cents(
+            model="gpt-4o",
+            provider="openai",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+            db_session=db_session,
+        )
+        # $1.00 = 100 cents in, $2.00 = 200 cents out.
+        assert in_cents == pytest.approx(100.0)
+        assert out_cents == pytest.approx(200.0)
+
+    def test_override_counts_cache_reads_as_input(self, db_session: Session) -> None:
+        db_session.add(
+            ModelCostOverride(
+                model="gpt-4o",
+                input_cost_per_mtok=1.0,
+                output_cost_per_mtok=2.0,
+            )
+        )
+        db_session.commit()
+
+        in_cents, _ = compute_cost_cents(
+            model="gpt-4o",
+            provider="openai",
+            prompt_tokens=1_000_000,
+            completion_tokens=0,
+            cache_read_tokens=500_000,
+            db_session=db_session,
+        )
+        assert in_cents == pytest.approx(100.0)
+
+    def test_override_bills_cache_writes_at_the_input_rate(
+        self, db_session: Session
+    ) -> None:
+        db_session.add(
+            ModelCostOverride(
+                model="gpt-4o",
+                input_cost_per_mtok=1.0,
+                output_cost_per_mtok=2.0,
+                cache_read_cost_per_mtok=0.1,
+            )
+        )
+        db_session.commit()
+
+        in_cents, _ = compute_cost_cents(
+            model="gpt-4o",
+            provider="openai",
+            prompt_tokens=2_000_000,
+            completion_tokens=0,
+            cache_creation_tokens=1_000_000,
+            db_session=db_session,
+        )
+        assert in_cents == pytest.approx(200.0)
+
+    def test_override_cache_rate_applied_when_set(self, db_session: Session) -> None:
+        db_session.add(
+            ModelCostOverride(
+                model="gpt-4o",
+                input_cost_per_mtok=1.0,
+                output_cost_per_mtok=2.0,
+                cache_read_cost_per_mtok=0.1,  # cache reads 10x cheaper than input
+            )
+        )
+        db_session.commit()
+
+        in_cents, _ = compute_cost_cents(
+            model="gpt-4o",
+            provider="openai",
+            prompt_tokens=2_000_000,
+            completion_tokens=0,
+            cache_read_tokens=1_000_000,
+            db_session=db_session,
+        )
+        # 1M non-cached @ $1 = 100c + 1M cache reads @ $0.10 = 10c = 110 cents.
+        assert in_cents == pytest.approx(110.0)
+
+    def test_override_cache_is_tenant_scoped(self) -> None:
+        # Override cache is tenant-scoped.
+        def _session() -> Session:
+            engine = create_engine("sqlite://")
+            cast(Table, ModelCostOverride.__table__).create(bind=engine)
+            return sessionmaker(bind=engine)()
+
+        tenant_a, tenant_b = _session(), _session()
+        tenant_a.add(
+            ModelCostOverride(
+                model="gpt-4o", input_cost_per_mtok=1.0, output_cost_per_mtok=2.0
+            )
+        )
+        tenant_a.commit()
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_a")
+        try:
+            a_in, a_out = compute_cost_cents(
+                "gpt-4o",
+                "openai",
+                prompt_tokens=1_000_000,
+                completion_tokens=1_000_000,
+                db_session=tenant_a,
+            )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        assert (a_in, a_out) == pytest.approx((100.0, 200.0))
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_b")
+        try:
+            b_in, b_out = compute_cost_cents(
+                "gpt-4o",
+                "openai",
+                prompt_tokens=1_000_000,
+                completion_tokens=1_000_000,
+                db_session=tenant_b,
+            )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        # litellm gpt-4o: $2.50/Mtok in, $10.00/Mtok out.
+        assert (b_in, b_out) == pytest.approx((250.0, 1000.0))
+
+
+class TestGetOverride:
+    def test_returns_none_when_absent(self, db_session: Session) -> None:
+        assert cost_overrides.get_override(db_session, "no-such-model") is None
+
+    def test_returns_rates_when_present(self, db_session: Session) -> None:
+        db_session.add(
+            ModelCostOverride(
+                model="claude-x",
+                input_cost_per_mtok=3.0,
+                output_cost_per_mtok=15.0,
+            )
+        )
+        db_session.commit()
+
+        rates = cost_overrides.get_override(db_session, "claude-x")
+        assert rates is not None
+        assert rates.input_cost_per_mtok == 3.0
+        assert rates.output_cost_per_mtok == 15.0
+        assert rates.cache_read_cost_per_mtok is None
+
+    def test_cache_invalidation_picks_up_new_row(self, db_session: Session) -> None:
+        assert cost_overrides.get_override(db_session, "late-model") is None
+        db_session.add(
+            ModelCostOverride(
+                model="late-model",
+                input_cost_per_mtok=4.0,
+                output_cost_per_mtok=8.0,
+            )
+        )
+        db_session.commit()
+        # Stale cache still says None until invalidated.
+        assert cost_overrides.get_override(db_session, "late-model") is None
+        cost_overrides.invalidate_override_cache()
+        assert cost_overrides.get_override(
+            db_session, "late-model"
+        ) == cost_overrides.CostOverrideRates(
+            input_cost_per_mtok=4.0,
+            output_cost_per_mtok=8.0,
+            cache_read_cost_per_mtok=None,
+        )
+
+    def test_expired_snapshot_reloads(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        now = 0.0
+        loads = 0
+        monkeypatch.setattr(
+            cost_overrides,
+            "_cache",
+            cost_overrides.TTLCache(
+                maxsize=10,
+                ttl=60,
+                timer=lambda: now,
+            ),
+        )
+
+        def _load(
+            _db_session: Session,
+        ) -> dict[tuple[str, str], cost_overrides.CostOverrideRates]:
+            nonlocal loads
+            loads += 1
+            return {
+                ("", "model"): cost_overrides.CostOverrideRates(
+                    input_cost_per_mtok=float(loads),
+                    output_cost_per_mtok=float(loads),
+                    cache_read_cost_per_mtok=None,
+                )
+            }
+
+        monkeypatch.setattr(cost_overrides, "_load_cache", _load)
+        first = cost_overrides.get_override(db_session, "model")
+        assert first is not None
+        assert first.input_cost_per_mtok == 1.0
+
+        now = 61.0
+        second = cost_overrides.get_override(db_session, "model")
+        assert second is not None
+        assert second.input_cost_per_mtok == 2.0
+
+        def _fail_load(
+            _: Session,
+        ) -> dict[tuple[str, str], cost_overrides.CostOverrideRates]:
+            raise RuntimeError("database unavailable")
+
+        monkeypatch.setattr(cost_overrides, "_load_cache", _fail_load)
+        now = 122.0
+        stale = cost_overrides.get_override(db_session, "model")
+        assert stale == second
+
+    def test_invalidation_during_reload_discards_stale_snapshot(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        loads = 0
+
+        def _load(
+            _db_session: Session,
+        ) -> dict[tuple[str, str], cost_overrides.CostOverrideRates]:
+            nonlocal loads
+            loads += 1
+            if loads == 1:
+                cost_overrides.invalidate_override_cache()
+                return {
+                    ("", "model"): cost_overrides.CostOverrideRates(
+                        input_cost_per_mtok=1.0,
+                        output_cost_per_mtok=1.0,
+                        cache_read_cost_per_mtok=None,
+                    )
+                }
+            return {
+                ("", "model"): cost_overrides.CostOverrideRates(
+                    input_cost_per_mtok=2.0,
+                    output_cost_per_mtok=2.0,
+                    cache_read_cost_per_mtok=None,
+                )
+            }
+
+        monkeypatch.setattr(cost_overrides, "_load_cache", _load)
+        assert cost_overrides.get_override(
+            db_session, "model"
+        ) == cost_overrides.CostOverrideRates(
+            input_cost_per_mtok=2.0,
+            output_cost_per_mtok=2.0,
+            cache_read_cost_per_mtok=None,
+        )

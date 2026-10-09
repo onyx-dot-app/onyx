@@ -1,38 +1,39 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useEffect } from "react";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton, Divider } from "@opal/components";
+import { useTranslations } from "next-intl";
 import {
-  ConfigurableSources,
-  CredentialFieldSpec,
+  Button,
+  Divider,
+  Dropdown,
+  InputCheckbox,
+  Tooltip,
+} from "@opal/components";
+import {
   ConfigurationFieldSpec,
   FederatedConnectorCreateRequest,
   FederatedConnectorDetail,
-  CredentialSchemaResponse,
 } from "@/lib/types";
+import {
+  CredentialFieldSpec,
+  CredentialSchemaResponse,
+} from "@/lib/credentials/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
-import { AlertTriangle, Check, Loader2, Trash2Icon, Info } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Info } from "lucide-react";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import Title from "@/components/ui/title";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 import { Badge } from "@/components/ui/badge";
-import { Tooltip } from "@opal/components";
-import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
-import { Checkbox } from "@opal/components";
-import { SvgSettings, SvgSimpleLoader } from "@opal/icons";
+import { InputList } from "@opal/components";
+import { SvgSettings, SvgTrash } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -59,9 +60,14 @@ interface FormState {
   connectorError: string | null;
 }
 
+type FederatedFormTranslate = ReturnType<
+  typeof useTranslations<"admin.federated.form">
+>;
+
 async function validateCredentials(
   source: string,
-  credentials: CredentialForm
+  credentials: CredentialForm,
+  t: FederatedFormTranslate
 ): Promise<{ success: boolean; message: string }> {
   try {
     const response = await fetch(
@@ -80,23 +86,28 @@ async function validateCredentials(
       return {
         success: false,
         message:
-          errorData.detail || `Validation failed: ${response.statusText}`,
+          errorData.detail ||
+          t("validation.failedStatus", { statusText: response.statusText }),
       };
     }
 
     const result = await response.json();
     return {
       success: result,
-      message: result ? "Credentials are valid" : "Credentials are invalid",
+      message: result ? t("validation.valid") : t("validation.invalid"),
     };
   } catch (error) {
-    return { success: false, message: `Validation error: ${error}` };
+    return {
+      success: false,
+      message: t("validation.error", { error: String(error) }),
+    };
   }
 }
 
 async function createFederatedConnector(
   source: string,
   credentials: CredentialForm,
+  t: FederatedFormTranslate,
   config?: ConfigForm
 ): Promise<{ success: boolean; message: string }> {
   try {
@@ -115,23 +126,27 @@ async function createFederatedConnector(
     if (response.ok) {
       return {
         success: true,
-        message: "Federated connector created successfully!",
+        message: t("create.success"),
       };
     } else {
       const errorData = await response.json();
       return {
         success: false,
-        message: errorData.detail || "Failed to create federated connector",
+        message: errorData.detail || t("create.failed"),
       };
     }
   } catch (error) {
-    return { success: false, message: `Error: ${error}` };
+    return {
+      success: false,
+      message: t("genericError.text", { error: String(error) }),
+    };
   }
 }
 
 async function updateFederatedConnector(
   id: number,
   credentials: CredentialForm | null,
+  t: FederatedFormTranslate,
   config?: ConfigForm
 ): Promise<{ success: boolean; message: string }> {
   try {
@@ -149,22 +164,26 @@ async function updateFederatedConnector(
     if (response.ok) {
       return {
         success: true,
-        message: "Federated connector updated successfully!",
+        message: t("update.success"),
       };
     } else {
       const errorData = await response.json();
       return {
         success: false,
-        message: errorData.detail || "Failed to update federated connector",
+        message: errorData.detail || t("update.failed"),
       };
     }
   } catch (error) {
-    return { success: false, message: `Error: ${error}` };
+    return {
+      success: false,
+      message: t("genericError.text", { error: String(error) }),
+    };
   }
 }
 
 async function deleteFederatedConnector(
-  id: number
+  id: number,
+  t: FederatedFormTranslate
 ): Promise<{ success: boolean; message: string }> {
   try {
     const response = await fetch(`/api/federated/${id}`, {
@@ -174,17 +193,20 @@ async function deleteFederatedConnector(
     if (response.ok) {
       return {
         success: true,
-        message: "Federated connector deleted successfully!",
+        message: t("delete.success"),
       };
     } else {
       const errorData = await response.json();
       return {
         success: false,
-        message: errorData.detail || "Failed to delete federated connector",
+        message: errorData.detail || t("delete.failed"),
       };
     }
   } catch (error) {
-    return { success: false, message: `Error: ${error}` };
+    return {
+      success: false,
+      message: t("genericError.text", { error: String(error) }),
+    };
   }
 }
 
@@ -194,6 +216,7 @@ export function FederatedConnectorForm({
   preloadedConnectorData,
   preloadedCredentialSchema,
 }: FederatedConnectorFormProps) {
+  const t = useTranslations("admin.federated.form");
   const router = useRouter();
   const sourceMetadata = getSourceMetadata(connector);
   const isEditMode = connectorId !== undefined;
@@ -248,7 +271,7 @@ export function FederatedConnectorForm({
           console.error("Error fetching credential schema:", error);
           setFormState((prev) => ({
             ...prev,
-            schemaError: `Failed to load credential schema: ${error}`,
+            schemaError: t("schemaLoadError.message", { error: String(error) }),
           }));
         } finally {
           setIsLoadingSchema(false);
@@ -306,7 +329,9 @@ export function FederatedConnectorForm({
         console.error("Error fetching configuration schema:", error);
         setFormState((prev) => ({
           ...prev,
-          configurationSchemaError: `Failed to load configuration schema: ${error}`,
+          configurationSchemaError: t("configSchemaLoadError.message", {
+            error: String(error),
+          }),
         }));
       }
     };
@@ -322,10 +347,10 @@ export function FederatedConnectorForm({
           <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-4" />
           <div className="text-center">
             <p className="text-lg font-medium text-gray-700 mb-2">
-              Loading credential schema...
+              {t("loadingSchema.title")}
             </p>
             <p className="text-sm text-gray-500">
-              Retrieving required fields for this connector type
+              {t("loadingSchema.description")}
             </p>
           </div>
         </div>
@@ -357,7 +382,7 @@ export function FederatedConnectorForm({
   const handleValidateCredentials = async () => {
     if (!formState.schema) return;
     if (isEditMode && !credentialsModified) {
-      setSubmitMessage("Enter new credential values before validating.");
+      setSubmitMessage(t("validateBeforeEdit.message"));
       setSubmitSuccess(false);
       return;
     }
@@ -369,12 +394,13 @@ export function FederatedConnectorForm({
     try {
       const result = await validateCredentials(
         connector,
-        formState.credentials
+        formState.credentials,
+        t
       );
       setSubmitMessage(result.message);
       setSubmitSuccess(result.success);
     } catch (error) {
-      setSubmitMessage(`Validation error: ${error}`);
+      setSubmitMessage(t("validation.error", { error: String(error) }));
       setSubmitSuccess(false);
     } finally {
       setIsValidating(false);
@@ -384,28 +410,26 @@ export function FederatedConnectorForm({
   const handleDeleteConnector = async () => {
     if (!connectorId) return;
 
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this federated connector? This action cannot be undone."
-    );
+    const confirmed = window.confirm(t("deleteConfirm.message"));
 
     if (!confirmed) return;
 
     setIsDeleting(true);
 
     try {
-      const result = await deleteFederatedConnector(connectorId);
+      const result = await deleteFederatedConnector(connectorId, t);
 
       if (result.success) {
         toast.success(result.message);
         // Redirect after a short delay
         setTimeout(() => {
-          router.push("/admin/indexing/status");
+          router.push("/admin/indexing-status");
         }, 500);
       } else {
         toast.error(result.message);
       }
     } catch (error) {
-      toast.error(`Error deleting connector: ${error}`);
+      toast.error(t("deleteError.toast", { error: String(error) }));
     } finally {
       setIsDeleting(false);
     }
@@ -430,7 +454,7 @@ export function FederatedConnectorForm({
 
         if (missingRequired.length > 0) {
           setSubmitMessage(
-            `Missing required fields: ${missingRequired.join(", ")}`
+            t("missingFields.message", { fields: missingRequired.join(", ") })
           );
           setSubmitSuccess(false);
           setIsSubmitting(false);
@@ -455,11 +479,14 @@ export function FederatedConnectorForm({
       if (shouldValidateCredentials) {
         const validation = await validateCredentials(
           connector,
-          formState.credentials
+          formState.credentials,
+          t
         );
         if (!validation.success) {
           setSubmitMessage(
-            `Credential validation failed: ${validation.message}`
+            t("credentialValidationFailed.message", {
+              message: validation.message,
+            })
           );
           setSubmitSuccess(false);
           setIsSubmitting(false);
@@ -473,11 +500,13 @@ export function FederatedConnectorForm({
           ? await updateFederatedConnector(
               connectorId,
               credentialsModified ? formState.credentials : null,
+              t,
               formState.config
             )
           : await createFederatedConnector(
               connector,
               formState.credentials,
+              t,
               formState.config
             );
 
@@ -488,11 +517,11 @@ export function FederatedConnectorForm({
       if (result.success) {
         // Redirect after a short delay
         setTimeout(() => {
-          router.push("/admin/indexing/status");
+          router.push("/admin/indexing-status");
         }, 500);
       }
     } catch (error) {
-      setSubmitMessage(`Error: ${error}`);
+      setSubmitMessage(t("genericError.text", { error: String(error) }));
       setSubmitSuccess(false);
       setIsSubmitting(false);
     }
@@ -520,7 +549,7 @@ export function FederatedConnectorForm({
     if (!formState.schema) {
       return (
         <div className="text-sm text-gray-500">
-          No credential schema available for this connector type.
+          {t("noCredentialSchema.message")}
         </div>
       );
     }
@@ -538,7 +567,7 @@ export function FederatedConnectorForm({
                   .replace(/_/g, " ")
                   .replace(/\b\w/g, (l) => l.toUpperCase())}
                 {fieldSpec.required && (
-                  <span className="text-red-500 ml-1">*</span>
+                  <span className="text-red-500 ms-1">*</span>
                 )}
               </Text>
               {fieldSpec.description && (
@@ -552,7 +581,7 @@ export function FederatedConnectorForm({
               type={fieldSpec.secret ? "password" : "text"}
               placeholder={
                 isEditMode && !credentialsModified
-                  ? "••••••••  (leave blank to keep current value)"
+                  ? t("credentialField.keepCurrentPlaceholder")
                   : fieldSpec.example
                     ? String(fieldSpec.example)
                     : fieldSpec.description
@@ -598,8 +627,7 @@ export function FederatedConnectorForm({
           !Array.isArray(formState.config.channels) ||
           formState.config.channels.length === 0)
       ) {
-        errors.channels =
-          "At least one channel is required when 'Search All Channels' is disabled";
+        errors.channels = t("channelsRequired.error");
       }
     }
 
@@ -619,13 +647,12 @@ export function FederatedConnectorForm({
     if (!formState.configurationSchema) {
       return (
         <div className="text-sm text-gray-500">
-          No search configuration available for this connector type.
+          {t("noConfigSchema.message")}
         </div>
       );
     }
 
-    const channelInputPlaceholder =
-      "Type channel name or regex pattern and press Enter";
+    const channelInputPlaceholder = t("channelInput.placeholder");
 
     return (
       <>
@@ -638,7 +665,7 @@ export function FederatedConnectorForm({
               <div key={fieldKey} className="space-y-2 w-full">
                 {isBoolType ? (
                   <div className="flex items-center gap-3 py-2">
-                    <Checkbox
+                    <InputCheckbox
                       checked={
                         formState.config[fieldKey] !== undefined
                           ? Boolean(formState.config[fieldKey])
@@ -673,10 +700,10 @@ export function FederatedConnectorForm({
                           {(fieldSpec.required ||
                             (fieldKey === "channels" &&
                               isSlackChannelsRequired())) && (
-                            <span className="text-red-500 ml-1">*</span>
+                            <span className="text-red-500 ms-1">*</span>
                           )}
                         </Text>
-                        <ListFieldInput
+                        <InputList
                           values={
                             Array.isArray(formState.config[fieldKey])
                               ? (formState.config[fieldKey] as string[])
@@ -699,7 +726,7 @@ export function FederatedConnectorForm({
                             fieldKey === "channels" ||
                             fieldKey === "exclude_channels"
                               ? channelInputPlaceholder
-                              : "Type and press Enter to add an item"
+                              : t("listInput.placeholder")
                           }
                           disabled={disableSlackChannelInput(fieldKey)}
                           error={!!configValidationErrors[fieldKey]}
@@ -718,7 +745,7 @@ export function FederatedConnectorForm({
                               .replace(/_/g, " ")
                               .replace(/\b\w/g, (l) => l.toUpperCase())}
                             {fieldSpec.required && (
-                              <span className="text-red-500 ml-1">*</span>
+                              <span className="text-red-500 ms-1">*</span>
                             )}
                           </Text>
                           {fieldSpec.description && (
@@ -764,25 +791,26 @@ export function FederatedConnectorForm({
 
   return (
     <div className="mx-auto w-[800px] pb-8">
-      <BackButton routerOverride="/admin/indexing/status" />
+      <BackButton routerOverride="/admin/indexing-status" />
 
       <div className="flex items-center justify-between h-16 pb-2 border-b border-neutral-200 dark:border-neutral-600">
         <div className="my-auto">
           <SourceIcon iconSize={32} sourceType={connector} />
         </div>
 
-        <div className="ml-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 mr-4">
+        <div className="ms-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 me-4">
           <div className="text-2xl font-bold text-text-default flex items-center gap-2">
             <span>
-              {isEditMode ? "Edit" : "Setup"} {sourceMetadata.displayName}
+              {isEditMode
+                ? t("title.edit", { name: sourceMetadata.displayName })
+                : t("title.setup", { name: sourceMetadata.displayName })}
             </span>
             <Badge variant="outline" className="text-xs">
-              Federated
+              {t("federatedBadge.label")}
             </Badge>
             <Tooltip
               tooltip={
-                sourceMetadata.federatedTooltip ||
-                "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."
+                sourceMetadata.federatedTooltip || t("federatedTooltip.default")
               }
               side="bottom"
             >
@@ -792,48 +820,55 @@ export function FederatedConnectorForm({
         </div>
 
         {isEditMode && (
-          <div className="ml-auto flex gap-x-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <div>
-                  <OpalButton prominence="secondary" icon={SvgSettings}>
-                    Manage
-                  </OpalButton>
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItemWithTooltip
-                  onClick={handleDeleteConnector}
-                  disabled={isDeleting}
-                  className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                  tooltip={isDeleting ? "Deletion in progress" : undefined}
-                >
-                  <Trash2Icon className="h-4 w-4" />
-                  <span>{isDeleting ? "Deleting..." : "Delete"}</span>
-                </DropdownMenuItemWithTooltip>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="ms-auto flex gap-x-2">
+            <Dropdown>
+              <Dropdown.Trigger asChild>
+                <Button prominence="secondary" icon={SvgSettings}>
+                  {t("manageButton.label")}
+                </Button>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("manageButton.label")}
+                items={[
+                  {
+                    kind: "action",
+                    id: "delete",
+                    icon: SvgTrash,
+                    danger: true,
+                    disabled: isDeleting,
+                    title: isDeleting
+                      ? t("deleteItem.deleting")
+                      : t("deleteItem.label"),
+                    // The reason a row is disabled is its tooltip.
+                    tooltip: isDeleting
+                      ? t("deleteItem.inProgressTooltip")
+                      : undefined,
+                    onSelect: handleDeleteConnector,
+                  },
+                ]}
+              />
+            </Dropdown>
           </div>
         )}
       </div>
 
       <Title className="mb-2 mt-6" size="md">
-        Federated Connector Configuration
+        {t("configTitle.text")}
       </Title>
 
       <Card className="px-8 py-4">
         <CardContent className="p-0">
           <form onSubmit={handleSubmit}>
             <Text as="p" headingH3>
-              Credentials
+              {t("credentials.heading")}
             </Text>
             <Text as="p" mainUiMuted>
-              Enter the credentials for this connector.
+              {t("credentials.description")}
             </Text>
             <div className="space-y-4">{renderCredentialFields()}</div>
             <Divider />
             <Text as="p" headingH3>
-              Configuration
+              {t("configuration.heading")}
             </Text>
             <div className="space-y-4">{renderConfigFields()}</div>
 
@@ -855,30 +890,30 @@ export function FederatedConnectorForm({
                 </div>
               )}
 
-              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-              <Button
-                type="button"
-                secondary
-                onClick={handleValidateCredentials}
-                disabled={isValidating || !formState.schema}
-                className="flex ml-auto"
-              >
-                {isValidating ? "Validating..." : "Validate"}
-              </Button>
-              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              <div className="ms-auto">
+                <Button
+                  type="button"
+                  prominence="secondary"
+                  onClick={handleValidateCredentials}
+                  disabled={isValidating || !formState.schema}
+                >
+                  {isValidating
+                    ? t("validateButton.validating")
+                    : t("validateButton.label")}
+                </Button>
+              </div>
               <Button
                 type="submit"
                 disabled={isSubmitting || !formState.schema}
-                className="flex"
-                leftIcon={isSubmitting ? SvgSimpleLoader : undefined}
+                icon={isSubmitting ? IconLoader : undefined}
               >
                 {isSubmitting
                   ? isEditMode
-                    ? "Updating..."
-                    : "Creating..."
+                    ? t("submitButton.updating")
+                    : t("submitButton.creating")
                   : isEditMode
-                    ? "Update"
-                    : "Create"}
+                    ? t("submitButton.update")
+                    : t("submitButton.create")}
               </Button>
             </div>
           </form>

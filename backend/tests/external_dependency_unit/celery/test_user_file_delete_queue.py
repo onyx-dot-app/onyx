@@ -25,29 +25,23 @@ on the task class so no real broker is needed.
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from unittest.mock import PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.user_file_processing.tasks import (
     _user_file_delete_lock_key,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     _user_file_delete_queued_key,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     check_for_user_file_delete,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     process_single_user_file_delete,
 )
-from onyx.configs.constants import CELERY_USER_FILE_DELETE_TASK_EXPIRES
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import USER_FILE_DELETE_MAX_QUEUE_DEPTH
+from onyx.configs.constants import (
+    CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+    USER_FILE_DELETE_MAX_QUEUE_DEPTH,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.redis.redis_pool import get_redis_client
@@ -132,7 +126,7 @@ class TestDeleteQueueDepthBackpressure:
             patch(_PATCH_QUEUE_LEN, return_value=USER_FILE_DELETE_MAX_QUEUE_DEPTH + 1),
         ):
             check_for_user_file_delete.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
 
         mock_app.send_task.assert_not_called()
@@ -164,7 +158,7 @@ class TestDeletePerFileGuardKey:
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
                 check_for_user_file_delete.run(
-                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
                 )
 
             # send_task must not have been called with this specific file's ID
@@ -199,7 +193,7 @@ class TestDeletePerFileGuardKey:
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
                 check_for_user_file_delete.run(
-                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
                 )
 
             assert redis_client.exists(guard_key), (
@@ -239,7 +233,7 @@ class TestDeleteTaskExpiry:
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
                 check_for_user_file_delete.run(
-                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
                 )
 
             # At least one task should have been submitted (for our file)
@@ -292,8 +286,8 @@ class TestDeleteWorkerClearsGuardKey:
 
         try:
             process_single_user_file_delete.run(
-                user_file_id=user_file_id,
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                user_file_id=user_file_id,  # ty: ignore[invalid-argument-type]
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,  # ty: ignore[invalid-argument-type]
             )
         finally:
             if delete_lock.owned():

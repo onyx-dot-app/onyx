@@ -1,39 +1,45 @@
 import time
+from datetime import datetime
 from enum import Enum
-from http import HTTPStatus
 
-import httpx
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from tenacity import RetryError
+from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_document
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
-from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.document import delete_document_by_connector_credential_pair__no_commit
-from onyx.db.document import delete_documents_complete
-from onyx.db.document import fetch_chunk_count_for_document
-from onyx.db.document import get_document
-from onyx.db.document import get_document_connector_count
-from onyx.db.document import mark_document_as_modified
-from onyx.db.document import mark_document_as_synced
+from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY, OnyxCeleryTask
+from onyx.db.connector_credential_pair import get_connector_credential_pair
+from onyx.db.document import (
+    delete_document_by_connector_credential_pair__no_commit,
+    delete_documents_complete,
+    fetch_chunk_count_for_document,
+    get_cc_pair_ids_for_documents,
+    get_document_connector_count,
+    get_document_for_update,
+    get_document_source_types,
+    get_document_source_types_after_cc_pair_removal,
+    mark_document_as_modified,
+    mark_document_as_modified__no_commit,
+    mark_document_as_synced,
+)
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.port_orphan_candidate import (
+    clear_port_orphan_candidates,
+    port_target_settings_id,
+    record_port_orphan_candidates_for_document,
+)
 from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
-from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.httpx.httpx_pool import HttpxPool
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import MetadataUpdateRequest
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 
 DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES = 3
 
 
-# 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
 LIGHT_SOFT_TIME_LIMIT = 105
 LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
 
@@ -65,7 +71,35 @@ class DocumentCleanupAction(str, Enum):
     UPDATE = "update"
 
 
-@shared_task(
+def _clear_port_orphan_candidate_for_live_doc(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    document_id: str,
+) -> None:
+    """Drop a doc's port orphan-candidate when a delete leaves it LIVE, so a later port sweep
+    doesn't delete the live doc's port-copied chunks. Scoped to (target, this cc_pair, doc)
+    and idempotent, so it's safe across Celery retries. NOT for the transient-retry path: the
+    candidate must survive an in-flight delete to still catch a mid-delete resurrection."""
+    active_search_settings = get_active_search_settings(db_session)
+    target_settings_id = port_target_settings_id(
+        active_search_settings.primary, active_search_settings.secondary
+    )
+    if target_settings_id is None:
+        return
+    # Keep the candidate if the doc lost its last link (being deleted): its port-copied
+    # chunks remain (the index delete failed), so the sweep still needs to clean them.
+    if get_document_connector_count(db_session, document_id) == 0:
+        return
+    cc_pair = get_connector_credential_pair(db_session, connector_id, credential_id)
+    if cc_pair is None:
+        return  # cc_pair deleted -> its FK cascade already dropped the candidate
+    clear_port_orphan_candidates(
+        db_session, target_settings_id, cc_pair.id, [document_id]
+    )
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
     time_limit=LIGHT_TIME_LIMIT,
@@ -79,20 +113,10 @@ def document_by_cc_pair_cleanup_task(
     credential_id: int,
     tenant_id: str,  # noqa: ARG001 — kept on the celery task signature
 ) -> bool:
-    """A lightweight subtask used to clean up document to cc pair relationships.
-    Created by connection deletion and connector pruning parent tasks."""
+    """Remove one document relationship and reconcile its index metadata.
 
-    """
-    To delete a connector / credential pair:
-    (1) find all documents associated with connector / credential pair where there
-    this the is only connector / credential pair that has indexed it
-    (2) delete all documents from document stores
-    (3) delete all entries from postgres
-    (4) find all documents associated with connector / credential pair where there
-    are multiple connector / credential pairs that have indexed it
-    (5) update document store entries to remove access associated with the
-    connector / credential pair from the access list
-    (6) delete all relevant entries from postgres
+    Retained documents commit the relationship removal first. The stale
+    watermark then makes failed or concurrent index writes retry safely.
     """
     task_logger.debug(f"Task start: doc={document_id}")
 
@@ -104,35 +128,72 @@ def document_by_cc_pair_cleanup_task(
 
     try:
         # Phase 1: read DB state, then release the connection before the
-        # document-index HTTP call (OpenSearch on cloud, Vespa on legacy
-        # deployments). Holding a pg transaction across the round-trip pins
+        # document-index HTTP call. Holding a pg transaction across the round-trip pins
         # a pgbouncer slot for the duration and saturates the pool under
         # bulk-deletion fan-out across the light worker fleet.
         chunk_count: int | None = None
         update_request: MetadataUpdateRequest | None = None
+        doc_last_modified: datetime | None = None
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
             primary_search_settings = active_search_settings.primary
             secondary_search_settings = active_search_settings.secondary
 
+            doc = get_document_for_update(document_id, db_session)
+            if not doc:
+                return False
+
             count = get_document_connector_count(db_session, document_id)
-            if count == 1:
+            source_types_after_removal = (
+                get_document_source_types_after_cc_pair_removal(
+                    db_session=db_session,
+                    document_id=document_id,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                )
+            )
+            if count == 1 and not source_types_after_removal:
                 action = DocumentCleanupAction.DELETE
                 chunk_count = fetch_chunk_count_for_document(document_id, db_session)
-            elif count > 1:
-                doc = get_document(document_id, db_session)
-                if not doc:
-                    return False
 
+                # If a port is filling a target index, record this delete so the
+                # cc_pair's port attempt sweeps the doc back out if a racing
+                # create-only copy resurrects it. Commit before the index delete
+                # below so the candidate is durable before any resurrection.
+                if record_port_orphan_candidates_for_document(
+                    db_session,
+                    document_id,
+                    primary_search_settings,
+                    secondary_search_settings,
+                ):
+                    db_session.commit()
+            elif count:
                 action = DocumentCleanupAction.UPDATE
+                delete_document_by_connector_credential_pair__no_commit(
+                    db_session=db_session,
+                    document_id=document_id,
+                    connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                    ),
+                )
+                doc_last_modified = mark_document_as_modified__no_commit(
+                    document_id, db_session
+                )
+                db_session.flush()
 
-                # the below functions do not include cc_pairs being deleted.
-                # i.e. they will correctly omit access for the current cc_pair
                 doc_access = get_access_for_document(
                     document_id=document_id, db_session=db_session
                 )
 
                 doc_sets = fetch_document_sets_for_document(document_id, db_session)
+                source_types = get_document_source_types(
+                    db_session=db_session,
+                    document_ids=[document_id],
+                ).get(document_id, ())
+                assert source_types, (
+                    f"Document {document_id} has no source after relationship cleanup"
+                )
 
                 update_request = MetadataUpdateRequest(
                     document_ids=[document_id],
@@ -142,39 +203,39 @@ def document_by_cc_pair_cleanup_task(
                         )
                     },
                     access=doc_access,
+                    cc_pair_ids=set(
+                        get_cc_pair_ids_for_documents(
+                            db_session=db_session, document_ids=[document_id]
+                        ).get(document_id, [])
+                    ),
                     document_sets=set(doc_sets),
                     boost=doc.boost,
                     hidden=doc.hidden,
+                    source_types=source_types,
                 )
+                db_session.commit()
 
-        # Build document-index clients outside the DB session — construction
+        # Build the document-index client outside the DB session — construction
         # can take a few seconds to connect to the document index server,
         # and we don't want to pin a pgbouncer slot while that happens.
-        # This flow is for updates and deletion so we get all indices.
-        document_indices = get_all_document_indices(
+        document_index = get_default_document_index(
             primary_search_settings,
             secondary_search_settings,
-            httpx_client=HttpxPool.get("vespa"),
         )
-        retry_document_indices: list[RetryDocumentIndex] = [
-            RetryDocumentIndex(document_index) for document_index in document_indices
-        ]
 
         # Phase 2: document-index I/O — no DB connection held.
         if action == DocumentCleanupAction.DELETE:
-            for retry_document_index in retry_document_indices:
-                _ = retry_document_index.delete(
-                    document_id,
-                    chunk_count=chunk_count,
-                )
+            _ = document_index.delete(
+                document_id,
+                chunk_count=chunk_count,
+            )
         elif action == DocumentCleanupAction.UPDATE:
             assert update_request is not None
-            for retry_document_index in retry_document_indices:
-                # TODO(andrei): Previously there was a comment here saying
-                # it was ok if a doc did not exist in the document index. I
-                # don't agree with that claim, so keep an eye on this task
-                # to see if this raises.
-                retry_document_index.update([update_request])
+            # TODO(andrei): Previously there was a comment here saying
+            # it was ok if a doc did not exist in the document index. I
+            # don't agree with that claim, so keep an eye on this task
+            # to see if this raises.
+            document_index.update([update_request])
 
         # Phase 3: write back to PG in a fresh transaction.
         if action == DocumentCleanupAction.DELETE:
@@ -192,17 +253,14 @@ def document_by_cc_pair_cleanup_task(
             completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
         elif action == DocumentCleanupAction.UPDATE:
             with get_session_with_current_tenant() as db_session:
-                # there are still other cc_pair references to the doc, so just resync to the document index
-                delete_document_by_connector_credential_pair__no_commit(
-                    db_session=db_session,
-                    document_id=document_id,
-                    connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
-                        connector_id=connector_id,
-                        credential_id=credential_id,
-                    ),
+                # The phase-1 watermark keeps a concurrently-modified doc stale.
+                mark_document_as_synced(
+                    document_id, db_session, synced_as_of=doc_last_modified
                 )
-
-                mark_document_as_synced(document_id, db_session)
+                # re-link -> doc stays live under another cc_pair; drop its stale candidate
+                _clear_port_orphan_candidate_for_live_doc(
+                    db_session, connector_id, credential_id, document_id
+                )
                 db_session.commit()
 
             completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
@@ -216,67 +274,40 @@ def document_by_cc_pair_cleanup_task(
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
         completion_status = OnyxCeleryTaskCompletionStatus.SOFT_TIME_LIMIT
-    except Exception as ex:
-        e: Exception | None = None
-        while True:
-            if isinstance(ex, RetryError):
-                task_logger.warning(
-                    f"Tenacity retry failed: num_attempts={ex.last_attempt.attempt_number}"
-                )
+    except Exception as e:
+        task_logger.exception(
+            f"document_by_cc_pair_cleanup_task exceptioned: doc={document_id}"
+        )
 
-                # only set the inner exception if it is of type Exception
-                e_temp = ex.last_attempt.exception()
-                if isinstance(e_temp, Exception):
-                    e = e_temp
-            else:
-                e = ex
-
-            if isinstance(e, httpx.HTTPStatusError):
-                if e.response.status_code == HTTPStatus.BAD_REQUEST:
-                    task_logger.exception(
-                        f"Non-retryable HTTPStatusError: doc={document_id} status={e.response.status_code}"
-                    )
-                completion_status = (
-                    OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
-                )
-                break
-
-            task_logger.exception(
-                f"document_by_cc_pair_cleanup_task exceptioned: doc={document_id}"
+        completion_status = OnyxCeleryTaskCompletionStatus.RETRYABLE_EXCEPTION
+        if self.max_retries is not None and self.request.retries >= self.max_retries:
+            # This is the last attempt! mark the document as dirty in the db so that it
+            # eventually gets fixed out of band via stale document reconciliation
+            task_logger.warning(
+                f"Max celery task retries reached. Marking doc as dirty for reconciliation: doc={document_id}"
             )
-
-            completion_status = OnyxCeleryTaskCompletionStatus.RETRYABLE_EXCEPTION
-            if (
-                self.max_retries is not None
-                and self.request.retries >= self.max_retries
-            ):
-                # This is the last attempt! mark the document as dirty in the db so that it
-                # eventually gets fixed out of band via stale document reconciliation
-                task_logger.warning(
-                    f"Max celery task retries reached. Marking doc as dirty for reconciliation: doc={document_id}"
+            with get_session_with_current_tenant() as db_session:
+                # delete the cc pair relationship now and let reconciliation clean it up
+                # in the document index
+                delete_document_by_connector_credential_pair__no_commit(
+                    db_session=db_session,
+                    document_id=document_id,
+                    connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                    ),
                 )
-                with get_session_with_current_tenant() as db_session:
-                    # delete the cc pair relationship now and let reconciliation clean it up
-                    # in vespa
-                    delete_document_by_connector_credential_pair__no_commit(
-                        db_session=db_session,
-                        document_id=document_id,
-                        connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
-                            connector_id=connector_id,
-                            credential_id=credential_id,
-                        ),
-                    )
-                    mark_document_as_modified(document_id, db_session)
-                    db_session.commit()
-                completion_status = (
-                    OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
+                mark_document_as_modified(document_id, db_session)
+                # helper keeps the candidate if this removed the doc's last link
+                _clear_port_orphan_candidate_for_live_doc(
+                    db_session, connector_id, credential_id, document_id
                 )
-                break
-
+                db_session.commit()
+            completion_status = OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
+        else:
             # Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64
             countdown = 2 ** (self.request.retries + 4)
             self.retry(exc=e, countdown=countdown)  # this will raise a celery exception
-            break  # we won't hit this, but it looks weird not to have it
     finally:
         task_logger.info(
             f"document_by_cc_pair_cleanup_task completed: status={completion_status.value} doc={document_id}"
@@ -289,7 +320,7 @@ def document_by_cc_pair_cleanup_task(
     return True
 
 
-@shared_task(name=OnyxCeleryTask.CELERY_BEAT_HEARTBEAT, ignore_result=True, bind=True)
+@shared_task(name=OnyxCeleryTask.CELERY_BEAT_HEARTBEAT, ignore_result=True, bind=True)  # ty: ignore[invalid-argument-type]
 def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     """When this task runs, it writes a key to Redis with a TTL.
 

@@ -5,13 +5,96 @@ Control plane and data plane are in SEPARATE clusters.
 
 import csv
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
+# Flags that consume the argument after them. Needed to find the positional
+# tenant id, which can otherwise be shadowed by a flag value.
+_VALUE_FLAGS = frozenset(
+    {
+        "--csv",
+        "--concurrency",
+        "--inactive-days",
+        "--data-plane-context",
+        "--control-plane-context",
+        "--data-plane-pod",
+        "--control-plane-pod",
+    }
+)
+
+
+def parse_pod_overrides(argv: list[str]) -> tuple[str | None, str | None]:
+    """Read --data-plane-pod / --control-plane-pod, rejecting empty values.
+
+    An empty value usually means an unset environment variable was expanded. Falling
+    back to a random pod there would silently ignore the requested pin.
+    """
+    overrides: dict[str, str | None] = {"data": None, "control": None}
+    for flag, target in (
+        ("--data-plane-pod", "data"),
+        ("--control-plane-pod", "control"),
+    ):
+        if flag not in argv:
+            continue
+        index = argv.index(flag)
+        if index + 1 >= len(argv):
+            print(f"Error: {flag} requires a pod name", file=sys.stderr)
+            sys.exit(1)
+        value = argv[index + 1]
+        if not value.strip():
+            print(f"Error: {flag} was given an empty value", file=sys.stderr)
+            sys.exit(1)
+        # `--data-plane-pod $POD --force` with POD unset leaves the next flag as
+        # the value, which would otherwise pin to a pod named "--force".
+        if value.startswith("-"):
+            print(
+                f"Error: {flag} was given {value!r}, which looks like a flag. "
+                "Pass a pod name.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        overrides[target] = value
+    return overrides["data"], overrides["control"]
+
+
+def positional_tenant_id(argv: list[str]) -> str | None:
+    """First argument that is neither a flag nor the value of one."""
+    index = 1
+    while index < len(argv):
+        arg = argv[index]
+        if arg in _VALUE_FLAGS:
+            index += 2
+            continue
+        if arg.startswith("-"):
+            index += 1
+            continue
+        return arg
+    return None
+
+
+class TenantRecentlyActiveError(Exception):
+    """Raised when a tenant has activity inside the inactivity window."""
+
 
 class TenantNotFoundInControlPlaneError(Exception):
     """Exception raised when tenant/table is not found in control plane."""
+
+
+# Tenant ids reach SQL through string interpolation, so anything that could carry a
+# quote, semicolon, or whitespace is rejected before it gets there.
+_TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def validate_tenant_id(tenant_id: str) -> str:
+    """Return the tenant id if it is safe to interpolate, otherwise raise."""
+    if not _TENANT_ID_RE.match(tenant_id):
+        raise ValueError(
+            f"Refusing to use unsafe tenant id: {tenant_id!r}. "
+            "Expected only letters, digits, underscores and dashes."
+        )
+    return tenant_id
 
 
 def find_worker_pod(context: str) -> str:
@@ -171,32 +254,16 @@ with engine.connect() as conn:
     conn.commit()
 '''
 
-    # Write the script to a temp file on the pod
-    script_path = "/tmp/control_plane_query.py"
-
+    # Piped over stdin rather than staged to a file on the pod. Callers run this
+    # concurrently against a single pod, and a shared temp path let one thread's query
+    # overwrite another's before it executed - tenant A could run tenant B's DELETE.
     try:
-        cmd_write = ["kubectl", "exec", "--context", context, pod_name]
-        cmd_write.extend(
-            [
-                "--",
-                "bash",
-                "-c",
-                f"cat > {script_path} << 'EOFQUERY'\n{query_script}\nEOFQUERY",
-            ]
-        )
-
-        subprocess.run(
-            cmd_write,
-            check=True,
-            capture_output=True,
-        )
-
-        # Execute the script
-        cmd_exec = ["kubectl", "exec", "--context", context, pod_name]
-        cmd_exec.extend(["--", "python", script_path])
+        cmd_exec = ["kubectl", "exec", "-i", "--context", context, pod_name]
+        cmd_exec.extend(["--", "python", "-"])
 
         result = subprocess.run(
             cmd_exec,
+            input=query_script,
             capture_output=True,
             text=True,
             check=True,
@@ -211,8 +278,8 @@ with engine.connect() as conn:
     except subprocess.CalledProcessError as e:
         return {
             "success": False,
-            "stdout": e.stdout if e.stdout else "",
-            "error": e.stderr if e.stderr else str(e),
+            "stdout": e.stdout or "",
+            "error": e.stderr or str(e),
         }
 
 
@@ -233,6 +300,7 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
+    validate_tenant_id(tenant_id)
     query = f"SELECT application_status FROM tenant WHERE tenant_id = '{tenant_id}'"
 
     result = execute_control_plane_query_from_pod(pod_name, query, context)
@@ -314,7 +382,12 @@ def read_tenant_ids_from_csv(csv_path: str) -> list[str]:
 
         for row in reader:
             tenant_id = row.get("tenant_id", "").strip()
-            if tenant_id:
-                tenant_ids.append(tenant_id)
+            if not tenant_id:
+                continue
+            # cleaned_tenants.csv is appended to across runs, so a repeated header row
+            # is possible. Never treat one as a tenant.
+            if tenant_id == "tenant_id":
+                continue
+            tenant_ids.append(validate_tenant_id(tenant_id))
 
     return tenant_ids

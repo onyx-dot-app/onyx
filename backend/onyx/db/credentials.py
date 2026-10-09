@@ -1,25 +1,31 @@
 from typing import Any
 
-from sqlalchemy import exists
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import Select, exists, select, update
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.expression import and_
-from sqlalchemy.sql.expression import or_
+from sqlalchemy.sql.expression import and_, or_
 
-from onyx.auth.schemas import UserRole
-from onyx.configs.constants import DocumentSource
-from onyx.connectors.google_utils.shared_constants import (
-    DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
+from onyx.auth.permissions import get_effective_permissions
+from onyx.configs.constants import DocumentSource, NotificationType
+from onyx.connectors.credential_families import (
+    credential_family_for_source,
+    family_sources,
+    is_credential_usable_for_source,
+    stored_credential_family,
+    to_source_credential_json,
+    to_stored_credential_json,
 )
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import Credential__UserGroup
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.connector_alerts import clear_connector_alerts__no_commit
+from onyx.db.enums import ConnectorCredentialPairStatus, Permission
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Credential,
+    Credential__UserGroup,
+    DocumentByConnectorCredentialPair,
+    User,
+)
+from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
 
@@ -42,16 +48,14 @@ PUBLIC_CREDENTIAL_ID = 0
 def _add_user_filters(
     stmt: Select,
     user: User,
-    get_editable: bool = True,
 ) -> Select:
-    """Attaches filters to the statement to ensure that the user can only
-    access the appropriate credentials"""
+    """Attaches filters to ensure the user can only access appropriate credentials."""
     if user.is_anonymous:
         raise ValueError("Anonymous users are not allowed to access credentials")
 
-    if user.role == UserRole.ADMIN:
-        # Admins can access all credentials that are public or owned by them
-        # or are not associated with any user
+    effective = get_effective_permissions(user)
+
+    if Permission.MANAGE_CONNECTORS in effective:
         return stmt.where(
             or_(
                 Credential.user_id == user.id,
@@ -60,55 +64,9 @@ def _add_user_filters(
                 Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
             )
         )
-    if user.role == UserRole.BASIC:
-        # Basic users can only access credentials that are owned by them
-        return stmt.where(Credential.user_id == user.id)
 
-    stmt = stmt.distinct()
-    """
-    THIS PART IS FOR CURATORS AND GLOBAL CURATORS
-    Here we select cc_pairs by relation:
-    User -> User__UserGroup -> Credential__UserGroup -> Credential
-    """
-    stmt = stmt.outerjoin(Credential__UserGroup).outerjoin(
-        User__UserGroup,
-        User__UserGroup.user_group_id == Credential__UserGroup.user_group_id,
-    )
-    """
-    Filter Credentials by:
-    - if the user is in the user_group that owns the Credential
-    - if the user is a curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out Credentials that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all Credentials in the groups the user is a curator
-    for (as well as public Credentials)
-    - if we are not editing, we return all Credentials directly connected to the user
-    """
-    where_clause = User__UserGroup.user_id == user.id
-    if user.role == UserRole.CURATOR:
-        where_clause &= User__UserGroup.is_curator == True  # noqa: E712
-
-    if get_editable:
-        user_groups = select(User__UserGroup.user_group_id).where(
-            User__UserGroup.user_id == user.id
-        )
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(
-                User__UserGroup.is_curator == True  # noqa: E712
-            )
-        where_clause &= ~exists().where(
-            Credential__UserGroup.credential_id == Credential.id
-        ).where(~Credential__UserGroup.user_group_id.in_(user_groups)).correlate(
-            Credential
-        )
-    else:
-        where_clause |= Credential.curator_public == True  # noqa: E712
-        where_clause |= Credential.user_id == user.id  # noqa: E712
-
-    where_clause |= Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE)
-
-    return stmt.where(where_clause)
+    # All other users: only their own credentials
+    return stmt.where(Credential.user_id == user.id)
 
 
 def _relate_credential_to_user_groups__no_commit(
@@ -116,24 +74,24 @@ def _relate_credential_to_user_groups__no_commit(
     credential_id: int,
     user_group_ids: list[int],
 ) -> None:
-    credential_user_groups = []
-    for group_id in user_group_ids:
-        credential_user_groups.append(
-            Credential__UserGroup(
-                credential_id=credential_id,
-                user_group_id=group_id,
-            )
+    assert_not_shared_with_default_group(db_session, user_group_ids)
+
+    credential_user_groups = [
+        Credential__UserGroup(
+            credential_id=credential_id,
+            user_group_id=group_id,
         )
+        for group_id in user_group_ids
+    ]
     db_session.add_all(credential_user_groups)
 
 
 def fetch_credentials_for_user(
     db_session: Session,
     user: User,
-    get_editable: bool = True,
 ) -> list[Credential]:
     stmt = select(Credential)
-    stmt = _add_user_filters(stmt, user, get_editable=get_editable)
+    stmt = _add_user_filters(stmt, user)
     results = db_session.scalars(stmt)
     return list(results.all())
 
@@ -142,14 +100,12 @@ def fetch_credential_by_id_for_user(
     credential_id: int,
     user: User,
     db_session: Session,
-    get_editable: bool = True,
 ) -> Credential | None:
     stmt = select(Credential).distinct()
     stmt = stmt.where(Credential.id == credential_id)
     stmt = _add_user_filters(
         stmt=stmt,
         user=user,
-        get_editable=get_editable,
     )
     result = db_session.execute(stmt)
     credential = result.scalar_one_or_none()
@@ -171,12 +127,31 @@ def fetch_credentials_by_source_for_user(
     db_session: Session,
     user: User,
     document_source: DocumentSource | None = None,
-    get_editable: bool = True,
 ) -> list[Credential]:
     base_query = select(Credential).where(Credential.source == document_source)
-    base_query = _add_user_filters(base_query, user, get_editable=get_editable)
+    base_query = _add_user_filters(base_query, user)
     credentials = db_session.execute(base_query).scalars().all()
     return list(credentials)
+
+
+def fetch_credentials_usable_by_source_for_user(
+    db_session: Session,
+    user: User,
+    document_source: DocumentSource,
+) -> list[Credential]:
+    """The source's own credentials, plus the family credentials of the other
+    sources in its family."""
+    family = credential_family_for_source(document_source)
+    sources = family_sources(family) if family else [document_source]
+    base_query = select(Credential).where(Credential.source.in_(sources))
+    base_query = _add_user_filters(base_query, user)
+    return [
+        credential
+        for credential in db_session.execute(base_query).scalars().all()
+        if is_credential_usable_for_source(
+            credential.source, _stored_json(credential), document_source
+        )
+    ]
 
 
 def fetch_credentials_by_source(
@@ -213,9 +188,13 @@ def swap_credentials_connector(
         )
 
     # Check if the new credential is compatible with the connector
-    if new_credential.source != existing_pair.connector.source:
+    if not is_credential_usable_for_source(
+        new_credential.source,
+        _stored_json(new_credential),
+        existing_pair.connector.source,
+    ):
         raise ValueError(
-            f"New credential source {new_credential.source} does not match connector source {existing_pair.connector.source}"
+            f"New credential source {new_credential.source} cannot be used by connector source {existing_pair.connector.source}"
         )
 
     db_session.execute(
@@ -237,6 +216,11 @@ def swap_credentials_connector(
     # Update ccpair status if it's in INVALID state
     if existing_pair.status == ConnectorCredentialPairStatus.INVALID:
         existing_pair.status = ConnectorCredentialPairStatus.ACTIVE
+        clear_connector_alerts__no_commit(
+            db_session=db_session,
+            cc_pair_id=existing_pair.id,
+            notif_type=NotificationType.CONNECTOR_INVALID,
+        )
 
     # Commit the changes
     db_session.commit()
@@ -246,13 +230,23 @@ def swap_credentials_connector(
     return existing_pair
 
 
+def _stored_json(credential: Credential) -> dict[str, Any]:
+    return (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
+
+
 def create_credential(
     credential_data: CredentialBase,
     user: User,
     db_session: Session,
 ) -> Credential:
     credential = Credential(
-        credential_json=credential_data.credential_json,
+        credential_json=to_stored_credential_json(
+            credential_data.source, credential_data.credential_json, None
+        ),
         user_id=user.id,
         admin_public=credential_data.admin_public,
         source=credential_data.source,
@@ -303,10 +297,16 @@ def alter_credential(
         if credential.credential_json
         else {}
     )
-    credential.credential_json = {  # ty: ignore[invalid-assignment]
-        **existing_json,
-        **credential_json,
-    }
+    # Merge in the credential's own source keys; a family credential is stored
+    # in its family's shape.
+    source = credential.source or DocumentSource.NOT_APPLICABLE
+    credential.credential_json = (  # ty: ignore[invalid-assignment]
+        to_stored_credential_json(
+            source,
+            {**to_source_credential_json(source, existing_json), **credential_json},
+            existing_json,
+        )
+    )
 
     credential.user_id = user.id
     db_session.commit()
@@ -325,8 +325,22 @@ def update_credential(
     if credential is None:
         return None
 
+    current_stored_json = _stored_json(credential)
+    # A family credential is written in its own source's keys: another member
+    # source's shape would drop state only the own source keeps (e.g. OAuth).
+    if (
+        stored_credential_family(current_stored_json) is not None
+        and credential_data.source != credential.source
+    ):
+        raise ValueError(
+            f"Credential {credential_id} is a {credential.source.value} "
+            f"credential; update it as {credential.source.value}, not "
+            f"{credential_data.source.value}."
+        )
     credential.credential_json = (  # ty: ignore[invalid-assignment]
-        credential_data.credential_json
+        to_stored_credential_json(
+            credential_data.source, credential_data.credential_json, current_stored_json
+        )
     )
     credential.user_id = user.id if user is not None else None
 
@@ -346,7 +360,13 @@ def update_credential_json(
     if credential is None:
         return None
 
-    credential.credential_json = credential_json  # ty: ignore[invalid-assignment]
+    credential.credential_json = (  # ty: ignore[invalid-assignment]
+        to_stored_credential_json(
+            credential.source or DocumentSource.NOT_APPLICABLE,
+            credential_json,
+            _stored_json(credential),
+        )
+    )
     db_session.commit()
     # Expire to ensure credential_json is reloaded as SensitiveValue from DB
     db_session.expire(credential)
@@ -355,11 +375,18 @@ def update_credential_json(
 
 def backend_update_credential_json(
     credential: Credential,
+    source: DocumentSource,
     credential_json: dict[str, Any],
     db_session: Session,
 ) -> None:
-    """This should not be used in any flows involving the frontend or users"""
-    credential.credential_json = credential_json  # ty: ignore[invalid-assignment]
+    """This should not be used in any flows involving the frontend or users.
+
+    ``credential_json`` is in ``source``'s own keys: the source of the connector
+    that wrote it, which for a family credential may not be ``credential.source``.
+    """
+    credential.credential_json = (  # ty: ignore[invalid-assignment]
+        to_stored_credential_json(source, credential_json, _stored_json(credential))
+    )
     db_session.commit()
 
 
@@ -399,9 +426,11 @@ def _delete_credential_internal(
             # Commit these deletions before deleting the credential
             db_session.flush()
         else:
-            raise ValueError(
+            raise OnyxError(
+                OnyxErrorCode.RESOURCE_IN_USE,
                 f"Cannot delete credential as it is still associated with "
-                f"{len(associated_connectors)} connector(s) and {len(associated_doc_cc_pairs)} document(s). "
+                f"{len(associated_connectors)} connector(s) and "
+                f"{len(associated_doc_cc_pairs)} document(s).",
             )
 
     if force:
@@ -423,11 +452,47 @@ def delete_credential_for_user(
     """Delete a credential that belongs to a specific user"""
     credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
     if credential is None:
-        raise ValueError(
-            f"Credential by provided id {credential_id} does not exist or does not belong to user"
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     _delete_credential_internal(credential, credential_id, db_session, force)
+
+
+def discard_credential_if_unpaired(db_session: Session, credential_id: int) -> bool:
+    """The cleanup behind a failed creation validation: its own transaction, a
+    row lock so a pair landing concurrently is never cascaded, and it never
+    raises, because the caller's validation error is what the user needs."""
+    try:
+        with db_session.begin():
+            credential = db_session.execute(
+                select(Credential)
+                .where(Credential.id == credential_id)
+                .with_for_update()
+            ).scalar_one_or_none()
+            if credential is None:
+                return True
+            paired = db_session.scalar(
+                select(
+                    exists().where(
+                        ConnectorCredentialPair.credential_id == credential_id
+                    )
+                )
+            )
+            if paired:
+                return False
+            _cleanup_credential__user_group_relationships__no_commit(
+                db_session, credential_id
+            )
+            db_session.delete(credential)
+            return True
+    except Exception:
+        logger.exception(
+            "Left credential %s behind after a failed validation", credential_id
+        )
+        db_session.rollback()
+        return False
 
 
 def delete_credential(
@@ -438,7 +503,10 @@ def delete_credential(
     """Delete a credential regardless of ownership (admin function)"""
     credential = fetch_credential_by_id(credential_id, db_session)
     if credential is None:
-        raise ValueError(f"Credential by provided id {credential_id} does not exist")
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist",
+        )
 
     _delete_credential_internal(credential, credential_id, db_session, force)
 
@@ -478,32 +546,4 @@ def cleanup_gmail_credentials(db_session: Session) -> None:
     )
     for credential in gmail_credentials:
         db_session.delete(credential)
-    db_session.commit()
-
-
-def cleanup_google_drive_credentials(db_session: Session) -> None:
-    google_drive_credentials = fetch_credentials_by_source(
-        db_session=db_session, document_source=DocumentSource.GOOGLE_DRIVE
-    )
-    for credential in google_drive_credentials:
-        db_session.delete(credential)
-    db_session.commit()
-
-
-def delete_service_account_credentials(
-    user: User, db_session: Session, source: DocumentSource
-) -> None:
-    credentials = fetch_credentials_for_user(db_session=db_session, user=user)
-    for credential in credentials:
-        credential_json = (
-            credential.credential_json.get_value(apply_mask=False)
-            if credential.credential_json
-            else {}
-        )
-        if (
-            credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY)
-            and credential.source == source
-        ):
-            db_session.delete(credential)
-
     db_session.commit()

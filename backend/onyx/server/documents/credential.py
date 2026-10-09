@@ -1,49 +1,60 @@
 import json
+from collections import defaultdict
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import Form
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.connectors.factory import validate_ccpair_for_user
-from onyx.db.credentials import alter_credential
-from onyx.db.credentials import cleanup_gmail_credentials
-from onyx.db.credentials import create_credential
-from onyx.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
-from onyx.db.credentials import delete_credential
-from onyx.db.credentials import delete_credential_for_user
-from onyx.db.credentials import fetch_credential_by_id_for_user
-from onyx.db.credentials import fetch_credentials_by_source_for_user
-from onyx.db.credentials import fetch_credentials_for_user
-from onyx.db.credentials import swap_credentials_connector
-from onyx.db.credentials import update_credential
+from onyx.connectors.factory import parse_credential_binding, validate_ccpair_for_user
+from onyx.db.connector_credential_pair import (
+    get_manageable_cc_pairs_for_credentials,
+    verify_user_can_edit_connector,
+)
+from onyx.db.credentials import (
+    CREDENTIAL_PERMISSIONS_TO_IGNORE,
+    alter_credential,
+    create_credential,
+    delete_credential,
+    delete_credential_for_user,
+    fetch_credential_by_id_for_user,
+    fetch_credentials_for_user,
+    fetch_credentials_usable_by_source_for_user,
+    swap_credentials_connector,
+    update_credential,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import DocumentSource
-from onyx.db.models import User
-from onyx.server.documents.models import CredentialBase
-from onyx.server.documents.models import CredentialDataUpdateRequest
-from onyx.server.documents.models import CredentialSnapshot
-from onyx.server.documents.models import CredentialSwapRequest
-from onyx.server.documents.models import ObjectCreationIdResponse
-from onyx.server.documents.private_key_types import FILE_TYPE_TO_FILE_PROCESSOR
-from onyx.server.documents.private_key_types import PrivateKeyFileTypes
-from onyx.server.documents.private_key_types import ProcessPrivateKeyFileProtocol
+from onyx.db.models import DocumentSource, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.capability_check_runs import (
+    start_capability_checks_for_new_credential,
+)
+from onyx.server.documents.models import (
+    CredentialBase,
+    CredentialDataUpdateRequest,
+    CredentialSnapshot,
+    CredentialSwapRequest,
+    CredentialUsage,
+    ObjectCreationIdResponse,
+    SimilarCredentialSnapshot,
+)
+from onyx.server.documents.private_key_types import (
+    FILE_TYPE_TO_FILE_PROCESSOR,
+    PrivateKeyFileTypes,
+    ProcessPrivateKeyFileProtocol,
+)
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
-from onyx.utils.audit import actor_from_user
-from onyx.utils.audit import AuditAction
-from onyx.utils.audit import AuditOutcome
-from onyx.utils.audit import emit_audit_event
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
@@ -51,23 +62,20 @@ logger = setup_logger()
 router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 
 
-def _ignore_credential_permissions(source: DocumentSource) -> bool:
-    return source in CREDENTIAL_PERMISSIONS_TO_IGNORE
-
-
 """Admin-only endpoints"""
 
 
 @router.get("/admin/credential")
 def list_credentials_admin(
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     """Lists all public credentials"""
     credentials = fetch_credentials_for_user(
         db_session=db_session,
         user=user,
-        get_editable=False,
     )
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
@@ -81,23 +89,49 @@ def list_credentials_admin(
 @router.get("/admin/similar-credentials/{source_type}")
 def get_cc_source_full_info(
     source_type: DocumentSource,
-    user: User = Depends(current_curator_or_admin_user),
-    db_session: Session = Depends(get_session),
-    get_editable: bool = Query(
-        False, description="If true, return editable credentials"
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
-) -> list[CredentialSnapshot]:
-    credentials = fetch_credentials_by_source_for_user(
+    db_session: Session = Depends(get_session),
+) -> list[SimilarCredentialSnapshot]:
+    """The credentials a ``source_type`` connector can use, shown in that
+    source's keys. Each lists the connectors using it that the user can manage,
+    with their credential-bound config values, to help pick one."""
+    credentials = fetch_credentials_usable_by_source_for_user(
         db_session=db_session,
         user=user,
         document_source=source_type,
-        get_editable=get_editable,
     )
+    if not credentials:
+        return []
+    usages: defaultdict[int, list[CredentialUsage]] = defaultdict(list)
+    for cc_pair in get_manageable_cc_pairs_for_credentials(
+        db_session, user, [credential.id for credential in credentials]
+    ):
+        connector = cc_pair.connector
+        usages[cc_pair.credential_id].append(
+            CredentialUsage(
+                cc_pair_id=cc_pair.id,
+                cc_pair_name=cc_pair.name,
+                connector_id=connector.id,
+                source=connector.source,
+                credential_binding=parse_credential_binding(
+                    connector.source, connector.connector_specific_config
+                ),
+            )
+        )
 
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
-        CredentialSnapshot.from_credential_db_model(
-            credential, mask_credential_prefix=mask_credential_prefix
+        SimilarCredentialSnapshot(
+            **dict(
+                CredentialSnapshot.from_credential_db_model(
+                    credential,
+                    mask_credential_prefix=mask_credential_prefix,
+                    view_source=source_type,
+                )
+            ),
+            usages=usages[credential.id],
         )
         for credential in credentials
     ]
@@ -106,7 +140,7 @@ def get_cc_source_full_info(
 @router.delete("/admin/credential/{credential_id}")
 def delete_credential_by_id_admin(
     credential_id: int,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     """Same as the user endpoint, but can delete any credential (not just the user's own)"""
@@ -126,18 +160,39 @@ def delete_credential_by_id_admin(
 @router.put("/admin/credential/swap")
 def swap_credentials_for_connector(
     credential_swap_req: CredentialSwapRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
+    new_credential_id = credential_swap_req.new_credential_id
+
+    # GATE 2 on the connector: swapping its credential is an Editor action.
+    if not verify_user_can_edit_connector(
+        credential_swap_req.connector_id, db_session, user
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
+        )
+
+    # GATE 2 on the credential: validate_ccpair_for_user builds and probes the
+    # connector, so ownership has to be settled before it runs.
+    if fetch_credential_by_id_for_user(new_credential_id, user, db_session) is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {new_credential_id} does not exist or does not belong to user",
+        )
+
     validate_ccpair_for_user(
         credential_swap_req.connector_id,
-        credential_swap_req.new_credential_id,
+        new_credential_id,
         credential_swap_req.access_type,
         db_session,
     )
 
     connector_credential_pair = swap_credentials_connector(
-        new_credential_id=credential_swap_req.new_credential_id,
+        new_credential_id=new_credential_id,
         connector_id=credential_swap_req.connector_id,
         db_session=db_session,
         user=user,
@@ -150,25 +205,34 @@ def swap_credentials_for_connector(
     )
 
 
+def _assert_credential_share_within_scope(
+    credential_info: CredentialBase, user: User, db_session: Session
+) -> None:
+    """GATE 2 for both create paths — they build the same CredentialBase, so the gate
+    can't differ by transport. Only sharing needs bounding: an unshared credential is
+    private to its creator. CREDENTIAL_PERMISSIONS_TO_IGNORE sources (file, web, wiki)
+    carry no real secret and stay exempt."""
+    is_shared = bool(credential_info.groups) or credential_info.curator_public
+    if is_shared and credential_info.source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=[],
+            requested_group_ids=credential_info.groups,
+            is_non_public=not credential_info.curator_public,
+        )
+
+
 @router.post("/credential")
 def create_credential_from_model(
     credential_info: CredentialBase,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    if not _ignore_credential_permissions(credential_info.source):
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_object_creation_for_user", None
-        )(
-            db_session=db_session,
-            user=user,
-            target_group_ids=credential_info.groups,
-            object_is_public=credential_info.curator_public,
-        )
-
-    # Temporary fix for empty Google App credentials
-    if credential_info.source == DocumentSource.GMAIL:
-        cleanup_gmail_credentials(db_session=db_session)
+    _assert_credential_share_within_scope(credential_info, user, db_session)
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
@@ -179,6 +243,7 @@ def create_credential_from_model(
         resource_id=credential.id,
         extra={"source": credential_info.source.value},
     )
+    start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
         credential=CredentialSnapshot.from_credential_db_model(
@@ -196,7 +261,9 @@ def create_credential_with_private_key(
     groups: list[int] = Form([]),
     name: str | None = Form(None),
     source: str = Form(...),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     uploaded_file: UploadFile = File(...),
     field_key: str = Form(...),
     type_definition_key: str = Form(...),
@@ -230,20 +297,7 @@ def create_credential_with_private_key(
         name=name,
         source=DocumentSource(source),
     )
-
-    if not _ignore_credential_permissions(DocumentSource(source)):
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_object_creation_for_user", None
-        )(
-            db_session=db_session,
-            user=user,
-            target_group_ids=groups,
-            object_is_public=curator_public,
-        )
-
-    # Temporary fix for empty Google App credentials
-    if DocumentSource(source) == DocumentSource.GMAIL:
-        cleanup_gmail_credentials(db_session=db_session)
+    _assert_credential_share_within_scope(credential_info, user, db_session)
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
@@ -254,6 +308,7 @@ def create_credential_with_private_key(
         resource_id=credential.id,
         extra={"source": credential_info.source.value},
     )
+    start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
         credential=CredentialSnapshot.from_credential_db_model(
@@ -291,12 +346,11 @@ def get_credential_by_id(
         credential_id,
         user,
         db_session,
-        get_editable=False,
     )
     if credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     return CredentialSnapshot.from_credential_db_model(
@@ -309,7 +363,7 @@ def get_credential_by_id(
 def update_credential_data(
     credential_id: int,
     credential_update: CredentialDataUpdateRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CredentialBase:
     credential = alter_credential(
@@ -321,9 +375,9 @@ def update_credential_data(
     )
 
     if credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     return CredentialSnapshot.from_credential_db_model(
@@ -340,7 +394,7 @@ def update_credential_private_key(
     uploaded_file: UploadFile = File(...),
     field_key: str = Form(...),
     type_definition_key: str = Form(...),
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CredentialBase:
     try:
@@ -371,9 +425,9 @@ def update_credential_private_key(
     )
 
     if credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     return CredentialSnapshot.from_credential_db_model(
@@ -393,9 +447,9 @@ def update_credential_from_model(
         credential_id, credential_data, user, db_session
     )
     if updated_credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     emit_audit_event(
@@ -406,23 +460,9 @@ def update_credential_from_model(
         resource_id=credential_id,
     )
 
-    mask_credential_prefix = get_security_settings().mask_credential_prefix
-    credential_json_value = (
-        updated_credential.credential_json.get_value(apply_mask=mask_credential_prefix)
-        if updated_credential.credential_json
-        else {}
-    )
-
-    return CredentialSnapshot(
-        source=updated_credential.source,
-        id=updated_credential.id,
-        credential_json=credential_json_value,
-        user_id=updated_credential.user_id,
-        name=updated_credential.name,
-        admin_public=updated_credential.admin_public,
-        time_created=updated_credential.time_created,
-        time_updated=updated_credential.time_updated,
-        curator_public=updated_credential.curator_public,
+    return CredentialSnapshot.from_credential_db_model(
+        updated_credential,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
     )
 
 

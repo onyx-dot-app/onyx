@@ -121,26 +121,37 @@ export function useContentSize(
 
   // Observe resize if enabled
   useEffect(() => {
-    if (!observeResize || !ref.current) return;
+    const container = ref.current;
+    if (!observeResize || !container) return;
+    let animationFrameId: number | null = null;
+    const observedElements = [
+      container,
+      ...Array.from(container.querySelectorAll("*")),
+    ];
 
     const resizeObserver = new ResizeObserver(() => {
       // Use requestAnimationFrame to ensure measurements happen after the resize is complete
-      requestAnimationFrame(() => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      animationFrameId = requestAnimationFrame(() => {
+        animationFrameId = null;
         measureSize();
       });
     });
 
-    // Observe the container itself
-    resizeObserver.observe(ref.current);
-
-    // Also observe all descendant elements (like textareas)
-    const descendants = ref.current.querySelectorAll("*");
-    descendants.forEach((el) => {
+    observedElements.forEach((el) => {
       resizeObserver.observe(el);
     });
 
     return () => {
+      observedElements.forEach((el) => {
+        resizeObserver.unobserve(el);
+      });
       resizeObserver.disconnect();
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
   }, [observeResize]);
 

@@ -56,7 +56,7 @@ spec:
       containers:
         - name: celery-worker-user-file-processing
           securityContext:
-            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
+            {{- include "onyx.containerSecurityContext" .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
@@ -73,7 +73,7 @@ spec:
               {{- end }}
               "--hostname=user-file-processing@%n",
               "-Q",
-              "user_file_processing,user_file_project_sync,user_file_delete",
+              "user_file_processing,user_file_project_sync,user_file_delete,user_file_port",
             ]
           resources:
             {{- toYaml .Values.celery_worker_user_file_processing.resources | nindent 12 }}

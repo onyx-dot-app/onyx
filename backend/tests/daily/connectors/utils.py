@@ -1,23 +1,42 @@
+import os
 from collections.abc import Iterator
-from typing import IO
-from typing import TypeVar
+from typing import IO, TypeVar
 
 from pydantic import BaseModel
 
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    Document,
+    HierarchyNode,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
 
 _ITERATION_LIMIT = 100_000
+
+# Hierarchy IDs and names are source URLs and titles. CI logs are public, so
+# failure messages name them only when a developer opts in locally.
+_SHOW_HIERARCHY_IDS_ENV = "DAILY_TEST_SHOW_HIERARCHY_IDS"
+
+
+def _show_hierarchy_ids() -> bool:
+    return os.environ.get(_SHOW_HIERARCHY_IDS_ENV, "").lower() == "true"
+
+
+def _hierarchy_detail(details: str) -> str:
+    if _show_hierarchy_ids():
+        return details
+    return f"Set {_SHOW_HIERARCHY_IDS_ENV}=true locally to show the IDs."
+
 
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
@@ -120,12 +139,17 @@ def load_all_from_connector(
                         not in seen_hierarchy_raw_ids
                     ):
                         raise AssertionError(
-                            f"Document '{document.id}' "
-                            f"(semantic_identifier='{document.semantic_identifier}') "
-                            f"has parent_hierarchy_raw_node_id="
-                            f"'{document.parent_hierarchy_raw_node_id}' "
-                            f"which was not yielded before this document. "
-                            f"Seen hierarchy IDs: {seen_hierarchy_raw_ids}"
+                            "A document's parent hierarchy node was not "
+                            "yielded before the document "
+                            f"({len(seen_hierarchy_raw_ids)} nodes seen). "
+                            + _hierarchy_detail(
+                                f"Document '{document.id}' "
+                                f"(semantic_identifier="
+                                f"'{document.semantic_identifier}') has "
+                                f"parent_hierarchy_raw_node_id="
+                                f"'{document.parent_hierarchy_raw_node_id}'. "
+                                f"Seen hierarchy IDs: {seen_hierarchy_raw_ids}"
+                            )
                         )
 
             if next_checkpoint is not None:
@@ -143,12 +167,16 @@ def load_all_from_connector(
 
             if not parent_in_current_batch and not parent_in_previous_batch:
                 raise AssertionError(
-                    f"HierarchyNode '{node.raw_node_id}' "
-                    f"(display_name='{node.display_name}') "
-                    f"has raw_parent_id='{node.raw_parent_id}' which was not yielded "
-                    f"in the current batch or any previous batch. "
-                    f"Seen hierarchy IDs: {seen_hierarchy_raw_ids}, "
-                    f"Current batch IDs: {batch_hierarchy_raw_ids}"
+                    f"A {node.node_type.value} hierarchy node's parent was not "
+                    "yielded in the current batch or any previous batch "
+                    f"({len(seen_hierarchy_raw_ids)} nodes seen). "
+                    + _hierarchy_detail(
+                        f"HierarchyNode '{node.raw_node_id}' "
+                        f"(display_name='{node.display_name}') has "
+                        f"raw_parent_id='{node.raw_parent_id}'. "
+                        f"Seen hierarchy IDs: {seen_hierarchy_raw_ids}, "
+                        f"Current batch IDs: {batch_hierarchy_raw_ids}"
+                    )
                 )
 
         num_iterations += 1

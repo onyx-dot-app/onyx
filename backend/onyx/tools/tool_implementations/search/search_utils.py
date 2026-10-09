@@ -2,21 +2,21 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import TypeVar
 
-from onyx.context.search.models import ContextExpansionType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.utils import inference_section_from_chunks
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentSectionRequest
-from onyx.document_index.vespa.shared_utils.utils import (
-    replace_invalid_doc_id_characters,
+from onyx.context.search.models import (
+    ContextExpansionType,
+    IndexFilters,
+    InferenceChunk,
+    InferenceSection,
 )
+from onyx.context.search.utils import inference_section_from_chunks
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.llm.interfaces import LLM
 from onyx.prompts.prompt_utils import clean_up_source
 from onyx.secondary_llm_flows.document_filter import classify_section_relevance
-from onyx.tools.tool_implementations.search.constants import FULL_DOC_NUM_CHUNKS_AROUND
-from onyx.tools.tool_implementations.search.constants import RRF_K_VALUE
+from onyx.tools.tool_implementations.search.constants import (
+    FULL_DOC_NUM_CHUNKS_AROUND,
+    RRF_K_VALUE,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -81,7 +81,9 @@ def weighted_reciprocal_rank_fusion(
     id_to_source_rank: dict[str, int] = {}
 
     # Compute weighted RRF scores
-    for source_idx, (result_list, weight) in enumerate(zip(ranked_results, weights)):
+    for source_idx, (result_list, weight) in enumerate(
+        zip(ranked_results, weights, strict=True)
+    ):
         for rank, item in enumerate(result_list, start=1):
             item_id = id_extractor(item)
 
@@ -164,7 +166,7 @@ def _retrieve_adjacent_chunks(
         above_max = min_chunk_id - 1
 
         above_request = DocumentSectionRequest(
-            document_id=replace_invalid_doc_id_characters(document_id),
+            document_id=document_id,
             min_chunk_ind=above_min,
             max_chunk_ind=above_max,
         )
@@ -186,7 +188,7 @@ def _retrieve_adjacent_chunks(
         below_max = max_chunk_id + num_chunks_below
 
         below_request = DocumentSectionRequest(
-            document_id=replace_invalid_doc_id_characters(document_id),
+            document_id=document_id,
             min_chunk_ind=below_min,
             max_chunk_ind=below_max,
         )
@@ -238,7 +240,7 @@ def merge_overlapping_sections(
     merged_sections: dict[tuple[str, int], InferenceSection] = {}
 
     # Process each document's sections
-    for doc_id, doc_section_list in doc_sections.items():
+    for doc_section_list in doc_sections.values():
         if not doc_section_list:
             continue
 
@@ -445,7 +447,7 @@ def expand_section_with_context(
             chunks=all_chunks,
         )
 
-        return expanded_section if expanded_section else section
+        return expanded_section or section
 
     elif classification == ContextExpansionType.FULL_DOCUMENT:
         # Fetch 5 chunks above and below (optimal single retrieval)
@@ -483,7 +485,7 @@ def expand_section_with_context(
             chunks=all_chunks,
         )
 
-        return expanded_section if expanded_section else section
+        return expanded_section or section
 
     else:
         # Unknown classification - default to returning original section

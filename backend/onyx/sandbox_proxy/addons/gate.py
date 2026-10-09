@@ -9,57 +9,64 @@ import base64
 import binascii
 import ipaddress
 import operator
-import socket
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Protocol
-from urllib.parse import urlparse
 from uuid import UUID
 
-from cachetools import cachedmethod
-from cachetools import TTLCache
+from cachetools import TTLCache, cachedmethod
 from mitmproxy import http
 from mitmproxy.proxy import server_hooks
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
+from onyx.db.gated_app import get_gated_app_id
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_live_scheduled_run_grants
-from onyx.db.scheduled_task import ScheduledRunGrants
-from onyx.external_apps.matching.engine import actions_requiring_approval
-from onyx.external_apps.matching.engine import AllMatchedActions
+from onyx.db.scheduled_task import ScheduledRunGrants, get_live_scheduled_run_grants
+from onyx.external_apps.matching.engine import (
+    AllMatchedActions,
+    actions_requiring_approval,
+)
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import InjectionContext
-from onyx.sandbox_proxy.credential_injection import InjectionOutcome
-from onyx.sandbox_proxy.errors import http_403
-from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SessionContext
-from onyx.sandbox_proxy.logging_utils import approval_decided_args
-from onyx.sandbox_proxy.logging_utils import APPROVAL_DECIDED_FIELDS
-from onyx.sandbox_proxy.logging_utils import credential_outcome_label
-from onyx.sandbox_proxy.logging_utils import egress_approval_matched_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_APPROVAL_MATCHED_FIELDS
-from onyx.sandbox_proxy.logging_utils import egress_matched_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_MATCHED_FIELDS
-from onyx.sandbox_proxy.logging_utils import egress_session_matched_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_SESSION_MATCHED_FIELDS
-from onyx.sandbox_proxy.logging_utils import egress_target_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_TARGET_FIELDS
-from onyx.sandbox_proxy.logging_utils import full_log_id
-from onyx.sandbox_proxy.logging_utils import sandbox_log_label
-from onyx.sandbox_proxy.logging_utils import short_log_id
+from onyx.sandbox_proxy.destination_policy import (
+    clear_destination,
+    is_destination_blocked,
+    pin_destination,
+    resolve_destination,
+)
+from onyx.sandbox_proxy.errors import SandboxProxyError, http_403
+from onyx.sandbox_proxy.logging_utils import (
+    APPROVAL_DECIDED_FIELDS,
+    EGRESS_APPROVAL_MATCHED_FIELDS,
+    EGRESS_MATCHED_FIELDS,
+    EGRESS_SESSION_MATCHED_FIELDS,
+    EGRESS_TARGET_FIELDS,
+    approval_decided_args,
+    credential_outcome_label,
+    egress_approval_matched_args,
+    egress_matched_args,
+    egress_session_matched_args,
+    egress_target_args,
+    full_log_id,
+    sandbox_log_label,
+    short_log_id,
+)
+from onyx.sandbox_proxy.models import (
+    DestinationPolicyConfig,
+    InjectionContext,
+    InjectionOutcome,
+)
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
+from onyx.server.features.build.configs import (
+    MCP_SESSION_TAG_HEADER,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
 
@@ -70,92 +77,6 @@ logger = setup_logger()
 # the false blocker: anything the upstream would accept passes through, and a
 # genuinely oversized request gets the upstream's own 413, not an opaque 403.
 PARSER_MAX_BODY_BYTES = 32 * 1024 * 1024
-
-
-# --- internal-destination egress lockdown: closes the proxy-relay path ---
-# A sandbox can only egress via the proxy, so the proxy is the single layer that can
-# stop it relaying (CONNECT-tunneling) to internal services (databases, caches, search,
-# metadata endpoints) — that destination is invisible at the sandbox's own egress (it sees
-# "TCP to proxy:8080"). Deny any forwarded destination that is, or resolves to, an
-# internal address; allow the one legitimate internal exception (the api-server) plus
-# the public internet. Keying off "not globally routable" — not a hostname allow-list —
-# catches internal services we never enumerated. The proxy's OWN cred-resolution DB
-# client connects directly (not through the mitmproxy listener), so it is unaffected here.
-
-
-# The single allowed internal destination: the api-server the sandbox calls via the
-# proxy (PAT-injected). Matched by host AND port so it works even when it's an
-# in-cluster name resolving to an internal IP, while still denying every other port
-# on that host (e.g. a co-located Redis/Postgres reachable at the same hostname).
-def _parse_api_server() -> tuple[str | None, int | None]:
-    if not SANDBOX_API_SERVER_URL:
-        return None, None
-    parsed = urlparse(SANDBOX_API_SERVER_URL)
-    host = (parsed.hostname or "").lower() or None
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    return host, port
-
-
-_API_SERVER_HOST, _API_SERVER_PORT = _parse_api_server()
-
-
-def _is_api_server(host: str, port: int) -> bool:
-    return (
-        _API_SERVER_HOST is not None
-        and host == _API_SERVER_HOST
-        and port == _API_SERVER_PORT
-    )
-
-
-def _ip_is_internal(ip_str: str) -> bool:
-    """True if ``ip_str`` is not a globally-routable public address.
-
-    `is_global` covers far more than RFC1918: CGNAT (100.64.0.0/10 — EKS pod IPs
-    under custom networking), loopback, link-local (incl. cloud metadata / IMDS),
-    IPv6 ULA (fc00::/7) + link-local (fe80::/10) + loopback (::1), and reserved
-    ranges. IPv4-mapped IPv6 (``::ffff:10.0.0.1``) is judged by its embedded IPv4
-    so it can't be used to smuggle an internal v4 address past the check.
-    """
-    try:
-        ip = ipaddress.ip_address(ip_str)
-    except ValueError:
-        return False
-    mapped = getattr(ip, "ipv4_mapped", None)
-    if mapped is not None:
-        ip = mapped
-    return not ip.is_global
-
-
-def destination_is_blocked(host: str, port: int) -> bool:
-    """True if the sandbox must not be relayed to ``host:port``.
-
-    Denied: anything that is, or resolves to, an internal address. Allowed: the
-    api-server (host + port) and any public address. Fail closed: a resolution
-    failure denies (with a warning) — a transient resolver error must not become
-    an opening to an internal service. If a name resolves to a mix of public and
-    internal addresses, deny — an attacker could otherwise steer the connection
-    to the internal one.
-    """
-    host = (host or "").strip().lower()
-    if not host:
-        return False
-    if _is_api_server(host, port):
-        return False
-    try:
-        ipaddress.ip_address(host)  # literal-IP destination: check directly, no DNS
-        return _ip_is_internal(host)
-    except ValueError:
-        pass
-    try:
-        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
-    except OSError as exc:
-        logger.warning(
-            "egress_destination_resolution_failed host=%s error=%s", host, exc
-        )
-        return True
-    # getaddrinfo types sockaddr[0] as `str | int`; the address element is always
-    # a str at runtime (AF_INET/AF_INET6), so coerce to satisfy the type checker.
-    return any(_ip_is_internal(str(info[4][0])) for info in infos)
 
 
 class _IdentityResolver(Protocol):
@@ -176,13 +97,14 @@ CacheFactory = Callable[[str], CacheBackend]
 _CRAFT_SESSION_LINK_TEMPLATE = "/craft/v1?sessionId={session_id}"
 
 
-@dataclass(frozen=True)
-class _ApprovalGrant:
+class _ApprovalGrant(BaseModel):
     """A decision to approve a gated request without parking it.
 
     Produced by a grant source in ``_resolve_approval_grant``. Carries how to
     attribute the audit row (``decided_via``) and any bell entry to raise.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     decided_via: ApprovalDecidedVia
     notif_type: NotificationType | None = None
@@ -231,8 +153,10 @@ class GateAddon:
         cache_factory: CacheFactory,
         proxy_instance_id: str,
         credential_dispatcher: CredentialInjectionDispatcher,
+        destination_policy: DestinationPolicyConfig,
         stream_responses: bool = True,
     ) -> None:
+        self._destination_policy = destination_policy
         self._identity = identity
         self._request_evaluator = request_evaluator
         self._cache_factory = cache_factory
@@ -261,7 +185,7 @@ class GateAddon:
     # ------------------------------------------------------------------
 
     async def http_connect(self, flow: http.HTTPFlow) -> None:
-        """Capture the per-session tag from the CONNECT's Proxy-Authorization.
+        """Identify the peer and capture the CONNECT's per-session tag.
 
         For MITM'd HTTPS the header rides on the CONNECT, not the decrypted
         inner request, so this is the only place it's visible. Keyed by client
@@ -274,7 +198,11 @@ class GateAddon:
         # authoritative rebinding-proof enforcement (resolve-once + IP pin). The check
         # can do a blocking DNS lookup, so run it off the event loop.
         if await asyncio.get_running_loop().run_in_executor(
-            None, destination_is_blocked, flow.request.host, flow.request.port
+            None,
+            is_destination_blocked,
+            self._destination_policy,
+            flow.request.host,
+            flow.request.port,
         ):
             logger.info(
                 "egress_denied_internal_destination phase=connect host=%s port=%s",
@@ -284,7 +212,10 @@ class GateAddon:
             flow.response = http_403(SandboxProxyError.DESTINATION_BLOCKED)
             return
 
-        conn_id = getattr(flow.client_conn, "id", None)
+        if await asyncio.to_thread(self._resolve_sandbox, flow) is None:
+            return
+
+        conn_id = getattr(flow.client_conn, "id", None)  # ods: ignore[getattr]
         auth_header = flow.request.headers.get("Proxy-Authorization")
         tag = _parse_proxy_auth_username(auth_header)
 
@@ -304,44 +235,40 @@ class GateAddon:
 
     def client_disconnected(self, client: object) -> None:
         """Drops the connection's cached session tag to bound memory."""
-        conn_id = getattr(client, "id", None)
+        conn_id = getattr(client, "id", None)  # ods: ignore[getattr]
         if conn_id is not None:
             self._conn_session_tags.pop(conn_id, None)
 
     async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
-        """Deny internal destinations at connection-setup time (backstop).
-
-        Last hook before mitmproxy opens the upstream. Re-checking here — closer to
-        the actual connect than the earlier `http_connect`/`request` denies — shrinks
-        the DNS-rebinding window where a host that vetted as public re-resolves to an
-        internal address. A deny is a TCP-level kill (`server.error`); the structured
-        `destination_blocked` 403 is delivered by the `http_connect`/`request` checks
-        for every normal request.
-
-        We deliberately do NOT pin `server.address` to the resolved IP. Under the
-        default `eager` connection strategy mitmproxy completes the upstream TLS
-        handshake before the client's ClientHello is available; connecting by bare IP
-        makes the upstream cert check fail and mitmproxy silently falls back to a raw
-        passthrough tunnel — which skips credential injection (the LLM provider key is
-        never swapped in, so the sandbox's placeholder leaks and the call 401s).
-        Leaving the hostname in place keeps interception (and key injection) working.
-        The cost is a residual rebind window between this resolution and mitmproxy's
-        own: accepted as the safe trade-off versus breaking credential injection.
-        """
+        """Validate the final addresses and pin them while preserving TLS SNI."""
         server = data.server
         if server.error or not server.address:
             return
         host, port = server.address[0], server.address[1]
-        blocked = await asyncio.get_running_loop().run_in_executor(
-            None, destination_is_blocked, host, port
+        addresses: tuple[str, ...] | None = await asyncio.to_thread(
+            resolve_destination, self._destination_policy, host, port
         )
-        if blocked:
+        if addresses is None:
             logger.info(
                 "egress_denied_internal_destination phase=server_connect host=%s port=%s",
                 host,
                 port,
             )
-            server.error = "destination_blocked: internal address"
+            server.error = "destination_blocked: unresolved or forbidden destination"
+            return
+        # TLS verifies the original hostname, even before the client sends SNI.
+        if server.sni is None:
+            server.sni = host
+        try:
+            pin_destination(host, port, addresses)
+        except RuntimeError:
+            server.error = "destination_blocked: upstream resolver unavailable"
+
+    def server_connected(self, data: server_hooks.ServerConnectionHookData) -> None:  # noqa: ARG002
+        clear_destination()
+
+    def server_connect_error(self, data: server_hooks.ServerConnectionHookData) -> None:  # noqa: ARG002
+        clear_destination()
 
     def responseheaders(self, flow: http.HTTPFlow) -> None:
         """
@@ -366,7 +293,11 @@ class GateAddon:
         # scheme. `server_connect` is the authoritative rebinding-proof backstop +
         # pin. Resolution can block, so run it off the event loop.
         if await asyncio.get_running_loop().run_in_executor(
-            None, destination_is_blocked, flow.request.host, flow.request.port
+            None,
+            is_destination_blocked,
+            self._destination_policy,
+            flow.request.host,
+            flow.request.port,
         ):
             logger.info(
                 "egress_denied_internal_destination phase=request host=%s port=%s",
@@ -377,8 +308,9 @@ class GateAddon:
             return
 
         gate_target = await self._resolve_and_match(flow)
-        # Strip the in-band session tag so it never reaches the origin
+        # Strip the in-band session tags so they never reach the origin
         flow.request.headers.pop("Proxy-Authorization", None)
+        flow.request.headers.pop(MCP_SESSION_TAG_HEADER, None)
         if gate_target is None:
             return
         ctx, matched_actions = gate_target
@@ -519,43 +451,8 @@ class GateAddon:
         Session resolution is LAST: only gated actions need a session tag;
         Non-gated traffic (npm, apt, pip) is identified at the pod level.
         """
-        src_ip = self._extract_src_ip(flow)
-        if src_ip is None:
-            # mitmproxy peername returned no usable IP -- should never happen
-            # over real TCP. Log loudly so a stuck NAT or transport-mode mishap
-            # doesn't read as "everything just 403's silently".
-            peer = flow.client_conn.peername
-            peer_label = "-" if peer is None else ":".join(str(part) for part in peer)
-            logger.warning(
-                "identity_missing_src_ip host=%s peer=%s",
-                flow.request.host,
-                peer_label,
-            )
-            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
-            return None
-
-        try:
-            sandbox = self._identity.resolve_sandbox(src_ip)
-        except Exception:
-            # A DB blip can't be allowed to grant ungated egress.
-            logger.exception(
-                "identity_error src_ip=%s host=%s",
-                src_ip,
-                flow.request.host,
-            )
-            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
-            return None
+        sandbox: ResolvedSandbox | None = self._resolve_sandbox(flow)
         if sandbox is None:
-            # Source IP isn't in the lookup cache. Two common causes:
-            # (1) Container died + evicted before its last request drained.
-            # (2) Deployment-shape SNAT masks the sandbox's real bridge IP (e.g.
-            # proxy outside the sandbox bridge).
-            logger.warning(
-                "identity_unknown_sandbox src_ip=%s host=%s",
-                src_ip,
-                flow.request.host,
-            )
-            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
             return None
 
         # raw_content is None for streamed bodies; treat None as oversize so a
@@ -594,8 +491,13 @@ class GateAddon:
         # ALWAYS / DENY / off-catalog terminate here; ASK falls through to the
         # approval pipeline in `request()`.
         if matched_actions is None:
-            injection = self._dispatch_injection_or_block(
-                flow, sandbox=sandbox, matched_actions=None
+            # Off-thread like the ALWAYS path: host-claiming resolvers may hit
+            # the DB or refresh an expiring OAuth token before injecting.
+            injection = await asyncio.to_thread(
+                self._dispatch_injection_or_block,
+                flow,
+                sandbox=sandbox,
+                matched_actions=None,
             )
             if injection is InjectionOutcome.BLOCKED:
                 logger.warning(
@@ -727,8 +629,9 @@ class GateAddon:
         grants = self._live_grants(db, ctx.session_id)
         if grants is None:
             return None
-        run_id, granted_app_ids = grants
-        if matched_actions.external_app_id not in granted_app_ids:
+        run_id, granted_targets = grants
+        target = matched_actions.target
+        if target.key not in granted_targets:
             return None
         return _ApprovalGrant(
             decided_via=ApprovalDecidedVia.PRE_APPROVAL,
@@ -736,7 +639,8 @@ class GateAddon:
             notification_title=f"Scheduled task used {matched_actions.app_name} (pre-approved)",
             notification_data={
                 "run_id": str(run_id),
-                "external_app_id": matched_actions.external_app_id,
+                "target_kind": target.kind.value,
+                "target_id": target.id,
             },
         )
 
@@ -747,12 +651,14 @@ class GateAddon:
         action_types = actions_requiring_approval(matched_actions.actions)
         if not action_types:
             return None
+        target = matched_actions.target
         cache: CacheBackend | None = None
         try:
             cache = self._cache_factory(ctx.tenant_id)
             if approval_cache.cached_session_grants_cover(
                 session_id=ctx.session_id,
-                external_app_id=matched_actions.external_app_id,
+                kind=target.kind,
+                target_id=target.id,
                 action_types=action_types,
                 cache=cache,
             ):
@@ -760,10 +666,11 @@ class GateAddon:
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
                 "approval_grant_cache_error tenant=%s session=%s "
-                "external_app_id=%s operation=%s error=%r",
+                "target=%s:%s operation=%s error=%r",
                 ctx.tenant_id,
                 short_log_id(ctx.session_id),
-                matched_actions.external_app_id,
+                target.kind.value,
+                target.id,
                 "check",
                 str(e),
             )
@@ -771,38 +678,17 @@ class GateAddon:
         grant_source_rows = action_approval.list_session_grant_action_approvals(
             db,
             session_id=ctx.session_id,
-            external_app_id=matched_actions.external_app_id,
+            gated_app_id=get_gated_app_id(db, target.kind, target.id),
         )
-        granted_action_types: set[str] = set()
-        for grant_source_row in grant_source_rows:
-            granted_action_types.update(
-                actions_requiring_approval(grant_source_row.actions)
-            )
+        granted_action_types = approval_cache.hydrate_session_grants(
+            session_id=ctx.session_id,
+            kind=target.kind,
+            target_id=target.id,
+            rows=grant_source_rows,
+            cache=cache,
+        )
         if not set(action_types).issubset(granted_action_types):
             return None
-
-        if cache is not None:
-            try:
-                for grant_source_row in grant_source_rows:
-                    approval_cache.cache_session_grant_actions(
-                        session_id=ctx.session_id,
-                        external_app_id=matched_actions.external_app_id,
-                        action_types=actions_requiring_approval(
-                            grant_source_row.actions
-                        ),
-                        source_approval_id=grant_source_row.approval_id,
-                        cache=cache,
-                    )
-            except CACHE_TRANSIENT_ERRORS as e:
-                logger.warning(
-                    "approval_grant_cache_error tenant=%s session=%s "
-                    "external_app_id=%s operation=%s error=%r",
-                    ctx.tenant_id,
-                    short_log_id(ctx.session_id),
-                    matched_actions.external_app_id,
-                    "hydrate",
-                    str(e),
-                )
         return _ApprovalGrant(decided_via=ApprovalDecidedVia.SESSION_GRANT)
 
     async def _apply_approval_grant(
@@ -855,7 +741,7 @@ class GateAddon:
                     ],
                     app_name=matched_actions.app_name,
                     payload=matched_actions.payload,
-                    external_app_id=matched_actions.external_app_id,
+                    target=matched_actions.target.key,
                     decision=ApprovalDecision.APPROVED,
                     decided_via=grant.decided_via,
                 )
@@ -911,7 +797,7 @@ class GateAddon:
                 actions=actions_payload,
                 app_name=matched_actions.app_name,
                 payload=matched_actions.payload,
-                external_app_id=matched_actions.external_app_id,
+                target=matched_actions.target.key,
             )
             approval_id = row.approval_id
             db.commit()
@@ -933,14 +819,15 @@ class GateAddon:
 
         logger.info(
             "approval_requested tenant=%s sandbox=%s session=%s approval=%s "
-            "app_name=%r external_app_id=%s action_type=%s action_count=%s "
+            "app_name=%r target=%s:%s action_type=%s action_count=%s "
             "proxy_instance=%s session_id=%s approval_id=%s",
             ctx.tenant_id,
             sandbox_log_label(ctx),
             short_log_id(ctx.session_id),
             short_log_id(approval_id),
             matched_actions.app_name,
-            matched_actions.external_app_id,
+            matched_actions.target.kind.value,
+            matched_actions.target.id,
             matched_actions.governing_action.action_type,
             len(matched_actions.actions),
             self._proxy_instance_id,
@@ -1059,16 +946,18 @@ class GateAddon:
         matched_actions: AllMatchedActions | None,
     ) -> InjectionOutcome:
         """Runs the credential dispatcher; Fails closed with a 403 on BLOCKED."""
-        outcome = self._credential_dispatcher.apply(
+        result = self._credential_dispatcher.apply(
             flow,
             InjectionContext(
                 sandbox=sandbox,
                 matched_actions=matched_actions,
             ),
         )
-        if outcome is InjectionOutcome.BLOCKED:
-            flow.response = http_403(SandboxProxyError.CREDENTIAL_ERROR)
-        return outcome
+        if result.outcome is InjectionOutcome.BLOCKED:
+            flow.response = http_403(
+                SandboxProxyError.CREDENTIAL_ERROR, detail=result.block_detail
+            )
+        return result.outcome
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str
@@ -1222,6 +1111,49 @@ class GateAddon:
     # internal helpers
     # --------------------------------------------------------------------------
 
+    def _resolve_sandbox(self, flow: http.HTTPFlow) -> ResolvedSandbox | None:
+        """Identify the peer before accepting HTTP requests or CONNECT tunnels."""
+        src_ip: str | None = self._extract_src_ip(flow)
+        if src_ip is None:
+            # mitmproxy peername returned no usable IP -- should never happen
+            # over real TCP. Log loudly so a stuck NAT or transport-mode mishap
+            # doesn't read as "everything just 403's silently".
+            peer = flow.client_conn.peername
+            peer_label = "-" if peer is None else ":".join(str(part) for part in peer)
+            logger.warning(
+                "identity_missing_src_ip host=%s peer=%s",
+                flow.request.host,
+                peer_label,
+            )
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
+            return None
+
+        try:
+            sandbox: ResolvedSandbox | None = self._identity.resolve_sandbox(src_ip)
+        except Exception:
+            # A DB blip can't be allowed to grant ungated egress.
+            logger.exception(
+                "identity_error src_ip=%s host=%s",
+                src_ip,
+                flow.request.host,
+            )
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
+            return None
+        if sandbox is None:
+            # Source IP isn't in the lookup cache. Two common causes:
+            # (1) Container died + evicted before its last request drained.
+            # (2) Deployment-shape SNAT masks the sandbox's real bridge IP (e.g.
+            # proxy outside the sandbox bridge).
+            logger.warning(
+                "identity_unknown_sandbox src_ip=%s host=%s",
+                src_ip,
+                flow.request.host,
+            )
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
+            return None
+
+        return sandbox
+
     def _extract_src_ip(self, flow: http.HTTPFlow) -> str | None:
         peer = flow.client_conn.peername
         if peer is None or len(peer) < 1:
@@ -1229,7 +1161,15 @@ class GateAddon:
         addr = peer[0]
         if not isinstance(addr, str):
             return None
-        return addr
+        try:
+            parsed: ipaddress.IPv4Address | ipaddress.IPv6Address = (
+                ipaddress.ip_address(addr)
+            )
+        except ValueError:
+            return None
+        if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped:
+            return str(parsed.ipv4_mapped)
+        return str(parsed)
 
     def _resolve_gated_session(
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
@@ -1287,11 +1227,20 @@ class GateAddon:
         HTTPS: cached from the CONNECT in `http_connect`. HTTP: read off the
         request directly, since there's no CONNECT to carry the header.
         """
-        conn_id = getattr(flow.client_conn, "id", None)
+        conn_id = getattr(flow.client_conn, "id", None)  # ods: ignore[getattr]
         cached = self._conn_session_tags.get(conn_id) if conn_id else None
         direct_auth_header = flow.request.headers.get("Proxy-Authorization")
         direct = _parse_proxy_auth_username(direct_auth_header)
-        tag = cached or direct
+        # opencode's in-process MCP client can't ride the proxy-userinfo tag
+        # (shared process, untagged base proxy), so it carries the session id in a
+        # header stamped by the per-session opencode.json, which wins for MCP
+        # requests. This is a same-user attribution hint, not a security boundary:
+        # the sandbox is one trust domain per user, so a compromised process can
+        # read any of its sessions' tags and forge this header — signing it buys
+        # nothing (the value is stored in-sandbox in plaintext). Cross-user is
+        # still blocked by the src-IP-pinned sandbox identity in resolve_sandbox.
+        mcp_header = flow.request.headers.get(MCP_SESSION_TAG_HEADER)
+        tag = mcp_header or cached or direct
 
         logger.debug(
             "session_tag_resolved conn=%s host=%s cached=%s direct=%s "

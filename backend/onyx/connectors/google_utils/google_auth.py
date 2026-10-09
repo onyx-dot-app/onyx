@@ -5,21 +5,17 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 
-from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
+from onyx.configs.app_configs import (
+    OAUTH_GOOGLE_DRIVE_CLIENT_ID,
+    OAUTH_GOOGLE_DRIVE_CLIENT_SECRET,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
-from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import GOOGLE_SCOPES
-from onyx.connectors.google_utils.shared_constants import (
+    GOOGLE_SCOPES,
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.utils.logger import setup_logger

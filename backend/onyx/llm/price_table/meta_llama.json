@@ -1,0 +1,192 @@
+{
+  "aliases": {},
+  "models": {
+    "cerebras-llama-4-maverick-17b-128e-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Cerebras-Llama-4-Maverick-17B-128E-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "cerebras-llama-4-scout-17b-16e-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Cerebras-Llama-4-Scout-17B-16E-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "groq-llama-4-maverick-17b-128e-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Groq-Llama-4-Maverick-17B-128E-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "llama-3.3-70b-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama-3.3-70B-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-12-06",
+      "temperature": true,
+      "tool_call": true
+    },
+    "llama-3.3-8b-instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama-3.3-8B-Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-12-06",
+      "temperature": true,
+      "tool_call": true
+    },
+    "llama-4-maverick-17b-128e-instruct-fp8": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama-4-Maverick-17B-128E-Instruct-FP8",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "llama-4-scout-17b-16e-instruct-fp8": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "llama",
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama-4-Scout-17B-16E-Instruct-FP8",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-05",
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "llama"
+  ]
+}

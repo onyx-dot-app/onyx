@@ -4,27 +4,30 @@ from itertools import chain
 
 from pydantic import BaseModel
 
-from onyx.connectors.models import Section
-from onyx.connectors.models import TabularSection
+from onyx.connectors.models import Section, TabularSection
 from onyx.file_store.file_store import get_default_file_store
-from onyx.indexing.chunking.section_chunker import AccumulatorState
-from onyx.indexing.chunking.section_chunker import ChunkPayload
-from onyx.indexing.chunking.section_chunker import SectionChunker
-from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
-from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
-from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
+from onyx.indexing.chunking.section_chunker import (
+    AccumulatorState,
+    ChunkPayload,
+    SectionChunker,
+    SectionChunkerOutput,
+)
+from onyx.indexing.chunking.tabular_section_chunker.analysis import (
+    SheetAnalysis,
+    analyze_sheet,
+)
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
 )
 from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
     build_total_descriptor_chunks,
 )
-from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.natural_language_processing.utils import count_tokens
-from onyx.natural_language_processing.utils import split_text_by_tokens
-from onyx.utils.csv_utils import parse_csv_stream
-from onyx.utils.csv_utils import ParsedRow
-from onyx.utils.csv_utils import read_csv_header
+from onyx.natural_language_processing.utils import (
+    BaseTokenizer,
+    count_tokens,
+    split_text_by_tokens,
+)
+from onyx.utils.csv_utils import ParsedRow, parse_csv_stream, read_csv_header
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -69,7 +72,7 @@ def format_columns_header(headers: list[str]) -> str:
 
 
 def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
-    return [(h, v) for h, v in zip(headers, row) if v.strip()]
+    return [(h, v) for h, v in zip(headers, row, strict=False) if v.strip()]
 
 
 def pack_chunk(chunk: str, new_row: str) -> str:
@@ -110,13 +113,13 @@ def _split_row_by_pairs(
             current_tokens = 0
 
         if pair_tokens > max_tokens:
-            for split_text in split_text_by_tokens(pair_str, tokenizer, max_tokens):
-                pieces.append(
-                    _TokenizedText(
-                        text=split_text,
-                        token_count=count_tokens(split_text, tokenizer),
-                    )
+            pieces.extend(
+                _TokenizedText(
+                    text=split_text,
+                    token_count=count_tokens(split_text, tokenizer),
                 )
+                for split_text in split_text_by_tokens(pair_str, tokenizer, max_tokens)
+            )
         else:
             current_parts = [pair_str]
             current_tokens = pair_tokens

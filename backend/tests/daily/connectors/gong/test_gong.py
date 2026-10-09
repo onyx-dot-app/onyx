@@ -1,6 +1,5 @@
 import time
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -51,7 +50,8 @@ def test_gong_basic(
         except StopIteration as e:
             checkpoint = e.value
 
-    assert len(docs) == 2
+    # Gong deletes calls after the workspace's retention period. The test
+    # call is kept in a company library folder, which is exempt.
+    assert len(docs) == 1
 
     assert docs[0].semantic_identifier == "test with chris"
-    assert docs[1].semantic_identifier == "Testing Gong"

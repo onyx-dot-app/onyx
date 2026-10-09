@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { unstable_noStore as noStore } from "next/cache";
-import { requireAuth } from "@/lib/auth/requireAuth";
-import { ProjectsProvider } from "@/providers/ProjectsContext";
+import { requireAuth } from "@/lib/auth/svcSS";
+import { ProjectsProvider } from "@/lib/projects/providers";
 import { VoiceModeProvider } from "@/providers/VoiceModeProvider";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
 import { RootLayout } from "@opal/layouts";

@@ -1,55 +1,58 @@
 import json
-import re
 from collections.abc import Callable
 from typing import cast
 from uuid import UUID
 
-from fastapi.datastructures import Headers
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import ChatHistoryResult
-from onyx.chat.models import ChatLoadedFile
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import ToolCallSimple
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.chat.incognito import (
+    incognito_allowed_for_user,
+    resolve_incognito_record_mode,
+)
+from onyx.chat.incognito_context import incognito_context_available
+from onyx.chat.models import (
+    ChatHistoryResult,
+    ChatLoadedFile,
+    ChatMessageSimple,
+    FileToolMetadata,
+    ToolCallSimple,
+)
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.constants import (
+    DEFAULT_PERSONA_ID,
+    FileOrigin,
+    MessageType,
+)
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.utils import sandbox_filename_for_document
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import get_chat_messages_by_session
-from onyx.db.chat import get_or_create_root_message
+from onyx.db.chat import (
+    create_chat_session,
+)
+from onyx.db.enums import (
+    IncognitoRecordMode,
+    UserFileStatus,
+    record_mode_persists_content,
+)
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import is_kg_config_settings_enabled_valid
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import Persona
-from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.db.models import User
-from onyx.db.models import UserFile
+from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
+from onyx.db.user_file import get_user_file_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import FileDescriptor
-from onyx.file_store.utils import plaintext_file_name_for_id
-from onyx.file_store.utils import store_plaintext
-from onyx.kg.models import KGException
-from onyx.kg.setup.kg_default_entity_definitions import (
-    populate_missing_default_entity_types__commit,
+from onyx.file_store.models import ChatFileType, FileDescriptor
+from onyx.file_store.utils import plaintext_file_name_for_id, store_plaintext
+from onyx.prompts.chat_prompts import (
+    ADDITIONAL_CONTEXT_PROMPT,
+    NON_VISION_IMAGE_MARKER,
+    TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
-from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
-from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.tools.models import ChatFile
-from onyx.tools.models import ToolCallKickoff
+from onyx.tools.models import ChatFile, ToolCallKickoff
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
@@ -65,6 +68,47 @@ class FileContextResult(BaseModel):
     tool_metadata: FileToolMetadata
 
 
+CONTENT_PENDING_NOTICE = (
+    "[This file is still being processed and its contents are not yet "
+    "available. Do not guess what it contains — tell the user the file is "
+    "still processing and to ask again in a moment.]"
+)
+
+CONTENT_UNAVAILABLE_NOTICE = (
+    "[No machine-readable text could be extracted from this file. It is "
+    "likely image-only (e.g. a scanned document) or in an unsupported "
+    "format. Its contents are not available to you — do not guess them. If "
+    "needed, ask the user for a text-based copy.]"
+)
+
+# Used when no token_counter is available to measure the non-vision image
+# marker; intentionally generous so budgeting stays conservative.
+_NON_VISION_MARKER_TOKEN_FALLBACK = 40
+
+
+def count_message_replay_tokens(
+    msg: ChatMessageSimple,
+    *,
+    image_files_replayed_as_markers: bool = False,
+    token_counter: Callable[[str], int] | None = None,
+) -> int:
+    if not image_files_replayed_as_markers:
+        return msg.token_count
+    # Include images whose stored cost is zero, such as project images.
+    num_images: int = sum(
+        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+    )
+    if not num_images:
+        return msg.token_count
+    sample_marker: str = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+    marker_tokens: int = (
+        token_counter(sample_marker)
+        if token_counter
+        else _NON_VISION_MARKER_TOKEN_FALLBACK
+    )
+    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
+
+
 def build_file_context(
     tool_file_id: str,
     filename: str,
@@ -72,6 +116,7 @@ def build_file_context(
     content_text: str | None = None,
     token_count: int = 0,
     approx_char_count: int | None = None,
+    content_pending: bool = False,
 ) -> FileContextResult:
     """Build the LLM context representation for a single file.
 
@@ -79,11 +124,34 @@ def build_file_context(
     — the ID that FileReaderTool accepts (``UserFile.id`` for user files).
     """
     if file_type.use_metadata_only():
-        message_text = (
+        # Name read_file only where it is attached (FileReaderTool.is_available),
+        # and drop the id with it: read_file is that UUID's only consumer, since
+        # the python tool addresses files by filename. Tools are constructed
+        # after this runs, so the other branch cannot know what is available and
+        # names nothing rather than promising a tool the model may not have.
+        message_text: str = (
             f"File: {filename} (id={tool_file_id})\n"
-            "Use the file_reader or python tools to access "
-            "this file's contents."
+            "Use the read_file or python tools to access this file's contents."
+            if DISABLE_VECTOR_DB
+            else f"File: {filename}\n"
+            "This file's contents are not included here. Use your available "
+            "tools to read it. Do not guess the contents and do not search "
+            "the web for this file."
         )
+        message = ChatMessageSimple(
+            message=message_text,
+            token_count=max(1, len(message_text) // 4),
+            message_type=MessageType.USER,
+            file_id=tool_file_id,
+        )
+    elif not (content_text or "").strip():
+        # An empty file block gives the model nothing to go on, and it tends
+        # to invent workarounds (search the web for the document, guess its
+        # contents). Say explicitly why there is no content.
+        notice = (
+            CONTENT_PENDING_NOTICE if content_pending else CONTENT_UNAVAILABLE_NOTICE
+        )
+        message_text = f"File: {filename}\n{notice}\nEnd of File"
         message = ChatMessageSimple(
             message=message_text,
             token_count=max(1, len(message_text) // 4),
@@ -143,7 +211,7 @@ def create_chat_session_from_request(
 
     persona_id = chat_session_request.persona_id
     if persona_id != DEFAULT_PERSONA_ID:
-        if not user.is_anonymous and not user_can_access_persona(
+        if not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
             user=user,
@@ -151,225 +219,52 @@ def create_chat_session_from_request(
         ):
             raise ValueError("User does not have access to persona")
 
-    return create_chat_session(
+    # Pinned at creation so a later setting change cannot alter a live session.
+    # Availability decides server-side, never the client flag. A refusal
+    # errors: degrading would silently persist a believed-incognito chat.
+    # The capability is checked first so a deployment that cannot hold the
+    # context says so, rather than reporting it as a permission the admin
+    # could grant.
+    incognito_mode: IncognitoRecordMode | None = None
+    if chat_session_request.incognito:
+        if not incognito_context_available():
+            raise OnyxError(
+                OnyxErrorCode.DEPLOYMENT_UNSUPPORTED,
+                "Incognito chat is not supported on this deployment.",
+            )
+        if not incognito_allowed_for_user(user, db_session, cached=False):
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHORIZED,
+                "Incognito chat is not enabled for this user.",
+            )
+        incognito_mode = resolve_incognito_record_mode()
+
+    # A caller-supplied title is conversation-derived, so a content-free
+    # session stores none of it.
+    description = (
+        chat_session_request.description or ""
+        if record_mode_persists_content(incognito_mode)
+        else ""
+    )
+
+    chat_session = create_chat_session(
         db_session=db_session,
-        description=chat_session_request.description or "",
+        description=description,
         user_id=user.id,
         persona_id=chat_session_request.persona_id,
         project_id=chat_session_request.project_id,
+        incognito_record_mode=incognito_mode,
+        session_id=(
+            chat_session_request.incognito_session_id if incognito_mode else None
+        ),
     )
-
-
-def create_chat_history_chain(
-    chat_session_id: UUID,
-    db_session: Session,
-    prefetch_top_two_level_tool_calls: bool = True,
-    prefetch_message_details: bool = False,
-    # Optional id at which we finish processing
-    stop_at_message_id: int | None = None,
-) -> list[ChatMessage]:
-    """Build the linear chain of messages without including the root message"""
-    mainline_messages: list[ChatMessage] = []
-
-    all_chat_messages = get_chat_messages_by_session(
-        chat_session_id=chat_session_id,
-        user_id=None,
-        db_session=db_session,
-        skip_permission_check=True,
-        prefetch_top_two_level_tool_calls=prefetch_top_two_level_tool_calls,
-        prefetch_message_details=prefetch_message_details,
-    )
-
-    if not all_chat_messages:
-        root_message = get_or_create_root_message(
-            chat_session_id=chat_session_id, db_session=db_session
-        )
-    else:
-        root_message = all_chat_messages[0]
-        if root_message.parent_message is not None:
-            raise RuntimeError(
-                "Invalid root message, unable to fetch valid chat message sequence"
-            )
-
-    current_message: ChatMessage | None = root_message
-    previous_message: ChatMessage | None = None
-    while current_message is not None:
-        child_msg = current_message.latest_child_message
-
-        # Break if at the end of the chain
-        # or have reached the `final_id` of the submitted message
-        if not child_msg or (
-            stop_at_message_id and current_message.id == stop_at_message_id
-        ):
-            break
-        current_message = child_msg
-
-        if (
-            current_message.message_type == MessageType.ASSISTANT
-            and previous_message is not None
-            and previous_message.message_type == MessageType.ASSISTANT
-            and mainline_messages
-        ):
-            # Note that 2 user messages in a row is fine since this is often used for
-            # adding custom prompts and reminders
-            raise RuntimeError(
-                "Invalid message chain, cannot have two assistant messages in a row"
-            )
-        else:
-            mainline_messages.append(current_message)
-
-        previous_message = current_message
-
-    return mainline_messages
-
-
-def reorganize_citations(
-    answer: str, citations: list[CitationInfo]
-) -> tuple[str, list[CitationInfo]]:
-    """For a complete, citation-aware response, we want to reorganize the citations so that
-    they are in the order of the documents that were used in the response. This just looks nicer / avoids
-    confusion ("Why is there [7] when only 2 documents are cited?")."""
-
-    # Regular expression to find all instances of [[x]](LINK)
-    pattern = r"\[\[(.*?)\]\]\((.*?)\)"
-
-    all_citation_matches = re.findall(pattern, answer)
-
-    new_citation_info: dict[int, CitationInfo] = {}
-    for citation_match in all_citation_matches:
-        try:
-            citation_num = int(citation_match[0])
-            if citation_num in new_citation_info:
-                continue
-
-            matching_citation = next(
-                iter([c for c in citations if c.citation_number == int(citation_num)]),
-                None,
-            )
-            if matching_citation is None:
-                continue
-
-            new_citation_info[citation_num] = CitationInfo(
-                citation_number=len(new_citation_info) + 1,
-                document_id=matching_citation.document_id,
-            )
-        except Exception:
-            pass
-
-    # Function to replace citations with their new number
-    def slack_link_format(match: re.Match) -> str:
-        link_text = match.group(1)
-        try:
-            citation_num = int(link_text)
-            if citation_num in new_citation_info:
-                link_text = new_citation_info[citation_num].citation_number
-        except Exception:
-            pass
-
-        link_url = match.group(2)
-        return f"[[{link_text}]]({link_url})"
-
-    # Substitute all matches in the input text
-    new_answer = re.sub(pattern, slack_link_format, answer)
-
-    # if any citations weren't parsable, just add them back to be safe
-    for citation in citations:
-        if citation.citation_number not in new_citation_info:
-            new_citation_info[citation.citation_number] = citation
-
-    return new_answer, list(new_citation_info.values())
-
-
-def build_citation_map_from_infos(
-    citations_list: list[CitationInfo], db_docs: list[DbSearchDoc]
-) -> dict[int, int]:
-    """Translate a list of streaming CitationInfo objects into a mapping of
-    citation number -> saved search doc DB id.
-
-    Always cites the first instance of a document_id and assumes db_docs are
-    ordered as shown to the user (display order).
-    """
-    doc_id_to_saved_doc_id_map: dict[str, int] = {}
-    for db_doc in db_docs:
-        if db_doc.document_id not in doc_id_to_saved_doc_id_map:
-            doc_id_to_saved_doc_id_map[db_doc.document_id] = db_doc.id
-
-    citation_to_saved_doc_id_map: dict[int, int] = {}
-    for citation in citations_list:
-        if citation.citation_number not in citation_to_saved_doc_id_map:
-            saved_id = doc_id_to_saved_doc_id_map.get(citation.document_id)
-            if saved_id is not None:
-                citation_to_saved_doc_id_map[citation.citation_number] = saved_id
-
-    return citation_to_saved_doc_id_map
-
-
-def build_citation_map_from_numbers(
-    cited_numbers: list[int] | set[int], db_docs: list[DbSearchDoc]
-) -> dict[int, int]:
-    """Translate parsed citation numbers (e.g., from [[n]]) into a mapping of
-    citation number -> saved search doc DB id by positional index.
-    """
-    citation_to_saved_doc_id_map: dict[int, int] = {}
-    for num in sorted(set(cited_numbers)):
-        idx = num - 1
-        if 0 <= idx < len(db_docs):
-            citation_to_saved_doc_id_map[num] = db_docs[idx].id
-
-    return citation_to_saved_doc_id_map
-
-
-def extract_headers(
-    headers: dict[str, str] | Headers, pass_through_headers: list[str] | None
-) -> dict[str, str]:
-    """
-    Extract headers specified in pass_through_headers from input headers.
-    Handles both dict and FastAPI Headers objects, accounting for lowercase keys.
-
-    Args:
-        headers: Input headers as dict or Headers object.
-
-    Returns:
-        dict: Filtered headers based on pass_through_headers.
-    """
-    if not pass_through_headers:
-        return {}
-
-    extracted_headers: dict[str, str] = {}
-    for key in pass_through_headers:
-        if key in headers:
-            extracted_headers[key] = headers[key]
-        else:
-            # fastapi makes all header keys lowercase, handling that here
-            lowercase_key = key.lower()
-            if lowercase_key in headers:
-                extracted_headers[lowercase_key] = headers[lowercase_key]
-    return extracted_headers
-
-
-def process_kg_commands(
-    message: str,
-    persona_name: str,
-    tenant_id: str,  # noqa: ARG001
-    db_session: Session,
-) -> None:
-    # Temporarily, until we have a draft UI for the KG Operations/Management
-    # TODO: move to api endpoint once we get frontend
-    if not persona_name.startswith(TMP_DRALPHA_PERSONA_NAME):
-        return
-
-    kg_config_settings = get_kg_config_settings()
-    if not is_kg_config_settings_enabled_valid(kg_config_settings):
-        return
-
-    if message == "kg_setup":
-        populate_missing_default_entity_types__commit(db_session=db_session)
-        raise KGException("KG setup done")
+    return chat_session
 
 
 def _get_or_extract_plaintext(
     file_id: str,
     extract_fn: Callable[[], str],
+    store_on_miss: bool = True,
 ) -> str:
     """Load cached plaintext for a file, or extract and store it.
 
@@ -393,9 +288,12 @@ def _get_or_extract_plaintext(
     # don't get re-fetched from object storage and re-attempted on every
     # subsequent chat turn.  Transient extraction errors surface as raised
     # exceptions, not empty returns, so they propagate without poisoning the
-    # cache.
+    # cache.  Callers pass store_on_miss=False when another writer owns the
+    # canonical plaintext for this key (e.g. the user-file worker, whose
+    # result may include image captions this inline extraction can't produce).
     content_text = extract_fn()
-    store_plaintext(file_id, content_text)
+    if store_on_miss:
+        store_plaintext(file_id, content_text)
     return content_text
 
 
@@ -423,6 +321,21 @@ def load_chat_file(
     file_type = ChatFileType(file_descriptor["type"])
     filename = file_descriptor.get("name")
 
+    # Look up the UserFile row first (when one exists) — it supplies the token
+    # count and tells us whether the user-file worker is still processing.
+    user_file_id_str = file_descriptor.get("user_file_id", "")
+    user_file: UserFile | None = None
+    if user_file_id_str:
+        try:
+            user_file = get_user_file_by_id(UUID(user_file_id_str), db_session)
+        except (ValueError, TypeError) as e:
+            logger.warning("Failed to look up user file for %s: %s", file_id, e)
+    token_count = user_file.token_count if user_file and user_file.token_count else 0
+    content_pending = user_file is not None and user_file.status in (
+        UserFileStatus.PROCESSING,
+        UserFileStatus.INDEXING,
+    )
+
     # Extract text content if it's a text file type (not an image). The
     # cached-plaintext path avoids reading the original bytes on the steady
     # state; only the cache miss branch opens the binary stream.
@@ -441,31 +354,21 @@ def load_chat_file(
         # Use the user_file_id as cache key when available (matches what
         # the celery indexing worker stores), otherwise fall back to the
         # file store id (covers code-interpreter-generated files, etc.).
-        user_file_id_str = file_descriptor.get("user_file_id")
         cache_key = user_file_id_str or file_id
 
         try:
-            content_text = _get_or_extract_plaintext(cache_key, _extract)
+            # While the worker is still processing, don't store the inline
+            # extraction under its key: the worker's canonical plaintext (which
+            # may include image captions) should be what later turns read.
+            content_text = _get_or_extract_plaintext(
+                cache_key, _extract, store_on_miss=not content_pending
+            )
         except Exception as e:
             logger.warning(
                 "Failed to retrieve content for file %s: %s",
                 file_id,
                 str(e),
             )
-
-    # Get token count from UserFile if available
-    token_count = 0
-    user_file_id_str = file_descriptor.get("user_file_id")
-    if user_file_id_str:
-        try:
-            user_file_id = UUID(user_file_id_str)
-            user_file = (
-                db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
-            )
-            if user_file and user_file.token_count:
-                token_count = user_file.token_count
-        except (ValueError, TypeError) as e:
-            logger.warning("Failed to get token count for file %s: %s", file_id, e)
 
     def _load_content() -> bytes:
         # Chat messages keep file references in their JSONB `files` column, but
@@ -501,6 +404,7 @@ def load_chat_file(
         content_text=content_text,
         token_count=token_count,
         loader=_load_content,
+        content_pending=content_pending,
     )
 
 
@@ -563,7 +467,7 @@ def convert_chat_history_basic(
             continue
 
         message = chat_message.message or ""
-        token_count = getattr(chat_message, "token_count", None)
+        token_count = getattr(chat_message, "token_count", None)  # ods: ignore[getattr]
         if token_count is None:
             token_count = token_counter(message)
 
@@ -697,6 +601,7 @@ def convert_chat_history(
                     file_type=text_file.file_type,
                     content_text=text_file.content_text,
                     token_count=text_file.token_count,
+                    content_pending=text_file.content_pending,
                 )
                 simple_messages.append(ctx.message)
                 all_injected_file_metadata[tool_id] = ctx.tool_metadata
@@ -730,7 +635,8 @@ def convert_chat_history(
                     message=chat_message.message,
                     token_count=chat_message.token_count + image_token_count,
                     message_type=MessageType.USER,
-                    image_files=image_files if image_files else None,
+                    image_files=image_files or None,
+                    image_token_count=image_token_count,
                 )
             )
 
@@ -797,11 +703,7 @@ def convert_chat_history(
                         simple_messages.append(
                             ChatMessageSimple(
                                 message=tool_response_message,
-                                token_count=(
-                                    token_counter(tool_response_message)
-                                    if tool_name == IMAGE_GENERATION_TOOL_NAME
-                                    else 20
-                                ),
+                                token_count=token_counter(tool_response_message),
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
                                 tool_call_id=tool_call.tool_call_id,
                                 image_files=None,
@@ -923,18 +825,22 @@ def create_tool_call_failure_messages(
 
     messages: list[ChatMessageSimple] = [assistant_msg]
 
-    # Create a TOOL_CALL_RESPONSE failure message for each tool call
-    for tool_call in tool_calls:
-        failure_response_msg = ChatMessageSimple(
-            message=TOOL_CALL_FAILURE_PROMPT,
-            token_count=50,  # Tiny overestimate
-            message_type=MessageType.TOOL_CALL_RESPONSE,
-            tool_call_id=tool_call.tool_call_id,
-            image_files=None,
-        )
-        messages.append(failure_response_msg)
+    messages.extend(
+        create_tool_call_failure_response(tool_call.tool_call_id)
+        for tool_call in tool_calls
+    )
 
     return messages
+
+
+def create_tool_call_failure_response(tool_call_id: str) -> ChatMessageSimple:
+    return ChatMessageSimple(
+        message=TOOL_CALL_FAILURE_PROMPT,
+        token_count=50,  # Tiny overestimate
+        message_type=MessageType.TOOL_CALL_RESPONSE,
+        tool_call_id=tool_call_id,
+        image_files=None,
+    )
 
 
 def build_python_chat_files_from_search_docs(

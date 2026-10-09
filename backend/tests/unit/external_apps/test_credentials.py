@@ -55,7 +55,7 @@ def test_extra_credentials_are_ignored() -> None:
 
 def test_non_string_template_value_skipped() -> None:
     headers = build_auth_headers(
-        {"Authorization": "Bearer {t}", "Bad": 123},  # type: ignore[dict-item]
+        {"Authorization": "Bearer {t}", "Bad": 123},
         {"t": "x"},
     )
     assert headers == {"Authorization": "Bearer x"}

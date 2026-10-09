@@ -14,8 +14,7 @@ import secrets
 from fastapi import Request
 
 from onyx.auth.constants import BEARER_PREFIX
-from onyx.configs.app_configs import DISABLE_METRICS_AUTH
-from onyx.configs.app_configs import METRICS_AUTH_TOKEN
+from onyx.configs.app_configs import DISABLE_METRICS_AUTH, METRICS_AUTH_TOKEN
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 

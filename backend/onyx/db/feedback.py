@@ -1,31 +1,26 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import and_
-from sqlalchemy import asc
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import exists
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, and_, asc, delete, desc, select
+from sqlalchemy.orm import Session, aliased
 
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import SearchFeedbackType
+from onyx.auth.permissions import has_global_permission
+from onyx.configs.constants import MessageType, SearchFeedbackType
 from onyx.db.chat import get_chat_message
-from onyx.db.enums import AccessType
-from onyx.db.models import ChatMessageFeedback
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
+    select_cc_pair_ids_for_user,
+)
+from onyx.db.enums import Permission
+from onyx.db.models import (
+    ChatMessageFeedback,
+    ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
+    DocumentRetrievalFeedback,
+    User,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import DocumentRetrievalFeedback
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -43,61 +38,41 @@ def _fetch_db_doc_by_id(doc_id: str, db_session: Session) -> DbDocument:
 
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
-    if user.role == UserRole.ADMIN:
+    """Boost and hide are Operator actions. A document is readable when a pair the
+    user may operate serves it, and editable when every pair serving it is one the
+    user may operate, so an edit cannot reach documents other managers serve."""
+    # MANAGE_CONNECTORS is org-wide over connectors, so boost/hide sees every
+    # document the same way an admin does; without this the routes would admit
+    # the holder and then silently return only their own groups' documents.
+    if has_global_permission(
+        user, Permission.FULL_ADMIN_PANEL_ACCESS
+    ) or has_global_permission(user, Permission.MANAGE_CONNECTORS):
         return stmt
 
-    stmt = stmt.distinct()
-    DocByCC = aliased(DocumentByConnectorCredentialPair)
-    CCPair = aliased(ConnectorCredentialPair)
-    UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)
-    User__UG = aliased(User__UserGroup)
-
-    """
-    Here we select documents by relation:
-    User -> User__UserGroup -> UserGroup__ConnectorCredentialPair ->
-    ConnectorCredentialPair -> DocumentByConnectorCredentialPair -> Document
-    """
-    stmt = (
-        stmt.outerjoin(DocByCC, DocByCC.id == DbDocument.id)
-        .outerjoin(
-            CCPair,
+    DocCCPair = aliased(ConnectorCredentialPair)
+    document_cc_pair_ids = (
+        select(DocCCPair.id)
+        .join(
+            DocumentByConnectorCredentialPair,
             and_(
-                CCPair.connector_id == DocByCC.connector_id,
-                CCPair.credential_id == DocByCC.credential_id,
+                DocumentByConnectorCredentialPair.connector_id
+                == DocCCPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == DocCCPair.credential_id,
             ),
         )
-        .outerjoin(UG__CCpair, UG__CCpair.cc_pair_id == CCPair.id)
-        .outerjoin(User__UG, User__UG.user_group_id == UG__CCpair.user_group_id)
+        .where(DocumentByConnectorCredentialPair.id == DbDocument.id)
     )
+    operable_cc_pair_ids = select_cc_pair_ids_for_user(user, CCPairAccessLevel.OPERATE)
 
-    """
-    Filter Documents by:
-    - if the user is in the user_group that owns the object
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out objects that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all objects in the groups the user is a curator
-    for (as well as public objects as well)
-    """
-
-    # Anonymous users only see public documents
-    if user.is_anonymous:
-        where_clause = CCPair.access_type == AccessType.PUBLIC
-        return stmt.where(where_clause)
-
-    where_clause = User__UG.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UG.is_curator == True  # noqa: E712
-    if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        where_clause &= ~exists().where(UG__CCpair.cc_pair_id == CCPair.id).where(
-            ~UG__CCpair.user_group_id.in_(user_groups)
-        ).correlate(CCPair)
-    else:
-        where_clause |= CCPair.access_type == AccessType.PUBLIC
-
-    return stmt.where(where_clause)
+    stmt = stmt.where(
+        document_cc_pair_ids.where(DocCCPair.id.in_(operable_cc_pair_ids)).exists()
+    )
+    if not get_editable:
+        return stmt
+    return stmt.where(
+        ~document_cc_pair_ids.where(DocCCPair.id.not_in(operable_cc_pair_ids)).exists()
+    )
 
 
 def fetch_docs_ranked_by_boost_for_user(
@@ -173,7 +148,7 @@ def create_doc_retrieval_feedback(
     clicked: bool = False,
     feedback: SearchFeedbackType | None = None,
 ) -> None:
-    """Creates a new Document feedback row and updates the boost value in Postgres and Vespa"""
+    """Creates a new Document feedback row and updates the boost value in Postgres and the document index"""
     db_doc = _fetch_db_doc_by_id(document_id, db_session)
 
     retrieval_feedback = DocumentRetrievalFeedback(

@@ -1,14 +1,20 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Label } from "@opal/layouts";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { cn } from "@opal/utils";
+import {
+  Button,
+  Dropdown,
+  InputTypeIn,
+  type DropdownMenuItem,
+} from "@opal/components";
 import { SvgX } from "@opal/icons";
-import { Button } from "@opal/components";
 
 interface ConnectorMultiSelectProps {
   name: string;
@@ -28,13 +34,12 @@ export const ConnectorMultiSelect = ({
   selectedIds,
   onChange,
   disabled = false,
-  placeholder = "Search connectors...",
+  placeholder,
   showError = false,
 }: ConnectorMultiSelectProps) => {
+  const t = useTranslations("common.connectorMultiSelect");
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedConnectors = connectors.filter((connector) =>
     selectedIds.includes(connector.cc_pair_id)
@@ -47,13 +52,6 @@ export const ConnectorMultiSelect = ({
   const allConnectorsSelected =
     connectors.length > 0 && unselectedConnectors.length === 0;
 
-  const filteredUnselectedConnectors = unselectedConnectors.filter(
-    (connector) => {
-      const connectorName = connector.name || connector.connector.source;
-      return connectorName.toLowerCase().includes(searchQuery.toLowerCase());
-    }
-  );
-
   useEffect(() => {
     if (allConnectorsSelected) {
       setSearchQuery("");
@@ -61,52 +59,72 @@ export const ConnectorMultiSelect = ({
   }, [allConnectorsSelected, selectedIds]);
 
   const selectConnector = (connectorId: number) => {
-    const newSelectedIds = [...selectedIds, connectorId];
-    onChange(newSelectedIds);
+    onChange([...selectedIds, connectorId]);
     setSearchQuery("");
-
-    const willAllBeSelected = connectors.length === newSelectedIds.length;
-
-    if (!willAllBeSelected) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 0);
-    }
   };
 
   const removeConnector = (connectorId: number) => {
     onChange(selectedIds.filter((id) => id !== connectorId));
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        inputRef.current !== event.target &&
-        !inputRef.current?.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      setOpen(false);
-    }
-  };
-
   const effectivePlaceholder = allConnectorsSelected
-    ? "All connectors selected"
-    : placeholder;
+    ? t("allSelected.placeholder")
+    : (placeholder ?? t("search.placeholder"));
 
   const isInputDisabled = disabled;
+
+  // One message row when there is nothing to pick; else the unpicked
+  // connectors, each a custom row since its title is a component.
+  const message = allConnectorsSelected
+    ? t("allSelected.description")
+    : unselectedConnectors.length === 0
+      ? connectors.length === 0
+        ? t("noPrivateConnectors.text")
+        : t("noMoreConnectors.text")
+      : undefined;
+  const items: DropdownMenuItem[] =
+    message !== undefined
+      ? [
+          {
+            kind: "custom",
+            id: "message",
+            disabled: true,
+            pinned: true,
+            render: ({ props }) => (
+              <div {...props} className="py-4 px-3">
+                <Text as="p" text03 className="text-center text-xs">
+                  {message}
+                </Text>
+              </div>
+            ),
+          },
+        ]
+      : unselectedConnectors.map((connector) => ({
+          kind: "custom",
+          id: String(connector.cc_pair_id),
+          keywords: [connector.name || connector.connector.source],
+          onActivate: () => selectConnector(connector.cc_pair_id),
+          keepOpen: true,
+          render: ({ highlighted, props }) => (
+            <div
+              {...props}
+              className={cn(
+                "w-full flex items-center justify-between py-2 px-3 cursor-pointer rounded-08 text-xs",
+                highlighted && "bg-background-neutral-01"
+              )}
+            >
+              <div className="flex items-center truncate me-2">
+                <ConnectorTitle
+                  connector={connector.connector}
+                  ccPairId={connector.cc_pair_id}
+                  ccPairName={connector.name}
+                  isLink={false}
+                  showMetadata={false}
+                />
+              </div>
+            </div>
+          ),
+        }));
 
   return (
     <div className="flex flex-col w-full space-y-2 mb-4">
@@ -117,74 +135,31 @@ export const ConnectorMultiSelect = ({
       )}
 
       <Text as="p" mainUiMuted text03>
-        All documents indexed by the selected connectors will be part of this
-        document set.
+        {t("documentSetHint.description")}
       </Text>
-      <div className="relative">
-        <InputTypeIn
-          ref={inputRef}
-          searchIcon
-          placeholder={effectivePlaceholder}
-          value={searchQuery}
-          variant={isInputDisabled ? "disabled" : undefined}
-          onChange={(e) => {
-            if (!allConnectorsSelected) {
+      <Dropdown open={open} onOpenChange={setOpen}>
+        <Dropdown.Trigger asChild typeIn behavior="open">
+          <InputTypeIn
+            searchIcon
+            placeholder={effectivePlaceholder}
+            value={searchQuery}
+            variant={isInputDisabled ? "disabled" : undefined}
+            onChange={(e) => {
+              if (allConnectorsSelected) return;
               setSearchQuery(e.target.value);
+              // Typing opens the list, as a type-in does.
               setOpen(true);
-            }
-          }}
-          onFocus={() => {
-            setOpen(true);
-          }}
-          onKeyDown={handleKeyDown}
+            }}
+            data-testid="connector-search-input"
+          />
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={effectivePlaceholder}
+          query={searchQuery}
+          items={items}
+          noMatchText={t("noMatches.text")}
         />
-
-        {open && (
-          <div
-            ref={dropdownRef}
-            className="absolute z-50 w-full mt-1 rounded-12 border border-border-02 bg-background-neutral-00 shadow-md default-scrollbar max-h-[300px] overflow-auto"
-          >
-            {allConnectorsSelected ? (
-              <div className="py-4 px-3">
-                <Text as="p" text03 className="text-center text-xs">
-                  All available connectors have been selected. Remove connectors
-                  below to add different ones.
-                </Text>
-              </div>
-            ) : filteredUnselectedConnectors.length === 0 ? (
-              <div className="py-4 px-3">
-                <Text as="p" text03 className="text-center text-xs">
-                  {searchQuery
-                    ? "No matching connectors found"
-                    : connectors.length === 0
-                      ? "No private connectors available. Create a private connector first."
-                      : "No more connectors available"}
-                </Text>
-              </div>
-            ) : (
-              <div>
-                {filteredUnselectedConnectors.map((connector) => (
-                  <div
-                    key={connector.cc_pair_id}
-                    className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-background-neutral-01 text-xs"
-                    onClick={() => selectConnector(connector.cc_pair_id)}
-                  >
-                    <div className="flex items-center truncate mr-2">
-                      <ConnectorTitle
-                        connector={connector.connector}
-                        ccPairId={connector.cc_pair_id}
-                        ccPairName={connector.name}
-                        isLink={false}
-                        showMetadata={false}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      </Dropdown>
 
       {selectedConnectors.length > 0 ? (
         <div className="mt-3">
@@ -209,8 +184,8 @@ export const ConnectorMultiSelect = ({
                   prominence="tertiary"
                   size="sm"
                   type="button"
-                  aria-label="Remove connector"
-                  tooltip="Remove connector"
+                  aria-label={t("removeConnector.tooltip")}
+                  tooltip={t("removeConnector.tooltip")}
                   onClick={() => removeConnector(connector.cc_pair_id)}
                   icon={SvgX}
                 />
@@ -220,7 +195,7 @@ export const ConnectorMultiSelect = ({
         </div>
       ) : (
         <div className="mt-3 p-3 border border-dashed border-border-02 rounded-12 bg-background-neutral-01 text-text-03 text-xs">
-          No connectors selected. Search and select connectors above.
+          {t("noneSelected.text")}
         </div>
       )}
 

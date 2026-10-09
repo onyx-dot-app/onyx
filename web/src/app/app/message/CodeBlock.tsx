@@ -2,6 +2,7 @@ import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";
 import { SvgCheck, SvgCode, SvgCopy } from "@opal/icons";
+import { useTranslations } from "next-intl";
 
 interface CodeBlockProps {
   className?: string;
@@ -22,6 +23,7 @@ export const CodeBlock = memo(function CodeBlock({
   showHeader = true,
   noPadding = false,
 }: CodeBlockProps) {
+  const t = useTranslations("chat.messages");
   const [copied, setCopied] = useState(false);
 
   const language = useMemo(() => {
@@ -41,31 +43,35 @@ export const CodeBlock = memo(function CodeBlock({
   }, [codeText]);
 
   const CopyButton = () => (
-    <div
-      className="ml-auto cursor-pointer select-none"
-      onMouseDown={handleCopy}
+    <button
+      type="button"
+      className="ms-auto cursor-pointer select-none"
+      onClick={handleCopy}
     >
       {copied ? (
         <div className="flex items-center space-x-2">
           <SvgCheck height={14} width={14} stroke="currentColor" />
           <Text as="p" secondaryMono>
-            Copied!
+            {t("codeBlock.copyButton.copiedLabel")}
           </Text>
         </div>
       ) : (
         <div className="flex items-center space-x-2">
           <SvgCopy height={14} width={14} stroke="currentColor" />
           <Text as="p" secondaryMono>
-            Copy
+            {t("codeBlock.copyButton.label")}
           </Text>
         </div>
       )}
-    </div>
+    </button>
   );
 
   if (typeof children === "string" && !language) {
     return (
+      // dir="ltr": code is always LTR, even inside RTL prose. The dir
+      // attribute also bidi-isolates the run from the surrounding text.
       <span
+        dir="ltr"
         data-testid="code-block"
         className={cn(
           "font-mono",
@@ -86,10 +92,23 @@ export const CodeBlock = memo(function CodeBlock({
     );
   }
 
+  // Concentric with the wrapper: inner radius = outer radius - the gap between
+  // the two boxes. Both come from vars the wrapper sets, so they stay in sync.
+  const innerRounding =
+    "rounded-[calc(var(--code-block-radius,0px)-var(--code-block-gap,0px))]!";
+
   const CodeContent = () => {
     if (!language) {
       return (
-        <pre className="p-2! m-0 overflow-x-auto w-0 min-w-full hljs">
+        // dir="ltr" on both pre branches: code is always LTR, even when
+        // the surrounding message resolved to RTL.
+        <pre
+          dir="ltr"
+          className={cn(
+            "p-2! m-0 overflow-x-auto w-0 min-w-full hljs",
+            innerRounding
+          )}
+        >
           <code className={`text-sm hljs ${className}`}>
             {Array.isArray(children)
               ? children.map((child, index) => (
@@ -102,7 +121,13 @@ export const CodeBlock = memo(function CodeBlock({
     }
 
     return (
-      <pre className="p-2! m-0 overflow-x-auto w-0 min-w-full hljs">
+      <pre
+        dir="ltr"
+        className={cn(
+          "p-2! m-0 overflow-x-auto w-0 min-w-full hljs",
+          innerRounding
+        )}
+      >
         <code className="text-xs">
           {Array.isArray(children)
             ? children.map((child, index) => (
@@ -120,7 +145,10 @@ export const CodeBlock = memo(function CodeBlock({
         <div
           className={cn(
             "bg-background-tint-00 rounded-12 max-w-full min-w-0",
-            !noPadding && "px-1 pb-1"
+            "[--code-block-radius:var(--radius-12)]",
+            noPadding
+              ? "[--code-block-gap:0px]"
+              : "px-1 pb-1 [--code-block-gap:0.25rem]"
           )}
         >
           {language && (

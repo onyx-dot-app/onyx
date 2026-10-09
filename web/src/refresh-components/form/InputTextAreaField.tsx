@@ -1,9 +1,7 @@
 "use client";
 
 import { useField } from "formik";
-import InputTextArea, {
-  InputTextAreaProps,
-} from "@/refresh-components/inputs/InputTextArea";
+import { InputTextArea, type InputTextAreaProps } from "@opal/components";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 
 export interface InputTextAreaFieldProps extends Omit<

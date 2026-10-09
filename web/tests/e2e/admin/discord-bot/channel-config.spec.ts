@@ -17,6 +17,7 @@ import {
   expect,
   gotoGuildDetailPage,
 } from "@tests/e2e/admin/discord-bot/fixtures";
+import { DiscordGuildPage } from "@tests/e2e/pages/DiscordGuildPage";
 
 // Disable retries for Discord bot tests - attempt once at most
 test.describe.configure({ retries: 0 });
@@ -44,21 +45,19 @@ test.describe("Guild Detail Page & Channel Configuration", () => {
     mockRegisteredGuild,
   }) => {
     await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+    const guildPage = new DiscordGuildPage(adminPage);
 
     // Should show "Default Agent" section
-    await expect(adminPage.locator("text=Default Agent").first()).toBeVisible({
+    await expect(guildPage.defaultAgentHeading).toBeVisible({
       timeout: 10000,
     });
 
-    // Find the persona/agent dropdown (InputSelect)
-    const agentDropdown = adminPage.locator('button:has-text("Default Agent")');
-
-    if (await agentDropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await agentDropdown.click();
-
-      // Dropdown should show available options
-      const options = adminPage.locator('[role="option"]');
-      await expect(options.first()).toBeVisible({ timeout: 5000 });
+    if (
+      await guildPage.defaultAgentSelect
+        .isVisible({ timeout: 5000 })
+        .catch(() => false)
+    ) {
+      await guildPage.expectDefaultAgentOptions();
     }
   });
 });

@@ -1,7 +1,6 @@
 """Tests for get_index_attempt_errors_across_connectors."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from onyx.db.index_attempt import get_index_attempt_errors_across_connectors

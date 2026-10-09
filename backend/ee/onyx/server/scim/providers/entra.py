@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
-from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
-from ee.onyx.server.scim.providers.base import COMMON_IGNORED_PATCH_PATHS
-from ee.onyx.server.scim.providers.base import ScimProvider
+from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA, SCIM_USER_SCHEMA
+from ee.onyx.server.scim.providers.base import COMMON_IGNORED_PATCH_PATHS, ScimProvider
 
 _ENTRA_IGNORED_PATCH_PATHS = COMMON_IGNORED_PATCH_PATHS
 

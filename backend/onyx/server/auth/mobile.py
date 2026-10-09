@@ -17,8 +17,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from onyx.auth.mobile_sso.code_store import consume_sso_code
-from onyx.auth.users import fastapi_users
-from onyx.auth.users import mobile_auth_backend
+from onyx.auth.users import fastapi_users, mobile_auth_backend
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 

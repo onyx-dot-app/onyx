@@ -1,7 +1,5 @@
 import os
 
-PROMPTS_YAML = "./onyx/seeding/prompts.yaml"
-PERSONAS_YAML = "./onyx/seeding/personas.yaml"
 NUM_RETURNED_HITS = 50
 
 # May be less depending on model
@@ -14,12 +12,9 @@ MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
 
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
-# Capped in Vespa at 0.5
 DOC_TIME_DECAY = float(
     os.environ.get("DOC_TIME_DECAY") or 0.5  # Hits limit at 2 years by default
 )
-BASE_RECENCY_DECAY = 0.5
-FAVOR_RECENT_DECAY_MULTIPLIER = 2.0
 # For the highest matching base size chunk, how many chunks above and below do we pull in by default
 # Note this is not in any of the deployment configs yet
 # Currently only applies to search flow not chat
@@ -30,6 +25,21 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Default total timeout for LLM.invoke. It reuses LLM_SOCKET_READ_TIMEOUT so that
+# existing operator tuning still applies: on a plain request, the single socket
+# read was already the whole call.
+LLM_INVOKE_TIMEOUT_S = LLM_SOCKET_READ_TIMEOUT
+# Total per-call timeout for image summarization. Unlike LLM_SOCKET_READ_TIMEOUT
+# (per-packet gap), this bounds the whole call so a keepalive-only stream can't
+# wedge a docprocessing thread. A generous backstop against hangs.
+IMAGE_SUMMARIZATION_TIMEOUT = int(
+    os.environ.get("IMAGE_SUMMARIZATION_TIMEOUT") or "300"
+)  # 300 seconds (5 min)
+# Same backstop for contextual-RAG doc/chunk summaries. These are short,
+# non-reasoning calls, so this is generous headroom.
+CONTEXTUAL_RAG_LLM_TIMEOUT = int(
+    os.environ.get("CONTEXTUAL_RAG_LLM_TIMEOUT") or "180"
+)  # 180 seconds
 # Max silent gap before the chat stream emits a keepalive packet; must stay below
 # the smallest proxy idle timeout in front (ALBs default to 60s).
 CHAT_HEARTBEAT_INTERVAL_S = int(os.environ.get("CHAT_HEARTBEAT_INTERVAL_S") or "15")
@@ -86,8 +96,6 @@ HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 # Internet Search
 NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)
 NUM_INTERNET_SEARCH_CHUNKS = int(os.environ.get("NUM_INTERNET_SEARCH_CHUNKS") or 50)
-
-VESPA_SEARCHER_THREADS = int(os.environ.get("VESPA_SEARCHER_THREADS") or 2)
 
 # Whether or not to use the semantic & keyword search expansions for Basic Search
 USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH = (

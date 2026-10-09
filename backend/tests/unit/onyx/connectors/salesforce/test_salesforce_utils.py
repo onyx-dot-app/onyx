@@ -1,7 +1,9 @@
 import pytest
 
-from onyx.connectors.salesforce.utils import is_valid_sf_identifier
-from onyx.connectors.salesforce.utils import validate_sf_identifier
+from onyx.connectors.salesforce.utils import (
+    is_valid_sf_identifier,
+    validate_sf_identifier,
+)
 
 
 class TestSfIdentifier:

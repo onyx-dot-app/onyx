@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useState } from "react";
 import { SelectCard } from "@opal/components";
 import { Button } from "@opal/components";
 import { Content } from "@opal/layouts";
@@ -13,8 +14,8 @@ import {
 import { Interactive } from "@opal/core";
 
 const STATES = ["empty", "filled", "selected"] as const;
-const PADDING_VARIANTS = ["fit", "2xs", "xs", "sm", "md", "lg"] as const;
-const ROUNDING_VARIANTS = ["xs", "sm", "md", "lg"] as const;
+const PADDING_VARIANTS = [0, 0.5, 1, 2, 4, 6] as const;
+const ROUNDING_VARIANTS = [1, 2, 3, 4] as const;
 
 const meta = {
   title: "opal/components/SelectCard",
@@ -226,4 +227,112 @@ export const RoundingVariants: Story = {
       ))}
     </div>
   ),
+};
+
+/** Expandable: the header toggles, the fold holds the body. */
+export const Expandable: Story = {
+  render: function ExpandableStory() {
+    const [open, setOpen] = useState(false);
+    return (
+      <div className="w-96">
+        <SelectCard
+          expandable
+          expanded={open}
+          state={open ? "selected" : "empty"}
+          onClick={() => setOpen((value) => !value)}
+          expandedContent={
+            <div className="p-4">
+              <Content
+                sizePreset="main-ui"
+                variant="body"
+                title="Fold body"
+                description="Clicks in here belong to the body, not the card."
+              />
+            </div>
+          }
+        >
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgGlobe}
+            title="New account"
+            description="Click the header to expand."
+          />
+        </SelectCard>
+      </div>
+    );
+  },
+};
+
+/** `expandableContentHeight="full"` drops the 20rem cap on the fold. */
+export const ExpandableFitHeight: Story = {
+  render: function ExpandableFitHeightStory() {
+    const [open, setOpen] = useState(true);
+    return (
+      <div className="w-96">
+        <SelectCard
+          expandable
+          expanded={open}
+          expandableContentHeight="full"
+          state="filled"
+          onClick={() => setOpen((value) => !value)}
+          expandedContent={
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 8 }, (_, index) => (
+                <Content
+                  key={index}
+                  sizePreset="secondary"
+                  variant="body"
+                  title={`Row ${index + 1}`}
+                />
+              ))}
+            </div>
+          }
+        >
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgGlobe}
+            title="Tall body"
+            description="No max-height, no scrollbar."
+          />
+        </SelectCard>
+      </div>
+    );
+  },
+};
+
+/** The caller decides what an open card paints: this one stays selected. */
+export const ExpandableStaysSelected: Story = {
+  render: function ExpandableStaysSelectedStory() {
+    const [open, setOpen] = useState(true);
+    return (
+      <div className="w-96">
+        <SelectCard
+          expandable
+          expanded={open}
+          state="selected"
+          onClick={() => setOpen((value) => !value)}
+          expandedContent={
+            <div className="p-4">
+              <Content
+                sizePreset="main-ui"
+                variant="body"
+                title="Selected while open"
+                description="The fold carries the selection border too."
+              />
+            </div>
+          }
+        >
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgGlobe}
+            title="Still selected"
+            description="state is the caller's, open or closed."
+          />
+        </SelectCard>
+      </div>
+    );
+  },
 };

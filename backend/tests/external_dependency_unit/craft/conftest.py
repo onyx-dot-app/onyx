@@ -5,12 +5,10 @@ from __future__ import annotations
 import hashlib
 import io
 import zipfile
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
+from collections.abc import Callable, Generator, Iterable
+from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
@@ -18,35 +16,43 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.enums import AccountType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SkillSharePermission
-from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import Skill__UserGroup
-from onyx.db.models import User
-from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.enums import (
+    AccountType,
+    BuildSessionStatus,
+    SandboxStatus,
+    SkillSharePermission,
+)
+from onyx.db.llm import (
+    fetch_default_llm_model,
+    fetch_existing_llm_provider,
+    remove_llm_provider,
+    update_default_provider,
+    upsert_llm_provider,
+)
+from onyx.db.models import (
+    BuildSession,
+    Sandbox,
+    Skill,
+    Skill__UserGroup,
+    User,
+    UserGroup,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.common.craft.skill_table_isolation import restore_skill_tables
-from tests.common.craft.skill_table_isolation import snapshot_skill_tables
+from tests.common.craft.skill_table_isolation import (
+    restore_skill_tables,
+    snapshot_skill_tables,
+)
 from tests.common.craft.stubs import StubSandboxManager
 
 
@@ -125,6 +131,13 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
+@pytest.fixture(autouse=True)
+def _set_onyx_server_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    # build_onyx_gateway_config returns None (and provisioning raises) without
+    # a server URL; the CI env doesn't set one for this suite.
+    monkeypatch.setattr(llm_config, "ONYX_SERVER_URL", "http://api-server:8080")
+
+
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
@@ -146,6 +159,11 @@ def test_user(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> Generator[User, None, None]:
+    """A group-less, permission-less external-permission placeholder.
+
+    That is deliberate: it matches the row production's permission sync creates.
+    Use ``make_user(standard_account=True)`` when a test needs real authority.
+    """
     password_helper = PasswordHelper()
     user = User(
         id=uuid4(),
@@ -154,7 +172,6 @@ def test_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
     db_session.add(user)
@@ -199,7 +216,11 @@ def sandbox(
         owner = user or test_user
         row = create_sandbox__no_commit(db_session=db_session, user_id=owner.id)
         if status != SandboxStatus.PROVISIONING:
-            update_sandbox_status__no_commit(db_session, row.id, status)
+            # Raw seed of an arbitrary lifecycle state; production writes go
+            # through the attempt-numbered helpers.
+            row.status = status
+            if status == SandboxStatus.RUNNING:
+                row.last_heartbeat = datetime.now(timezone.utc)
         db_session.commit()
         db_session.refresh(row)
         return row
@@ -269,7 +290,7 @@ def seeded_skill(
     request.addfinalizer(_cleanup)
 
     def _make(
-        slug: str,
+        name: str,
         public: bool = False,
         groups: Iterable[UserGroup] | None = None,
         bundle_files: dict[str, bytes | str] | None = None,
@@ -278,7 +299,7 @@ def seeded_skill(
         if bundle_files is None:
             bundle_files = {
                 "SKILL.md": (
-                    f"---\nname: {slug}\ndescription: Seeded skill {slug}\n---\n"
+                    f"---\nname: {name}\ndescription: Seeded skill {name}\n---\n"
                 ),
             }
         bundle_bytes = _build_zip(bundle_files)
@@ -286,7 +307,7 @@ def seeded_skill(
 
         bundle_file_id = file_store.save_file(
             content=io.BytesIO(bundle_bytes),
-            display_name=f"{slug}.zip",
+            display_name=f"{name}.zip",
             file_origin=FileOrigin.SKILL_BUNDLE,
             file_type="application/zip",
         )
@@ -294,13 +315,11 @@ def seeded_skill(
 
         skill = Skill(
             id=uuid4(),
-            slug=slug,
-            name=slug,
-            description=f"Seeded skill {slug}",
+            name=name,
+            description=f"Seeded skill {name}",
             bundle_file_id=bundle_file_id,
             bundle_sha256=bundle_sha256,
             public_permission=SkillSharePermission.VIEWER if public else None,
-            enabled=True,
             author_user_id=author_user_id,
         )
         db_session.add(skill)

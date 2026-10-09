@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// render writes the result to w in the requested format.
+// render writes the result to w in a single format.
 func render(w io.Writer, format string, res *Result) error {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "", "text":
@@ -20,6 +20,78 @@ func render(w io.Writer, format string, res *Result) error {
 	default:
 		return fmt.Errorf("unknown format %q (want text, json, or sarif)", format)
 	}
+}
+
+// renderReport renders res in each format named in a comma-separated list,
+// routing the human-readable text report and the machine-readable formats to
+// separate streams so both can be produced in one run. Machine formats (json,
+// sarif) go to stdout — where CI redirects them to a file — while the text
+// report goes to stderr, keeping it out of that file but visible in the log. A
+// lone format always goes to stdout, so `--format=sarif > file` is unchanged.
+//
+// At most one machine format may be requested (two would concatenate into
+// invalid output on stdout). All formats are validated before anything is
+// written, so an unknown format can't leave a half-written report behind.
+func renderReport(stdout, stderr io.Writer, format string, res *Result) error {
+	formats := parseFormats(format)
+
+	dataFormats := 0
+	for _, f := range formats {
+		if !knownFormat(f) {
+			return fmt.Errorf("unknown format %q (want text, json, or sarif)", f)
+		}
+		if isDataFormat(f) {
+			dataFormats++
+		}
+	}
+	if dataFormats > 1 {
+		return fmt.Errorf("at most one machine-readable format (json, sarif) may be requested; got %q", format)
+	}
+
+	lone := len(formats) == 1
+	for _, f := range formats {
+		w := stdout
+		// The text report shares stdout only when it's the sole format; combined
+		// with a data format it moves to stderr so it can't corrupt the data.
+		if f == "text" && !lone {
+			w = stderr
+		}
+		if err := render(w, f, res); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// parseFormats splits a comma-separated --format value into a normalized,
+// order-preserving, de-duplicated list. An empty or whitespace-only value
+// defaults to text.
+func parseFormats(format string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, part := range strings.Split(format, ",") {
+		f := strings.ToLower(strings.TrimSpace(part))
+		if f == "" || seen[f] {
+			continue
+		}
+		seen[f] = true
+		out = append(out, f)
+	}
+	if len(out) == 0 {
+		return []string{"text"}
+	}
+	return out
+}
+
+// knownFormat reports whether f is a format render understands.
+func knownFormat(f string) bool {
+	return f == "text" || f == "json" || f == "sarif"
+}
+
+// isDataFormat reports whether f is a machine-readable format written to stdout,
+// as opposed to the human-readable text report.
+func isDataFormat(f string) bool {
+	return f == "json" || f == "sarif"
 }
 
 func renderText(w io.Writer, res *Result) error {
@@ -51,7 +123,42 @@ func renderText(w io.Writer, res *Result) error {
 	}
 
 	_, _ = fmt.Fprintf(w, "\n%s\n", summaryLine(res))
+	if rb := runbook(res); rb != "" {
+		_, _ = fmt.Fprint(w, rb)
+	}
 	return nil
+}
+
+// runbook returns operator guidance shown beneath the text report when findings
+// are blocking the audit (i.e. the gate will fail). It spells out the two ways
+// to clear the gate — resolve the advisory, or suppress a reviewed-and-accepted
+// one — and prints a ready-to-fill `ods audit ignore add` command seeded from
+// the first blocking finding. It intentionally shows one example rather than a
+// command per finding, so suppressing every advisory takes a deliberate step.
+// Returns "" when nothing is blocking.
+func runbook(res *Result) string {
+	if len(res.Blocking) == 0 {
+		return ""
+	}
+
+	f := res.Blocking[0]
+	add := "ods audit ignore add " + f.ID
+	if f.Ecosystem != "" {
+		add += fmt.Sprintf(" --ecosystem %q", f.Ecosystem)
+	}
+	add += ` --reason "<why this is not exploitable in Onyx>"`
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nAction required: %d finding(s) at or above the fail-on threshold are blocking this audit.\n", len(res.Blocking))
+	b.WriteString("  - Resolve (preferred): upgrade or remove the affected package. Look up each\n")
+	b.WriteString("    advisory by its ID at https://osv.dev to find the fixed version.\n")
+	b.WriteString("  - Accept: if you've reviewed an advisory and it isn't exploitable in Onyx,\n")
+	b.WriteString("    suppress it in the shared allowlist (a --reason is required; add\n")
+	b.WriteString("    --expires YYYY-MM-DD to time-box it), then re-run the audit:\n\n")
+	fmt.Fprintf(&b, "      %s\n\n", add)
+	b.WriteString("    Repeat per advisory, and suppress only advisories you've assessed — this\n")
+	b.WriteString("    allowlist gates every deploy.\n")
+	return b.String()
 }
 
 // summaryLine builds a one-line tally of findings by severity.

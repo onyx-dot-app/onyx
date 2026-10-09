@@ -1,10 +1,11 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -15,7 +16,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -27,7 +28,6 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 const DEFAULT_API_BASE = "https://api.tokenfactory.nebius.com/v1";
@@ -46,6 +46,7 @@ function NebiusTokenfactoryModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: NebiusTokenfactoryModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<NebiusTokenfactoryModalValues>();
   const { setFieldValue } = formikProps;
 
@@ -60,13 +61,7 @@ function NebiusTokenfactoryModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(models));
   };
 
   // When editing a saved provider, the models load from the DB without the
@@ -85,13 +80,7 @@ function NebiusTokenfactoryModalInternals({
     })
       .then(({ models }) => {
         if (models.length > 0) {
-          setFieldValue(
-            "model_configurations",
-            mergeFetchedModelConfigurations(
-              models,
-              formikProps.values.model_configurations
-            )
-          );
+          formikProps.setValues(withFetchedModels(models));
         }
       })
       .catch(() => undefined);
@@ -101,14 +90,12 @@ function NebiusTokenfactoryModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription="Nebius TokenFactory endpoint URL (including API version)."
+        subDescription={t("nebius.apiBaseField.description")}
         placeholder={DEFAULT_API_BASE}
       />
 
       <APIKeyField
-        subDescription={markdown(
-          "Paste your API key from [Nebius TokenFactory](https://tokenfactory.nebius.com/) to load the available models."
-        )}
+        subDescription={markdown(t("nebius.apiKeyField.description"))}
       />
 
       {!isOnboarding && (
@@ -140,7 +127,9 @@ export default function NebiusTokenfactoryModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -159,7 +148,7 @@ export default function NebiusTokenfactoryModal({
     initialValues.api_base = DEFAULT_API_BASE;
   }
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
     apiKey: true,
   });
@@ -173,9 +162,12 @@ export default function NebiusTokenfactoryModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          t,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.NEBIUS_TOKENFACTORY,
           values,
           initialValues,
@@ -191,8 +183,8 @@ export default function NebiusTokenfactoryModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

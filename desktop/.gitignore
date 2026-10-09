@@ -23,5 +23,5 @@ npm-debug.log*
 .env
 .env.local
 
-# Generated files
-src-tauri/gen/schemas/acl-manifests.json
+# Generated files (regenerated per build host/platform; content drifts by OS)
+src-tauri/gen/schemas/

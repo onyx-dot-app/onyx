@@ -5,13 +5,11 @@ Tests for DiscordCacheManager class functionality.
 
 import asyncio
 import time
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.onyxbot.discord.cache import DiscordCacheManager
-from onyx.onyxbot.discord.cache import TenantDiscordData
+from onyx.onyxbot.discord.cache import DiscordCacheManager, TenantDiscordData
 
 
 class TestCacheInitialization:

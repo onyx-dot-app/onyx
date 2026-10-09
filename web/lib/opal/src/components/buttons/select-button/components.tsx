@@ -86,7 +86,7 @@ function SelectButton({
     <Text
       font={isLarge ? "main-ui-body" : "secondary-body"}
       color="inherit"
-      nowrap
+      wordWrap="whitespace-nowrap"
     >
       {children}
     </Text>
@@ -98,11 +98,11 @@ function SelectButton({
         type={type}
         size={size}
         width={width}
-        rounding={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
+        rounding={isLarge ? 3 : size === "2xs" ? 1 : 2}
       >
         <div
           className={cn(
-            "opal-select-button",
+            "opal-select-content",
             foldable && "interactive-foldable-host"
           )}
         >

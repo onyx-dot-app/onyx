@@ -1,0 +1,53 @@
+"""Unit-suite conftest.
+
+Unit tests assume OSS resolution unless they opt into EE via the shared
+``enable_ee`` fixture (see ``backend/tests/conftest.py``).
+"""
+
+from collections.abc import Generator
+from unittest.mock import patch
+
+import pytest
+
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_remote_catalog_fetch() -> Generator[None, None, None]:
+    """Keeps the unit suite offline: catalog misses must not reach GitHub.
+
+    Remote-catalog tests override this by patching
+    ``model_catalog._fetch_provider_file`` themselves. Patching that seam
+    (rather than ``httpx.get``) keeps every other httpx caller working.
+    """
+    from onyx.llm import model_catalog
+
+    with patch.object(
+        model_catalog,
+        "_fetch_provider_file",
+        side_effect=RuntimeError("remote catalog fetch in unit test"),
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_leaked_ee_state() -> Generator[None, None, None]:
+    """Undoes EE state leaked into the process by import side effects.
+
+    ``set_is_ee_if_available()`` runs at module level in ``onyx.main``
+    and every ``background/celery/versioned_apps`` module, and flips the
+    process-global EE flag whenever the build ships the EE code. A
+    unit test whose import chain reaches one of those modules therefore silently
+    switches every later test in the worker to EE resolution, breaking
+    OSS-asserting tests order-dependently. Runs before ``enable_ee`` (autouse
+    fixtures are instantiated first), so opting in still works.
+    """
+    if global_version.is_ee_version():
+        global_version.unset_ee()
+        # Entries resolved while the flag was flipped point at EE
+        # implementations; drop them along with the flag.
+        fetch_versioned_implementation.cache_clear()
+    yield

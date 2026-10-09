@@ -15,23 +15,25 @@ from collections.abc import Generator
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import LargeBinary
-from sqlalchemy import select
-from sqlalchemy import text
+from sqlalchemy import LargeBinary, select, text
 from sqlalchemy.orm import Session
 
-from ee.onyx.utils.encryption import _decrypt_bytes
-from ee.onyx.utils.encryption import _encrypt_string
-from ee.onyx.utils.encryption import _get_trimmed_key
+from ee.onyx.utils.encryption import _decrypt_bytes, _encrypt_string, _get_trimmed_key
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import Credential
-from onyx.db.models import EncryptedJson
-from onyx.db.models import EncryptedString
-from onyx.db.models import InternetSearchProvider
-from onyx.db.rotate_encryption_key import _discover_encrypted_columns
-from onyx.db.rotate_encryption_key import rotate_encryption_key
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import global_version
+from onyx.db.models import (
+    Credential,
+    EncryptedJson,
+    EncryptedString,
+    InternetSearchProvider,
+)
+from onyx.db.rotate_encryption_key import (
+    _discover_encrypted_columns,
+    rotate_encryption_key,
+)
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
+)
 
 EE_MODULE = "ee.onyx.utils.encryption"
 ROTATE_MODULE = "onyx.db.rotate_encryption_key"
@@ -103,7 +105,9 @@ class TestDiscoverEncryptedColumns:
     def test_all_encrypted_string_columns_are_not_json(self) -> None:
         results = _discover_encrypted_columns()
         for model_cls, col_name, _, is_json in results:
-            col = getattr(model_cls, col_name).property.columns[0]
+            col = getattr(model_cls, col_name).property.columns[  # ods: ignore[getattr]
+                0
+            ]
             if isinstance(col.type, EncryptedString):
                 assert not is_json, (
                     f"{model_cls.__tablename__}.{col_name} is EncryptedString "  # ty: ignore[unresolved-attribute]
@@ -113,7 +117,9 @@ class TestDiscoverEncryptedColumns:
     def test_all_encrypted_json_columns_are_json(self) -> None:
         results = _discover_encrypted_columns()
         for model_cls, col_name, _, is_json in results:
-            col = getattr(model_cls, col_name).property.columns[0]
+            col = getattr(model_cls, col_name).property.columns[  # ods: ignore[getattr]
+                0
+            ]
             if isinstance(col.type, EncryptedJson):
                 assert is_json, (
                     f"{model_cls.__tablename__}.{col_name} is EncryptedJson "  # ty: ignore[unresolved-attribute]

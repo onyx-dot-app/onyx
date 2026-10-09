@@ -3,8 +3,7 @@ import json
 import os
 from collections import defaultdict
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,66 +12,40 @@ from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sy
 from onyx.access.models import DocExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.utils import DocumentRow
-from onyx.db.utils import SortOrder
+from onyx.db.utils import DocumentRow, SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from tests.daily.connectors.google_drive.consts_and_utils import _pick
-from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ACCESS_MAPPING,
+    ADMIN_EMAIL,
+    ADMIN_MY_DRIVE_ID,
     ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    assert_hierarchy_nodes_match_expected,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    assert_resource_key_shortcut_target_in_retrieved_docs,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_FOLDER_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_ID
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    get_expected_hierarchy_for_shared_drives,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
-from tests.daily.connectors.google_drive.consts_and_utils import (
+    FOLDER_3_ID,
+    LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+    PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
     PERM_SYNC_DRIVE_ACCESS_MAPPING,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import PILL_FOLDER_ID
-from tests.daily.connectors.google_drive.consts_and_utils import PUBLIC_RANGE
-from tests.daily.connectors.google_drive.consts_and_utils import (
+    PILL_FOLDER_ID,
+    PUBLIC_RANGE,
     RESTRICTED_ACCESS_FOLDER_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_DRIVE_B_FOLDER_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_DRIVE_B_ID
-from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_DRIVE_B_ID,
     TEST_USER_1_EXTRA_DRIVE_1_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_DRIVE_2_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_FOLDER_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_MY_DRIVE_FOLDER_ID,
+    TEST_USER_1_MY_DRIVE_ID,
+    TEST_USER_2_MY_DRIVE,
+    TEST_USER_3_MY_DRIVE_ID,
+    _clear_parents,
+    _pick,
+    assert_hierarchy_nodes_match_expected,
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+    get_expected_hierarchy_for_shared_drives,
+    load_connector_outputs,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_MY_DRIVE_ID
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_MY_DRIVE
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_MY_DRIVE_ID
 from tests.utils.secret_names import TestSecret
 
 
@@ -89,7 +62,7 @@ def _build_connector(
         my_drive_emails=None,
     )
     # don't need this anymore, it's been called in the factory
-    connector.load_credentials = MagicMock()  # ty: ignore[invalid-assignment]
+    connector.load_credentials = MagicMock()
     return connector
 
 
@@ -290,8 +263,12 @@ def test_gdrive_perm_sync_with_real_data(
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
             *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+            *PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
         )
     )
+    # The service account reaches this folder without resolving test_user_1's
+    # My Drive root, so its parent comes back unset.
+    expected_nodes = _clear_parents(expected_nodes, LIMITED_ACCESS_MY_DRIVE_FOLDER_ID)
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,

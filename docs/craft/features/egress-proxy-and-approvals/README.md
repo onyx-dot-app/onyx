@@ -20,15 +20,16 @@ The short version:
 
 Proxy runtime:
 
+- `backend/onyx/sandbox_proxy/models.py` defines shared destination, credential
+  injection, and MCP classification models.
 - `backend/onyx/sandbox_proxy/server.py` starts mitmproxy, health checks, CA
   bootstrap, identity lookup, request evaluator, credential resolvers, and the
   gate addon.
 - `backend/onyx/sandbox_proxy/addons/gate.py` owns request classification,
   approval parking, grant resolution, credential injection dispatch, internal
   destination blocking, and SIGTERM drain cleanup.
-- `backend/onyx/sandbox_proxy/identity.py`,
-  `identity_k8s.py`, and `identity_docker.py` resolve source IPs to sandbox,
-  tenant, and user identity.
+- `backend/onyx/sandbox_proxy/sandbox_identity/` modules resolve source IPs to sandbox,
+  tenant, and user identity. Its `models.py` defines the identity and session models.
 - `backend/onyx/sandbox_proxy/request_evaluator.py` turns mitmproxy requests
   into external-app action matches.
 - `backend/onyx/sandbox_proxy/credential_injection.py` and
@@ -36,13 +37,13 @@ Proxy runtime:
   and external-app credentials.
 - `backend/onyx/sandbox_proxy/approval_cache.py` defines Redis announce, wake,
   and session-grant cache keys.
-- `backend/onyx/sandbox_proxy/ca.py`, `ca_k8s.py`, and `ca_docker.py` manage
+- `backend/onyx/sandbox_proxy/certificate_authority/` modules manage
   the proxy CA.
 
 Approval persistence and API:
 
 - `backend/onyx/db/models.py` defines `ActionApproval`,
-  `ExternalAppPolicy`, and `ScheduledTaskPreApprovedApp`.
+  `ExternalAppPolicy`, and `ScheduledTaskPreApprovedTarget`.
 - `backend/onyx/db/enums.py` defines `EndpointPolicy`,
   `ApprovalDecision`, and `ApprovalDecidedVia`.
 - `backend/onyx/server/features/build/db/action_approval.py` owns approval DB
@@ -451,8 +452,8 @@ Partial coverage still parks.
 ### Scheduled Task Pre-Approvals
 
 Scheduled task pre-approvals are another grant source inside the same proxy
-approval path. A task can store a set of pre-approved external app ids in
-`scheduled_task_pre_approved_app`.
+approval path. A task can store external-app and MCP-server grants in the
+legacy-named `scheduled_task_pre_approved_app` table.
 
 For an `ASK` request, the gate checks grant sources in this order:
 
@@ -463,7 +464,7 @@ A scheduled-task grant applies only when:
 
 - The `BuildSession` has a `ScheduledTaskRun` row.
 - That run is currently `RUNNING`.
-- The task has a grant for the matched `external_app_id`.
+- The task has a grant for the matched `(target kind, target id)`.
 
 When it applies, the proxy inserts an `action_approval` row already
 `APPROVED` with `decided_via=PRE_APPROVAL`, emits a deduped scheduled-task
@@ -491,7 +492,7 @@ The proxy uses first-claim-wins credential dispatch. Resolvers must keep
 ### Onyx PAT Resolver
 
 `OnyxPatResolver` claims requests whose host and port match
-`SANDBOX_API_SERVER_URL`.
+`ONYX_SERVER_URL`.
 
 It loads the sandbox row and decrypts `Sandbox.encrypted_pat`, then injects both
 Onyx API key header names as bearer tokens. The tenant is embedded in the PAT,
@@ -747,7 +748,8 @@ Relevant config:
 
 - `ENABLE_CRAFT=true` enables Craft chart resources.
 - `SANDBOX_BACKEND` is `kubernetes` or `docker`.
-- `SANDBOX_API_SERVER_URL` must be set for sandbox API calls and PAT injection.
+- `ONYX_SERVER_URL` must be the complete API base for sandbox API calls and PAT
+  injection.
 - `SANDBOX_PROXY_HOST` and `SANDBOX_PROXY_PORT` tell sandboxes where to proxy.
 - `SANDBOX_PROXY_LISTEN_PORT` and `SANDBOX_PROXY_HEALTHZ_PORT` configure the
   proxy process.

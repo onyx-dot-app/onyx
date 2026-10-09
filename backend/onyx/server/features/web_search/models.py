@@ -1,11 +1,8 @@
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator
 
-from onyx.tools.models import LlmOpenUrlResult
-from onyx.tools.models import LlmWebSearchResult
-from shared_configs.enums import WebContentProviderType
-from shared_configs.enums import WebSearchProviderType
+from onyx.configs.app_configs import OPEN_URLS_MAX_URLS_PER_REQUEST
+from onyx.tools.models import LlmOpenUrlResult, LlmWebSearchResult
+from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 
 
 class WebSearchToolRequest(BaseModel):
@@ -55,6 +52,7 @@ class OpenUrlsToolRequest(BaseModel):
     urls: list[str] = Field(
         ...,
         min_length=1,
+        max_length=OPEN_URLS_MAX_URLS_PER_REQUEST,
         description="URLs to fetch using the configured content provider.",
     )
 

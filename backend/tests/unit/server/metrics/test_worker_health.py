@@ -3,8 +3,10 @@
 import time
 from unittest.mock import MagicMock
 
-from onyx.server.metrics.indexing_pipeline import WorkerHealthCollector
-from onyx.server.metrics.indexing_pipeline import WorkerHeartbeatMonitor
+from onyx.server.metrics.indexing_pipeline import (
+    WorkerHealthCollector,
+    WorkerHeartbeatMonitor,
+)
 
 
 class TestWorkerHeartbeatMonitor:

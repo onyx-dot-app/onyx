@@ -6,7 +6,7 @@ from ee.onyx.utils import telemetry as ee_telemetry
 from onyx.utils import client_ip as client_ip_mod
 
 
-def test_event_telemetry_reads_client_ip_from_contextvar(monkeypatch):  # type: ignore[no-untyped-def]
+def test_event_telemetry_reads_client_ip_from_contextvar(monkeypatch):
     fake_posthog = MagicMock()
     monkeypatch.setattr(ee_telemetry, "posthog", fake_posthog)
 
@@ -27,7 +27,7 @@ def test_event_telemetry_reads_client_ip_from_contextvar(monkeypatch):  # type: 
     )
 
 
-def test_event_telemetry_omits_ip_when_contextvar_not_set(monkeypatch):  # type: ignore[no-untyped-def]
+def test_event_telemetry_omits_ip_when_contextvar_not_set(monkeypatch):
     fake_posthog = MagicMock()
     monkeypatch.setattr(ee_telemetry, "posthog", fake_posthog)
     # Contextvar defaults to None — no need to set it.
@@ -45,7 +45,7 @@ def test_event_telemetry_omits_ip_when_contextvar_not_set(monkeypatch):  # type:
     )
 
 
-def test_identify_user_reads_client_ip_from_contextvar(monkeypatch):  # type: ignore[no-untyped-def]
+def test_identify_user_reads_client_ip_from_contextvar(monkeypatch):
     fake_posthog = MagicMock()
     monkeypatch.setattr(ee_telemetry, "posthog", fake_posthog)
 

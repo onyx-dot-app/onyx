@@ -1,0 +1,16 @@
+@reference "#reference.css";
+
+/* Structural track/fill only; track bg + per-color fill are token classes on the
+   component, and the fill width is set inline. */
+
+.opal-progress-bar {
+  @apply flex items-center w-full overflow-hidden;
+  height: 0.375rem;
+  border-radius: 0.25rem;
+}
+
+.opal-progress-bar-fill {
+  @apply h-full;
+  border-radius: 0.25rem;
+  transition: width 0.3s ease-in-out;
+}

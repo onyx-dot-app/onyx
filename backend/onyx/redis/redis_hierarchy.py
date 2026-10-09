@@ -16,8 +16,7 @@ Cache Strategy:
   using only the SOURCE-type node as the ancestor
 """
 
-from typing import cast
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
@@ -227,6 +226,22 @@ def evict_hierarchy_nodes_from_cache(
     if node_id_strs:
         redis_client.hdel(cache_key, *node_id_strs)
     redis_client.hdel(raw_id_key, *raw_node_ids)
+
+
+def invalidate_hierarchy_cache_for_source(
+    redis_client: TenantRedisClient,
+    source: DocumentSource,
+) -> None:
+    """Drop all cached ancestor mappings for a source.
+
+    Next ancestor lookup refreshes from Postgres. Use after source-wide
+    node deletes or reparents so stale parent chains cannot be served.
+    """
+    redis_client.delete(
+        _cache_key(source),
+        _raw_id_cache_key(source),
+        _source_node_key(source),
+    )
 
 
 def get_node_id_from_raw_id(

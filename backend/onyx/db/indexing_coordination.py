@@ -6,9 +6,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IndexingStatus
-from onyx.db.index_attempt import count_error_rows_for_index_attempt
-from onyx.db.index_attempt import create_index_attempt
-from onyx.db.index_attempt import get_index_attempt
+from onyx.db.index_attempt import (
+    count_error_rows_for_index_attempt,
+    create_index_attempt,
+    get_index_attempt,
+)
 from onyx.db.models import IndexAttempt
 from onyx.utils.logger import setup_logger
 
@@ -36,7 +38,8 @@ class IndexingCoordination:
         db_session: Session,
         cc_pair_id: int,
         search_settings_id: int,
-        celery_task_id: str,
+        # None creates the attempt without its docfetching task, to send later.
+        celery_task_id: str | None,
         from_beginning: bool = False,
     ) -> int | None:
         """

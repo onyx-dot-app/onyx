@@ -12,8 +12,7 @@ from unittest.mock import patch
 from sentry_sdk.scrubber import EventScrubber
 from sentry_sdk.utils import AnnotatedValue
 
-from onyx.configs.sentry import build_event_scrubber
-from onyx.configs.sentry import init_sentry
+from onyx.configs.sentry import build_event_scrubber, init_sentry
 
 
 def _frame_event(frame_vars: dict) -> dict:

@@ -3,15 +3,20 @@ import { act, renderHook } from "@testing-library/react";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import type { StreamItem } from "@/app/craft/types/displayTypes";
+import type { OutputFile } from "@/app/craft/types/streamingTypes";
 import {
   createTurn,
   fetchActiveTurn,
   fetchArtifacts,
+  fetchOutputInventory,
+  fetchScheduledRunEventStream,
   fetchMessages,
   fetchSession,
+  fetchWebappInfo,
   fetchTurnEventStream,
   interruptMessageStream,
   processSSEStream,
+  RateLimitedError,
 } from "@/app/craft/services/apiServices";
 
 jest.mock("swr", () => ({
@@ -19,13 +24,21 @@ jest.mock("swr", () => ({
 }));
 
 jest.mock("@/app/craft/services/apiServices", () => ({
-  RateLimitError: class RateLimitError extends Error {},
+  RateLimitedError: class RateLimitedError extends Error {
+    details: Record<string, unknown>;
+    constructor(message: string, details: Record<string, unknown>) {
+      super(message);
+      this.details = details;
+    }
+  },
   createTurn: jest.fn(),
   fetchActiveTurn: jest.fn(),
   fetchArtifacts: jest.fn(),
+  fetchOutputInventory: jest.fn(),
   fetchMessages: jest.fn(),
   fetchScheduledRunEventStream: jest.fn(),
   fetchSession: jest.fn(),
+  fetchWebappInfo: jest.fn(),
   fetchTurnEventStream: jest.fn(),
   interruptMessageStream: jest.fn(),
   processSSEStream: jest.fn(),
@@ -46,6 +59,18 @@ describe("useBuildStreaming thinking packets", () => {
     useBuildSessionStore.getState().createSession(sessionId, {
       status: "active",
       isLoaded: true,
+      outputInventory: {},
+    });
+
+    jest
+      .mocked(fetchOutputInventory)
+      .mockResolvedValue({ files: [], complete: true });
+    jest.mocked(fetchWebappInfo).mockResolvedValue({
+      has_webapp: false,
+      webapp_url: null,
+      ready: false,
+      status: "running",
+      sharing_scope: "private",
     });
 
     jest.mocked(createTurn).mockResolvedValue({
@@ -112,6 +137,45 @@ describe("useBuildStreaming thinking packets", () => {
     });
   });
 
+  it.each([
+    { changesDuringTurn: false, expected: false },
+    { changesDuringTurn: true, expected: true },
+  ])(
+    "reconciles stale skills after turn creation when changesDuringTurn is $changesDuringTurn",
+    async ({ changesDuringTurn, expected }) => {
+      let resolveTurn: (
+        turn: Awaited<ReturnType<typeof createTurn>>
+      ) => void = () => {};
+      jest.mocked(createTurn).mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveTurn = resolve;
+        })
+      );
+      useBuildSessionStore.getState().updateSessionData(sessionId, {
+        skillsStale: true,
+      });
+      const { result } = renderHook(() => useBuildStreaming());
+
+      const stream = result.current.streamMessage(sessionId, "build the app");
+      if (changesDuringTurn) {
+        useBuildSessionStore.getState().updateSessionData(sessionId, {
+          skillsStale: true,
+        });
+      }
+      resolveTurn({
+        session_id: sessionId,
+        turn_id: "turn-thinking",
+        status: "QUEUED",
+        turn_index: 0,
+      });
+      await act(async () => stream);
+
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)?.skillsStale
+      ).toBe(expected);
+    }
+  );
+
   it("does not reset the abort controller when a newer turn took ownership mid-stream", async () => {
     const newerController = new AbortController();
     jest.mocked(processSSEStream).mockImplementationOnce(async () => {
@@ -132,6 +196,575 @@ describe("useBuildStreaming thinking packets", () => {
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)?.abortController
     ).toBe(newerController);
+  });
+
+  it("refreshes files only when an output write completes", async () => {
+    useBuildSessionStore.getState().updateFilesTabState(sessionId, {
+      expandedPaths: ["attachments", "attachments/reports"],
+    });
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        for (const status of ["pending", "in_progress", "completed"] as const) {
+          onPacket({
+            type: "tool_call_progress",
+            tool_call_id: "write-output",
+            kind: "edit",
+            status,
+            raw_input: { filePath: "outputs/report.txt" },
+            raw_output: null,
+            _meta: { toolName: "write" },
+          } as never);
+        }
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "write a report");
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.filesNeedsRefresh).toBe(1);
+    expect(session?.webappNeedsRefresh).toBe(0);
+    expect(session?.filesTabState.expandedPaths).toEqual([
+      "attachments",
+      "attachments/reports",
+    ]);
+  });
+
+  it("refreshes both files and preview for a completed output web write", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "write-web-output",
+          kind: "edit",
+          status: "completed",
+          raw_input: {
+            filePath:
+              "/workspace/sessions/323d7ce1-ea1b-42a8-bc34-ca5d8b4d27a3/outputs/web/app/page.tsx",
+          },
+          raw_output: null,
+          _meta: { toolName: "write" },
+        } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "update the web app");
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.filesNeedsRefresh).toBe(1);
+    expect(session?.webappNeedsRefresh).toBe(1);
+  });
+
+  it("reconciles files when a turn completes", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "mkdir-output",
+          kind: "execute",
+          status: "completed",
+          raw_input: { command: "mkdir -p outputs/report" },
+          raw_output: null,
+          _meta: { toolName: "bash" },
+        } as never);
+        onPacket({ type: "prompt_response" } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(
+        sessionId,
+        "create a report directory"
+      );
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.filesNeedsRefresh
+    ).toBe(1);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.outputPanelOpen
+    ).toBe(false);
+  });
+
+  function completeOutputTurn() {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "generate-slides",
+          kind: "execute",
+          status: "completed",
+          raw_input: { command: "python make_slides.py" },
+          _meta: { toolName: "bash" },
+        } as never);
+        onPacket({ type: "prompt_response" } as never);
+      });
+  }
+
+  it("discovers nested script outputs in one inventory and selects a PowerPoint in an open panel", async () => {
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      outputPanelOpen: true,
+      activeOutputTab: "files",
+    });
+    // GET /outputs returns a flat inventory, including nested files.
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      complete: true,
+      files: [
+        { path: "outputs/notes.md", revision: "1:10", size: 100 },
+        { path: "outputs/slides/deck.PPTX", revision: "2:100", size: 100 },
+      ],
+    });
+    completeOutputTurn();
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "make slides");
+    });
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session).toMatchObject({
+      outputPanelOpen: true,
+      activePanelTabId: "file:outputs/slides/deck.PPTX",
+    });
+    expect(session?.panelTabs).toHaveLength(2);
+    expect(fetchOutputInventory).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends and settles a prompt while the initial inventory is still loading", async () => {
+    const store = () => useBuildSessionStore.getState();
+    store().updateSessionData(sessionId, {
+      outputInventory: null,
+      outputBaselinePending: true,
+    });
+    let finishInitial:
+      | ((inventory: Awaited<ReturnType<typeof fetchOutputInventory>>) => void)
+      | undefined;
+    jest.mocked(fetchOutputInventory).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishInitial = resolve;
+      })
+    );
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      files: [{ path: "outputs/first.pdf", revision: "1", size: 100 }],
+      complete: true,
+    });
+    const initial = store().refreshOutputInventory(sessionId, { silent: true });
+    completeOutputTurn();
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "make a PDF");
+    });
+    expect(createTurn).toHaveBeenCalledTimes(1);
+    expect(store().sessions.get(sessionId)).toMatchObject({
+      status: "active",
+      outputInventory: null,
+    });
+    await act(async () => {
+      finishInitial?.({ files: [], complete: true });
+      await initial;
+    });
+    expect(store().sessions.get(sessionId)).toMatchObject({
+      outputInventory: {
+        "outputs/first.pdf": {
+          path: "outputs/first.pdf",
+          revision: "1",
+          size: 100,
+        },
+      },
+      outputPanelOpen: false,
+      outputBaselinePending: false,
+    });
+  });
+
+  it("settles a turn before slow final discovery and retries a temporary failure", async () => {
+    let failRead: ((error: Error) => void) | undefined;
+    jest.mocked(fetchOutputInventory).mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        failRead = reject;
+      })
+    );
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      files: [{ path: "outputs/new.pdf", revision: "1", size: 100 }],
+      complete: true,
+    });
+    completeOutputTurn();
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "make a PDF");
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.status
+    ).toBe("active");
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(3000);
+    });
+    expect(fetchOutputInventory).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(fetchOutputInventory).mock.calls[0]?.[1]?.aborted).toBe(
+      false
+    );
+    await act(async () => {
+      failRead?.(new Error("sandbox unavailable"));
+      await jest.advanceTimersByTimeAsync(1000);
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.activePanelTabId
+    ).toBe("file:outputs/new.pdf");
+  });
+
+  it("bounds pending tool reads and queues final discovery before focus", async () => {
+    const deck: OutputFile = {
+      path: "outputs/deck.pptx",
+      revision: "1",
+      size: 100,
+    };
+    let finishToolRead:
+      | ((inventory: Awaited<ReturnType<typeof fetchOutputInventory>>) => void)
+      | undefined;
+    jest
+      .mocked(fetchOutputInventory)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishToolRead = resolve;
+        })
+      )
+      .mockResolvedValue({ files: [deck], complete: true });
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "prepare-slides",
+          kind: "execute",
+          status: "completed",
+          _meta: { toolName: "bash" },
+        } as never);
+        await jest.advanceTimersByTimeAsync(400);
+        expect(fetchOutputInventory).toHaveBeenCalledTimes(1);
+        for (let index = 0; index < 3; index++) {
+          onPacket({
+            type: "tool_call_progress",
+            tool_call_id: `prepare-slide-${index}`,
+            kind: "execute",
+            status: "completed",
+            _meta: { toolName: "bash" },
+          } as never);
+          await jest.advanceTimersByTimeAsync(400);
+        }
+        onPacket({ type: "prompt_response" } as never);
+        const focus = useBuildSessionStore
+          .getState()
+          .refreshOutputInventory(sessionId, { silent: true });
+        // The older read saw no file; final discovery must run before focus.
+        finishToolRead?.({ files: [], complete: true });
+        await focus;
+      });
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "make slides");
+    });
+    // One tool read, final discovery, and focus; no queued tool backlog.
+    expect(fetchOutputInventory).toHaveBeenCalledTimes(3);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      outputPanelOpen: true,
+      activePanelTabId: `file:${deck.path}`,
+    });
+  });
+
+  it("coalesces tool completions and reveals outputs before the turn ends", async () => {
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      complete: true,
+      files: [{ path: "outputs/deck.pptx", revision: "1", size: 100 }],
+    });
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        for (const id of ["write-slides", "render-slides"]) {
+          onPacket({
+            type: "tool_call_progress",
+            tool_call_id: id,
+            kind: "execute",
+            status: "completed",
+            raw_input: { command: "python make_slides.py" },
+            _meta: { toolName: "bash" },
+          } as never);
+        }
+        expect(fetchOutputInventory).toHaveBeenCalledTimes(0);
+        await jest.advanceTimersByTimeAsync(400);
+        expect(fetchOutputInventory).toHaveBeenCalledTimes(1);
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+        ).toMatchObject({
+          status: "running",
+          outputPanelOpen: true,
+          activePanelTabId: "file:outputs/deck.pptx",
+        });
+        onPacket({ type: "prompt_response" } as never);
+      });
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "make slides");
+    });
+    expect(fetchOutputInventory).toHaveBeenCalledTimes(2);
+  });
+
+  it("combines tool completions during an inventory request into one follow-up", async () => {
+    let finishInventory: (
+      inventory: Awaited<ReturnType<typeof fetchOutputInventory>>
+    ) => void = () => {};
+    jest
+      .mocked(fetchOutputInventory)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishInventory = resolve;
+        })
+      )
+      .mockResolvedValue({
+        complete: true,
+        files: [{ path: "outputs/deck.pptx", revision: "1", size: 100 }],
+      });
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        const completeTool = (id: string) =>
+          onPacket({
+            type: "tool_call_progress",
+            tool_call_id: id,
+            kind: "execute",
+            status: "completed",
+            _meta: { toolName: "bash" },
+          } as never);
+        completeTool("write-slides");
+        await jest.advanceTimersByTimeAsync(400);
+        expect(fetchOutputInventory).toHaveBeenCalledTimes(1);
+        completeTool("render-slides");
+        completeTool("export-slides");
+        await jest.advanceTimersByTimeAsync(400);
+        expect(fetchOutputInventory).toHaveBeenCalledTimes(1);
+
+        finishInventory({ files: [], complete: true });
+        await jest.advanceTimersByTimeAsync(0);
+        expect(fetchOutputInventory).toHaveBeenCalledTimes(2);
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+            ?.activePanelTabId
+        ).toBe("file:outputs/deck.pptx");
+        onPacket({ type: "prompt_response" } as never);
+      });
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "make slides");
+    });
+    expect(fetchOutputInventory).toHaveBeenCalledTimes(3);
+  });
+
+  it("cancels a pending inventory refresh when its stream is aborted", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "write-slides",
+          kind: "execute",
+          status: "completed",
+          _meta: { toolName: "bash" },
+        } as never);
+        throw new DOMException("Stream aborted", "AbortError");
+      });
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "make slides");
+      await jest.advanceTimersByTimeAsync(400);
+    });
+    expect(fetchOutputInventory).toHaveBeenCalledTimes(0);
+  });
+
+  it.each(["manual", "automatic"] as const)(
+    "resets a %s selection lock for the next task",
+    async (selection) => {
+      jest.mocked(fetchOutputInventory).mockResolvedValue({
+        complete: true,
+        files: [{ path: "outputs/deck.pptx", revision: "1", size: 100 }],
+      });
+      jest
+        .mocked(processSSEStream)
+        .mockImplementationOnce(async (_response, onPacket) => {
+          if (selection === "manual")
+            useBuildSessionStore
+              .getState()
+              .setActiveOutputTab(sessionId, "files");
+          onPacket({
+            type: "tool_call_progress",
+            tool_call_id: "write",
+            kind: "execute",
+            status: "completed",
+            raw_input: { command: "python make_slides.py" },
+            _meta: { toolName: "bash" },
+          } as never);
+          onPacket({ type: "prompt_response" } as never);
+        });
+      const { result } = renderHook(() => useBuildStreaming());
+      await act(async () => {
+        await result.current.streamMessage(sessionId, "make slides");
+      });
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        activePanelTabId:
+          selection === "manual" ? null : "file:outputs/deck.pptx",
+        outputSelectionLocked: true,
+      });
+      jest.mocked(fetchOutputInventory).mockResolvedValue({
+        complete: true,
+        files: [
+          { path: "outputs/deck.pptx", revision: "1", size: 100 },
+          { path: "outputs/second.pdf", revision: "2", size: 100 },
+        ],
+      });
+      completeOutputTurn();
+      await act(async () => {
+        await result.current.streamMessage(sessionId, "make a PDF too");
+      });
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+          ?.activePanelTabId
+      ).toBe("file:outputs/second.pdf");
+    }
+  );
+
+  it("preserves a manual output choice when reattaching to a scheduled run", async () => {
+    useBuildSessionStore.getState().setActiveOutputTab(sessionId, "files");
+    jest.mocked(fetchScheduledRunEventStream).mockResolvedValue({} as Response);
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      complete: true,
+      files: [{ path: "outputs/scheduled.pptx", revision: "1", size: 100 }],
+    });
+    completeOutputTurn();
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamScheduledRunEvents(
+        sessionId,
+        new AbortController().signal
+      );
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      activeOutputTab: "files",
+      activePanelTabId: null,
+      outputSelectionLocked: true,
+      outputInventory: {
+        "outputs/scheduled.pptx": {
+          path: "outputs/scheduled.pptx",
+          revision: "1",
+          size: 100,
+        },
+      },
+    });
+  });
+
+  it("keeps dismissal for this task and lets the next task open its new output", async () => {
+    const store = () => useBuildSessionStore.getState();
+    store().setCurrentSession(sessionId);
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      complete: true,
+      files: [{ path: "outputs/deck.pptx", revision: "1", size: 100 }],
+    });
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        store().toggleCurrentOutputPanel();
+        store().toggleCurrentOutputPanel();
+        onPacket({ type: "prompt_response" } as never);
+      });
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "make slides");
+    });
+    expect(store().sessions.get(sessionId)).toMatchObject({
+      outputPanelOpen: false,
+      activePanelTabId: null,
+    });
+
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      complete: true,
+      files: [
+        { path: "outputs/deck.pptx", revision: "1", size: 100 },
+        { path: "outputs/report.pdf", revision: "2", size: 100 },
+      ],
+    });
+    completeOutputTurn();
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "make a report");
+    });
+    expect(store().sessions.get(sessionId)).toMatchObject({
+      outputPanelOpen: true,
+      activePanelTabId: "file:outputs/report.pdf",
+    });
+  });
+
+  it.each(["terminal", "end-of-stream", "already-settled"] as const)(
+    "discovers outputs after missed tool events with %s settlement",
+    async (settlement) => {
+      jest.mocked(fetchOutputInventory).mockResolvedValue({
+        complete: true,
+        files: [{ path: "outputs/missed.pptx", revision: "1", size: 100 }],
+      });
+      if (settlement === "already-settled") {
+        jest.mocked(fetchTurnEventStream).mockResolvedValueOnce(null);
+      } else {
+        jest
+          .mocked(processSSEStream)
+          .mockImplementationOnce(async (_response, onPacket) => {
+            if (settlement === "terminal") {
+              onPacket({ type: "prompt_response" } as never);
+            }
+          });
+      }
+      const { result } = renderHook(() => useBuildStreaming());
+      await act(async () => {
+        await result.current.streamTurnEvents(
+          sessionId,
+          "turn-late-attach",
+          new AbortController().signal
+        );
+      });
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        outputPanelOpen: true,
+        activePanelTabId: "file:outputs/missed.pptx",
+      });
+      expect(fetchOutputInventory).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("does not refresh unchanged files after a text-only turn", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({ type: "text_chunk", text: "Done." } as never);
+        onPacket({ type: "prompt_response" } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "explain the project");
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.filesNeedsRefresh
+    ).toBe(0);
   });
 
   it("seeds clickable subagent metadata from a task start packet", async () => {
@@ -254,7 +887,7 @@ describe("useBuildStreaming thinking packets", () => {
         onPacket({
           type: "connect_app_request",
           request_id: "req-1",
-          app_slug: "google_calendar",
+          external_app_id: 17,
           reason: "to schedule events",
         } as never);
       });
@@ -271,7 +904,7 @@ describe("useBuildStreaming thinking packets", () => {
         type: "connect_app_request",
         id: "req-1",
         requestId: "req-1",
-        appSlug: "google_calendar",
+        externalAppId: 17,
         reason: "to schedule events",
       }),
     ]);
@@ -735,6 +1368,42 @@ describe("useBuildStreaming thinking packets", () => {
     ]);
   });
 
+  it("surfaces a usage rate-limit 429 as an in-transcript banner item", async () => {
+    jest.mocked(createTurn).mockRejectedValueOnce(
+      new RateLimitedError("You've reached the usage budget.", {
+        scope: "user",
+        reset_at: "2026-01-02T00:00:00Z",
+        retry_after_seconds: 3600,
+      })
+    );
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "build the app");
+    });
+
+    // Recoverable once the budget resets: session stays active (not failed),
+    // but `error` stays set so queued messages don't auto-send into the limit.
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session).toMatchObject({
+      status: "active",
+      error: "You've reached the usage budget.",
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+    });
+    expect(session?.streamItems).toEqual([
+      expect.objectContaining({
+        type: "error",
+        content: "You've reached the usage budget.",
+        rateLimit: {
+          scope: "user",
+          reset_at: "2026-01-02T00:00:00Z",
+          retry_after_seconds: 3600,
+        },
+      }),
+    ]);
+  });
+
   it("defers to reconcile when an error packet arrives mid-interrupt", async () => {
     jest
       .mocked(processSSEStream)
@@ -847,8 +1516,9 @@ describe("useBuildStreaming thinking packets", () => {
     jest.mocked(fetchSession).mockResolvedValue({
       id: sessionId,
       status: "active",
+      nextjs_port: null,
       session_loaded_in_sandbox: true,
-      sandbox: { id: "sandbox-1", status: "running", nextjs_port: null },
+      sandbox: { id: "sandbox-1", status: "running" },
       agent_provider: "openai",
       agent_model: "gpt-5-mini",
     } as never);

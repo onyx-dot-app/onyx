@@ -34,9 +34,12 @@ export class UsersAdminPage {
     this.inviteButton = page.getByRole("button", { name: "Invite Users" });
     this.searchInput = page.getByPlaceholder("Search users...");
 
-    this.accountTypesFilter = page.getByLabel("Filter by role");
-    this.groupsFilter = page.getByLabel("Filter by group");
-    this.statusFilter = page.getByLabel("Filter by status");
+    // The trigger button: the open list carries the same label.
+    this.accountTypesFilter = page.getByRole("button", {
+      name: "Filter by account type",
+    });
+    this.groupsFilter = page.getByRole("button", { name: "Filter by group" });
+    this.statusFilter = page.getByRole("button", { name: "Filter by status" });
 
     this.table = page.getByRole("table");
     this.tableRows = page.getByRole("table").locator("tbody tr");
@@ -52,14 +55,11 @@ export class UsersAdminPage {
   // ---------------------------------------------------------------------------
 
   /**
-   * Returns a locator for the currently open popover / filter dropdown.
-   * Radix Popover renders its content with `role="dialog"`. Using
-   * `getByRole("dialog").first()` targets the oldest open dialog, which is
-   * always the popover during row-action or filter flows (confirmation
-   * modals open later and would be `.last()`).
+   * The open filter list or row-action menu. A filter is a listbox and a
+   * row's actions a menu; only one is open at a time during these flows.
    */
   get popover(): Locator {
-    return this.page.getByRole("dialog").first();
+    return this.page.getByRole("listbox").or(this.page.getByRole("menu"));
   }
 
   // ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ export class UsersAdminPage {
 
   async closePopover() {
     await this.page.keyboard.press("Escape");
-    await expect(this.page.getByRole("dialog")).not.toBeVisible();
+    await expect(this.popover).not.toBeVisible();
   }
 
   // ---------------------------------------------------------------------------
@@ -143,7 +143,7 @@ export class UsersAdminPage {
 
   /**
    * Returns the text content of a specific column across all visible rows.
-   * Column indices: 0=Name, 1=Groups, 2=Account Type, 3=Status, 4=Last Updated.
+   * Column indices: 0=Name, 1=Groups, 2=Account Type, 3=Status, 4=Last Active.
    */
   async getColumnTexts(columnIndex: number): Promise<string[]> {
     const cells = this.tableRows.locator(`td:nth-child(${columnIndex + 2})`);
@@ -229,7 +229,7 @@ export class UsersAdminPage {
 
   /** The email input inside the invite modal. */
   get inviteEmailInput(): Locator {
-    return this.dialog.getByPlaceholder("Add an email and press enter");
+    return this.dialog.getByRole("textbox");
   }
 
   async openInviteModal() {
@@ -240,44 +240,26 @@ export class UsersAdminPage {
   async addInviteEmail(email: string) {
     await this.inviteEmailInput.pressSequentially(email, { delay: 20 });
     await this.inviteEmailInput.press("Enter");
-    // Wait for the chip to appear in the dialog
     await expect(this.dialog.getByText(email)).toBeVisible();
   }
 
   async submitInvite() {
-    await this.dialog.getByRole("button", { name: "Invite" }).click();
+    // Exact, or the substring default also matches a tag's "Remove <email>"
+    // button whenever the address itself contains "invite".
+    await this.dialog
+      .getByRole("button", { name: "Invite", exact: true })
+      .click();
   }
 
   // ---------------------------------------------------------------------------
   // Inline role editing (Popover + OpenButton + LineItem)
   // ---------------------------------------------------------------------------
 
-  async openRoleDropdown(email: string) {
-    const row = this.getRowByEmail(email);
-    const roleButton = row
-      .locator("button")
-      .filter({ hasText: /Basic|Admin|Global Curator|Slack User/ });
-    await roleButton.click();
-    await expect(this.popover).toBeVisible();
-  }
-
-  async selectRole(roleName: string) {
-    await this.popover.getByText(roleName).first().click();
-    await this.waitForTableRefresh();
-  }
-
   // ---------------------------------------------------------------------------
   // Edit groups modal
   // ---------------------------------------------------------------------------
 
-  /**
-   * Stable locator for the edit-groups modal.
-   *
-   * We can't use the generic `dialog` getter (`.last()`) here because the
-   * groups search opens a Radix Popover (also `role="dialog"`) inside the
-   * modal, which shifts what `.last()` resolves to.  Targeting by accessible
-   * name keeps the reference pinned to the modal itself.
-   */
+  /** Stable locator for the edit-groups modal, pinned by accessible name. */
   get editGroupsDialog(): Locator {
     return this.page.getByRole("dialog", { name: /Edit User/ });
   }
@@ -291,23 +273,23 @@ export class UsersAdminPage {
     await this.openRowActions(email);
     await this.clickRowAction("Groups");
     await expect(
-      this.editGroupsDialog.getByText("Edit User's Groups & Roles")
+      this.editGroupsDialog.getByText("Edit User's Groups")
     ).toBeVisible();
   }
 
   async searchGroupsInModal(term: string) {
-    // Click the input first to open the popover (Radix Popover.Trigger
-    // wraps the input — fill() alone bypasses the trigger's click handler).
+    // Click the input first: the dropdown opens on a click or typing, and
+    // fill() alone does not type.
     await this.groupSearchInput.click();
     await this.groupSearchInput.fill(term);
-    // The group name appears in the popover dropdown (nested dialog).
-    // Use page-level search since the popover may be portaled.
+    // The group name appears in the dropdown list, which portals into the
+    // modal, so search page-wide.
     await expect(this.page.getByText(term).first()).toBeVisible();
   }
 
   async toggleGroupInModal(groupName: string) {
-    // LineItem renders as a <div>, not <button>.
-    // The popover dropdown is a nested dialog inside the modal.
+    // The dropdown list portals into the modal, so the modal's text holds
+    // the option row (add) or the joined-group row (remove).
     await this.page
       .getByRole("dialog")
       .last()

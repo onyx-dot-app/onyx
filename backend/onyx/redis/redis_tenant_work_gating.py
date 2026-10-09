@@ -11,8 +11,7 @@ All public functions no-op in single-tenant mode (`MULTI_TENANT=False`).
 import time
 from typing import cast
 
-from prometheus_client import Counter
-from prometheus_client import Gauge
+from prometheus_client import Counter, Gauge
 
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.redis.redis_pool import get_redis_client

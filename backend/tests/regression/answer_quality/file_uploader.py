@@ -8,12 +8,14 @@ from types import SimpleNamespace
 
 import yaml
 
-from tests.regression.answer_quality.api_utils import check_indexing_status
-from tests.regression.answer_quality.api_utils import create_cc_pair
-from tests.regression.answer_quality.api_utils import create_connector
-from tests.regression.answer_quality.api_utils import create_credential
-from tests.regression.answer_quality.api_utils import run_cc_once
-from tests.regression.answer_quality.api_utils import upload_file
+from tests.regression.answer_quality.api_utils import (
+    check_indexing_status,
+    create_cc_pair,
+    create_connector,
+    create_credential,
+    run_cc_once,
+    upload_file,
+)
 
 
 def unzip_and_get_file_paths(zip_file_path: str) -> list[str]:
@@ -23,8 +25,7 @@ def unzip_and_get_file_paths(zip_file_path: str) -> list[str]:
 
     file_paths = []
     for root, _, files in os.walk(persistent_dir):
-        for file in sorted(files):
-            file_paths.append(os.path.join(root, file))
+        file_paths.extend(os.path.join(root, file) for file in sorted(files))
 
     return file_paths
 

@@ -8,15 +8,13 @@ from uuid import UUID
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
-from onyx.db.enums import AccountType
-from onyx.db.enums import PersonaSharePermission
+from onyx.db.enums import AccountType, PersonaSharePermission
 from onyx.db.models import Persona__User
 from onyx.db.persona import transfer_persona_ownership
 from onyx.db.persona_sharing import persona_ownership_is_vacant
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.db.agent_sharing_helpers import create_test_persona
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
+    create_test_persona,
     share_persona_with_user,
 )
 
@@ -116,7 +114,7 @@ def test_admin_cannot_transfer_owned_persona(db_session: Session) -> None:
     """ENG-4177: only owners transfer. Admin authority applies to vacant
     personas only."""
     owner = create_test_user(db_session, "owner")
-    admin = create_test_user(db_session, "admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "admin", is_admin=True)
     target = create_test_user(db_session, "target")
     persona = create_test_persona(db_session, owner)
 
@@ -130,7 +128,7 @@ def test_admin_cannot_transfer_owned_persona(db_session: Session) -> None:
 
 
 def test_admin_transfers_vacant_persona(db_session: Session) -> None:
-    admin = create_test_user(db_session, "admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "admin", is_admin=True)
     target = create_test_user(db_session, "target")
     persona = create_test_persona(db_session, owner=None)
     db_session.refresh(persona)
@@ -164,7 +162,7 @@ def test_deactivated_owner_makes_persona_admin_transferable(
     db_session: Session,
 ) -> None:
     owner = create_test_user(db_session, "owner")
-    admin = create_test_user(db_session, "admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "admin", is_admin=True)
     target = create_test_user(db_session, "target")
     persona = create_test_persona(db_session, owner)
 
@@ -183,22 +181,21 @@ def test_deactivated_owner_makes_persona_admin_transferable(
     assert persona.user_id == target.id
 
 
+# Account type is the whole gate now: anything other than STANDARD is rejected.
+# The old SLACK_USER / EXT_PERM_USER roles are BOT / EXT_PERM_USER account types.
 @pytest.mark.parametrize(
-    "role,account_type",
+    "account_type",
     [
-        (UserRole.SLACK_USER, AccountType.STANDARD),
-        (UserRole.EXT_PERM_USER, AccountType.STANDARD),
-        (UserRole.BASIC, AccountType.BOT),
-        (UserRole.BASIC, AccountType.SERVICE_ACCOUNT),
+        AccountType.BOT,
+        AccountType.EXT_PERM_USER,
+        AccountType.SERVICE_ACCOUNT,
     ],
 )
 def test_transfer_rejects_invalid_target_account(
-    db_session: Session, role: UserRole, account_type: AccountType
+    db_session: Session, account_type: AccountType
 ) -> None:
     owner = create_test_user(db_session, "owner")
-    target = create_test_user(
-        db_session, "target", role=role, account_type=account_type
-    )
+    target = create_test_user(db_session, "target", account_type=account_type)
     persona = create_test_persona(db_session, owner)
 
     with pytest.raises(ValueError):
@@ -256,10 +253,18 @@ def test_transfer_rejects_builtin_persona(db_session: Session) -> None:
     target = create_test_user(db_session, "target")
     persona = create_test_persona(db_session, owner, builtin_persona=True)
 
-    with pytest.raises(ValueError):
-        transfer_persona_ownership(
-            persona_id=persona.id,
-            user=owner,
-            db_session=db_session,
-            new_owner_user_id=target.id,
-        )
+    try:
+        with pytest.raises(ValueError):
+            transfer_persona_ownership(
+                persona_id=persona.id,
+                user=owner,
+                db_session=db_session,
+                new_owner_user_id=target.id,
+            )
+    finally:
+        # get_default_assistant() reads the builtin persona with one_or_none(),
+        # so a stray one breaks every later test in this directory that touches
+        # the default assistant.
+        db_session.rollback()
+        db_session.delete(persona)
+        db_session.commit()

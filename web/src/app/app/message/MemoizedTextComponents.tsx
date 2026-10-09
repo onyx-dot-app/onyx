@@ -1,13 +1,10 @@
 import React, { memo, JSX, useMemo, useCallback } from "react";
+import type { ExtraProps } from "react-markdown";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import {
-  LoadedOnyxDocument,
-  MinimalOnyxDocument,
-  OnyxDocument,
-} from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { ProjectFile } from "@/lib/projects/types";
 import { BlinkingBar } from "./BlinkingBar";
 import Text from "@/refresh-components/texts/Text";
@@ -19,9 +16,27 @@ import {
 } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
+import { extractTextFromReactNode } from "@/app/app/message/codeUtils";
+import { useTranslations } from "next-intl";
+
+const CITATION_LABEL_PATTERN: RegExp = /^\[(D|Q)?\d+\]$/;
+
+// Returns the label only when it has no nested elements (e.g. bold).
+function getPlainLabel(children: React.ReactNode): string | null {
+  if (typeof children === "string" || typeof children === "number") {
+    return String(children);
+  }
+  if (
+    Array.isArray(children) &&
+    children.every((c) => typeof c === "string" || typeof c === "number")
+  ) {
+    return children.join("");
+  }
+  return null;
+}
 
 interface DocumentCardProps {
-  document: LoadedOnyxDocument;
+  document: OnyxDocument;
   updatePresentingDocument: (document: MinimalOnyxDocument) => void;
   url?: string;
 }
@@ -99,7 +114,7 @@ export const MemoizedAnchor = memo(
           const associatedDocInfo = associatedDoc
             ? {
                 ...associatedDoc,
-                icon: icon as any,
+                icon: icon,
                 link: associatedDoc.link,
               }
             : undefined;
@@ -138,16 +153,18 @@ export const MemoizedLink = memo(
     href,
     openQuestion,
     ...rest
-  }: Partial<DocumentCardProps & QuestionCardProps> & {
-    node?: any;
-    [key: string]: any;
-  }) => {
+  }: Partial<DocumentCardProps & QuestionCardProps> &
+    ExtraProps & {
+      href?: string;
+      children?: React.ReactNode;
+    }) => {
+    const t = useTranslations("chat.messages");
     const value = rest.children;
 
     // Convert document to SourceInfo for SourceTag
     const documentSourceInfo = useMemo(() => {
       if (!document) return null;
-      return documentToSourceInfo(document as OnyxDocument);
+      return documentToSourceInfo(document);
     }, [document]);
 
     // Convert question to SourceInfo for SourceTag
@@ -159,23 +176,31 @@ export const MemoizedLink = memo(
     // Handle click on SourceTag
     const handleSourceClick = useCallback(() => {
       if (document && updatePresentingDocument) {
-        openDocument(document as OnyxDocument, updatePresentingDocument);
+        openDocument(document, updatePresentingDocument);
       } else if (question && openQuestion) {
         openQuestion(question);
       }
     }, [document, updatePresentingDocument, question, openQuestion]);
 
+    const url: string | undefined = ensureHrefProtocol(href);
+    const isChatFile: boolean = !!url?.includes("/api/chat/file/");
+    const plainLabel: string | null = getPlainLabel(value);
+
     if (value?.toString().startsWith("*")) {
       return <BlinkingBar addMargin />;
-    } else if (value?.toString().startsWith("[")) {
+    } else if (
+      !isChatFile &&
+      plainLabel !== null &&
+      CITATION_LABEL_PATTERN.test(plainLabel)
+    ) {
       const sourceInfo = documentSourceInfo || questionSourceInfo;
       if (!sourceInfo) {
         return <>{rest.children}</>;
       }
 
       const displayName = document
-        ? getDisplayNameForSource(document as OnyxDocument)
-        : question?.question || "Question";
+        ? getDisplayNameForSource(document)
+        : question?.question || t("memoizedLink.questionFallback.label");
 
       return (
         <SourceTag
@@ -184,32 +209,31 @@ export const MemoizedLink = memo(
           sources={[sourceInfo]}
           onSourceClick={handleSourceClick}
           showDetailsCard
-          className="mr-0.5"
+          className="me-0.5"
         />
       );
     }
 
-    const url = ensureHrefProtocol(href);
-
-    // Check if the link is to a file on the backend
-    const isChatFile = url?.includes("/api/chat/file/");
     if (isChatFile && updatePresentingDocument) {
-      const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
-      const filename = value?.toString() || "download";
+      const fileId: string =
+        url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
+      const filename: string =
+        extractTextFromReactNode(value).trim() || "download";
       return (
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
+        <button
+          type="button"
+          onClick={() =>
             updatePresentingDocument({
               document_id: fileId,
               semantic_identifier: filename,
-            });
-          }}
-          className="cursor-pointer text-link hover:text-link-hover"
+            })
+          }
+          // `inline`: a button is inline-block by default, which would break
+          // the surrounding prose differently than the <a> it replaces.
+          className="inline cursor-pointer text-link hover:text-link-hover"
         >
           {rest.children}
-        </a>
+        </button>
       );
     }
 
@@ -228,15 +252,20 @@ export const MemoizedLink = memo(
 
 interface MemoizedParagraphProps {
   className?: string;
+  // Stamped per-paragraph by the rehypeDirection plugin so RTL and LTR
+  // paragraphs align independently. Unstamped paragraphs inherit their
+  // container's direction.
+  dir?: React.HTMLAttributes<HTMLElement>["dir"];
   children?: React.ReactNode;
 }
 
 export const MemoizedParagraph = memo(function MemoizedParagraph({
   className,
+  dir,
   children,
 }: MemoizedParagraphProps) {
   return (
-    <Text as="p" mainContentBody className={className}>
+    <Text as="p" dir={dir} mainContentBody text04 className={className}>
       {children}
     </Text>
   );

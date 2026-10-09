@@ -1,7 +1,6 @@
 """Tests for LLM provider model sync functionality."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -48,6 +47,12 @@ class TestSyncModelConfigurations:
                 ),
             ]
 
+            # The bulk model insert returns the inserted (id, name) rows.
+            mock_session.execute.return_value.all.return_value = [
+                (1, "gpt-4"),
+                (2, "gpt-4o"),
+            ]
+
             result = sync_model_configurations(
                 db_session=mock_session,
                 provider_id=1,
@@ -55,9 +60,8 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 2  # Two new models
-            assert (
-                mock_session.execute.call_count == 2 * 3
-            )  # 2 models * (model insert + chat insert + vision insert)
+            # One bulk insert for the models, one for their flows.
+            assert mock_session.execute.call_count == 2
             mock_session.commit.assert_called_once()
 
     def test_skips_existing_models(self) -> None:
@@ -91,6 +95,8 @@ class TestSyncModelConfigurations:
                 ),
             ]
 
+            mock_session.execute.return_value.all.return_value = [(2, "gpt-4o")]
+
             result = sync_model_configurations(
                 db_session=mock_session,
                 provider_id=1,
@@ -98,7 +104,8 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 1  # Only one new model
-            assert mock_session.execute.call_count == 3
+            # One bulk insert for the new model, one for its flows.
+            assert mock_session.execute.call_count == 2
 
     def test_no_commit_when_no_new_models(self) -> None:
         """Test that commit is not called when nothing new or upgraded."""
@@ -166,6 +173,8 @@ class TestSyncModelConfigurations:
                 ),
             ]
 
+            mock_session.execute.return_value.all.return_value = [(1, "deepseek-r1")]
+
             result = sync_model_configurations(
                 db_session=mock_session,
                 provider_id=1,
@@ -173,8 +182,20 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 1
-            # 1 model insert + 3 flow inserts (CHAT + VISION + REASONING)
-            assert mock_session.execute.call_count == 4
+            # One bulk insert for the model, one for its CHAT, VISION and
+            # REASONING flows.
+            assert mock_session.execute.call_count == 2
+            inserted_flow_types = {
+                value
+                for call in mock_session.execute.call_args_list
+                for key, value in call.args[0].compile().params.items()
+                if key.startswith("llm_model_flow_type")
+            }
+            assert inserted_flow_types == {
+                LLMModelFlowType.CHAT,
+                LLMModelFlowType.VISION,
+                LLMModelFlowType.REASONING,
+            }
             mock_session.commit.assert_called_once()
 
     def test_handles_missing_optional_fields(self) -> None:

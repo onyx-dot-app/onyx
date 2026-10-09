@@ -1,21 +1,25 @@
 from collections.abc import Iterator
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 from googleapiclient.discovery import Resource
 
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
-from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
-from onyx.connectors.google_drive.doc_conversion import download_request
-from onyx.connectors.google_drive.file_retrieval import _get_files_in_parent
-from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
-from onyx.connectors.google_drive.file_retrieval import DRIVE_RESOURCE_KEY_FIELD
-from onyx.connectors.google_drive.file_retrieval import DRIVE_RESOURCE_KEY_HEADER
-from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_SHORTCUT_TYPE,
+)
+from onyx.connectors.google_drive.doc_conversion import (
+    convert_drive_item_to_document,
+    download_request,
+)
+from onyx.connectors.google_drive.file_retrieval import (
+    DRIVE_RESOURCE_KEY_FIELD,
+    DRIVE_RESOURCE_KEY_HEADER,
+    DriveFileFieldType,
+    _get_files_in_parent,
+    crawl_folders_for_files,
+)
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 
 _FILE_RETRIEVAL_MODULE = "onyx.connectors.google_drive.file_retrieval"
@@ -142,6 +146,40 @@ def test_shortcut_to_file_yields_target_with_true_parent() -> None:
     assert files == [target]
     assert service.files_resource.get_calls[0]["fileId"] == "target_file"
     assert len(service.files_resource.get_calls) == 1
+
+
+def test_shortcut_resolution_uses_shortcut_modified_time() -> None:
+    target = _target_file("target_file", "true_parent")
+    target["modifiedTime"] = "2024-01-15T00:00:00Z"
+    service = _FakeDriveService(
+        {
+            "shortcut_file": _shortcut("shortcut_file", "target_file", _PDF_MIME_TYPE),
+            "target_file": target,
+        }
+    )
+
+    def _fake_paginated_retrieval(**_kwargs: object) -> Iterator[dict[str, Any]]:
+        shortcut = _shortcut("shortcut_file", "target_file", _PDF_MIME_TYPE)
+        shortcut["modifiedTime"] = "2026-06-02T00:00:00Z"
+        yield shortcut
+
+    with patch(
+        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
+        side_effect=_fake_paginated_retrieval,
+    ):
+        files = list(
+            _get_files_in_parent(
+                service=cast(Resource, service),
+                parent_id="shortcut_parent",
+                field_type=DriveFileFieldType.STANDARD,
+            )
+        )
+
+    assert len(files) == 1
+    # the retrieved item keeps the shortcut's modifiedTime — the value the
+    # listing was filtered/ordered by — so it stays within the requested range
+    assert files[0]["modifiedTime"] == "2026-06-02T00:00:00Z"
+    assert files[0]["id"] == "target_file"
 
 
 def test_shortcut_to_resource_key_file_uses_header() -> None:

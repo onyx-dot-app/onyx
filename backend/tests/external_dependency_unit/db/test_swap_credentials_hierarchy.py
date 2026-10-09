@@ -8,20 +8,19 @@ connector with hierarchy nodes has its credential swapped (e.g. Confluence).
 
 from uuid import uuid4
 
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import HierarchyNodeType
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import HierarchyNode
-from onyx.db.models import HierarchyNodeByConnectorCredentialPair
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, HierarchyNodeType
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    HierarchyNode,
+    HierarchyNodeByConnectorCredentialPair,
+)
 
 
 def test_cc_pair_credential_swap_cascades_to_hierarchy_join(

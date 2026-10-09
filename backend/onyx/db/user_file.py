@@ -1,15 +1,15 @@
 import datetime
+from collections.abc import Sequence
+from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import func
-from sqlalchemy import select
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy import column, exists, func, or_, select, true, update, values
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.orm import Session, joinedload, selectinload
 
-from onyx.db.models import Persona
-from onyx.db.models import Project__UserFile
-from onyx.db.models import UserFile
+from onyx.db.enums import UserFileStatus
+from onyx.db.models import Persona, Project__UserFile, User, UserFile
+from onyx.file_store.models import UserFileMetadata
 
 
 def fetch_chunk_counts_for_user_files(
@@ -108,6 +108,29 @@ def update_last_accessed_at_for_user_files(
     db_session.commit()
 
 
+def get_user_file_by_id(
+    user_file_id: UUID | str, db_session: Session
+) -> UserFile | None:
+    """Fetch a UserFile row by id. Accepts str for callers whose input may not
+    even be a UserFile id (e.g. a storage file_id) — those resolve to None."""
+    return db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+
+
+def capture_user_file_metadata(
+    user_files: Sequence[UserFile],
+) -> list[UserFileMetadata]:
+    """Copy loaded fields while the caller owns the database session."""
+    return [UserFileMetadata.model_validate(user_file) for user_file in user_files]
+
+
+def get_user_file_metadata(user_file_id: UUID, db_session: Session) -> UserFileMetadata:
+    """Capture one file for content loading after the session closes."""
+    user_file: UserFile | None = get_user_file_by_id(user_file_id, db_session)
+    if user_file is None:
+        raise ValueError(f"User file with id {user_file_id} not found")
+    return UserFileMetadata.model_validate(user_file)
+
+
 def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str | None:
     """Resolve a `UserFile.id` to its underlying `FileRecord.file_id`.
 
@@ -115,10 +138,22 @@ def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str |
     caller is already passing a storage `file_id`), so the caller can fall
     through to a direct file-store lookup.
     """
-    user_file = db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+    user_file = get_user_file_by_id(user_file_id, db_session)
     if user_file:
         return user_file.file_id
     return None
+
+
+def get_owned_file_ids(
+    file_ids: set[str], user_id: UUID, db_session: Session
+) -> set[str]:
+    return set(
+        db_session.scalars(
+            select(UserFile.file_id).where(
+                UserFile.file_id.in_(file_ids), UserFile.user_id == user_id
+            )
+        ).all()
+    )
 
 
 def get_file_ids_by_user_file_ids(
@@ -153,4 +188,213 @@ def fetch_user_files_with_access_relationships(
         )
         .filter(UserFile.id.in_(user_file_ids))
         .all()
+    )
+
+
+# Port scope helpers. The port threads document ids as `str` (a user file's doc id is
+# `str(UserFile.id)`), so these accept/return `str` and convert to UUID for the query;
+# ordering is by UUID value and every bound converts the same way.
+
+
+def fetch_port_scope_user_ids(db_session: Session) -> list[UUID]:
+    """Users with at least one COMPLETED file — the port scheduler's work list, one
+    scope per user (switchover-agnostic: users have no paused concept)."""
+    return [
+        user_id
+        for user_id in db_session.scalars(
+            select(UserFile.user_id)
+            .where(UserFile.status == UserFileStatus.COMPLETED)
+            .distinct()
+        )
+        if user_id is not None
+    ]
+
+
+class PortedUserScope(NamedTuple):
+    user_id: UUID
+    up_to_doc_id: str | None
+
+
+def sample_ported_user_file_ids(
+    db_session: Session,
+    user_scopes: Sequence[PortedUserScope],
+    per_scope_limit: int,
+) -> list[str]:
+    """Gets up to `per_scope_limit` user file IDs per user that its port copied.
+
+    Only COMPLETED, non-incognito files inside the port's snapshot bound count, which
+    is the scope the port itself copies. A user with a None `up_to_doc_id` is skipped:
+    that port found no files when it started, and files completed since belong to the
+    dual-write. Files with a NULL chunk_count are included; the column was added
+    without a backfill.
+
+    One LATERAL query serves every user. This runs on each 15-second swap-gate tick,
+    and a tenant can have thousands of users with files.
+    """
+    scope_rows = [
+        (scope.user_id, UUID(scope.up_to_doc_id))
+        for scope in user_scopes
+        if scope.up_to_doc_id is not None
+    ]
+    if per_scope_limit <= 0 or not scope_rows:
+        return []
+    scopes = values(
+        column("user_id", PGUUID(as_uuid=True)),
+        column("up_to_id", PGUUID(as_uuid=True)),
+        name="user_scope",
+    ).data(scope_rows)
+
+    per_user = (
+        select(UserFile.id)
+        .where(
+            UserFile.user_id == scopes.c.user_id,
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.incognito.is_(False),
+            or_(UserFile.chunk_count.is_(None), UserFile.chunk_count > 0),
+            UserFile.id <= scopes.c.up_to_id,
+        )
+        .order_by(UserFile.id)
+        .limit(per_scope_limit)
+        .lateral("sampled_user_file")
+    )
+    stmt = select(per_user.c.id).select_from(scopes.join(per_user, true()))
+    return [str(file_id) for file_id in db_session.scalars(stmt)]
+
+
+def get_user_file_ids_for_user_batch(
+    db_session: Session,
+    user_id: UUID,
+    after_id: str | None,
+    limit: int,
+    up_to_id: str | None,
+) -> list[str]:
+    """One ascending cursor page of a user's COMPLETED file ids for the port copy.
+    `up_to_id` (the snapshot max id at attempt creation) bounds the scan so the attempt
+    terminates and covers every file COMPLETED as of creation (all have id <= max). Ids
+    are random UUIDs, not creation-ordered, so a file that completes later with id <=
+    up_to may also be picked up — harmless (create-only write); guaranteeing mid-run
+    files reach FUTURE is the dual-write's job, not this bound."""
+    stmt = select(UserFile.id).where(
+        UserFile.user_id == user_id,
+        UserFile.status == UserFileStatus.COMPLETED,
+        UserFile.incognito.is_(False),
+    )
+    if after_id is not None:
+        stmt = stmt.where(UserFile.id > UUID(after_id))
+    if up_to_id is not None:
+        stmt = stmt.where(UserFile.id <= UUID(up_to_id))
+    stmt = stmt.order_by(UserFile.id).limit(limit)
+    return [str(uf_id) for uf_id in db_session.scalars(stmt)]
+
+
+def get_max_user_file_id_for_user(db_session: Session, user_id: UUID) -> str | None:
+    """The greatest COMPLETED file id for a user — the attempt's snapshot upper bound."""
+    max_id = db_session.scalar(
+        select(UserFile.id)
+        .where(
+            UserFile.user_id == user_id,
+            UserFile.status == UserFileStatus.COMPLETED,
+        )
+        .order_by(UserFile.id.desc())
+        .limit(1)
+    )
+    return str(max_id) if max_id is not None else None
+
+
+def filter_existing_user_file_ids(
+    db_session: Session, user_id: UUID, ids: list[str]
+) -> set[str]:
+    """The subset of `ids` still COMPLETED for this user — the survival filter the port
+    applies before its create-only write so a file deleted mid-run isn't resurrected."""
+    if not ids:
+        return set()
+    rows = db_session.scalars(
+        select(UserFile.id).where(
+            UserFile.user_id == user_id,
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.id.in_([UUID(i) for i in ids]),
+        )
+    )
+    return {str(uf_id) for uf_id in rows}
+
+
+def filter_existing_user_file_ids_any_owner(
+    db_session: Session, ids: list[str]
+) -> set[str]:
+    """Returns the subset of `ids` that are COMPLETED user files, regardless of owner.
+
+    IDs that are not UUIDs are ignored, so connector document IDs can be mixed in.
+    """
+    if not ids:
+        return set()
+    parsed: list[UUID] = []
+    for raw_id in ids:
+        try:
+            parsed.append(UUID(raw_id))
+        except ValueError:
+            continue
+    if not parsed:
+        return set()
+    rows = db_session.scalars(
+        select(UserFile.id).where(
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.id.in_(parsed),
+        )
+    )
+    return {str(uf_id) for uf_id in rows}
+
+
+def user_file_port_scope_active(db_session: Session, user_id: UUID) -> bool:
+    """True while the user still exists — the user-scope analog of the cc_pair
+    DELETING liveness guard. A hard-deleted user CASCADE-drops its port attempts, so
+    this is a fast pre-check; per-file deletions are handled by the survival filter."""
+    return db_session.get(User, user_id) is not None
+
+
+def mark_user_file_reconcile_pending(db_session: Session, user_file_id: UUID) -> None:
+    """Flag FUTURE as stale/missing for this file (deferred ACL or missing content).
+    Owned by the sync/index path, never the port."""
+    db_session.execute(
+        update(UserFile)
+        .where(UserFile.id == user_file_id)
+        .values(secondary_reconcile_pending=True)
+    )
+    db_session.commit()
+
+
+def clear_user_file_reconcile_pending(db_session: Session, user_file_id: UUID) -> None:
+    """Clear the flag once FUTURE matches PRESENT. Owned by the reconciler."""
+    db_session.execute(
+        update(UserFile)
+        .where(UserFile.id == user_file_id)
+        .values(secondary_reconcile_pending=False)
+    )
+    db_session.commit()
+
+
+def count_user_files_reconcile_pending(db_session: Session) -> int:
+    """Count of user files whose FUTURE copy hasn't reconciled yet (swap progress)."""
+    return db_session.execute(
+        select(func.count()).where(UserFile.secondary_reconcile_pending.is_(True))
+    ).scalar_one()
+
+
+def any_user_file_reconcile_pending_for_users(
+    db_session: Session, user_ids: list[UUID]
+) -> bool:
+    """Swap-gate check: any un-reconciled COMPLETED file among the port's users? Scoped to
+    required_user_ids like the connector flag's required_cc_pairs. COMPLETED-only because only
+    those are drainable — a flag stuck on a non-COMPLETED row must not wedge the swap."""
+    if not user_ids:
+        return False
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    UserFile.user_id.in_(user_ids),
+                    UserFile.status == UserFileStatus.COMPLETED,
+                    UserFile.secondary_reconcile_pending.is_(True),
+                )
+            )
+        )
     )

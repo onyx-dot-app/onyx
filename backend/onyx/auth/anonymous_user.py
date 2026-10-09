@@ -1,17 +1,15 @@
 from collections.abc import Mapping
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from onyx.auth.schemas import UserRole
-from onyx.configs.constants import ANONYMOUS_USER_EMAIL
-from onyx.configs.constants import ANONYMOUS_USER_INFO_ID
-from onyx.configs.constants import KV_ANONYMOUS_USER_PERSONALIZATION_KEY
-from onyx.configs.constants import KV_ANONYMOUS_USER_PREFERENCES_KEY
-from onyx.key_value_store.store import KeyValueStore
-from onyx.key_value_store.store import KvKeyNotFoundError
-from onyx.server.manage.models import UserInfo
-from onyx.server.manage.models import UserPersonalization
-from onyx.server.manage.models import UserPreferences
+from onyx.configs.constants import (
+    ANONYMOUS_USER_EMAIL,
+    ANONYMOUS_USER_INFO_ID,
+    KV_ANONYMOUS_USER_PERSONALIZATION_KEY,
+    KV_ANONYMOUS_USER_PREFERENCES_KEY,
+)
+from onyx.db.enums import AccountType
+from onyx.key_value_store.store import KeyValueStore, KvKeyNotFoundError
+from onyx.server.manage.models import UserInfo, UserPersonalization, UserPreferences
 
 
 def set_anonymous_user_preferences(
@@ -55,7 +53,7 @@ def fetch_anonymous_user_info(store: KeyValueStore) -> UserInfo:
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.LIMITED,
+        account_type=AccountType.ANONYMOUS,
         preferences=load_anonymous_user_preferences(store),
         personalization=personalization,
         is_anonymous_user=True,

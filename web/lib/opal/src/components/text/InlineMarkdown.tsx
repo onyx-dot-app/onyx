@@ -19,11 +19,39 @@ const sanitizeSchema = {
   },
 };
 
-const ALLOWED_ELEMENTS = ["p", "br", "a", "strong", "em", "code", "del"];
+const ALLOWED_ELEMENTS = [
+  "p",
+  "br",
+  "a",
+  "strong",
+  "em",
+  "code",
+  "del",
+  "ul",
+  "ol",
+  "li",
+];
 
 const INLINE_COMPONENTS = {
+  // dir="auto" isolates each block's direction so LTR technical copy
+  // inside an RTL page keeps its own reading order.
   p: ({ children }: { children?: ReactNode }) => (
-    <span className="block">{children}</span>
+    <span dir="auto" className="block">
+      {children}
+    </span>
+  ),
+  ul: ({ children }: { children?: ReactNode }) => (
+    <ul dir="auto" className="list-disc ps-3 space-y-0">
+      {children}
+    </ul>
+  ),
+  ol: ({ children }: { children?: ReactNode }) => (
+    <ol dir="auto" className="list-decimal ps-3">
+      {children}
+    </ol>
+  ),
+  li: ({ children }: { children?: ReactNode }) => (
+    <li dir="auto">{children}</li>
   ),
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {
     if (!href) return <>{children}</>;
@@ -106,5 +134,11 @@ export function toPlainString(value: string | RichStr): string {
     .replace(/(?<!\w)_([^_]+)_(?!\w)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\s*\n\s*/g, " ")
+    .replace(/&#(\d+);/g, (entity: string, code: string) => {
+      const point = Number(code);
+      return point >= 0x21 && point <= 0x7e
+        ? String.fromCodePoint(point)
+        : entity;
+    })
     .trim();
 }

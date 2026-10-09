@@ -15,23 +15,28 @@ import (
 // ImageOptions configures a container image audit run.
 type ImageOptions struct {
 	Image     string
-	Format    string // text|json|sarif
+	Format    string // comma-separated list of text|json|sarif
 	FailOn    Severity
 	IgnoreURL string
-	Writer    io.Writer
+	// Strict fails a scan that extracts no packages, for callers that read a
+	// missing finding as a resolved one. Every image ships OS packages.
+	Strict bool
+	// Stdout/Stderr route the requested formats; see Options and renderReport.
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // RunImage scans a container image for known vulnerabilities, applies the same
-// S3 allowlist used by Run, renders a report to opts.Writer, and returns the
-// result. Findings at or above opts.FailOn are reported as Blocking, which is
-// how it gates a release.
+// S3 allowlist used by Run, renders a report to opts.Stdout/opts.Stderr, and
+// returns the result. Findings at or above opts.FailOn are reported as Blocking,
+// which is how it gates a release.
 func RunImage(opts ImageOptions) (*Result, error) {
-	findings, err := scanImage(opts.Image)
+	findings, err := scanImage(opts.Image, opts.Strict)
 	if err != nil {
 		return nil, fmt.Errorf("image scan failed: %w", err)
 	}
 
-	ignores, err := fetchIgnores(opts.IgnoreURL)
+	ignores, err := FetchIgnores(opts.IgnoreURL)
 	if err != nil {
 		// Err toward blocking: proceed with an empty allowlist so unignored
 		// criticals still fail the gate rather than slipping through.
@@ -51,7 +56,7 @@ func RunImage(opts ImageOptions) (*Result, error) {
 		Blocking: blockingFindings(kept, opts.FailOn),
 	}
 
-	if err := render(opts.Writer, opts.Format, result); err != nil {
+	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -60,7 +65,7 @@ func RunImage(opts ImageOptions) (*Result, error) {
 // scanImage runs osv-scanner's layer-aware container scanner (as a library)
 // over ref and maps the results into Findings. ref may be a remote image, which
 // is pulled using the ambient Docker credentials.
-func scanImage(ref string) ([]Finding, error) {
+func scanImage(ref string, strict bool) ([]Finding, error) {
 	res, err := osvscanner.DoContainerScan(osvscanner.ScannerActions{
 		Image: ref,
 		// Fetch the OSV databases so matching works on a fresh CI runner
@@ -70,7 +75,7 @@ func scanImage(ref string) ([]Finding, error) {
 	if err != nil {
 		// ErrVulnerabilitiesFound is the normal "found something" path; results
 		// are still populated. ErrNoPackagesFound means nothing to scan.
-		if errors.Is(err, osvscanner.ErrNoPackagesFound) {
+		if errors.Is(err, osvscanner.ErrNoPackagesFound) && !strict {
 			return nil, nil
 		}
 		if !errors.Is(err, osvscanner.ErrVulnerabilitiesFound) {

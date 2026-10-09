@@ -9,16 +9,16 @@ import logging
 import os
 from typing import Any
 
-import braintrust
 import requests
 
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
+from onyx.configs.app_configs import (
+    POSTGRES_API_SERVER_POOL_OVERFLOW,
+    POSTGRES_API_SERVER_POOL_SIZE,
+)
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.evals.eval import run_eval
-from onyx.evals.models import EvalationAck
-from onyx.evals.models import EvalConfigurationOptions
+from onyx.evals.models import EvalationAck, EvalConfigurationOptions
 from onyx.evals.provider import get_provider
 from onyx.tracing.setup import setup_tracing
 
@@ -247,6 +247,8 @@ def main() -> None:
                 "--local-only cannot be used with --remote-dataset-name. Use --local-data-path with a local JSON file instead."
             )
         print(f"Loading data from remote dataset: {args.remote_dataset_name}")
+        import braintrust
+
         dataset = braintrust.init_dataset(
             project=args.braintrust_project, name=args.remote_dataset_name
         )
@@ -255,9 +257,7 @@ def main() -> None:
     if args.remote:
         if not args.api_key:
             print("Using API Key from ONYX_EVAL_API_KEY")
-        api_key: str = (
-            args.api_key if args.api_key else os.environ.get("ONYX_EVAL_API_KEY", "")
-        )
+        api_key: str = args.api_key or os.environ.get("ONYX_EVAL_API_KEY", "")
         print(f"Running evaluation on remote server: {args.base_url}")
 
         if args.search_permissions_email:

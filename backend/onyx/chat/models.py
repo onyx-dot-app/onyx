@@ -1,22 +1,54 @@
 from collections.abc import Iterator
-from typing import Any
-from typing import Callable
+from enum import Enum
+from typing import Any, Callable
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
-from onyx.server.query_and_chat.models import MessageResponseIDInfo
-from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.models import SearchToolUsage
-from onyx.tools.models import ToolCallKickoff
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.server.query_and_chat.models import (
+    MessageResponseIDInfo,
+    MultiModelMessageResponseIDInfo,
+)
+from onyx.server.query_and_chat.streaming_models import (
+    CitationInfo,
+    GeneratedImage,
+    Packet,
+)
+from onyx.tools.models import SearchToolUsage, ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
+
+
+class HistoryImageReplay(BaseModel):
+    supports_image_input: bool
+    image_cap: int | None = None
+    keep_image_indices: set[tuple[int, int]] | None = None
+    dropped_image_count: int = 0
+
+
+class CitationMode(str, Enum):
+    """Defines how citations should be handled in the output.
+
+    REMOVE: Citations are completely removed from output text.
+            No CitationInfo objects are emitted.
+            Use case: When you need to remove citations from the output if they are not shared with the user
+            (e.g. in discord bot, public slack bot).
+
+    KEEP_MARKERS: Original citation markers like [1], [2] are preserved unchanged.
+                  No CitationInfo objects are emitted.
+                  Use case: When you need to track citations in research agent and later process
+                  them with collapse_citations() to renumber.
+
+    HYPERLINK: Citations are replaced with markdown links like [[1]](url).
+               CitationInfo objects are emitted for UI tracking.
+               Use case: Final reports shown to users with clickable links.
+    """
+
+    REMOVE = "remove"
+    KEEP_MARKERS = "keep_markers"
+    HYPERLINK = "hyperlink"
 
 
 class StreamingError(BaseModel):
@@ -36,6 +68,9 @@ class CustomToolResponse(BaseModel):
 
 class CreateChatSessionID(BaseModel):
     chat_session_id: UUID
+    # Echoes the pinned mode so the client can verify the server honored an
+    # incognito request. A server that omits it did not.
+    incognito: bool = False
 
 
 AnswerStreamPart = (
@@ -92,12 +127,18 @@ class ChatFullResponse(BaseModel):
     # Metadata
     message_id: int
     chat_session_id: UUID | None = None
+    # Echoes the pinned mode for newly-created sessions, like the streaming
+    # packet does. A server that omits it did not honor an incognito request.
+    incognito: bool = False
     error_msg: str | None = None
 
 
 class ChatLoadedFile(InMemoryChatFile):
     content_text: str | None
     token_count: int
+    # True while the user-file worker is still processing the file — its
+    # canonical plaintext (e.g. including image captions) doesn't exist yet.
+    content_pending: bool = False
 
     # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
     # can require ``content_text`` / ``token_count`` without violating LSP on
@@ -112,6 +153,7 @@ class ChatLoadedFile(InMemoryChatFile):
         content_text: str | None,
         token_count: int,
         loader: Callable[[], bytes],
+        content_pending: bool = False,
     ) -> "ChatLoadedFile":
         """Construct a ``ChatLoadedFile`` whose ``content`` bytes are loaded
         only on first access. ``content_text`` and ``token_count`` are passed
@@ -126,6 +168,7 @@ class ChatLoadedFile(InMemoryChatFile):
             filename=filename,
             content_text=content_text,
             token_count=token_count,
+            content_pending=content_pending,
         )
         install_lazy_content_loader(inst, loader)
         return inst
@@ -150,6 +193,10 @@ class ChatMessageSimple(BaseModel):
     message_type: MessageType
     # Only for USER type messages
     image_files: list[ChatLoadedFile] | None = None
+    # Portion of token_count contributed by image_files. Kept separate so
+    # budgeting can discount it when a non-vision model replays the images
+    # as text markers instead.
+    image_token_count: int = 0
     # Only for TOOL_CALL_RESPONSE type messages
     tool_call_id: str | None = None
     # For ASSISTANT messages with tool calls (OpenAI parallel tool calling format)
@@ -184,6 +231,12 @@ class FileToolMetadata(BaseModel):
     file_id: str
     filename: str
     approx_char_count: int
+    # Whether this file's bytes reached ``chat_files_for_tools``, and so are
+    # available to tools that receive the files themselves (PythonTool).
+    # Messages dropped by summary truncation are filtered out of
+    # ``chat_history`` before ``load_all_chat_files`` runs, so their files are
+    # listed for the LLM but never staged. Only ``read_file`` can fetch those.
+    staged_for_tools: bool = True
 
 
 class ChatHistoryResult(BaseModel):
@@ -229,3 +282,16 @@ class LlmStepResult(BaseModel):
     # Raw LLM text before any display-oriented filtering/sanitization.
     # Used for fallback tool-call extraction when providers emit calls as text.
     raw_answer: str | None = None
+    # Terminal finish_reason from the stream, LiteLLM-normalized (e.g. "stop",
+    # "length", "tool_calls", "content_filter"). Lets downstream classification
+    # distinguish a model refusal from a genuinely empty provider response.
+    finish_reason: str | None = None
+
+
+class AvailableFiles(BaseModel):
+    """Separated file IDs for the FileReaderTool so it knows which loader to use."""
+
+    # IDs from the ``user_file`` table (project / persona-attached files).
+    user_file_ids: list[UUID] = []
+    # IDs from the ``file_record`` table (chat-attached files).
+    chat_file_ids: list[UUID] = []

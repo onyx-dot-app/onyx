@@ -1,5 +1,5 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+import time
+from unittest.mock import MagicMock, patch
 
 import pytest
 from googleapiclient.errors import HttpError
@@ -37,7 +37,7 @@ def test_get_drive_members_admin_403_raises_permission_error(
     )
 
     with pytest.raises(PermissionError) as exc_info:
-        _get_drive_members(connector, admin_service)
+        _get_drive_members(connector, admin_service, deadline=time.monotonic() + 60)
 
     assert "primary admin" in str(exc_info.value).lower()
     assert connector.primary_admin_email in str(exc_info.value)
@@ -58,4 +58,4 @@ def test_get_drive_members_admin_non_403_reraised(
     )
 
     with pytest.raises(HttpError):
-        _get_drive_members(connector, admin_service)
+        _get_drive_members(connector, admin_service, deadline=time.monotonic() + 60)

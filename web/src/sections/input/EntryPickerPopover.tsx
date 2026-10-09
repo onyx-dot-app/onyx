@@ -9,17 +9,17 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Popover, Text } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import { useTranslations } from "next-intl";
+import { LineItemButton, Popover, Text } from "@opal/components";
 import {
   filterPickerSections,
   flattenSections,
-  type PickerApp,
+  pickerEntryKey,
   type PickerEntry,
   type PickerSections,
 } from "@/lib/skills/picker";
-import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import { cn } from "@opal/utils";
+import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
+import type { IconFunctionComponent } from "@opal/types";
 
 interface EntryPickerPopoverProps {
   open: boolean;
@@ -38,6 +38,7 @@ function EntryPickerPopover({
   onSelect,
   onClose,
 }: EntryPickerPopoverProps) {
+  const t = useTranslations("chat.input");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -138,7 +139,7 @@ function EntryPickerPopover({
         width="xl"
         onOpenAutoFocus={(e) => e.preventDefault()}
         data-testid="skill-picker-popover"
-        aria-label="Skill picker"
+        aria-label={t("entryPickerPopover.content.ariaLabel")}
       >
         <Popover.Menu scrollContainerRef={scrollContainerRef}>
           {buildMenuChildren({
@@ -147,6 +148,12 @@ function EntryPickerPopover({
             selectedIndex,
             onSelect,
             onHover: setSelectedIndex,
+            emptyMessage: t("entryPickerPopover.empty.text"),
+            groupLabels: {
+              skills: t("entryPickerPopover.skillsGroup.label"),
+              apps: t("entryPickerPopover.appsGroup.label"),
+              mcpServers: t("entryPickerPopover.mcpServersGroup.label"),
+            },
           })}
         </Popover.Menu>
       </Popover.Content>
@@ -161,6 +168,9 @@ interface BuildMenuChildrenArgs {
   selectedIndex: number;
   onSelect: (entry: PickerEntry) => void;
   onHover: (idx: number) => void;
+  /** Translated copy: this helper is not a component, so it cannot call `t`. */
+  emptyMessage: string;
+  groupLabels: { skills: string; apps: string; mcpServers: string };
 }
 
 // `Popover.Menu` renders a literal `null` between children as a divider.
@@ -170,52 +180,72 @@ function buildMenuChildren({
   selectedIndex,
   onSelect,
   onHover,
+  emptyMessage,
+  groupLabels,
 }: BuildMenuChildrenArgs): ReactNode[] {
   if (flatEntries.length === 0) {
     return [
       <div key="empty" className="p-2">
         <Text font="secondary-body" color="text-03">
-          No matching skills
+          {emptyMessage}
         </Text>
       </div>,
     ];
   }
 
-  const skillsCount = filtered.skills.length;
-  const children: ReactNode[] = [];
+  // Groups must stay in `flattenSections` order — keyboard nav indexes into that
+  // flat list, so a running index is what keeps the two aligned.
+  const groups: { key: string; label: string; entries: PickerEntry[] }[] = [
+    { key: "skills", label: groupLabels.skills, entries: filtered.skills },
+    { key: "apps", label: groupLabels.apps, entries: filtered.apps },
+    {
+      key: "mcpServers",
+      label: groupLabels.mcpServers,
+      entries: filtered.mcpServers,
+    },
+  ];
 
-  flatEntries.forEach((entry, idx) => {
-    if (idx === 0 && skillsCount > 0) {
-      children.push(<SectionHeader key="skills-header" label="Skills" />);
-    }
-    if (idx === skillsCount && filtered.apps.length > 0) {
-      if (skillsCount > 0) children.push(null);
-      children.push(<SectionHeader key="apps-header" label="Apps" />);
-    }
-    const selected = idx === selectedIndex;
+  const children: ReactNode[] = [];
+  let idx = 0;
+
+  for (const group of groups) {
+    if (group.entries.length === 0) continue;
+    if (children.length > 0) children.push(null);
     children.push(
-      entry.kind === "app" ? (
-        <AppRow
-          key={`app-${entry.slug}`}
-          app={entry}
-          selected={selected}
-          onHover={() => onHover(idx)}
-          onPick={() => onSelect(entry)}
-          rowIndex={idx}
-        />
-      ) : (
-        <SkillRow
-          key={`skill-${entry.slug}`}
-          slug={entry.slug}
-          description={entry.description}
-          selected={selected}
-          onHover={() => onHover(idx)}
-          onPick={() => onSelect(entry)}
-          rowIndex={idx}
-        />
-      )
+      <SectionHeader key={`${group.key}-header`} label={group.label} />
     );
-  });
+    for (const entry of group.entries) {
+      const rowProps = {
+        key: pickerEntryKey(entry),
+        selected: idx === selectedIndex,
+        onHover: () => onHover(idx),
+        onPick: () => onSelect(entry),
+        rowIndex: idx,
+      };
+      children.push(
+        entry.kind === "skill" ? (
+          <SkillRow
+            {...rowProps}
+            slug={entry.slug}
+            description={entry.description}
+          />
+        ) : (
+          <ConnectableRow
+            {...rowProps}
+            logo={pickerEntryIcon(entry)}
+            name={entry.name}
+            authenticated={entry.authenticated}
+            testId={
+              entry.kind === "app"
+                ? `app-picker-row-${entry.externalAppId}`
+                : `mcp-picker-row-${entry.mcpServerId}`
+            }
+          />
+        )
+      );
+      idx += 1;
+    }
+  }
 
   return children;
 }
@@ -249,11 +279,16 @@ function SkillRow({
 }: SkillRowProps) {
   return (
     <div className="cursor-pointer">
-      <LineItem
-        interactive={false}
-        selected={selected}
-        emphasized={selected}
+      <LineItemButton
+        presentational
+        sizePreset="main-ui"
+        variant="section"
+        title={`/${slug}`}
+        titleMaxLines={1}
+        state={selected ? "selected" : "empty"}
+        selectVariant="select-heavy"
         description={description}
+        descriptionMaxLines={1}
         onMouseEnter={onHover}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -261,31 +296,57 @@ function SkillRow({
         }}
         data-row-index={rowIndex}
         data-testid={`skill-picker-row-${slug}`}
-      >
-        {`/${slug}`}
-      </LineItem>
+      />
     </div>
   );
 }
 
-interface AppRowProps {
-  app: PickerApp;
+interface ConnectableRowProps {
+  logo: IconFunctionComponent;
+  name: string;
+  authenticated: boolean;
+  testId: string;
   selected: boolean;
   onHover: () => void;
   onPick: () => void;
   rowIndex: number;
 }
 
-function AppRow({ app, selected, onHover, onPick, rowIndex }: AppRowProps) {
-  const Logo = getAppTypeLogo(app.appType);
-  const unauth = !app.authenticated;
+// Shared by external apps and MCP servers: identical affordances, and the
+// section header above already says which kind the row is.
+function ConnectableRow({
+  logo: Logo,
+  name,
+  authenticated,
+  testId,
+  selected,
+  onHover,
+  onPick,
+  rowIndex,
+}: ConnectableRowProps) {
+  const t = useTranslations("chat.input");
+  const unauth = !authenticated;
   return (
     <div className="cursor-pointer">
-      <LineItem
-        interactive={false}
-        selected={selected}
-        emphasized={selected}
-        description={app.description}
+      {/* The logo takes the icon slot rather than riding inside the label,
+          and the unauthenticated dimming becomes the muted colour mode
+          rather than opacity on a hand-rolled span. */}
+      <LineItemButton
+        presentational
+        sizePreset="main-ui"
+        variant="section"
+        icon={Logo}
+        title={name}
+        titleMaxLines={1}
+        color={unauth ? "muted" : undefined}
+        state={selected ? "selected" : "empty"}
+        selectVariant="select-heavy"
+        description={
+          authenticated
+            ? t("entryPickerPopover.connectedRow.description")
+            : t("entryPickerPopover.connectionRequiredRow.description")
+        }
+        descriptionMaxLines={1}
         onMouseEnter={onHover}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -293,24 +354,18 @@ function AppRow({ app, selected, onHover, onPick, rowIndex }: AppRowProps) {
         }}
         rightChildren={
           unauth ? (
-            <Text font="secondary-action" color="text-03" nowrap>
-              Connect
+            <Text
+              font="secondary-action"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
+              {t("entryPickerPopover.connectAction.label")}
             </Text>
           ) : undefined
         }
         data-row-index={rowIndex}
-        data-testid={`skill-picker-row-${app.slug}`}
-      >
-        <span
-          className={cn(
-            "inline-flex items-center gap-2",
-            unauth && "opacity-50"
-          )}
-        >
-          <Logo className="h-4 w-4 shrink-0" />
-          <span>{`/${app.slug}`}</span>
-        </span>
-      </LineItem>
+        data-testid={testId}
+      />
     </div>
   );
 }

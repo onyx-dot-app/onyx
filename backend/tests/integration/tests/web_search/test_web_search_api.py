@@ -2,8 +2,7 @@ import os
 
 import pytest
 
-from shared_configs.enums import WebContentProviderType
-from shared_configs.enums import WebSearchProviderType
+from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser

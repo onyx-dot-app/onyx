@@ -27,6 +27,8 @@ STACK_NAMES=(
   "${ENVIRONMENT}-onyx-backend-api-server-service"
   "${ENVIRONMENT}-onyx-model-server-inference-service"
   "${ENVIRONMENT}-onyx-model-server-indexing-service"
+  # Legacy Vespa service stack, removed from deploy.sh. Kept so old installs
+  # can still be torn down.
   "${ENVIRONMENT}-onyx-vespaengine-service"
   "${ENVIRONMENT}-onyx-redis-service"
   "${ENVIRONMENT}-onyx-postgres-service"

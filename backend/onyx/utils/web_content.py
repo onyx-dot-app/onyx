@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import io
-from urllib.parse import unquote
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from bs4.dammit import UnicodeDammit
 

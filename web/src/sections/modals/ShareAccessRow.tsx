@@ -106,7 +106,7 @@ export function ShareAccessRow({
       <ContentAction
         description={description}
         icon={LeadingIcon}
-        padding="sm"
+        padding={1}
         rightChildren={
           <PermissionColumns
             rightChildren={rightChildren}

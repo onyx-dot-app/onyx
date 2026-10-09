@@ -1,5 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -7,47 +6,47 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.web_search import fetch_active_web_content_provider
-from onyx.db.web_search import fetch_active_web_search_provider
+from onyx.db.web_search import (
+    fetch_active_web_content_provider,
+    fetch_active_web_search_provider,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.web_search.models import OpenUrlsToolRequest
-from onyx.server.features.web_search.models import OpenUrlsToolResponse
-from onyx.server.features.web_search.models import WebSearchToolRequest
-from onyx.server.features.web_search.models import WebSearchToolResponse
-from onyx.server.features.web_search.models import WebSearchWithContentResponse
-from onyx.server.manage.web_search.models import WebContentProviderView
-from onyx.server.manage.web_search.models import WebSearchProviderView
-from onyx.tools.models import LlmOpenUrlResult
-from onyx.tools.models import LlmWebSearchResult
+from onyx.server.features.web_search.models import (
+    OpenUrlsToolRequest,
+    OpenUrlsToolResponse,
+    WebSearchToolRequest,
+    WebSearchToolResponse,
+    WebSearchWithContentResponse,
+)
+from onyx.server.manage.web_search.models import (
+    WebContentProviderView,
+    WebSearchProviderView,
+)
+from onyx.tools.models import LlmOpenUrlResult, LlmWebSearchResult
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_HTML_SIZE_BYTES,
-)
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_PDF_SIZE_BYTES,
+    OnyxWebCrawler,
 )
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
-from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
-from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
-from onyx.tools.tool_implementations.web_search.providers import (
-    build_content_provider_from_config,
+from onyx.tools.tool_implementations.web_search.models import (
+    WebContentProviderConfig,
+    WebSearchProvider,
 )
 from onyx.tools.tool_implementations.web_search.providers import (
+    build_content_provider_from_config,
     build_search_provider_from_config,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
     filter_web_search_results_with_no_title_or_snippet,
-)
-from onyx.tools.tool_implementations.web_search.utils import (
     truncate_search_result_content,
 )
 from onyx.utils.logger import setup_logger
-from shared_configs.enums import WebContentProviderType
-from shared_configs.enums import WebSearchProviderType
+from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 
 router = APIRouter(prefix="/web-search", tags=PUBLIC_API_TAGS)
 logger = setup_logger()
@@ -177,16 +176,16 @@ def _run_web_search(
             list(search_results)
         )
         trimmed_results = list(filtered_results)[: request.max_results]
-        for search_result in trimmed_results:
-            results.append(
-                LlmWebSearchResult(
-                    document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-                    url=search_result.link,
-                    title=search_result.title,
-                    snippet=search_result.snippet or "",
-                    unique_identifier_to_strip_away=search_result.link,
-                )
+        results.extend(
+            LlmWebSearchResult(
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                url=search_result.link,
+                title=search_result.title,
+                snippet=search_result.snippet or "",
+                unique_identifier_to_strip_away=search_result.link,
             )
+            for search_result in trimmed_results
+        )
     return provider_view.provider_type, results
 
 
@@ -212,15 +211,14 @@ def _open_urls(
             "Web content provider failed to fetch URLs.",
         ) from exc
 
-    results: list[LlmOpenUrlResult] = []
-    for doc in docs:
-        results.append(
-            LlmOpenUrlResult(
-                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-                content=truncate_search_result_content(doc.full_content),
-                unique_identifier_to_strip_away=doc.link,
-            )
+    results: list[LlmOpenUrlResult] = [
+        LlmOpenUrlResult(
+            document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            content=truncate_search_result_content(doc.full_content),
+            unique_identifier_to_strip_away=doc.link,
         )
+        for doc in docs
+    ]
     provider_type = (
         provider_view.provider_type
         if provider_view
@@ -232,7 +230,7 @@ def _open_urls(
 @router.post("/search", response_model=WebSearchWithContentResponse)
 def execute_web_search(
     request: WebSearchToolRequest,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> WebSearchWithContentResponse:
     """
@@ -275,7 +273,7 @@ def execute_web_search(
 @router.post("/search-lite", response_model=WebSearchToolResponse)
 def execute_web_search_lite(
     request: WebSearchToolRequest,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> WebSearchToolResponse:
     """
@@ -291,7 +289,7 @@ def execute_web_search_lite(
 @router.post("/open-urls", response_model=OpenUrlsToolResponse)
 def execute_open_urls(
     request: OpenUrlsToolRequest,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> OpenUrlsToolResponse:
     """

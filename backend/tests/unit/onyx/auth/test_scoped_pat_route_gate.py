@@ -14,8 +14,7 @@ from fastapi import Depends
 from fastapi.routing import APIRoute
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import _scoped_pat_permitted_on_route
-from onyx.auth.users import scope_exempt
+from onyx.auth.users import _scoped_pat_permitted_on_route, scope_exempt
 from onyx.db.enums import Permission
 
 

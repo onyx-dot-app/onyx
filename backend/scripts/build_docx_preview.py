@@ -121,7 +121,7 @@ def _paragraph_alignment_score(
     """Fraction of position-aligned paragraphs whose text AND style both match."""
     if not a and not b:
         return 1.0
-    matches = sum(1 for pa, pb in zip(a, b) if pa == pb)
+    matches = sum(1 for pa, pb in zip(a, b, strict=False) if pa == pb)
     return matches / max(len(a), len(b))
 
 
@@ -129,7 +129,7 @@ def _text_alignment_score(a: list[tuple[str, str]], b: list[tuple[str, str]]) ->
     """Fraction of position-aligned paragraphs whose text matches (ignoring style)."""
     if not a and not b:
         return 1.0
-    matches = sum(1 for (_, ta), (_, tb) in zip(a, b) if ta == tb)
+    matches = sum(1 for (_, ta), (_, tb) in zip(a, b, strict=False) if ta == tb)
     return matches / max(len(a), len(b))
 
 
@@ -175,7 +175,7 @@ def compare(
     )
     shown = 0
     for index, (ref_p, cand_p) in enumerate(
-        zip(reference.paragraphs, candidate.paragraphs)
+        zip(reference.paragraphs, candidate.paragraphs, strict=False)
     ):
         if ref_p == cand_p:
             continue

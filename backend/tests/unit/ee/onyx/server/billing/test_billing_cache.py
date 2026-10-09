@@ -1,22 +1,20 @@
 """Unit tests for the Redis-backed billing cache."""
 
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 from redis.exceptions import RedisError
 
 from ee.onyx.server.billing import billing_cache as bc
-from ee.onyx.server.billing.billing_cache import BILLING_CACHE_KEY
-from ee.onyx.server.billing.billing_cache import cached_fetch_billing_information
-from ee.onyx.server.billing.billing_cache import cached_is_tenant_on_trial
-from ee.onyx.server.billing.billing_cache import invalidate_billing_cache
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+from ee.onyx.server.billing.billing_cache import (
+    BILLING_CACHE_KEY,
+    cached_fetch_billing_information,
+    cached_is_tenant_on_trial,
+    invalidate_billing_cache,
+)
+from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
 
 
 def _billing(status: str = "active") -> BillingInformation:
@@ -281,7 +279,7 @@ def test_is_tenant_on_trial_true_when_no_subscription() -> None:
 def test_invalidate_drops_cache_entry() -> None:
     redis = _fake_redis()
     with patch.object(bc, "get_shared_redis_client", return_value=redis):
-        invalidate_billing_cache("tenant_abc")
+        assert invalidate_billing_cache("tenant_abc") is True
     redis.delete.assert_called_once_with(
         BILLING_CACHE_KEY.format(tenant_id="tenant_abc")
     )
@@ -291,8 +289,8 @@ def test_invalidate_swallows_redis_errors() -> None:
     redis = _fake_redis()
     redis.delete = MagicMock(side_effect=RedisError("down"))
     with patch.object(bc, "get_shared_redis_client", return_value=redis):
-        # No exception bubbles up.
-        invalidate_billing_cache("tenant_abc")
+        # No exception bubbles up. The failure is reported via the return.
+        assert invalidate_billing_cache("tenant_abc") is False
 
 
 def test_single_tenant_fetch_raises_without_touching_redis() -> None:
@@ -333,6 +331,6 @@ def test_single_tenant_invalidate_is_noop() -> None:
         patch.object(bc, "MULTI_TENANT", False),
         patch.object(bc, "get_shared_redis_client", return_value=redis) as client,
     ):
-        invalidate_billing_cache("tenant_abc")
+        assert invalidate_billing_cache("tenant_abc") is True
 
     client.assert_not_called()

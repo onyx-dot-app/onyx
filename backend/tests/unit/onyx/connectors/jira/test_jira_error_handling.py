@@ -4,12 +4,13 @@ import time
 from unittest.mock import MagicMock
 
 import pytest
-from jira import JIRA
-from jira import JIRAError
+from jira import JIRA, JIRAError
 
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.jira.connector import JiraConnector
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 

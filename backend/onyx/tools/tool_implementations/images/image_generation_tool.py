@@ -1,38 +1,46 @@
 import json
 import threading
-from typing import Any
-from typing import cast
+from typing import Any, cast
+from uuid import UUID
 
 import requests
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.app_configs import IMAGE_MODEL_PROVIDER
+from onyx.configs.app_configs import IMAGE_MODEL_NAME, IMAGE_MODEL_PROVIDER
 from onyx.file_store.models import ChatFileType
-from onyx.file_store.utils import build_frontend_file_url
-from onyx.file_store.utils import load_chat_file_by_id
-from onyx.file_store.utils import save_files
+from onyx.file_store.utils import (
+    build_frontend_file_url,
+    load_chat_file_by_id,
+    save_files,
+)
 from onyx.image_gen.factory import get_image_generation_provider
-from onyx.image_gen.generation import generate_images_with_provider
-from onyx.image_gen.generation import is_image_generation_configured
-from onyx.image_gen.generation import resolve_image_size
-from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.image_gen.interfaces import ImageShape
-from onyx.image_gen.interfaces import ReferenceImage
+from onyx.image_gen.generation import (
+    generate_images_with_provider,
+    is_image_generation_configured,
+    resolve_image_size,
+)
+from onyx.image_gen.interfaces import (
+    ImageGenerationProviderCredentials,
+    ImageShape,
+    ReferenceImage,
+)
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    GeneratedImage,
+    ImageGenerationFinal,
+    ImageGenerationToolHeartbeat,
+    ImageGenerationToolStart,
+    Packet,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolExecutionException
-from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
-from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
+from onyx.tools.models import ToolCallException, ToolExecutionException, ToolResponse
+from onyx.tools.tool_implementations.images.models import (
+    FinalImageGenerationResponse,
+    ImageGenerationResponse,
+)
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -56,12 +64,14 @@ class ImageGenerationTool(Tool[None]):
         image_generation_credentials: ImageGenerationProviderCredentials,
         tool_id: int,
         emitter: Emitter,
+        chat_session_id: UUID,
         model: str = IMAGE_MODEL_NAME,
         provider: str = IMAGE_MODEL_PROVIDER,
         num_imgs: int = 1,
     ) -> None:
         super().__init__(emitter=emitter)
         self.model = model
+        self._chat_session_id = chat_session_id
         self.provider = provider
         self.num_imgs = num_imgs
 
@@ -93,45 +103,42 @@ class ImageGenerationTool(Tool[None]):
         """Available if a default image generation config exists with valid credentials."""
         return is_image_generation_configured(db_session)
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        PROMPT_FIELD: {
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    PROMPT_FIELD: {
+                        "type": "string",
+                        "description": "Prompt used to generate the image",
+                    },
+                    "shape": {
+                        "type": "string",
+                        "description": (
+                            "Optional - only specify if you want a specific shape."
+                            " Image shape: 'square', 'portrait', or 'landscape'."
+                        ),
+                        "enum": [shape.value for shape in ImageShape],
+                    },
+                    REFERENCE_IMAGE_FILE_IDS_FIELD: {
+                        "type": "array",
+                        "description": (
+                            "Optional file_ids of existing images to edit or use as reference;"
+                            " the first is the primary edit source."
+                            " Get file_ids from `[attached image — file_id: <id>]` tags on"
+                            " user-attached images or from prior generate_image tool responses."
+                            " Omit for a fresh, unrelated generation."
+                        ),
+                        "items": {
                             "type": "string",
-                            "description": "Prompt used to generate the image",
-                        },
-                        "shape": {
-                            "type": "string",
-                            "description": (
-                                "Optional - only specify if you want a specific shape."
-                                " Image shape: 'square', 'portrait', or 'landscape'."
-                            ),
-                            "enum": [shape.value for shape in ImageShape],
-                        },
-                        REFERENCE_IMAGE_FILE_IDS_FIELD: {
-                            "type": "array",
-                            "description": (
-                                "Optional file_ids of existing images to edit or use as reference;"
-                                " the first is the primary edit source."
-                                " Get file_ids from `[attached image — file_id: <id>]` tags on"
-                                " user-attached images or from prior generate_image tool responses."
-                                " Omit for a fresh, unrelated generation."
-                            ),
-                            "items": {
-                                "type": "string",
-                            },
                         },
                     },
-                    "required": [PROMPT_FIELD],
                 },
+                "required": [PROMPT_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
@@ -386,6 +393,7 @@ class ImageGenerationTool(Tool[None]):
         file_ids = save_files(
             urls=[],
             base64_files=[img.image_data for img in image_generation_responses],
+            chat_session_id=self._chat_session_id,
         )
         generated_images_metadata = [
             GeneratedImage(
@@ -394,7 +402,7 @@ class ImageGenerationTool(Tool[None]):
                 revised_prompt=img.revised_prompt,
                 shape=shape.value,
             )
-            for img, file_id in zip(image_generation_responses, file_ids)
+            for img, file_id in zip(image_generation_responses, file_ids, strict=True)
         ]
 
         # Emit final packet with generated images

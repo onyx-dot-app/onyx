@@ -103,21 +103,20 @@ interface UseDataTableOptions<TData extends RowData> {
   initialSorting?: SortingState;
   /** Initial column visibility state. @default {} */
   initialColumnVisibility?: VisibilityState;
-  /** Initial row selection state. Keys are row IDs (from `getRowId`), values are `true`. @default {} */
-  initialRowSelection?: RowSelectionState;
-  /** When true AND `initialRowSelection` is non-empty, start in view-selected mode (filtered to selected rows). @default false */
+  /** The selected row IDs. Given, the selection is controlled; left out, the hook keeps its own. */
+  values?: ReadonlySet<string>;
+  /** When true AND `values` is non-empty at mount, start in view-selected mode (filtered to selected rows). @default false */
   initialViewSelected?: boolean;
-  /** Called whenever the set of selected row IDs changes. */
-  onSelectionChange?: (selectedIds: string[]) => void;
-  /** Search term for global text filtering. Rows are filtered to those containing
-   *  the term in any accessor column value (case-insensitive). */
-  searchTerm?: string;
+  /** Called with the next selection. */
+  onSelectionChange?: (values: ReadonlySet<string>) => void;
+  /** Filters rows to those containing it in any accessor column value (case-insensitive). */
+  query?: string;
   /** Server-side configuration. When provided, enables manual pagination/sorting/filtering. */
   serverSide?: {
     totalItems: number;
     onSortingChange: (sorting: SortingState) => void;
     onPaginationChange: (pageIndex: number, pageSize: number) => void;
-    onSearchTermChange: (searchTerm: string) => void;
+    onQueryChange: (query: string) => void;
   };
   /** Escape-hatch: extra options spread into `useReactTable`. Managed keys are excluded. */
   tableOptions?: Partial<Omit<TableOptions<TData>, ManagedKeys>>;
@@ -199,11 +198,11 @@ export default function useDataTable<TData extends RowData>(
     columnResizeMode = "onChange",
     initialSorting = [],
     initialColumnVisibility = {},
-    initialRowSelection = {},
+    values,
     initialViewSelected = false,
     getRowId,
     onSelectionChange,
-    searchTerm,
+    query,
     serverSide,
     tableOptions,
   } = options;
@@ -212,8 +211,32 @@ export default function useDataTable<TData extends RowData>(
 
   // ---- internal state -----------------------------------------------------
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
-  const [rowSelection, setRowSelection] =
-    useState<RowSelectionState>(initialRowSelection);
+  // Controlled when `values` is given: TanStack reads the selection from it
+  // and every change goes out through `onSelectionChange`.
+  const isControlled = values !== undefined;
+  const [ownRowSelection, setOwnRowSelection] = useState<RowSelectionState>({});
+  const rowSelection = useMemo<RowSelectionState>(
+    () =>
+      isControlled
+        ? Object.fromEntries(Array.from(values, (id) => [id, true]))
+        : ownRowSelection,
+    [isControlled, values, ownRowSelection]
+  );
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
+  const setRowSelection = (
+    updater: RowSelectionState | ((old: RowSelectionState) => RowSelectionState)
+  ) => {
+    const next =
+      typeof updater === "function" ? updater(rowSelection) : updater;
+    if (isControlled) {
+      onSelectionChangeRef.current?.(new Set(Object.keys(next)));
+    } else {
+      setOwnRowSelection(next);
+    }
+  };
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
     initialColumnVisibility
@@ -224,8 +247,8 @@ export default function useDataTable<TData extends RowData>(
   });
   /** Combined global filter: view-mode (selected IDs) + text search. */
   const initialSelectedIds =
-    initialViewSelected && Object.keys(initialRowSelection).length > 0
-      ? new Set(Object.keys(initialRowSelection))
+    initialViewSelected && values !== undefined && values.size > 0
+      ? new Set(values)
       : null;
   const [globalFilter, setGlobalFilter] = useState<GlobalFilterValue>({
     selectedIds: initialSelectedIds,
@@ -241,13 +264,13 @@ export default function useDataTable<TData extends RowData>(
     }));
   }, [pageSizeOption]);
 
-  // ---- sync external searchTerm prop into combined filter state ------------
+  // ---- sync external query prop into combined filter state ------------
   // (client-side only — server-side uses separate callbacks instead)
   const preSearchPageRef = useRef<number>(0);
 
   useEffect(() => {
     if (isServerSide) return;
-    const term = searchTerm ?? "";
+    const term = query ?? "";
     const wasSearching = !!globalFilter.searchTerm;
 
     if (!wasSearching && term) {
@@ -264,13 +287,15 @@ export default function useDataTable<TData extends RowData>(
     // omits `globalFilter` and `pagination.pageIndex`: we only read snapshot
     // values to detect the search enter/clear transition, not to react to
     // every filter or page change.
-  }, [searchTerm, isServerSide]);
+  }, [query, isServerSide]);
 
   // ---- server-side: 3 separate callbacks -----------------------------------
   // Single ref for the whole serverSide config — prevents effects from
   // re-firing when the consumer passes an inline object each render.
   const serverSideRef = useRef(serverSide);
-  serverSideRef.current = serverSide;
+  useEffect(() => {
+    serverSideRef.current = serverSide;
+  }, [serverSide]);
 
   useEffect(() => {
     if (!isServerSide) return;
@@ -288,8 +313,8 @@ export default function useDataTable<TData extends RowData>(
   useEffect(() => {
     if (!isServerSide) return;
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    serverSideRef.current!.onSearchTermChange(searchTerm ?? "");
-  }, [searchTerm, isServerSide]);
+    serverSideRef.current!.onQueryChange(query ?? "");
+  }, [query, isServerSide]);
 
   // ---- TanStack table instance --------------------------------------------
   const serverPageCount = isServerSide
@@ -308,7 +333,7 @@ export default function useDataTable<TData extends RowData>(
       columnSizing,
       columnVisibility,
       pagination,
-      ...(isServerSide ? {} : { globalFilter }),
+      globalFilter: isServerSide ? undefined : globalFilter,
     },
     onSortingChange: isServerSide
       ? (updater) => {
@@ -339,7 +364,11 @@ export default function useDataTable<TData extends RowData>(
   } else {
     tableOpts.onGlobalFilterChange = setGlobalFilter;
     tableOpts.getSortedRowModel = getSortedRowModel();
-    tableOpts.getPaginationRowModel = getPaginationRowModel();
+    // An Infinity page size means no pagination. TanStack would start the page
+    // at 0 * Infinity = NaN and slice every row away.
+    if (isFinite(pagination.pageSize)) {
+      tableOpts.getPaginationRowModel = getPaginationRowModel();
+    }
     tableOpts.getFilteredRowModel = getFilteredRowModel();
     tableOpts.globalFilterFn = (
       row,
@@ -420,22 +449,18 @@ export default function useDataTable<TData extends RowData>(
     // selection changes while in view mode
   }, [rowSelection, isServerSide]);
 
-  // ---- selection change callback ------------------------------------------
+  // ---- selection change callback (uncontrolled only) ------------------------
+  // A controlled selection reports each change from `setRowSelection`, so it
+  // never echoes the caller's own `values` back.
   const isFirstRenderRef = useRef(true);
-  const onSelectionChangeRef = useRef(onSelectionChange);
-  onSelectionChangeRef.current = onSelectionChange;
-
   useEffect(() => {
     if (isFirstRenderRef.current) {
       isFirstRenderRef.current = false;
-      // Still fire the callback on first render if there's an initial selection
-      if (selectedRowIds.length > 0) {
-        onSelectionChangeRef.current?.(selectedRowIds);
-      }
       return;
     }
-    onSelectionChangeRef.current?.(selectedRowIds);
-  }, [selectedRowIds]);
+    if (isControlled) return;
+    onSelectionChangeRef.current?.(new Set(selectedRowIds));
+  }, [selectedRowIds, isControlled]);
 
   // ---- actions ------------------------------------------------------------
   const setPage = (page: number) => {

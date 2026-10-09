@@ -9,6 +9,9 @@
   --z-modal-overlay: 900;
   --z-modal: 1000;
   --z-toast: 1100;
+
+  /* System-level banners — above everything, including toasts */
+  --z-banner: 1200;
 }
 
 /* Base layers */
@@ -34,4 +37,7 @@
 }
 .z-toast {
   z-index: var(--z-toast);
+}
+.z-banner {
+  z-index: var(--z-banner);
 }

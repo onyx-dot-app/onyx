@@ -18,6 +18,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from onyx.db.engine.shard_registry import get_default_shard_name
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.tenant_utils import get_schemas_needing_migration
 
@@ -134,7 +135,9 @@ def test_classifies_all_cases(
     - stale rev    → included (needs migration)
     """
     all_schemas = [tenant_schema_at_head, tenant_schema_empty, tenant_schema_stale_rev]
-    result = get_schemas_needing_migration(all_schemas, current_head_rev)
+    result = get_schemas_needing_migration(
+        all_schemas, current_head_rev, get_default_shard_name()
+    )
 
     assert tenant_schema_at_head not in result
     assert tenant_schema_empty in result
@@ -153,12 +156,19 @@ def test_idempotent(
     """
     schemas = [tenant_schema_at_head, tenant_schema_empty]
 
-    first = get_schemas_needing_migration(schemas, current_head_rev)
-    second = get_schemas_needing_migration(schemas, current_head_rev)
+    first = get_schemas_needing_migration(
+        schemas, current_head_rev, get_default_shard_name()
+    )
+    second = get_schemas_needing_migration(
+        schemas, current_head_rev, get_default_shard_name()
+    )
 
     assert first == second
 
 
 def test_empty_input(current_head_rev: str) -> None:
     """An empty input list returns immediately without touching the DB."""
-    assert get_schemas_needing_migration([], current_head_rev) == []
+    assert (
+        get_schemas_needing_migration([], current_head_rev, get_default_shard_name())
+        == []
+    )

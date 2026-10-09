@@ -1,38 +1,43 @@
 import hashlib
 import tempfile
+import threading
+import time
 import uuid
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+from functools import partial, reduce
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import IO
-from typing import NotRequired
-from typing import TYPE_CHECKING
-from typing import TypedDict
+from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, TypeVar, cast
 
-import boto3
 import puremagic
-from botocore.config import Config
 from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.configs.app_configs import S3_AWS_ACCESS_KEY_ID
-from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
-from onyx.configs.app_configs import S3_ENDPOINT_URL
-from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
-from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
-from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
-from onyx.configs.app_configs import S3_VERIFY_SSL
+from onyx.configs.app_configs import (
+    AWS_REGION_NAME,
+    S3_AWS_ACCESS_KEY_ID,
+    S3_AWS_SECRET_ACCESS_KEY,
+    S3_ENDPOINT_URL,
+    S3_FILE_STORE_BUCKET_NAME,
+    S3_FILE_STORE_PREFIX,
+    S3_GENERATE_LOCAL_CHECKSUM,
+    S3_LEGACY_AWS_ACCESS_KEY_ID,
+    S3_LEGACY_AWS_SECRET_ACCESS_KEY,
+    S3_LEGACY_ENDPOINT_URL,
+    S3_VERIFY_SSL,
+)
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.file_record import delete_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.file_record import get_filerecord_by_prefix
-from onyx.db.file_record import upsert_filerecord
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_current_tenant_if_none,
+)
+from onyx.db.file_record import (
+    delete_filerecord_by_file_id,
+    get_filerecord_by_file_id,
+    get_filerecord_by_file_id_optional,
+    get_filerecord_by_prefix,
+    upsert_filerecord,
+)
 from onyx.db.models import FileRecord
 from onyx.db.models import FileRecord as FileStoreModel
 from onyx.file_store.s3_key_utils import generate_s3_key
@@ -42,14 +47,181 @@ from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
+    from mypy_boto3_s3.literals import BucketLocationConstraintType
+    from mypy_boto3_s3.type_defs import BlobTypeDef
 
+    from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
     from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 logger = setup_logger()
 
 
+# Persisted in file_record.file_size when the backing object is confirmed
+# missing, so listings stop re-probing the object store for it. Rendered as
+# "unknown" (None) in API responses.
+FILE_SIZE_MISSING_SENTINEL = -1
+
+
+def content_byte_size(file_content: object) -> int | None:
+    """Stored size in bytes of save_file content. str content is uploaded
+    UTF-8 encoded by every backend, so its size is the encoded length."""
+    if isinstance(file_content, (bytes, bytearray)):
+        return len(file_content)
+    if isinstance(file_content, str):
+        return len(file_content.encode("utf-8"))
+    return None
+
+
+_T = TypeVar("_T")
+
+
 class S3PutKwargs(TypedDict):
     ChecksumSHA256: NotRequired[str]
+
+
+# Marks legacy objects this release writes. The object store already holds that
+# version or a newer one, so a later copy of MinIO into the object store must
+# never let a marked object replace an app write.
+DUAL_WRITE_METADATA_KEY = "onyx-dual-write"
+
+
+def s3_error_code(e: ClientError) -> str | None:
+    return e.response.get("Error", {}).get("Code")
+
+
+def is_missing_object(e: ClientError) -> bool:
+    return s3_error_code(e) in ("404", "NoSuchKey", "NotFound")
+
+
+# A failed legacy write leaves a marker at this prefix plus the key in the
+# object store, for a later copy of MinIO to replay the write into MinIO.
+LEGACY_OUT_OF_SYNC_PREFIX = "onyx-legacy-out-of-sync/"
+
+
+# Retiring MinIO writes this object once MinIO holds nothing the object store
+# lacks, so running processes stop writing to MinIO without a restart.
+LEGACY_RETIRED_MARKER_KEY = "onyx-legacy-minio-retired"
+LEGACY_RETIRED_RECHECK_SECONDS = 60
+# Module level because a store is built per request. Two threads that check at
+# once both HEAD the marker, which is harmless, so the dict is unguarded.
+_legacy_retired: dict[tuple[str, str], tuple[float, bool]] = {}
+
+
+def legacy_store_retired(client: "S3Client", bucket: str) -> bool:
+    """Whether the retire marker is in the bucket, checked at most once a
+    minute per store. A failed check keeps the last answer."""
+    store = (client.meta.endpoint_url, bucket)
+    checked_at, retired = _legacy_retired.get(store, (float("-inf"), False))
+    now = time.monotonic()
+    if now - checked_at < LEGACY_RETIRED_RECHECK_SECONDS:
+        return retired
+    try:
+        client.head_object(Bucket=bucket, Key=LEGACY_RETIRED_MARKER_KEY)
+        retired = True
+    except Exception as e:
+        if isinstance(e, ClientError) and is_missing_object(e):
+            retired = False
+        else:
+            logger.warning(
+                "Could not check whether the legacy MinIO store is retired",
+                exc_info=True,
+            )
+    _legacy_retired[store] = (now, retired)
+    return retired
+
+
+def build_s3_client(
+    endpoint_url: str | None,
+    access_key_id: str | None,
+    secret_access_key: str | None,
+    region_name: str,
+    verify_ssl: bool,
+    fail_fast: bool = False,
+    max_pool_connections: int | None = None,
+) -> "S3Client":
+    try:
+        # Imported here: boto3 costs ~16 MB and most workers never build an S3 client.
+        import boto3
+        from botocore.config import Config
+
+        client_kwargs: dict[str, Any] = {
+            "service_name": "s3",
+            "region_name": region_name,
+        }
+        # AWS keeps boto3's defaults, so a Config is passed only when one applies.
+        configs: list[Config] = []
+        # One connection per concurrent caller, or the pool opens and drops a
+        # connection for every request beyond boto3's default of ten.
+        if max_pool_connections is not None:
+            configs.append(Config(max_pool_connections=max_pool_connections))
+        # An endpoint URL means a self-hosted store, which needs path-style addressing.
+        if endpoint_url:
+            client_kwargs["endpoint_url"] = endpoint_url
+            configs.append(
+                Config(signature_version="s3v4", s3={"addressing_style": "path"})
+            )
+            # A hung secondary store must not hold up the request it serves.
+            if fail_fast:
+                configs.append(
+                    Config(
+                        connect_timeout=5,
+                        read_timeout=10,
+                        retries={"total_max_attempts": 2},
+                    )
+                )
+            if not verify_ssl:
+                import urllib3
+
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                client_kwargs["verify"] = False
+        if configs:
+            client_kwargs["config"] = reduce(Config.merge, configs)
+
+        # Without explicit keys, boto3 uses the IAM role or default credentials.
+        if access_key_id and secret_access_key:
+            client_kwargs.update(
+                {
+                    "aws_access_key_id": access_key_id,
+                    "aws_secret_access_key": secret_access_key,
+                }
+            )
+        return boto3.client(**client_kwargs)
+
+    except Exception as e:
+        logger.error("Failed to initialize S3 client: %s", e)
+        raise RuntimeError(f"Failed to initialize S3 client: {e}") from e
+
+
+def ensure_bucket(s3_client: "S3Client", bucket_name: str) -> None:
+    try:
+        s3_client.head_bucket(Bucket=bucket_name)
+        logger.info("S3 bucket '%s' already exists", bucket_name)
+        return
+    except ClientError as e:
+        error_code = s3_error_code(e)
+        if error_code == "403":
+            logger.warning("S3 bucket '%s' exists but access is forbidden", bucket_name)
+            raise RuntimeError(
+                f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
+            ) from e
+        if error_code != "404":
+            logger.error("Failed to check S3 bucket '%s': %s", bucket_name, e)
+            raise RuntimeError(f"Failed to check S3 bucket '{bucket_name}': {e}") from e
+
+    logger.info("Creating S3 bucket '%s'", bucket_name)
+    region = s3_client.meta.region_name
+    # AWS needs a LocationConstraint outside us-east-1.
+    if region and region != "us-east-1":
+        s3_client.create_bucket(
+            Bucket=bucket_name,
+            CreateBucketConfiguration={
+                # The stub wants the region Literal, and meta.region_name is a str.
+                "LocationConstraint": cast("BucketLocationConstraintType", region)
+            },
+        )
+    else:
+        s3_client.create_bucket(Bucket=bucket_name)
+    logger.info("Successfully created S3 bucket '%s'", bucket_name)
 
 
 class FileStore(ABC):
@@ -72,7 +244,11 @@ class FileStore(ABC):
         file_type: str,
     ) -> bool:
         """
-        Check if a file exists in the blob store
+        Check if a file record with the given origin and type exists.
+
+        Note: implementations check the metadata record in the database, not
+        the backing blob itself — content is assumed present when the record
+        exists.
 
         Parameters:
         - file_id: Unique ID of the file to check for
@@ -187,8 +363,15 @@ class S3BackedFileStore(FileStore):
         s3_endpoint_url: str | None = None,
         s3_prefix: str | None = None,
         s3_verify_ssl: bool = True,
+        legacy_endpoint_url: str | None = None,
+        legacy_access_key_id: str | None = None,
+        legacy_secret_access_key: str | None = None,
     ) -> None:
         self._s3_client: "S3Client | None" = None
+        self._legacy_s3_client: "S3Client | None" = None
+        # The store is shared across threads and its clients are built lazily,
+        # so the first operations of several threads build each client once.
+        self._client_lock = threading.Lock()
         self._bucket_name = bucket_name
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
@@ -196,50 +379,136 @@ class S3BackedFileStore(FileStore):
         self._s3_endpoint_url = s3_endpoint_url
         self._s3_prefix = s3_prefix or "onyx-files"
         self._s3_verify_ssl = s3_verify_ssl
+        self._legacy_endpoint_url = legacy_endpoint_url
+        self._legacy_access_key_id = legacy_access_key_id
+        self._legacy_secret_access_key = legacy_secret_access_key
 
     def _get_s3_client(self) -> "S3Client":
-        """Initialize S3 client if not already done"""
-        if self._s3_client is None:
+        with self._client_lock:
+            if self._s3_client is None:
+                self._s3_client = build_s3_client(
+                    self._s3_endpoint_url,
+                    self._aws_access_key_id,
+                    self._aws_secret_access_key,
+                    self._aws_region_name,
+                    self._s3_verify_ssl,
+                )
+            return self._s3_client
+
+    def _get_legacy_s3_client(self) -> "S3Client | None":
+        if self._legacy_endpoint_url is None:
+            return None
+        with self._client_lock:
+            if self._legacy_s3_client is None:
+                self._legacy_s3_client = build_s3_client(
+                    self._legacy_endpoint_url,
+                    self._legacy_access_key_id,
+                    self._legacy_secret_access_key,
+                    self._aws_region_name,
+                    self._s3_verify_ssl,
+                    fail_fast=True,
+                )
+            return self._legacy_s3_client
+
+    # Writes and deletes skip a retired legacy store. Reads still fall back to
+    # it while MinIO runs, so a late write of an older release stays readable.
+    def _get_legacy_write_client(self) -> "S3Client | None":
+        legacy_client = self._get_legacy_s3_client()
+        if legacy_client is None or self._legacy_store_retired():
+            return None
+        return legacy_client
+
+    def _legacy_store_retired(self) -> bool:
+        return legacy_store_retired(self._get_s3_client(), self._get_bucket_name())
+
+    # Objects written before the bundled object store stay in the legacy
+    # MinIO until they are copied across, so a miss falls back there.
+    def _with_legacy_fallback(self, call: Callable[["S3Client"], _T]) -> _T:
+        try:
+            return call(self._get_s3_client())
+        except ClientError as e:
+            legacy_client = self._get_legacy_s3_client()
+            if legacy_client is None or not is_missing_object(e):
+                raise
             try:
-                client_kwargs: dict[str, Any] = {
-                    "service_name": "s3",
-                    "region_name": self._aws_region_name,
-                }
+                return call(legacy_client)
+            except ClientError as legacy_error:
+                # A legacy bucket no write has created yet holds nothing.
+                if s3_error_code(legacy_error) == "NoSuchBucket":
+                    raise e from legacy_error
+                raise
+            except Exception as legacy_error:
+                # A retired MinIO may be stopped, so the object store's miss stands.
+                if self._legacy_store_retired():
+                    raise e from legacy_error
+                raise
 
-                # Add endpoint URL if specified (for MinIO, etc.)
-                if self._s3_endpoint_url:
-                    client_kwargs["endpoint_url"] = self._s3_endpoint_url
-                    client_kwargs["config"] = Config(
-                        signature_version="s3v4",
-                        s3={"addressing_style": "path"},  # Required for MinIO
-                    )
-                    # Disable SSL verification if requested (for local development)
-                    if not self._s3_verify_ssl:
-                        import urllib3
+    # A rollback to a release that reads only the legacy store still finds
+    # files written since the upgrade. The primary write already succeeded,
+    # so a legacy failure logs and marks the key for a later replay into MinIO.
+    def _put_legacy_object(
+        self,
+        bucket: str,
+        key: str,
+        body: "BlobTypeDef",
+        content_type: str,
+        kwargs: S3PutKwargs,
+    ) -> None:
+        try:
+            legacy_client = self._get_legacy_write_client()
+            if legacy_client is None:
+                return
+            put = partial(
+                legacy_client.put_object,
+                Bucket=bucket,
+                Key=key,
+                Body=body,
+                ContentType=content_type,
+                Metadata={DUAL_WRITE_METADATA_KEY: "1"},
+                **kwargs,
+            )
+            try:
+                put()
+            except ClientError as e:
+                # A fresh install's MinIO starts without the bucket.
+                if s3_error_code(e) != "NoSuchBucket":
+                    raise
+                ensure_bucket(legacy_client, bucket)
+                put()
+        except Exception:
+            logger.warning(
+                "Failed to write %s to the legacy MinIO store", key, exc_info=True
+            )
+            self._mark_legacy_out_of_sync(bucket, key)
 
-                        urllib3.disable_warnings(
-                            urllib3.exceptions.InsecureRequestWarning
-                        )
-                        client_kwargs["verify"] = False
+    # A copy of MinIO into the object store takes only objects a file record
+    # points at, so an object a failed delete leaves in MinIO never comes back.
+    def _delete_legacy_object(self, bucket: str, key: str) -> None:
+        try:
+            legacy_client = self._get_legacy_write_client()
+            if legacy_client is None:
+                return
+            legacy_client.delete_object(Bucket=bucket, Key=key)
+        except Exception:
+            logger.warning(
+                "Failed to delete %s from the legacy MinIO store", key, exc_info=True
+            )
 
-                if self._aws_access_key_id and self._aws_secret_access_key:
-                    # Use explicit credentials
-                    client_kwargs.update(
-                        {
-                            "aws_access_key_id": self._aws_access_key_id,
-                            "aws_secret_access_key": self._aws_secret_access_key,
-                        }
-                    )
-                    self._s3_client = boto3.client(**client_kwargs)
-                else:
-                    # Use IAM role or default credentials (not typically used with MinIO)
-                    self._s3_client = boto3.client(**client_kwargs)
-
-            except Exception as e:
-                logger.error("Failed to initialize S3 client: %s", e)
-                raise RuntimeError(f"Failed to initialize S3 client: {e}")
-
-        return self._s3_client
+    def _mark_legacy_out_of_sync(self, bucket: str, key: str) -> None:
+        try:
+            # A unique body gives each marker its own ETag, so a replay removes
+            # only the marker it resynced.
+            self._get_s3_client().put_object(
+                Bucket=bucket,
+                Key=LEGACY_OUT_OF_SYNC_PREFIX + key,
+                Body=uuid.uuid4().hex.encode(),
+            )
+        except Exception:
+            logger.warning(
+                "Failed to record that %s is out of sync in the legacy MinIO store",
+                key,
+                exc_info=True,
+            )
 
     def _get_bucket_name(self) -> str:
         """Get S3 bucket name from configuration"""
@@ -266,49 +535,7 @@ class S3BackedFileStore(FileStore):
 
     def initialize(self) -> None:
         """Initialize the S3 file store by ensuring the bucket exists"""
-        s3_client = self._get_s3_client()
-        bucket_name = self._get_bucket_name()
-
-        # Check if bucket exists
-        try:
-            s3_client.head_bucket(Bucket=bucket_name)
-            logger.info("S3 bucket '%s' already exists", bucket_name)
-        except ClientError as e:
-            error_code = e.response["Error"]["Code"]
-            if error_code == "404":
-                # Bucket doesn't exist, create it
-                logger.info("Creating S3 bucket '%s'", bucket_name)
-
-                # For AWS S3, we need to handle region-specific bucket creation
-                region = (
-                    s3_client._client_config.region_name  # ty: ignore[unresolved-attribute]
-                    if hasattr(s3_client, "_client_config")
-                    else None
-                )
-
-                if region and region != "us-east-1":
-                    # For regions other than us-east-1, we need to specify LocationConstraint
-                    s3_client.create_bucket(
-                        Bucket=bucket_name,
-                        CreateBucketConfiguration={"LocationConstraint": region},
-                    )
-                else:
-                    # For us-east-1 or MinIO/other S3-compatible services
-                    s3_client.create_bucket(Bucket=bucket_name)
-
-                logger.info("Successfully created S3 bucket '%s'", bucket_name)
-            elif error_code == "403":
-                # Bucket exists but we don't have permission to access it
-                logger.warning(
-                    "S3 bucket '%s' exists but access is forbidden", bucket_name
-                )
-                raise RuntimeError(
-                    f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
-                )
-            else:
-                # Some other error occurred
-                logger.error("Failed to check S3 bucket '%s': %s", bucket_name, e)
-                raise RuntimeError(f"Failed to check S3 bucket '{bucket_name}': {e}")
+        ensure_bucket(self._get_s3_client(), self._get_bucket_name())
 
     def has_file(
         self,
@@ -375,6 +602,7 @@ class S3BackedFileStore(FileStore):
             ContentType=file_type,
             **kwargs,
         )
+        self._put_legacy_object(bucket_name, s3_key, file_content, file_type, kwargs)
 
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             # Save metadata to database
@@ -387,6 +615,7 @@ class S3BackedFileStore(FileStore):
                 object_key=s3_key,
                 db_session=db_session,
                 file_metadata=file_metadata,
+                file_size=content_byte_size(file_content),
             )
             db_session.commit()
 
@@ -404,10 +633,11 @@ class S3BackedFileStore(FileStore):
                 file_id=file_id, db_session=db_session
             )
 
-        s3_client = self._get_s3_client()
         try:
-            response = s3_client.get_object(
-                Bucket=file_record.bucket_name, Key=file_record.object_key
+            response = self._with_legacy_fallback(
+                lambda client: client.get_object(
+                    Bucket=file_record.bucket_name, Key=file_record.object_key
+                )
             )
         except ClientError:
             logger.error("Failed to read file %s from S3", file_id)
@@ -450,11 +680,19 @@ class S3BackedFileStore(FileStore):
                     file_id=file_id, db_session=db_session
                 )
 
-            s3_client = self._get_s3_client()
-            response = s3_client.head_object(
-                Bucket=file_record.bucket_name, Key=file_record.object_key
+            response = self._with_legacy_fallback(
+                lambda client: client.head_object(
+                    Bucket=file_record.bucket_name, Key=file_record.object_key
+                )
             )
             return response.get("ContentLength")
+        except ClientError as e:
+            if is_missing_object(e):
+                raise FileNotFoundError(
+                    f"Object for file {file_id} does not exist"
+                ) from e
+            logger.warning("Error getting file size for %s: %s", file_id, e)
+            return None
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
@@ -487,6 +725,9 @@ class S3BackedFileStore(FileStore):
                     return
 
                 # Delete from external storage
+                self._delete_legacy_object(
+                    file_record.bucket_name, file_record.object_key
+                )
                 s3_client = self._get_s3_client()
                 try:
                     s3_client.delete_object(
@@ -495,7 +736,7 @@ class S3BackedFileStore(FileStore):
                 except ClientError as e:
                     # If the object doesn't exist in file store, treat it as success
                     # since the end goal (object not existing) is achieved
-                    if e.response.get("Error", {}).get("Code") == "NoSuchKey":
+                    if is_missing_object(e):
                         logger.warning(
                             "delete_file: File %s not found in file store (key: %s), cleaning up database record.",
                             file_id,
@@ -544,6 +785,7 @@ class S3BackedFileStore(FileStore):
                     object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=old_file_record.file_size,
                 )
 
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
@@ -603,16 +845,21 @@ def get_s3_file_store() -> S3BackedFileStore:
         s3_endpoint_url=S3_ENDPOINT_URL,
         s3_prefix=S3_FILE_STORE_PREFIX,
         s3_verify_ssl=S3_VERIFY_SSL,
+        legacy_endpoint_url=S3_LEGACY_ENDPOINT_URL,
+        legacy_access_key_id=S3_LEGACY_AWS_ACCESS_KEY_ID,
+        legacy_secret_access_key=S3_LEGACY_AWS_SECRET_ACCESS_KEY,
     )
 
 
 def get_gcs_file_store() -> "GCSBackedFileStore":
     """Returns the GCS file store implementation."""
-    from onyx.configs.app_configs import GCS_FILE_STORE_BUCKET_NAME
-    from onyx.configs.app_configs import GCS_FILE_STORE_PREFIX
-    from onyx.configs.app_configs import GCS_PROJECT_ID
-    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_JSON
-    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_PATH
+    from onyx.configs.app_configs import (
+        GCS_FILE_STORE_BUCKET_NAME,
+        GCS_FILE_STORE_PREFIX,
+        GCS_PROJECT_ID,
+        GCS_SERVICE_ACCOUNT_KEY_JSON,
+        GCS_SERVICE_ACCOUNT_KEY_PATH,
+    )
     from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
     bucket_name = GCS_FILE_STORE_BUCKET_NAME
@@ -628,7 +875,50 @@ def get_gcs_file_store() -> "GCSBackedFileStore":
     )
 
 
+def get_azure_file_store() -> "AzureBlobBackedFileStore":
+    """Returns the Azure Blob Storage file store implementation."""
+    from onyx.configs.app_configs import (
+        AZURE_FILE_STORE_CONTAINER_NAME,
+        AZURE_FILE_STORE_PREFIX,
+        AZURE_STORAGE_ACCOUNT_KEY,
+        AZURE_STORAGE_ACCOUNT_NAME,
+        AZURE_STORAGE_ACCOUNT_URL,
+        AZURE_STORAGE_CONNECTION_STRING,
+    )
+    from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
+
+    container_name = AZURE_FILE_STORE_CONTAINER_NAME
+    if not container_name:
+        raise RuntimeError(
+            "AZURE_FILE_STORE_CONTAINER_NAME is required for Azure file store"
+        )
+
+    return AzureBlobBackedFileStore(
+        container_name=container_name,
+        azure_prefix=AZURE_FILE_STORE_PREFIX,
+        account_name=AZURE_STORAGE_ACCOUNT_NAME,
+        account_url=AZURE_STORAGE_ACCOUNT_URL,
+        connection_string=AZURE_STORAGE_CONNECTION_STRING,
+        account_key=AZURE_STORAGE_ACCOUNT_KEY,
+    )
+
+
+# Built once per process: a store carries no tenant or request state (keys take
+# the tenant from the context at call time) and its client is safe to share,
+# while building one costs tens of milliseconds, mostly the S3 client.
+_DEFAULT_FILE_STORE: FileStore | None = None
+_DEFAULT_FILE_STORE_LOCK: threading.Lock = threading.Lock()
+
+
 def get_default_file_store() -> FileStore:
+    global _DEFAULT_FILE_STORE
+    with _DEFAULT_FILE_STORE_LOCK:
+        if _DEFAULT_FILE_STORE is None:
+            _DEFAULT_FILE_STORE = _build_default_file_store()
+        return _DEFAULT_FILE_STORE
+
+
+def _build_default_file_store() -> FileStore:
     """
     Returns the configured file store implementation based on FILE_STORE_BACKEND.
 
@@ -645,6 +935,13 @@ def get_default_file_store() -> FileStore:
     - Uses Google Cloud Storage with ADC/Workload Identity or service account keys.
     - Configuration via environment variables:
       - GCS_FILE_STORE_BUCKET_NAME, GCS_PROJECT_ID, GCS_SERVICE_ACCOUNT_KEY_PATH, etc.
+
+    When FILE_STORE_BACKEND=azure:
+    - Uses Azure Blob Storage with connection string, account key, or
+      DefaultAzureCredential (AKS Workload Identity / managed identity).
+    - Configuration via environment variables:
+      - AZURE_FILE_STORE_CONTAINER_NAME, AZURE_STORAGE_ACCOUNT_NAME,
+        AZURE_STORAGE_CONNECTION_STRING, AZURE_STORAGE_ACCOUNT_KEY, etc.
     """
     from onyx.configs.app_configs import FILE_STORE_BACKEND
     from onyx.configs.constants import FileStoreType
@@ -658,5 +955,8 @@ def get_default_file_store() -> FileStore:
 
     if backend == FileStoreType.GCS:
         return get_gcs_file_store()
+
+    if backend == FileStoreType.AZURE:
+        return get_azure_file_store()
 
     return get_s3_file_store()

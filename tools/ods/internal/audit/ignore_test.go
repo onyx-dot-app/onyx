@@ -15,6 +15,7 @@ func TestApplyIgnores(t *testing.T) {
 		{ID: "GHSA-expired", Ecosystem: "npm", Package: "d", Severity: SeverityCritical},
 		{ID: "GHSA-future", Ecosystem: "npm", Package: "e", Severity: SeverityCritical},
 		{ID: "GHSA-ecomismatch", Ecosystem: "npm", Package: "f", Severity: SeverityCritical},
+		{ID: "GHSA-dependabot", Ecosystem: "pip", Package: "g", Severity: SeverityCritical, Source: SourceDependabot},
 	}
 
 	ignores := []IgnoreEntry{
@@ -23,6 +24,7 @@ func TestApplyIgnores(t *testing.T) {
 		{ID: "GHSA-expired", Expires: "2026-06-25"}, // yesterday -> expired
 		{ID: "GHSA-future", Expires: "2026-12-31"},  // future -> active
 		{ID: "GHSA-ecomismatch", Ecosystem: "PyPI"}, // ecosystem mismatch -> no match
+		{ID: "GHSA-dependabot", Ecosystem: "PyPI"},  // Dependabot's "pip" is OSV's "PyPI"
 		{ID: ""}, // empty id ignored
 	}
 
@@ -45,6 +47,9 @@ func TestApplyIgnores(t *testing.T) {
 	}
 	if !keptIDs["GHSA-ecomismatch"] {
 		t.Error("GHSA-ecomismatch should NOT be suppressed (ecosystem mismatch)")
+	}
+	if !suppIDs["GHSA-dependabot"] {
+		t.Error("GHSA-dependabot should be suppressed across Dependabot and OSV ecosystem names")
 	}
 	if !keptIDs["GHSA-keep"] {
 		t.Error("GHSA-keep should remain")

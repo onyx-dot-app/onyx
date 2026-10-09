@@ -15,7 +15,7 @@ The background jobs take care of:
 | Primary                   | `apps/primary.py`              | `celery`                                                                                                             |
 | Light                     | `apps/light.py`                | `vespa_metadata_sync`, `connector_deletion`, `doc_permissions_upsert`, `checkpoint_cleanup`, `index_attempt_cleanup` |
 | Heavy                     | `apps/heavy.py`                | `connector_pruning`, `connector_doc_permissions_sync`, `connector_external_group_sync`, `csv_generation`, `sandbox`  |
-| Docprocessing             | `apps/docprocessing.py`        | `docprocessing`                                                                                                      |
+| Docprocessing             | `apps/docprocessing.py`        | `docprocessing`, `port`                                                                                              |
 | Docfetching               | `apps/docfetching.py`          | `connector_doc_fetching`                                                                                             |
 | User File Processing      | `apps/user_file_processing.py` | `user_file_processing`, `user_file_project_sync`, `user_file_delete`                                                 |
 | Monitoring                | `apps/monitoring.py`           | `monitoring`                                                                                                         |

@@ -6,14 +6,9 @@ from pydantic import BaseModel
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.auth.users import get_display_email
 from onyx.background.task_utils import extract_task_id_from_query_history_report_name
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import QAFeedbackType
-from onyx.configs.constants import SessionType
+from onyx.configs.constants import MessageType, QAFeedbackType, SessionType
 from onyx.db.enums import TaskStatus
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import FileRecord
-from onyx.db.models import TaskQueueState
+from onyx.db.models import ChatMessage, ChatSession, FileRecord, TaskQueueState
 
 
 class AbridgedSearchDoc(BaseModel):
@@ -176,14 +171,13 @@ class QuestionAnswerPairSnapshot(BaseModel):
         cls,
         chat_session_snapshot: ChatSessionSnapshot,
     ) -> list["QuestionAnswerPairSnapshot"]:
-        message_pairs: list[tuple[MessageSnapshot, MessageSnapshot]] = []
-        for ind in range(1, len(chat_session_snapshot.messages), 2):
-            message_pairs.append(
-                (
-                    chat_session_snapshot.messages[ind - 1],
-                    chat_session_snapshot.messages[ind],
-                )
+        message_pairs: list[tuple[MessageSnapshot, MessageSnapshot]] = [
+            (
+                chat_session_snapshot.messages[ind - 1],
+                chat_session_snapshot.messages[ind],
             )
+            for ind in range(1, len(chat_session_snapshot.messages), 2)
+        ]
 
         return [
             cls(

@@ -1,39 +1,33 @@
 import math
 import time
-from collections.abc import Callable
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any
-from typing import cast
-from typing import TYPE_CHECKING
-from typing import TypeVar
-from urllib.parse import parse_qs
-from urllib.parse import quote
-from urllib.parse import urljoin
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qs, quote, urljoin, urlparse
 
+import bs4
 import requests
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
+    CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
+    REQUEST_TIMEOUT_SECONDS,
 )
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import FileOrigin
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.file_processing.file_types import OnyxMimeTypes
+from onyx.file_processing.extract_file_text import extract_file_text, get_file_ext
+from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
+from onyx.file_processing.html_utils import format_document_soup
 from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
 if TYPE_CHECKING:
-    from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+    from onyx.connectors.confluence.source_operations import (
+        ConfluenceSourceOperations,
+    )
 
 
 logger = setup_logger()
@@ -80,38 +74,11 @@ class AttachmentProcessingResult(BaseModel):
     error: str | None = None
 
 
-def _make_attachment_link(
-    confluence_client: "OnyxConfluence",
-    attachment: dict[str, Any],
-    parent_content_id: str | None,
-    is_cloud: bool,
-) -> str | None:
-    download_link = ""
-
-    if is_cloud:
-        # https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content---attachments/#api-wiki-rest-api-content-id-child-attachment-attachmentid-download-get
-        if not parent_content_id:
-            logger.warning(
-                "parent_content_id is required to download attachments from Confluence Cloud!"
-            )
-            return None
-
-        download_link = (
-            confluence_client.url
-            + f"/rest/api/content/{parent_content_id}/child/attachment/{attachment['id']}/download"
-        )
-    else:
-        download_link = confluence_client.url + attachment["_links"]["download"]
-
-    return download_link
-
-
 def process_attachment(
-    confluence_client: "OnyxConfluence",
+    source_operations: "ConfluenceSourceOperations",
     attachment: dict[str, Any],
     parent_content_id: str | None,
     allow_images: bool,
-    is_cloud: bool,
 ) -> AttachmentProcessingResult:
     """
     Processes a Confluence attachment. If it's a document, extracts text,
@@ -128,14 +95,6 @@ def process_attachment(
                 error=f"Unsupported file type: {media_type}",
             )
 
-        attachment_link = _make_attachment_link(
-            confluence_client, attachment, parent_content_id, is_cloud
-        )
-        if not attachment_link:
-            return AttachmentProcessingResult(
-                text=None, file_name=None, error="Failed to make attachment link"
-            )
-
         attachment_size = attachment["extensions"]["fileSize"]
 
         if media_type.startswith("image/"):
@@ -149,7 +108,7 @@ def process_attachment(
             if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
                 logger.warning(
                     "Skipping %s due to size. size=%s threshold=%s",
-                    attachment_link,
+                    attachment["title"],
                     attachment_size,
                     CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
                 )
@@ -159,28 +118,9 @@ def process_attachment(
                     error=f"Attachment text too long: {attachment_size} chars",
                 )
 
-        logger.info(
-            "Downloading attachment: title=%s length=%s link=%s",
-            attachment["title"],
-            attachment_size,
-            attachment_link,
+        raw_bytes = source_operations.download_attachment(
+            attachment=attachment, parent_content_id=parent_content_id
         )
-
-        # Download the attachment
-        resp: requests.Response = confluence_client._session.get(attachment_link)
-        if resp.status_code != 200:
-            logger.warning(
-                "Failed to fetch %s with status code %s",
-                attachment_link,
-                resp.status_code,
-            )
-            return AttachmentProcessingResult(
-                text=None,
-                file_name=None,
-                error=f"Attachment download status code is {resp.status_code}",
-            )
-
-        raw_bytes = resp.content
         if not raw_bytes:
             return AttachmentProcessingResult(
                 text=None, file_name=None, error="attachment.content is None"
@@ -188,9 +128,7 @@ def process_attachment(
 
         # Process image attachments
         if media_type.startswith("image/"):
-            return _process_image_attachment(
-                confluence_client, attachment, raw_bytes, media_type
-            )
+            return _process_image_attachment(attachment, raw_bytes, media_type)
 
         # Process document attachments
         try:
@@ -220,7 +158,6 @@ def process_attachment(
 
 
 def _process_image_attachment(
-    confluence_client: "OnyxConfluence",  # noqa: ARG001
     attachment: dict[str, Any],
     raw_bytes: bytes,
     media_type: str,
@@ -246,11 +183,10 @@ def _process_image_attachment(
 
 
 def convert_attachment_to_content(
-    confluence_client: "OnyxConfluence",
+    source_operations: "ConfluenceSourceOperations",
     attachment: dict[str, Any],
     page_id: str,
     allow_images: bool,
-    is_cloud: bool,
 ) -> tuple[str | None, str | None] | None:
     """
     Facade function which:
@@ -268,9 +204,7 @@ def convert_attachment_to_content(
         )
         return None
 
-    result = process_attachment(
-        confluence_client, attachment, page_id, allow_images, is_cloud
-    )
+    result = process_attachment(source_operations, attachment, page_id, allow_images)
     if result.error is not None:
         logger.warning(
             "Attachment %s encountered error: %s", attachment["title"], result.error
@@ -304,17 +238,14 @@ def build_confluence_document_id(
     return final_url
 
 
+def build_cql_url(cql: str, expand: str | None = None) -> str:
+    """Returns the content-search path for a CQL query."""
+    expand_string = f"&expand={expand}" if expand else ""
+    return f"rest/api/content/search?cql={cql}{expand_string}"
+
+
 def datetime_from_string(datetime_string: str) -> datetime:
-    datetime_object = datetime.fromisoformat(datetime_string)
-
-    if datetime_object.tzinfo is None:
-        # If no timezone info, assume it is UTC
-        datetime_object = datetime_object.replace(tzinfo=timezone.utc)
-    else:
-        # If not in UTC, translate it
-        datetime_object = datetime_object.astimezone(timezone.utc)
-
-    return datetime_object
+    return datetime_to_utc(datetime.fromisoformat(datetime_string))
 
 
 def confluence_refresh_tokens(
@@ -355,52 +286,6 @@ def confluence_refresh_tokens(
     return new_credentials
 
 
-F = TypeVar("F", bound=Callable[..., Any])
-
-
-# https://developer.atlassian.com/cloud/confluence/rate-limiting/
-# this uses the native rate limiting option provided by the
-# confluence client and otherwise applies a simpler set of error handling
-def handle_confluence_rate_limit(confluence_call: F) -> F:
-    def wrapped_call(*args: list[Any], **kwargs: Any) -> Any:
-        MAX_RETRIES = 5
-
-        TIMEOUT = 600
-        timeout_at = time.monotonic() + TIMEOUT
-
-        for attempt in range(MAX_RETRIES):
-            if time.monotonic() > timeout_at:
-                raise TimeoutError(
-                    f"Confluence call attempts took longer than {TIMEOUT} seconds."
-                )
-
-            try:
-                # we're relying more on the client to rate limit itself
-                # and applying our own retries in a more specific set of circumstances
-                return confluence_call(*args, **kwargs)
-            except requests.HTTPError as e:
-                delay_until = _handle_http_error(e, attempt, MAX_RETRIES)
-                logger.warning(
-                    "HTTPError in confluence call. Retrying in %s seconds...",
-                    delay_until,
-                )
-                while time.monotonic() < delay_until:
-                    # in the future, check a signal here to exit
-                    time.sleep(1)
-            except AttributeError as e:
-                # Some error within the Confluence library, unclear why it fails.
-                # Users reported it to be intermittent, so just retry
-                if attempt == MAX_RETRIES - 1:
-                    raise e
-
-                logger.exception(
-                    "Confluence Client raised an AttributeError. Retrying..."
-                )
-                time.sleep(5)
-
-    return cast(F, wrapped_call)
-
-
 def _handle_http_error(e: requests.HTTPError, attempt: int, max_retries: int) -> int:
     MIN_DELAY = 2
     MAX_DELAY = 60
@@ -421,7 +306,7 @@ def _handle_http_error(e: requests.HTTPError, attempt: int, max_retries: int) ->
                 "403 error. This sometimes happens when we hit Confluence rate limits. Retrying in %s seconds...",
                 FORBIDDEN_RETRY_DELAY,
             )
-            return FORBIDDEN_RETRY_DELAY
+            return math.ceil(time.monotonic() + FORBIDDEN_RETRY_DELAY)
 
         raise e
 
@@ -496,3 +381,135 @@ def update_param_in_path(path: str, param: str, value: str) -> str:
         + "?"
         + "&".join(f"{k}={quote(v[0])}" for k, v in query_params.items())
     )
+
+
+def sanitize_attachment_title(title: str) -> str:
+    """
+    Sanitize the attachment title to be a valid HTML attribute.
+    """
+    return title.replace("<", "_").replace(">", "_").replace(" ", "_").replace(":", "_")
+
+
+def extract_text_from_confluence_html(
+    source_operations: "ConfluenceSourceOperations",
+    confluence_object: dict[str, Any],
+    fetched_titles: set[str],
+) -> str:
+    """Parse a Confluence html page and replace the 'user Id' by the real
+        User Display Name
+
+    Args:
+        source_operations: The Confluence source-operations gateway
+        confluence_object (dict): The confluence object as a dict
+        fetched_titles (set[str]): The titles of the pages that have already been fetched
+    Returns:
+        str: loaded and formated Confluence page
+    """
+    body = confluence_object["body"]
+    object_html = body.get("storage", body.get("view", {})).get("value")
+
+    soup = bs4.BeautifulSoup(object_html, "html.parser")
+
+    _remove_macro_stylings(soup=soup)
+
+    for date_span in soup.findAll("span", {"class": "date-lozenger-container"}):
+        date_span.replaceWith(date_span.get_text())
+
+    for user in soup.findAll("ri:user"):
+        user_id = (
+            user.attrs["ri:account-id"]
+            if "ri:account-id" in user.attrs
+            else user.get("ri:userkey")
+        )
+        if not user_id:
+            logger.warning(
+                "ri:userkey not found in ri:user element. Found attrs: %s",
+                user.attrs,
+            )
+            continue
+        # Include @ sign for tagging, more clear for LLM
+        user.replaceWith("@" + source_operations.get_user_display_name(user_id=user_id))
+
+    for html_page_reference in soup.findAll("ac:structured-macro"):
+        # Here, we only want to process page within page macros
+        if html_page_reference.attrs.get("ac:name") != "include":
+            continue
+
+        page_data = html_page_reference.find("ri:page")
+        if not page_data:
+            logger.warning(
+                "Skipping retrieval of %s because because page data is missing",
+                html_page_reference,
+            )
+            continue
+
+        page_title = page_data.attrs.get("ri:content-title")
+        if not page_title:
+            # only fetch pages that have a title
+            logger.warning(
+                "Skipping retrieval of %s because it has no title",
+                html_page_reference,
+            )
+            continue
+
+        if page_title in fetched_titles:
+            # prevent recursive fetching of pages
+            logger.debug("Skipping %s because it has already been fetched", page_title)
+            continue
+
+        fetched_titles.add(page_title)
+
+        # Wrap this in a try-except because there are some pages that might not exist
+        try:
+            page_contents = source_operations.find_page_by_title(title=page_title)
+        except Exception as e:
+            logger.warning(
+                "Error getting page contents for object %s: %s",
+                confluence_object,
+                e,
+            )
+            continue
+
+        if not page_contents:
+            continue
+
+        text_from_page = extract_text_from_confluence_html(
+            source_operations=source_operations,
+            confluence_object=page_contents,
+            fetched_titles=fetched_titles,
+        )
+
+        html_page_reference.replaceWith(text_from_page)
+
+    for html_link_body in soup.findAll("ac:link-body"):
+        # This extracts the text from inline links in the page so they can be
+        # represented in the document text as plain text
+        try:
+            text_from_link = html_link_body.text
+            html_link_body.replaceWith(f"(LINK TEXT: {text_from_link})")
+        except Exception as e:
+            logger.warning("Error processing ac:link-body: %s", e)
+
+    for html_attachment in soup.findAll("ri:attachment"):
+        # This extracts the text from inline attachments in the page so they can be
+        # represented in the document text as plain text
+        try:
+            html_attachment.replaceWith(
+                f"<attachment>{sanitize_attachment_title(html_attachment.attrs['ri:filename'])}</attachment>"
+            )  # to be replaced later
+        except Exception as e:
+            logger.warning("Error processing ac:attachment: %s", e)
+
+    return format_document_soup(soup)
+
+
+def _remove_macro_stylings(soup: bs4.BeautifulSoup) -> None:
+    for macro_root in soup.findAll("ac:structured-macro"):
+        if not isinstance(macro_root, bs4.Tag):
+            continue
+
+        macro_styling = macro_root.find(name="ac:parameter", attrs={"ac:name": "page"})
+        if not macro_styling or not isinstance(macro_styling, bs4.Tag):
+            continue
+
+        macro_styling.extract()

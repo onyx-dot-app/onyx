@@ -1,26 +1,30 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import TracingProviderConfig
-from onyx.db.models import User
-from onyx.db.tracing import delete_tracing_provider
-from onyx.db.tracing import fetch_tracing_provider
-from onyx.db.tracing import upsert_tracing_provider
+from onyx.db.models import TracingProviderConfig, User
+from onyx.db.tracing import (
+    delete_tracing_provider,
+    fetch_tracing_provider,
+    upsert_tracing_provider,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.tracing.models import TracingProviderTestRequest
-from onyx.server.manage.tracing.models import TracingProviderUpsertRequest
-from onyx.server.manage.tracing.models import TracingProviderView
-from onyx.tracing.provider_config import BraintrustConfig
-from onyx.tracing.provider_config import EffectiveTracingConfig
-from onyx.tracing.provider_config import LangfuseConfig
-from onyx.tracing.provider_config import resolve_effective_tracing_config
+from onyx.server.manage.tracing.models import (
+    TracingProviderTestRequest,
+    TracingProviderUpsertRequest,
+    TracingProviderView,
+)
+from onyx.tracing.provider_config import (
+    BraintrustConfig,
+    EffectiveTracingConfig,
+    LangfuseConfig,
+    resolve_effective_tracing_config,
+)
 from onyx.tracing.validation import validate_tracing_credentials
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT

@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useTranslations } from "next-intl";
 
 import {
   PacketType,
@@ -24,8 +25,6 @@ import {
 import { SvgCircle } from "@opal/icons";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
-
-const THINKING_STATUS = "Thinking";
 
 function extractFirstParagraph(content: string): {
   title: string | null;
@@ -93,6 +92,9 @@ export const ReasoningRenderer: MessageRenderer<
   ReasoningPacket,
   FullChatState
 > = ({ packets, onComplete, animate, children }) => {
+  const t = useTranslations("chat.messages.timeline");
+  const thinkingStatus = t("reasoning.thinking.status");
+
   const { hasStart, hasEnd, content } = useMemo(
     () => constructCurrentReasoningState(packets),
     [packets]
@@ -104,14 +106,13 @@ export const ReasoningRenderer: MessageRenderer<
   );
 
   // Use extracted title if available, otherwise default
-  const displayStatus = title || THINKING_STATUS;
+  const displayStatus = title || thinkingStatus;
   const displayContent = title ? remainingContent : content;
 
   // Track reasoning timing for minimum display duration
   const [reasoningStartTime, setReasoningStartTime] = useState<number | null>(
     null
   );
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const completionHandledRef = useRef(false);
 
   // Track when reasoning starts
@@ -124,35 +125,32 @@ export const ReasoningRenderer: MessageRenderer<
   // Handle reasoning completion with minimum duration
   useEffect(() => {
     if (
-      hasEnd &&
-      reasoningStartTime !== null &&
-      !completionHandledRef.current
+      !hasEnd ||
+      reasoningStartTime === null ||
+      completionHandledRef.current
     ) {
-      completionHandledRef.current = true;
-      const elapsedTime = Date.now() - reasoningStartTime;
-      const minimumThinkingDuration = animate ? THINKING_MIN_DURATION_MS : 0;
-
-      if (elapsedTime >= minimumThinkingDuration) {
-        // Enough time has passed, complete immediately
-        onComplete();
-      } else {
-        // Not enough time has passed, delay completion
-        const remainingTime = minimumThinkingDuration - elapsedTime;
-        timeoutRef.current = setTimeout(() => {
-          onComplete();
-        }, remainingTime);
-      }
+      return;
     }
-  }, [hasEnd, reasoningStartTime, animate, onComplete]);
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+    const complete = () => {
+      if (!completionHandledRef.current) {
+        completionHandledRef.current = true;
+        onComplete();
       }
     };
-  }, []);
+
+    const elapsedTime = Date.now() - reasoningStartTime;
+    const minimumThinkingDuration = animate ? THINKING_MIN_DURATION_MS : 0;
+
+    if (elapsedTime >= minimumThinkingDuration) {
+      complete();
+      return;
+    }
+
+    const remainingTime = minimumThinkingDuration - elapsedTime;
+    const timeout = setTimeout(complete, remainingTime);
+    return () => clearTimeout(timeout);
+  }, [hasEnd, reasoningStartTime, animate, onComplete]);
 
   // Markdown renderer callback for ExpandableTextDisplay
   // Uses collapsed components (no spacing) in collapsed view, normal spacing in expanded modal
@@ -172,7 +170,7 @@ export const ReasoningRenderer: MessageRenderer<
     return children([
       {
         icon: SvgCircle,
-        status: THINKING_STATUS,
+        status: thinkingStatus,
         content: <></>,
         noPaddingRight: true,
       },
@@ -180,9 +178,9 @@ export const ReasoningRenderer: MessageRenderer<
   }
 
   const reasoningContent = (
-    <div className="pl-(--timeline-common-text-padding)">
+    <div className="ps-(--timeline-common-text-padding)">
       <ExpandableTextDisplay
-        title="Full text"
+        title={t("reasoning.fullText.title")}
         content={content}
         displayContent={displayContent}
         renderContent={renderMarkdown}

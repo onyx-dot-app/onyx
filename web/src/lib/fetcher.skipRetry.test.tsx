@@ -9,8 +9,8 @@ import { setDocumentVisibility } from "@tests/setup/test-utils";
 type RetryParams = Parameters<typeof skipRetryOnAuthError>;
 const emptyConfig = {} as RetryParams[2];
 
-// ts-jest compiles to ES5, where `class extends Error` breaks instanceof on
-// construction; build via the prototype so the guard's instanceof check holds.
+// Build via the prototype so the guard's instanceof check holds regardless of
+// how the transform downlevels `class extends Error`.
 function makeAuthError(status: number): FetchError {
   const err = Object.create(FetchError.prototype) as FetchError;
   err.status = status;

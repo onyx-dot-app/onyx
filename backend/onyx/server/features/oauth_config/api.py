@@ -1,35 +1,40 @@
 """API endpoints for OAuth configuration management."""
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.auth.oauth_token_manager import OAuthTokenManager
-from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.oauth_token_manager import OAuthTokenManager, validate_oauth_endpoint_url
+from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import OAuthConfig
-from onyx.db.models import User
-from onyx.db.oauth_config import create_oauth_config
-from onyx.db.oauth_config import delete_oauth_config
-from onyx.db.oauth_config import delete_user_oauth_token
-from onyx.db.oauth_config import get_oauth_config
-from onyx.db.oauth_config import get_oauth_configs
-from onyx.db.oauth_config import get_tools_by_oauth_config
-from onyx.db.oauth_config import update_oauth_config
-from onyx.db.oauth_config import upsert_user_oauth_token
-from onyx.federated_connectors.oauth_utils import generate_oauth_state
-from onyx.federated_connectors.oauth_utils import verify_oauth_state
-from onyx.server.features.oauth_config.models import OAuthCallbackResponse
-from onyx.server.features.oauth_config.models import OAuthConfigCreate
-from onyx.server.features.oauth_config.models import OAuthConfigSnapshot
-from onyx.server.features.oauth_config.models import OAuthConfigUpdate
-from onyx.server.features.oauth_config.models import OAuthInitiateRequest
-from onyx.server.features.oauth_config.models import OAuthInitiateResponse
+from onyx.db.models import OAuthConfig, User
+from onyx.db.oauth_config import (
+    create_oauth_config,
+    delete_oauth_config,
+    delete_user_oauth_token,
+    get_oauth_config,
+    get_oauth_configs,
+    get_tools_by_oauth_config,
+    update_oauth_config,
+    upsert_user_oauth_token,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.federated_connectors.oauth_utils import (
+    generate_oauth_state,
+    verify_oauth_state,
+)
+from onyx.server.features.oauth_config.models import (
+    OAuthCallbackResponse,
+    OAuthConfigCreate,
+    OAuthConfigSnapshot,
+    OAuthConfigUpdate,
+    OAuthInitiateRequest,
+    OAuthInitiateResponse,
+)
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException
 
 logger = setup_logger()
 
@@ -60,13 +65,47 @@ def _oauth_config_to_snapshot(
 """Admin endpoints for OAuth configuration management"""
 
 
+def _validate_oauth_endpoint_urls(
+    authorization_url: str | None, token_url: str | None
+) -> None:
+    for field, url in (
+        ("authorization_url", authorization_url),
+        ("token_url", token_url),
+    ):
+        if url is None:
+            continue
+        try:
+            validate_oauth_endpoint_url(url, resolve_dns=False)
+        except (SSRFException, ValueError) as e:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"Invalid {field}: {e}")
+
+
+def _assert_can_manage_oauth_config(
+    oauth_config: OAuthConfig, user: User, db_session: Session
+) -> None:
+    """Owner-or-admin gate: a global actions-admin manages any OAuth config; a scoped manager
+    manages one only when they own every action referencing it — editing shared credentials
+    would otherwise affect the other creators."""
+    if has_global_permission(user, Permission.MANAGE_ACTIONS):
+        return
+    tools = get_tools_by_oauth_config(oauth_config.id, db_session)
+    if tools and all(tool.user_id == user.id for tool in tools):
+        return
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "You can only manage OAuth configurations for actions that you created.",
+    )
+
+
 @admin_router.post("/create")
 def create_oauth_config_endpoint(
     oauth_data: OAuthConfigCreate,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)),
 ) -> OAuthConfigSnapshot:
-    """Create a new OAuth configuration (admin only)."""
+    """Create a new OAuth configuration. A scoped manager may create one and link it to an
+    action they created; get/update/delete are then owner-or-admin."""
+    _validate_oauth_endpoint_urls(oauth_data.authorization_url, oauth_data.token_url)
     try:
         oauth_config = create_oauth_config(
             name=oauth_data.name,
@@ -86,7 +125,7 @@ def create_oauth_config_endpoint(
 @admin_router.get("")
 def list_oauth_configs(
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> list[OAuthConfigSnapshot]:
     """List all OAuth configurations (admin only)."""
     oauth_configs = get_oauth_configs(db_session)
@@ -97,14 +136,18 @@ def list_oauth_configs(
 def get_oauth_config_endpoint(
     oauth_config_id: int,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> OAuthConfigSnapshot:
-    """Retrieve a single OAuth configuration (admin only)."""
+    """Retrieve a single OAuth configuration (owner or admin)."""
     oauth_config = get_oauth_config(oauth_config_id, db_session)
     if not oauth_config:
-        raise HTTPException(
-            status_code=404, detail=f"OAuth config with id {oauth_config_id} not found"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {oauth_config_id} not found",
         )
+    _assert_can_manage_oauth_config(oauth_config, user, db_session)
     return _oauth_config_to_snapshot(oauth_config, db_session)
 
 
@@ -113,9 +156,26 @@ def update_oauth_config_endpoint(
     oauth_config_id: int,
     oauth_data: OAuthConfigUpdate,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> OAuthConfigSnapshot:
-    """Update an OAuth configuration (admin only)."""
+    """Update an OAuth configuration (owner or admin)."""
+    existing_config = get_oauth_config(oauth_config_id, db_session)
+    if not existing_config:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {oauth_config_id} not found",
+        )
+    _assert_can_manage_oauth_config(existing_config, user, db_session)
+    _validate_oauth_endpoint_urls(
+        oauth_data.authorization_url
+        if oauth_data.authorization_url is not None
+        else existing_config.authorization_url,
+        oauth_data.token_url
+        if oauth_data.token_url is not None
+        else existing_config.token_url,
+    )
     try:
         updated_config = update_oauth_config(
             oauth_config_id=oauth_config_id,
@@ -139,9 +199,18 @@ def update_oauth_config_endpoint(
 def delete_oauth_config_endpoint(
     oauth_config_id: int,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> dict[str, str]:
-    """Delete an OAuth configuration (admin only)."""
+    """Delete an OAuth configuration (owner or admin)."""
+    existing_config = get_oauth_config(oauth_config_id, db_session)
+    if not existing_config:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"OAuth config with id {oauth_config_id} not found",
+        )
+    _assert_can_manage_oauth_config(existing_config, user, db_session)
     try:
         delete_oauth_config(oauth_config_id, db_session)
         return {"message": "OAuth configuration deleted successfully"}

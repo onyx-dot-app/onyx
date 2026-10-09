@@ -1,7 +1,6 @@
 """Tests for FileStore.delete_file error_on_missing behavior."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

@@ -15,6 +15,12 @@
 const esmPackages = [
   // Auth & Security
   "jose",
+  // i18n
+  "next-intl",
+  "use-intl",
+  "intl-messageformat",
+  "@formatjs",
+  "tslib",
   // UI Libraries
   "@radix-ui",
   "@floating-ui",
@@ -76,7 +82,6 @@ const esmPackagesPattern =
 
 // Shared configuration
 const sharedConfig = {
-  preset: "ts-jest",
   setupFilesAfterEnv: ["<rootDir>/tests/setup/jest.setup.ts"],
 
   // Performance: Use 50% of CPU cores for parallel execution
@@ -107,16 +112,31 @@ const sharedConfig = {
   // See `esmPackages` above to add packages.
   transformIgnorePatterns: [esmPackagesPattern],
 
+  // Transpile-only (no type-checking; types are checked separately via `types:check`).
   transform: {
     "^.+\\.(t|j)sx?$": [
-      "ts-jest",
+      "@swc/jest",
       {
-        // Performance: Disable type-checking in tests (types are checked by tsc)
-        isolatedModules: true,
-        tsconfig: {
-          jsx: "react-jsx",
-          // Allow ts-jest to process JavaScript files from node_modules
-          allowJs: true,
+        jsc: {
+          parser: {
+            syntax: "typescript",
+            tsx: true,
+          },
+          transform: {
+            react: {
+              runtime: "automatic",
+            },
+          },
+          target: "es2022",
+        },
+        module: {
+          type: "commonjs",
+          // Opal's internal barrel self-imports (components importing sibling
+          // primitives from their own public barrel) create circular requires.
+          // SWC's default eager reexport codegen throws a TDZ error in that case;
+          // lazy-initializing just these barrels (not all deps) avoids it without
+          // perturbing execution order of everything else.
+          lazy: ["@opal/components", "@opal/layouts", "@opal/core"],
         },
       },
     ],
@@ -155,10 +175,12 @@ module.exports = {
         "**/src/app/**/hooks/*.test.ts", // Pure packet processor tests
         "**/src/app/**/__tests__/*.test.ts",
         "**/src/hooks/**/*.test.ts",
+        "**/src/i18n/**/*.test.ts",
         "**/src/refresh-components/**/*.test.ts",
         "**/src/refresh-pages/**/*.test.ts",
         "**/src/sections/**/*.test.ts",
         "**/src/components/**/*.test.ts",
+        "**/src/views/**/*.test.ts",
         "**/lib/opal/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],
@@ -178,6 +200,8 @@ module.exports = {
         "**/src/hooks/**/*.test.tsx",
         "**/src/sections/**/*.test.tsx",
         "**/src/views/**/*.test.tsx",
+        "**/lib/opal/**/*.test.tsx",
+        "**/src/i18n/**/*.test.tsx",
         // Add more patterns here as you add more integration tests
       ],
     },

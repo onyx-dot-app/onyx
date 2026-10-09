@@ -1,5 +1,5 @@
 /**
- * Playwright fixture that ensures a public LLM provider is available.
+ * Playwright fixture that ensures the public mock LLM provider is available.
  *
  * Usage:
  * ```ts
@@ -8,13 +8,14 @@
  *
  * test("my test that needs an LLM provider", async ({ page, llmProviderId }) => {
  *   // llmProviderId is the ID of the provider that was created (or null if
- *   // one already existed). The fixture handles cleanup automatically.
+ *   // it already existed). The fixture handles cleanup automatically.
  * });
  * ```
  *
  * The fixture:
  * - Authenticates as admin
- * - Creates a public LLM provider if none exists
+ * - Creates the public mock LLM provider if it does not exist, and makes it
+ *   the default
  * - Provides the created provider ID to the test
  * - Cleans up the provider after all tests in the file complete
  */
@@ -25,8 +26,8 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 export const test = base.extend<{
   /**
-   * The ID of the public LLM provider created by this fixture, or `null`
-   * if a public provider already existed.
+   * The ID of the mock LLM provider created by this fixture, or `null`
+   * if it already existed.
    */
   llmProviderId: number | null;
 }>({

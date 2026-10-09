@@ -2,17 +2,14 @@ import csv
 import os
 import shutil
 
-from onyx.connectors.salesforce.shelve_stuff.shelve_functions import find_ids_by_type
 from onyx.connectors.salesforce.shelve_stuff.shelve_functions import (
+    find_ids_by_type,
     get_affected_parent_ids_by_type,
-)
-from onyx.connectors.salesforce.shelve_stuff.shelve_functions import get_child_ids
-from onyx.connectors.salesforce.shelve_stuff.shelve_functions import get_record
-from onyx.connectors.salesforce.shelve_stuff.shelve_functions import (
+    get_child_ids,
+    get_record,
     update_sf_db_with_csv,
 )
-from onyx.connectors.salesforce.utils import BASE_DATA_PATH
-from onyx.connectors.salesforce.utils import get_object_type_path
+from onyx.connectors.salesforce.utils import BASE_DATA_PATH, get_object_type_path
 
 _VALID_SALESFORCE_IDS = [
     "001bm00000fd9Z3AAI",
@@ -141,12 +138,12 @@ def create_csv_file(
     fields: set[str] = set()
     for record in records:
         fields.update(record.keys())
-    fields = set(sorted(list(fields)))  # Sort for consistent order
+    sorted_fields = sorted(fields)  # Sort for a consistent column order
 
     # Create CSV file
     csv_path = os.path.join(get_object_type_path(object_type), filename)
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
+        writer = csv.DictWriter(f, fieldnames=sorted_fields)
         writer.writeheader()
         for record in records:
             writer.writerow(record)

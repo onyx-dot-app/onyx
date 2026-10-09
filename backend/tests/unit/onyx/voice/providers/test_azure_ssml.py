@@ -4,7 +4,11 @@ import wave
 
 import pytest
 
-from onyx.voice.providers.azure import AzureVoiceProvider
+from onyx.voice.providers.azure import (
+    AzureVoiceProvider,
+    _parse_stt_languages,
+    _voice_locale,
+)
 
 # --- _is_azure_cloud_url ---
 
@@ -85,6 +89,67 @@ def test_validate_region_rejects_dots() -> None:
         AzureVoiceProvider._validate_speech_region("west.us")
 
 
+# --- STT languages ---
+
+
+def test_stt_languages_default_when_unset() -> None:
+    assert _parse_stt_languages(None) == ["en-US"]
+    assert _parse_stt_languages([]) == ["en-US"]
+
+
+def test_stt_languages_normalize_case_and_dedupe() -> None:
+    assert _parse_stt_languages(["en-us", "FR-fr", "fr-FR"]) == ["en-US", "fr-FR"]
+
+
+def test_stt_languages_script_locale() -> None:
+    assert _parse_stt_languages(["iu-latn-ca"]) == ["iu-Latn-CA"]
+
+
+def test_stt_languages_rejects_invalid_locale() -> None:
+    with pytest.raises(ValueError, match="Invalid Azure STT language"):
+        _parse_stt_languages(["not a locale"])
+
+
+def test_stt_languages_rejects_bare_language_code() -> None:
+    with pytest.raises(ValueError, match="Invalid Azure STT language"):
+        _parse_stt_languages(["fr"])
+
+
+def test_stt_languages_rejects_too_many() -> None:
+    locales = [f"en-{chr(ord('A') + i)}A" for i in range(11)]
+    with pytest.raises(ValueError, match="at most 10"):
+        _parse_stt_languages(locales)
+
+
+def test_stt_languages_rejects_non_list_config() -> None:
+    with pytest.raises(ValueError, match="must be a list"):
+        _parse_stt_languages("en-US, fr-FR")
+
+
+# --- _voice_locale ---
+
+
+def test_voice_locale_from_french_voice() -> None:
+    assert _voice_locale("fr-FR-DeniseNeural") == "fr-FR"
+
+
+def test_voice_locale_from_script_locale_voice() -> None:
+    assert _voice_locale("iu-Latn-CA-SiqiniqNeural") == "iu-Latn-CA"
+
+
+def test_voice_locale_falls_back_for_none() -> None:
+    assert _voice_locale(None) == "en-US"
+
+
+def test_voice_locale_falls_back_for_unparseable_name() -> None:
+    assert _voice_locale("weird") == "en-US"
+
+
+def test_voice_locale_rejects_ssml_injection() -> None:
+    # A malformed locale must never flow into the xml:lang attribute.
+    assert _voice_locale("en-US' x='y-EvilNeural") == "en-US"
+
+
 # --- _pcm16_to_wav ---
 
 
@@ -153,41 +218,3 @@ def test_is_self_hosted_false_for_azure_cloud() -> None:
         custom_config={},
     )
     assert provider._is_self_hosted() is False
-
-
-# --- Resampling ---
-
-
-def test_resample_pcm16_passthrough() -> None:
-    from onyx.voice.providers.azure import AzureStreamingTranscriber
-
-    t = AzureStreamingTranscriber.__new__(AzureStreamingTranscriber)
-    t.input_sample_rate = 16000
-    t.target_sample_rate = 16000
-
-    data = struct.pack("<4h", 100, 200, 300, 400)
-    assert t._resample_pcm16(data) == data
-
-
-def test_resample_pcm16_downsamples() -> None:
-    from onyx.voice.providers.azure import AzureStreamingTranscriber
-
-    t = AzureStreamingTranscriber.__new__(AzureStreamingTranscriber)
-    t.input_sample_rate = 24000
-    t.target_sample_rate = 16000
-
-    input_samples = [1000, 2000, 3000, 4000, 5000, 6000]
-    data = struct.pack(f"<{len(input_samples)}h", *input_samples)
-
-    result = t._resample_pcm16(data)
-    assert len(result) // 2 == 4
-
-
-def test_resample_pcm16_empty_data() -> None:
-    from onyx.voice.providers.azure import AzureStreamingTranscriber
-
-    t = AzureStreamingTranscriber.__new__(AzureStreamingTranscriber)
-    t.input_sample_rate = 24000
-    t.target_sample_rate = 16000
-
-    assert t._resample_pcm16(b"") == b""

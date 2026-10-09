@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import DiffBody from "@/app/craft/components/tool-cards/DiffBody";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 

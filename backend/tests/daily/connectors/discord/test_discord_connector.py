@@ -3,9 +3,7 @@ import time
 import pytest
 
 from onyx.connectors.discord.connector import DiscordConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import Document, DocumentSource, HierarchyNode
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.DISCORD_CONNECTOR_BOT_TOKEN)
@@ -30,10 +28,9 @@ def test_discord_connector_basic(discord_connector: DiscordConnector) -> None:
 
     doc_batch = next(doc_batch_generator)
 
-    docs: list[Document] = []
-    for doc in doc_batch:
-        if not isinstance(doc, HierarchyNode):
-            docs.append(doc)
+    docs: list[Document] = [
+        doc for doc in doc_batch if not isinstance(doc, HierarchyNode)
+    ]
 
     assert len(docs) > 0, "No documents were retrieved from the connector"
 

@@ -1,25 +1,27 @@
 # docs: https://docs.celeryq.dev/en/stable/userguide/configuration.html
 import urllib.parse
 
-from onyx.configs.app_configs import CELERY_BROKER_POOL_LIMIT
-from onyx.configs.app_configs import CELERY_RESULT_EXPIRES
-from onyx.configs.app_configs import REDIS_DB_NUMBER_CELERY
-from onyx.configs.app_configs import REDIS_DB_NUMBER_CELERY_RESULT_BACKEND
-from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
-from onyx.configs.app_configs import REDIS_HOST
-from onyx.configs.app_configs import REDIS_PASSWORD
-from onyx.configs.app_configs import REDIS_PORT
-from onyx.configs.app_configs import REDIS_SENTINEL_HOSTS
-from onyx.configs.app_configs import REDIS_SENTINEL_MASTER_NAME
-from onyx.configs.app_configs import REDIS_SENTINEL_PASSWORD
-from onyx.configs.app_configs import REDIS_SSL
-from onyx.configs.app_configs import REDIS_SSL_CA_CERTS
-from onyx.configs.app_configs import REDIS_SSL_CERT_REQS
-from onyx.configs.app_configs import REDIS_SSL_CERTFILE
-from onyx.configs.app_configs import REDIS_SSL_KEYFILE
-from onyx.configs.app_configs import USE_REDIS_IAM_AUTH
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
+from onyx.configs.app_configs import (
+    CELERY_BROKER_POOL_LIMIT,
+    CELERY_RESULT_EXPIRES,
+    REDIS_DB_NUMBER_CELERY,
+    REDIS_DB_NUMBER_CELERY_RESULT_BACKEND,
+    REDIS_HEALTH_CHECK_INTERVAL,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_PORT,
+    REDIS_SENTINEL_HOSTS,
+    REDIS_SENTINEL_MASTER_NAME,
+    REDIS_SENTINEL_PASSWORD,
+    REDIS_SSL,
+    REDIS_SSL_CA_CERTS,
+    REDIS_SSL_CERT_REQS,
+    REDIS_SSL_CERTFILE,
+    REDIS_SSL_CHECK_HOSTNAME,
+    REDIS_SSL_KEYFILE,
+    USE_REDIS_IAM_AUTH,
+)
+from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS, OnyxCeleryPriority
 
 CELERY_SEPARATOR = ":"
 
@@ -33,7 +35,10 @@ REDIS_SCHEME = "redis"
 SSL_QUERY_PARAMS = ""
 if REDIS_SSL and not USE_REDIS_IAM_AUTH:
     REDIS_SCHEME = "rediss"
-    SSL_QUERY_PARAMS = f"?ssl_cert_reqs={REDIS_SSL_CERT_REQS}"
+    SSL_QUERY_PARAMS = (
+        f"?ssl_cert_reqs={REDIS_SSL_CERT_REQS}"
+        f"&ssl_check_hostname={str(REDIS_SSL_CHECK_HOSTNAME).lower()}"
+    )
     if REDIS_SSL_CA_CERTS:
         SSL_QUERY_PARAMS += f"&ssl_ca_certs={REDIS_SSL_CA_CERTS}"
     # Client certificate for mutual TLS — the broker URL is how the Celery
@@ -54,8 +59,11 @@ USE_SENTINEL = bool(REDIS_SENTINEL_HOSTS)
 _SENTINEL_USE_SSL = REDIS_SSL and not USE_REDIS_IAM_AUTH
 
 
-def _redis_ssl_settings() -> dict[str, str]:
-    settings: dict[str, str] = {"ssl_cert_reqs": REDIS_SSL_CERT_REQS}
+def _redis_ssl_settings() -> dict[str, str | bool]:
+    settings: dict[str, str | bool] = {
+        "ssl_cert_reqs": REDIS_SSL_CERT_REQS,
+        "ssl_check_hostname": REDIS_SSL_CHECK_HOSTNAME,
+    }
     if REDIS_SSL_CA_CERTS:
         settings["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
     if REDIS_SSL_CERTFILE and REDIS_SSL_KEYFILE:
@@ -64,16 +72,25 @@ def _redis_ssl_settings() -> dict[str, str]:
     return settings
 
 
-_SENTINEL_NODES = ";".join(
-    f"sentinel://{CELERY_PASSWORD_PART}{host}:{port}"
-    for host, port in REDIS_SENTINEL_HOSTS
-)
+def _sentinel_url(db: int) -> str:
+    """Build the `;`-separated Sentinel URL for one Redis db.
+
+    The db goes on every node. Celery reads the db from the first URL in the
+    list and kombu reads it from the primary URL, so a db on the last node only
+    is dropped and both silently fall back to db 0.
+    """
+    return ";".join(
+        f"sentinel://{CELERY_PASSWORD_PART}{host}:{port}/{db}"
+        for host, port in REDIS_SENTINEL_HOSTS
+    )
+
+
 _SENTINEL_TRANSPORT_OPTIONS: dict = {}
 # Celery TLS settings for the Sentinel data connections. Always defined (empty =
 # no SSL, matching Celery's default) so they're not conditionally-present module
 # globals.
-broker_use_ssl: dict[str, str] = {}
-redis_backend_use_ssl: dict[str, str] = {}
+broker_use_ssl: dict[str, str | bool] = {}
+redis_backend_use_ssl: dict[str, str | bool] = {}
 if USE_SENTINEL:
     _SENTINEL_TRANSPORT_OPTIONS["master_name"] = REDIS_SENTINEL_MASTER_NAME
     _sentinel_kwargs: dict = {}
@@ -96,7 +113,7 @@ if USE_SENTINEL:
 # region Broker settings
 # example celery_broker_url: "redis://:password@localhost:6379/15"
 if USE_SENTINEL:
-    broker_url = f"{_SENTINEL_NODES}/{REDIS_DB_NUMBER_CELERY}"
+    broker_url = _sentinel_url(REDIS_DB_NUMBER_CELERY)
 else:
     broker_url = f"{REDIS_SCHEME}://{CELERY_PASSWORD_PART}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY}{SSL_QUERY_PARAMS}"
 
@@ -135,7 +152,7 @@ task_acks_late = True
 # might be irrelevant
 result_backend_transport_options: dict = {}
 if USE_SENTINEL:
-    result_backend = f"{_SENTINEL_NODES}/{REDIS_DB_NUMBER_CELERY_RESULT_BACKEND}"
+    result_backend = _sentinel_url(REDIS_DB_NUMBER_CELERY_RESULT_BACKEND)
     result_backend_transport_options = _SENTINEL_TRANSPORT_OPTIONS
 else:
     result_backend = f"{REDIS_SCHEME}://{CELERY_PASSWORD_PART}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY_RESULT_BACKEND}{SSL_QUERY_PARAMS}"

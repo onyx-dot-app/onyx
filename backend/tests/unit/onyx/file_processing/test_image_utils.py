@@ -1,9 +1,6 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import ImageSection, TabularSection, TextSection
 from onyx.file_processing.image_utils import make_image_callback
 
 # Minimal valid file headers for testing magic-byte detection

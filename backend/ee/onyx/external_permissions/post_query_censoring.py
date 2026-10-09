@@ -1,6 +1,8 @@
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
-from ee.onyx.external_permissions.sync_params import get_all_censoring_enabled_sources
-from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
+from ee.onyx.external_permissions.sync_params import (
+    get_all_censoring_enabled_sources,
+    get_source_perm_sync_config,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.pipeline import InferenceChunk
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -79,11 +81,12 @@ def _post_query_chunk_censoring(
             final_chunk_dict[censored_chunk.unique_id] = censored_chunk
 
     # IMPORTANT: make sure to retain the same ordering as the original `chunks` passed in
-    final_chunk_list: list[InferenceChunk] = []
-    for chunk in chunks:
-        # only if the chunk is in the final censored chunks, add it to the final list
-        # if it is missing, that means it was intentionally left out
-        if chunk.unique_id in final_chunk_dict:
-            final_chunk_list.append(final_chunk_dict[chunk.unique_id])
+    # only if the chunk is in the final censored chunks, add it to the final list
+    # if it is missing, that means it was intentionally left out
+    final_chunk_list: list[InferenceChunk] = [
+        final_chunk_dict[chunk.unique_id]
+        for chunk in chunks
+        if chunk.unique_id in final_chunk_dict
+    ]
 
     return final_chunk_list

@@ -35,9 +35,9 @@ The `DiscordCacheManager` maintains two critical in-memory mappings:
 
 ```python
 class DiscordCacheManager:
-    _guild_tenants: dict[int, str]   # guild_id → tenant_id
-    _api_keys: dict[str, str]        # tenant_id → api_key
-    _lock: asyncio.Lock              # Concurrency control
+    _guild_tenants: dict[int, str]  # guild_id → tenant_id
+    _api_keys: dict[str, str]  # tenant_id → api_key
+    _lock: asyncio.Lock  # Concurrency control
 ```
 
 #### Key Responsibilities
@@ -145,8 +145,8 @@ async def on_message(self, message: Message) -> None:
     # Step 3: API call with tenant-specific credentials
     await process_chat_message(
         message=message,
-        api_key=api_key,              # Tenant-specific
-        persona_id=persona_id,         # Tenant-specific
+        api_key=api_key,  # Tenant-specific
+        persona_id=persona_id,  # Tenant-specific
         api_client=self.api_client,
     )
 ```
@@ -200,12 +200,11 @@ def get_or_create_discord_service_api_key(db_session: Session, tenant_id: str) -
     if existing:
         return regenerate_key(existing)
 
-    # Create LIMITED role key (chat-only permissions)
+    # Create a service key with the default service-account permissions.
     return insert_api_key(
         db_session=db_session,
         api_key_args=APIKeyArgs(
             name=DISCORD_SERVICE_API_KEY_NAME,
-            role=UserRole.LIMITED,  # Minimal permissions
         ),
         user_id=None,  # Service account (system-owned)
     ).api_key

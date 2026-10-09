@@ -13,9 +13,11 @@ import pytest
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 
-from onyx.server.features.mcp.api import _build_oauth_admin_config_data
-from onyx.server.features.mcp.api import _build_oauth_admin_config_data_for_update
-from onyx.server.features.mcp.api import _resolve_oauth_credentials
+from onyx.server.features.mcp.api import (
+    _build_oauth_admin_config_data,
+    _build_oauth_admin_config_data_for_update,
+    _resolve_oauth_credentials,
+)
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.utils.encryption import mask_string
 

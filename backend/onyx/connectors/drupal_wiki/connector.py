@@ -5,42 +5,50 @@ from typing import Any
 import requests
 from typing_extensions import override
 
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
-from onyx.configs.app_configs import DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.app_configs import (
+    CONTINUE_ON_CONNECTOR_FAILURE,
+    DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD,
+    INDEX_BATCH_SIZE,
+)
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     datetime_from_utc_timestamp,
 )
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
-from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    rate_limit_builder,
+    rl_requests,
+)
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    is_tabular_file,
     tabular_file_to_sections,
 )
-from onyx.connectors.drupal_wiki.models import DrupalWikiCheckpoint
-from onyx.connectors.drupal_wiki.models import DrupalWikiPage
-from onyx.connectors.drupal_wiki.models import DrupalWikiPageResponse
-from onyx.connectors.drupal_wiki.models import DrupalWikiSpaceResponse
+from onyx.connectors.drupal_wiki.models import (
+    DrupalWikiCheckpoint,
+    DrupalWikiPage,
+    DrupalWikiPageResponse,
+    DrupalWikiSpaceResponse,
+)
 from onyx.connectors.drupal_wiki.utils import build_drupal_wiki_document_id
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import ConnectorFailure
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    ConnectorFailure,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TabularSection,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.image_utils import store_image_and_create_section
@@ -438,7 +446,7 @@ class DrupalWikiConnector(
             page += 1
 
         # Return a deterministic, sorted list of ids
-        space_id_list = list(sorted(all_space_ids))
+        space_id_list = sorted(all_space_ids)
         logger.debug("Total spaces fetched: %s", len(space_id_list))
         return space_id_list
 
@@ -610,7 +618,7 @@ class DrupalWikiConnector(
             logger.error("Error processing page %s: %s", page.id, e)
             return ConnectorFailure(
                 failed_document=DocumentFailure(
-                    document_id=str(page.id),
+                    document_id=build_drupal_wiki_document_id(self.base_url, page.id),
                     document_link=build_drupal_wiki_document_id(self.base_url, page.id),
                 ),
                 failure_message=f"Error processing page {page.id}: {e}",
@@ -670,7 +678,9 @@ class DrupalWikiConnector(
                 logger.error("Error processing page ID %s: %s", page_id, e)
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
-                        document_id=str(page_id),
+                        document_id=build_drupal_wiki_document_id(
+                            self.base_url, page_id
+                        ),
                         document_link=build_drupal_wiki_document_id(
                             self.base_url, page_id
                         ),
@@ -858,10 +868,19 @@ class DrupalWikiConnector(
                         if callback:
                             callback.progress("retrieve_all_slim_docs", 1)
 
-                except Exception as e:
-                    logger.error(
-                        "Error processing page ID %s for slim documents: %s", page_id, e
+                except Exception:
+                    # Do not swallow this. The slim document list is the
+                    # authoritative "what still exists" set for pruning
+                    # (celery_utils.extract_ids_from_runnable_connector), and a
+                    # page omitted from it is deleted from the index. Logging and
+                    # continuing turns a transient fetch error into data loss.
+                    # The spaces branch below already lets errors propagate.
+                    logger.exception(
+                        "Failed to retrieve page ID %s for slim documents; "
+                        "aborting so pruning does not delete it",
+                        page_id,
                     )
+                    raise
 
         # Process spaces if include_all_spaces is True or spaces are provided
         if self.include_all_spaces or self.spaces:

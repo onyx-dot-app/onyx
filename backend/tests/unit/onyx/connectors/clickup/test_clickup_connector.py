@@ -1,9 +1,7 @@
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.connectors.clickup.connector import CLICKUP_API_BASE_URL
-from onyx.connectors.clickup.connector import ClickupConnector
+from onyx.connectors.clickup.connector import CLICKUP_API_BASE_URL, ClickupConnector
 
 
 def _mock_response(json_response: dict[str, Any]) -> MagicMock:
@@ -13,7 +11,10 @@ def _mock_response(json_response: dict[str, Any]) -> MagicMock:
 
 
 def test_get_all_tasks_filtered_uses_relative_endpoint() -> None:
-    connector = ClickupConnector(api_token="test-token", team_id="123")
+    connector = ClickupConnector()
+    connector.load_credentials(
+        {"clickup_api_token": "test-token", "clickup_team_id": "123"}
+    )
     response = _mock_response({"tasks": []})
 
     with patch("onyx.connectors.clickup.connector.requests.get") as mock_get:
@@ -26,7 +27,10 @@ def test_get_all_tasks_filtered_uses_relative_endpoint() -> None:
 
 
 def test_get_task_comments_uses_relative_endpoint() -> None:
-    connector = ClickupConnector(api_token="test-token")
+    connector = ClickupConnector()
+    connector.load_credentials(
+        {"clickup_api_token": "test-token", "clickup_team_id": "123"}
+    )
     response = _mock_response(
         {
             "comments": [

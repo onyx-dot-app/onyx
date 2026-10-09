@@ -1,9 +1,9 @@
 import { test, expect, Page, Locator } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
-const IMAGE_GENERATION_URL =
-  "http://localhost:3000/admin/configuration/image-generation";
+const IMAGE_GENERATION_URL = `http://localhost:3000${ADMIN_ROUTES.IMAGE_GENERATION.path}`;
 
 // Provider IDs matching constants.ts
 const PROVIDERS = [

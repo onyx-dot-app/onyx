@@ -1,9 +1,13 @@
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.external_perm import fetch_external_groups_for_user
-from ee.onyx.db.external_perm import fetch_public_external_group_ids
-from ee.onyx.db.user_group import fetch_user_groups_for_documents
-from ee.onyx.db.user_group import fetch_user_groups_for_user
+from ee.onyx.db.external_perm import (
+    fetch_external_groups_for_user,
+    fetch_public_external_group_ids,
+)
+from ee.onyx.db.user_group import (
+    fetch_user_groups_for_documents,
+    fetch_user_groups_for_user,
+)
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.access import (
     _get_access_for_documents as get_access_for_documents_without_groups,
@@ -11,12 +15,9 @@ from onyx.access.access import (
 from onyx.access.access import _get_acl_for_user as get_acl_for_user_without_groups
 from onyx.access.access import collect_user_file_access
 from onyx.access.models import DocumentAccess
-from onyx.access.utils import prefix_external_group
-from onyx.access.utils import prefix_user_group
-from onyx.db.document import get_document_sources
-from onyx.db.document import get_documents_by_ids
-from onyx.db.models import User
-from onyx.db.models import UserFile
+from onyx.access.utils import prefix_external_group, prefix_user_group
+from onyx.db.document import get_document_sources, get_documents_by_ids
+from onyx.db.models import User, UserFile
 from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.utils.logger import setup_logger
 
@@ -48,13 +49,12 @@ def _get_access_for_documents(
         document_ids=document_ids,
         db_session=db_session,
     )
-    user_group_info: dict[str, list[str]] = {
-        document_id: group_names
-        for document_id, group_names in fetch_user_groups_for_documents(
+    user_group_info: dict[str, list[str]] = dict(
+        fetch_user_groups_for_documents(
             db_session=db_session,
             document_ids=document_ids,
         )
-    }
+    )
     documents = get_documents_by_ids(
         db_session=db_session,
         document_ids=document_ids,

@@ -1,15 +1,18 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.db.code_interpreter import fetch_code_interpreter_server
-from onyx.db.code_interpreter import update_code_interpreter_server_enabled
+from onyx.db.code_interpreter import (
+    fetch_code_interpreter_server,
+    update_code_interpreter_server_enabled,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.server.manage.code_interpreter.models import CodeInterpreterServer
-from onyx.server.manage.code_interpreter.models import CodeInterpreterServerHealth
+from onyx.server.manage.code_interpreter.models import (
+    CodeInterpreterServer,
+    CodeInterpreterServerHealth,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
@@ -23,9 +26,13 @@ def get_code_interpreter_health(
 ) -> CodeInterpreterServerHealth:
     try:
         client = CodeInterpreterClient()
-        return CodeInterpreterServerHealth(healthy=client.health().healthy)
-    except ValueError:
-        return CodeInterpreterServerHealth(healthy=False)
+        result = client.health()
+        return CodeInterpreterServerHealth(
+            connected=result.connected,
+            error=result.error,
+        )
+    except ValueError as e:
+        return CodeInterpreterServerHealth(connected=False, error=str(e))
 
 
 @admin_router.get("")

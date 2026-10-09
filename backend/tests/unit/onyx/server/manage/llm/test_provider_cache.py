@@ -2,9 +2,11 @@ import pytest
 from redis.exceptions import RedisError
 
 from onyx.server.manage.llm import provider_cache
-from onyx.server.manage.llm.models import DefaultModel
-from onyx.server.manage.llm.models import LLMProviderDescriptor
-from onyx.server.manage.llm.models import LLMProviderResponse
+from onyx.server.manage.llm.models import (
+    DefaultModel,
+    LLMProviderDescriptor,
+    LLMProviderResponse,
+)
 
 
 class _FakeCache:
@@ -43,6 +45,7 @@ def _make_response() -> LLMProviderResponse[LLMProviderDescriptor]:
         provider="openai",
         provider_display_name="OpenAI",
         model_configurations=[],
+        next_model_configuration_offset=None,
     )
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=[descriptor],

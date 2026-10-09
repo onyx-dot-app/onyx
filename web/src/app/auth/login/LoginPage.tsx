@@ -2,12 +2,15 @@
 
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
-import SignInButton from "@/app/auth/login/SignInButton";
-import EmailPasswordForm from "./EmailPasswordForm";
-import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
-import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
-import Text from "@/refresh-components/texts/Text";
+import CloudSSOSignIn from "@/app/auth/login/CloudSSOSignIn";
+import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
+import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
+import { shouldAutoStartSso } from "@/lib/auth/utils";
+import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { Button, MessageCard } from "@opal/components";
+import { AuthLayouts } from "@opal/layouts";
+import { useTranslations } from "next-intl";
 
 interface LoginPageProps {
   authUrl: string | null;
@@ -16,6 +19,8 @@ interface LoginPageProps {
   hidePageRedirect?: boolean;
   verified?: boolean;
   isFirstUser?: boolean;
+  /** False keeps the SSO button instead of starting the flow on load. */
+  autoRedirectToSso: boolean;
 }
 
 export default function LoginPage({
@@ -25,71 +30,83 @@ export default function LoginPage({
   hidePageRedirect,
   verified,
   isFirstUser,
+  autoRedirectToSso,
 }: LoginPageProps) {
+  const t = useTranslations("auth");
   useSendAuthRequiredMessage();
 
   // Honor any existing nextUrl; only default to new team flow for first users with no nextUrl
   const effectiveNextUrl =
     nextUrl ?? (isFirstUser ? "/app?new_team=true" : null);
 
+  const ssoProviders = authTypeMetadata?.ssoProviders ?? [];
+  // Kill switch off: hide password login/signup. Backend refuses regardless.
+  const passwordAuthEnabled = authTypeMetadata?.passwordAuthEnabled !== false;
+  const autoStartSso = shouldAutoStartSso(authTypeMetadata, autoRedirectToSso);
+  const orDivider = t("login.orDivider.text");
+
   return (
     <div className="flex flex-col w-full justify-center">
       {verified && (
         <MessageCard
           variant="success"
-          title="Your email has been verified! Please sign in to continue."
+          title={t("login.verifiedMessage.title")}
         />
       )}
-      {authUrl &&
-        authTypeMetadata &&
-        authTypeMetadata.authType !== AuthType.CLOUD &&
-        // basic auth is handled below w/ the EmailPasswordForm
-        authTypeMetadata.authType !== AuthType.BASIC && (
-          <div className="flex flex-col w-full gap-4">
-            <LoginText />
-            <SignInButton
-              authorizeUrl={authUrl}
-              authType={authTypeMetadata?.authType}
-            />
-          </div>
-        )}
-
-      {authTypeMetadata?.authType === AuthType.CLOUD && (
+      {authTypeMetadata?.multiTenant === true && (
         <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
           {authUrl && authTypeMetadata && (
-            <>
-              <SignInButton
-                authorizeUrl={authUrl}
-                authType={authTypeMetadata?.authType}
-              />
-              <div className="flex flex-row items-center w-full gap-2">
-                <div className="flex-1 border-t border-text-01" />
-                <Text as="p" text03 mainUiMuted>
-                  or
-                </Text>
-                <div className="flex-1 border-t border-text-01" />
-              </div>
-            </>
+            <SignInButton authorizeUrl={authUrl} />
           )}
-          <EmailPasswordForm shouldVerify={true} nextUrl={effectiveNextUrl} />
+          <CloudSSOSignIn nextUrl={effectiveNextUrl} />
+          <AuthLayouts.OrSeparator title={orDivider} />
+          {/* Password sign-in is never hidden on cloud: it is the only route
+              that does not need a workspace resolved first. */}
+          <EmailPasswordForm
+            label="submit"
+            shouldVerify={true}
+            nextUrl={effectiveNextUrl}
+          />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <Button href="/auth/forgot-password">Reset Password</Button>
+            <Button href="/auth/forgot-password">
+              {t("login.resetPasswordButton.label")}
+            </Button>
           )}
         </div>
       )}
 
-      {authTypeMetadata?.authType === AuthType.BASIC && (
+      {authTypeMetadata?.multiTenant === false && (
         <div className="flex flex-col w-full gap-6">
           <LoginText />
-          <EmailPasswordForm nextUrl={effectiveNextUrl} />
+          {ssoProviders.length > 0 && (
+            <>
+              <div className="flex flex-col w-full gap-4">
+                {ssoProviders.map((provider) => (
+                  <ProviderSignInButton
+                    key={provider.name}
+                    provider={provider}
+                    nextUrl={effectiveNextUrl}
+                    autoStart={autoStartSso}
+                  />
+                ))}
+              </div>
+              {passwordAuthEnabled && (
+                <AuthLayouts.OrSeparator title={orDivider} />
+              )}
+            </>
+          )}
+          {passwordAuthEnabled && (
+            <EmailPasswordForm label="submit" nextUrl={effectiveNextUrl} />
+          )}
         </div>
       )}
 
-      {!hidePageRedirect && (
+      {!hidePageRedirect && passwordAuthEnabled && (
         <p className="text-center mt-4">
-          Don&apos;t have an account?{" "}
-          <span
+          {t("login.signupPrompt.text")}{" "}
+          <button
+            type="button"
             onClick={() => {
               if (typeof window !== "undefined" && window.top) {
                 window.top.location.href = "/auth/signup";
@@ -99,8 +116,8 @@ export default function LoginPage({
             }}
             className="text-link font-medium cursor-pointer"
           >
-            Create an account
-          </span>
+            {t("login.createAccountButton.label")}
+          </button>
         </p>
       )}
     </div>

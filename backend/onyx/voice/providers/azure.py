@@ -22,32 +22,94 @@ for API reference.
 """
 
 import asyncio
-import io
 import re
-import struct
-import wave
 from collections.abc import AsyncIterator
 from typing import Any
 from urllib.parse import urlparse
-from xml.sax.saxutils import escape
-from xml.sax.saxutils import quoteattr
+from xml.sax.saxutils import escape, quoteattr
 
 import aiohttp
 
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
-from onyx.voice.interface import StreamingSynthesizerProtocol
-from onyx.voice.interface import StreamingTranscriberProtocol
-from onyx.voice.interface import TranscriptResult
-from onyx.voice.interface import VoiceProviderInterface
+from onyx.voice.audio_utils import Pcm16Resampler, pcm16_to_wav
+from onyx.voice.interface import (
+    STREAM_FAILED_ERROR,
+    StreamingSynthesizerProtocol,
+    StreamingTranscriberProtocol,
+    TranscriptResult,
+    VoiceProviderInterface,
+)
+
+logger = setup_logger()
 
 # SSML namespace — W3C standard for Speech Synthesis Markup Language.
 # This is a fixed W3C specification and will not change.
 SSML_NAMESPACE = "http://www.w3.org/2001/10/synthesis"
 
-# Common Azure Neural voices
+# Locale shape (en-US, iu-Latn-CA); doubles as an SSML attribute injection guard.
+AZURE_LOCALE_PATTERN = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z]{2,8}){1,2}$")
+
+DEFAULT_LOCALE = "en-US"
+
+# Azure caps language-identification candidates at 10 for continuous LID and
+# 4 for at-start LID (the self-hosted endpoint path).
+MAX_STT_LANGUAGES = 10
+MAX_AT_START_STT_LANGUAGES = 4
+
+
+def _normalize_stt_language(raw: str) -> str:
+    """Canonicalize casing (en-us -> en-US) so Azure always gets exact locales."""
+    if not AZURE_LOCALE_PATTERN.fullmatch(raw):
+        raise ValueError(
+            f"Invalid Azure STT language {raw!r}. Use locales like 'en-US' or 'fr-FR'."
+        )
+    lang, *rest = raw.split("-")
+    return "-".join(
+        [lang.lower()] + [s.upper() if len(s) == 2 else s.capitalize() for s in rest]
+    )
+
+
+def _parse_stt_languages(value: Any) -> list[str]:
+    if value is None:
+        return [DEFAULT_LOCALE]
+    if not isinstance(value, list):
+        raise ValueError("stt_languages must be a list of locales like ['fr-FR']")
+    languages = list(
+        dict.fromkeys(
+            _normalize_stt_language(str(item).strip())
+            for item in value
+            if str(item).strip()
+        )
+    )
+    if len(languages) > MAX_STT_LANGUAGES:
+        raise ValueError(
+            f"Azure supports at most {MAX_STT_LANGUAGES} STT languages; got {len(languages)}."
+        )
+    bases = [lang.split("-", 1)[0] for lang in languages]
+    if len(set(bases)) != len(bases):
+        raise ValueError(
+            "Azure language detection allows one locale per language "
+            "(e.g. not both en-US and en-GB)."
+        )
+    return languages or [DEFAULT_LOCALE]
+
+
+def _voice_locale(voice_name: str | None) -> str:
+    """Derive the SSML locale from an Azure voice name (fr-FR-DeniseNeural -> fr-FR)."""
+    locale = "-".join((voice_name or "").split("-")[:-1])
+    return locale if AZURE_LOCALE_PATTERN.fullmatch(locale) else DEFAULT_LOCALE
+
+
+# Curated picker subset — any Azure voice ID can also be typed in. Multilingual
+# voices speak the language of the input text.
 AZURE_VOICES = [
+    {"id": "en-US-AvaMultilingualNeural", "name": "Ava (Multilingual, Female)"},
+    {"id": "en-US-AndrewMultilingualNeural", "name": "Andrew (Multilingual, Male)"},
+    {"id": "fr-FR-DeniseNeural", "name": "Denise (fr-FR, Female)"},
+    {"id": "fr-FR-HenriNeural", "name": "Henri (fr-FR, Male)"},
+    {"id": "fr-CA-SylvieNeural", "name": "Sylvie (fr-CA, Female)"},
     {"id": "en-US-JennyNeural", "name": "Jenny (en-US, Female)"},
     {"id": "en-US-GuyNeural", "name": "Guy (en-US, Male)"},
     {"id": "en-US-AriaNeural", "name": "Aria (en-US, Female)"},
@@ -72,6 +134,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         endpoint: str | None = None,
         input_sample_rate: int = 24000,
         target_sample_rate: int = 16000,
+        languages: list[str] | None = None,
     ):
         self._logger = setup_logger()
         self.api_key = api_key
@@ -79,6 +142,8 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         self.endpoint = endpoint
         self.input_sample_rate = input_sample_rate
         self.target_sample_rate = target_sample_rate
+        self.languages = languages or [DEFAULT_LOCALE]
+        self._resampler = Pcm16Resampler(input_sample_rate, target_sample_rate)
         self._transcript_queue: asyncio.Queue[TranscriptResult | None] = asyncio.Queue()
         self._accumulated_transcript = ""
         self._recognizer: Any = None
@@ -97,17 +162,42 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
 
         self._loop = asyncio.get_running_loop()
 
+        multilingual = len(self.languages) > 1
+
         # Use endpoint for self-hosted containers, region for Azure cloud
         if self.endpoint:
             speech_config = speechsdk.SpeechConfig(
                 subscription=self.api_key,
                 endpoint=self.endpoint,
             )
+        elif multilingual:
+            # Continuous LID (language switches mid-session) requires the
+            # universal/v2 endpoint; a region-based config silently falls
+            # back to at-start detection.
+            speech_config = speechsdk.SpeechConfig(
+                subscription=self.api_key,
+                endpoint=f"wss://{self.region}.stt.speech.microsoft.com/speech/universal/v2",
+            )
+            speech_config.set_property(
+                speechsdk.PropertyId.SpeechServiceConnection_LanguageIdMode,
+                "Continuous",
+            )
         else:
             speech_config = speechsdk.SpeechConfig(
                 subscription=self.api_key,
                 region=self.region,
             )
+
+        auto_detect_config = None
+        if multilingual:
+            # Self-hosted containers keep the default at-start detection.
+            auto_detect_config = (
+                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                    languages=self.languages
+                )
+            )
+        else:
+            speech_config.speech_recognition_language = self.languages[0]
 
         audio_format = speechsdk.audio.AudioStreamFormat(
             samples_per_second=16000,
@@ -120,6 +210,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         self._recognizer = speechsdk.SpeechRecognizer(
             speech_config=speech_config,
             audio_config=audio_config,
+            auto_detect_source_language_config=auto_detect_config,
         )
 
         transcriber = self
@@ -142,7 +233,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
                 # so this isn't a silent empty transcript.
                 transcriber._logger.info(
                     "Azure STT: no speech recognized in segment (reason=%s)",
-                    getattr(evt.result, "reason", None),
+                    getattr(evt.result, "reason", None),  # ods: ignore[getattr]
                 )
                 return
             if transcriber._loop and not transcriber._closed:
@@ -163,17 +254,31 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
             # connection to Azure, or bad audio format. The diagnostic fields
             # live on evt.cancellation_details (code is a CancellationErrorCode),
             # not on evt itself.
-            details = getattr(evt, "cancellation_details", None)
+            details = getattr(evt, "cancellation_details", None)  # ods: ignore[getattr]
+            reason: speechsdk.CancellationReason | None = (
+                getattr(  # ods: ignore[getattr] - Azure SDK details are dynamically typed
+                    details, "reason", None
+                )
+            )
+            if reason == speechsdk.CancellationReason.EndOfStream:
+                # Closing the push stream in close() ends the audio normally;
+                # the SDK reports that as a cancel, not as a failure.
+                transcriber._logger.info("Azure STT: end of audio stream")
+                return
             transcriber._logger.error(
                 "Azure STT canceled: reason=%s code=%s details=%s",
-                getattr(details, "reason", None),
-                getattr(details, "code", None),
-                getattr(details, "error_details", None),
+                reason,
+                getattr(details, "code", None),  # ods: ignore[getattr]
+                getattr(details, "error_details", None),  # ods: ignore[getattr]
             )
-            # A cancel is terminal — no more transcripts will arrive. Signal
-            # end-of-stream so the consumer loop stops polling instead of
-            # spinning on empty results forever.
+            # A cancel is terminal — no more transcripts will arrive. Report the
+            # failure, then signal end-of-stream so the consumer loop stops
+            # polling instead of spinning on empty results forever.
             if transcriber._loop and not transcriber._closed:
+                transcriber._loop.call_soon_threadsafe(
+                    transcriber._transcript_queue.put_nowait,
+                    TranscriptResult(error=STREAM_FAILED_ERROR),
+                )
                 transcriber._loop.call_soon_threadsafe(
                     transcriber._transcript_queue.put_nowait, None
                 )
@@ -190,32 +295,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
     async def send_audio(self, chunk: bytes) -> None:
         """Send audio chunk to Azure."""
         if self._audio_stream and not self._closed:
-            self._audio_stream.write(self._resample_pcm16(chunk))
-
-    def _resample_pcm16(self, data: bytes) -> bytes:
-        """Resample PCM16 audio from input_sample_rate to target_sample_rate."""
-        if self.input_sample_rate == self.target_sample_rate:
-            return data
-
-        num_samples = len(data) // 2
-        if num_samples == 0:
-            return b""
-
-        samples = list(struct.unpack(f"<{num_samples}h", data))
-        ratio = self.input_sample_rate / self.target_sample_rate
-        new_length = int(num_samples / ratio)
-
-        resampled: list[int] = []
-        for i in range(new_length):
-            src_idx = i * ratio
-            idx_floor = int(src_idx)
-            idx_ceil = min(idx_floor + 1, num_samples - 1)
-            frac = src_idx - idx_floor
-            sample = int(samples[idx_floor] * (1 - frac) + samples[idx_ceil] * frac)
-            sample = max(-32768, min(32767, sample))
-            resampled.append(sample)
-
-        return struct.pack(f"<{len(resampled)}h", *resampled)
+            self._audio_stream.write(self._resampler.resample(chunk))
 
     async def receive_transcript(self) -> TranscriptResult | None:
         """Receive next transcript."""
@@ -225,12 +305,22 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
             return TranscriptResult(text="", is_vad_end=False)
 
     async def close(self) -> str:
-        """Stop recognition and return final transcript."""
-        self._closed = True
-        if self._recognizer:
-            self._recognizer.stop_continuous_recognition_async()
+        """Stop recognition and return final transcript. Safe to call more than once."""
+        if self._closed:
+            return self._accumulated_transcript
         if self._audio_stream:
+            # Emit the resampled tail the last chunk held back, then end the
+            # stream so Azure recognizes the audio it still holds.
+            trailing_audio = self._resampler.flush()
+            if trailing_audio:
+                self._audio_stream.write(trailing_audio)
             self._audio_stream.close()
+        if self._recognizer:
+            # Recognition drains before the session is marked closed, because the
+            # result callbacks drop events once it is.
+            stop_result = self._recognizer.stop_continuous_recognition_async()
+            await asyncio.to_thread(stop_result.get)
+        self._closed = True
         self._loop = None
         return self._accumulated_transcript
 
@@ -255,6 +345,7 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
         self.region = region
         self.endpoint = endpoint
         self.voice = voice
+        self._locale = _voice_locale(voice)
         self.speed = max(0.5, min(2.0, speed))
         self._audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
         self._synthesizer: Any = None
@@ -323,7 +414,7 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
             # Build SSML with prosody for speed control
             rate = f"{int((self.speed - 1) * 100):+d}%"
             escaped_text = escape(text)
-            ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='en-US'>
+            ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='{self._locale}'>
                 <voice name={quoteattr(self.voice)}>
                     <prosody rate='{rate}'>{escaped_text}</prosody>
                 </voice>
@@ -372,6 +463,15 @@ class AzureVoiceProvider(VoiceProviderInterface):
             or ""
         )
         self.speech_region = self._validate_speech_region(raw_speech_region)
+        self.stt_languages = _parse_stt_languages(custom_config.get("stt_languages"))
+        if (
+            self._is_self_hosted()
+            and len(self.stt_languages) > MAX_AT_START_STT_LANGUAGES
+        ):
+            raise ValueError(
+                "Self-hosted Azure endpoints use at-start detection, which supports "
+                f"at most {MAX_AT_START_STT_LANGUAGES} STT languages."
+            )
         self.stt_model = stt_model
         self.tts_model = tts_model
         self.default_voice = default_voice or "en-US-JennyNeural"
@@ -463,13 +563,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
     @staticmethod
     def _pcm16_to_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
         """Wrap raw PCM16 mono bytes into a WAV container."""
-        buffer = io.BytesIO()
-        with wave.open(buffer, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(pcm_data)
-        return buffer.getvalue()
+        return pcm16_to_wav(pcm_data, sample_rate=sample_rate)
 
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
         if not self.api_key:
@@ -491,7 +585,12 @@ class AzureVoiceProvider(VoiceProviderInterface):
             content_type = "audio/webm; codecs=opus"
 
         url = self._get_stt_url()
-        params = {"language": "en-US", "format": "detailed"}
+        # The short-audio REST API takes a single language (no auto-detect).
+        if len(self.stt_languages) > 1:
+            logger.warning(
+                "Azure chunked STT cannot auto-detect; using %s", self.stt_languages[0]
+            )
+        params = {"language": self.stt_languages[0], "format": "detailed"}
         headers = {
             "Ocp-Apim-Subscription-Key": self.api_key,
             "Content-Type": content_type,
@@ -550,7 +649,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
 
         # Build SSML with escaped text and quoted attributes to prevent injection
         escaped_text = escape(text)
-        ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='en-US'>
+        ssml = f"""<speak version='1.0' xmlns='{SSML_NAMESPACE}' xml:lang='{_voice_locale(voice_name)}'>
             <voice name={quoteattr(voice_name)}>
                 <prosody rate='{rate}'>{escaped_text}</prosody>
             </voice>
@@ -641,6 +740,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
             endpoint=self.api_base if self._is_self_hosted() else None,
             input_sample_rate=24000,
             target_sample_rate=16000,
+            languages=self.stt_languages,
         )
         await transcriber.connect()
         return transcriber

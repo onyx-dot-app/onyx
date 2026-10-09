@@ -15,8 +15,11 @@ class LLMOverride(BaseModel):
     and for multi-model comparison, where one override is supplied per model.
 
     Attributes:
-        model_provider: LLM provider slug (e.g. ``"openai"``, ``"anthropic"``).
-            When ``None``, the persona's default provider is used.
+        model_configuration_id: Exact model configuration to use. Preferred
+            over the name-based fields — provider display names are not
+            unique, so only the id routes unambiguously.
+        model_provider: LLM provider display name. When ``None``, the
+            persona's default provider is used.
         model_version: Specific model version string (e.g. ``"gpt-4o"``).
             When ``None``, the persona's default model is used.
         temperature: Sampling temperature in ``[0, 2]``. When ``None``, the
@@ -26,6 +29,7 @@ class LLMOverride(BaseModel):
             when not set.
     """
 
+    model_configuration_id: int | None = None
     model_provider: str | None = None
     model_version: str | None = None
     temperature: float | None = None

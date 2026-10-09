@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +14,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/charlievieth/fastwalk"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -66,7 +70,7 @@ Examples:
   ods trace --list                   # list available traces without opening`,
 		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			runTrace(args, opts)
+			runTrace(cmd.OutOrStdout(), cmd.InOrStdin(), args, opts)
 		},
 	}
 
@@ -88,7 +92,7 @@ type ghRun struct {
 	URL        string `json:"url"`
 }
 
-func runTrace(args []string, opts *TraceOptions) {
+func runTrace(out io.Writer, in io.Reader, args []string, opts *TraceOptions) {
 	git.CheckGitHubCLI()
 
 	runID, err := resolveRunID(args, opts)
@@ -117,8 +121,8 @@ func runTrace(args []string, opts *TraceOptions) {
 	projects := groupByProject(traces)
 
 	if opts.List || opts.NoOpen {
-		printTraceList(traces, projects)
-		fmt.Printf("\nTraces downloaded to: %s\n", destDir)
+		printTraceList(out, traces, projects)
+		_, _ = fmt.Fprintf(out, "\nTraces downloaded to: %s\n", destDir)
 		return
 	}
 
@@ -128,7 +132,10 @@ func runTrace(args []string, opts *TraceOptions) {
 	}
 
 	for {
-		selected := selectTraces(traces, projects)
+		selected, err := selectTraces(out, in, traces, projects)
+		if err != nil {
+			log.Fatal(err)
+		}
 		if len(selected) == 0 {
 			return
 		}
@@ -277,15 +284,21 @@ func downloadTraceArtifacts(runID string, project string) (string, error) {
 // findTraces recursively finds all trace.zip files under a directory.
 func findTraces(root string) ([]string, error) {
 	var traces []string
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	// fastwalk runs the callback on several goroutines, so guard the slice.
+	var mu sync.Mutex
+	err := fastwalk.Walk(nil, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && info.Name() == "trace.zip" {
+		if !d.IsDir() && d.Name() == "trace.zip" {
+			mu.Lock()
 			traces = append(traces, path)
+			mu.Unlock()
 		}
 		return nil
 	})
+	// Walk order is non-deterministic, so sort for a stable trace list.
+	sort.Strings(traces)
 	return traces, err
 }
 
@@ -293,11 +306,13 @@ func findTraces(root string) ([]string, error) {
 // Expects: destDir/{artifact-dir}/{test-dir}/trace.zip
 func findTraceInfos(destDir, runID string) ([]traceInfo, error) {
 	var traces []traceInfo
-	err := filepath.Walk(destDir, func(path string, info os.FileInfo, err error) error {
+	// fastwalk runs the callback on several goroutines, so guard the slice.
+	var mu sync.Mutex
+	err := fastwalk.Walk(nil, destDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || info.Name() != "trace.zip" {
+		if d.IsDir() || d.Name() != "trace.zip" {
 			return nil
 		}
 
@@ -311,11 +326,13 @@ func findTraceInfos(destDir, runID string) ([]traceInfo, error) {
 			testDir = parts[1]
 		}
 
+		mu.Lock()
 		traces = append(traces, traceInfo{
 			Path:    path,
 			Project: extractProject(artifactDir, runID),
 			TestDir: testDir,
 		})
+		mu.Unlock()
 		return nil
 	})
 
@@ -324,7 +341,10 @@ func findTraceInfos(destDir, runID string) ([]traceInfo, error) {
 		if pi != pj {
 			return pi < pj
 		}
-		return traces[i].TestDir < traces[j].TestDir
+		if traces[i].TestDir != traces[j].TestDir {
+			return traces[i].TestDir < traces[j].TestDir
+		}
+		return traces[i].Path < traces[j].Path
 	})
 
 	return traces, err
@@ -374,8 +394,8 @@ func groupByProject(traces []traceInfo) []string {
 }
 
 // printTraceList displays traces grouped by project.
-func printTraceList(traces []traceInfo, projects []string) {
-	fmt.Printf("\nFound %d trace(s) across %d project(s):\n", len(traces), len(projects))
+func printTraceList(out io.Writer, traces []traceInfo, projects []string) {
+	_, _ = fmt.Fprintf(out, "\nFound %d trace(s) across %d project(s):\n", len(traces), len(projects))
 
 	idx := 1
 	for _, proj := range projects {
@@ -385,10 +405,10 @@ func printTraceList(traces []traceInfo, projects []string) {
 				count++
 			}
 		}
-		fmt.Printf("\n  %s (%d):\n", proj, count)
+		_, _ = fmt.Fprintf(out, "\n  %s (%d):\n", proj, count)
 		for _, t := range traces {
 			if t.Project == proj {
-				fmt.Printf("    [%2d] %s\n", idx, t.TestDir)
+				_, _ = fmt.Fprintf(out, "    [%2d] %s\n", idx, t.TestDir)
 				idx++
 			}
 		}
@@ -397,7 +417,7 @@ func printTraceList(traces []traceInfo, projects []string) {
 
 // selectTraces tries the TUI picker first, falling back to a plain-text
 // prompt when the terminal cannot be initialised (e.g. piped output).
-func selectTraces(traces []traceInfo, projects []string) []traceInfo {
+func selectTraces(out io.Writer, in io.Reader, traces []traceInfo, projects []string) ([]traceInfo, error) {
 	// Build picker groups in the same order as the sorted traces slice.
 	var groups []tui.PickerGroup
 	for _, proj := range projects {
@@ -414,34 +434,39 @@ func selectTraces(traces []traceInfo, projects []string) []traceInfo {
 	if err != nil {
 		// Terminal not available — fall back to text prompt
 		log.Debugf("TUI picker unavailable: %v", err)
-		printTraceList(traces, projects)
-		return promptTraceSelection(traces, projects)
+		return promptTraceSelectionAsText(out, in, traces, projects)
 	}
 	if indices == nil {
-		return nil // user cancelled
+		return nil, nil // user cancelled
 	}
 
 	selected := make([]traceInfo, len(indices))
 	for i, idx := range indices {
 		selected[i] = traces[idx]
 	}
-	return selected
+	return selected, nil
+}
+
+// promptTraceSelectionAsText lists the traces and then prompts for a selection.
+func promptTraceSelectionAsText(out io.Writer, in io.Reader, traces []traceInfo, projects []string) ([]traceInfo, error) {
+	printTraceList(out, traces, projects)
+	return promptTraceSelection(out, in, traces, projects)
 }
 
 // promptTraceSelection asks the user which traces to open via plain text.
 // Accepts numbers (1,3,5), ranges (1-5), "all", or a project name.
-func promptTraceSelection(traces []traceInfo, projects []string) []traceInfo {
-	fmt.Printf("\nOpen which traces? (e.g. 1,3,5 | 1-5 | all | %s): ", strings.Join(projects, " | "))
+func promptTraceSelection(out io.Writer, in io.Reader, traces []traceInfo, projects []string) ([]traceInfo, error) {
+	_, _ = fmt.Fprintf(out, "\nOpen which traces? (e.g. 1,3,5 | 1-5 | all | %s): ", strings.Join(projects, " | "))
 
-	reader := bufio.NewReader(os.Stdin)
+	reader := bufio.NewReader(in)
 	input, err := reader.ReadString('\n')
 	if err != nil {
-		log.Fatalf("Failed to read input: %v", err)
+		return nil, fatalErrorf("Failed to read input: %v", err)
 	}
 	input = strings.TrimSpace(input)
 
 	if input == "" || strings.EqualFold(input, "all") {
-		return traces
+		return traces, nil
 	}
 
 	// Check if input matches a project name
@@ -453,7 +478,7 @@ func promptTraceSelection(traces []traceInfo, projects []string) []traceInfo {
 					selected = append(selected, t)
 				}
 			}
-			return selected
+			return selected, nil
 		}
 	}
 
@@ -461,14 +486,14 @@ func promptTraceSelection(traces []traceInfo, projects []string) []traceInfo {
 	indices := parseTraceSelection(input, len(traces))
 	if len(indices) == 0 {
 		log.Warn("No valid selection; opening all traces")
-		return traces
+		return traces, nil
 	}
 
 	selected := make([]traceInfo, len(indices))
 	for i, idx := range indices {
 		selected[i] = traces[idx]
 	}
-	return selected
+	return selected, nil
 }
 
 // parseTraceSelection parses a comma-separated list of numbers and ranges into

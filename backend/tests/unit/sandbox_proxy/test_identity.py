@@ -1,15 +1,13 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.sandbox_proxy import identity as identity_mod
-from onyx.sandbox_proxy.identity import IdentityResolver
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SandboxIdentity
+from onyx.sandbox_proxy.sandbox_identity import resolution as identity_mod
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
+from onyx.sandbox_proxy.sandbox_identity.resolution import IdentityResolver
 from tests.unit.sandbox_proxy.conftest import StaticLookup
 
 

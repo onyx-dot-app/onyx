@@ -3,15 +3,23 @@
 import { useState, useCallback } from "react";
 import useOnMount from "@opal/hooks/useOnMount";
 import {
-  MOBILE_SIDEBAR_BREAKPOINT_PX,
-  DESKTOP_MEDIUM_BREAKPOINT_PX,
+  SMALL_BREAKPOINT_PX,
+  MEDIUM_BREAKPOINT_PX,
+  LARGE_BREAKPOINT_PX,
 } from "@opal/constants";
 
 export interface ScreenSize {
   width: number;
   height: number;
   isMobile: boolean;
+  isSmallScreen: boolean;
   isMediumScreen: boolean;
+  /**
+   * `false` until the hook mounts. Before that the size flags all report
+   * desktop, to keep the first client render equal to the server render.
+   * Gate on this in effects that must not act on the desktop default.
+   */
+  isMounted: boolean;
 }
 
 export default function useScreenSize(): ScreenSize {
@@ -32,7 +40,9 @@ export default function useScreenSize(): ScreenSize {
   return {
     width: sizes.width,
     height: sizes.height,
-    isMobile: isMounted && sizes.width <= MOBILE_SIDEBAR_BREAKPOINT_PX,
-    isMediumScreen: isMounted && sizes.width <= DESKTOP_MEDIUM_BREAKPOINT_PX,
+    isMobile: isMounted && sizes.width < SMALL_BREAKPOINT_PX,
+    isSmallScreen: isMounted && sizes.width < MEDIUM_BREAKPOINT_PX,
+    isMediumScreen: isMounted && sizes.width < LARGE_BREAKPOINT_PX,
+    isMounted,
   };
 }

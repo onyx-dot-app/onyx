@@ -21,6 +21,7 @@ class LlmProviderNames(str, Enum):
     VERTEX_AI = "vertex_ai"
     OPENROUTER = "openrouter"
     AZURE = "azure"
+    OLLAMA = "ollama"
     OLLAMA_CHAT = "ollama_chat"
     LM_STUDIO = "lm_studio"
     MISTRAL = "mistral"
@@ -28,6 +29,8 @@ class LlmProviderNames(str, Enum):
     BIFROST = "bifrost"
     OPENAI_COMPATIBLE = "openai_compatible"
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
+    PORTKEY = "portkey"
+    VERCEL_AI_GATEWAY = "vercel_ai_gateway"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -36,6 +39,11 @@ class LlmProviderNames(str, Enum):
         """
         return self.value
 
+
+# Models per provider in the user-facing listing and per page of
+# /llm/provider/{id}/models. Bounds the response for providers that sync
+# tens of thousands of models.
+LLM_PROVIDER_MODEL_PAGE_SIZE = 50
 
 WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENAI,
@@ -50,6 +58,8 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.BIFROST,
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
+    LlmProviderNames.PORTKEY,
+    LlmProviderNames.VERCEL_AI_GATEWAY,
 ]
 
 
@@ -63,13 +73,15 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.VERTEX_AI: "Vertex AI",
     LlmProviderNames.OPENROUTER: "OpenRouter",
     LlmProviderNames.AZURE: "Azure",
-    "ollama": "Ollama",
+    LlmProviderNames.OLLAMA: "Ollama",
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
     LlmProviderNames.LM_STUDIO: "LM Studio",
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
     LlmProviderNames.BIFROST: "Bifrost",
     LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
+    LlmProviderNames.PORTKEY: "Portkey",
+    LlmProviderNames.VERCEL_AI_GATEWAY: "Vercel AI Gateway",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -162,7 +174,36 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.BIFROST,
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
+    LlmProviderNames.PORTKEY,
+    LlmProviderNames.VERCEL_AI_GATEWAY,
 }
+
+# Dynamic providers fetch models directly from source APIs (not LiteLLM).
+# A subset of AGGREGATOR_PROVIDERS.
+DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
+    {
+        LlmProviderNames.OPENROUTER,
+        LlmProviderNames.BEDROCK,
+        LlmProviderNames.OLLAMA_CHAT,
+        LlmProviderNames.LM_STUDIO,
+        LlmProviderNames.BIFROST,
+        LlmProviderNames.OPENAI_COMPATIBLE,
+    }
+)
+
+# Providers whose `available-models` endpoint reads a context limit from the
+# source API and persists it as `max_input_tokens`. Those values are
+# authoritative and must never be second-guessed against LiteLLM's model map.
+# Nebius TokenFactory, Portkey, and Vercel AI Gateway do this without being
+# dynamic providers, so this is deliberately a superset of
+# DYNAMIC_LLM_PROVIDERS rather than a reuse.
+SOURCE_API_CONTEXT_LIMIT_PROVIDERS: frozenset[str] = DYNAMIC_LLM_PROVIDERS | frozenset(
+    {
+        LlmProviderNames.NEBIUS_TOKENFACTORY,
+        LlmProviderNames.PORTKEY,
+        LlmProviderNames.VERCEL_AI_GATEWAY,
+    }
+)
 
 # Model family name mappings for display name generation
 # Used by Bedrock display name generator

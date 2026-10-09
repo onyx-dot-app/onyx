@@ -5,22 +5,16 @@ import contextvars
 import copy
 import threading
 import uuid
-from collections.abc import Callable
-from collections.abc import Coroutine
-from collections.abc import Iterator
-from collections.abc import MutableMapping
-from collections.abc import Sequence
-from concurrent.futures import as_completed
-from concurrent.futures import FIRST_COMPLETED
-from concurrent.futures import Future
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import wait
-from typing import Any
-from typing import cast
-from typing import Generic
-from typing import overload
-from typing import Protocol
-from typing import TypeVar
+from collections import deque
+from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Future,
+    ThreadPoolExecutor,
+    as_completed,
+    wait,
+)
+from typing import Any, Generic, Protocol, TypeVar, cast, overload
 
 from pydantic import GetCoreSchemaHandler
 from pydantic.types import T
@@ -113,7 +107,7 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
     @overload
     def get(self, key: KT, default: VT | _T) -> VT | _T: ...
 
-    def get(self, key: KT, default: Any = None) -> Any:
+    def get(self, key: KT, default: Any = None) -> Any:  # ty: ignore[invalid-method-override]
         """Get a value with a default, atomically."""
         with self.lock:
             return self._dict.get(key, default)
@@ -125,9 +119,7 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
                 return self._dict.pop(key)
             return self._dict.pop(key, default)
 
-    def setdefault(  # ty: ignore[invalid-method-override]
-        self, key: KT, default: VT
-    ) -> VT:
+    def setdefault(self, key: KT, default: VT) -> VT:
         """Set a default value if key is missing, atomically."""
         with self.lock:
             return self._dict.setdefault(key, default)
@@ -461,27 +453,6 @@ def run_async_sync_no_cancel(coro: Coroutine[Any, Any, T]) -> T:
         return future.result()
 
 
-def run_multiple_in_background(
-    funcs: list[Callable[[], None]],
-    thread_name_prefix: str = "worker",
-) -> ThreadPoolExecutor:
-    """Submit multiple callables to a ``ThreadPoolExecutor`` with context propagation.
-
-    Copies the current ``contextvars`` context once and runs every callable
-    inside that copy, which is important for preserving tenant IDs and other
-    context-local state across threads.
-
-    Returns the executor so the caller can ``shutdown()`` when done.
-    """
-    ctx = contextvars.copy_context()
-    executor = ThreadPoolExecutor(
-        max_workers=len(funcs), thread_name_prefix=thread_name_prefix
-    )
-    for func in funcs:
-        executor.submit(ctx.run, func)
-    return executor
-
-
 def start_thread_with_context(
     target: Callable[..., Any],
     *,
@@ -489,16 +460,15 @@ def start_thread_with_context(
     daemon: bool = False,
     args: tuple[Any, ...] = (),
     kwargs: dict[str, Any] | None = None,
+    context: contextvars.Context | None = None,
 ) -> threading.Thread:
-    """Spawn a fire-and-forget thread that inherits the caller's contextvars
-    (tenant id, request id, trace context). A raw ``threading.Thread`` starts
-    with an empty context, so tenant-scoped DB access inside the thread would
-    raise "Tenant ID is not set".
+    """Start a thread with an explicit context or a copy of the caller's context.
 
-    Unlike ``run_in_background`` / ``run_multiple_in_background``, this is for
-    daemon producer threads that are never joined.
+    Preserve tenant ID, request ID, and trace context across threads.
     """
-    ctx = contextvars.copy_context()
+    ctx: contextvars.Context = (
+        context if context is not None else contextvars.copy_context()
+    )
     thread = threading.Thread(
         target=lambda: ctx.run(target, *args, **(kwargs or {})),
         name=name,
@@ -506,6 +476,23 @@ def start_thread_with_context(
     )
     thread.start()
     return thread
+
+
+def start_thread_future[T](operation: Callable[[], T], *, name: str) -> Future[T]:
+    """Start independent work with the caller's context and an observable result."""
+    result: Future[T] = Future()
+    result.set_running_or_notify_cancel()
+
+    def run() -> None:
+        try:
+            value: T = operation()
+        except BaseException as error:
+            result.set_exception(error)
+        else:
+            result.set_result(value)
+
+    start_thread_with_context(run, name=name, daemon=True)
+    return result
 
 
 class TimeoutThread(threading.Thread, Generic[R]):
@@ -535,8 +522,8 @@ def run_with_timeout(
     timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
 ) -> R:
     """
-    Executes a function with a timeout. If the function doesn't complete within the specified
-    timeout, raises TimeoutError.
+    Executes a function with a timeout. If the function doesn't complete within
+    the specified timeout, raises TimeoutError.
     """
     context = contextvars.copy_context()
     task = TimeoutThread(timeout, context.run, func, *args, **kwargs)
@@ -596,9 +583,13 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
     for some extra generator code to run and not have the result(s) yielded.
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_index: dict[Future[tuple[int, R | None]], int] = (  # type: ignore
+        future_to_index: dict[Future[tuple[int, R | None]], int] = (  # ty: ignore[invalid-assignment]
             {
-                executor.submit(_next_or_none, ind, gen): ind
+                # The caller's context rides along, as in the rest of this
+                # module: the tenant id and the log prefix live in contextvars.
+                executor.submit(
+                    contextvars.copy_context().run, _next_or_none, ind, gen
+                ): ind
                 for ind, gen in enumerate(gens)
             }
         )
@@ -610,11 +601,40 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                 ind, result = future.result()
                 if result is not None:
                     yield result
-                    future_to_index[executor.submit(_next_or_none, ind, gens[ind])] = (
-                        next_ind  # ty: ignore[invalid-assignment]
-                    )
+                    future_to_index[
+                        executor.submit(
+                            contextvars.copy_context().run,
+                            _next_or_none,
+                            ind,
+                            gens[ind],
+                        )
+                    ] = next_ind  # ty: ignore[invalid-assignment]
                     next_ind += 1
                 del future_to_index[future]
+
+
+def drain(
+    items: Sequence[_T], listing: Callable[[_T], Iterator[R]], workers: int
+) -> Iterator[R]:
+    """Every item listed, ``workers`` at a time, each worker taking the next
+    item off a shared queue so a slow item holds back only its own worker."""
+    if workers <= 1 or len(items) <= 1:
+        for item in items:
+            yield from listing(item)
+        return
+    queue: deque[_T] = deque(items)
+
+    def worker() -> Iterator[R]:
+        while True:
+            try:
+                item = queue.popleft()
+            except IndexError:
+                return
+            yield from listing(item)
+
+    yield from parallel_yield(
+        [worker() for _ in range(min(workers, len(items)))], max_workers=workers
+    )
 
 
 def parallel_yield_from_funcs(

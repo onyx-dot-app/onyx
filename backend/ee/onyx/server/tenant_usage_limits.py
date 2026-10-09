@@ -5,8 +5,7 @@ import time
 import requests
 
 from ee.onyx.server.tenants.access import generate_data_plane_token
-from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
-from onyx.configs.app_configs import DEV_MODE
+from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL, DEV_MODE
 from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
 from onyx.server.usage_limits import NO_LIMIT
 from onyx.utils.logger import setup_logger

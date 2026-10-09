@@ -2,13 +2,10 @@
 
 from unittest.mock import MagicMock
 
-from fastapi import FastAPI
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from onyx.utils.client_ip import ClientIPMiddleware
-from onyx.utils.client_ip import current_client_ip
-from onyx.utils.client_ip import get_client_ip
+from onyx.utils.client_ip import ClientIPMiddleware, current_client_ip, get_client_ip
 
 
 def _fake_request(

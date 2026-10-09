@@ -22,7 +22,7 @@ class CloudIdentifyHarness:
         self, module: str, attribute: str, fallback: Any
     ) -> Any:
         if (
-            module == "onyx.server.tenants.user_mapping"
+            module == "onyx.db.user_tenant_mapping"
             and attribute == "get_tenant_id_for_email"
         ):
             return self.get_tenant_id_for_email

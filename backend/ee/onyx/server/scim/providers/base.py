@@ -4,26 +4,26 @@ from __future__ import annotations
 
 import json
 import logging
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from uuid import UUID
 
 from pydantic import ValidationError
 
-from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
-from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
-from ee.onyx.server.scim.models import ScimEmail
-from ee.onyx.server.scim.models import ScimEnterpriseExtension
-from ee.onyx.server.scim.models import ScimGroupMember
-from ee.onyx.server.scim.models import ScimGroupResource
-from ee.onyx.server.scim.models import ScimManagerRef
-from ee.onyx.server.scim.models import ScimMappingFields
-from ee.onyx.server.scim.models import ScimMeta
-from ee.onyx.server.scim.models import ScimName
-from ee.onyx.server.scim.models import ScimUserGroupRef
-from ee.onyx.server.scim.models import ScimUserResource
-from onyx.db.models import User
-from onyx.db.models import UserGroup
+from ee.onyx.server.scim.models import (
+    SCIM_ENTERPRISE_USER_SCHEMA,
+    SCIM_USER_SCHEMA,
+    ScimEmail,
+    ScimEnterpriseExtension,
+    ScimGroupMember,
+    ScimGroupResource,
+    ScimManagerRef,
+    ScimMappingFields,
+    ScimMeta,
+    ScimName,
+    ScimUserGroupRef,
+    ScimUserResource,
+)
+from onyx.db.models import User, UserGroup
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,10 @@ class ScimProvider(ABC):
                 schemas.append(SCIM_ENTERPRISE_USER_SCHEMA)
 
         name = self.build_scim_name(user, f)
-        emails = _deserialize_emails(f.scim_emails_json, username)
+        # The emails fallback is the login email, not the userName. Reporting
+        # the userName would let a GET-then-PUT IdP feed it back as an email
+        # change and re-couple the two.
+        emails = _deserialize_emails(f.scim_emails_json, user.email)
 
         resource = ScimUserResource(
             schemas=schemas,
@@ -181,7 +184,9 @@ class ScimProvider(ABC):
         )
 
 
-def _deserialize_emails(stored_json: str | None, username: str) -> list[ScimEmail]:
+def _deserialize_emails(
+    stored_json: str | None, fallback_email: str
+) -> list[ScimEmail]:
     """Deserialize stored email entries or build a default work email."""
     if stored_json:
         try:
@@ -192,7 +197,7 @@ def _deserialize_emails(stored_json: str | None, username: str) -> list[ScimEmai
             logger.warning(
                 "Corrupt scim_emails_json, falling back to default: %s", stored_json
             )
-    return [ScimEmail(value=username, type="work", primary=True)]
+    return [ScimEmail(value=fallback_email, type="work", primary=True)]
 
 
 def serialize_emails(emails: list[ScimEmail]) -> str | None:

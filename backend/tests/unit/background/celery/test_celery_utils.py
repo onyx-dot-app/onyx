@@ -8,15 +8,22 @@ import pytest
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import SlimDocument
-from onyx.server.metrics.pruning_metrics import PRUNING_ENUMERATION_DURATION
-from onyx.server.metrics.pruning_metrics import PRUNING_RATE_LIMIT_ERRORS
+from onyx.server.metrics.pruning_metrics import (
+    PRUNING_ENUMERATION_DURATION,
+    PRUNING_RATE_LIMIT_ERRORS,
+)
 
 
 def _make_slim_connector(doc_ids: list[str]) -> SlimConnector:
     """Mock SlimConnector that yields the given doc IDs in one batch."""
     connector = MagicMock(spec=SlimConnector)
     docs = [
-        MagicMock(spec=SlimDocument, id=doc_id, parent_hierarchy_raw_node_id=None)
+        MagicMock(
+            spec=SlimDocument,
+            id=doc_id,
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
+        )
         for doc_id in doc_ids
     ]
     connector.retrieve_all_slim_docs.return_value = iter([docs])
@@ -55,7 +62,7 @@ class TestEnumerationDuration:
             connector_type="confluence"
         )._sum.get()
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="unexpected error"):
             extract_ids_from_runnable_connector(connector, connector_type="confluence")
 
         after = PRUNING_ENUMERATION_DURATION.labels(
@@ -109,7 +116,7 @@ class TestRateLimitDetection:
         connector = _raising_connector("RATE LIMIT exceeded")
         before = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="jira")._value.get()
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="RATE LIMIT exceeded"):
             extract_ids_from_runnable_connector(connector, connector_type="jira")
 
         after = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="jira")._value.get()
@@ -124,7 +131,7 @@ class TestRateLimitDetection:
             connector_type="jira"
         )._value.get()
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="rate limit exceeded"):
             extract_ids_from_runnable_connector(
                 connector, connector_type="google_drive"
             )
@@ -142,7 +149,7 @@ class TestRateLimitDetection:
         connector = _raising_connector("rate limit exceeded")
         before = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="unknown")._value.get()
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="rate limit exceeded"):
             extract_ids_from_runnable_connector(connector)
 
         after = PRUNING_RATE_LIMIT_ERRORS.labels(connector_type="unknown")._value.get()

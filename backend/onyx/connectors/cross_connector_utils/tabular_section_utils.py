@@ -5,8 +5,7 @@ from typing import IO
 from pydantic import BaseModel
 
 from onyx.connectors.models import TabularSection
-from onyx.file_processing.extract_file_text import file_io_to_text
-from onyx.file_processing.extract_file_text import stage_xlsx_sheets
+from onyx.file_processing.extract_file_text import file_io_to_text, stage_xlsx_sheets
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger

@@ -1,5 +1,7 @@
-// Imperative nav, not `<Redirect>`: at the root layout <Redirect>'s `useFocusEffect` has no
-// focused route to bind to. `children` renders in every branch so the navigator stays mounted.
+/*
+ * Imperative nav, not `<Redirect>`: at the root layout <Redirect>'s `useFocusEffect` has no
+ * focused route to bind to. `children` renders in every branch so the navigator stays mounted.
+ */
 import { router, useSegments } from "expo-router";
 import * as React from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -8,6 +10,7 @@ import { isAuthError } from "@/api/errors";
 import { AuthUnreachable } from "@/components/auth/AuthUnreachable";
 import { resolveAuthGate } from "@/components/auth/authRoute";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { useSession } from "@/state/session";
 
 function AuthSplash() {
@@ -28,6 +31,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const { data, error, isError, isFetching, refetch } = useCurrentUser();
   const authError = isAuthError(error);
 
+  // The bearer never renews itself: without this an active session expires 7 days after login.
+  useTokenRefresh(data !== undefined);
+
   const resolution = resolveAuthGate({
     serverUrl,
     status,
@@ -43,7 +49,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (redirectTo) router.replace(redirectTo);
   }, [redirectTo]);
 
-  // Overlay: actionable error on a settled failure, else the splash while identity resolves.
   const overlay =
     resolution.kind === "error" ? (
       <AuthUnreachable onRetry={() => refetch()} retrying={isFetching} />

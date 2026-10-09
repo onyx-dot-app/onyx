@@ -36,9 +36,9 @@ def update_slack_bot(
     app_token: str,
     user_token: str | None = None,
 ) -> SlackBot:
-    slack_bot = db_session.scalar(select(SlackBot).where(SlackBot.id == slack_bot_id))
-    if slack_bot is None:
-        raise ValueError(f"Unable to find Slack Bot with ID {slack_bot_id}")
+    slack_bot: SlackBot = fetch_slack_bot(
+        db_session=db_session, slack_bot_id=slack_bot_id
+    )
 
     # update the app
     slack_bot.name = name
@@ -52,11 +52,20 @@ def update_slack_bot(
     return slack_bot
 
 
+def fetch_slack_bot_or_none(
+    db_session: Session,
+    slack_bot_id: int,
+) -> SlackBot | None:
+    return db_session.scalar(select(SlackBot).where(SlackBot.id == slack_bot_id))
+
+
 def fetch_slack_bot(
     db_session: Session,
     slack_bot_id: int,
 ) -> SlackBot:
-    slack_bot = db_session.scalar(select(SlackBot).where(SlackBot.id == slack_bot_id))
+    slack_bot: SlackBot | None = fetch_slack_bot_or_none(
+        db_session=db_session, slack_bot_id=slack_bot_id
+    )
     if slack_bot is None:
         raise ValueError(f"Unable to find Slack Bot with ID {slack_bot_id}")
 

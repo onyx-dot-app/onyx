@@ -1,5 +1,11 @@
 import React from "react";
-import { ModalContentProps } from "@/refresh-components/Modal";
+import type { useTranslations } from "next-intl";
+import type { ModalContentProps } from "@opal/components";
+
+/** Variants are plain objects, so the modal threads its translator to them. */
+export type PreviewTranslate = ReturnType<
+  typeof useTranslations<"chat.modals.preview">
+>;
 
 export interface PreviewContext {
   fileContent: string;
@@ -11,6 +17,7 @@ export interface PreviewContext {
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  t: PreviewTranslate;
 }
 
 export interface PreviewVariant extends Required<
@@ -20,6 +27,10 @@ export interface PreviewVariant extends Required<
   matches: (semanticIdentifier: string | null, mimeType: string) => boolean;
   /** Whether the fetcher should read the blob as text. */
   needsTextContent: boolean;
+  /** Whether the fetcher should fetch backend-parsed content
+   * (`?parsed=true`, JSON) into fileContent instead of the raw blob text.
+   * Used for binary spreadsheet files. */
+  needsParsedContent?: boolean;
   /** Whether the variant renders on a code-style background (bg-background-code-01). */
   codeBackground: boolean;
   /** String shown below the title in the modal header. */

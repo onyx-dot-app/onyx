@@ -24,12 +24,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import NamedTuple
 
-from alembic.config import Config
-from alembic.script import ScriptDirectory
 
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.engine.tenant_utils import get_schemas_needing_migration
+from ee.onyx.db.tenant_snapshot import ensure_template_schema
+from ee.onyx.db.tenant_snapshot import get_head_revision
+from ee.onyx.db.tenant_snapshot import store_template_snapshots
+from onyx.db.engine.shard_registry import get_shard_specs
+from onyx.db.engine.tenant_utils import get_tenant_ids_by_shard
 from shared_configs.configs import TENANT_ID_PREFIX
 
 # ---------------------------------------------------------------------------
@@ -40,6 +42,12 @@ from shared_configs.configs import TENANT_ID_PREFIX
 class Args(NamedTuple):
     jobs: int
     batch_size: int
+    snapshot_template: bool
+
+
+class Batch(NamedTuple):
+    shard_name: str
+    schemas: list[str]
 
 
 class BatchResult(NamedTuple):
@@ -54,7 +62,7 @@ class BatchResult(NamedTuple):
 # ---------------------------------------------------------------------------
 
 
-def run_alembic_for_batch(schemas: list[str]) -> BatchResult:
+def run_alembic_for_batch(batch: Batch) -> BatchResult:
     """Run ``alembic upgrade head`` for a batch of schemas in one subprocess.
 
     If the batch fails, it is automatically retried with ``-x continue=true``
@@ -62,8 +70,10 @@ def run_alembic_for_batch(schemas: list[str]) -> BatchResult:
     output (which contains alembic's per-schema error messages) is returned
     for diagnosis.
     """
+    schemas = batch.schemas
     csv = ",".join(schemas)
-    base_cmd = ["alembic", "-x", f"schemas={csv}"]
+    # `shard` pins the subprocess to the database holding these schemas.
+    base_cmd = ["alembic", "-x", f"schemas={csv}", "-x", f"shard={batch.shard_name}"]
 
     start = time.monotonic()
     result = subprocess.run(
@@ -97,27 +107,28 @@ def run_alembic_for_batch(schemas: list[str]) -> BatchResult:
     return BatchResult(schemas, False, retry.stdout or "", elapsed)
 
 
-def get_head_revision() -> str | None:
-    """Get the head revision from the alembic script directory."""
-    alembic_cfg = Config("alembic.ini")
-    script = ScriptDirectory.from_config(alembic_cfg)
-    return script.get_current_head()
-
-
 def run_migrations_parallel(
-    schemas: list[str],
+    schemas_by_shard: dict[str, list[str]],
     max_workers: int,
     batch_size: int,
 ) -> bool:
-    """Chunk *schemas* into batches and run them in parallel.
+    """Chunk each shard's schemas into batches and run them in parallel.
+
+    Batches never span shards, so one subprocess talks to exactly one database.
 
     A background monitor thread prints a status line every 60 s listing
     which batches are still in-flight, making it easy to spot hung tenants.
     """
-    batches = [schemas[i : i + batch_size] for i in range(0, len(schemas), batch_size)]
+    batches = [
+        Batch(shard_name, shard_schemas[i : i + batch_size])
+        for shard_name, shard_schemas in sorted(schemas_by_shard.items())
+        for i in range(0, len(shard_schemas), batch_size)
+    ]
     total_batches = len(batches)
+    total_schemas = sum(len(s) for s in schemas_by_shard.values())
     print(
-        f"{len(schemas)} schemas in {total_batches} batch(es) with {max_workers} workers (batch size: {batch_size})...",
+        f"{total_schemas} schemas across {len(schemas_by_shard)} shard(s) in "
+        f"{total_batches} batch(es) with {max_workers} workers (batch size: {batch_size})...",
         flush=True,
     )
     all_success = True
@@ -161,11 +172,13 @@ def run_migrations_parallel(
     try:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
 
-            def _run(batch_idx: int, batch: list[str]) -> BatchResult:
+            def _run(batch_idx: int, batch: Batch) -> BatchResult:
                 with lock:
-                    in_flight[batch_idx] = batch
+                    in_flight[batch_idx] = batch.schemas
                 print(
-                    f"Batch {batch_idx + 1}/{total_batches} started ({len(batch)} schemas): {', '.join(batch)}",
+                    f"Batch {batch_idx + 1}/{total_batches} started on shard "
+                    f"{batch.shard_name} ({len(batch.schemas)} schemas): "
+                    f"{', '.join(batch.schemas)}",
                     flush=True,
                 )
                 result = run_alembic_for_batch(batch)
@@ -235,12 +248,24 @@ def parse_args() -> Args:
         metavar="N",
         help="Schemas per alembic process (default: 50)",
     )
+    parser.add_argument(
+        "--snapshot-template",
+        action="store_true",
+        help=(
+            "Migrate the template schema on every shard with the tenants and "
+            "store its dump afterwards (cloud provisioning clones it)"
+        ),
+    )
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be >= 1")
     if args.batch_size < 1:
         parser.error("--batch-size must be >= 1")
-    return Args(jobs=args.jobs, batch_size=args.batch_size)
+    return Args(
+        jobs=args.jobs,
+        batch_size=args.batch_size,
+        snapshot_template=args.snapshot_template,
+    )
 
 
 def main() -> int:
@@ -251,37 +276,58 @@ def main() -> int:
         print("Could not determine head revision.", file=sys.stderr)
         return 1
 
+    schemas_by_shard: dict[str, list[str]] = {}
     with SqlEngine.scoped_engine(pool_size=5, max_overflow=2):
-        tenant_ids = get_all_tenant_ids()
-        tenant_schemas = [tid for tid in tenant_ids if tid.startswith(TENANT_ID_PREFIX)]
+        if args.snapshot_template:
+            for shard_name in sorted(get_shard_specs()):
+                ensure_template_schema(shard_name)
 
-        if not tenant_schemas:
+        # The prefix filter drops `public`, which enumeration reports as the sole
+        # "tenant" outside multi-tenant mode. That is what makes the hint below fire.
+        tenants_by_shard = {
+            shard_name: [t for t in tenants if t.startswith(TENANT_ID_PREFIX)]
+            for shard_name, tenants in get_tenant_ids_by_shard().items()
+        }
+        total_tenants = sum(len(s) for s in tenants_by_shard.values())
+
+        if not total_tenants:
             print(
                 "No tenant schemas found. Is MULTI_TENANT=true set?",
                 file=sys.stderr,
             )
             return 1
 
-        schemas_to_migrate = get_schemas_needing_migration(tenant_schemas, head_rev)
+        # Per shard: alembic_version lives in the schema, so each shard has to be
+        # asked about its own tenants.
+        for shard_name, tenants in tenants_by_shard.items():
+            if not tenants:
+                continue
+            needing = get_schemas_needing_migration(tenants, head_rev, shard_name)
+            if needing:
+                schemas_by_shard[shard_name] = needing
 
-    if not schemas_to_migrate:
+    total_to_migrate = sum(len(s) for s in schemas_by_shard.values())
+    if total_to_migrate:
         print(
-            f"All {len(tenant_schemas)} tenants are already at head revision ({head_rev})."
+            f"{total_to_migrate}/{total_tenants} tenants need migration (head: {head_rev})."
         )
-        return 0
+        success = run_migrations_parallel(
+            schemas_by_shard,
+            max_workers=args.jobs,
+            batch_size=args.batch_size,
+        )
+        print(
+            f"\n{'All migrations successful' if success else 'Some migrations failed'}"
+        )
+        if not success:
+            return 1
+    else:
+        print(f"All {total_tenants} tenants are already at head revision ({head_rev}).")
 
-    print(
-        f"{len(schemas_to_migrate)}/{len(tenant_schemas)} tenants need migration (head: {head_rev})."
-    )
-
-    success = run_migrations_parallel(
-        schemas_to_migrate,
-        max_workers=args.jobs,
-        batch_size=args.batch_size,
-    )
-
-    print(f"\n{'All migrations successful' if success else 'Some migrations failed'}")
-    return 0 if success else 1
+    if args.snapshot_template:
+        with SqlEngine.scoped_engine(pool_size=5, max_overflow=2):
+            store_template_snapshots(head_rev)
+    return 0
 
 
 if __name__ == "__main__":

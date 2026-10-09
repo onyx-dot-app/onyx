@@ -11,8 +11,7 @@ workers can be different processes.
 
 from enum import Enum
 
-from pydantic import BaseModel
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from onyx.cache.interface import CacheBackend
 from onyx.utils.logger import setup_logger
@@ -33,7 +32,7 @@ class ConnectAppRequest(BaseModel):
     """The connect prompt carried from the turn consumer to the live stream."""
 
     request_id: str
-    app_slug: str
+    external_app_id: int
     reason: str | None = None
 
 

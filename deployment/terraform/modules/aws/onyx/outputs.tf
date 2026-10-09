@@ -16,7 +16,7 @@ output "oidc_provider" {
 }
 
 output "workload_irsa_role_arn" {
-  description = "ARN of the IAM role for workloads (S3 + optional RDS)"
+  description = "ARN of the IAM role for workloads (S3 + RDS)"
   value       = module.eks.workload_irsa_role_arn
 }
 
@@ -26,8 +26,13 @@ output "workload_irsa_service_account_subjects" {
 }
 
 output "postgres_endpoint" {
-  description = "RDS endpoint hostname"
+  description = "RDS endpoint in host:port form, as returned by AWS"
   value       = module.postgres.endpoint
+}
+
+output "postgres_address" {
+  description = "RDS hostname without the port, for callers building their own connection string"
+  value       = module.postgres.address
 }
 
 output "postgres_port" {

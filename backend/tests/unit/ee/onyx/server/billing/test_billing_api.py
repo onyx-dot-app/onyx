@@ -1,16 +1,16 @@
 """Tests for the unified billing API endpoints."""
 
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ee.onyx.server.billing.models import BillingInformationResponse
-from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
-from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
-from ee.onyx.server.billing.models import SeatUpdateResponse
-from ee.onyx.server.billing.models import SubscriptionStatusResponse
+from ee.onyx.server.billing.models import (
+    BillingInformationResponse,
+    CreateCheckoutSessionResponse,
+    CreateCustomerPortalSessionResponse,
+    SeatUpdateResponse,
+    SubscriptionStatusResponse,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -284,6 +284,41 @@ class TestUpdateSeats:
             license_data="license_blob",
             tenant_id=None,
         )
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.clear_claim_cooldown")
+    @patch("ee.onyx.server.billing.api.get_used_seats")
+    @patch("ee.onyx.server.billing.api.update_seat_service")
+    @patch("ee.onyx.server.billing.api._get_tenant_id")
+    @patch("ee.onyx.server.billing.api._get_license_data")
+    async def test_releases_the_claim_cooldown(
+        self,
+        mock_get_license: MagicMock,
+        mock_get_tenant: MagicMock,
+        mock_service: AsyncMock,
+        mock_get_used_seats: MagicMock,
+        mock_clear_cooldown: MagicMock,
+    ) -> None:
+        """The reissued license arrives via a follow-up claim, so a cooldown
+        left by a sync moments earlier would strand the instance on the old
+        seat count after Stripe had already been charged for the new one."""
+        from ee.onyx.server.billing.api import update_seats
+        from ee.onyx.server.billing.models import SeatUpdateRequest
+
+        mock_get_license.return_value = "license_blob"
+        mock_get_tenant.return_value = None
+        mock_get_used_seats.return_value = 5
+        mock_service.return_value = SeatUpdateResponse(
+            success=True, current_seats=15, used_seats=5, message="Seats updated to 15"
+        )
+
+        await update_seats(
+            request=SeatUpdateRequest(new_seat_count=15),
+            _=MagicMock(),
+            db_session=MagicMock(),
+        )
+
+        mock_clear_cooldown.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.api.get_used_seats")

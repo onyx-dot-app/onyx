@@ -2,20 +2,20 @@
 
 Used as a safety net when DISABLE_VECTOR_DB is True. Any code path that
 accidentally reaches the vector DB layer will fail loudly instead of timing
-out against a nonexistent Vespa/OpenSearch instance.
+out against a nonexistent OpenSearch instance.
 """
 
 from collections.abc import Iterable
 
 from onyx.context.search.enums import QueryType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.db.enums import EmbeddingPrecision
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentInsertionRecord
-from onyx.document_index.interfaces_new import DocumentSectionRequest
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.context.search.models import IndexFilters, InferenceChunk
+from onyx.document_index.interfaces import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    DocumentSectionRequest,
+    IndexingMetadata,
+    MetadataUpdateRequest,
+)
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
 
@@ -33,7 +33,6 @@ class DisabledDocumentIndex(DocumentIndex):
     def verify_and_create_index_if_necessary(
         self,
         embedding_dim: int,  # noqa: ARG002
-        embedding_precision: EmbeddingPrecision,  # noqa: ARG002
     ) -> None:
         # No-op: there are no indices to create when the vector DB is disabled.
         return None

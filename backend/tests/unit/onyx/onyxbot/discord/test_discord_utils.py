@@ -5,13 +5,14 @@ Tests for:
 - Registration key parsing (parse_discord_registration_key, generate_discord_registration_key)
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.onyxbot.discord.utils import get_bot_token
-from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
-from onyx.server.manage.discord_bot.utils import parse_discord_registration_key
-from onyx.server.manage.discord_bot.utils import REGISTRATION_KEY_PREFIX
+from onyx.server.manage.discord_bot.utils import (
+    REGISTRATION_KEY_PREFIX,
+    generate_discord_registration_key,
+    parse_discord_registration_key,
+)
 
 
 class TestGetBotToken:
@@ -30,7 +31,7 @@ class TestGetBotToken:
 
         with (
             patch("onyx.onyxbot.discord.utils.DISCORD_BOT_TOKEN", None),
-            patch("onyx.onyxbot.discord.utils.AUTH_TYPE", "basic"),  # Not CLOUD
+            patch("onyx.onyxbot.discord.utils.MULTI_TENANT", False),  # Not cloud
             patch("onyx.onyxbot.discord.utils.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.utils.get_discord_bot_config",
@@ -46,7 +47,7 @@ class TestGetBotToken:
         """When no env var and no DB config, returns None."""
         with (
             patch("onyx.onyxbot.discord.utils.DISCORD_BOT_TOKEN", None),
-            patch("onyx.onyxbot.discord.utils.AUTH_TYPE", "basic"),  # Not CLOUD
+            patch("onyx.onyxbot.discord.utils.MULTI_TENANT", False),  # Not cloud
             patch("onyx.onyxbot.discord.utils.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.utils.get_discord_bot_config",

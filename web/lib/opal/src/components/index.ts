@@ -30,6 +30,12 @@ export {
   type FilterButtonProps,
 } from "@opal/components/buttons/filter-button/components";
 
+/* AttachmentItemButton */
+export {
+  AttachmentItemButton,
+  type AttachmentItemButtonProps,
+} from "@opal/components/buttons/attachment-item-button/components";
+
 /* LineItemButton */
 export {
   LineItemButton,
@@ -48,6 +54,55 @@ export {
   type LinkButtonProps,
 } from "@opal/components/buttons/link-button/components";
 
+/* TextButton */
+export {
+  TextButton,
+  type TextButtonProps,
+} from "@opal/components/buttons/text-button/components";
+
+/* InputDateRangePicker */
+export {
+  InputDateRangePicker,
+  rangeForInclusiveDays,
+  THIRTY_DAYS,
+  type DateRange,
+  type InputDateRangePickerValue,
+} from "@opal/components/inputs/chrono/input-date-range-picker/components";
+
+/* InputAvatar */
+export { default as InputAvatar } from "@opal/components/inputs/input-avatar/components";
+
+/* InputKeyValue */
+export {
+  default as InputKeyValue,
+  type KeyValue,
+  type KeyValueInputProps,
+} from "@opal/components/inputs/input-key-value/components";
+
+/* InputImage */
+export {
+  default as InputImage,
+  type InputImageProps,
+} from "@opal/components/inputs/input-image/components";
+
+/* InputNumber */
+export {
+  default as InputNumber,
+  type InputNumberProps,
+} from "@opal/components/inputs/input-number/components";
+
+/* InputFile */
+export {
+  default as InputFile,
+  type InputFileProps,
+} from "@opal/components/inputs/input-file/components";
+
+/* InputList */
+export {
+  InputList,
+  type InputListProps,
+} from "@opal/components/inputs/input-list/components";
+
 /* Text */
 export {
   Text,
@@ -64,15 +119,56 @@ export {
 export {
   Tag,
   TAG_COLORS,
+  TAG_REMOVE_CLASS,
   type TagProps,
   type TagColor,
 } from "@opal/components/tag/components";
+
+/* Fold */
+export { Fold, type FoldProps } from "@opal/components/fold/components";
+
+/* IconTooltip */
+export {
+  IconTooltip,
+  type IconTooltipProps,
+  type IconTooltipStatus,
+} from "@opal/components/icon-tooltip/components";
+
+/* OverflowText */
+export {
+  OverflowText,
+  type OverflowTextProps,
+} from "@opal/components/overflow-text/components";
+
+/* Log */
+export {
+  Log,
+  type LogProps,
+  type LogStatus,
+  type LogVariant,
+  type LogWeight,
+} from "@opal/components/log/components";
 
 /* Divider */
 export {
   Divider,
   type DividerProps,
+  type DividerSpacing,
 } from "@opal/components/divider/components";
+
+/* IconContainer */
+export {
+  IconContainer,
+  type IconContainerProps,
+  type IconContainerSize,
+  type IconContainerType,
+} from "@opal/components/icon-container/components";
+/* ProgressBar */
+export {
+  ProgressBar,
+  type ProgressBarProps,
+  type ProgressBarColor,
+} from "@opal/components/progress-bar/components";
 
 /* Card */
 export { Card, type CardProps } from "@opal/components/cards/card/components";
@@ -89,11 +185,24 @@ export {
   type EmptyMessageCardProps,
 } from "@opal/components/cards/empty-message-card/components";
 
+/* Collapsible */
+export {
+  Collapsible,
+  type CollapsibleProps,
+} from "@opal/components/collapsible/components";
+
 /* MessageCard */
 export {
   MessageCard,
   type MessageCardProps,
 } from "@opal/components/cards/message-card/components";
+
+/* Loader */
+export {
+  OnyxLoader,
+  type OnyxLoaderProps,
+  type LoaderColor,
+} from "@opal/components/loader/components";
 
 /* Pagination */
 export {
@@ -102,21 +211,38 @@ export {
   type PaginationSize,
 } from "@opal/components/pagination/components";
 
-/* Checkbox */
+/* Calendar */
 export {
-  Checkbox,
-  type CheckboxProps,
-} from "@opal/components/checkbox/components";
+  Calendar,
+  type CalendarProps,
+} from "@opal/components/calendar/components";
+
+/* InputCheckbox */
+export {
+  InputCheckbox,
+  type InputCheckboxProps,
+} from "@opal/components/inputs/booleans/input-checkbox/components";
 
 /* Table */
 export { Table } from "@opal/components/table/components";
-export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
+export type {
+  TableColumn,
+  TableQualifierColumn,
+  TableFieldColumn,
+  TableValueColumn,
+  TableDisplayColumn,
+  TableActionsColumn,
+  TableCellValue,
+} from "@opal/components/table/types";
 
 /* ShadowDiv */
 export {
   ShadowDiv,
   type ShadowDivProps,
+  type ShadowDirection,
+  type ShadowDivVariant,
+  type ShadowDivVariants,
 } from "@opal/components/shadow-div/components";
 
 /* Popover */
@@ -126,20 +252,119 @@ export {
   type PopoverMenuProps,
 } from "@opal/components/popover/components";
 
+/* Modal */
+export {
+  Modal,
+  BasicModalFooter,
+  type ModalContentProps,
+  type ModalHeaderProps,
+  type ModalBodyProps,
+  type BasicModalFooterProps,
+} from "@opal/components/modal/components";
+
+/* ModalContext */
+export {
+  useCreateModal,
+  useModal,
+  useModalClose,
+  type ModalInterface,
+  type ModalCreationInterface,
+  type ModalProviderProps,
+} from "@opal/components/modal/context";
+
 /* InputTypeIn */
 export {
   default as InputTypeIn,
   type InputTypeInProps,
-} from "@opal/components/inputs/input-type-in/components";
+} from "@opal/components/inputs/texts/input-type-in/components";
+
+/* InputTypeInTag */
+export {
+  InputTypeInTag,
+  type InputTypeInTagProps,
+  type TagItem,
+} from "@opal/components/inputs/texts/input-type-in-tag/components";
+
+/* InputDatePicker */
+export {
+  InputDatePicker,
+  type InputDatePickerProps,
+} from "@opal/components/inputs/chrono/input-date-picker/components";
+
+/* Dropdown */
+export {
+  Dropdown,
+  type DropdownProps,
+  type DropdownAnchorProps,
+  type DropdownTriggerProps,
+  type DropdownDataProps,
+  type DropdownTriggerBehavior,
+  type DropdownTabKey,
+  type DropdownVirtualAnchor,
+} from "@opal/components/dropdown/components";
+export {
+  type DropdownItem,
+  type DropdownMenuItem,
+  type DropdownRow,
+  type DropdownMenuRow,
+  type DropdownOption,
+  type DropdownAction,
+  type DropdownToggle,
+  type DropdownCustom,
+  type DropdownGroup,
+  type DropdownRowState,
+  type DropdownRowProps,
+  type DropdownSearch,
+  type DropdownView,
+  type DropdownViews,
+  type DropdownWidth,
+  type DropdownAlign,
+  type DropdownSide,
+} from "@opal/components/dropdown/types";
+export { useDropdownViews } from "@opal/components/dropdown/context";
+
+/* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */
+export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";
+export { InputSingleComboBox } from "@opal/components/inputs/dropdowns/input-single-combo-box/components";
+export { InputMultiSelect } from "@opal/components/inputs/dropdowns/input-multi-select/components";
+export { InputMultiComboBox } from "@opal/components/inputs/dropdowns/input-multi-combo-box/components";
+export {
+  type InputSingleSelectProps,
+  type InputSingleComboBoxProps,
+  type InputMultiSelectProps,
+  type InputMultiComboBoxProps,
+  type SelectOption,
+  type SelectDivider,
+  type SelectOptions,
+} from "@opal/components/inputs/dropdowns/types";
+
+/* InputPasswordTypeIn */
+export {
+  InputPasswordTypeIn,
+  type InputPasswordTypeInProps,
+} from "@opal/components/inputs/texts/input-password-type-in/components";
+
+/* InputTextArea */
+export {
+  InputTextArea,
+  type InputTextAreaProps,
+} from "@opal/components/inputs/texts/input-text-area/components";
+
+/* InputTime */
+export {
+  InputTime,
+  type InputTimeProps,
+  type TimeValue,
+} from "@opal/components/inputs/chrono/input-time/components";
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
 
-/* Switch */
+/* InputSwitch */
 export {
-  Switch,
-  type SwitchProps,
-} from "@opal/components/inputs/switch/components";
+  InputSwitch,
+  type InputSwitchProps,
+} from "@opal/components/inputs/booleans/input-switch/components";
 
 /* CopyButton */
 export {
