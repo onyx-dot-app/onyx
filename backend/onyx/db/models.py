@@ -1111,7 +1111,7 @@ class HierarchyNode(Base):
 
     # Source type (google_drive, confluence, etc.)
     source: Mapped[DocumentSource] = mapped_column(
-        Enum(DocumentSource, native_enum=False), nullable=False
+        Enum(DocumentSource, native_enum=False, length=50), nullable=False
     )
 
     # What kind of structural node this is
@@ -1927,7 +1927,7 @@ class Tag(Base):
     tag_key: Mapped[str] = mapped_column(String)
     tag_value: Mapped[str] = mapped_column(String)
     source: Mapped[DocumentSource] = mapped_column(
-        Enum(DocumentSource, native_enum=False)
+        Enum(DocumentSource, native_enum=False, length=50)
     )
     is_list: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -1954,7 +1954,7 @@ class Connector(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String)
     source: Mapped[DocumentSource] = mapped_column(
-        Enum(DocumentSource, native_enum=False)
+        Enum(DocumentSource, native_enum=False, length=50)
     )
     input_type = mapped_column(Enum(InputType, native_enum=False))
     connector_specific_config: Mapped[dict[str, Any]] = mapped_column(
@@ -2021,7 +2021,7 @@ class Credential(Base):
     name: Mapped[str] = mapped_column(String, nullable=True)
 
     source: Mapped[DocumentSource] = mapped_column(
-        Enum(DocumentSource, native_enum=False)
+        Enum(DocumentSource, native_enum=False, length=50)
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -2079,7 +2079,7 @@ class CredentialCapabilityReportRow(Base):
     )
     # Denormalized for support queries by source.
     source: Mapped[DocumentSource] = mapped_column(
-        Enum(DocumentSource, native_enum=False), nullable=False
+        Enum(DocumentSource, native_enum=False, length=50), nullable=False
     )
     # sha256 of the canonical config JSON the report ran with; staleness signal
     # for connector-scoped reports.

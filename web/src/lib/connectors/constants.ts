@@ -37,6 +37,8 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Outline]: "sources.outline.description",
   [ValidSources.Confluence]: "sources.confluence.description",
   [ValidSources.Jira]: "sources.jira.description",
+  [ValidSources.JiraServiceManagement]:
+    "sources.jira_service_management.description",
   [ValidSources.Productboard]: "sources.productboard.description",
   [ValidSources.Slab]: "sources.slab.description",
   [ValidSources.Coda]: "sources.coda.description",
