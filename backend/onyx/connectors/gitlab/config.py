@@ -4,7 +4,7 @@ from onyx.configs.app_configs import (
     GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
     INDEX_BATCH_SIZE,
 )
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import ConnectorConfig, RealmCredentialBinding
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
@@ -19,7 +19,14 @@ _DOCUMENT_TYPE_TOGGLE = FieldPolicy(
 )
 
 
-class GitlabConnectorConfig(ConnectorConfig):
+class GitlabCredentialBinding(RealmCredentialBinding):
+    REALM_KEY = "gitlab_url"
+
+    # Where the account works. The connector reads it from the credential.
+    gitlab_url: Annotated[str | None, FieldPolicy(FieldClass.COSMETIC)] = None
+
+
+class GitlabConnectorConfig(GitlabCredentialBinding, ConnectorConfig):
     project_owner: Annotated[str, _PROJECT_PATH]
     project_name: Annotated[str, _PROJECT_PATH]
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
