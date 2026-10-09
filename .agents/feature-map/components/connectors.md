@@ -424,7 +424,7 @@ whose required permission depends on an argument) onto each public method;
 method on the subclass lacks the stamp, or if the subclass overrides
 `__init__`. Operations must return plain data, never live SDK objects, because
 lazily-evaluated SDK attribute access (PyGithub, office365) can fire network
-calls outside any wrapper. Only Slack, Confluence, OneDrive, and Outlook have a gateway today
+calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, and Jira have a gateway today
 (`<source>/source_operations.py`); most connectors still call their SDK directly.
 
 ### 4.8 Capabilities and capability checks
@@ -668,8 +668,8 @@ lack of a key, ask instead. The shared helper
   not assume a checkpoint is small or simple when reasoning about serialization
   changes.
 - **`SourceOperations` is opt-in and mostly unused.** Only Slack, Confluence,
-  OneDrive, and Outlook have a gateway; most connectors still make source-API calls inline, so the
-  "one file that talks to the source" guarantee only holds for those four today.
+  OneDrive, Outlook, and Jira have a gateway; most connectors still make source-API calls inline, so the
+  "one file that talks to the source" guarantee only holds for those five today.
 - **`include_attachments` default differs by connector age.** New connectors
   default to `False`; connectors retrofitted with the flag default to `True`
   to preserve existing behavior for connector rows that predate the setting.
