@@ -1,5 +1,5 @@
-"""Runs the Google Drive indexing checks against the live test Workspace with
-the service account. Read only."""
+"""Runs the Google Drive indexing, permission-sync and group-sync checks
+against the live test Workspace with the service account. Read only."""
 
 from typing import Any
 
@@ -14,11 +14,14 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.google_drive.capability_checks import (
+    build_google_drive_doc_permission_sync_checks,
+    build_google_drive_group_sync_checks,
     build_google_drive_indexing_checks,
 )
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
+from onyx.db.enums import AccessType
 from tests.daily.connectors.google_drive.conftest import build_credentials
 from tests.daily.connectors.google_drive.consts_and_utils import (
     ADMIN_EMAIL,
@@ -43,6 +46,7 @@ def _run(
         source=DocumentSource.GOOGLE_DRIVE,
         credential_json=credential_json,
         connector_specific_config=config,
+        access_type=AccessType.SYNC,
         source_operations=GoogleDriveSourceOperations(
             credentials_provider=OnyxStaticCredentialsProvider(
                 None, DocumentSource.GOOGLE_DRIVE.value, credential_json
@@ -50,7 +54,12 @@ def _run(
             connector_specific_config=config,
         ),
     )
-    results = run_capability_checks(build_google_drive_indexing_checks(), context)
+    checks = (
+        build_google_drive_indexing_checks()
+        + build_google_drive_doc_permission_sync_checks()
+        + build_google_drive_group_sync_checks()
+    )
+    results = run_capability_checks(checks, context)
     return {result.check_id: result for result in results}
 
 
