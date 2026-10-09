@@ -115,6 +115,7 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdout_from_container,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.labels import (
@@ -128,7 +129,6 @@ from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FileSet,
-    FilesystemEntry,
     SandboxInfo,
     SnapshotResult,
 )
@@ -1694,7 +1694,7 @@ fi
                     "-E",
                     "-s",
                     "-m",
-                    "sandbox_daemon.manifest",
+                    "sandbox_daemon.outputs_manifest",
                     str(session_id),
                 ],
                 workdir="/opt",

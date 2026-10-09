@@ -8,7 +8,8 @@ import type {
   PDFViewer,
 } from "pdfjs-dist/web/pdf_viewer.mjs";
 import "pdfjs-dist/web/pdf_viewer.css";
-import useSWR from "swr";
+import { useFilePreview } from "@/lib/build/hooks";
+import { FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useTranslations } from "next-intl";
 import { Button, InputPasswordTypeIn, Text } from "@opal/components";
@@ -27,6 +28,7 @@ interface PdfPreviewProps {
   filePath: string;
   revision?: string;
   refreshKey?: number;
+  isActive?: boolean;
 }
 
 export default function PdfPreview({
@@ -34,19 +36,15 @@ export default function PdfPreview({
   filePath,
   revision,
   refreshKey,
+  isActive = true,
 }: PdfPreviewProps) {
-  const t = useTranslations("craft.pdfPreview");
+  const displayedBlobRef = useRef<Blob | null>(null);
   const {
     data: blob,
     error,
     isLoading,
-  } = useSWR<Blob, Error>(
-    [
-      SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
-      "pdf",
-      revision,
-      refreshKey ?? 0,
-    ],
+  } = useFilePreview<Blob>(
+    SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     async () => {
       const response: Response = await fetch(
         buildArtifactUrl(sessionId, filePath),
@@ -55,15 +53,42 @@ export default function PdfPreview({
         }
       );
       if (!response.ok)
-        throw new Error(`Failed to fetch PDF: ${response.status}`);
-      return response.blob();
+        throw new FetchError(
+          `Failed to fetch PDF: ${response.status}`,
+          response.status,
+          null
+        );
+      const nextBlob: Blob = await response.blob();
+      const displayedBlob: Blob | null = displayedBlobRef.current;
+      if (
+        revision === undefined &&
+        displayedBlob &&
+        displayedBlob.size === nextBlob.size &&
+        displayedBlob.type === nextBlob.type
+      ) {
+        const [displayedBytes, nextBytes] = await Promise.all([
+          displayedBlob.arrayBuffer(),
+          nextBlob.arrayBuffer(),
+        ]);
+        const next: Uint8Array = new Uint8Array(nextBytes);
+        // Keep the PDF.js document when activation returns identical bytes.
+        if (
+          new Uint8Array(displayedBytes).every(
+            (byte, index) => byte === next[index]
+          )
+        ) {
+          return displayedBlob;
+        }
+      }
+      return nextBlob;
     },
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      revalidateIfStale: revision === undefined,
-    }
+    revision,
+    refreshKey,
+    isActive
   );
+  useEffect(() => {
+    displayedBlobRef.current = blob ?? null;
+  }, [blob]);
   if (error) return <PdfError />;
   if (isLoading || !blob) return <PdfLoading />;
 
@@ -193,6 +218,7 @@ function PdfDocument({ blob, filePath }: PdfDocumentProps) {
       const resizeObserver: ResizeObserver = new ResizeObserver(() => {
         const width: number = container.clientWidth;
         if (
+          width > 0 &&
           width !== previousWidth &&
           viewer.currentScaleValue === "page-width"
         ) {

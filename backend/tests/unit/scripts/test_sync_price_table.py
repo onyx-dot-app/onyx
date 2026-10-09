@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 from scripts.sync_price_table import (
+    _build_provider_section,
     _preserve_unbounded_flags,
     merge_litellm,
     merge_openrouter,
@@ -140,3 +142,77 @@ def test_preserve_unbounded_flags_survives_feed_outage(tmp_path: Path) -> None:
 
     assert models["openrouter/auto"]["unbounded"] is True
     assert "unbounded" not in models["vendor/real-model"]
+
+
+def test_preserve_unbounded_flags_fails_on_corrupt_vendored(tmp_path: Path) -> None:
+    """A missing vendored file is fine (first sync); an unreadable one must
+    fail loudly rather than silently dropping flags."""
+    providers: dict[str, Any] = _openrouter_section()
+
+    # No vendored file at all — returns without touching entries.
+    _preserve_unbounded_flags(providers, tmp_path)
+
+    (tmp_path / "openrouter.json").write_text("{not json")
+    with pytest.raises(json.JSONDecodeError):
+        _preserve_unbounded_flags(providers, tmp_path)
+
+
+def test_merge_openrouter_drops_negative_prices() -> None:
+    """Upstream's -1 'unknown price' sentinel must not land as a real rate."""
+    providers: dict[str, Any] = _openrouter_section()
+    models: dict[str, Any] = providers["openrouter"]["models"]
+    mixed: dict[str, Any] = _or_model("vendor/mixed", price="0.000001")
+    mixed["pricing"]["prompt"] = "-1"
+    merge_openrouter(
+        providers,
+        [
+            _or_model("vendor/paid-model", price="0.000001"),
+            mixed,
+            _or_model("vendor/sentinel-only", price="-1"),
+        ],
+    )
+
+    assert models["vendor/paid-model"]["cost"] == {"input": 1.0, "output": 1.0}
+    # Sentinel field dropped; the real rate stays.
+    assert models["vendor/mixed"]["cost"] == {"output": 1.0}
+    # Both rates sentinel -> vendored without a cost block (limits and
+    # router flags still carry over).
+    assert "cost" not in models["vendor/sentinel-only"]
+
+
+def test_merge_litellm_drops_negative_cost_fields() -> None:
+    providers = _providers()
+    entry: dict[str, Any] = _chat_entry(
+        "anthropic",
+        cache_read_input_token_cost=-1.0,
+    )
+    providers["anthropic"]["models"]["claude-x"] = {"mode": "chat"}
+    merge_litellm(providers, {"claude-x": entry})
+
+    cost: dict[str, Any] = providers["anthropic"]["models"]["claude-x"]["cost"]
+    assert cost["input"] == 2.0
+    assert cost["output"] == 10.0
+    assert "cache_read" not in cost
+
+
+def test_build_provider_section_drops_negative_costs_and_empty_ids() -> None:
+    api: dict[str, Any] = {
+        "mistral": {
+            "models": {
+                "mistral-large": {
+                    "name": "Mistral Large",
+                    "cost": {"input": -1.0, "output": 2.0},
+                    "limit": {"context": 128000, "output": 8192},
+                },
+                "": {"name": "junk"},
+                "vendor/models/": {"name": "also junk"},
+            }
+        }
+    }
+
+    section: dict[str, Any] | None = _build_provider_section(api, ["mistral"])
+
+    assert section is not None
+    assert list(section["models"]) == ["mistral-large"]
+    # The -1 sentinel field is dropped; the real rate stays.
+    assert section["models"]["mistral-large"]["cost"] == {"output": 2.0}

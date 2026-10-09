@@ -1,0 +1,110 @@
+name: onyx-mcp-ci
+
+x-backend: &backend
+  image: ${ONYX_BACKEND_IMAGE:-onyx-mcp-ci-backend:local}
+  build:
+    context: ../../backend
+    dockerfile: Dockerfile
+    target: runtime
+  environment:
+    POSTGRES_HOST: relational_db
+    POSTGRES_PORT: "5432"
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: mcp-ci-postgres
+    POSTGRES_DB: postgres
+    REDIS_HOST: cache
+    REDIS_PORT: "6379"
+    AUTH_TYPE: basic
+    AUTH_BACKEND: redis
+    CACHE_BACKEND: redis
+    USER_AUTH_SECRET: mcp-ci-only-not-a-production-secret
+    WEB_DOMAIN: http://localhost:${MCP_CANARY_PORT:-18080}
+    DISABLE_VECTOR_DB: "true"
+    FILE_STORE_BACKEND: postgres
+    DISABLE_TELEMETRY: "true"
+    MCP_SERVER_ENABLED: "true"
+    API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS: http://api_server:8080
+
+services:
+  relational_db:
+    image: postgres:15.2-alpine
+    environment:
+      POSTGRES_PASSWORD: mcp-ci-postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  cache:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  api_server:
+    <<: *backend
+    command: [sh, -c, "alembic upgrade head && exec uvicorn onyx.main:app --host 0.0.0.0 --port 8080"]
+    depends_on:
+      relational_db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import http.client; c = http.client.HTTPConnection('localhost', 8080, timeout=5); c.request('GET', '/health'); assert c.getresponse().status == 200"]
+      interval: 5s
+      timeout: 10s
+      start_period: 120s
+      retries: 30
+
+  mcp_server:
+    <<: *backend
+    command: [python, -m, onyx.mcp_server_main]
+    depends_on:
+      api_server:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import http.client; c = http.client.HTTPConnection('localhost', 8090, timeout=5); c.request('GET', '/health'); assert c.getresponse().status == 200"]
+      interval: 5s
+      timeout: 10s
+      start_period: 30s
+      retries: 30
+
+  # Only satisfy nginx's web upstream; this stack does not test the consent UI.
+  web_server:
+    image: nginx:1.25.5-alpine
+    volumes:
+      - ./mcp-ci-web.conf:/etc/nginx/conf.d/default.conf:ro
+
+  nginx:
+    image: nginx:1.25.5-alpine
+    command: [sh, /etc/nginx/conf.d/run-nginx.sh, app.conf.template]
+    environment:
+      MCP_SERVER_ENABLED: "true"
+    ports:
+      - "127.0.0.1:${MCP_CANARY_PORT:-18080}:80"
+    volumes:
+      - /dev/null:/etc/nginx/conf.d/default.conf:ro
+      - ../data/nginx/app.conf.template:/etc/nginx/conf.d/app.conf.template:ro
+      - ../data/nginx/mcp.conf.inc.template:/etc/nginx/conf.d/mcp.conf.inc.template:ro
+      - ../data/nginx/mcp_upstream.conf.inc.template:/etc/nginx/conf.d/mcp_upstream.conf.inc.template:ro
+      - ../data/nginx/run-nginx.sh:/etc/nginx/conf.d/run-nginx.sh:ro
+    depends_on:
+      api_server:
+        condition: service_healthy
+      mcp_server:
+        condition: service_healthy
+      web_server:
+        condition: service_started
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1/nginx-health]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  postgres_data:

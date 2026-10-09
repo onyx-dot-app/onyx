@@ -15,8 +15,10 @@ from onyx.connectors.interfaces import (
     ConnectorCheckpoint,
     LoadConnector,
     PollConnector,
+    SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    prune_listing_honors_indexing_start,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -39,6 +41,8 @@ logger = setup_logger()
 
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
+_EPOCH_SECONDS: SecondsSinceUnixEpoch = 0.0
+
 
 class SlimConnectorExtractionResult(BaseModel):
     """Result of extracting document IDs and hierarchy nodes from a connector.
@@ -50,6 +54,9 @@ class SlimConnectorExtractionResult(BaseModel):
     raw_id_to_parent: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
     id_to_created_at: dict[str, datetime]
+    # The start the listing applied, None if it listed all documents. A listing
+    # from a start can omit hierarchy nodes that are still live.
+    listed_from: SecondsSinceUnixEpoch | None = None
 
 
 def _checkpointed_batched_items(
@@ -142,6 +149,7 @@ def extract_ids_from_runnable_connector(
     runnable_connector: BaseConnector,
     callback: IndexingHeartbeatInterface | None = None,
     connector_type: str = "unknown",
+    start: SecondsSinceUnixEpoch | None = None,
 ) -> SlimConnectorExtractionResult:
     """
     Extract document IDs and hierarchy nodes from a runnable connector.
@@ -151,7 +159,17 @@ def extract_ids_from_runnable_connector(
     so that failed-to-retrieve documents are not accidentally pruned.
 
     Optionally, a callback can be passed to handle the length of each document batch.
+
+    ``start`` (the pair's indexing start) limits the listing to documents from
+    that time on, but only where ``prune_listing_honors_indexing_start`` says
+    the listing filters by the same date as indexing. Otherwise all documents
+    are listed.
     """
+    if start is not None and not prune_listing_honors_indexing_start(
+        type(runnable_connector)
+    ):
+        start = None
+
     all_raw_id_to_parent: dict[str, str | None] = {}
     all_hierarchy_nodes: list[HierarchyNode] = []
     all_id_to_created_at: dict[str, datetime] = {}
@@ -174,21 +192,24 @@ def extract_ids_from_runnable_connector(
     ) = None
 
     if isinstance(runnable_connector, SlimConnector):
-        raw_batch_generator = runnable_connector.retrieve_all_slim_docs()
+        raw_batch_generator = runnable_connector.retrieve_all_slim_docs(start=start)
     elif isinstance(runnable_connector, SlimConnectorWithPermSync):
-        raw_batch_generator = runnable_connector.retrieve_all_slim_docs_perm_sync()
+        raw_batch_generator = runnable_connector.retrieve_all_slim_docs_perm_sync(
+            start=start
+        )
     # If the connector isn't slim, fall back to running it normally to get ids
     elif isinstance(runnable_connector, LoadConnector):
         raw_batch_generator = runnable_connector.load_from_state()
     elif isinstance(runnable_connector, PollConnector):
-        start = datetime(1970, 1, 1, tzinfo=timezone.utc).timestamp()
-        end = datetime.now(timezone.utc).timestamp()
-        raw_batch_generator = runnable_connector.poll_source(start=start, end=end)
+        raw_batch_generator = runnable_connector.poll_source(
+            start=start if start is not None else _EPOCH_SECONDS,
+            end=datetime.now(timezone.utc).timestamp(),
+        )
     elif isinstance(runnable_connector, CheckpointedConnector):
-        start = datetime(1970, 1, 1, tzinfo=timezone.utc).timestamp()
-        end = datetime.now(timezone.utc).timestamp()
         raw_batch_generator = _checkpointed_batched_items(
-            runnable_connector, start, end
+            runnable_connector,
+            start if start is not None else _EPOCH_SECONDS,
+            datetime.now(timezone.utc).timestamp(),
         )
     else:
         raise RuntimeError("Pruning job could not find a valid runnable_connector.")
@@ -245,6 +266,7 @@ def extract_ids_from_runnable_connector(
         raw_id_to_parent=all_raw_id_to_parent,
         hierarchy_nodes=all_hierarchy_nodes,
         id_to_created_at=all_id_to_created_at,
+        listed_from=start,
     )
 
 

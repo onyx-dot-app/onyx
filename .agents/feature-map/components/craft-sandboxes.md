@@ -19,7 +19,7 @@
 `backend/onyx/server/features/build/sandbox/docker/` (`docker_sandbox_manager.py`,
 `dev_mode_serve.py`, `internal/exec_helpers.py`),
 `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/` (`server.py`,
-`snapshot.py`, `extract.py`, `filesystem.py`, `manifest.py`, `models.py`,
+`snapshot.py`, `extract.py`, `filesystem.py`, `outputs_manifest.py`, `models.py`,
 `opencode_history.py`),
 `backend/onyx/server/features/build/sandbox/util/` (`agent_instructions.py`,
 `opencode_config.py`, `mcp_config.py`, `api_url_check.py`),
@@ -318,6 +318,30 @@ signed `GET`/`POST` over plain HTTP to
 `http://{pod-name}.{namespace}.svc.cluster.local:8731`, with retry-until-deadline
 on transient failures (`_post`) and a streaming path for archive
 create/download (`request_and_stream_new_snapshot`).
+
+Directory listings use one `FilesystemEntry` model in `sandbox_daemon/models.py`
+across the daemon, both sandbox managers, and the API. The sidecar client returns
+these validated entries directly.
+
+The outputs manifest scans visible regular files under `outputs/` without reading file contents.
+It shares file browsing's hidden-name rules through `sandbox_daemon/models.py`.
+The scan excludes dotfiles, dependencies, caches, runtime logs, symlinks, and special files.
+It also skips the root web subtree within outputs before descent. Nested directories named `web` remain visible.
+All examined entries count toward one scan budget, including ignored names and directories.
+A depth limit bounds recursion. Descriptor-relative descent refuses symlinks at every workspace component.
+
+Kubernetes sends a signed request with the session ID. Docker invokes
+`python -E -s -m sandbox_daemon.outputs_manifest` from the root-owned `/opt` copy.
+Both transports call `build_outputs_manifest` and return paths, sizes, modification times, change times, and completeness.
+The API exposes sizes and string revisions, so JavaScript does not round nanosecond timestamps.
+Revisions include change time to detect same-size overwrites that preserve modification time.
+Missing session workspaces, scan limits, and unreadable entries make the response incomplete.
+An existing workspace without an outputs directory returns a complete empty response.
+Callers must not infer deletions from incomplete responses.
+
+This contract requires the matching sandbox image alongside the API server.
+Existing healthy sandboxes keep their image until replacement.
+Update running sandboxes through the normal snapshot and recovery lifecycle during rollout.
 
 **Current state versus the sidecar-migration doc:** as of this code, snapshot
 create/restore and file push already go through the sidecar HTTP API (confirmed

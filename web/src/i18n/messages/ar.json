@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "تبديل {name}"
+      },
+      "status": {
+        "loading": "جارٍ تحميل المخرجات…",
+        "incomplete": "تعذر عرض بعض المخرجات. افتح الملفات لتصفح مساحة العمل.",
+        "error": "تعذر تحديث المخرجات. حاول مرة أخرى."
       }
     },
     "chatPanel": {
@@ -12454,17 +12459,11 @@
         "description": "ستظهر الملفات المُنشأة أثناء البناء هنا",
         "title": "لا توجد ملفات بعد"
       },
-      "emptyDirectory": {
-        "label": "لا توجد ملفات في هذا المجلد"
-      },
       "error": {
         "title": "خطأ في تحميل الملفات"
       },
       "loading": {
         "label": "جارٍ تحميل الملفات..."
-      },
-      "loadingChildren": {
-        "label": "جارٍ التحميل..."
       },
       "preparing": {
         "description": "جارٍ إعداد بيئة التطوير الخاصة بك",
@@ -12624,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "إغلاق {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "ابدأ ببناء شيء ما لرؤية المخرجات!"
       },
@@ -12665,6 +12667,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "الشرائح"
+      },
+      "previous": {
+        "label": "الشريحة السابقة"
+      },
+      "next": {
+        "label": "الشريحة التالية"
+      },
       "converting": {
         "label": "جارٍ تحويل العرض التقديمي..."
       },
@@ -13070,9 +13081,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# استدعاء} other {# استدعاءات}}"
-        },
-        "failed": {
-          "tag": "فشل {count}"
         },
         "working": {
           "label": "قيد العمل"

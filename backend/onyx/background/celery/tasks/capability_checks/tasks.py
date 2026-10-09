@@ -21,6 +21,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_CHECK_TIMEOUT_SECONDS,
     DraftCheckStateKind,
+    DraftRunPairScope,
     DraftRunStatus,
     apply_check_result,
     cache_draft_result,
@@ -28,10 +29,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     load_draft_run,
     save_draft_run,
 )
-from onyx.connectors.capability_checks.models import (
-    CapabilityCheckResult,
-    compute_connector_config_hash,
-)
+from onyx.connectors.capability_checks.models import CapabilityCheckResult
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
     CAPABILITY_CHECK_TIMEOUT_SECONDS,
@@ -40,6 +38,7 @@ from onyx.connectors.capability_checks.runner import (
     generate_capability_report,
     merge_capability_results,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -203,7 +202,8 @@ def run_draft_capability_checks_task(
     """Runs a draft run's PENDING checks and writes each result into the stored
     run as it lands. The task is the only writer of the run after its start.
     Before each next check it stops if a newer run for the same draft key
-    started."""
+    started. A dry run of a pair builds the connector with the pair's input
+    type, as creation does."""
     run = load_draft_run(UUID(run_id))
     if run is None:
         task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
@@ -263,10 +263,13 @@ def run_draft_capability_checks_task(
             return
         mark_next_running()
         save_draft_run(run)
+        pair_scope: DraftRunPairScope | None = run.pair_scope
         generate_capability_report(
             credential,
             source=snapshot.source,
             connector_specific_config=connector_specific_config,
+            connector_id=pair_scope.connector_id if pair_scope is not None else None,
+            input_type=pair_scope.input_type if pair_scope is not None else None,
             access_type=snapshot.access_type,
             on_result=on_result,
             check_ids=frozenset(check.check_id for check in pending),

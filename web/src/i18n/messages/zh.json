@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "展开或折叠 {name}"
+      },
+      "status": {
+        "loading": "正在加载输出…",
+        "incomplete": "部分输出无法列出。请打开“文件”浏览工作区。",
+        "error": "无法刷新输出。请重试。"
       }
     },
     "chatPanel": {
@@ -12454,17 +12459,11 @@
         "description": "构建过程中创建的文件将显示在这里",
         "title": "暂无文件"
       },
-      "emptyDirectory": {
-        "label": "此目录中没有文件"
-      },
       "error": {
         "title": "加载文件出错"
       },
       "loading": {
         "label": "正在加载文件..."
-      },
-      "loadingChildren": {
-        "label": "加载中..."
       },
       "preparing": {
         "description": "正在设置您的开发环境",
@@ -12624,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "关闭 {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "开始构建内容即可查看产物！"
       },
@@ -12665,6 +12667,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "幻灯片"
+      },
+      "previous": {
+        "label": "上一张幻灯片"
+      },
+      "next": {
+        "label": "下一张幻灯片"
+      },
       "converting": {
         "label": "正在转换演示文稿..."
       },
@@ -13070,9 +13081,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# 次调用} other {# 次调用}}"
-        },
-        "failed": {
-          "tag": "{count} 个失败"
         },
         "working": {
           "label": "处理中"

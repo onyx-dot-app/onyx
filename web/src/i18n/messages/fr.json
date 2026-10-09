@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Basculer {name}"
+      },
+      "status": {
+        "loading": "Chargement des résultats…",
+        "incomplete": "Certains résultats ne peuvent pas être affichés. Ouvrez Fichiers pour parcourir l’espace de travail.",
+        "error": "Impossible d’actualiser les résultats. Réessayez."
       }
     },
     "chatPanel": {
@@ -12454,17 +12459,11 @@
         "description": "Les fichiers créés pendant la construction apparaîtront ici",
         "title": "Aucun fichier pour l'instant"
       },
-      "emptyDirectory": {
-        "label": "Aucun fichier dans ce répertoire"
-      },
       "error": {
         "title": "Erreur de chargement des fichiers"
       },
       "loading": {
         "label": "Chargement des fichiers..."
-      },
-      "loadingChildren": {
-        "label": "Chargement..."
       },
       "preparing": {
         "description": "Configuration de votre environnement de développement",
@@ -12624,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Fermer {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Commencez à construire quelque chose pour voir des artefacts !"
       },
@@ -12665,6 +12667,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Diapositives"
+      },
+      "previous": {
+        "label": "Diapositive précédente"
+      },
+      "next": {
+        "label": "Diapositive suivante"
+      },
       "converting": {
         "label": "Conversion de la présentation..."
       },
@@ -13070,9 +13081,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# appel} other {# appels}}"
-        },
-        "failed": {
-          "tag": "{count} en échec"
         },
         "working": {
           "label": "En cours"

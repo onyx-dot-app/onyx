@@ -330,15 +330,33 @@ sorts every live cc-pair into three sets for the acting user:
 - **ACL** pairs: `SYNC` pairs, and `SYNC_RESTRICTED` pairs where the user is in
   a data-access group. These need a public chunk or a `user_email:` or
   `external_group:` match.
-- **Hidden restricted** pairs: `SYNC_RESTRICTED` pairs that grant the user
-  nothing.
+- **Hidden restricted** pairs: guarded pairs that grant the user nothing
+  (`connector_credential_pair.py:_guarded_cc_pair_clause`). A guarded pair is a
+  `SYNC_RESTRICTED` pair, or a pair marked as awaiting its first permission
+  sync (`ConnectorCredentialPair.perm_sync_pending_since`). A marked pair is
+  in neither the open nor the ACL set for any user
+  (`connector_credential_pair.py:_granting_cc_pair_clause`), because its chunks
+  can still carry the access of its previous access type, such as
+  `public=true`.
+
+`connector_edit_requests.py:apply_access_change__no_commit` sets the mark when
+a pair enters `SYNC` or `SYNC_RESTRICTED` from `PUBLIC` or `PRIVATE`, and only
+for a source with a doc permission sync
+(`ee/onyx/external_permissions/sync_params.py:source_requires_doc_sync`).
+Salesforce checks access after search (§4.5) and gets no mark. The
+doc-permission-sync beat clears the mark
+(`ee/onyx/background/celery/tasks/doc_permission_syncing/tasks.py:clear_caught_up_perm_sync_pending_marks`)
+once a doc permission sync and, for a source with one, an external group sync
+that started after the mark succeed, and no indexed document of the pair waits
+for metadata sync (`db/document.py:build_cc_pair_has_unsynced_documents_clause`).
+It clears a mark on a source with no doc permission sync at once.
 
 `access_filters.py:build_access_filters_for_user` returns these sets as
 `CCPairAccessFilter` on `UserAccessFilters`. `onyx/access/cc_pair_access.py:get_cc_pair_access_mode`
 picks the `CCPairAccessMode`:
 
-- `OFF`: the filter is not used. It is built only to hide `SYNC_RESTRICTED`
-  pairs from the ACL filter.
+- `OFF`: the filter is not used. It is built only to hide guarded pairs
+  (`SYNC_RESTRICTED` and marked pairs) from the ACL filter.
 - `SHADOW`: results use the ACL filter. The cc-pair filter is only compared and
   logged. This is the mode when `ENABLE_CC_PAIR_ACCESS_FILTER` (or the Redis
   override `cc_pair_access_filter` / `enabled`) is on and the `ENFORCE`
@@ -349,7 +367,7 @@ picks the `CCPairAccessMode`:
 
 In `_get_search_filters`, `_get_cc_pair_access_visibility_filter` replaces the
 ACL clause only in `ENFORCE` mode. In every other mode the ACL clause stays,
-plus `_get_restricted_cc_pair_guard`, which removes chunks of hidden restricted
+plus `_get_restricted_cc_pair_guard`, which removes chunks of hidden guarded
 pairs unless another pair of the chunk grants access. Chunks with no cc-pair
 (user files) fall back to the ACL filter. `user_can_access_chat_file` applies the
 same rule in Python.
@@ -659,7 +677,8 @@ verified by "it still returns documents"; it is verified by a second user
   `SHADOW` logs disagreements and still returns ACL-filtered results. `ENFORCE`
   needs the Redis flag and a complete `cc_pair_ids` backfill, so a tenant can
   have the master flag on and still run the ACL filter. A `SYNC_RESTRICTED`
-  pair is hidden in every mode, because the ACL alone cannot express it.
+  pair, and a pair awaiting its first permission sync, is hidden in every
+  mode, because the ACL alone cannot express it.
 - **Read-side and write-side ACL changes roll out differently.**
   `_get_acl_for_user` runs on each query, so a change takes effect on the next
   request. `_get_access_for_documents` computes the ACL stored on each indexed

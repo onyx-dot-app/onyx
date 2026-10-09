@@ -2,6 +2,7 @@
 const { withSentryConfig } = require("@sentry/nextjs");
 const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 const createNextIntlPlugin = require("next-intl/plugin");
+
 // Points next-intl at the request-scoped locale/message resolution.
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -72,10 +73,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr",
+        source:
+          "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)",
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"
-        }/build/sessions/:sessionId/webapp/_next/webpack-hmr`,
+        }/build/sessions/:sessionId/webapp/_next/:hmrEndpoint`,
       },
       {
         source: "/ph_ingest/static/:path*",
@@ -312,6 +314,25 @@ module.exports = (phase) => {
     withSentryConfig(
       {
         ...nextConfig,
+        ...(isDevServer && {
+          async rewrites() {
+            return [
+              {
+                source: "/.well-known/oauth-authorization-server/:path*",
+                destination: `${
+                  process.env.INTERNAL_URL || "http://localhost:8080"
+                }/oauth-provider/metadata`,
+              },
+              {
+                source: "/.well-known/oauth-protected-resource/:path*",
+                destination: `${
+                  process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090"
+                }/.well-known/oauth-protected-resource/:path*`,
+              },
+              ...(await nextConfig.rewrites()),
+            ];
+          },
+        }),
         reactCompiler:
           !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
       },

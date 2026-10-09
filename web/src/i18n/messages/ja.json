@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "{name} を開閉"
+      },
+      "status": {
+        "loading": "出力を読み込み中…",
+        "incomplete": "一部の出力を表示できませんでした。「ファイル」を開いてワークスペースを確認してください。",
+        "error": "出力を更新できませんでした。もう一度お試しください。"
       }
     },
     "chatPanel": {
@@ -12454,17 +12459,11 @@
         "description": "ビルド中に作成されたファイルがここに表示されます",
         "title": "まだファイルがありません"
       },
-      "emptyDirectory": {
-        "label": "このディレクトリにはファイルがありません"
-      },
       "error": {
         "title": "ファイルの読み込みエラー"
       },
       "loading": {
         "label": "ファイルを読み込んでいます..."
-      },
-      "loadingChildren": {
-        "label": "読み込み中..."
       },
       "preparing": {
         "description": "開発環境をセットアップしています",
@@ -12624,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} を閉じる"
+      },
       "artifactsEmpty": {
         "tooltip": "何かを作り始めるとアーティファクトが表示されます！"
       },
@@ -12665,6 +12667,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "スライド"
+      },
+      "previous": {
+        "label": "前のスライド"
+      },
+      "next": {
+        "label": "次のスライド"
+      },
       "converting": {
         "label": "プレゼンテーションを変換しています..."
       },
@@ -13070,9 +13081,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# 件の呼び出し} other {# 件の呼び出し}}"
-        },
-        "failed": {
-          "tag": "{count} 件失敗"
         },
         "working": {
           "label": "作業中"

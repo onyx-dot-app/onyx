@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from fastmcp import FastMCP
 from prometheus_client import CollectorRegistry
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -270,6 +271,37 @@ async def test_insufficient_scope_has_discovery_challenge(
 
 
 @pytest.mark.asyncio
+async def test_pat_initializes_mcp_with_oauth_discovery_enabled(
+    introspection_backend: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    introspection_backend.get.return_value = httpx.Response(200)
+    server: FastMCP = FastMCP("pat-test", auth=mcp_auth.build_mcp_server_auth())
+    monkeypatch.setattr(mcp_api, "mcp_server", server)
+    app: FastAPI = mcp_api.create_mcp_fastapi_app()
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="https://onyx.example"
+        ) as client:
+            response: httpx.Response = await client.post(
+                "/",
+                headers={"Authorization": "Bearer onyx_pat_test"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {},
+                        "clientInfo": {"name": "pat-test", "version": "1"},
+                    },
+                },
+            )
+    assert response.status_code == 200, response.text
+    introspection_backend.get.assert_awaited_once()
+    assert introspection_backend.get.call_args.args[0].endswith("/me")
+
+
+@pytest.mark.asyncio
 async def test_discovery_aliases_and_challenge_point_to_same_resource(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -279,21 +311,23 @@ async def test_discovery_aliases_and_challenge_point_to_same_resource(
         "OAUTH_PROVIDER_SETTINGS",
         oauth_config.load_oauth_provider_settings(),
     )
-    server = FastMCP("discovery-test", auth=mcp_auth.build_mcp_server_auth())
+    server: FastMCP = FastMCP("discovery-test", auth=mcp_auth.build_mcp_server_auth())
     monkeypatch.setattr(mcp_api, "mcp_server", server)
-    app = mcp_api.create_mcp_fastapi_app()
+    app: FastAPI = mcp_api.create_mcp_fastapi_app()
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app), base_url="http://localhost:3000"
     ) as client:
-        challenge = await client.post("/")
+        challenge: httpx.Response = await client.post("/")
         assert challenge.status_code == 401
-        metadata_url = (
+        metadata_url: str = (
             challenge.headers["www-authenticate"]
             .split('resource_metadata="')[1]
             .split('"')[0]
         )
-        discovered = await client.get(metadata_url)
-        alias = await client.get("/.well-known/oauth-protected-resource/mcp/")
+        discovered: httpx.Response = await client.get(metadata_url)
+        alias: httpx.Response = await client.get(
+            "/.well-known/oauth-protected-resource/mcp/"
+        )
     assert discovered.status_code == alias.status_code == 200
     assert discovered.json() == alias.json()
     assert discovered.json()["resource"] == "http://localhost:3000/mcp"

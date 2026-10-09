@@ -51,6 +51,7 @@ from onyx.server.features.build.session.models import (
     ArtifactResponse,
     DetailedSessionResponse,
     OpencodeHistorySnapshotResponse,
+    OutputInventoryResponse,
     PptxPreviewResponse,
     PreProvisionedCheckResponse,
     SandboxStatusResponse,
@@ -516,6 +517,16 @@ def list_artifacts(
         raise HTTPException(status_code=404, detail="Session not found")
 
     return artifacts
+
+
+@router.get("/{session_id}/outputs")
+def get_output_inventory(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> OutputInventoryResponse:
+    """Return output metadata without storing a persistent file index."""
+    return SessionManager(db_session).get_output_inventory(session_id, user.id)
 
 
 @router.get("/{session_id}/files", response_model=DirectoryListing)

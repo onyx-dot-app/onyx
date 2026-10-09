@@ -151,3 +151,15 @@ class InMemoryChatFile(BaseModel):
             "name": self.filename,
             "user_file_id": str(self.file_id) if self.file_id else None,
         }
+
+
+class StoredFileFacts(BaseModel):
+    """What decides the document a stored connector file gives, besides its
+    id and its metadata entry."""
+
+    model_config = ConfigDict(frozen=True)
+
+    display_name: str
+    file_type: str
+    # None for files saved before uploads recorded a hash.
+    content_sha256: str | None

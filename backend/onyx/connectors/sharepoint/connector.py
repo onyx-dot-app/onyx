@@ -644,6 +644,8 @@ class SharepointConnector(
     CheckpointedConnectorWithPermSync[SharepointConnectorCheckpoint],
     Resolver,
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,

@@ -17,7 +17,6 @@ from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sandbox_daemon.extract import MAX_BUNDLE_BYTES, safe_extract_then_atomic_swap
 from sandbox_daemon.filesystem import FilesystemPathError, list_session_directory
-from sandbox_daemon.manifest import build_outputs_manifest
 from sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
     SIDECAR_FILESYSTEM_LIST_PATH,
@@ -42,6 +41,7 @@ from sandbox_daemon.opencode_history import (
     opencode_history_restored,
     restore_opencode_history_archive,
 )
+from sandbox_daemon.outputs_manifest import build_outputs_manifest
 from sandbox_daemon.snapshot import (
     SnapshotError,
     has_snapshot_content,
@@ -206,7 +206,10 @@ async def outputs_manifest(
         raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
 
     try:
-        manifest = await asyncio.to_thread(build_outputs_manifest, payload.session_id)
+        manifest = await asyncio.to_thread(
+            build_outputs_manifest,
+            payload.session_id,
+        )
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"outputs manifest OS error: {e}")
 

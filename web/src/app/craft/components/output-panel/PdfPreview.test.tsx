@@ -1,5 +1,8 @@
+import { Blob as NodeBlob } from "node:buffer";
+import { skipRetryOnAuthError } from "@/lib/fetcher";
 import {
   act,
+  deferred,
   render,
   screen,
   setupUser,
@@ -51,7 +54,15 @@ jest.mock("pdfjs-dist/web/pdf_viewer.mjs", () => ({
   PDFViewer: jest.fn().mockImplementation(() => mockViewer),
 }));
 
+const originalBlob = globalThis.Blob;
+
 beforeEach(() => {
+  // JSDOM lacks Blob.arrayBuffer(); use Node's binary implementation.
+  Object.defineProperty(globalThis, "Blob", {
+    configurable: true,
+    writable: true,
+    value: NodeBlob,
+  });
   mockEvents.clear();
   mockViewer.currentPageNumber = 1;
   mockViewer.currentScaleValue = "";
@@ -70,7 +81,10 @@ beforeEach(() => {
     .spyOn(globalThis, "fetch")
     .mockResolvedValue({ ok: true, blob: async () => blob } as Response);
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  globalThis.Blob = originalBlob;
+  jest.restoreAllMocks();
+});
 
 it("reuses PDF bytes across tab switches and releases PDF.js documents", async () => {
   const preview = (
@@ -244,4 +258,71 @@ it("destroys a document when closing an open password prompt", async () => {
   expect(screen.getByLabelText("PDF password")).toBeInTheDocument();
   unmount();
   expect(mockDestroy).toHaveBeenCalledTimes(1);
+});
+
+it.each([401, 402, 403])(
+  "does not retry a PDF HTTP %s response",
+  async (status) => {
+    jest.useFakeTimers();
+    const fetch: jest.SpyInstance = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("Forbidden", { status }));
+    try {
+      render(
+        <PdfPreview
+          sessionId="forbidden-pdf"
+          filePath="outputs/report.pdf"
+          revision="v1"
+        />,
+        {
+          swrConfig: {
+            shouldRetryOnError: true,
+            onErrorRetry: skipRetryOnAuthError,
+          },
+        }
+      );
+      await act(async () => {});
+      expect(screen.getByText("Cannot preview PDF")).toBeInTheDocument();
+      await act(async () => jest.advanceTimersByTime(30000));
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  }
+);
+
+it("retains an unversioned PDF.js document for identical bytes and reloads changed bytes", async () => {
+  const originalBytes = new Uint8Array([37, 80, 68, 70, 0, 255]);
+  const changedBytes = new Uint8Array([37, 80, 68, 70, 0, 254]);
+  const unchangedResponse = deferred<Response>();
+  const fetch = jest
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(new Response(originalBytes))
+    .mockReturnValueOnce(unchangedResponse.promise)
+    .mockResolvedValueOnce(new Response(changedBytes));
+  const view = (isActive: boolean) => (
+    <PdfPreview
+      sessionId="unversioned-pdf"
+      filePath="web/report.pdf"
+      isActive={isActive}
+    />
+  );
+  const { rerender, unmount } = render(view(true));
+  await screen.findByText("Page 1 of 2");
+  expect(mockGetDocument).toHaveBeenCalledTimes(1);
+  rerender(view(false));
+  rerender(view(true));
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  await act(async () => unchangedResponse.resolve(new Response(originalBytes)));
+  expect(mockGetDocument).toHaveBeenCalledTimes(1);
+  expect(mockDestroy).not.toHaveBeenCalled();
+
+  // Equal byte lengths must not hide an actual edit.
+  rerender(view(false));
+  rerender(view(true));
+  await waitFor(() => expect(mockGetDocument).toHaveBeenCalledTimes(2));
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(mockDestroy).toHaveBeenCalledTimes(1);
+  unmount();
+  expect(mockDestroy).toHaveBeenCalledTimes(2);
 });

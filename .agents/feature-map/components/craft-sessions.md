@@ -51,8 +51,19 @@ over; the entire agentic loop runs inside the sandbox's `opencode serve`
 process, and the backend's job is to start it, stream its events, persist
 them, and know when to stop.
 
+The welcome panel starts on Files. Sending the first message keeps its selected tab,
+expanded folders, cached listings, and scroll position. Returning from an inline
+preview restores the tree scroll position. Each mounted Files browser owns its listing cache.
+Folder requests run independently and abort when their directory unmounts.
+A claimed welcome sandbox stays available until the URL selects the session.
+Late validity checks cannot reset it. Mounting Files revalidates visible folders.
+Opening a folder fetches its current contents, even when its cached listing is empty.
+
 The composer moves from the welcome position to the conversation footer with
 a shared layout animation. Reduced-motion users get an immediate transition.
+
+A session with stale skills shows a blue information notice after its active turn
+ends. Its Reload action refreshes that session’s skills.
 
 The user can interrupt a running turn at any time. Partial output stays
 visible and stays saved; sending a new message does not erase what was
@@ -61,7 +72,10 @@ permission (per the app policy in `[[craft-admin]]` and `[[craft-external-apps]]
 the turn pauses and the user sees an approval card; the user can approve or
 reject just that request, or approve it for the rest of the session. Files
 the agent produces appear as artifacts the user can browse, download, or
-(for Markdown) export as a `.docx`. The user's uploaded library files
+(for Markdown) export as a `.docx`. New previewable outputs add tabs; only the first
+eligible discovery in a task selects a file. Manual selection or dismissal suppresses
+automatic selection until the next interactive turn. See [[craft-streaming]] for
+inventory and selection rules. The user's own uploaded library files
 (PDFs, spreadsheets) are available inside every session's sandbox.
 
 PDF previews use PDF.js with selectable text, links, page navigation, zoom, and
@@ -69,7 +83,8 @@ fit-to-width. Password-protected PDFs prompt for a password and allow retries or
 The frontend serves matching workers, fonts, and decoders locally.
 `web/tools/prepare-pdfjs.mts` prepares these assets before development and production builds.
 Cached PDF bytes survive tab switches; each viewer releases its worker on unmount or render failure.
-Revisions and explicit refreshes fetch new bytes.
+Revisions and explicit refreshes fetch new bytes. Unversioned files revalidate on activation;
+identical bytes preserve the PDF.js document.
 
 ---
 
@@ -93,6 +108,7 @@ protects.
 | POST | `/build/sessions/{id}/restore` | `restore_session` (`session/api.py`) | Wakes a sleeping sandbox and rebuilds the workspace; 409s under concurrent restore. |
 | POST | `/build/sessions/{id}/snapshot` | `create_session_snapshot` (`session/api.py`) | Per-session workspace snapshot. |
 | POST | `/build/sessions/{id}/opencode-history-snapshot` | `create_session_opencode_history_snapshot` (`session/api.py`) | Sandbox-global opencode history capture; see §4.5. Manual capture hook for tests and operators; no frontend caller (see §9). |
+| GET | `/build/sessions/{id}/outputs` | `get_output_inventory` (`session/api.py`) | Flat file paths, sizes, and metadata revisions; no persistent index. |
 | GET | `/build/sessions/{id}/artifacts` | `list_artifacts` (`session/api.py`) | |
 | GET | `/build/sessions/{id}/artifacts/{path}` | `download_artifact` (`session/api.py`) | |
 | GET | `/build/sessions/{id}/export-docx/{path}` | `export_docx` (`session/api.py`) | Uses `session/md_to_docx.py`. |
@@ -566,6 +582,16 @@ owner-checked artifact routes. Rendering the message does not open or fetch arti
 separators, control characters, and query or fragment syntax. Invalid output links
 render as text. Other links retain the existing Markdown behavior.
 These frontend files live under `web/src/app/craft/`.
+
+### Output inventory
+
+`GET /build/sessions/{id}/outputs` checks session ownership before reading the sandbox.
+It returns visible output file paths, byte sizes, and string revisions built from modification time, change time, and size.
+The scan excludes hidden entries and the root `web` source tree. It reads metadata without hashing file contents.
+The response sets `complete=False` when scan limits, unreadable entries, or an unrestored workspace prevent a full inventory.
+An existing workspace with no outputs directory returns a complete empty inventory.
+Callers must preserve unseen files when the response is incomplete.
+The endpoint does not store an index or create artifact records.
 
 ## 5. Contracts and invariants
 

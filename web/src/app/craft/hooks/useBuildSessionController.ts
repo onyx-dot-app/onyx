@@ -104,6 +104,15 @@ export function useBuildSessionController({
         .sessions.get(sessionId);
       if (!cachedSession?.isLoaded) return;
       const skillsStaleRevision = cachedSession.skillsStaleRevision;
+      if (
+        cachedSession.status !== "running" &&
+        cachedSession.status !== "creating" &&
+        cachedSession.activeTurnId === null
+      ) {
+        void useBuildSessionStore
+          .getState()
+          .refreshOutputInventory(sessionId, { silent: true });
+      }
 
       try {
         const session = await fetchSession(sessionId, {
@@ -278,6 +287,10 @@ export function useBuildSessionController({
         try {
           // Check if session is still valid WITHOUT resetting state
           const { valid } = await checkPreProvisionedSession(cachedSessionId);
+          if (
+            useBuildSessionStore.getState().preProvisioning !== preProvisioning
+          )
+            return;
 
           if (!valid) {
             // Session was consumed by another tab - now reset and re-provision

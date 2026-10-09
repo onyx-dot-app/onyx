@@ -1,13 +1,15 @@
-"""Named capability checks when a cc-pair is created or its credential swapped.
+"""Named capability checks when a cc-pair is created, its credential swapped,
+or an edit applied.
 
 For a source with named checks, this replaces the legacy blocking validation
 (``validate_connector_settings`` and ``validate_perm_sync``). It runs the
 source's checks for the pairing's access type and stores the full report. A
-fresh result of a draft run on the same form is reused, so the check does not
-run again. Only a required check that failed within the blocking budget blocks
-the pairing: INDETERMINATE is transient, and skipped checks do not apply. A
-check that is still running at the end of the budget does not block; a
-background run produces its result.
+fresh result of a draft run on the same form (for an edit, of a dry run on the
+same pair and proposed state) is reused, so the check does not run again. Only
+a required check that failed within the blocking budget blocks the pairing:
+INDETERMINATE is transient, and skipped checks do not apply. A check that is
+still running at the end of the budget does not block; a background run
+produces its result.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -32,13 +34,14 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CredentialCapabilityReport,
-    compute_connector_config_hash,
+    NamedCheckRun,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
     generate_capability_report,
     merge_capability_results,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
@@ -56,8 +59,6 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
-_TRIGGER = CapabilityCheckTrigger.CC_PAIR_VALIDATION
-
 # The longest time creation waits for its checks. A check that is still running
 # then does not block the pairing.
 CREATION_BLOCKING_BUDGET_SECONDS = 3.0
@@ -65,22 +66,22 @@ CREATION_BLOCKING_BUDGET_SECONDS = 3.0
 _REJECTED_MESSAGE = "Did not finish before the connector was rejected."
 
 
-def _fresh_draft_results(
+def _cached_draft_results(
     checks: list[CapabilityCheck[Any]],
     *,
     credential: Credential,
     source: DocumentSource,
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
+    cc_pair_id: int | None,
 ) -> dict[str, CachedDraftResult]:
     """check_id to its cached draft result, for the checks a draft run already
-    ran with this credential, access type and form values. A cached FAILED
-    result is left out, so the check runs again: the source may have been
-    fixed since, and a client without a draft run cannot ask for a re-run."""
+    ran with this credential, access type and form values. With ``cc_pair_id``,
+    only that pair's dry runs count; without it, only create-form runs."""
     form_values = validate_form_state(
         CONNECTOR_CLASS_MAP[source].config_class, connector_specific_config
     ).values
-    fresh: dict[str, CachedDraftResult] = {}
+    cached_by_check_id: dict[str, CachedDraftResult] = {}
     for check in checks:
         cached = get_cached_draft_result(
             draft_result_cache_key(
@@ -90,15 +91,73 @@ def _fresh_draft_results(
                 access_type=access_type,
                 check=check,
                 form_values=form_values,
+                cc_pair_id=cc_pair_id,
             )
         )
-        if cached is not None and cached.state != DraftCheckStateKind.FAILED:
-            fresh[check.check_id] = cached
-    return fresh
+        if cached is not None:
+            cached_by_check_id[check.check_id] = cached
+    return cached_by_check_id
+
+
+def _fresh_draft_results(
+    checks: list[CapabilityCheck[Any]],
+    *,
+    credential: Credential,
+    source: DocumentSource,
+    access_type: AccessType,
+    connector_specific_config: dict[str, Any],
+    cc_pair_id: int | None,
+) -> dict[str, CachedDraftResult]:
+    """The cached draft results that a validation reuses. A cached FAILED
+    result is left out, so the check runs again: the source may have been
+    fixed since, and a client without a draft run cannot ask for a re-run."""
+    return {
+        check_id: cached
+        for check_id, cached in _cached_draft_results(
+            checks,
+            credential=credential,
+            source=source,
+            access_type=access_type,
+            connector_specific_config=connector_specific_config,
+            cc_pair_id=cc_pair_id,
+        ).items()
+        if cached.state != DraftCheckStateKind.FAILED
+    }
+
+
+def get_cc_pair_dry_run_results(
+    *,
+    cc_pair_id: int,
+    credential: Credential,
+    source: DocumentSource,
+    access_type: AccessType,
+    connector_specific_config: dict[str, Any],
+) -> list[CapabilityCheckResult]:
+    """The cached results of the pair's dry runs for this proposed state, as
+    report rows, failures included. Reads the cache only: a check with no
+    terminal result for exactly this state is left out."""
+    checks = get_capability_checks(source)
+    cached_by_check_id = _cached_draft_results(
+        checks,
+        credential=credential,
+        source=source,
+        access_type=access_type,
+        connector_specific_config=connector_specific_config,
+        cc_pair_id=cc_pair_id,
+    )
+    return [
+        cached_check_result(check, cached)
+        for check in checks
+        if (cached := cached_by_check_id.get(check.check_id)) is not None
+    ]
 
 
 def _mark_running(
-    *, credential_id: int, connector_id: int, source: DocumentSource
+    *,
+    credential_id: int,
+    connector_id: int,
+    source: DocumentSource,
+    trigger: CapabilityCheckTrigger,
 ) -> UUID | None:
     """Claims the pairing's report row for this run, also from a run in flight.
     This run decides the pairing, so its report is the one to keep; the fence
@@ -109,7 +168,7 @@ def _mark_running(
             credential_id=credential_id,
             connector_id=connector_id,
             source=source,
-            trigger=_TRIGGER,
+            trigger=trigger,
             active_within=timedelta(0),
         )
         db_session.commit()
@@ -122,7 +181,7 @@ def _run_check_group(
     check_id: str,
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
-    connector_id: int,
+    connector_id: int | None,
     input_type: InputType | None,
     access_type: AccessType,
 ) -> list[CapabilityCheckResult]:
@@ -133,7 +192,6 @@ def _run_check_group(
         connector_specific_config=connector_specific_config,
         connector_id=connector_id,
         input_type=input_type,
-        trigger=_TRIGGER,
         access_type=access_type,
         check_ids=frozenset({check_id}),
     ).check_results
@@ -145,7 +203,7 @@ def _run_checks_within_budget(
     credential_id: int,
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
-    connector_id: int,
+    connector_id: int | None,
     input_type: InputType | None,
     access_type: AccessType,
 ) -> tuple[list[CapabilityCheckResult], frozenset[str]]:
@@ -228,6 +286,7 @@ def _store_report(
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
     run_id: UUID,
+    trigger: CapabilityCheckTrigger,
 ) -> None:
     report = merge_capability_results(
         CredentialCapabilityReport(
@@ -235,7 +294,7 @@ def _store_report(
             source=source,
             connector_id=connector_id,
             checked_at=datetime.now(timezone.utc),
-            trigger=_TRIGGER,
+            trigger=trigger,
             verdicts={},
             check_results=[],
         ),
@@ -247,7 +306,7 @@ def _store_report(
             credential_id=credential_id,
             connector_id=connector_id,
             source=source,
-            trigger=_TRIGGER,
+            trigger=trigger,
             report=report,
             connector_config_hash=compute_connector_config_hash(
                 connector_specific_config
@@ -286,6 +345,7 @@ def _enqueue_unfinished_checks(
     access_type: AccessType,
     unfinished: frozenset[str],
     finished: list[CapabilityCheckResult],
+    trigger: CapabilityCheckTrigger,
 ) -> None:
     """Starts the background run of the checks that did not finish. When the
     run does not start, it is marked failed to run: the first index attempt
@@ -295,7 +355,7 @@ def _enqueue_unfinished_checks(
             credential_id=credential_id,
             connector_id=connector_id,
             source=source,
-            trigger=_TRIGGER,
+            trigger=trigger,
             run_id=run_id,
             connector_specific_config=connector_specific_config,
             access_type=access_type,
@@ -314,9 +374,58 @@ def _enqueue_unfinished_checks(
         )
 
 
+def run_named_checks_within_budget(
+    *,
+    connector_id: int | None,
+    cc_pair_id: int | None,
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+    access_type: AccessType,
+) -> NamedCheckRun:
+    """Runs the source's named checks for a pairing, with no writes.
+
+    Fresh draft results for the same form are reused and count as finished at
+    once: with ``cc_pair_id``, those of the pair's dry runs. The other checks
+    run for at most ``CREATION_BLOCKING_BUDGET_SECONDS``. Does not claim or
+    store a report row and does not start a background run.
+    """
+    checks = get_capability_checks(source)
+    reused = _fresh_draft_results(
+        checks,
+        credential=credential,
+        source=source,
+        access_type=access_type,
+        connector_specific_config=connector_specific_config,
+        cc_pair_id=cc_pair_id,
+    )
+    finished, unfinished = _run_checks_within_budget(
+        list(
+            dict.fromkeys(
+                check.check_id for check in checks if check.check_id not in reused
+            )
+        ),
+        credential_id=credential.id,
+        source=source,
+        connector_specific_config=connector_specific_config,
+        connector_id=connector_id,
+        input_type=input_type,
+        access_type=access_type,
+    )
+    finished.extend(
+        cached_check_result(check, cached)
+        for check in checks
+        if (cached := reused.get(check.check_id)) is not None
+    )
+    return NamedCheckRun(finished_results=finished, unfinished_check_ids=unfinished)
+
+
 def validate_pairing_with_named_checks(
     *,
     connector_id: int,
+    cc_pair_id: int | None,
+    trigger: CapabilityCheckTrigger,
     source: DocumentSource,
     input_type: InputType | None,
     connector_specific_config: dict[str, Any],
@@ -324,7 +433,9 @@ def validate_pairing_with_named_checks(
     access_type: AccessType,
     enforce_creation: bool,
 ) -> bool:
-    """Runs the source's named checks for a new pairing and stores the report.
+    """Runs the source's named checks for a pairing and stores the report
+    under ``trigger``. ``cc_pair_id`` is the edited pair whose dry-run results
+    are reused; None for a new pairing.
 
     Waits at most ``CREATION_BLOCKING_BUDGET_SECONDS``. Reused draft results
     count as finished at once. When checks are still running at the end of the
@@ -338,44 +449,28 @@ def validate_pairing_with_named_checks(
         ConnectorValidationError: A required check failed and
             ``enforce_creation`` is True. The message names each failed check.
     """
-    checks = get_capability_checks(source)
-    reused = _fresh_draft_results(
-        checks,
-        credential=credential,
-        source=source,
-        access_type=access_type,
-        connector_specific_config=connector_specific_config,
-    )
     credential_id = credential.id
     run_id = _mark_running(
-        credential_id=credential_id, connector_id=connector_id, source=source
+        credential_id=credential_id,
+        connector_id=connector_id,
+        source=source,
+        trigger=trigger,
     )
     # Every write after the claim is in this block, so a failure anywhere
     # retires the RUNNING mark instead of leaving it until the stale sweep.
     try:
-        finished, unfinished = _run_checks_within_budget(
-            list(
-                dict.fromkeys(
-                    check.check_id for check in checks if check.check_id not in reused
-                )
-            ),
-            credential_id=credential_id,
-            source=source,
-            connector_specific_config=connector_specific_config,
+        run = run_named_checks_within_budget(
             connector_id=connector_id,
+            cc_pair_id=cc_pair_id,
+            source=source,
             input_type=input_type,
+            connector_specific_config=connector_specific_config,
+            credential=credential,
             access_type=access_type,
         )
-        finished.extend(
-            cached_check_result(check, cached)
-            for check in checks
-            if (cached := reused.get(check.check_id)) is not None
-        )
-        failed = [
-            result
-            for result in finished
-            if result.required and result.status == CapabilityCheckStatus.FAILED
-        ]
+        finished = run.finished_results
+        unfinished = run.unfinished_check_ids
+        failed = run.failed_required_results
         if run_id is None:
             logger.info(
                 "A capability run for connector %s, credential %s started in the "
@@ -393,15 +488,20 @@ def validate_pairing_with_named_checks(
                 access_type=access_type,
                 unfinished=unfinished,
                 finished=finished,
+                trigger=trigger,
             )
         else:
             _store_report(
-                finished + _unfinished_results(checks, unfinished, _REJECTED_MESSAGE),
+                finished
+                + _unfinished_results(
+                    get_capability_checks(source), unfinished, _REJECTED_MESSAGE
+                ),
                 credential_id=credential_id,
                 connector_id=connector_id,
                 source=source,
                 connector_specific_config=connector_specific_config,
                 run_id=run_id,
+                trigger=trigger,
             )
     except Exception:
         if run_id is not None:
