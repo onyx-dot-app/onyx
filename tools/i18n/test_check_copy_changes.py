@@ -1,11 +1,13 @@
 """Exercise the copy gate against real Git baselines and working catalogs."""
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 CHECKER: Path = Path(__file__).with_name("check_copy_changes.py").resolve()
 
@@ -83,7 +85,7 @@ class CopyChangesTest(unittest.TestCase):
             "-qm",
             "copy",
         )
-        self.assertEqual(self.check().returncode, 0)
+        self.assertEqual(self.check().returncode, 1)
         self.assertEqual(self.check("--base", base).returncode, 1)
 
     def test_new_locale_has_no_previous_translation(self) -> None:
@@ -91,6 +93,50 @@ class CopyChangesTest(unittest.TestCase):
         self.write("fr", {"title": "Bienvenue"})
         self.write("de", {"title": "Willkommen"})
         self.write("es", {"title": "Bienvenido"})
+        self.assertEqual(self.check().returncode, 0)
+
+    def test_push_range_checks_copy_before_an_unrelated_commit(self) -> None:
+        base: str = self.git("rev-parse", "HEAD").strip()
+        self.write("en", {"title": "Welcome"})
+        self.git("add", ".")
+        self.git(
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            "copy",
+        )
+        (self.root / "unrelated.txt").write_text("unrelated")
+        self.git("add", ".")
+        self.git(
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            "unrelated",
+        )
+        self.assertEqual(self.check().returncode, 0)
+        with patch.dict(os.environ, {"PRE_COMMIT_FROM_REF": base}):
+            self.assertEqual(self.check().returncode, 1)
+
+    def test_clean_checkout_with_committed_translations_passes(self) -> None:
+        self.write("en", {"title": "Welcome"})
+        self.write("fr", {"title": "Bienvenue"})
+        self.write("de", {"title": "Willkommen"})
+        self.git("add", ".")
+        self.git(
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            "translated copy",
+        )
         self.assertEqual(self.check().returncode, 0)
 
 

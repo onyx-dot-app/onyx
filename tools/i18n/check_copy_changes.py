@@ -33,11 +33,27 @@ def read_catalog(path: Path, base: str | None = None) -> dict[str, str]:
     return flatten(json.loads(source))
 
 
+def default_base() -> str:
+    """Check working edits against HEAD, or the last commit in a clean checkout."""
+    changes: str = subprocess.check_output(
+        ["git", "status", "--porcelain", "--", CATALOG_PATH.as_posix()], text=True
+    )
+    if changes:
+        return "HEAD"
+    parent: subprocess.CompletedProcess[str] = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD^"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return "HEAD^" if parent.returncode == 0 else "HEAD"
+
+
 def main() -> int:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default=os.environ.get("PRE_COMMIT_FROM_REF", "HEAD"))
+    parser.add_argument("--base")
     args: argparse.Namespace = parser.parse_args()
-    base: str = args.base
+    base: str = args.base or os.environ.get("PRE_COMMIT_FROM_REF") or default_base()
     previous: dict[str, str] = read_catalog(CATALOG_PATH / "en.json", base)
     current: dict[str, str] = read_catalog(CATALOG_PATH / "en.json")
     changed: list[str] = [
