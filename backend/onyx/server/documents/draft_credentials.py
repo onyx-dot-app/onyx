@@ -10,7 +10,10 @@ from onyx.auth.sealed import (
     unseal_draft_credential,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.credential_families import to_stored_credential_json
+from onyx.connectors.credential_families import (
+    to_source_credential_json,
+    to_stored_credential_json,
+)
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -60,10 +63,13 @@ def resolve_draft_credential(
     if credential_json is not None:
         try:
             reject_masked_credentials(credential_json)
-            # Validates the values as a save would, without saving them.
-            to_stored_credential_json(source, credential_json, None)
+            # Validates the values as a save would, without saving them, and
+            # gives them the shape the connector reads after a save.
+            source_json = to_source_credential_json(
+                source, to_stored_credential_json(source, credential_json, None)
+            )
         except ValueError as e:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
-        sealed = seal_draft_credential(credential_json, user_id=user.id, source=source)
+        sealed = seal_draft_credential(source_json, user_id=user.id, source=source)
         return unseal_draft_credential(sealed, user_id=user.id), sealed
     return None

@@ -81,7 +81,8 @@ def _relate_credential_to_user_groups__no_commit(
             credential_id=credential_id,
             user_group_id=group_id,
         )
-        for group_id in user_group_ids
+        # A repeated group would break the link table's primary key.
+        for group_id in dict.fromkeys(user_group_ids)
     ]
     db_session.add_all(credential_user_groups)
 

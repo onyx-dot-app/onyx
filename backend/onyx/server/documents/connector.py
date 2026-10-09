@@ -1749,6 +1749,9 @@ def create_connector_with_mock_credential(
     except ValueError as e:
         _discard_unpaired_creation(db_session, connector_id, credential_id)
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+    except Exception:
+        _discard_unpaired_creation(db_session, connector_id, credential_id)
+        raise
 
 
 @router.post("/admin/connector-with-credential")
@@ -1860,7 +1863,7 @@ def create_connector_with_credential(
     except ValueError as e:
         _discard_unpaired_creation(db_session, connector_id, new_credential_id)
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
-    except OnyxError:
+    except Exception:
         _discard_unpaired_creation(db_session, connector_id, new_credential_id)
         raise
 

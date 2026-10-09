@@ -23,6 +23,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import connector as connector_api
 from onyx.server.documents.connector import create_connector_with_credential
+from onyx.server.documents.draft_credentials import resolve_draft_credential
 from onyx.server.documents.models import (
     ConnectorCredentialPairMetadata,
     ConnectorUpdateRequest,
@@ -182,6 +183,47 @@ def test_a_failed_create_leaves_no_connector_and_no_credential(
     assert error.value.error_code == OnyxErrorCode.CONNECTOR_VALIDATION_FAILED
     assert _connector(db_session, name) is None
     assert _credentials_of(db_session, owner) == 0
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_an_unexpected_failure_also_frees_the_name(
+    db_session: Session, users: tuple[User, User], validation: MagicMock
+) -> None:
+    owner, _ = users
+    name = f"draft-create-{uuid4().hex[:8]}"
+    validation.side_effect = RuntimeError("unexpected")
+
+    with pytest.raises(RuntimeError):
+        create_connector_with_credential(
+            _request(name, credential_json={"token": "typed-secret"}),
+            user=owner,
+            db_session=db_session,
+        )
+
+    assert _connector(db_session, name) is None
+    assert _credentials_of(db_session, owner) == 0
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_typed_values_are_sealed_in_the_shape_a_save_gives(
+    users: tuple[User, User],
+) -> None:
+    owner, _ = users
+
+    resolved = resolve_draft_credential(
+        credential_json={"confluence_access_token": "typed-secret"},
+        draft_credential=None,
+        source=DocumentSource.CONFLUENCE,
+        user=owner,
+    )
+
+    assert resolved is not None
+    draft, _ = resolved
+    # The account check reads the keys the family codec adds on a save.
+    assert draft.credential_json == {
+        "confluence_username": None,
+        "confluence_access_token": "typed-secret",
+    }
 
 
 @pytest.mark.usefixtures("tenant_context", "validation")
