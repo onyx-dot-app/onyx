@@ -79,10 +79,6 @@ class CCPairReindexResult:
     `unsupported` is True iff the connector class does not implement
     `Resolver`. All targets for that cc_pair are bucketed into
     `failed_doc_ids` in that case so the admin sees a clear signal.
-
-    `connector_failures` maps each doc_id the connector failed to the
-    failure it yielded, so the task can record the latest reason on the
-    source error.
     """
 
     def __init__(
@@ -90,12 +86,10 @@ class CCPairReindexResult:
         landed_doc_ids: set[str],
         failed_doc_ids: set[str],
         unsupported: bool,
-        connector_failures: dict[str, ConnectorFailure] | None = None,
     ) -> None:
         self.landed_doc_ids = landed_doc_ids
         self.failed_doc_ids = failed_doc_ids
         self.unsupported = unsupported
-        self.connector_failures: dict[str, ConnectorFailure] = connector_failures or {}
 
 
 def _flush_batch(
@@ -220,6 +214,7 @@ def process_targets_for_cc_pair(
     attempts: Iterable[IndexAttempt],
     tenant_id: str,
     db_session: Session,
+    connector_failures: dict[str, ConnectorFailure],
 ) -> CCPairReindexResult:
     """Fetch + index every target for one cc_pair.
 
@@ -228,6 +223,9 @@ def process_targets_for_cc_pair(
     connector is instantiated once and its `reindex` output is fed
     into the pipeline once per attempt so all active indexes receive
     the same Documents.
+
+    `connector_failures` is filled by doc_id as the connector yields
+    failures, so the caller keeps them even when this raises.
     """
     target_doc_ids = {t.document_id for t in targets}
     cc_pair_attempts = [
@@ -278,7 +276,6 @@ def process_targets_for_cc_pair(
     connector.set_raw_file_callback(staging_callback)
 
     docs: list[Document] = []
-    connector_failures: dict[str, ConnectorFailure] = {}
     landed_overall: set[str] = set()
     failed_pipeline_overall: set[str] = set()
     try:
@@ -353,7 +350,6 @@ def process_targets_for_cc_pair(
         landed_doc_ids=landed_doc_ids,
         failed_doc_ids=failed_doc_ids,
         unsupported=False,
-        connector_failures=connector_failures,
     )
 
 

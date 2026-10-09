@@ -94,6 +94,7 @@ def run_targeted_reindex(
             failed_keys: set[tuple[int, str]] = set()
             connector_failures: dict[tuple[int, str], ConnectorFailure] = {}
             for cc_pair_id, cc_targets in by_cc_pair.items():
+                cc_pair_failures: dict[str, ConnectorFailure] = {}
                 try:
                     result = process_targets_for_cc_pair(
                         cc_pair_id=cc_pair_id,
@@ -101,6 +102,7 @@ def run_targeted_reindex(
                         attempts=attempts,
                         tenant_id=tenant_id,
                         db_session=db_session,
+                        connector_failures=cc_pair_failures,
                     )
                 except Exception:
                     # One bad cc_pair must not poison the rest of the
@@ -112,15 +114,17 @@ def run_targeted_reindex(
                     )
                     failed_keys.update((cc_pair_id, t.document_id) for t in cc_targets)
                     continue
+                finally:
+                    # Failures yielded before a raise still carry the latest reason.
+                    connector_failures.update(
+                        ((cc_pair_id, doc_id), failure)
+                        for doc_id, failure in cc_pair_failures.items()
+                    )
                 landed_keys.update(
                     (cc_pair_id, doc_id) for doc_id in result.landed_doc_ids
                 )
                 failed_keys.update(
                     (cc_pair_id, doc_id) for doc_id in result.failed_doc_ids
-                )
-                connector_failures.update(
-                    ((cc_pair_id, doc_id), failure)
-                    for doc_id, failure in result.connector_failures.items()
                 )
                 if result.unsupported:
                     log.info(
