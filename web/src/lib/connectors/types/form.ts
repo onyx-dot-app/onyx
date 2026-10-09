@@ -141,4 +141,12 @@ export interface ConnectionConfiguration {
     values: any,
     currentCredential: Credential<any> | null
   ) => boolean;
+  /**
+   * Config values that follow from the picked credential, such as its kind.
+   * The form sets them whenever the credential changes. Each must also be a
+   * field (usually hidden), so that the checks and the create request send it.
+   */
+  configFromCredential?: (
+    credential: Credential<unknown> | null
+  ) => Record<string, string | undefined>;
 }

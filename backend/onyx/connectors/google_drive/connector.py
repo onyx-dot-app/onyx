@@ -320,6 +320,8 @@ class GoogleDriveConnector(
         specific_user_emails: str | None = None,
         exclude_domain_link_only: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,  # noqa: ARG002
+        # Read by capability checks only; the kind comes from the credential.
+        credential_kind: GoogleCredentialKind | None = None,  # noqa: ARG002
         # OLD PARAMETERS
         folder_paths: list[str] | None = None,
         include_shared: bool | None = None,
