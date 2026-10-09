@@ -67,11 +67,7 @@ export default function DraftAccountSummaryCard({
           />
         </Section>
         {/* Repeats the card's own action, so it leaves the tab order. */}
-        <Button
-          prominence="tertiary"
-          rightIcon={SvgUserEdit}
-          tabIndex={-1}
-        >
+        <Button prominence="tertiary" rightIcon={SvgUserEdit} tabIndex={-1}>
           {t("draftSummary.editButton.label")}
         </Button>
       </Section>
