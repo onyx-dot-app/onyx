@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Divider, SelectCard, Tabs } from "@opal/components";
-import { Content, Section, toast } from "@opal/layouts";
-import { SvgPlusCircle } from "@opal/icons";
+import {
+  Button,
+  Divider,
+  Fold,
+  SelectButton,
+  SelectCard,
+  Tabs,
+} from "@opal/components";
+import { Content, ContentAction, Section, toast } from "@opal/layouts";
+import { SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential, DraftCredential } from "@/lib/credentials/types";
 import {
   useCredentialCheckReports,
@@ -90,6 +97,7 @@ export default function AuthenticationAccountSection({
     isAuthorizing,
   } = useCredentialSetup(connector);
   const checkReports = useCredentialCheckReports(connector);
+  const [showSavedAccounts, setShowSavedAccounts] = useState<boolean>(true);
 
   // The create card's one label, whatever the number of routes; the tabs
   // inside it name the routes.
@@ -250,13 +258,36 @@ export default function AuthenticationAccountSection({
 
   return (
     <Section gap={2} alignItems="stretch" width="full">
-      <Content
+      <ContentAction
         title={t("add.credentialStep.title")}
         description={t("add.credentialStep.description", {
           appName: settings.appName,
         })}
         sizePreset="main-content"
         variant="section"
+        padding={0}
+        rightChildren={
+          <SelectButton
+            icon={SvgListTree}
+            variant="select-heavy"
+            // Blue while an account is picked; held in its hover look
+            // while the list is open.
+            state={
+              selectedSavedId === null
+                ? "empty"
+                : showSavedAccounts
+                  ? "selected"
+                  : "filled"
+            }
+            interaction={showSavedAccounts ? "hover" : "rest"}
+            aria-expanded={showSavedAccounts}
+            onClick={() => setShowSavedAccounts((shown) => !shown)}
+          >
+            {t("add.savedAccountsButton.label", {
+              count: credentials?.length ?? 0,
+            })}
+          </SelectButton>
+        }
       />
 
       {/* The page mounts this step only once the credentials have loaded,
@@ -264,22 +295,29 @@ export default function AuthenticationAccountSection({
       the types honest. */}
       {!credentials ? null : (
         <Section gap={6} alignItems="stretch" width="full">
-          <Section gap={2} alignItems="stretch" width="full" height="fit">
-            {credentials.map((credential) => (
-              <AuthenticationAccountCard
-                key={credential.id}
-                credential={credential}
-                source={connector}
-                sourceName={displayName}
-                selected={credential.id === selectedSavedId}
-                selectable={isSelectable(credential)}
-                onSelect={() => onSwap(credential)}
-                onDeselect={() => onCredentialChange(null)}
-                onDelete={() => onDeleteCredential(credential)}
-                checkReport={checkReports.reportFor(credential.id)}
-                onRerunChecks={() => checkReports.rerun(credential.id)}
-              />
-            ))}
+          <Section gap={0} alignItems="stretch" width="full" height="fit">
+            {/* Hidden accounts animate away, then leave the page. The fold
+            holds the cards' gap, so a closed one leaves no space behind. A
+            div, as Section's own padding would override the bottom one. */}
+            <Fold open={showSavedAccounts && credentials.length > 0}>
+              <div className="flex flex-col gap-2 pb-2">
+                {credentials.map((credential) => (
+                  <AuthenticationAccountCard
+                    key={credential.id}
+                    credential={credential}
+                    source={connector}
+                    sourceName={displayName}
+                    selected={credential.id === selectedSavedId}
+                    selectable={isSelectable(credential)}
+                    onSelect={() => onSwap(credential)}
+                    onDeselect={() => onCredentialChange(null)}
+                    onDelete={() => onDeleteCredential(credential)}
+                    checkReport={checkReports.reportFor(credential.id)}
+                    onRerunChecks={() => checkReports.rerun(credential.id)}
+                  />
+                ))}
+              </div>
+            </Fold>
             <Section gap={2} alignItems="stretch" width="full">
               {canAuthorize && (
                 <Section flexDirection="row" justifyContent="start" gap={1}>
