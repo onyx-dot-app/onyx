@@ -7,7 +7,7 @@ from onyx.connectors.config_diff import (
     build_source_scoped_backfill_config,
     classify_source_config_change,
 )
-from onyx.connectors.field_policy import ScopeDirection
+from onyx.connectors.field_policy import FieldClass, ScopeDirection
 from onyx.connectors.github.config import GithubConnectorConfig
 from onyx.connectors.planning_rule_registry import PLANNING_RULES
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
@@ -156,41 +156,6 @@ def test_every_rule_reads_the_config_class_of_its_source() -> None:
             {"calendar_future_days": ScopeDirection.NARROW},
         ),
         (DocumentSource.OUTLOOK, {}, {"calendar_past_days": 400}, {}),
-        # Outlook walks the listed mailboxes plus the members of the listed
-        # groups, and every mailbox when neither is listed.
-        (
-            DocumentSource.OUTLOOK,
-            {},
-            {"mailbox_groups": ["Sales"]},
-            {"mailbox_groups": ScopeDirection.NARROW},
-        ),
-        (
-            DocumentSource.OUTLOOK,
-            {"mailboxes": ["a@example.com"]},
-            {"mailboxes": ["a@example.com"], "mailbox_groups": ["Sales"]},
-            {"mailbox_groups": ScopeDirection.WIDEN},
-        ),
-        (
-            DocumentSource.OUTLOOK,
-            {"mailboxes": ["a@example.com"]},
-            {"mailbox_groups": ["Sales"]},
-            {
-                "mailboxes": ScopeDirection.BOTH,
-                "mailbox_groups": ScopeDirection.BOTH,
-            },
-        ),
-        (
-            DocumentSource.OUTLOOK,
-            {"mailbox_groups": ["Sales"]},
-            {"mailbox_groups": []},
-            {"mailbox_groups": ScopeDirection.WIDEN},
-        ),
-        (
-            DocumentSource.OUTLOOK,
-            {"mailboxes": ["A@example.com"]},
-            {"mailboxes": [" a@example.com"]},
-            {},
-        ),
         # Salesforce
         (
             DocumentSource.SALESFORCE,
@@ -310,18 +275,6 @@ def test_every_rule_reads_the_config_class_of_its_source() -> None:
             {"recursive_index_enabled": ScopeDirection.WIDEN},
         ),
         # Outlook matches excluded folder names without case.
-        (
-            DocumentSource.OUTLOOK,
-            {"excluded_folders": ["Inbox"]},
-            {"excluded_folders": ["inbox "]},
-            {},
-        ),
-        (
-            DocumentSource.OUTLOOK,
-            {"excluded_folders": ["Inbox"]},
-            {"excluded_folders": ["inbox", "Sent"]},
-            {"excluded_folders": ScopeDirection.NARROW},
-        ),
         # Two unbounded values are the same scope.
         (DocumentSource.DISCORD, {"start_date": None}, {"start_date": ""}, {}),
         # TestRail: 0 and blank are the default limit, and only None or a
@@ -451,3 +404,28 @@ def test_rule_direction_blocks_scoped_backfill() -> None:
         )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "old, new",
+    [
+        (
+            {"mailboxes": ["a@example.com"]},
+            {"mailboxes": ["a@example.com", "b@example.com"]},
+        ),
+        ({}, {"mailbox_groups": ["Sales"]}),
+        (
+            {"excluded_folders": ["Inbox"]},
+            {"excluded_folders": ["Inbox", "Sent Items"]},
+        ),
+    ],
+)
+def test_outlook_roster_change_is_an_identity_change(
+    old: dict[str, Any], new: dict[str, Any]
+) -> None:
+    """The walked mailboxes and folders decide each thread document's builder,
+    content and readers, so no backfill or prune of part of them is correct."""
+    changes = classify_source_config_change(DocumentSource.OUTLOOK, old, new)
+
+    assert changes
+    assert {change.field_class for change in changes} == {FieldClass.IDENTITY}

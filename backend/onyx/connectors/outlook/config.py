@@ -6,8 +6,6 @@ from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
     ScopeDirection,
-    ScopeExclude,
-    ScopeInclude,
     ScopeOpaque,
     ScopeToggle,
 )
@@ -22,11 +20,9 @@ DEFAULT_CALENDAR_FUTURE_DAYS = 180
 
 _CALENDAR_PAST_DAYS = "calendar_past_days"
 _CALENDAR_FUTURE_DAYS = "calendar_future_days"
-_MAILBOXES = "mailboxes"
-_MAILBOX_GROUPS = "mailbox_groups"
-_EXCLUDED_FOLDERS = "excluded_folders"
 # Directions come from outlook_planning_rule: a larger window widens.
 _CALENDAR_WINDOW = FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
+_THREAD_ROSTER = FieldPolicy(FieldClass.IDENTITY)
 
 
 def _window_direction(
@@ -37,74 +33,14 @@ def _window_direction(
     return ScopeDirection.WIDEN if new_days > old_days else ScopeDirection.NARROW
 
 
-def _mailbox_items(config: "OutlookConnectorConfig") -> set[tuple[str, str]]:
-    return {
-        (field_name, name.strip().casefold())
-        for field_name, names in (
-            (_MAILBOXES, config.mailboxes),
-            (_MAILBOX_GROUPS, config.mailbox_groups),
-        )
-        for name in names or []
-        if name.strip()
-    }
-
-
-def _mailbox_direction(
-    old: "OutlookConnectorConfig", new: "OutlookConnectorConfig"
-) -> ScopeDirection:
-    """The walked mailboxes are the listed ones plus the members of the listed
-    groups. With neither listed, every mailbox is walked."""
-    old_items: set[tuple[str, str]] = _mailbox_items(old)
-    new_items: set[tuple[str, str]] = _mailbox_items(new)
-    if old_items == new_items:
-        return ScopeDirection.NONE
-    if not old_items:
-        return ScopeDirection.NARROW
-    if not new_items:
-        return ScopeDirection.WIDEN
-    added: bool = bool(new_items - old_items)
-    removed: bool = bool(old_items - new_items)
-    if added and removed:
-        return ScopeDirection.BOTH
-    return ScopeDirection.WIDEN if added else ScopeDirection.NARROW
-
-
-def _folder_names(folders: list[str] | None) -> set[str]:
-    """The excluded folder names as the connector matches them."""
-    return {name.strip().casefold() for name in folders or [] if name.strip()}
-
-
-def _excluded_folders_direction(
-    old_folders: list[str] | None, new_folders: list[str] | None
-) -> ScopeDirection:
-    old_names: set[str] = _folder_names(old_folders)
-    new_names: set[str] = _folder_names(new_folders)
-    # An added exclusion narrows, a removed one widens.
-    narrows: bool = bool(new_names - old_names)
-    widens: bool = bool(old_names - new_names)
-    if narrows and widens:
-        return ScopeDirection.BOTH
-    if narrows:
-        return ScopeDirection.NARROW
-    if widens:
-        return ScopeDirection.WIDEN
-    return ScopeDirection.NONE
-
-
 class OutlookConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
-    mailboxes: Annotated[
-        list[str] | None,
-        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
-    ] = None
+    # The walked mailboxes and folders decide each thread document's builder,
+    # content and readers (threads.py), so a change rebuilds every thread.
+    mailboxes: Annotated[list[str] | None, _THREAD_ROSTER] = None
     # Entra groups whose members' mailboxes are walked, with the mailboxes
-    # above. Directions come from outlook_planning_rule.
-    mailbox_groups: Annotated[
-        list[str] | None,
-        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
-    ] = None
-    excluded_folders: Annotated[
-        list[str] | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeExclude())
-    ] = None
+    # above.
+    mailbox_groups: Annotated[list[str] | None, _THREAD_ROSTER] = None
+    excluded_folders: Annotated[list[str] | None, _THREAD_ROSTER] = None
     # Adds attachment text to conversation documents.
     include_attachments: Annotated[bool, FieldPolicy(FieldClass.BEHAVIOR)] = False
     include_calendar: Annotated[
@@ -123,21 +59,8 @@ def outlook_planning_rule(
     # The window has no effect while the calendar is off on either side:
     # include_calendar carries that change.
     calendar_on: bool = old.include_calendar and new.include_calendar
-    mailbox_direction: ScopeDirection = _mailbox_direction(old, new)
-    mailbox_fields: dict[str, ScopeDirection] = {
-        field_name: mailbox_direction
-        for field_name, old_value, new_value in (
-            (_MAILBOXES, old.mailboxes, new.mailboxes),
-            (_MAILBOX_GROUPS, old.mailbox_groups, new.mailbox_groups),
-        )
-        if old_value != new_value
-    }
     return ConnectorChangeOverride(
-        scope_directions=mailbox_fields
-        | {
-            _EXCLUDED_FOLDERS: _excluded_folders_direction(
-                old.excluded_folders, new.excluded_folders
-            ),
+        scope_directions={
             _CALENDAR_PAST_DAYS: _window_direction(
                 old.calendar_past_days, new.calendar_past_days, calendar_on
             ),
