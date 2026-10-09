@@ -30,7 +30,7 @@ from onyx.connectors.models import ConnectorFailure, Document, SlimDocument, Tex
 from onyx.connectors.teams import files as files_module
 from onyx.connectors.teams import listing as listing_module
 from onyx.connectors.teams import session as session_module
-from onyx.connectors.teams.connector import TeamsConnector
+from onyx.connectors.teams.connector import TeamsCheckpoint, TeamsConnector
 from onyx.connectors.teams.files import FileSource, file_document_id
 from onyx.connectors.teams.models import ChannelLibrary, ChannelRef
 from onyx.connectors.teams.utils import (
@@ -39,6 +39,7 @@ from onyx.connectors.teams.utils import (
     message_delta_url,
 )
 from tests.unit.onyx.connectors.teams.helpers import (
+    CHANNEL,
     CHANNEL_ID,
     DELTA_URL,
     MEMBERS_URL,
@@ -258,6 +259,92 @@ def test_files_follow_the_last_page_and_respect_the_poll_window(
     assert library["listed"] == [
         (DRIVE, FOLDER_ID, datetime.fromtimestamp(start, tz=timezone.utc))
     ]
+    assert checkpoint.has_more is False
+
+
+OTHER_CHANNEL = ChannelRef(
+    team_id=TEAM_ID,
+    id="19:other@thread.tacv2",
+    display_name="Other",
+    membership_type="standard",
+)
+
+
+def _two_channels_with_files(
+    library: dict[str, Any],
+) -> tuple[MagicMock, TeamsCheckpoint]:
+    """Two channels on their last page, both on the one library, a file each."""
+    library["files"] = [_item("item-1", "Plan.pdf")]
+    routes = _channel_routes(message("m1", "one"))
+    routes[message_delta_url(TEAM_ID, OTHER_CHANNEL.id, 0)] = {
+        "value": [message("m2", "two")]
+    }
+    routes[replies_url("m2", OTHER_CHANNEL.id)] = {"value": []}
+    routes[f"teams/{TEAM_ID}/channels/{OTHER_CHANNEL.id}/filesFolder"] = routes[
+        FOLDER_URL
+    ]
+    checkpoint = TeamsCheckpoint(
+        has_more=True,
+        todo_team_ids=[],
+        todo_channels=[CHANNEL, OTHER_CHANNEL],
+    )
+    return graph_client(routes), checkpoint
+
+
+def test_the_files_of_finished_channels_are_read_side_by_side(
+    library: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, checkpoint = _two_channels_with_files(library)
+    extract = files_module.extract_drive_item_content
+    both_in_flight = threading.Barrier(2, timeout=5)
+
+    def meet(item: DriveItemData, **kwargs: Any) -> Any:
+        # Each file read waits for the other, so files read one channel at a
+        # time break the barrier.
+        both_in_flight.wait()
+        return extract(item, **kwargs)
+
+    monkeypatch.setattr(files_module, "extract_drive_item_content", meet)
+
+    items, checkpoint = step(connector(client, include_attachments=True), checkpoint)
+
+    assert [item for item in items if isinstance(item, ConnectorFailure)] == []
+    assert sorted(_document_ids(items)) == sorted(
+        ["m1", "m2", file_document_id("item-1"), file_document_id("item-1")]
+    )
+    assert checkpoint.has_more is False
+
+
+def test_a_file_listing_outage_fails_the_step_and_the_retry_reads_it_again(
+    library: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An outage while a channel's files are read fails the step, so the saved
+    checkpoint stays where it was and the retried step reads every file."""
+    client, checkpoint = _two_channels_with_files(library)
+    saved: str = checkpoint.model_dump_json()
+    outages: list[int] = [1]
+    listing = files_module.iter_drive_items_paged
+
+    def flaky(_client: Any, drive_id: str, **kwargs: Any) -> Any:
+        if outages:
+            outages.pop()
+            response = MagicMock(status_code=503, text="outage")
+            response.headers = {"Content-Type": "text/plain"}
+            raise requests.HTTPError("503", response=response)
+        return listing(_client, drive_id, **kwargs)
+
+    monkeypatch.setattr(files_module, "iter_drive_items_paged", flaky)
+    teams_connector = connector(client, include_attachments=True)
+
+    with pytest.raises(requests.HTTPError):
+        step(teams_connector, checkpoint)
+
+    retried = teams_connector.validate_checkpoint_json(saved)
+    items, checkpoint = step(teams_connector, retried)
+
+    assert sorted(_document_ids(items)) == sorted(
+        ["m1", "m2", file_document_id("item-1"), file_document_id("item-1")]
+    )
     assert checkpoint.has_more is False
 
 

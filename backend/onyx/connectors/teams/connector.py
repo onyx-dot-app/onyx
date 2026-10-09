@@ -1,6 +1,6 @@
 import copy
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
 from itertools import chain
 from typing import Any, cast
@@ -398,40 +398,63 @@ class TeamsConnector(
             if export.fell_back:
                 checkpoint.todo_channels.extend(export.channels)
                 continue
-            for channel in export.channels:
-                yield from self._opened_channel_files(channel, start)
+            yield from self._channel_files_side_by_side(export.channels, start)
         del checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
+
+    def _channel_files_side_by_side(
+        self, channels: Sequence[ChannelRef], start: SecondsSinceUnixEpoch
+    ) -> Iterator[Document | ConnectorFailure]:
+        """The files of these channels, max_workers workers draining them a
+        channel at a time. A worker yields each file as it is read, so it
+        buffers no library. The SharePoint REST context behind the readers is
+        per thread."""
+        if self._files is None:
+            return
+        yield from drain(
+            channels,
+            lambda channel: self._opened_channel_files(channel, start),
+            self.max_workers,
+        )
 
     def _opened_channel_files(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
-        """A channel's files, library opened and left here. A channel Graph
-        describes without a library, or refuses, is one recorded failure.
-        Anything else fails the attempt."""
+        """A channel's files, library opened and left within this call. A
+        channel Graph describes without a library, or refuses, is one recorded
+        failure. Anything else fails the attempt."""
         if self._files is None:
-            return
+            raise RuntimeError("Channel files are read only when attachments are on")
         try:
-            self._files.open(channel)
-        except ChannelFilesUnavailable as e:
-            yield channel_failure(channel, "files", e)
-            return
-        except requests.HTTPError as e:
-            if not is_permanent(e):
-                raise
-            yield channel_failure(channel, "files", e)
-            return
-        try:
+            refusal = self._open_library(channel)
+            if refusal is not None:
+                yield refusal
+                return
             yield from self._channel_files(channel, start)
         finally:
             self._files.leave(channel)
+
+    def _open_library(self, channel: ChannelRef) -> ConnectorFailure | None:
+        """Opens the channel's library, or returns the one failure a channel
+        without a usable library costs. An outage raises."""
+        if self._files is None:
+            raise RuntimeError("Channel files are read only when attachments are on")
+        try:
+            self._files.open(channel)
+        except ChannelFilesUnavailable as e:
+            return channel_failure(channel, "files", e)
+        except requests.HTTPError as e:
+            if not is_permanent(e):
+                raise
+            return channel_failure(channel, "files", e)
+        return None
 
     def _channel_step(
         self, checkpoint: TeamsCheckpoint, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
         """One page of every active channel, side by side, then the files of
-        each channel whose last page this was. Cursors are advanced on copies
-        and written back only once every channel finished its page, so a raise
-        in one leaves the whole step to be retried."""
+        the channels whose last page this was, side by side too. Cursors are
+        advanced on copies and written back only once every channel finished
+        its page, so a raise in one leaves the whole step to be retried."""
         while len(checkpoint.active) < self.max_workers and checkpoint.todo_channels:
             checkpoint.active.append(
                 ChannelCursor(channel=checkpoint.todo_channels.pop())
@@ -450,27 +473,26 @@ class TeamsConnector(
             ),
         )
         active: list[ChannelCursor] = []
+        files_due: list[ChannelRef] = []
         for advance in advances:
             yield from advance.items
             if advance.restarted:
                 self._restarted_channel_ids.add(advance.cursor.channel.id)
             if not advance.done:
                 active.append(advance.cursor)
-                continue
-            # The SharePoint REST client behind file readers is not safe across
-            # threads, so a channel's files are read here, after its last page.
-            if advance.files_due and self._files is not None:
-                yield from self._channel_files(advance.cursor.channel, start)
-            if self._files is not None:
+            elif advance.files_due:
+                files_due.append(advance.cursor.channel)
+            elif self._files is not None:
                 self._files.leave(advance.cursor.channel)
         checkpoint.active = active
+        yield from self._channel_files_side_by_side(files_due, start)
 
     def _advance_channel(
         self, cursor: ChannelCursor, start: SecondsSinceUnixEpoch
     ) -> ChannelAdvance:
         """One page of the cursor's channel: its threads with their replies and
-        images. Done when the page was its last or is refused; the step leaves
-        the channel."""
+        images. Done when the page was its last or is refused; the files of a
+        channel read to its last page follow, off this worker."""
         channel = cursor.channel
         items: list[Document | ConnectorFailure] = []
 
@@ -525,7 +547,7 @@ class TeamsConnector(
     def _channel_files(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
-        """The files follow the last page of messages. A refused folder listing
+        """A channel's files once its library is open. A refused folder listing
         on Graph or a refused site on SharePoint REST (the SDK's own exception)
         is one recorded failure for the channel, anything else fails the attempt."""
         if self._files is None:
