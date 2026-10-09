@@ -306,6 +306,10 @@ def _get_file_by_id(
         return None
 
 
+# Set on a shortcut's resolved target, holding the shortcut's id.
+RESOLVED_FROM_SHORTCUT_KEY = "onyxResolvedFromShortcutId"
+
+
 def _is_drive_shortcut(file: GoogleDriveFileType) -> bool:
     return file.get("mimeType") == DRIVE_SHORTCUT_TYPE
 
@@ -378,6 +382,9 @@ def _resolve_file_or_shortcut(
     listing_modified_time = file.get(GoogleFields.MODIFIED_TIME.value)
     if listing_modified_time is not None:
         target[GoogleFields.MODIFIED_TIME.value] = listing_modified_time
+    # The target now looks like any listed file; record where it came from so
+    # partitioned retrieval does not count it as part of the listing's scope.
+    target[RESOLVED_FROM_SHORTCUT_KEY] = file.get("id")
     return target
 
 
