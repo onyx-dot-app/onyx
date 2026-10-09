@@ -2748,7 +2748,7 @@
           }
         },
         "realm": {
-          "defaultHint": "입력하지 않으면 {value}을(를) 사용합니다"
+          "description": "사이트 URL 또는 하위 도메인을 붙여 넣으세요. 해당 위치에서 {source} REST API에 접근할 수 있어야 합니다.{hasDefault, select, true { 입력하지 않으면 대신 {value}이(가) 사용됩니다.} other {}}"
         }
       },
       "credentialRequired": {
