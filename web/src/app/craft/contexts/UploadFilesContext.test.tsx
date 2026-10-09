@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { act, deferred, renderHook, waitFor } from "@tests/setup/test-utils";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -355,3 +355,33 @@ it.each(["upload", "delete"])(
     ).toBe(0);
   }
 );
+
+it("rejects a listing from before the chat unmounted and revisited its session", async () => {
+  const previousVisit = deferred<DirectoryListing>();
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockReturnValueOnce(previousVisit.promise)
+    .mockResolvedValueOnce(listing("current.txt"));
+  const { result, rerender } = renderHook(
+    ({ mounted }) => {
+      const context = useUploadFilesContext();
+      useEffect(() => {
+        if (!mounted) return;
+        context.setActiveSession("session-a");
+        return () => context.setActiveSession(null);
+      }, [mounted, context.setActiveSession]);
+      return context;
+    },
+    { initialProps: { mounted: true }, wrapper: Provider }
+  );
+  await waitFor(() => expect(fetchDirectoryListing).toHaveBeenCalledTimes(1));
+  rerender({ mounted: false });
+  rerender({ mounted: true });
+  await waitFor(() =>
+    expect(result.current.currentMessageFiles[0]?.name).toBe("current.txt")
+  );
+  await act(async () => previousVisit.resolve(listing("stale.txt")));
+  expect(result.current.currentMessageFiles.map((file) => file.name)).toEqual([
+    "current.txt",
+  ]);
+});

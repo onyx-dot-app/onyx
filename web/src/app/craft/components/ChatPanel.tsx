@@ -255,6 +255,10 @@ export default function BuildChatPanel({
     setActiveSession(activeSession);
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
+  useEffect(() => {
+    return () => setActiveSession(null);
+  }, [setActiveSession]);
+
   const maybeAutoOpenWebapp = useBuildSessionStore(
     (s) => s.maybeAutoOpenWebapp
   );

@@ -172,6 +172,10 @@ export enum UploadErrorType {
   UNKNOWN = "UNKNOWN",
 }
 
+interface AttachmentScope {
+  sessionId: string | null;
+}
+
 interface ClassifiedUploadError {
   type: UploadErrorType;
   message: string;
@@ -295,7 +299,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     []
   );
   const currentMessageFilesRef = useRef<BuildFile[]>([]);
-  const [activeScope, setActiveScope] = useState<{ sessionId: string | null }>({
+  const [activeScope, setActiveScope] = useState<AttachmentScope>({
     sessionId: null,
   });
   const activeSessionId = activeScope.sessionId;
@@ -344,7 +348,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   // Immediate and pending uploads share completion and session-scope checks.
   const uploadAttachedFiles = useCallback(
     async (sessionId: string, files: BuildFile[]): Promise<void> => {
-      const scope = activeScopeRef.current;
+      const scope: AttachmentScope = activeScopeRef.current;
       if (scope.sessionId !== sessionId) return;
       const results = await Promise.all(
         files.map(async (file) => {
@@ -394,7 +398,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
   const uploadPendingFilesInternal = useCallback(
     async (sessionId: string): Promise<void> => {
-      const scope = activeScopeRef.current;
+      const scope: AttachmentScope = activeScopeRef.current;
       if (scope.sessionId !== sessionId || isUploadingPendingRef.current)
         return;
       const pendingFiles = currentMessageFilesRef.current.filter(
@@ -402,7 +406,9 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       );
       if (pendingFiles.length === 0) return;
       isUploadingPendingRef.current = true;
-      const pendingIds = new Set(pendingFiles.map((file) => file.id));
+      const pendingIds: Set<string> = new Set(
+        pendingFiles.map((file) => file.id)
+      );
       setCurrentMessageFiles((files) =>
         files.map((file) =>
           pendingIds.has(file.id)
@@ -426,7 +432,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    */
   const fetchExistingAttachmentsInternal = useCallback(
     async (sessionId: string, replace: boolean): Promise<void> => {
-      const scope = activeScopeRef.current;
+      const scope: AttachmentScope = activeScopeRef.current;
       if (scope.sessionId !== sessionId) return;
       // Request deduplication
       if (fetchingSessionRef.current === sessionId) return;
@@ -571,9 +577,9 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    * Set the active session. Triggers fetching/clearing as needed.
    */
   const setActiveSession = useCallback((sessionId: string | null) => {
-    const previous = activeScopeRef.current;
+    const previous: AttachmentScope = activeScopeRef.current;
     if (previous.sessionId === sessionId) return;
-    const nextScope = { sessionId };
+    const nextScope: AttachmentScope = { sessionId };
     activeScopeRef.current = nextScope;
     fetchingSessionRef.current = null;
     isUploadingPendingRef.current = false;
@@ -592,7 +598,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    */
   const uploadFiles = useCallback(
     async (files: File[]): Promise<BuildFile[]> => {
-      const scope = activeScopeRef.current;
+      const scope: AttachmentScope = activeScopeRef.current;
       if (scope !== activeScope) return [];
       // Get current files for batch validation
       const existingFiles = currentMessageFiles;
@@ -660,7 +666,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
   const removeFile = useCallback(
     (fileId: string) => {
-      const scope = activeScopeRef.current;
+      const scope: AttachmentScope = activeScopeRef.current;
       if (scope !== activeScope || activeDeletionsRef.current.has(fileId))
         return;
       const currentFiles = currentMessageFilesRef.current;
