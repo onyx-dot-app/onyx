@@ -432,6 +432,23 @@ def test_failed_tool_call_does_not_fail_the_query(query_sink: Mock) -> None:
     assert _query_record(query_sink)["outcome"] == "success"
 
 
+@pytest.mark.parametrize(
+    "code, reported", [("QUERY_REJECTED", False), ("STREAM_WRITER_ERROR", True)]
+)
+def test_a_chat_that_a_hook_rejects_is_not_a_failed_query(
+    query_sink: Mock, code: str, reported: bool
+) -> None:
+    from onyx.chat.models import StreamingError
+
+    packets = [StreamingError(error="PRIVATE reason", error_code=code)]
+    assert list(query.observe_chat_packets(iter(packets), channel="web")) == packets
+    assert query_sink.called is reported
+    if reported:
+        record = _query_record(query_sink)
+        assert record["outcome"] == "failure"
+        assert "PRIVATE" not in json.dumps(record)
+
+
 def test_query_failure_and_disconnect_do_not_replace_application_errors(
     query_sink: Mock,
 ) -> None:

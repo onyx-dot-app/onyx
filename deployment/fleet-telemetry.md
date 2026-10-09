@@ -49,7 +49,9 @@ Telemetry needs no extra container, Helm value, or migration.
 
 Each pass reads the rows that changed since the previous pass, and all work that is still running.
 It reads 5 minutes of the previous window again, for rows that committed late. Event IDs come from
-the row identity and update time, so the fleet service drops the repeated events.
+the row identity and update time, so the fleet service drops the repeated events. Each read returns
+the oldest changes first. When a read reaches its row limit, or the queue is full, the next pass
+starts at the first row that this pass did not send.
 
 ## Cost and failure behavior
 
@@ -60,7 +62,7 @@ the row identity and update time, so the fleet service drops the repeated events
   attempts. The reply of the fleet service is final: the sender does not send rejected events again.
 - Each collection pass uses one transaction. Each statement stops after 1.5 seconds and reads at
   most 1000 rows. A failed pass adds a source error to the heartbeat and reads the same window again
-  on the next pass.
+  on the next pass. A pass that was stopped early continues on the next pass, so rows are not skipped.
 - Short-lived indexing processes wait at most 2 seconds at exit for their last delivery.
 - Readiness, requests, and indexing never wait for telemetry.
 

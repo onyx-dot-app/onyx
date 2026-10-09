@@ -8,13 +8,16 @@ the rows that changed since the previous run and the work that is still running.
 import json
 import re
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from itertools import groupby
 from typing import Any, TypeIs
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.fleet_telemetry import (
+    ROW_LIMIT,
     attempt_rows,
     connector_rows,
     email_domain_rows,
@@ -41,7 +44,8 @@ _OVERLAP: timedelta = timedelta(minutes=5)
 # Connectors, signup domains, and the license go out when they change, and at
 # least every six hours.
 _INVENTORY_SECONDS: int = 6 * 3600
-_LAST_RUN_KEY: str = "fleet_telemetry_last_run"
+# Where the next run starts reading.
+_CURSOR_KEY: str = "fleet_telemetry_cursor"
 _INVENTORY_KEY: str = "fleet_telemetry_inventory"
 _RUNNING_STATES: frozenset[str] = frozenset({"not_started", "in_progress"})
 # Connector configuration lists that select what to index. Only their sizes leave.
@@ -232,13 +236,13 @@ def _send(
     entity: str,
     revision: datetime,
     occurred_at: datetime | None = None,
-) -> None:
+) -> bool:
     """Send with an event ID made from the row's identity and revision time."""
     identity: str = f"{tenant_id}:{entity}:{revision.isoformat()}"
     if occurred_at is not None:
         # Running work changes its counters without a new revision time.
         identity += ":" + fingerprint(json.dumps(data, sort_keys=True))
-    sender.emit(
+    return sender.emit(
         event_type,
         data,
         tenant_id=tenant_id,
@@ -258,12 +262,55 @@ def _send_inventory(
     previous: bytes | None = cache.get(_INVENTORY_KEY)
     if previous is not None and previous.decode() == signature:
         return
-    sent: list[bool] = [
-        sender.emit(event_type, data, tenant_id=tenant_id)
-        for event_type, data in inventory
-    ]
-    if all(sent):
-        cache.set(_INVENTORY_KEY, signature, ex=_INVENTORY_SECONDS)
+    for event_type, data in inventory:
+        if not sender.emit(event_type, data, tenant_id=tenant_id) and sender.full:
+            # The next run sends the whole inventory again.
+            return
+    cache.set(_INVENTORY_KEY, signature, ex=_INVENTORY_SECONDS)
+
+
+def _send_in_order(
+    sender: BoundedTelemetry,
+    since: datetime,
+    rows: list[dict[str, Any]],
+    changed_at: str,
+    send: Callable[[dict[str, Any]], bool],
+) -> datetime | None:
+    """Send rows in read order. Return where the next run must resume: the first
+    row that a full queue refused, or the end of a capped read. Rows from before
+    `since` are running work, which every run reads again."""
+    for row in rows:
+        if not send(row) and sender.full:
+            point: datetime = row[changed_at]
+            break
+    else:
+        if len(rows) < ROW_LIMIT:
+            return None
+        point = rows[-1][changed_at]
+    return point if point >= since else None
+
+
+def stage_data(row: dict[str, Any], attempt: dict[str, Any]) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        key: row[key]
+        for key in (
+            "attempt_id",
+            "event_count",
+            "total_duration_ms",
+            "min_duration_ms",
+            "max_duration_ms",
+            "m2_duration_ms",
+        )
+    }
+    data.update(
+        connector_id=attempt["connector_id"],
+        cc_pair_id=attempt["cc_pair_id"],
+        connector_type=attempt["source"].value.lower(),
+        stage_name=row["stage"].value,
+        first_event_at=_iso(row["first_event_at"]),
+        last_event_at=_iso(row["last_event_at"]),
+    )
+    return data
 
 
 def collect_snapshots(tenant_id: str) -> None:
@@ -275,13 +322,12 @@ def collect_snapshots(tenant_id: str) -> None:
     started: datetime = datetime.now(timezone.utc)
     try:
         cache: CacheBackend = get_cache_backend(tenant_id=tenant_id)
-        last_run: bytes | None = cache.get(_LAST_RUN_KEY)
-        since: datetime = started - _FIRST_WINDOW
-        if last_run is not None:
-            since = max(
-                datetime.fromisoformat(last_run.decode()) - _OVERLAP,
-                started - _MAX_WINDOW,
-            )
+        cursor: bytes | None = cache.get(_CURSOR_KEY)
+        since: datetime = (
+            max(datetime.fromisoformat(cursor.decode()), started - _MAX_WINDOW)
+            if cursor is not None
+            else started - _FIRST_WINDOW
+        )
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             limit_statement_time(db_session)
             inventory: list[tuple[str, dict[str, Any]]] = [
@@ -314,61 +360,67 @@ def collect_snapshots(tenant_id: str) -> None:
                 db_session, [row["attempt_id"] for row in attempts], since
             )
             jobs: list[dict[str, Any]] = job_rows(db_session, since)
-        _send_inventory(sender, cache, tenant_id, inventory)
-        for row in attempts:
-            _send(
-                sender,
-                tenant_id,
-                "attempt",
-                attempt_data(row),
-                f"attempt:{row['attempt_id']}",
-                row["time_updated"],
-            )
         by_attempt: dict[int, dict[str, Any]] = {
             row["attempt_id"]: row for row in attempts
         }
-        for row in stages:
-            attempt: dict[str, Any] = by_attempt[row["attempt_id"]]
-            stage_data: dict[str, Any] = {
-                key: row[key]
-                for key in (
-                    "attempt_id",
-                    "event_count",
-                    "total_duration_ms",
-                    "min_duration_ms",
-                    "max_duration_ms",
-                    "m2_duration_ms",
-                )
-            }
-            stage_data.update(
-                connector_id=attempt["connector_id"],
-                cc_pair_id=attempt["cc_pair_id"],
-                connector_type=attempt["source"].value.lower(),
-                stage_name=row["stage"].value,
-                first_event_at=_iso(row["first_event_at"]),
-                last_event_at=_iso(row["last_event_at"]),
-            )
-            # The service requires the event time to equal the summary's last update.
-            _send(
+        resume: list[datetime | None] = [
+            _send_in_order(
                 sender,
-                tenant_id,
-                "stage",
-                stage_data,
-                f"stage:{row['attempt_id']}:{row['stage'].value}",
-                row["last_event_at"],
-            )
-        for row in jobs:
-            if row["revision_at"] is not None:
-                _send(
+                since,
+                attempts,
+                "time_updated",
+                lambda row: _send(
                     sender,
                     tenant_id,
-                    "job",
-                    job_data(row),
-                    row["job_id"],
-                    row["revision_at"],
-                    started if row["state"] in _RUNNING_STATES else None,
-                )
-        cache.set(_LAST_RUN_KEY, started.isoformat(), ex=7 * 24 * 3600)
+                    "attempt",
+                    attempt_data(row),
+                    f"attempt:{row['attempt_id']}",
+                    row["time_updated"],
+                ),
+            ),
+            # The service requires the event time to equal the summary's last update.
+            _send_in_order(
+                sender,
+                since,
+                stages,
+                "last_event_at",
+                lambda row: _send(
+                    sender,
+                    tenant_id,
+                    "stage",
+                    stage_data(row, by_attempt[row["attempt_id"]]),
+                    f"stage:{row['attempt_id']}:{row['stage'].value}",
+                    row["last_event_at"],
+                ),
+            ),
+        ]
+        # Each job table is a separate capped read.
+        for _, table in groupby(jobs, key=lambda row: row["job_id"].split(":")[0]):
+            resume.append(
+                _send_in_order(
+                    sender,
+                    since,
+                    list(table),
+                    "revision_at",
+                    lambda row: _send(
+                        sender,
+                        tenant_id,
+                        "job",
+                        job_data(row),
+                        row["job_id"],
+                        row["revision_at"],
+                        started if row["state"] in _RUNNING_STATES else None,
+                    ),
+                ),
+            )
+        # Work goes first, so a large inventory cannot hold it back.
+        _send_inventory(sender, cache, tenant_id, inventory)
+        next_since: datetime = min(
+            [started - _OVERLAP, *(point for point in resume if point is not None)]
+        )
+        # A run always moves forward, even when a capped read ends on `since`.
+        next_since = max(next_since, since + timedelta(microseconds=1))
+        cache.set(_CURSOR_KEY, next_since.isoformat(), ex=7 * 24 * 3600)
         sender.health["source_consecutive_errors"] = 0
         sender.health["last_source_success_at"] = started.isoformat()
     except Exception:

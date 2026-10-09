@@ -420,6 +420,11 @@ class BoundedTelemetry:
         return self._stop.is_set()
 
     @property
+    def full(self) -> bool:
+        """True when the queue has no room, so the next event would be dropped."""
+        return len(self._queue) >= self.capacity
+
+    @property
     def customer_uuid(self) -> str | None:
         """The ID that the fleet service assigned at enrollment. None until then."""
         return self._customer

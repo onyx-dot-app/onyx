@@ -48,6 +48,12 @@ _RUNNING_PORT: tuple[PortAttemptStatus, ...] = (
 )
 
 
+def _changed_first(changed_at: Any, row_id: Any, since: datetime) -> tuple[Any, ...]:
+    """Rows that changed since `since` come first, oldest first, then running rows
+    from before the window. A capped read then ends where the next pass resumes."""
+    return (changed_at < since, changed_at, row_id)
+
+
 def limit_statement_time(db_session: Session) -> None:
     """Bound each later statement in the current transaction."""
     db_session.execute(
@@ -131,7 +137,7 @@ def attempt_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             ),
             IndexAttempt.is_synthetic_seed.is_(False),
         )
-        .order_by(IndexAttempt.time_updated.desc())
+        .order_by(*_changed_first(IndexAttempt.time_updated, IndexAttempt.id, since))
         .limit(ROW_LIMIT)
     )
     return [dict(row) for row in db_session.execute(statement).mappings()]
@@ -159,6 +165,7 @@ def stage_rows(
             IndexAttemptStageMetric.index_attempt_id.in_(attempt_ids),
             IndexAttemptStageMetric.time_last_event >= since,
         )
+        .order_by(IndexAttemptStageMetric.time_last_event, IndexAttemptStageMetric.id)
         .limit(ROW_LIMIT)
     )
     return [dict(row) for row in db_session.execute(statement).mappings()]
@@ -173,7 +180,7 @@ def _job(
     cc_pair_id: int | None,
     started_at: datetime | None,
     ended_at: datetime | None,
-    revision_at: datetime | None,
+    revision_at: datetime,
     docs_processed: int | None = 0,
     users_processed: int | None = 0,
     groups_processed: int | None = 0,
@@ -199,6 +206,7 @@ def _job(
 
 def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
     """Background jobs that changed since `since` or are still running, in one shape."""
+    sync_revision = func.coalesce(SyncRecord.sync_end_time, SyncRecord.sync_start_time)
     syncs = db_session.execute(
         select(
             SyncRecord.id,
@@ -208,6 +216,7 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             SyncRecord.num_docs_synced,
             SyncRecord.sync_start_time,
             SyncRecord.sync_end_time,
+            sync_revision.label("revision_at"),
         )
         .where(
             or_(
@@ -216,6 +225,7 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
                 SyncRecord.sync_end_time >= since,
             )
         )
+        .order_by(*_changed_first(sync_revision, SyncRecord.id, since))
         .limit(ROW_LIMIT)
     )
     jobs: list[dict[str, Any]] = [
@@ -227,13 +237,19 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             cc_pair_id=None,
             started_at=sync.sync_start_time,
             ended_at=sync.sync_end_time,
-            revision_at=sync.sync_end_time or sync.sync_start_time,
+            revision_at=sync.revision_at,
             docs_processed=sync.num_docs_synced,
         )
         for sync in syncs
     ]
+    permission_revision = func.coalesce(
+        DocPermissionSyncAttempt.time_finished,
+        DocPermissionSyncAttempt.time_started,
+        DocPermissionSyncAttempt.time_created,
+    )
     permission_syncs = db_session.execute(
         select(
+            permission_revision.label("revision_at"),
             DocPermissionSyncAttempt.id,
             DocPermissionSyncAttempt.connector_credential_pair_id,
             DocPermissionSyncAttempt.status,
@@ -250,6 +266,9 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
                 DocPermissionSyncAttempt.time_finished >= since,
             )
         )
+        .order_by(
+            *_changed_first(permission_revision, DocPermissionSyncAttempt.id, since)
+        )
         .limit(ROW_LIMIT)
     )
     jobs.extend(
@@ -261,16 +280,20 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             cc_pair_id=attempt.connector_credential_pair_id,
             started_at=attempt.time_started,
             ended_at=attempt.time_finished,
-            revision_at=attempt.time_finished
-            or attempt.time_started
-            or attempt.time_created,
+            revision_at=attempt.revision_at,
             docs_processed=attempt.total_docs_synced,
             error_count=attempt.docs_with_permission_errors,
         )
         for attempt in permission_syncs
     )
+    group_revision = func.coalesce(
+        ExternalGroupPermissionSyncAttempt.time_finished,
+        ExternalGroupPermissionSyncAttempt.time_started,
+        ExternalGroupPermissionSyncAttempt.time_created,
+    )
     group_syncs = db_session.execute(
         select(
+            group_revision.label("revision_at"),
             ExternalGroupPermissionSyncAttempt.id,
             ExternalGroupPermissionSyncAttempt.connector_credential_pair_id,
             ExternalGroupPermissionSyncAttempt.status,
@@ -291,6 +314,11 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
                 ExternalGroupPermissionSyncAttempt.time_finished >= since,
             )
         )
+        .order_by(
+            *_changed_first(
+                group_revision, ExternalGroupPermissionSyncAttempt.id, since
+            )
+        )
         .limit(ROW_LIMIT)
     )
     jobs.extend(
@@ -302,7 +330,7 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             cc_pair_id=group.connector_credential_pair_id,
             started_at=group.time_started,
             ended_at=group.time_finished,
-            revision_at=group.time_finished or group.time_started or group.time_created,
+            revision_at=group.revision_at,
             users_processed=group.total_users_processed,
             groups_processed=group.total_groups_processed,
             memberships_synced=group.total_group_memberships_synced,
@@ -323,6 +351,11 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             or_(
                 HierarchyFetchAttempt.status.in_(_RUNNING_INDEXING),
                 HierarchyFetchAttempt.time_updated >= since,
+            )
+        )
+        .order_by(
+            *_changed_first(
+                HierarchyFetchAttempt.time_updated, HierarchyFetchAttempt.id, since
             )
         )
         .limit(ROW_LIMIT)
@@ -358,6 +391,7 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
                 PortAttempt.time_updated >= since,
             )
         )
+        .order_by(*_changed_first(PortAttempt.time_updated, PortAttempt.id, since))
         .limit(ROW_LIMIT)
     )
     jobs.extend(

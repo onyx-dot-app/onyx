@@ -266,28 +266,33 @@ def test_collection_waits_for_enrollment(
     assert source.since == [] and source.cache.store == {}
 
 
-def test_first_run_sends_inventory_work_and_cursor(
+def _cursor(source: _Source) -> datetime:
+    stored: bytes | None = source.cache.get(collector._CURSOR_KEY)
+    assert stored is not None
+    return datetime.fromisoformat(stored.decode())
+
+
+def test_first_run_sends_work_then_inventory_and_sets_the_cursor(
     source: _Source, sender: fleet.BoundedTelemetry
 ) -> None:
     collector.collect_snapshots("public")
     events: list[dict[str, Any]] = sender._take_batch()
     assert [event["event_type"] for event in events] == [
-        "connector",
-        "tenant_domain",
-        "license",
         "attempt",
         "stage",
         "job",
+        "connector",
+        "tenant_domain",
+        "license",
     ]
-    assert events[1]["data"]["domain"] == "example.com"
-    stage: dict[str, Any] = events[4]
+    assert events[4]["data"]["domain"] == "example.com"
+    stage: dict[str, Any] = events[1]
     # The service requires a stage event at the time of its last update.
     assert stage["occurred_at"] == (_NOW - timedelta(minutes=1)).isoformat()
     assert stage["data"]["stage_name"] == "EMBEDDING"
     assert stage["data"]["connector_type"] == "google_drive"
-    cursor: bytes | None = source.cache.get(collector._LAST_RUN_KEY)
-    assert cursor is not None
-    started: datetime = datetime.fromisoformat(cursor.decode())
+    # The next run reads the last minutes of this run again.
+    started: datetime = _cursor(source) + collector._OVERLAP
     assert started - source.since[0] == collector._FIRST_WINDOW
     assert sender.health["source_consecutive_errors"] == 0
     assert sender.health["last_source_success_at"] == started.isoformat()
@@ -324,5 +329,76 @@ def test_a_failed_read_counts_a_source_error_and_keeps_the_cursor(
         collector.collect_snapshots("public")
     assert sender.health["source_errors"] == 2
     assert sender.health["source_consecutive_errors"] == 2
-    assert collector._LAST_RUN_KEY not in source.cache.store
+    assert collector._CURSOR_KEY not in source.cache.store
     assert not sender._take_batch()
+
+
+@pytest.mark.usefixtures("sender")
+def test_a_capped_read_resumes_at_its_last_row(
+    monkeypatch: pytest.MonkeyPatch, source: _Source
+) -> None:
+    monkeypatch.setattr(collector, "ROW_LIMIT", 2)
+    recent: datetime = datetime.now(timezone.utc) - timedelta(minutes=30)
+    source.attempts = [
+        _attempt_row(attempt_id=1, time_updated=recent),
+        _attempt_row(attempt_id=2, time_updated=recent + timedelta(minutes=1)),
+    ]
+    source.stages = []
+    source.jobs = []
+    collector.collect_snapshots("public")
+    # More rows can follow the cap, so the next run starts at the last row read.
+    assert _cursor(source) == recent + timedelta(minutes=1)
+    collector.collect_snapshots("public")
+    assert source.since[1] == recent + timedelta(minutes=1)
+
+
+def test_a_full_queue_resumes_at_the_first_unsent_row(
+    monkeypatch: pytest.MonkeyPatch, source: _Source
+) -> None:
+    small: fleet.BoundedTelemetry = make_sender(capacity=2)
+    monkeypatch.setattr(collector, "get_sender", lambda: small)
+    recent: datetime = datetime.now(timezone.utc) - timedelta(minutes=30)
+    source.attempts = [
+        _attempt_row(attempt_id=index, time_updated=recent + timedelta(minutes=index))
+        for index in range(3)
+    ]
+    source.stages = []
+    source.jobs = []
+    collector.collect_snapshots("public")
+    assert [event["data"]["attempt_id"] for event in small._take_batch()] == [0, 1]
+    assert _cursor(source) == recent + timedelta(minutes=2)
+    # The inventory did not fit either, so the next run sends it again.
+    assert collector._INVENTORY_KEY not in source.cache.store
+
+
+@pytest.mark.usefixtures("sender")
+def test_running_work_from_before_the_window_does_not_hold_the_cursor(
+    monkeypatch: pytest.MonkeyPatch, source: _Source
+) -> None:
+    monkeypatch.setattr(collector, "ROW_LIMIT", 2)
+    now: datetime = datetime.now(timezone.utc)
+    # Running rows come after the changed rows, and every run reads them again.
+    source.attempts = [
+        _attempt_row(attempt_id=1, time_updated=now - timedelta(minutes=30)),
+        _attempt_row(attempt_id=2, time_updated=now - timedelta(days=3)),
+    ]
+    source.stages = []
+    source.jobs = []
+    collector.collect_snapshots("public")
+    assert now - collector._OVERLAP - _cursor(source) < timedelta(seconds=5)
+
+
+def test_an_invalid_row_does_not_stop_its_read(
+    source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    source.jobs = [
+        _job_row(job_id="sync:1", job_type="not one token"),
+        _job_row(job_id="sync:2", job_type="pruning"),
+    ]
+    collector.collect_snapshots("public")
+    jobs: list[str] = [
+        event["data"]["job_id"]
+        for event in sender._take_batch()
+        if event["event_type"] == "job"
+    ]
+    assert jobs == ["sync:2"] and sender.invalid == 1

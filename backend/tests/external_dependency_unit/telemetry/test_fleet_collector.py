@@ -142,8 +142,9 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
         }
         domains: list[dict[str, Any]] = email_domain_rows(db_session)
         license: dict[str, Any] = license_row(db_session)
-    # Finished work outside the window and synthetic seeds are not read.
-    assert set(attempts) == {1, 2}
+    # Finished work outside the window and synthetic seeds are not read. Changed
+    # rows come first, oldest first, then running rows from before the window.
+    assert list(attempts) == [1, 2]
     assert attempts[1]["error_count"] == 1
     assert attempts[1]["item_error_type"] == "ReadTimeout"
     assert [(row["attempt_id"], row["stage"].value) for row in stages] == [
@@ -157,6 +158,10 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
         "port:1",
     }
     assert jobs["permission:2"]["state"] == "in_progress"
+    assert [job for job in jobs if job.startswith("permission:")] == [
+        "permission:1",
+        "permission:2",
+    ]
     assert jobs["group:1"]["memberships_synced"] == 7
     assert jobs["port:1"]["error_count"] == 1
     assert [(row["domain"], row["first_signup_at"].year) for row in domains] == [

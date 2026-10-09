@@ -7,6 +7,7 @@ from collections.abc import Callable, Generator, Iterator
 from functools import wraps
 from typing import Any, TypeVar, cast
 
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.fleet_telemetry import emit_telemetry, error_category
 
@@ -99,8 +100,12 @@ def observe_chat_packets(packets: Iterator[Any], *, channel: str) -> Iterator[An
                         if stop_outcome is not None:
                             observation.outcome = stop_outcome
                 elif isinstance(packet, StreamingError):
-                    # error/error_code fields may contain unrestricted strings.
-                    observation.failed()
+                    # Only the code is read. The error text never leaves the process.
+                    if packet.error_code == OnyxErrorCode.QUERY_REJECTED.code:
+                        # A query-processing hook refused the query before it ran.
+                        observation.outcome = None
+                    else:
+                        observation.failed()
             except Exception:
                 pass
             yield packet

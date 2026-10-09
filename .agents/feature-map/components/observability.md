@@ -401,7 +401,8 @@ every five minutes.
   `handle_multi_model_stream`. `telemetry_query` wraps
   `server/features/search/api.py:search` and
   `ee/onyx/search/process_search_query.py:stream_search_query`. A request that
-  fails with a 4xx `OnyxError` sends no event.
+  fails with a 4xx `OnyxError`, or a chat that a query-processing hook rejects
+  (`QUERY_REJECTED`), sends no event.
 - Indexing counters: the fetch, embed, and write steps call `emit_stage_counter`
   ([[indexing-pipeline]] §4.10). The sender thread sums the deltas for one
   attempt and stage over at most 30 seconds.
@@ -414,10 +415,12 @@ every five minutes.
 five minutes for each tenant. It reads connectors, signup email domains, license
 presence, index attempts, stage summaries, and background jobs through the
 statement-limited queries in `db/fleet_telemetry.py`. It reads only the rows that
-changed since its previous pass, plus work that is still running. The inventory
-(connectors, domains, license) goes out when it changes and at least every six
-hours. Event IDs come from the row identity and update time, so the fleet service
-drops repeated events. Index attempt and job state reach the fleet only from these
+changed since its previous pass, plus work that is still running. Each read
+returns the oldest changes first. When a read reaches `ROW_LIMIT` or the sender
+queue is full, the next pass resumes at the first row that was not sent
+(`_send_in_order`). The inventory (connectors, domains, license) goes out after
+the work, when it changes and at least every six hours. Event IDs come from the
+row identity and update time, so the fleet service drops repeated events. Index attempt and job state reach the fleet only from these
 reads. The intervals are constants in `utils/fleet_telemetry.py`
 (`COLLECTION_INTERVAL_SECONDS` and the others); the fleet service cannot change
 them.
