@@ -1,13 +1,18 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import ConnectorConfig, CredentialBinding
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
     ScopeDirection,
     ScopeInclude,
     ScopeToggle,
+)
+from onyx.connectors.google_utils.shared_constants import (
+    GoogleCredentialKind,
+    google_credential_kind,
 )
 from onyx.connectors.planning_rule import ConnectorChangeOverride
 
@@ -33,7 +38,26 @@ _SPECIFIC_REQUEST = FieldPolicy(
 )
 
 
-class GoogleDriveConnectorConfig(ConnectorConfig):
+class GoogleDriveCredentialBinding(CredentialBinding):
+    # The kind of the picked credential. The form sets it from the credential,
+    # so capability checks for one kind can apply before a run reads the
+    # credential. The connector reads the kind from the credential itself.
+    credential_kind: Annotated[GoogleCredentialKind | None, _COSMETIC] = None
+
+    def validate_credential(self, credential_json: dict[str, Any]) -> None:
+        actual_kind = google_credential_kind(credential_json)
+        if (
+            self.credential_kind is not None
+            and actual_kind is not None
+            and actual_kind != self.credential_kind
+        ):
+            raise ConnectorValidationError(
+                f"The connector is set up for a {self.credential_kind.value} "
+                f"credential, but this credential is {actual_kind.value}."
+            )
+
+
+class GoogleDriveConnectorConfig(GoogleDriveCredentialBinding, ConnectorConfig):
     include_shared_drives: Annotated[bool, _GENERAL_TOGGLE] = False
     include_my_drives: Annotated[bool, _GENERAL_TOGGLE] = False
     include_files_shared_with_me: Annotated[bool, _GENERAL_TOGGLE] = False

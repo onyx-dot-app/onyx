@@ -6,7 +6,9 @@ group-sync checks register in the EE registry
 (one page, or the first in-scope item) with the gateway operations its sync
 calls.
 
-Two credential kinds need different checks (``credential_kinds``):
+Two credential kinds need different checks. The form sets the kind of the
+picked credential in the ``credential_kind`` config field, so a check for one
+kind requires that field:
 
 - A service account acts as each user of the Workspace through domain-wide
   delegation. It lists the users with the Admin SDK, and it reads each shared
@@ -69,12 +71,11 @@ from onyx.connectors.google_utils.shared_constants import (
     MISSING_SCOPES_ERROR_STR,
     SCOPE_DOC_URL,
     GoogleCredentialKind,
+    google_credential_kind,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
 
 _DOCS_LINK = SCOPE_DOC_URL
-_SERVICE_ACCOUNT = frozenset({GoogleCredentialKind.SERVICE_ACCOUNT.value})
-_OAUTH = frozenset({GoogleCredentialKind.OAUTH.value})
 
 _DRIVE_API = "Google Drive API"
 _ADMIN_API = "Admin SDK API"
@@ -112,8 +113,12 @@ def _is_service_account(auth: GoogleDriveAuth) -> bool:
     return auth.kind == GoogleCredentialKind.SERVICE_ACCOUNT
 
 
+def _is_oauth(context: CapabilityCheckContext) -> bool:
+    return google_credential_kind(context.credential_json) == GoogleCredentialKind.OAUTH
+
+
 def _scope_hint(context: CapabilityCheckContext) -> str:
-    if context.credential_kind == GoogleCredentialKind.OAUTH.value:
+    if _is_oauth(context):
         return "Connect Google Drive again and accept every permission Onyx asks for."
     scopes = ", ".join(GOOGLE_SCOPES[DocumentSource.GOOGLE_DRIVE])
     return (
@@ -163,7 +168,7 @@ def _raise_google_error(
             raise InsufficientPermissionsError(
                 f"Google refused the scopes Onyx asks for. {_scope_hint(context)}"
             ) from e
-        if context.credential_kind == GoogleCredentialKind.OAUTH.value:
+        if _is_oauth(context):
             raise CredentialExpiredError(
                 "Google refused the OAuth credential: it was revoked or it "
                 "expired. Connect Google Drive again."
@@ -304,7 +309,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
         required: bool = True,
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_connector_config: bool = False,
-        credential_kinds: frozenset[str] | None = None,
+        credential_kind: GoogleCredentialKind | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -313,10 +318,28 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
             required=required,
             requires_connector_instance=False,
             requires_connector_config=requires_connector_config,
-            credential_kinds=credential_kinds,
+            requires_fields=(
+                frozenset({"credential_kind"})
+                if credential_kind is not None
+                else frozenset()
+            ),
             remediation=remediation,
             docs_link=_DOCS_LINK,
         )
+        self._credential_kind = credential_kind
+
+    def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
+        config = form_state.config
+        if (
+            self._credential_kind is not None
+            and config.credential_kind != self._credential_kind
+        ):
+            return False
+        return self.applies_to(config)
+
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:  # noqa: ARG002
+        """False when the check means nothing for this config."""
+        return True
 
 
 class _AuthCheck(_GoogleDriveCheck):
@@ -369,7 +392,7 @@ class _WorkspaceUsersCheck(_GoogleDriveCheck):
         super().__init__(
             check_id="google_drive_workspace_users",
             display_name="Workspace users can be listed",
-            credential_kinds=_SERVICE_ACCOUNT,
+            credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
             remediation=(
                 "Make the primary admin a Google Workspace admin, give the service "
                 "account the admin.directory.user.readonly scope in domain-wide "
@@ -378,8 +401,8 @@ class _WorkspaceUsersCheck(_GoogleDriveCheck):
             ),
         )
 
-    def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
-        return not form_state.config.specific_user_emails
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
+        return not config.specific_user_emails
 
     def run(self, context: CapabilityCheckContext) -> None:
         ops = _gateway(context)
@@ -430,15 +453,15 @@ class _SpecificUsersCheck(_GoogleDriveCheck):
             display_name="Listed users can be impersonated",
             required=False,
             requires_connector_config=True,
-            credential_kinds=_SERVICE_ACCOUNT,
+            credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
             remediation=(
                 "Check the emails in 'Specific user emails': each must be the "
                 "primary email of an active Workspace user with Google Drive."
             ),
         )
 
-    def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
-        return bool(form_state.config.specific_user_emails)
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
+        return bool(config.specific_user_emails)
 
     def run(self, context: CapabilityCheckContext) -> None:
         emails = extract_str_list_from_comma_str(
@@ -462,15 +485,14 @@ class _OAuthIgnoredSettingsCheck(_GoogleDriveCheck):
             display_name="Settings apply to an OAuth credential",
             required=False,
             requires_connector_config=True,
-            credential_kinds=_OAUTH,
+            credential_kind=GoogleCredentialKind.OAUTH,
             remediation=(
                 "To index other users' My Drives, use a service account "
                 "credential. Otherwise clear these settings."
             ),
         )
 
-    def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
-        config = form_state.config
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
         return bool(config.my_drive_emails or config.specific_user_emails)
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -502,8 +524,8 @@ class _SharedDrivesCheck(_GoogleDriveCheck):
             ),
         )
 
-    def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
-        return _shared_drives_in_scope(form_state.config)
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
+        return _shared_drives_in_scope(config)
 
     def run(self, context: CapabilityCheckContext) -> None:
         config = self.config(context)
@@ -545,8 +567,8 @@ class _ConfiguredSharedDrivesCheck(_GoogleDriveCheck):
             ),
         )
 
-    def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
-        return bool(form_state.config.shared_drive_urls)
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
+        return bool(config.shared_drive_urls)
 
     def run(self, context: CapabilityCheckContext) -> None:
         config = self.config(context)
@@ -598,8 +620,8 @@ class _ConfiguredFoldersCheck(_GoogleDriveCheck):
             ),
         )
 
-    def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
-        return bool(form_state.config.shared_folder_urls)
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
+        return bool(config.shared_folder_urls)
 
     def run(self, context: CapabilityCheckContext) -> None:
         config = self.config(context)
@@ -666,7 +688,7 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
             check_id="google_drive_configured_my_drives",
             display_name="Configured My Drive users exist",
             requires_connector_config=True,
-            credential_kinds=_SERVICE_ACCOUNT,
+            credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
             remediation=(
                 "Use each user's primary Workspace email, not an alias. With "
                 "'Specific user emails' set, each My Drive email must also be in "
@@ -674,8 +696,8 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
             ),
         )
 
-    def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
-        return bool(form_state.config.my_drive_emails)
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
+        return bool(config.my_drive_emails)
 
     def run(self, context: CapabilityCheckContext) -> None:
         config = self.config(context)
@@ -732,7 +754,7 @@ class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
             display_name="Shared drives have an organizer Onyx can act as",
             required=False,
             requires_connector_config=True,
-            credential_kinds=_SERVICE_ACCOUNT,
+            credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
             remediation=(
                 "Make a Workspace user a Manager of each shared drive, and keep "
                 "that user in the users Onyx indexes. Without one, Onyx can miss "
@@ -740,8 +762,8 @@ class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
             ),
         )
 
-    def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
-        return _shared_drives_in_scope(form_state.config)
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
+        return _shared_drives_in_scope(config)
 
     def run(self, context: CapabilityCheckContext) -> None:
         config = self.config(context)
