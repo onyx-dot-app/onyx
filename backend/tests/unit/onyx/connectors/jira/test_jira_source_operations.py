@@ -4,9 +4,17 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 from jira import JIRA
-from jira.resources import Issue
+from jira.exceptions import JIRAError
 
-from onyx.connectors.jira.connector import _JIRA_BULK_FETCH_LIMIT, bulk_fetch_issues
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.jira.source_operations import (
+    _JIRA_BULK_FETCH_LIMIT,
+    JiraApiError,
+    JiraSourceOperations,
+    is_cloud_credential,
+    is_cloud_gateway,
+)
 
 
 def _make_raw_issue(issue_id: str) -> dict[str, Any]:
@@ -27,6 +35,24 @@ def _mock_jira_client() -> MagicMock:
     return mock
 
 
+def _gateway(
+    client: MagicMock | None = None,
+    credentials: dict[str, Any] | None = None,
+) -> JiraSourceOperations:
+    gateway = JiraSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None,
+            DocumentSource.JIRA.value,
+            credentials
+            if credentials is not None
+            else {"jira_user_email": "user@example.com", "jira_api_token": "token"},
+        ),
+        connector_specific_config={"jira_base_url": "https://jira.example.com"},
+    )
+    gateway._cached_client = client
+    return gateway
+
+
 def test_bulk_fetch_success() -> None:
     """Happy path: all issues fetched in one request."""
     client = _mock_jira_client()
@@ -35,9 +61,8 @@ def test_bulk_fetch_success() -> None:
     resp.json.return_value = {"issues": raw}
     client._session.post.return_value = resp
 
-    result = bulk_fetch_issues(client, ["1", "2", "3"])
-    assert len(result) == 3
-    assert all(isinstance(r, Issue) for r in result)
+    result = _gateway(client).bulk_fetch_issues(issue_ids=["1", "2", "3"])
+    assert result == raw
     client._session.post.assert_called_once()
 
 
@@ -64,10 +89,8 @@ def test_bulk_fetch_splits_on_json_error() -> None:
 
     client._session.post.side_effect = _post_side_effect
 
-    result = bulk_fetch_issues(client, ["1", "2", "3", "4"])
-    assert len(result) == 4
-    returned_ids = {r.raw["id"] for r in result}
-    assert returned_ids == {"1", "2", "3", "4"}
+    result = _gateway(client).bulk_fetch_issues(issue_ids=["1", "2", "3", "4"])
+    assert {r["id"] for r in result} == {"1", "2", "3", "4"}
     assert call_count > 1
 
 
@@ -91,7 +114,7 @@ def test_bulk_fetch_raises_on_single_unfetchable_issue() -> None:
     client._session.post.side_effect = _post_side_effect
 
     with pytest.raises(requests.exceptions.JSONDecodeError):
-        bulk_fetch_issues(client, ["1", "bad", "2"])
+        _gateway(client).bulk_fetch_issues(issue_ids=["1", "bad", "2"])
 
 
 def test_bulk_fetch_non_json_error_propagates() -> None:
@@ -102,11 +125,8 @@ def test_bulk_fetch_non_json_error_propagates() -> None:
     resp.json.side_effect = ValueError("something else broke")
     client._session.post.return_value = resp
 
-    try:
-        bulk_fetch_issues(client, ["1"])
-        raise AssertionError("Expected ValueError to propagate")
-    except ValueError:
-        pass
+    with pytest.raises(ValueError):
+        _gateway(client).bulk_fetch_issues(issue_ids=["1"])
 
 
 def test_bulk_fetch_with_fields() -> None:
@@ -117,7 +137,7 @@ def test_bulk_fetch_with_fields() -> None:
     resp.json.return_value = {"issues": raw}
     client._session.post.return_value = resp
 
-    bulk_fetch_issues(client, ["1"], fields="summary,description")
+    _gateway(client).bulk_fetch_issues(issue_ids=["1"], fields="summary,description")
 
     call_payload = client._session.post.call_args[1]["json"]
     assert call_payload["fields"] == ["summary", "description"]
@@ -144,7 +164,7 @@ def test_bulk_fetch_recursive_splitting_raises_on_bad_issue() -> None:
     client._session.post.side_effect = _post_side_effect
 
     with pytest.raises(requests.exceptions.JSONDecodeError):
-        bulk_fetch_issues(client, ["1", "2", bad_id, "3", "4", "5"])
+        _gateway(client).bulk_fetch_issues(issue_ids=["1", "2", bad_id, "3", "4", "5"])
 
 
 def test_bulk_fetch_respects_api_batch_limit() -> None:
@@ -164,10 +184,54 @@ def test_bulk_fetch_respects_api_batch_limit() -> None:
 
     client._session.post.side_effect = _post_side_effect
 
-    result = bulk_fetch_issues(client, all_ids)
+    result = _gateway(client).bulk_fetch_issues(issue_ids=all_ids)
 
     assert len(result) == total_issues
     # keeping this hardcoded because it's the documented limit
     # https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
     assert all(size <= 100 for size in batch_sizes)
     assert len(batch_sizes) == 4
+
+
+def test_sdk_errors_become_jira_api_errors() -> None:
+    client = _mock_jira_client()
+    client.project.side_effect = JIRAError(
+        status_code=404, text='{"errorMessages":["No project could be found"]}'
+    )
+
+    with pytest.raises(JiraApiError) as exc_info:
+        _gateway(client).get_project(project_key="NOPE")
+
+    assert exc_info.value.status_code == 404
+    assert "No project could be found" in (exc_info.value.text or "")
+
+
+def test_http_errors_become_jira_api_errors() -> None:
+    client = _mock_jira_client()
+    response = requests.Response()
+    response.status_code = 400
+    response._content = b'{"errorMessages":["Error in the JQL Query"]}'
+    client._session.get.return_value.raise_for_status.side_effect = requests.HTTPError(
+        response=response
+    )
+
+    with pytest.raises(JiraApiError) as exc_info:
+        _gateway(client).search_issue_ids(jql="project = AS")
+
+    assert exc_info.value.status_code == 400
+    assert "Error in the JQL Query" in (exc_info.value.text or "")
+
+
+@pytest.mark.parametrize(
+    "credentials,expected_cloud",
+    [
+        ({"jira_user_email": "user@example.com", "jira_api_token": "t"}, True),
+        ({"jira_api_token": "t"}, False),
+    ],
+    ids=["email-is-cloud", "token-only-is-server"],
+)
+def test_credential_selects_the_api_family(
+    credentials: dict[str, Any], expected_cloud: bool
+) -> None:
+    assert is_cloud_credential(credentials) is expected_cloud
+    assert is_cloud_gateway(_gateway(credentials=credentials)) is expected_cloud
