@@ -63,6 +63,7 @@ from shared_configs.configs import (
     MODEL_SERVER_HOST,
     POSTGRES_DEFAULT_SCHEMA,
 )
+from shared_configs.enums import EmbeddingProvider
 
 
 def _stored_chunk(
@@ -196,6 +197,7 @@ def _vector_ss(
     model_name: str = "model-a",
     enable_contextual_rag: bool = False,
     contextual_rag_model_configuration_id: int | None = None,
+    provider_type: EmbeddingProvider | None = None,
 ) -> SearchSettings:
     return SearchSettings(
         model_name=model_name,
@@ -203,7 +205,7 @@ def _vector_ss(
         normalize=True,
         query_prefix=None,
         passage_prefix=None,
-        provider_type=None,
+        provider_type=provider_type,
         reduced_dimension=None,
         enable_contextual_rag=enable_contextual_rag,
         contextual_rag_model_configuration_id=contextual_rag_model_configuration_id,
@@ -234,6 +236,28 @@ def test_select_reembed_strategy_copies_vectors_on_quantization_only_change() ->
         select_reembed_strategy(_vector_ss(none), _vector_ss(none))
         is ReembedStrategy.COPY_VECTORS
     )
+    # A provider whose model_name pins the model -> the vector is reused.
+    cohere = EmbeddingProvider.COHERE
+    assert (
+        select_reembed_strategy(
+            _vector_ss(none, provider_type=cohere),
+            _vector_ss(one_bit, provider_type=cohere),
+        )
+        is ReembedStrategy.COPY_VECTORS
+    )
+    # A provider whose model can change without a new SearchSettings -> re-embed.
+    for provider in (
+        EmbeddingProvider.AZURE,
+        EmbeddingProvider.LITELLM,
+        EmbeddingProvider.BIFROST,
+    ):
+        assert (
+            select_reembed_strategy(
+                _vector_ss(none, provider_type=provider),
+                _vector_ss(one_bit, provider_type=provider),
+            )
+            is ReembedStrategy.MODEL_ONLY
+        )
     # Quantization plus a contextual-RAG change -> the text changes.
     assert (
         select_reembed_strategy(

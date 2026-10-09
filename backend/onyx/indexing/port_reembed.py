@@ -61,6 +61,7 @@ from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk, IndexChunk
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.traces import TraceContentMode
+from shared_configs.enums import EmbeddingProvider
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
@@ -79,6 +80,21 @@ class ReembedStrategy(enum.Enum):
     # quantization did): the stored vector is what re-embedding would produce,
     # so copy it.
     COPY_VECTORS = "copy_vectors"
+
+
+# Providers whose model_name pins the model that produced a stored vector. Azure
+# picks the model by deployment, and the LiteLLM and Bifrost gateways can map a
+# name to any model. Those live on a shared provider row that can change without
+# a new SearchSettings, so a stored vector may not match what FUTURE embeds.
+_COPY_SAFE_PROVIDERS: frozenset[EmbeddingProvider | None] = frozenset(
+    {
+        None,
+        EmbeddingProvider.OPENAI,
+        EmbeddingProvider.COHERE,
+        EmbeddingProvider.VOYAGE,
+        EmbeddingProvider.GOOGLE,
+    }
+)
 
 
 @dataclass
@@ -129,10 +145,12 @@ def select_reembed_strategy(
 def _stored_vectors_reusable(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> bool:
-    """True when every setting that shapes a content vector is unchanged, so the
-    PRESENT vector is what re-embedding under FUTURE would produce."""
+    """True when every setting that shapes a content vector is unchanged and the
+    provider pins the model, so the PRESENT vector is what re-embedding under
+    FUTURE would produce."""
     return (
-        present_ss.model_name == future_ss.model_name
+        present_ss.provider_type in _COPY_SAFE_PROVIDERS
+        and present_ss.model_name == future_ss.model_name
         and present_ss.model_dim == future_ss.model_dim
         and present_ss.normalize == future_ss.normalize
         and present_ss.query_prefix == future_ss.query_prefix
