@@ -134,7 +134,20 @@ export default function AuthenticationAccountSection({
     accountRealmFields.map(([key]) => key)
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { values } = useFormikContext<Record<string, unknown>>();
+  const { values, errors, touched, setErrors, setTouched } =
+    useFormikContext<Record<string, unknown>>();
+
+  /**
+   * Closes the new-account card. Its values stay, but its errors and touched
+   * marks are cleared, so it opens again without errors.
+   */
+  function closeNewAccount() {
+    close();
+    const { [NEW_ACCOUNT_FIELD]: _touched, ...restTouched } = touched;
+    const { [NEW_ACCOUNT_FIELD]: _errors, ...restErrors } = errors;
+    void setTouched(restTouched, false);
+    setErrors(restErrors);
+  }
   const newAccountValues: NewAccountValues | undefined = getIn(
     values,
     NEW_ACCOUNT_FIELD
@@ -389,7 +402,9 @@ export default function AuthenticationAccountSection({
           )}
         </div>
       }
-      onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
+      onClick={() =>
+        isCreating ? closeNewAccount() : selectMethod(defaultMethod)
+      }
     >
       <Section padding={2} width="full">
         <Content
@@ -437,7 +452,7 @@ export default function AuthenticationAccountSection({
               }
               aria-expanded={accountsExpanded}
               onClick={() => {
-                if (accountsExpanded) close();
+                if (accountsExpanded) closeNewAccount();
                 setAccountsExpanded(!accountsExpanded);
               }}
             />
