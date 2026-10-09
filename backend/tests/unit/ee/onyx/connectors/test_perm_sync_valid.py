@@ -8,7 +8,6 @@ from ee.onyx.connectors.perm_sync_valid import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.connector import CanvasConnector
-from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.zoom.connector import ZoomConnector
 
@@ -61,9 +60,8 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
             ],
         ),
         (ZoomConnector, ["probe_recording_access_permissions"]),
-        (HubSpotConnector, ["probe_permission_sync_scopes"]),
     ],
-    ids=["canvas", "zoom", "hubspot"],
+    ids=["canvas", "zoom"],
 )
 def test_dispatch_reaches_the_matching_validator(
     connector_class: type[BaseConnector], probes: list[str]

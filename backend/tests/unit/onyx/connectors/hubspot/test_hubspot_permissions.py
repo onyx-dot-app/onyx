@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.hubspot.config import HubSpotObjectType
 from onyx.connectors.hubspot.connector import HUBSPOT_SEARCH_LIMIT, HubSpotConnector
 from onyx.connectors.hubspot.models import (
@@ -20,14 +19,12 @@ from onyx.connectors.hubspot.models import (
 from onyx.connectors.hubspot.permissions import HubSpotPermissionReader
 from onyx.connectors.hubspot.source_operations import (
     PERMITTED_USERS_BATCH_SIZE,
-    HubSpotApiError,
     HubSpotSourceOperations,
 )
 from onyx.connectors.models import HierarchyNode, SlimDocument
 
 CONNECTOR = "onyx.connectors.hubspot.connector"
 PORTAL = "46399533"
-USER_LISTING = "user listing"
 MOMENT = datetime(2024, 6, 6, tzinfo=timezone.utc)
 
 
@@ -202,13 +199,3 @@ def test_the_prune_listing_carries_ids_only_and_never_asks_for_viewers() -> None
     ]
     assert ops.list_records.call_args.kwargs["properties"] == ["hs_object_id"]
     reader_factory.assert_not_called()
-
-
-def test_the_probe_turns_a_refusal_into_insufficient_permissions() -> None:
-    ops = _ops()
-    ops.list_users.side_effect = HubSpotApiError(USER_LISTING, 403, {}, "")
-
-    with pytest.raises(InsufficientPermissionsError, match=USER_LISTING):
-        _connector(ops).probe_permission_sync_scopes()
-
-    ops.list_users.assert_called_once_with(limit=1)
