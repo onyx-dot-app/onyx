@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { InputTypeIn } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import { getCredentialSpec } from "@/lib/credentials/utils";
@@ -49,11 +50,14 @@ export default function AccountRealmFields({
             withLabel={name}
             title={fieldCopy(key).title}
             suffix={field.optional ? "optional" : undefined}
-            subDescription={t("description", {
-              source: brandName,
-              hasDefault: defaultValue ? "true" : "false",
-              value: defaultValue ?? "",
-            })}
+            // Markdown, so the default renders as code.
+            subDescription={markdown(
+              t("description", {
+                source: brandName,
+                hasDefault: defaultValue ? "true" : "false",
+                value: defaultValue ?? "",
+              })
+            )}
           >
             {savedCredential ? (
               <InputTypeIn

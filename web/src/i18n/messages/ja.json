@@ -2748,7 +2748,7 @@
           }
         },
         "realm": {
-          "description": "サイトの URL またはサブドメインを貼り付けてください。そこで {source} の REST API にアクセスできる必要があります。{hasDefault, select, true {指定しない場合は、代わりに {value} が使用されます。} other {}}"
+          "description": "サイトの URL またはサブドメインを貼り付けてください。そこで {source} の REST API にアクセスできる必要があります。{hasDefault, select, true {指定しない場合は、代わりに `{value}` が使用されます。} other {}}"
         }
       },
       "credentialRequired": {
