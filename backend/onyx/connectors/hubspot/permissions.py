@@ -27,7 +27,7 @@ def _clean_email(email: str | None) -> str | None:
     """A private app's own HubSpot-issued address is not a person, so it is dropped."""
     if not email:
         return None
-    cleaned = email.strip().lower()
+    cleaned: str = email.strip().lower()
     if cleaned.split("@")[-1].startswith(SERVICE_ACCOUNT_DOMAIN_PREFIX):
         return None
     return cleaned or None
@@ -57,8 +57,8 @@ class HubSpotPermissionReader:
             return self._emails[user_id]
         # The listing leaves out ids HubSpot still names as viewers (deleted
         # users, the app itself), so those resolve one at a time.
-        user = self._ops.get_user(user_id=user_id)
-        email = _clean_email(user.email) if user else None
+        user: HubSpotUser | None = self._ops.get_user(user_id=user_id)
+        email: str | None = _clean_email(user.email) if user else None
         self._emails[user_id] = email
         return email
 
@@ -73,9 +73,9 @@ class HubSpotPermissionReader:
     def access_for(self, viewer_ids: Iterable[int]) -> ExternalAccess:
         """Viewers with no person behind them (deleted users, the app itself) are left out."""
         emails: set[str] = set()
-        unmatched = 0
+        unmatched: int = 0
         for viewer_id in viewer_ids:
-            email = self._email_for(viewer_id)
+            email: str | None = self._email_for(viewer_id)
             if email is None:
                 unmatched += 1
                 continue

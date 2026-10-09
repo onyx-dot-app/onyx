@@ -31,6 +31,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.hubspot.config import HUBSPOT_OBJECT_SPECS, HubSpotObjectType
 from onyx.connectors.hubspot.models import (
+    ApiActionPermittedUsers,
     ApiAssociationPage,
     ApiPaging,
     ApiPermittedUsersResponse,
@@ -112,7 +113,7 @@ def iter_pages(
     max_pages raises, since a short listing would be taken as complete."""
     after: str | None = None
     for _ in range(max_pages):
-        page = fetch(after)
+        page: HubSpotPage[_ItemT] = fetch(after)
         yield from page.items
         if page.next_after is None:
             return
@@ -136,7 +137,7 @@ def _utc(moment: datetime) -> datetime:
 def _record(raw: ApiRecord) -> HubSpotRecord:
     associations: dict[str, HubSpotAssociationIds] | None = None
     if raw.associations is not None:
-        associations = {
+        associations: dict[str, HubSpotAssociationIds] = {
             assoc_type: HubSpotAssociationIds(
                 # One entry per association label, so an id can repeat.
                 ids=list(dict.fromkeys(item.id for item in collection.results)),
@@ -154,7 +155,7 @@ def _record(raw: ApiRecord) -> HubSpotRecord:
 
 
 def _record_page(page: Any) -> HubSpotPage[HubSpotRecord]:
-    raw = ApiRecordPage.model_validate(page.to_dict())
+    raw: ApiRecordPage = ApiRecordPage.model_validate(page.to_dict())
     return HubSpotPage(
         items=[_record(item) for item in raw.results],
         next_after=_next_after(raw.paging),
@@ -178,7 +179,7 @@ class HubSpotSourceOperations(SourceOperations):
     def _access_token(self) -> str:
         """Read once: a DB-backed provider decrypts and audits on every read."""
         if self._token is None:
-            token = self.credentials_provider.get_credentials().get(
+            token: str | None = self.credentials_provider.get_credentials().get(
                 CREDENTIAL_ACCESS_TOKEN
             )
             if not token:
@@ -198,7 +199,7 @@ class HubSpotSourceOperations(SourceOperations):
 
     def _crm(self, variant: str) -> Any:
         """The SDK's per-object client, which it leaves untyped."""
-        crm = self._api().crm
+        crm: Any = self._api().crm
         return {
             HubSpotObjectType.TICKETS.value: crm.tickets,
             HubSpotObjectType.COMPANIES.value: crm.companies,
@@ -229,7 +230,7 @@ class HubSpotSourceOperations(SourceOperations):
         """Runs one REST call the SDK has no client for."""
 
         def call() -> _M:
-            response = requests.get(
+            response: requests.Response = requests.get(
                 f"{HUBSPOT_API_BASE}{path}",
                 headers={"Authorization": f"Bearer {self._access_token()}"},
                 params=params,
@@ -270,7 +271,7 @@ class HubSpotSourceOperations(SourceOperations):
     ) -> HubSpotPage[HubSpotRecord]:
         """One page of records. Requested associations come back inline, with
         has_more set when HubSpot paged them."""
-        page = self._sdk(
+        page: Any = self._sdk(
             f"{variant} listing",
             self._crm(variant).basic_api.get_page,
             limit=limit,
@@ -300,8 +301,10 @@ class HubSpotSourceOperations(SourceOperations):
     ) -> HubSpotPage[HubSpotRecord]:
         """One page of records modified in the window, oldest first. The Search
         API takes no associations parameter, so none come back inline."""
-        modified_date_property = HUBSPOT_OBJECT_SPECS[variant].modified_date_property
-        filters = [
+        modified_date_property: str = HUBSPOT_OBJECT_SPECS[
+            variant
+        ].modified_date_property
+        filters: list[Filter] = [
             Filter(
                 property_name=modified_date_property,
                 operator="GTE",
@@ -317,14 +320,14 @@ class HubSpotSourceOperations(SourceOperations):
                 )
             )
         # The request body is the same for every object type.
-        request = PublicObjectSearchRequest(
+        request: PublicObjectSearchRequest = PublicObjectSearchRequest(
             filter_groups=[FilterGroup(filters=filters)],
             limit=limit,
             properties=properties,
             after=after,
             sorts=[modified_date_property],
         )
-        page = self._sdk(
+        page: Any = self._sdk(
             f"{variant} search",
             self._crm(variant).search_api.do_search,
             public_object_search_request=request,
@@ -346,7 +349,7 @@ class HubSpotSourceOperations(SourceOperations):
         limit: int = HUBSPOT_PAGE_SIZE,
     ) -> HubSpotPage[str]:
         """One page of ids of the records (or notes) linked to one record."""
-        page = self._sdk(
+        page: Any = self._sdk(
             f"{object_type} to {to_object_type} associations",
             self._api().crm.associations.v4.basic_api.get_page,
             object_type=object_type.value,
@@ -355,7 +358,7 @@ class HubSpotSourceOperations(SourceOperations):
             limit=limit,
             after=after,
         )
-        raw = ApiAssociationPage.model_validate(page.to_dict())
+        raw: ApiAssociationPage = ApiAssociationPage.model_validate(page.to_dict())
         return HubSpotPage(
             items=[str(item.to_object_id) for item in raw.results],
             next_after=_next_after(raw.paging),
@@ -376,11 +379,13 @@ class HubSpotSourceOperations(SourceOperations):
                 f"HubSpot reads at most {HUBSPOT_PAGE_SIZE} records per batch"
             )
         # The request body is the same for every object type.
-        request = BatchReadInputSimplePublicObjectId(
-            properties=properties,
-            inputs=[SimplePublicObjectId(id=record_id) for record_id in ids],
+        request: BatchReadInputSimplePublicObjectId = (
+            BatchReadInputSimplePublicObjectId(
+                properties=properties,
+                inputs=[SimplePublicObjectId(id=record_id) for record_id in ids],
+            )
         )
-        response = self._sdk(
+        response: Any = self._sdk(
             f"{variant} batch read",
             self._crm(variant).batch_api.read,
             batch_read_input_simple_public_object_id=request,
@@ -401,7 +406,9 @@ class HubSpotSourceOperations(SourceOperations):
         params: QueryParams = {"limit": limit}
         if after is not None:
             params["after"] = after
-        page = self._rest("user listing", ApiUsersResponse, USERS_PATH, params)
+        page: ApiUsersResponse = self._rest(
+            "user listing", ApiUsersResponse, USERS_PATH, params
+        )
         return HubSpotPage(items=page.results, next_after=_next_after(page.paging))
 
     @source_operation(
@@ -434,12 +441,12 @@ class HubSpotSourceOperations(SourceOperations):
             raise ValueError(
                 f"HubSpot answers for at most {PERMITTED_USERS_BATCH_SIZE} records per call"
             )
-        type_id = HUBSPOT_OBJECT_SPECS[object_type].type_id
-        hcrns = {
+        type_id: str = HUBSPOT_OBJECT_SPECS[object_type].type_id
+        hcrns: dict[str, str] = {
             f"hcrn:{portal_id}:crm-object:{type_id}:{record_id}": record_id
             for record_id in record_ids
         }
-        response = self._rest(
+        response: ApiPermittedUsersResponse = self._rest(
             "record viewers",
             ApiPermittedUsersResponse,
             PERMITTED_USERS_PATH,
@@ -447,7 +454,9 @@ class HubSpotSourceOperations(SourceOperations):
         )
         viewers: dict[str, set[int]] = {}
         for hcrn, record_id in hcrns.items():
-            actions = response.resources.get(hcrn)
+            actions: dict[str, ApiActionPermittedUsers] | None = response.resources.get(
+                hcrn
+            )
             if actions is None:
                 logger.warning(
                     "HubSpot gave no viewer list for %s %s, so it stays private",
@@ -456,6 +465,6 @@ class HubSpotSourceOperations(SourceOperations):
                 )
                 viewers[record_id] = set()
                 continue
-            view = actions.get(VIEW_ACTION)
+            view: ApiActionPermittedUsers | None = actions.get(VIEW_ACTION)
             viewers[record_id] = set(view.permitted_users) if view else set()
         return viewers
