@@ -324,10 +324,7 @@ export default function AuthenticationAccountSection({
                 // typed account stays the chosen one.
                 expandableKeepMounted
                 border="solid"
-                // Selected while its valid values make it the chosen account.
-                state={
-                  newAccountReady ? "selected" : isCreating ? "filled" : "empty"
-                }
+                state={isCreating ? "filled" : "empty"}
                 rounding={4}
                 padding={2}
                 // The card is one action, so it names itself. Nothing inside the
