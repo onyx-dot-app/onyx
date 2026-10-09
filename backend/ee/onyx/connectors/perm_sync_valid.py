@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from typing import Any
 
-from ee.onyx.external_permissions.linear.connector import LinearPermSyncConnector
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
@@ -10,7 +9,6 @@ from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_doc_permission_sync_checks,
     build_onedrive_group_sync_checks,
@@ -91,12 +89,6 @@ def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
         check.run(context)
 
 
-def validate_linear_perm_sync(connector: LinearConnector) -> None:
-    """A guest's token cannot see the workspace's members, so the sync would
-    revoke everyone's access. Probe before each scheduled sync as well."""
-    LinearPermSyncConnector.from_connector(connector).probe_perm_sync_access()
-
-
 def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
     """
     Permission sync reads each recording's share settings, its registered
@@ -118,7 +110,6 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     CanvasConnector: validate_canvas_perm_sync,
     ConfluenceConnector: validate_confluence_perm_sync,
     GoogleDriveConnector: validate_drive_perm_sync,
-    LinearConnector: validate_linear_perm_sync,
     OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
     ZoomConnector: validate_zoom_perm_sync,

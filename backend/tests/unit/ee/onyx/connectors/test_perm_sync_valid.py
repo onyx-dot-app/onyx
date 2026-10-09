@@ -10,7 +10,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.zoom.connector import ZoomConnector
 
 
@@ -44,7 +43,6 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
         DocumentSource.CANVAS,
         DocumentSource.CONFLUENCE,
         DocumentSource.GOOGLE_DRIVE,
-        DocumentSource.LINEAR,
         DocumentSource.ONEDRIVE,
         DocumentSource.SHAREPOINT,
         DocumentSource.ZOOM,
