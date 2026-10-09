@@ -18,12 +18,12 @@ import requests
 from jira import JIRA
 from jira.exceptions import JIRAError
 from more_itertools import chunked
-from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
 from onyx.connectors.jira.config import JiraCredentialBinding
+from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION, JIRA_SERVER_API_VERSION
 from onyx.connectors.source_operations import (
     OperationConsumes,
@@ -41,7 +41,6 @@ _MAX_RESULTS_FETCH_IDS = 5000
 # https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
 _JIRA_BULK_FETCH_LIMIT = 100
 _GROUP_PICKER_MAX_RESULTS = 9999
-_PERMISSION_SCHEME_EXPAND = "user"
 _UNTESTED = "Capability checks land in a follow-up PR."
 
 
@@ -58,22 +57,6 @@ class JiraApiError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.text = text
-
-
-class JiraIssueIdPage(BaseModel):
-    """One page of a Cloud enhanced JQL search. ``next_page_token`` is None on
-    the last page."""
-
-    issue_ids: list[str]
-    next_page_token: str | None
-
-
-class JiraGroupPage(BaseModel):
-    """The group names ``groups/picker`` returns. ``total`` is the number of
-    groups that match, which can be larger than the names returned."""
-
-    group_names: list[str]
-    total: int | None
 
 
 def rest_api_version(credentials: Mapping[str, Any]) -> str:
@@ -186,14 +169,16 @@ class JiraSourceOperations(SourceOperations):
         """The URL the client calls. Scoped tokens go through
         ``api.atlassian.com``; resolving its cloud id (``tenant_info``) raises
         ``requests.HTTPError`` on failure."""
-        binding = self._binding()
-        jira_base = binding.jira_base_url.rstrip("/")
+        binding: JiraCredentialBinding = self._binding()
+        jira_base: str = binding.jira_base_url.rstrip("/")
         return scoped_url(jira_base, "jira") if binding.scoped_token else jira_base
 
     def _build_client(self, api_url: str) -> JIRA:
-        credentials = self._credentials()
-        api_token = credentials[JIRA_API_TOKEN_KEY]
-        options = {"rest_api_version": rest_api_version(credentials)}
+        credentials: dict[str, Any] = self._credentials()
+        api_token: str = credentials[JIRA_API_TOKEN_KEY]
+        options: dict[str, str | bool | Any] = {
+            "rest_api_version": rest_api_version(credentials)
+        }
         if JIRA_USER_EMAIL_KEY in credentials:
             return JIRA(
                 basic_auth=(credentials[JIRA_USER_EMAIL_KEY], api_token),
@@ -340,10 +325,8 @@ class JiraSourceOperations(SourceOperations):
         expanded users. Needs the Administer Projects permission on the
         project, or Administer Jira."""
         with _translate_errors():
-            return self._client()._get_json(
-                f"project/{project_key}/permissionscheme",
-                params={"expand": _PERMISSION_SCHEME_EXPAND},
-            )
+            # The SDK resource requests ``expand=user``.
+            return self._client().project_permissionscheme(project=project_key).raw
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
@@ -374,7 +357,9 @@ class JiraSourceOperations(SourceOperations):
     def list_groups(self) -> JiraGroupPage:
         """Returns the group names from ``groups/picker``, sorted."""
         with _translate_errors():
-            response = self._client()._get_json(
+            # The public ``JIRA.groups()`` drops ``total``, which shows whether
+            # the listing was cut off.
+            response: dict[str, Any] = self._client()._get_json(
                 "groups/picker", params={"maxResults": _GROUP_PICKER_MAX_RESULTS}
             )
         return JiraGroupPage(
