@@ -49,6 +49,7 @@ import {
   isDraftCredential,
   realmFields,
   toCredentialRef,
+  toCredentialRequest,
 } from "@/lib/credentials/utils";
 import AccountRealmFields from "@/views/admin/connectors/AddConnectorPage/form/AccountRealmFields";
 import type {
@@ -77,6 +78,8 @@ import {
   useGmailCredentials,
   useCredentialLoad,
   useGoogleDriveCredentials,
+  useResetSavedDraftCredential,
+  useSavedDraftCredential,
 } from "@/lib/credentials/hooks";
 import {
   NEW_ACCOUNT_FIELD,
@@ -314,6 +317,9 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
   // The rest of the form also waits for the capability checks. Each visit
   // starts without a run. Sources without a credential step have no checks.
   useResetConnectorChecks(connector);
+  // A check run saves a typed account as a draft; Create names that draft.
+  useResetSavedDraftCredential(connector);
+  const { savedDraft } = useSavedDraftCredential(connector);
   const checksT = useTranslations("admin.connectorChecks");
 
   const convertStringToDateTime = (indexingStart: string | null) => {
@@ -549,7 +555,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                     : dataAccess,
                   manageAccess
                 ),
-                credential: credentialRef,
+                credential: toCredentialRequest(credentialRef, savedDraft),
                 credentialSharing: isDraftCredential(credential)
                   ? credential.sharing
                   : undefined,
@@ -785,7 +791,12 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                               onCredentialChange={setCurrentCredential}
                               newAccountReady={newAccountReady}
                               checkedCredential={checkedCredential}
-                              checksLocked={!configUnlocked}
+                              // A typed account's binding waits for a run,
+                              // so the checks stay open for it.
+                              checksLocked={
+                                !configUnlocked &&
+                                gate?.reason?.kind !== "runChecks"
+                              }
                             />
                           )}
 

@@ -278,3 +278,31 @@ it("shares one session between every caller for the source", async () => {
   await waitFor(() => expect(result.current[1]!.formUnlocked).toBe(true));
   expect(startMock).toHaveBeenCalledTimes(1);
 });
+
+it("sends a typed account's values with its first run, then names its draft", async () => {
+  startMock.mockResolvedValue({
+    ...run([check({ ...BINDING, state: "passed" }), CONTENT]),
+    credential_id: 7,
+  });
+  const typed: CredentialRef = { credential_json: { api_token: "token" } };
+  const { result } = renderHook(
+    () =>
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: typed,
+      }),
+    { wrapper }
+  );
+
+  act(() => result.current.begin());
+  await waitFor(() => expect(result.current.status).toBe("passed"));
+  expect(startMock).toHaveBeenLastCalledWith(
+    expect.objectContaining({ credential_json: { api_token: "token" } })
+  );
+  expect(startMock.mock.lastCall?.[0]).not.toHaveProperty("credential_id");
+
+  act(() => result.current.rerun());
+  await waitFor(() => expect(startMock).toHaveBeenCalledTimes(2));
+  expect(startMock.mock.lastCall?.[0]).toHaveProperty("credential_id", 7);
+  expect(startMock.mock.lastCall?.[0]).not.toHaveProperty("credential_json");
+});

@@ -184,8 +184,8 @@ export interface CredentialSharing {
 }
 
 /**
- * A new account typed into the add-connector form. It is not saved until its
- * connector is created: checks and Create send its values as they are.
+ * A new account typed into the add-connector form. A check run saves it as
+ * the user's draft credential, and Create promotes that draft.
  */
 export interface DraftCredential {
   source: ValidSources;
@@ -195,13 +195,29 @@ export interface DraftCredential {
 }
 
 /**
- * The credential a request runs on: a saved one by id, typed values, or an
- * OAuth sign-in's tokens that the server sealed. Spread into a request body.
+ * The form's credential: a saved one by id, or a typed account by its values.
+ * The form compares these, so a typed account keeps one reference while its
+ * values stay the same.
  */
 export type CredentialRef =
   | { credential_id: number }
-  | { credential_json: Record<string, unknown> }
-  | { draft_credential: string };
+  | { credential_json: Record<string, unknown> };
+
+/** The draft credential a check run saved a typed account as. */
+export interface SavedDraftCredential {
+  credential_id: number;
+  /** The `credential_json` the draft holds, as `JSON.stringify` wrote it. */
+  sent_values: string;
+}
+
+/**
+ * The credential as a request body names it: a saved credential or draft by
+ * id, with a typed account's values only when the draft does not hold them
+ * yet. Spread into a request body.
+ */
+export type CredentialRequest =
+  | { credential_id: number; credential_json?: Record<string, unknown> }
+  | { credential_json: Record<string, unknown> };
 
 /**
  * What the connector form's field callbacks read from the selected account:

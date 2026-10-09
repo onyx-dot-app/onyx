@@ -2758,6 +2758,7 @@
         "enterField": "Geben Sie das Feld „{field}“ ein.",
         "fixField": "Prüfen Sie das Feld „{field}“.",
         "awaitingCheck": "Verlassen Sie das Feld, um es mit den Anmeldedaten zu prüfen.",
+        "runChecks": "Führen Sie die Prüfungen aus, um das neue Konto mit diesen Einstellungen zu prüfen.",
         "checking": "Die Anmeldedaten werden geprüft…",
         "fieldInvalid": "Prüfen Sie das Feld „{field}“: {detail}",
         "rejected": "Diese Anmeldedaten können mit diesen Einstellungen nicht verwendet werden. {detail}"

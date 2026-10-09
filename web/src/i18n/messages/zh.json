@@ -2758,6 +2758,7 @@
         "enterField": "请输入“{field}”。",
         "fixField": "请检查“{field}”。",
         "awaitingCheck": "离开该字段后将使用凭据进行检查。",
+        "runChecks": "运行检查，以使用这些设置检查新账户。",
         "checking": "正在检查凭据…",
         "fieldInvalid": "请检查“{field}”：{detail}",
         "rejected": "此凭据无法与这些设置一起使用。{detail}"

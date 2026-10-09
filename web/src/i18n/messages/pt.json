@@ -2758,6 +2758,7 @@
         "enterField": "Insira o campo \"{field}\".",
         "fixField": "Verifique o campo \"{field}\".",
         "awaitingCheck": "Saia do campo para verificá-lo com a credencial.",
+        "runChecks": "Execute as verificações para verificar a nova conta com estas configurações.",
         "checking": "Verificando a credencial…",
         "fieldInvalid": "Verifique o campo \"{field}\": {detail}",
         "rejected": "Esta credencial não pode ser usada com estas configurações. {detail}"

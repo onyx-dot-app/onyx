@@ -8,6 +8,8 @@ import type {
 } from "@/lib/connectors/checks/types";
 
 const RUN_ID = "e2e-check-run";
+// The draft a real run would save a typed account as. Nothing stores it.
+const MOCK_DRAFT_CREDENTIAL_ID = 999_999;
 
 /**
  * The one check the mock knows: required, and it validates the credential, so
@@ -58,7 +60,9 @@ export async function mockPassingConnectorChecks(page: Page): Promise<void> {
         draft_key: request.draft_key,
         source: request.source,
         credential_id:
-          "credential_id" in request ? request.credential_id : null,
+          "credential_id" in request
+            ? request.credential_id
+            : MOCK_DRAFT_CREDENTIAL_ID,
         access_type: request.access_type,
         status: "completed",
         form_errors: {},

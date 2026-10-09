@@ -52,9 +52,12 @@ export interface CredentialBindingCheckResponse {
  * - `done`: the backend answered for this input.
  * - `unavailable`: the request failed, or there is no credential to check.
  *   Creation checks the binding again, so this does not lock the form.
+ * - `awaitingRun`: a typed account whose values no check run has saved yet.
+ *   A binding check sends no values, so it waits for a run.
  */
 export type BindingCheckState =
   | { kind: "idle" }
+  | { kind: "awaitingRun" }
   | { kind: "checking" }
   | { kind: "done"; response: CredentialBindingCheckResponse }
   | { kind: "unavailable" };
@@ -65,6 +68,7 @@ export type BindingGateReason =
   | { kind: "fixField"; label: string }
   | { kind: "selectCredential" }
   | { kind: "awaitingCheck" }
+  | { kind: "runChecks" }
   | { kind: "checking" }
   | { kind: "fieldRejected"; label: string; error: CredentialBindingFieldError }
   | { kind: "rejected"; rejection: CredentialBindingRejection }
@@ -147,6 +151,7 @@ export function decideBindingGate(input: BindingGateInput): BindingGate {
 
   const { binding } = input;
   if (binding.kind === "idle") return locked({ kind: "awaitingCheck" });
+  if (binding.kind === "awaitingRun") return locked({ kind: "runChecks" });
   if (binding.kind === "checking") return CHECKING_GATE;
   if (binding.kind === "done") {
     const [rejectedName, fieldError] =

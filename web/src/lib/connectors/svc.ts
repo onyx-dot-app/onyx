@@ -1,4 +1,3 @@
-import type { CredentialRef } from "@/lib/credentials/types";
 import type { ManageAccessEntry } from "@/lib/connectors/accessType";
 import { mutate } from "swr";
 import { toast } from "@opal/layouts";
@@ -299,25 +298,22 @@ export async function getConnectorOauthRedirectUrl(
 
 const BINDING_CHECK_ERROR = "Unable to check the credential";
 
-/** Checks the credential-bound fields of an unsaved form against a credential. */
+/**
+ * Checks the credential-bound fields of an unsaved form against a saved
+ * credential or the user's draft. Sends no credential values.
+ */
 export async function checkCredentialBinding(
-  credential: CredentialRef,
+  credentialId: number,
   request: CredentialBindingCheckRequest
 ): Promise<CredentialBindingCheckResponse> {
-  const response = !("credential_id" in credential)
-    ? await fetch("/api/manage/admin/draft-credential/binding-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...request, ...credential }),
-      })
-    : await fetch(
-        `/api/manage/admin/credential/${credential.credential_id}/binding-check`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(request),
-        }
-      );
+  const response = await fetch(
+    `/api/manage/admin/credential/${credentialId}/binding-check`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
   if (!response.ok) {
     throw new Error(await parseErrorDetail(response, BINDING_CHECK_ERROR));
   }

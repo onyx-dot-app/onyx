@@ -10,6 +10,8 @@ import {
   getCredentialCreationMethods,
   getEditableCredentialFields,
   shouldRedirectToOAuth,
+  bindingCheckCredentialId,
+  toCredentialRequest,
 } from "@/lib/credentials/utils";
 import {
   CredentialCreationMethod,
@@ -260,4 +262,36 @@ test("falls back to manual credentials without OAuth details", () => {
 test("redirects OAuth providers without additional fields", () => {
   expect(shouldRedirectToOAuth(oauthDetails(true, false))).toBe(true);
   expect(shouldRedirectToOAuth(oauthDetails(true, false, true))).toBe(false);
+});
+
+describe("naming a credential in a request", () => {
+  const values = { api_token: "token" };
+  const typed = { credential_json: values };
+  const saved = { credential_id: 7, sent_values: JSON.stringify(values) };
+
+  it("sends a typed account's values until a run saves a draft", () => {
+    expect(toCredentialRequest(typed, null)).toEqual(typed);
+    expect(bindingCheckCredentialId(typed, null)).toBeNull();
+  });
+
+  it("names the draft alone while it holds the values", () => {
+    expect(toCredentialRequest(typed, saved)).toEqual({ credential_id: 7 });
+    expect(bindingCheckCredentialId(typed, saved)).toBe(7);
+  });
+
+  it("sends changed values with the draft, and no binding check names it", () => {
+    const changed = { credential_json: { api_token: "other" } };
+    expect(toCredentialRequest(changed, saved)).toEqual({
+      credential_id: 7,
+      credential_json: changed.credential_json,
+    });
+    expect(bindingCheckCredentialId(changed, saved)).toBeNull();
+  });
+
+  it("names a saved credential by its id", () => {
+    expect(toCredentialRequest({ credential_id: 3 }, saved)).toEqual({
+      credential_id: 3,
+    });
+    expect(bindingCheckCredentialId({ credential_id: 3 }, saved)).toBe(3);
+  });
 });

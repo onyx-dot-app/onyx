@@ -2,7 +2,7 @@ import type {
   Credential,
   CredentialBase,
   CredentialCheckReport,
-  CredentialRef,
+  CredentialRequest,
   CredentialSharing,
   CredentialWithPrivateKey,
 } from "@/lib/credentials/types";
@@ -285,7 +285,7 @@ export async function startCredentialCheckRun(
 export interface ConnectorWithCredentialRequest {
   connector: ConnectorBase<unknown>;
   pairing: Record<string, unknown>;
-  credential: CredentialRef;
+  credential: CredentialRequest;
   /** How a new (typed) credential is shared. */
   credentialSharing?: CredentialSharing;
 }

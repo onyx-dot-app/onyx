@@ -28,6 +28,8 @@ import { splitCredentialBoundFields } from "@/lib/connectors/utils";
 import { toWireAccess } from "@/lib/connectors/accessType";
 import { checksProgress } from "@/lib/connectors/checks/progress";
 import type { CredentialRef } from "@/lib/credentials/types";
+import { useSavedDraftCredential } from "@/lib/credentials/hooks";
+import { toCredentialRequest } from "@/lib/credentials/utils";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
@@ -226,6 +228,7 @@ export function useConnectorChecks({
   const { mutate } = useSWRConfig();
   const sessionKey = SWR_KEYS.connectorCheckSession(source);
   const { data: session } = useSWR<ConnectorChecksSession>(sessionKey, null);
+  const { savedDraft, rememberDraft } = useSavedDraftCredential(source);
 
   const formState: Record<string, unknown> = useMemo(
     () => connectorFormState(configuration, values),
@@ -290,14 +293,22 @@ export function useConnectorChecks({
           { revalidate: false }
         );
       try {
+        // A typed account's values go only with a run, which saves them in
+        // the user's draft; later requests name the draft.
         const accepted: DraftCheckRunSnapshot = await startDraftCheckRun({
           source,
-          ...credential,
+          ...toCredentialRequest(credential, savedDraft),
           access_type: accessType,
           draft_key: draftKey,
           form_state: formState,
           rerun: mode,
         });
+        if ("credential_json" in credential) {
+          await rememberDraft(
+            accepted.credential_id,
+            credential.credential_json
+          );
+        }
         // Seed the run first, so readers show it at once and poll from it.
         await mutate(SWR_KEYS.connectorCheckRun(accepted.run_id), accepted, {
           revalidate: false,
@@ -318,6 +329,8 @@ export function useConnectorChecks({
     [
       // The key, not the object: callers may build a new one each render.
       credentialKey,
+      savedDraft,
+      rememberDraft,
       session,
       sessionKey,
       bindingKey,

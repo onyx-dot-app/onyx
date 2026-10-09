@@ -3,7 +3,9 @@ import * as Yup from "yup";
 import type {
   Credential,
   CredentialRef,
+  CredentialRequest,
   DraftCredential,
+  SavedDraftCredential,
 } from "@/lib/credentials/types";
 import type {
   CredentialFieldValues,
@@ -485,4 +487,37 @@ export function toCredentialRef(
   return isDraftCredential(credential)
     ? { credential_json: credential.credential_json }
     : { credential_id: credential.id };
+}
+
+/**
+ * How a check run or Create names `credential`. A typed account goes by its
+ * saved draft once a run saved one, with its values only when they changed
+ * since.
+ */
+export function toCredentialRequest(
+  credential: CredentialRef,
+  savedDraft: SavedDraftCredential | null
+): CredentialRequest {
+  if ("credential_id" in credential || savedDraft === null) return credential;
+  return JSON.stringify(credential.credential_json) === savedDraft.sent_values
+    ? { credential_id: savedDraft.credential_id }
+    : {
+        credential_id: savedDraft.credential_id,
+        credential_json: credential.credential_json,
+      };
+}
+
+/**
+ * The credential a binding check may name. A binding check never sends
+ * values, so a typed account has one only while its saved draft holds its
+ * current values; `null` until a check run saves them.
+ */
+export function bindingCheckCredentialId(
+  credential: CredentialRef,
+  savedDraft: SavedDraftCredential | null
+): number | null {
+  const request = toCredentialRequest(credential, savedDraft);
+  return "credential_id" in request && request.credential_json === undefined
+    ? request.credential_id
+    : null;
 }

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { SWRConfig } from "swr";
 import { act, deferred, renderHook } from "@tests/setup/test-utils";
 import {
   useBoundFieldsGate,
@@ -6,6 +8,7 @@ import {
 import { checkCredentialBinding } from "@/lib/connectors/svc";
 import type { CredentialBindingCheckResponse } from "@/lib/connectors/bindingGate";
 import { ValidSources } from "@/lib/connectors/types/source";
+import { useSavedDraftCredential } from "@/lib/credentials/hooks";
 
 jest.mock("@/lib/connectors/svc", () => ({
   checkCredentialBinding: jest.fn(),
@@ -182,5 +185,57 @@ describe("useBoundFieldsGate", () => {
     });
 
     expect(mockedCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for a check run before it checks a typed account, then names its draft", async () => {
+    mockedCheck.mockResolvedValue(VALID);
+    const typed = { credential_json: { confluence_access_token: "token" } };
+    // Its own cache, so no saved draft leaks in from another test.
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <SWRConfig value={{ provider: () => new Map() }}>{children}</SWRConfig>
+    );
+    const { result, rerender } = renderHook(
+      (props: UseBoundFieldsGateParams) => ({
+        gate: useBoundFieldsGate(props),
+        draft: useSavedDraftCredential(props.source),
+      }),
+      {
+        wrapper,
+        initialProps: params({
+          credential: typed,
+          credentialUpdatedAt: null,
+        }),
+      }
+    );
+    await flush();
+
+    expect(mockedCheck).not.toHaveBeenCalled();
+    expect(result.current.gate.reason).toEqual({ kind: "runChecks" });
+    act(() => result.current.gate.requestCheck());
+    await flush();
+    expect(mockedCheck).not.toHaveBeenCalled();
+
+    // A check run saved the values as draft 7.
+    await act(() =>
+      result.current.draft.rememberDraft(7, typed.credential_json)
+    );
+    await flush();
+    expect(mockedCheck).toHaveBeenCalledTimes(1);
+    expect(mockedCheck).toHaveBeenCalledWith(7, {
+      source: ValidSources.Confluence,
+      connector_specific_config: { wiki_base: SITE },
+    });
+    expect(result.current.gate.status).toBe("unlocked");
+
+    // New values wait for the next run, and the old result does not apply.
+    rerender(
+      params({
+        credential: { credential_json: { confluence_access_token: "other" } },
+        credentialUpdatedAt: null,
+      })
+    );
+    await flush();
+    expect(mockedCheck).toHaveBeenCalledTimes(1);
+    expect(result.current.gate.reason).toEqual({ kind: "runChecks" });
   });
 });
