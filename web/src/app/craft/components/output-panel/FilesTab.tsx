@@ -24,7 +24,7 @@ import {
   SvgFileText,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { InlineFilePreview } from "@/app/craft/components/output-panel/FilePreviewContent";
+import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
 
 interface FilesTabProps {
   sessionId: string | null;
@@ -419,7 +419,8 @@ export default function FilesTab({
         </div>
         {/* File content */}
         <div className="flex-1 overflow-auto">
-          <InlineFilePreview
+          <FilePreviewContent
+            fullHeight={false}
             sessionId={sessionId}
             filePath={previewingFile.path}
           />

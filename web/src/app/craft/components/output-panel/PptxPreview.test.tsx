@@ -1,3 +1,4 @@
+import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
 import {
   render,
   screen,
@@ -12,6 +13,7 @@ import {
 } from "@/app/craft/services/apiServices";
 
 jest.mock("@/app/craft/services/apiServices", () => ({
+  ...jest.requireActual("@/app/craft/services/apiServices"),
   fetchPptxPreview: jest.fn(),
 }));
 
@@ -356,4 +358,37 @@ it("leaves arrow keys outside the viewer available for scrolling", async () => {
     key: "ArrowDown",
   });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 2");
+});
+
+it("keeps a hidden deck intact and converts only the latest revision on activation", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 3,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg", "slide-3.jpg"],
+    cached: false,
+  });
+  const view = (revision: string, isActive: boolean) => (
+    <FilePreviewContent
+      sessionId="hidden-conversion"
+      filePath="outputs/deck.pptx"
+      revision={revision}
+      isActive={isActive}
+    />
+  );
+  const { rerender } = render(view("1", true));
+  await screen.findByRole("img");
+  fireEvent.click(screen.getByRole("button", { name: "Slide 3 of 3" }));
+  const image = screen.getByRole("img");
+  const url = image.getAttribute("src");
+  const requests = jest.mocked(fetchPptxPreview).mock.calls.length;
+  rerender(view("2", false));
+  rerender(view("3", false));
+  expect(screen.getByRole("img")).toBe(image);
+  expect(screen.getByRole("img")).toHaveAttribute("src", url);
+  expect(fetchPptxPreview).toHaveBeenCalledTimes(requests);
+  rerender(view("3", true));
+  await waitFor(() =>
+    expect(screen.getByRole("img")).not.toHaveAttribute("src", url)
+  );
+  expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
+  expect(fetchPptxPreview).toHaveBeenCalledTimes(requests + 1);
 });

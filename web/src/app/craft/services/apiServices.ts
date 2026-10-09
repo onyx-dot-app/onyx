@@ -1,3 +1,4 @@
+import { FetchError } from "@/lib/fetcher";
 import {
   ApiSessionResponse,
   ApiDetailedSessionResponse,
@@ -659,10 +660,16 @@ export async function fetchFileContent(
   sessionId: string,
   path: string
 ): Promise<FileContentResponse> {
-  const res = await fetch(buildArtifactUrl(sessionId, path));
+  const res = await fetch(buildArtifactUrl(sessionId, path), {
+    cache: "no-store",
+  });
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch file content: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch file content: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   const mimeType = res.headers.get("Content-Type") || "text/plain";
@@ -820,13 +827,16 @@ export async function fetchPptxPreview(
     .join("/");
 
   const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`
+    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`,
+    { cache: "no-store" }
   );
 
   if (!res.ok) {
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errorData.detail || `Failed to generate PPTX preview: ${res.status}`
+    throw new FetchError(
+      errorData.detail || `Failed to generate PPTX preview: ${res.status}`,
+      res.status,
+      errorData
     );
   }
 

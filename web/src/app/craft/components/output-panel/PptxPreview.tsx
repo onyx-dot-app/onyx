@@ -8,14 +8,16 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import useSWR from "swr";
+import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { cn } from "@opal/utils";
 import { Button, SelectCard, Text } from "@opal/components";
 import { SvgChevronLeft, SvgChevronRight, SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { fetchPptxPreview } from "@/app/craft/services/apiServices";
-import { getArtifactUrl } from "@/lib/build/client";
+import {
+  fetchPptxPreview,
+  buildArtifactUrl,
+} from "@/app/craft/services/apiServices";
 
 interface PptxPreviewProps {
   sessionId: string;
@@ -43,22 +45,14 @@ export default function PptxPreview({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imageLoading, setImageLoading] = useState(true);
 
-  const { data, error, isLoading } = useSWR(
-    [
-      SWR_KEYS.buildSessionPptxPreview(sessionId, filePath),
-      revision,
-      refreshKey ?? 0,
-    ],
+  const { data, error, isLoading } = useFilePreview(
+    SWR_KEYS.buildSessionPptxPreview(sessionId, filePath),
     async () => ({
       ...(await fetchPptxPreview(sessionId, filePath)),
       imageRevision: crypto.randomUUID(),
     }),
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      revalidateIfStale: revision === undefined,
-      dedupingInterval: 10000,
-    }
+    revision,
+    refreshKey
   );
 
   const slideCount = data?.slide_count ?? 0;
@@ -174,7 +168,7 @@ export default function PptxPreview({
 
   const slidePath = data.slide_paths[activeSlide] ?? "";
   // Local refresh counters can repeat after reloads; each response needs fresh images.
-  const slideUrl = `${getArtifactUrl(sessionId, slidePath)}?revision=${data.imageRevision}`;
+  const slideUrl = `${buildArtifactUrl(sessionId, slidePath)}?revision=${data.imageRevision}`;
 
   return (
     <div className="h-full min-h-0 flex overflow-hidden">
@@ -205,7 +199,7 @@ export default function PptxPreview({
             >
               <div className="flex flex-col gap-1">
                 <img
-                  src={`${getArtifactUrl(sessionId, path)}?revision=${data.imageRevision}`}
+                  src={`${buildArtifactUrl(sessionId, path)}?revision=${data.imageRevision}`}
                   alt=""
                   loading="lazy"
                   decoding="async"
