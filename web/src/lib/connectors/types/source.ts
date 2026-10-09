@@ -17,6 +17,7 @@ export enum ValidSources {
   Outline = "outline",
   Confluence = "confluence",
   Jira = "jira",
+  Jsm = "jsm",
   Productboard = "productboard",
   Slab = "slab",
   Coda = "coda",
