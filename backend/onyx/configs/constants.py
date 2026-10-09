@@ -115,7 +115,6 @@ KV_CRED_KEY = "credential_id_{}"
 KV_GEN_AI_KEY_CHECK_TIME = "genai_api_key_last_check_time"
 KV_SETTINGS_KEY = "onyx_settings"
 KV_CUSTOMER_UUID_KEY = "customer_uuid"
-KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
@@ -544,7 +543,6 @@ class OnyxRedisLocks:
 
     SECURITY_SETTINGS = "da_lock:security_settings"
 
-    MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     # In-flight marker: set while a chat-TTL cleanup chain is active (spanning
     # its chained tasks) so the beat won't start a second chain per tenant.
     CHAT_TTL_CHAIN_ACTIVE = "da_lock:chat_ttl_chain_active"
@@ -690,12 +688,11 @@ class OnyxCeleryTask:
     CHECK_FOR_OLD_INDEX_RECLAIM = "check_for_old_index_reclaim"
     RUN_OLD_INDEX_RECLAIM = "run_old_index_reclaim"
 
-    MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
     MONITOR_OPENSEARCH_RESOURCES = "monitor_opensearch_resources"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
-    EMIT_VERSION_TELEMETRY = "emit_version_telemetry"
+    COLLECT_FLEET_TELEMETRY = "collect_fleet_telemetry"
 
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"

@@ -60,8 +60,10 @@ from onyx.server.metrics.opensearch_search import (
     record_opensearch_search_error,
     track_opensearch_search,
 )
+from onyx.utils.fleet_telemetry import emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
+from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS = 2000
 DEFAULT_INDEX_SETTINGS_TIMEOUT_S = 15
@@ -86,6 +88,18 @@ opensearch_logger.setLevel(logging.WARNING)
 
 
 SchemaDocumentModel = TypeVar("SchemaDocumentModel")
+
+
+def _report_written_chunks(written: int, failed: int, started: float) -> None:
+    """Fleet telemetry for one bulk write made for an index attempt."""
+    context: tuple[int, int] | None = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
+    if context is not None:
+        emit_stage_counter(
+            context[1],
+            "write",
+            {"write_chunks": written, "write_errors": max(0, failed)},
+            duration_ms=max(0, int((time.monotonic() - started) * 1000)),
+        )
 
 
 class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
@@ -369,7 +383,7 @@ class OpenSearchClient(AbstractContextManager):
         except Exception:
             pass
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def create_search_pipeline(
         self,
         pipeline_id: str,
@@ -392,7 +406,7 @@ class OpenSearchClient(AbstractContextManager):
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to create search pipeline {pipeline_id}.")
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def delete_search_pipeline(self, pipeline_id: str) -> None:
         """Deletes a search pipeline.
 
@@ -406,7 +420,7 @@ class OpenSearchClient(AbstractContextManager):
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete search pipeline {pipeline_id}.")
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def put_cluster_settings(self, settings: dict[str, Any]) -> bool:
         """Puts cluster settings.
 
@@ -427,7 +441,7 @@ class OpenSearchClient(AbstractContextManager):
             logger.error("Failed to put cluster settings: %s.", response)
             return False
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def list_indices_with_info(self) -> list[IndexInfo]:
         """
         Lists the indices in the OpenSearch cluster with information about each
@@ -454,7 +468,7 @@ class OpenSearchClient(AbstractContextManager):
         ]
         return indices
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def cluster_health(
         self,
         level: str = "cluster",
@@ -477,7 +491,7 @@ class OpenSearchClient(AbstractContextManager):
         """
         return self._client.cluster.health(index=index, level=level)
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def cat_shards(
         self,
         index: str | None = None,
@@ -500,7 +514,7 @@ class OpenSearchClient(AbstractContextManager):
         """
         return self._client.cat.shards(format="json", h=columns, index=index)
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def allocation_explain(
         self,
         index: str | None = None,
@@ -533,7 +547,7 @@ class OpenSearchClient(AbstractContextManager):
             body["primary"] = primary
         return self._client.cluster.allocation_explain(body=body or None)
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def reroute_retry_failed(self) -> dict[str, Any]:
         """Triggers a cluster reroute with retry_failed=true.
 
@@ -552,7 +566,7 @@ class OpenSearchClient(AbstractContextManager):
         """
         return self._client.cluster.reroute(retry_failed=True)
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def ping(self) -> bool:
         """Pings the OpenSearch cluster.
 
@@ -567,7 +581,7 @@ class OpenSearchClient(AbstractContextManager):
             logger.warning("[OpenSearch] Ping failed: %s", e)
             return False
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def get_opensearch_version(self) -> tuple[int, int] | None:
         """Returns the (major, minor) OpenSearch version of the cluster.
 
@@ -668,7 +682,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             self._index_name,
         )
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def create_index(self, mappings: dict[str, Any], settings: dict[str, Any]) -> None:
         """Creates the index.
 
@@ -698,7 +712,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
         logger.debug("Index %s created successfully.", self._index_name)
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def delete_index(self) -> bool:
         """Deletes the index.
 
@@ -722,7 +736,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         logger.info("Index %s deleted successfully.", self._index_name)
         return True
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def index_exists(self) -> bool:
         """Checks if the index exists.
 
@@ -734,7 +748,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         """
         return self._client.indices.exists(index=self._index_name)
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def put_mapping(self, mappings: dict[str, Any]) -> None:
         """Updates the index mapping in an idempotent manner.
 
@@ -783,7 +797,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         return encoder
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def validate_index(self, expected_mappings: dict[str, Any]) -> bool:
         """Validates the index.
 
@@ -863,7 +877,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         logger.debug("Index %s validated successfully.", self._index_name)
         return True
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def update_settings(
         self,
         settings: dict[str, Any],
@@ -894,7 +908,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
         logger.debug("Settings of index %s updated successfully.", self._index_name)
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def get_settings(
         self,
         include_defaults: bool = False,
@@ -937,7 +951,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "defaults", None
         )
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def open_index(self, timeout: float = DEFAULT_INDEX_SETTINGS_TIMEOUT_S) -> None:
         """Opens the index.
 
@@ -953,7 +967,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             raise RuntimeError(f"Failed to open index {self._index_name}.")
         logger.debug("Index %s opened successfully.", self._index_name)
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def close_index(self, timeout: float = DEFAULT_INDEX_SETTINGS_TIMEOUT_S) -> None:
         """Closes the index.
 
@@ -970,7 +984,6 @@ class OpenSearchIndexClient(OpenSearchClient):
         logger.debug("Index %s closed successfully.", self._index_name)
 
     @log_function_time(
-        print_only=True,
         debug_only=True,
         include_args_subset={
             "document": str,
@@ -1049,7 +1062,6 @@ class OpenSearchIndexClient(OpenSearchClient):
         logger.debug("Successfully indexed %s.", document_chunk_id)
 
     @log_function_time(
-        print_only=True,
         debug_only=True,
         include_args_subset={
             "documents": len,
@@ -1130,6 +1142,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             }
             data.append(data_for_document)
 
+        started: float = time.monotonic()
         if use_create_only:
             # a chunk that already exists is owned by a live/forward writer, so
             # the port yields with a benign 409 instead of failing the batch
@@ -1153,6 +1166,9 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
             benign_conflicts = 0
 
+        _report_written_chunks(
+            successes, len(documents) - successes - benign_conflicts, started
+        )
         if successes + benign_conflicts != len(documents):
             raise OpenSearchIndexError(
                 f"Bulk index for index {self._index_name}: successful operations ({successes}) "
@@ -1194,7 +1210,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
         return benign
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def delete_document(self, document_chunk_id: str) -> bool:
         """Deletes a document.
 
@@ -1247,7 +1263,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                     f'Unknown OpenSearch deletion result: "{result_string}".'
                 )
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def delete_by_query(
         self,
         query_body: dict[str, Any],
@@ -1355,7 +1371,6 @@ class OpenSearchIndexClient(OpenSearchClient):
         return int(result["count"])
 
     @log_function_time(
-        print_only=True,
         debug_only=True,
         include_args_subset={
             "document_chunk_id": str,
@@ -1434,7 +1449,6 @@ class OpenSearchIndexClient(OpenSearchClient):
                 )
 
     @log_function_time(
-        print_only=True,
         debug_only=True,
         include_args_subset={
             "document_chunk_ids": len,
@@ -1627,7 +1641,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "Successfully bulk updated %s document chunks.", len(document_chunk_ids)
         )
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(debug_only=True, include_args=True)
     def get_document(self, document_chunk_id: str) -> DocumentChunk:
         """Gets an OpenSearch document chunk.
 
@@ -1668,7 +1682,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         return DocumentChunk.model_validate(document_chunk_source)
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def search(
         self,
         body: dict[str, Any],
@@ -1768,7 +1782,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         return search_hits
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def search_for_document_ids(
         self,
         body: dict[str, Any],
@@ -2112,7 +2126,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
         return found
 
-    @log_function_time(print_only=True, debug_only=True)
+    @log_function_time(debug_only=True)
     def refresh_index(self) -> None:
         """Refreshes the index to make recent changes searchable.
 

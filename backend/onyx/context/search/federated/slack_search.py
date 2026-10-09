@@ -993,7 +993,7 @@ def convert_slack_score(slack_score: float) -> float:
     return max(0.0, min(1.0, slack_score / 90_000))
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def slack_retrieval(
     query: ChunkIndexRequest,
     access_token: str,

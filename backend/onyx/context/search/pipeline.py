@@ -37,7 +37,7 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def _build_index_filters(
     user_provided_filters: BaseFilters | None,
     user: User,  # Used for ACLs, anonymous users only see public docs
@@ -256,7 +256,7 @@ def merge_individual_chunks(
     return result
 
 
-@log_function_time(print_only=True, debug_only=True)
+@log_function_time(debug_only=True)
 def search_pipeline(
     # Query and settings
     chunk_search_request: ChunkSearchRequest,

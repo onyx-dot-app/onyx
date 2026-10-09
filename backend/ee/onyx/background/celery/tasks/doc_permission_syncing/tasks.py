@@ -107,7 +107,6 @@ from onyx.utils.logger import (
     format_error_for_logging,
     setup_logger,
 )
-from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -1140,30 +1139,12 @@ def monitor_ccpair_permissions_taskset(
         f"Permissions sync progress: cc_pair={cc_pair_id} id={payload.id} remaining={remaining} initial={initial}"
     )
 
-    # Add telemetry for permission syncing progress
-    optional_telemetry(
-        record_type=RecordType.PERMISSION_SYNC_PROGRESS,
-        data={
-            "cc_pair_id": cc_pair_id,
-            "total_docs_synced": initial if initial is not None else 0,
-            "remaining_docs_to_sync": remaining,
-        },
-        tenant_id=tenant_id,
-    )
-
     if remaining > 0:
         return
 
     mark_cc_pair_as_permissions_synced(db_session, int(cc_pair_id), payload.started)
     task_logger.info(
         f"Permissions sync finished: cc_pair={cc_pair_id} id={payload.id} num_synced={initial}"
-    )
-
-    # Add telemetry for permission syncing complete
-    optional_telemetry(
-        record_type=RecordType.PERMISSION_SYNC_COMPLETE,
-        data={"cc_pair_id": cc_pair_id},
-        tenant_id=tenant_id,
     )
 
     update_sync_record_status(

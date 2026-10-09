@@ -1,59 +1,22 @@
-import contextvars
-import threading
+"""Cloud product analytics and the instance UUID. Fleet callhome uses fleet_telemetry."""
+
 import uuid
-from enum import Enum
 from typing import Any
 
-import requests
-
-from onyx.configs.app_configs import DISABLE_TELEMETRY
-from onyx.configs.constants import (
-    KV_CUSTOMER_UUID_KEY,
-    KV_INSTANCE_DOMAIN_KEY,
-    MilestoneRecordType,
-)
+from onyx.configs.constants import KV_CUSTOMER_UUID_KEY, MilestoneRecordType
 from onyx.db.encrypted_kv_store import load_encrypted_kv, upsert_encrypted_kv
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import User
 from onyx.key_value_store.interface import KvKeyNotFoundError, unwrap_str
-from onyx.server.settings.models import Tier
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
-    fetch_ee_implementation_or_noop,
     fetch_versioned_implementation_with_fallback,
     noop_fallback,
 )
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 
-_DANSWER_TELEMETRY_ENDPOINT = "https://telemetry.onyx.app/anonymous_telemetry"
 _CACHED_UUID: str | None = None
-_CACHED_INSTANCE_DOMAIN: str | None = None
-
-# Cap each telemetry POST so a slow or unreachable endpoint cannot pin a sender
-# thread indefinitely and let threads accumulate.
-_TELEMETRY_POST_TIMEOUT_SECONDS = 5
-
-
-class RecordType(str, Enum):
-    VERSION = "version"
-    SIGN_UP = "sign_up"
-    USAGE = "usage"
-    LATENCY = "latency"
-    FAILURE = "failure"
-    METRIC = "metric"
-    INDEXING_PROGRESS = "indexing_progress"
-    INDEXING_COMPLETE = "indexing_complete"
-    PERMISSION_SYNC_PROGRESS = "permission_sync_progress"
-    PERMISSION_SYNC_COMPLETE = "permission_sync_complete"
-    INDEX_ATTEMPT_STATUS = "index_attempt_status"
-
-
-def _get_or_generate_customer_id_mt(tenant_id: str) -> str:
-    return str(uuid.uuid5(uuid.NAMESPACE_X500, tenant_id))
 
 
 def get_or_generate_uuid() -> str:
@@ -74,96 +37,6 @@ def get_or_generate_uuid() -> str:
         upsert_encrypted_kv(KV_CUSTOMER_UUID_KEY, {"value": _CACHED_UUID})
 
     return _CACHED_UUID
-
-
-def _get_or_generate_instance_domain() -> str | None:  #
-    global _CACHED_INSTANCE_DOMAIN
-
-    if _CACHED_INSTANCE_DOMAIN is not None:
-        return _CACHED_INSTANCE_DOMAIN
-
-    try:
-        _CACHED_INSTANCE_DOMAIN = unwrap_str(load_encrypted_kv(KV_INSTANCE_DOMAIN_KEY))
-    except KvKeyNotFoundError:
-        with get_session_with_current_tenant() as db_session:
-            first_user = db_session.query(User).first()
-            if first_user:
-                _CACHED_INSTANCE_DOMAIN = first_user.email.split("@")[-1]
-                upsert_encrypted_kv(
-                    KV_INSTANCE_DOMAIN_KEY, {"value": _CACHED_INSTANCE_DOMAIN}
-                )
-
-    return _CACHED_INSTANCE_DOMAIN
-
-
-def _get_tier(tenant_id: str) -> Tier:
-    return fetch_ee_implementation_or_noop(
-        "onyx.utils.tier", "get_tier", Tier.COMMUNITY
-    )(tenant_id)
-
-
-def optional_telemetry(
-    record_type: RecordType,
-    data: dict,
-    user_id: str | None = None,
-    tenant_id: str | None = None,  # Allows for override of tenant_id
-    blocking: bool = False,
-) -> bool | None:
-    """Fire-and-forget by default. With blocking=True, sends in the current
-    thread and returns whether the POST succeeded."""
-    if DISABLE_TELEMETRY:
-        return False if blocking else None
-
-    tenant_id = tenant_id or get_current_tenant_id()
-
-    try:
-
-        def telemetry_logic() -> bool:
-            try:
-                customer_uuid = (
-                    _get_or_generate_customer_id_mt(tenant_id)
-                    if MULTI_TENANT
-                    else get_or_generate_uuid()
-                )
-                payload = {
-                    "data": data,
-                    "record": record_type,
-                    # If None then it's a flow that doesn't include a user
-                    # For cases where the User itself is None, a string is provided instead
-                    "user_id": user_id,
-                    "customer_uuid": customer_uuid,
-                    "is_cloud": MULTI_TENANT,
-                }
-                # Licensed deployments only.
-                if _get_tier(tenant_id) != Tier.COMMUNITY:
-                    payload["instance_domain"] = _get_or_generate_instance_domain()
-                response = requests.post(
-                    _DANSWER_TELEMETRY_ENDPOINT,
-                    headers={"Content-Type": "application/json"},
-                    json=payload,
-                    timeout=_TELEMETRY_POST_TIMEOUT_SECONDS,
-                )
-                return response.ok
-
-            except Exception:
-                # This way it silences all thread level logging as well
-                return False
-
-        if blocking:
-            return telemetry_logic()
-
-        # Run in separate thread with the same context as the current thread
-        # This is to ensure that the thread gets the current tenant ID
-        current_context = contextvars.copy_context()
-        thread = threading.Thread(
-            target=lambda: current_context.run(telemetry_logic), daemon=True
-        )
-        thread.start()
-    except Exception:
-        # Should never interfere with normal functions of Onyx
-        pass
-
-    return None
 
 
 def mt_cloud_telemetry(

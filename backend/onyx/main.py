@@ -169,12 +169,12 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx, setup_onyx
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
+from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger, setup_uvicorn_logger
 from onyx.utils.middleware import (
     add_endpoint_context_middleware,
     add_onyx_request_id_middleware,
 )
-from onyx.utils.telemetry import RecordType, get_or_generate_uuid, optional_telemetry
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
     fetch_versioned_implementation,
@@ -412,9 +412,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     await warm_up_connections()
 
     if not MULTI_TENANT:
-        # We cache this at the beginning so there is no delay in the first telemetry
         CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
-        get_or_generate_uuid()
 
         # If we are multi-tenant, we need to only set up initial public tables
         with get_session_with_current_tenant() as db_session:
@@ -431,11 +429,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     else:
         setup_multitenant_onyx()
 
-    if not MULTI_TENANT:
-        # don't emit a metric for every pod rollover/restart
-        optional_telemetry(
-            record_type=RecordType.VERSION, data={"version": __version__}
-        )
+    start_telemetry("api")
 
     if RATE_LIMITING_ENABLED:
         await setup_auth_limiter()
