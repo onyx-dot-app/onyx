@@ -16,7 +16,11 @@ from sqlalchemy.exc import OperationalError
 
 from onyx.cache import factory as cache_factory
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY, CacheBackendType
+from onyx.cache.interface import (
+    TTL_KEY_NOT_FOUND,
+    TTL_NO_EXPIRY,
+    CacheBackendType,
+)
 from onyx.cache.postgres_backend import (
     PostgresCacheBackend,
     PostgresCacheLock,
@@ -356,3 +360,14 @@ def test_lease_renewal_rejects_lease_that_expires_during_row_lock_wait(
         assert pg_cache.ttl(key) == TTL_KEY_NOT_FOUND
     finally:
         pg_cache.delete(key)
+
+
+def test_shared_cache_backend_works_on_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cache_factory, "CACHE_BACKEND", CacheBackendType.POSTGRES)
+    cache = cache_factory.get_shared_cache_backend()
+    key = f"shared-{uuid4().hex}"
+    cache.set(key, b"value", ex=60)
+    assert cache.get(key) == b"value"
+    cache.delete(key)

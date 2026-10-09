@@ -178,7 +178,6 @@ class TestVerifyLicenseAuth:
     """Tests for verify_license_auth helper."""
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     @patch("ee.onyx.server.tenants.proxy.is_license_valid")
     async def test_valid_license(
@@ -198,7 +197,6 @@ class TestVerifyLicenseAuth:
         assert result == mock_payload
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     async def test_invalid_signature(
         self,
@@ -218,7 +216,6 @@ class TestVerifyLicenseAuth:
         assert "Invalid license" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     @patch("ee.onyx.server.tenants.proxy.is_license_valid")
     async def test_expired_license_rejected(
@@ -242,7 +239,6 @@ class TestVerifyLicenseAuth:
         assert "expired" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     @patch("ee.onyx.server.tenants.proxy.is_license_valid")
     async def test_expired_license_allowed(
@@ -262,7 +258,6 @@ class TestVerifyLicenseAuth:
         assert result == mock_payload
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
     @patch("ee.onyx.server.tenants.proxy.is_license_valid")
     async def test_a_long_expired_license_still_authenticates_the_way_back_in(

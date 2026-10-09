@@ -1,5 +1,5 @@
-import { FileTypeCategory } from "./types";
-import type { FileTypeDefinition } from "./types";
+import { FileTypeCategory } from "@/lib/connectors/types";
+import type { FileTypeDefinition } from "@/lib/connectors/types";
 
 export const FILE_TYPE_DEFINITIONS: Record<
   FileTypeCategory,

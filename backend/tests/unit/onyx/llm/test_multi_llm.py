@@ -12,7 +12,6 @@ from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
 import onyx.llm.model_request
-from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
@@ -276,7 +275,6 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             client=ANY,  # HTTPHandler instance created per-request
             stream_options={"include_usage": True},
             parallel_tool_calls=True,
-            mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
         )
 
@@ -432,7 +430,6 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             client=ANY,  # HTTPHandler instance created per-stream
             stream_options={"include_usage": True},
             parallel_tool_calls=True,
-            mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
         )
 
@@ -2857,39 +2854,58 @@ def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:
     assert llm._model_kwargs["api_base"] == "https://bifrost.example.com/v1"
 
 
-def test_prompt_contains_tool_call_history_true() -> None:
-    from onyx.llm.multi_llm import _prompt_contains_tool_call_history
+def _weather_tool_call_message() -> AssistantMessage:
+    return AssistantMessage(
+        content=None,
+        tool_calls=[
+            ToolCall(
+                id="tc_1",
+                function=RequestFunctionCall(name="get_weather", arguments="{}"),
+            )
+        ],
+    )
+
+
+def test_prompt_in_tool_loop_true() -> None:
+    from onyx.llm.multi_llm import _prompt_in_tool_loop
 
     messages: list[ChatCompletionMessage] = [
         UserMessage(content="What's the weather?"),
-        AssistantMessage(
-            content=None,
-            tool_calls=[
-                ToolCall(
-                    id="tc_1",
-                    function=RequestFunctionCall(name="get_weather", arguments="{}"),
-                )
-            ],
-        ),
+        _weather_tool_call_message(),
+        ToolMessage(content="sunny", tool_call_id="tc_1"),
     ]
-    assert _prompt_contains_tool_call_history(messages) is True
+    assert _prompt_in_tool_loop(messages) is True
 
 
-def test_prompt_contains_tool_call_history_false_no_tools() -> None:
-    from onyx.llm.multi_llm import _prompt_contains_tool_call_history
+def test_prompt_in_tool_loop_false_after_completed_tool_turn() -> None:
+    """A tool call in an earlier, answered turn must not disable thinking."""
+    from onyx.llm.multi_llm import _prompt_in_tool_loop
+
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="What's the weather?"),
+        _weather_tool_call_message(),
+        ToolMessage(content="sunny", tool_call_id="tc_1"),
+        AssistantMessage(content="It is sunny."),
+        UserMessage(content="And tomorrow?"),
+    ]
+    assert _prompt_in_tool_loop(messages) is False
+
+
+def test_prompt_in_tool_loop_false_no_tools() -> None:
+    from onyx.llm.multi_llm import _prompt_in_tool_loop
 
     messages: list[ChatCompletionMessage] = [
         UserMessage(content="Hello"),
         AssistantMessage(content="Hi there!"),
     ]
-    assert _prompt_contains_tool_call_history(messages) is False
+    assert _prompt_in_tool_loop(messages) is False
 
 
-def test_prompt_contains_tool_call_history_false_user_only() -> None:
-    from onyx.llm.multi_llm import _prompt_contains_tool_call_history
+def test_prompt_in_tool_loop_false_user_only() -> None:
+    from onyx.llm.multi_llm import _prompt_in_tool_loop
 
     messages: list[ChatCompletionMessage] = [UserMessage(content="Hello")]
-    assert _prompt_contains_tool_call_history(messages) is False
+    assert _prompt_in_tool_loop(messages) is False
 
 
 def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:

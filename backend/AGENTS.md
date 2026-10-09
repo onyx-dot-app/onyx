@@ -13,13 +13,25 @@ tests. Additive to the root `AGENTS.md`.
   PostgreSQL implementation of `CacheBackend`, so its queries belong there.
 - When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
   function.
-- OpenSearch is the current document index backend for search and indexing. Some legacy modules,
-  Celery task names, and migration helpers still mention Vespa; treat those as compatibility or
-  migration artifacts unless the active `DocumentIndex` factory/config path explicitly uses them.
+- OpenSearch is the only document index backend for search and indexing. Onyx no longer uses
+  Vespa. Some live Celery names still say "vespa" (the `vespa_metadata_sync` queue, the
+  `check_for_vespa_sync_task` task, the `onyx.background.celery.tasks.vespa` module); they sync
+  the document index and keep their names so running deployments are not disrupted.
 - Do not use `getattr`: it hides attribute access from the type checker. Use
   plain attribute access when the name is statically known. A genuinely dynamic
   lookup needs an `# ods: ignore[getattr]` comment with a brief justification
   (checked by `ods check-getattr`).
+- Use `CacheBackend` (`get_cache_backend()` / `get_shared_cache_backend()` in
+  `backend/onyx/cache/factory.py`) for cache and short-lived state: one-time codes, counters,
+  rate limits, locks. Do not call Redis directly or write Lua scripts. Onyx can run with
+  PostgreSQL as its cache (`CACHE_BACKEND=postgres`, for example Onyx Lite), so direct Redis
+  code breaks those deployments. If `CacheBackend` does not have an operation you need, add it
+  to the interface with both the Redis and PostgreSQL implementations.
+- Do not use functions as constants. A value that depends only on startup configuration (env
+  vars, `app_configs`) is a module-level constant computed once, not a zero-argument function
+  that recomputes it on every call. If the configuration can be invalid, the loader returns
+  `None` and logs instead of raising, so a bad value disables the feature rather than breaking
+  imports. Tests patch the module constant.
 
 ## Background Workers (Celery)
 
@@ -93,6 +105,13 @@ uv run alembic -n schema_private revision -m "description"
 ```
 
 Write the migration manually and place it in the file that alembic creates when running the above command.
+
+Rows a revision in `alembic/versions` inserts must be identical on every schema: fixed ids and
+literal values, no `uuid4()`, `now()`, randomness or env reads. The template snapshot is cloned
+into new tenants and compared with a fresh build on deploy, so a run-dependent value breaks the
+comparison. Schema defaults and updates to existing rows are fine.
+`scripts/check_migration_determinism.py` enforces this on commit for revisions newer than the
+rule, and `# migration-determinism: allow` marks a deliberate exception.
 
 ## Testing Strategy
 

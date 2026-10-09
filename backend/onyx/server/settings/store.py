@@ -7,7 +7,6 @@ from onyx.configs.app_configs import (
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_USER_KNOWLEDGE,
     DISABLE_VECTOR_DB,
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
     HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
     ONYX_QUERY_HISTORY_TYPE,
@@ -88,7 +87,7 @@ def load_settings(raise_on_error: bool = False) -> Settings:
         settings.user_knowledge_enabled = False
 
     settings.show_extra_connectors = SHOW_EXTRA_CONNECTORS
-    settings.opensearch_indexing_enabled = ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+    settings.opensearch_indexing_enabled = True
     settings.hide_query_history_from_admin_panel = HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL
 
     # Resolve context-aware defaults for token threshold.
@@ -119,6 +118,16 @@ def load_settings(raise_on_error: bool = False) -> Settings:
         settings.user_file_max_upload_size_mb = MAX_ALLOWED_UPLOAD_SIZE_MB
 
     return settings
+
+
+def clear_chat_retention() -> None:
+    """Stops the retention task from deleting chats. Raises if the stored
+    settings cannot be read, so a failed read never passes for cleared."""
+    with settings_write_lock():
+        settings: Settings = load_settings(raise_on_error=True)
+        if settings.maximum_chat_retention_days is not None:
+            settings.maximum_chat_retention_days = None
+            store_settings(settings)
 
 
 def store_settings(settings: Settings) -> None:

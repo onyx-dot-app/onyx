@@ -305,7 +305,7 @@ def select_sections_for_expansion(
         content=DOCUMENT_SELECTION_PROMPT.format(
             max_sections=max_sections,
             extra_instructions=extra_instructions,
-            formatted_doc_sections=json.dumps(sections_dict, indent=2),
+            formatted_doc_sections=json.dumps(sections_dict, separators=(",", ":")),
             user_query=user_query,
         )
     )

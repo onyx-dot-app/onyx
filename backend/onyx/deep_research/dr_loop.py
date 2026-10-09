@@ -27,7 +27,8 @@ from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SupportedLanguage
 from onyx.db.tools import get_tool_by_name
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.models import ResearchAgentCallFailure
+from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
     THINK_TOOL_RESPONSE_TOKEN_COUNT,
@@ -40,6 +41,7 @@ from onyx.deep_research.utils import (
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
+from onyx.llm.model_request import serialize_tools
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.prompts.deep_research.orchestration_layer import (
     CLARIFICATION_PROMPT,
@@ -64,7 +66,6 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     SectionEnd,
-    TopLevelBranching,
 )
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.interface import Tool
@@ -302,7 +303,9 @@ def run_deep_research_llm_loop(
                 llm_step_result, _ = run_llm_step(
                     emitter=emitter,
                     history=truncated_message_history,
-                    tool_definitions=get_clarification_tool_definitions(),
+                    tool_definitions=serialize_tools(
+                        get_clarification_tool_definitions()
+                    ),
                     tool_choice=ToolChoiceOptions.AUTO,
                     llm=llm,
                     reasoning_effort=reasoning_effort,
@@ -542,8 +545,10 @@ def run_deep_research_llm_loop(
                 llm_step_result, has_reasoned = run_llm_step(
                     emitter=emitter,
                     history=truncated_message_history,
-                    tool_definitions=get_orchestrator_tools(
-                        include_think_tool=not is_reasoning_model
+                    tool_definitions=serialize_tools(
+                        get_orchestrator_tools(
+                            include_think_tool=not is_reasoning_model
+                        )
                     ),
                     tool_choice=ToolChoiceOptions.REQUIRED,
                     llm=llm,
@@ -703,26 +708,9 @@ def run_deep_research_llm_loop(
                         )
                         break
 
-                    if len(research_agent_calls) > 1:
-                        emitter.emit(
-                            Packet(
-                                placement=Placement(
-                                    turn_index=research_agent_calls[
-                                        0
-                                    ].placement.turn_index
-                                ),
-                                obj=TopLevelBranching(
-                                    num_parallel_branches=len(research_agent_calls)
-                                ),
-                            )
-                        )
-
                     research_results = run_research_agent_calls(
                         # The tool calls here contain the placement information
                         research_agent_calls=research_agent_calls,
-                        parent_tool_call_ids=[
-                            tool_call.tool_call_id for tool_call in tool_calls
-                        ],
                         tools=allowed_tools,
                         emitter=emitter,
                         state_container=state_container,
@@ -773,7 +761,7 @@ def run_deep_research_llm_loop(
                     for tab_index, report in enumerate(
                         research_results.intermediate_reports
                     ):
-                        if report is None:
+                        if isinstance(report, ResearchAgentCallFailure):
                             # Every tool_use id in the preceding assistant message must have a
                             # matching TOOL_CALL_RESPONSE or strict providers (e.g. AWS Bedrock
                             # Converse) reject the next request with 400 "Expected toolResult
@@ -785,7 +773,7 @@ def run_deep_research_llm_loop(
                                 tab_index,
                             )
                             failed_tool_call = research_agent_calls[tab_index]
-                            failure_message = "Research agent call failed. Try a different approach or continue without this result."
+                            failure_message = report.message
                             simple_chat_history.append(
                                 ChatMessageSimple(
                                     message=failure_message,

@@ -7,7 +7,6 @@ from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import (
     CitationMapping,
-    CitationMode,
     DynamicCitationProcessor,
 )
 from onyx.chat.citation_utils import (
@@ -17,26 +16,33 @@ from onyx.chat.citation_utils import (
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
-from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
+from onyx.chat.models import (
+    ChatMessageSimple,
+    CitationMode,
+    LlmStepResult,
+    ToolCallSimple,
+)
 from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.models import (
+    CombinedResearchAgentCallResult,
+    ResearchAgentCallFailure,
+    ResearchAgentCallResult,
+)
+from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_TASK_KEY,
     THINK_TOOL_RESPONSE_MESSAGE,
     THINK_TOOL_RESPONSE_TOKEN_COUNT,
     get_research_agent_additional_tool_definitions,
-)
-from onyx.deep_research.models import (
-    CombinedResearchAgentCallResult,
-    ResearchAgentCallResult,
 )
 from onyx.deep_research.utils import (
     check_special_tool_calls,
     create_think_tool_token_processor,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.model_request import serialize_tools
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION,
@@ -91,7 +97,14 @@ logger = setup_logger()
 
 # 30 minute timeout per research agent
 RESEARCH_AGENT_TIMEOUT_SECONDS = 30 * 60
-RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 30 minutes"
+RESEARCH_AGENT_TIMEOUT_MESSAGE = (
+    "Research agent timed out after 30 minutes. "
+    "Try a different approach or continue without this result."
+)
+RESEARCH_AGENT_FAILURE_MESSAGE = (
+    "Research agent call failed. "
+    "Try a different approach or continue without this result."
+)
 # 12 minute timeout before forcing intermediate report generation
 RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 # May be good to experiment with this, empirically reports of around 5,000 tokens are pretty good.
@@ -223,7 +236,6 @@ def generate_intermediate_report(
 
 def run_research_agent_call(
     research_agent_call: ToolCallKickoff,
-    parent_tool_call_id: str,
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -371,8 +383,10 @@ def run_research_agent_call(
                 llm_step_result, has_reasoned = run_llm_step(
                     emitter=emitter,
                     history=constructed_history,
-                    tool_definitions=[tool.tool_definition() for tool in current_tools]
-                    + research_agent_tools,
+                    tool_definitions=serialize_tools(
+                        [tool.tool_definition() for tool in current_tools]
+                        + research_agent_tools
+                    ),
                     tool_choice=ToolChoiceOptions.REQUIRED,
                     llm=llm,
                     placement=Placement(
@@ -468,7 +482,8 @@ def run_research_agent_call(
                         )
                         msg_history.append(think_tool_response_msg)
                         think_span.span_data.output = THINK_TOOL_RESPONSE_MESSAGE
-                    reasoning_cycles += 1
+                    # The think tool token processor streams the arguments as reasoning,
+                    # so run_llm_step already counted this step in has_reasoned.
                     most_recent_reasoning = llm_step_result.reasoning
                     continue
                 else:
@@ -581,7 +596,7 @@ def run_research_agent_call(
                         # Research Agent is a top level tool call but the tools called by the research
                         # agent are sub-tool calls.
                         tool_call_info = ToolCallInfo(
-                            parent_tool_call_id=parent_tool_call_id,
+                            parent_tool_call_id=research_agent_call.tool_call_id,
                             # At the DB save level, there is only a turn index, no sub-turn etc.
                             # This is implied by the parent tool call's turn index and the depth
                             # of the tree traversal.
@@ -594,7 +609,11 @@ def run_research_agent_call(
                             or most_recent_reasoning,
                             tool_call_arguments=tc.tool_args,
                             tool_call_response=tool_response.llm_facing_response,
-                            search_docs=displayed_docs or search_docs,
+                            search_docs=(
+                                displayed_docs
+                                if displayed_docs is not None
+                                else search_docs
+                            ),
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)
@@ -653,12 +672,7 @@ def _on_research_agent_timeout(
     index: int,  # noqa: ARG001
     func: Callable[..., Any],  # noqa: ARG001
     args: tuple[Any, ...],
-) -> ResearchAgentCallResult:
-    """Callback for handling research agent timeouts.
-
-    Returns a ResearchAgentCallResult with the timeout message so the research
-    can continue with other agents.
-    """
+) -> ResearchAgentCallFailure:
     research_agent_call: ToolCallKickoff = args[0]  # First arg
     research_task = research_agent_call.tool_args.get(
         RESEARCH_AGENT_TASK_KEY, "unknown"
@@ -668,15 +682,11 @@ def _on_research_agent_timeout(
         RESEARCH_AGENT_TIMEOUT_SECONDS,
         research_task,
     )
-    return ResearchAgentCallResult(
-        intermediate_report=RESEARCH_AGENT_TIMEOUT_MESSAGE,
-        citation_mapping={},
-    )
+    return ResearchAgentCallFailure(message=RESEARCH_AGENT_TIMEOUT_MESSAGE)
 
 
 def run_research_agent_calls(
     research_agent_calls: list[ToolCallKickoff],
-    parent_tool_call_ids: list[str],
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -694,7 +704,6 @@ def run_research_agent_calls(
             run_research_agent_call,
             (
                 research_agent_call,
-                parent_tool_call_id,
                 tools,
                 emitter,
                 state_container,
@@ -706,9 +715,7 @@ def run_research_agent_calls(
                 reasoning_effort,
             ),
         )
-        for research_agent_call, parent_tool_call_id in zip(
-            research_agent_calls, parent_tool_call_ids, strict=False
-        )
+        for research_agent_call in research_agent_calls
     ]
 
     research_agent_call_results = run_functions_tuples_in_parallel(
@@ -722,11 +729,16 @@ def run_research_agent_calls(
     )
 
     updated_citation_mapping = citation_mapping
-    updated_answers: list[str | None] = []
+    updated_answers: list[str | ResearchAgentCallFailure] = []
 
     for result in research_agent_call_results:
         if result is None:
-            updated_answers.append(None)
+            updated_answers.append(
+                ResearchAgentCallFailure(message=RESEARCH_AGENT_FAILURE_MESSAGE)
+            )
+            continue
+        if isinstance(result, ResearchAgentCallFailure):
+            updated_answers.append(result)
             continue
 
         # Use collapse_citations to renumber citations in the text and merge mappings.
@@ -752,6 +764,7 @@ if __name__ == "__main__":
     from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
     from onyx.db.models import User
     from onyx.db.persona import get_default_behavior_persona
+    from onyx.db.tools import capture_persona_tool_configuration
     from onyx.llm.factory import get_default_llm, get_llm_token_counter
     from onyx.llm.model_capabilities import model_is_reasoning_model
     from onyx.server.query_and_chat.placement import Placement
@@ -786,7 +799,7 @@ if __name__ == "__main__":
         # No chat session exists here, so skip the tools that write
         # session-scoped generated files.
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
             emitter=emitter,
             user=user,
@@ -811,7 +824,6 @@ if __name__ == "__main__":
                 tool_call_id=str(uuid4()),
                 placement=Placement(turn_index=0, tab_index=0),
             ),
-            parent_tool_call_id=str(uuid4()),
             tools=tools,
             emitter=emitter,
             state_container=state_container,

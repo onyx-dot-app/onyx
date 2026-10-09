@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { render, screen } from "@tests/setup/test-utils";
 import { Formik } from "formik";
 import { RenderField } from "@/views/admin/connectors/AddConnectorPage/form/FieldRendering";
@@ -6,7 +7,14 @@ import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
 } from "@/lib/connectors/utils";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+
+// Field descriptions render as Opal markdown. Under Jest, react-markdown's
+// default export loads as a module object, so render the source text as is.
+jest.mock("react-markdown", () => ({
+  __esModule: true,
+  default: ({ children }: { children?: string }) => children ?? null,
+}));
 
 function ZoomForm() {
   const config = connectorConfigs.zoom;
@@ -52,6 +60,13 @@ test("meetings and webinars are both included until the admin unticks one", () =
   expect(values.include_webinars).toBe(true);
 });
 
+test("link access counts as public until the admin unticks it", () => {
+  // Off leaves nearly every transcript readable by its owner alone.
+  const values = createConnectorInitialValues(ValidSources.Zoom);
+
+  expect(values.treat_link_access_as_public).toBe(true);
+});
+
 test("the form posts the names the connector takes", () => {
   const names = connectorConfigs.zoom.values.map((field) => field.name);
 
@@ -62,24 +77,28 @@ test("the form posts the names the connector takes", () => {
     "group_id",
     "include_meetings",
     "include_webinars",
+    "treat_link_access_as_public",
     "plan_tier",
   ]);
 });
 
-test("the plan select offers exactly the tiers the backend parses", () => {
+test("the plan select offers exactly the tiers the backend parses", async () => {
+  const user = userEvent.setup();
   render(<ZoomForm />);
 
-  const plan = screen.getByRole("combobox");
+  await user.click(screen.getByRole("combobox"));
   expect(
-    [...plan.querySelectorAll("option")].map((option) => option.value)
-  ).toEqual(["", "pro", "business_plus"]);
+    screen.getAllByRole("option").map((option) => option.textContent)
+  ).toEqual(["pro", "business_plus"]);
 });
 
 test("the rate limit share is an advanced number field", () => {
   render(<ZoomForm />);
 
-  const rateLimit = screen.getByRole("spinbutton");
-  expect(rateLimit).toHaveAttribute("name", "rate_limit_percent");
+  const rateLimit = screen.getByLabelText(/Zoom API Rate Limit/);
+  expect(rateLimit).toHaveAttribute("id", "rate_limit_percent");
+  // Connector number fields allow -1, so the pattern takes a leading minus.
+  expect(rateLimit).toHaveAttribute("pattern", "-?[0-9]*");
 });
 
 test("the plan has to be chosen", async () => {

@@ -154,7 +154,7 @@ def permission_holder_user_factory(
 
     Module-scoped and memoized by permission string. Requires the
     user-group permission API (Enterprise-only) — callers must guard their
-    module with the ``ENABLE_PAID_ENTERPRISE_EDITION_FEATURES`` skipif.
+    module with the ``RUN_EE_TESTS`` skipif.
     """
 
     cache: dict[str, DATestUser] = {}

@@ -14,6 +14,11 @@ type ShadowDirection = "top-and-bottom" | "top-only" | "bottom-only";
  */
 type ShadowDivVariant = "shadow" | "mask";
 
+/** One variant for both edges, or one per edge. */
+type ShadowDivVariants =
+  | ShadowDivVariant
+  | { top: ShadowDivVariant; bottom: ShadowDivVariant };
+
 interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
    * Height of each gradient, as a spacing step (`N / 4` rem).
@@ -33,10 +38,11 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   shadowDirection?: ShadowDirection;
 
   /**
-   * How the edges fade.
+   * How the edges fade: one variant for both, or one per edge (a shadow
+   * under a pinned header, a mask at the open end).
    * Defaults to `"shadow"`.
    */
-  variant?: ShadowDivVariant;
+  variant?: ShadowDivVariants;
 
   /**
    * Class for the outer wrapper (e.g. flex sizing within a parent column).
@@ -87,6 +93,8 @@ function ShadowDiv({
 
   const showTop = shadowDirection !== "bottom-only";
   const showBottom = shadowDirection !== "top-only";
+  const topVariant = typeof variant === "string" ? variant : variant.top;
+  const bottomVariant = typeof variant === "string" ? variant : variant.bottom;
 
   const checkScroll = useCallback(() => {
     const container = containerRef.current;
@@ -125,8 +133,11 @@ function ShadowDiv({
   }, [containerRef, checkScroll]);
 
   const fadeHeight = spacingToRem(shadowHeight);
-  const topFade = showTop && showTopShadow ? fadeHeight : "0px";
-  const bottomFade = showBottom && showBottomShadow ? fadeHeight : "0px";
+  // The mask fades only the edges that use it; a painted edge stays opaque.
+  const masksTop = topVariant === "mask" && showTop;
+  const masksBottom = bottomVariant === "mask" && showBottom;
+  const topFade = masksTop && showTopShadow ? fadeHeight : "0px";
+  const bottomFade = masksBottom && showBottomShadow ? fadeHeight : "0px";
   const maskImage = `linear-gradient(to bottom, transparent 0, black ${topFade}, black calc(100% - ${bottomFade}), transparent 100%)`;
 
   return (
@@ -135,7 +146,7 @@ function ShadowDiv({
         ref={containerRef}
         className={cn("overflow-y-auto", className)}
         style={
-          variant === "mask"
+          masksTop || masksBottom
             ? { ...style, maskImage, WebkitMaskImage: maskImage }
             : style
         }
@@ -145,7 +156,7 @@ function ShadowDiv({
       </div>
 
       {/* Top scroll shadow indicator */}
-      {variant === "shadow" && showTop && (
+      {topVariant === "shadow" && showTop && (
         <div
           className={cn(
             "absolute top-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
@@ -159,7 +170,7 @@ function ShadowDiv({
       )}
 
       {/* Bottom scroll shadow indicator */}
-      {variant === "shadow" && showBottom && (
+      {bottomVariant === "shadow" && showBottom && (
         <div
           className={cn(
             "absolute bottom-0 start-0 end-0 pointer-events-none transition-opacity duration-150",
@@ -180,4 +191,5 @@ export {
   type ShadowDivProps,
   type ShadowDirection,
   type ShadowDivVariant,
+  type ShadowDivVariants,
 };

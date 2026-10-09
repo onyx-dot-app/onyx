@@ -33,7 +33,7 @@ Sandbox containers run with:
   opencode auth/config only)
 - only the dedicated sandbox bridge network — never compose's default
   network. ``onyx-craft-api`` is the supported API endpoint on that bridge;
-  postgres, redis, minio, and model_server remain unreachable by service name.
+  postgres, redis, object-store, and model_server remain unreachable by service name.
 
 Threat model — Docker vs Kubernetes parity gap
 ----------------------------------------------
@@ -77,6 +77,7 @@ from uuid import UUID
 from docker import DockerClient
 from docker.errors import APIError, NotFound
 from docker.models.containers import Container
+from docker.models.networks import Network
 
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
@@ -113,7 +114,8 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdin_to_container,
     stream_stdout_from_container,
 )
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.labels import (
@@ -127,7 +129,6 @@ from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FileSet,
-    FilesystemEntry,
     SandboxInfo,
     SnapshotResult,
 )
@@ -339,11 +340,12 @@ _COMPOSE_INTERNAL_HOSTNAMES = {
     "relational_db",
     "cache",
     "minio",
+    "object-store",
     "model_server",
     "indexing_model_server",
     "inference_model_server",
     "web_server",
-    "vespa",
+    "opensearch",
 }
 
 
@@ -420,7 +422,8 @@ def build_sandbox_labels(
 
 # Sandbox should reach loopback directly; everything else (api server included)
 # goes through the proxy.
-_NO_PROXY_LIST = "127.0.0.1,localhost"
+_IPV4_LISTEN_HOST = "0.0.0.0"  # noqa: S104 — isolated sandbox bridge listener
+_NO_PROXY_LIST = "127.0.0.1,localhost,::1"
 
 
 def _proxy_env_vars(
@@ -519,6 +522,7 @@ def build_container_create_kwargs(
     compose_project: str | None = None,
     sandbox_proxy_host: str | None = None,
     proxy_ca_volume_name: str | None = None,
+    listen_host: str = _IPV4_LISTEN_HOST,
 ) -> ContainerCreateKwargs:
     """Builds the kwargs dict for ``DockerClient.containers.create``.
 
@@ -538,7 +542,7 @@ def build_container_create_kwargs(
     - **Single network**: joins only the caller-supplied ``network`` (the
       dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's default
       network; the dedicated API alias is supported there, while postgres,
-      redis, and minio remain unreachable by service name.
+      redis, and object-store remain unreachable by service name.
 
     Proxy-enabled (``sandbox_proxy_host`` set; production self-host compose with
     ``--include-craft``):
@@ -584,7 +588,7 @@ def build_container_create_kwargs(
     ``OPENCODE_CONFIG_CONTENT`` for opencode-serve to load at startup; each
     workspace provides its gateway catalog in a session-local config.
     """
-    if _looks_like_internal_compose_host(api_server_url):
+    if not sandbox_proxy_host and _looks_like_internal_compose_host(api_server_url):
         logger.warning(
             "ONYX_SERVER_URL=%s looks like an internal compose hostname. Sandboxes only "
             "join the craft bridge network, so default-network DNS will fail. Use the "
@@ -604,6 +608,9 @@ def build_container_create_kwargs(
         # inherits the allowlist the managed start path also sets.
         "ONYX_WEBAPP_ALLOWED_DEV_ORIGINS": allowed_dev_origins(),
     }
+
+    if listen_host != _IPV4_LISTEN_HOST:
+        env["SANDBOX_LISTEN_HOST"] = listen_host
 
     security_opts = ["no-new-privileges:true"]
     ports: dict[str, tuple[str, int | None]] = {}
@@ -1018,6 +1025,13 @@ class DockerSandboxManager(SandboxManager):
         # build_container_create_kwargs to layer on the legacy posture without
         # bifurcating this call site.
         proxy_host = SANDBOX_PROXY_HOST or None
+        network: Network = self._docker.networks.get(self._network_name)
+        # Match the sandbox bridge; dual-stack bridges retain IPv4 listeners.
+        listen_host: str = (
+            "::"
+            if network.attrs.get("EnableIPv4", True) is False
+            else _IPV4_LISTEN_HOST
+        )
         create_kwargs = build_container_create_kwargs(
             sandbox_id=sandbox_id,
             user_id=user_id,
@@ -1026,6 +1040,7 @@ class DockerSandboxManager(SandboxManager):
             onyx_pat=onyx_pat,
             api_server_url=ONYX_SERVER_URL,
             network=self._network_name,
+            listen_host=listen_host,
             volume_name=volume_name,
             memory_limit=self._memory_limit,
             cpu_limit=self._cpu_limit,
@@ -1679,7 +1694,7 @@ fi
                     "-E",
                     "-s",
                     "-m",
-                    "sandbox_daemon.manifest",
+                    "sandbox_daemon.outputs_manifest",
                     str(session_id),
                 ],
                 workdir="/opt",

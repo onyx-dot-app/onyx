@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document, TextSection
-from onyx.document_index.interfaces_new import IndexingMetadata, TenantState
+from onyx.document_index.interfaces import IndexingMetadata, TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
@@ -46,7 +46,6 @@ def _make_chunk(
         chunk_context="",
         contextual_rag_reserved_tokens=0,
         embeddings=ChunkEmbedding(full_embedding=[0.1] * 10, mini_chunk_embeddings=[]),
-        title_embedding=[0.1] * 10,
         tenant_id="test_tenant",
         access=access,
         document_sets=set(),

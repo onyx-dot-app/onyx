@@ -15,7 +15,8 @@ export type WebSearchProviderType =
   | "exa"
   | "searxng"
   | "brave"
-  | "tavily";
+  | "tavily"
+  | "firecrawl";
 
 export type WebContentProviderType =
   | "firecrawl"

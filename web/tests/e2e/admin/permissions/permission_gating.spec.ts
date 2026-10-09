@@ -4,6 +4,7 @@ import { Permission } from "@/lib/types";
 import { apiLogin, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
+import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -307,25 +308,26 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       // Access type and groups live on the connector setup page, so reaching
       // /admin/connectors says nothing about them. `web` has no credential
       // template, so its page shows the configuration straight away.
+      const setupPage = new ConnectorSetupPage(page, "web");
       await page.goto("/admin/connectors/web");
       await page.waitForLoadState("networkidle");
-      await expect(page.getByText("Document Access")).toBeVisible({
-        timeout: 10000,
-      });
+      await expect(setupPage.accessTypeSelect).toBeVisible({ timeout: 10000 });
 
       // a global holder defaults to public, which has no groups to scope
       // must be the picker, not "assigned to group X" — the old code auto-assigned
-      await page.getByText("Public", { exact: true }).first().click();
-      await page.getByText("Private", { exact: true }).first().click();
-      await expect(
-        page.getByText("Assign group access for this Connector")
-      ).toBeVisible({ timeout: 10000 });
+      await expect(setupPage.accessTypeSelect).toHaveValue(
+        "Everyone in Your Organization"
+      );
+      await setupPage.pickAccessType("Specific Groups");
+      await expect(setupPage.groupAccessPrompt).toBeVisible({ timeout: 10000 });
 
       // Drive's credential form used to render an empty fragment for non-admins
       // — a blank modal, no error, no network call.
       await page.goto("/admin/connectors/google-drive");
       await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Create New" }).click();
+      await page
+        .getByRole("button", { name: "New Google Drive Account" })
+        .click();
       await expect(
         page.getByText("Authenticate with Google Drive")
       ).toBeVisible({ timeout: 10000 });

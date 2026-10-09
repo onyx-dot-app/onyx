@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
@@ -11,18 +12,12 @@ import {
   Table,
   Text,
   Tooltip,
-  createTableColumns,
+  type TableColumn,
 } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import {
-  SvgClock,
-  SvgPlus,
-  SvgRefreshCw,
-  SvgTrash,
-  SvgSimpleLoader,
-} from "@opal/icons";
+import { SvgClock, SvgPlus, SvgRefreshCw, SvgTrash } from "@opal/icons";
 import { deleteScheduledTask } from "@/app/craft/v1/tasks/api";
 import {
   RunStatusBadge,
@@ -44,8 +39,6 @@ import {
 import { humanReadableScheduleFromCron } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-
-const tc = createTableColumns<ScheduledTaskListItem>();
 type TasksListTranslate = ReturnType<
   typeof useTranslations<"craft.tasks.listPage">
 >;
@@ -55,38 +48,49 @@ interface RowActionHandlers {
   onDelete: (task: ScheduledTaskListItem) => void;
 }
 
-function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
+function buildColumns(
+  handlers: RowActionHandlers,
+  t: TasksListTranslate
+): TableColumn<ScheduledTaskListItem>[] {
   return [
-    tc.column("name", {
-      header: t("columns.name"),
+    {
+      kind: "data",
+      field: "name",
+      title: t("columns.name"),
       weight: 25,
-      enableSorting: false,
+      sortable: false,
       cell: (value) => (
         <Text font="main-ui-body" color="text-05" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       ),
-    }),
-    tc.column("human_readable_schedule", {
-      header: t("columns.schedule"),
+    },
+    {
+      kind: "data",
+      field: "human_readable_schedule",
+      title: t("columns.schedule"),
       weight: 22,
-      enableSorting: false,
+      sortable: false,
       cell: (value) => (
         <Text font="main-ui-body" color="text-03" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       ),
-    }),
-    tc.column("status", {
-      header: t("columns.status"),
+    },
+    {
+      kind: "data",
+      field: "status",
+      title: t("columns.status"),
       weight: 12,
-      enableSorting: false,
+      sortable: false,
       cell: (status) => <TaskStatusBadge status={status} />,
-    }),
-    tc.column("last_run", {
-      header: t("columns.lastRun"),
+    },
+    {
+      kind: "data",
+      field: "last_run",
+      title: t("columns.lastRun"),
       weight: 18,
-      enableSorting: false,
+      sortable: false,
       cell: (lastRun) => {
         if (!lastRun) {
           return (
@@ -104,11 +108,13 @@ function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
           </div>
         );
       },
-    }),
-    tc.column("next_run_at", {
-      header: t("columns.nextRun"),
+    },
+    {
+      kind: "data",
+      field: "next_run_at",
+      title: t("columns.nextRun"),
       weight: 13,
-      enableSorting: false,
+      sortable: false,
       cell: (nextRunAt) => {
         if (!nextRunAt) {
           return (
@@ -129,12 +135,13 @@ function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
           </Tooltip>
         );
       },
-    }),
-    tc.actions({
+    },
+    {
+      kind: "actions",
       showColumnVisibility: false,
       showSorting: false,
       cell: (task) => <TaskRowActions task={task} handlers={handlers} />,
-    }),
+    },
   ];
 }
 
@@ -221,7 +228,7 @@ export default function ScheduledTasksListPage() {
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SvgSimpleLoader className="h-6 w-6" />
+            <IconLoader className="h-6 w-6" />
           </div>
         ) : error ? (
           <Section gap={2}>
@@ -239,7 +246,7 @@ export default function ScheduledTasksListPage() {
           </Section>
         ) : (
           <Table
-            data={tasks}
+            items={tasks}
             columns={columns}
             getRowId={(row) => row.id}
             pageSize={

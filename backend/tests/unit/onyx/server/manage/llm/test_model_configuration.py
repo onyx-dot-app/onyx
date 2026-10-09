@@ -578,7 +578,9 @@ class TestLLMProviderDescriptorRecommendedDefault:
                 return_value=default,
             ),
         ):
-            return LLMProviderDescriptor.from_model(provider_model)
+            return LLMProviderDescriptor.from_model(
+                provider_model, provider_model.model_configurations, None
+            )
 
     def test_marks_only_the_recommended_default_model(self) -> None:
         descriptor = self._from_model(
@@ -622,7 +624,9 @@ class TestLLMProviderDescriptorRecommendedDefault:
                 return_value=None,
             ),
         ):
-            LLMProviderDescriptor.from_model(provider_model)
+            LLMProviderDescriptor.from_model(
+                provider_model, provider_model.model_configurations, None
+            )
 
         assert mock_filter.call_args.kwargs["deployment_name"] == "gpt-5.1"
 

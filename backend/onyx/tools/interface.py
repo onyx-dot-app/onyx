@@ -6,6 +6,7 @@ from typing import Any, Generic, TypeVar
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolResponse
 
@@ -61,10 +62,7 @@ class Tool(abc.ABC, Generic[TOverride]):
         return True
 
     @abc.abstractmethod
-    def tool_definition(self) -> dict:
-        """
-        This is the full definition of the tool with all of the parameters, settings, etc.
-        """
+    def tool_definition(self) -> ToolDefinition:
         raise NotImplementedError
 
     @abc.abstractmethod

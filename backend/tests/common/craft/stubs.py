@@ -57,14 +57,14 @@ from typing import Any, cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FileSet,
-    FilesystemEntry,
     PromptAttachment,
     SandboxInfo,
     SnapshotResult,
@@ -610,7 +610,9 @@ class StubSandboxManager(SandboxManager):
         return self.list_directory_returns
 
     def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
     ) -> OutputsManifestResponse:
         self.get_outputs_manifest_count += 1
         self.last_outputs_manifest_payload = {

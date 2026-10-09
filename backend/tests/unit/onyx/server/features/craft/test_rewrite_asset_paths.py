@@ -75,8 +75,11 @@ class TestNextjsProxyMountContract:
         """Local Next dev cannot proxy websocket upgrades via /api/[...path]."""
         source = WEB_NEXT_CONFIG.read_text()
 
-        assert "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr" in source
-        assert "/build/sessions/:sessionId/webapp/_next/webpack-hmr" in source
+        assert (
+            "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)"
+            in source
+        )
+        assert "/build/sessions/:sessionId/webapp/_next/:hmrEndpoint" in source
 
 
 class _FakeUpstream:
@@ -202,29 +205,37 @@ class TestProxyRequestWiring:
         assert body == "<html><head><title>x</title></head><body></body></html>"
         assert "window.WebSocket = function (url, protocols)" not in body
 
-    def test_hmr_websocket_url_targets_native_nextjs_base_path(self) -> None:
+    @pytest.mark.parametrize("endpoint", ["hmr", "webpack-hmr"])
+    def test_hmr_websocket_url_targets_native_nextjs_base_path(
+        self, endpoint: api.HmrEndpoint
+    ) -> None:
         target = api._webapp_hmr_websocket_url(
-            UUID(SESSION_ID), "http://sandbox:3014", "id=req-1"
+            UUID(SESSION_ID), "http://sandbox:3014", "id=req-1", endpoint
         )
 
         assert target == (
-            f"ws://sandbox:3014/{BASE.lstrip('/')}/_next/webpack-hmr?id=req-1"
+            f"ws://sandbox:3014/{BASE.lstrip('/')}/_next/{endpoint}?id=req-1"
         )
 
-    def test_hmr_websocket_url_strips_non_hmr_query_params(self) -> None:
+    @pytest.mark.parametrize("endpoint", ["hmr", "webpack-hmr"])
+    def test_hmr_websocket_url_strips_non_hmr_query_params(
+        self, endpoint: api.HmrEndpoint
+    ) -> None:
         target = api._webapp_hmr_websocket_url(
             UUID(SESSION_ID),
             "http://sandbox:3014",
             "id=req-1&token=secret&authorization=bearer",
+            endpoint,
         )
 
         assert target == (
-            f"ws://sandbox:3014/{BASE.lstrip('/')}/_next/webpack-hmr?id=req-1"
+            f"ws://sandbox:3014/{BASE.lstrip('/')}/_next/{endpoint}?id=req-1"
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("endpoint", ["hmr", "webpack-hmr"])
     async def test_hmr_websocket_proxy_does_not_forward_viewer_headers(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, endpoint: api.HmrEndpoint
     ) -> None:
         captured: dict[str, object] = {}
 
@@ -256,12 +267,12 @@ class TestProxyRequestWiring:
 
         websocket = FakeWebSocket()
         await api._proxy_webapp_hmr_websocket(
-            UUID(SESSION_ID), cast(api.WebSocket, websocket)
+            UUID(SESSION_ID), cast(api.WebSocket, websocket), endpoint
         )
 
         assert websocket.accepted
         assert captured["uri"] == (
-            f"ws://sandbox/{BASE.lstrip('/')}/_next/webpack-hmr?id=req-1"
+            f"ws://sandbox/{BASE.lstrip('/')}/_next/{endpoint}?id=req-1"
         )
         assert captured["kwargs"] == {
             "additional_headers": None,

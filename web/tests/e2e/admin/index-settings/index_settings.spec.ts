@@ -222,6 +222,51 @@ test.describe("Index Settings Page @exclusive", () => {
     await expect(modal).not.toBeVisible({ timeout: 15000 });
   });
 
+  test("Google connection tests the selected model with Workload Identity", async ({
+    page,
+  }) => {
+    const vertexConfig = {
+      auth_method: "workload_identity",
+      project_id: "vertex-project",
+      location: "global",
+    };
+    let providerSaved = false;
+    await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+      if (route.request().method() === "PUT") {
+        expect(route.request().postDataJSON()).toMatchObject({
+          provider_type: "google",
+          api_key: null,
+          api_key_changed: true,
+          vertex_config: vertexConfig,
+        });
+        providerSaved = true;
+        await route.fulfill({ status: 200, body: JSON.stringify({}) });
+      } else {
+        await route.fulfill({ status: 200, body: JSON.stringify([]) });
+      }
+    });
+    await page.route(TEST_EMBEDDING_API, async (route) => {
+      const body = route.request().postDataJSON();
+      expect(body).toMatchObject({
+        provider_type: "google",
+        model_name: "gemini-embedding-2",
+        api_key: null,
+        vertex_config: vertexConfig,
+      });
+      await route.fulfill({ status: 200, body: JSON.stringify({}) });
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expandModelPicker();
+    await indexSettings.switchToCloudTab();
+    await indexSettings.openGoogleModelSetup("gemini-embedding-2");
+    await indexSettings.fillGoogleWorkloadIdentity("vertex-project", "global");
+    await indexSettings.submitProviderSetup();
+    expect(providerSaved).toBe(true);
+    await indexSettings.expectModelStaged();
+  });
+
   test("edit modal pre-fills existing provider fields", async ({ page }) => {
     // Seed a connected provider via the API
     await page.route(TEST_EMBEDDING_API, async (route) => {
@@ -929,6 +974,57 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
     const applyButton = page.getByRole("button", { name: "Apply & Re-index" });
     await expect(applyButton).toBeVisible({ timeout: 5000 });
     await expect(applyButton).toBeDisabled();
+  });
+});
+
+test.describe("Index Settings — vector quantization @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  test("the vector quantization control is hidden", async ({ page }) => {
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expectVectorQuantizationHidden();
+  });
+
+  test("a re-index keeps the saved quantization level", async ({ page }) => {
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const servedSettings: TestSearchSettings = {
+      ...current,
+      vector_quantization: "scalar_1_bit",
+    };
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+      void page.route(SET_NEW_SETTINGS_API, async (route) => {
+        resolve(
+          JSON.parse(route.request().postData() ?? "{}") as Record<
+            string,
+            unknown
+          >
+        );
+        await route.fulfill({ status: 200, body: JSON.stringify({ id: 1 }) });
+      });
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await stageNonCurrentSelfHostedModel(page);
+    await indexSettings.applyReindex();
+
+    const body = await bodyPromise;
+    expect(body.vector_quantization).toBe("scalar_1_bit");
   });
 });
 

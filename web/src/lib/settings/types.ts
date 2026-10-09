@@ -70,6 +70,12 @@ export interface Settings {
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;
 
+  // Workspace-wide switch for the LLM gateway (direct model API access via
+  // /api/gateway). When false, all gateway routes reject requests.
+  llm_gateway_enabled?: boolean;
+
+  oauth_provider_enabled?: boolean;
+
   // Workspace-wide instructions injected into every Craft agent's system
   // prompt (AGENTS.md).
   craft_instructions?: string | null;
@@ -88,9 +94,6 @@ export interface Settings {
   // Seat usage - populated when seat limit is exceeded
   seat_count?: number | null;
   used_seats?: number | null;
-
-  // OpenSearch migration
-  opensearch_indexing_enabled?: boolean;
 
   // Vector DB availability flag - false when DISABLE_VECTOR_DB is set.
   // When false, connectors, RAG search, document sets, and related features

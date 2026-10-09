@@ -1,12 +1,11 @@
 from collections.abc import Callable, Generator
 from typing import TypeVar
 
-from pydantic import ValidationError
-
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CredentialCapability,
+    form_config,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -27,8 +26,8 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     raise_for_auth_error,
     raise_for_graph_error,
 )
+from onyx.connectors.onedrive.config import OneDriveConnectorConfig
 from onyx.connectors.onedrive.models import (
-    OneDriveConnectorConfig,
     OneDriveDrive,
     OneDriveUser,
     OneDriveUserPage,
@@ -57,14 +56,9 @@ def _gateway(context: CapabilityCheckContext) -> OneDriveSourceOperations:
 
 
 def _config(context: CapabilityCheckContext) -> OneDriveConnectorConfig:
-    try:
-        return OneDriveConnectorConfig.model_validate(
-            context.connector_specific_config or {}
-        )
-    except ValidationError as error:
-        raise ConnectorValidationError(
-            f"Invalid OneDrive connector configuration: {error}"
-        ) from error
+    # The runner fails a config-reading check before ``run`` when the config
+    # has an invalid field.
+    return form_config(context, OneDriveConnectorConfig)
 
 
 def _configured_users(context: CapabilityCheckContext) -> list[str]:
@@ -252,7 +246,9 @@ class _UsersCheck(CapabilityCheck):
             raise_for_graph_error(error, "The app cannot list tenant users.")
 
 
-class _ConfiguredUsersCheck(CapabilityCheck):
+class _ConfiguredUsersCheck(CapabilityCheck[OneDriveConnectorConfig]):
+    config_class = OneDriveConnectorConfig
+
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
@@ -275,7 +271,9 @@ class _ConfiguredUsersCheck(CapabilityCheck):
                 raise ConnectorValidationError(f"No user matches `{identifier}`.")
 
 
-class _DriveCheck(CapabilityCheck):
+class _DriveCheck(CapabilityCheck[OneDriveConnectorConfig]):
+    config_class = OneDriveConnectorConfig
+
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
@@ -299,7 +297,9 @@ class _DriveCheck(CapabilityCheck):
             raise_for_graph_error(error, "The app cannot read this user's OneDrive.")
 
 
-class _DeltaCheck(CapabilityCheck):
+class _DeltaCheck(CapabilityCheck[OneDriveConnectorConfig]):
+    config_class = OneDriveConnectorConfig
+
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
@@ -335,7 +335,9 @@ class _DeltaCheck(CapabilityCheck):
             raise_for_graph_error(error, "The app cannot read OneDrive changes.")
 
 
-class _PermissionCheck(CapabilityCheck):
+class _PermissionCheck(CapabilityCheck[OneDriveConnectorConfig]):
+    config_class = OneDriveConnectorConfig
+
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,

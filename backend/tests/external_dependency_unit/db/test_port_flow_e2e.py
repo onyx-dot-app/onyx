@@ -28,11 +28,11 @@ from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX, ASYM_QUERY_PREFIX
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db import swap_index
 from onyx.db.enums import (
-    EmbeddingPrecision,
     IndexingStatus,
     IndexModelStatus,
     PortAttemptStatus,
     SwitchoverType,
+    VectorQuantization,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -42,7 +42,7 @@ from onyx.db.models import (
 )
 from onyx.db.port_attempt import get_port_attempt
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -101,7 +101,6 @@ def _make_chunk(
         document_id=document_id,
         chunk_index=chunk_index,
         title=None,
-        title_vector=None,
         content=content,
         content_vector=list(_PLACEHOLDER_VECTOR),
         source_type=DocumentSource.FILE.value,
@@ -142,7 +141,6 @@ def _make_saved_settings(
         provider_type=None,
         index_name=index_name,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=False,
         contextual_rag_llm_name=None,
@@ -306,7 +304,7 @@ def test_port_flow_end_to_end(
 
         # check_and_perform_index_swap fetches the FUTURE row via
         # get_secondary_search_settings (a stale FUTURE row exists in this dev
-        # DB), and get_all_document_indices would touch real Vespa/OpenSearch
+        # DB), and get_default_document_index would touch real OpenSearch
         # provisioning -> patch both in the swap_index namespace. The deferred
         # metadata-sync backlog is 0 in this dev DB; if it weren't, the swap
         # criterion would block, so we don't need to patch the count.
@@ -324,7 +322,7 @@ def test_port_flow_end_to_end(
                 "fetch_indexable_standard_connector_credential_pair_ids",
                 lambda *_, **__: [pair.id],
             ),
-            patch.object(swap_index, "get_all_document_indices", return_value=[]),
+            patch.object(swap_index, "get_default_document_index"),
         ):
             old_settings = swap_index.check_and_perform_index_swap(db_session)
 
@@ -429,7 +427,7 @@ def test_delete_port_written_chunks_only_marked(
             tenant_state=tenant_state,
             index_name=index_name,
             embedding_dim=_VECTOR_DIM,
-            embedding_precision=EmbeddingPrecision.FLOAT,
+            vector_quantization=VectorQuantization.NONE,
         )
         deleted = index.delete_port_written_chunks([marked_doc, unmarked_doc])
         client.refresh_index()

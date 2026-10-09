@@ -23,17 +23,18 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.outlook.connector import (
     CALENDAR_NODE_PREFIX,
-    DOCUMENT_ID_PREFIX,
     EVENT_DOCUMENT_ID_PREFIX,
     MAILBOX_NODE_PREFIX,
     OutlookConnector,
 )
+from onyx.connectors.outlook.threads import THREAD_DOCUMENT_ID_PREFIX
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import ConnectorOutput, load_all_from_connector
 from tests.utils.pytest_secrets import RedactedDict
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.SHAREPOINT_CLIENT_SECRET)
+
 
 TEST_MAILBOX = "test@danswerai.onmicrosoft.com"
 # No tenant user has this address, so validation must refuse it every run.
@@ -104,7 +105,7 @@ def _conversation_sent_by_mailbox(documents: list[Document], subject: str) -> Do
     matches = [
         d
         for d in documents
-        if d.id.startswith(DOCUMENT_ID_PREFIX)
+        if d.id.startswith(THREAD_DOCUMENT_ID_PREFIX)
         and d.semantic_identifier == subject
         and TEST_MAILBOX in _emails(d.primary_owners)
     ]
@@ -195,7 +196,7 @@ def test_mailbox_walk_yields_conversations_under_their_folders(
     assert not {"Junk Email", "Deleted Items"} & folder_names, folder_names
     assert not _calendar_nodes(result.hierarchy_nodes), "Calendar is off"
     for doc in result.documents:
-        assert doc.id.startswith(DOCUMENT_ID_PREFIX), doc.id
+        assert doc.id.startswith(THREAD_DOCUMENT_ID_PREFIX), doc.id
 
     share = _conversation_sent_by_mailbox(result.documents, FOLDER_SHARE_SUBJECT)
     assert share.metadata["message_count"] == "1"

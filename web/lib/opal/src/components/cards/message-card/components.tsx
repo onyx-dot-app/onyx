@@ -6,11 +6,14 @@ import type {
   CardColor,
   IconFunctionComponent,
   RichStr,
+  Rounding,
+  ShadowVariants,
   StatusVariants,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
 import { ContentAction } from "@opal/layouts";
 import { Card } from "@opal/components/cards/card/components";
+import { Fold } from "@opal/components/fold/components";
 import { Button, Divider } from "@opal/components";
 import {
   SvgAlertCircle,
@@ -20,6 +23,7 @@ import {
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
+import { useState } from "react";
 import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
@@ -61,8 +65,27 @@ interface MessageCardBaseProps {
   innerPadding?: 1 | 2;
 
   /**
+   * Padding of the `ContentAction` itself, inside `innerPadding`, as a
+   * spacing step.
+   *
+   * @default 0
+   */
+  contentPadding?: 0 | 0.5 | 1 | 2;
+
+  rounding?: Rounding;
+
+  /**
+   * Drop-shadow depth of the card, passed to `Card`.
+   *
+   * @default "none"
+   */
+  shadow?: ShadowVariants;
+
+  /**
    * Content rendered below a divider, under the main content area.
    * When provided, a `Divider` is inserted between the `ContentAction` and this node.
+   * Adding or removing it animates the section open or closed; a card that
+   * mounts with it does not animate.
    */
   bottomChildren?: React.ReactNode;
 
@@ -171,14 +194,25 @@ function MessageCard({
   titleMaxLines,
   outerPadding = 2,
   innerPadding = 2,
+  contentPadding = 0,
+  shadow = "none",
   bottomChildren,
   rightChildren,
   onClose,
+  rounding = 4,
   ref,
 }: MessageCardProps) {
   const { icon: DefaultIcon, iconClass, color } = VARIANT_CONFIG[variant];
   const Icon = iconOverride ?? DefaultIcon;
   const strings = useOpalStrings();
+  // Falsey content (`condition && <X />`) counts as absent, as it always has.
+  const expanded = Boolean(bottomChildren);
+  // The last section shown, kept so it can animate out after the caller
+  // drops it.
+  const [shownBottom, setShownBottom] = useState(bottomChildren);
+  if (expanded && bottomChildren !== shownBottom) {
+    setShownBottom(bottomChildren);
+  }
 
   const right = onClose ? (
     <Button
@@ -193,7 +227,7 @@ function MessageCard({
     rightChildren
   );
 
-  // Built on Card: the root owns color, border, rounding, and padding, so
+  // Built on Card: the root owns color, border, and padding, so
   // this component keeps only its message layout. The wrapper preserves the
   // stretch behavior the old root class carried, since Card takes no
   // className.
@@ -203,8 +237,9 @@ function MessageCard({
         color={color}
         border="solid"
         borderColor={variant}
-        rounding={4}
+        rounding={rounding}
         padding={outerPadding}
+        shadow={shadow}
       >
         <div className="opal-message-card-layout">
           <div style={{ padding: spacingToRem(innerPadding) }}>
@@ -218,16 +253,18 @@ function MessageCard({
               sizePreset="main-ui"
               variant="section"
               rightChildren={right}
-              padding={0}
+              padding={contentPadding}
             />
           </div>
 
-          {bottomChildren && (
-            <>
-              <Divider paddingParallel={2} paddingPerpendicular={1} />
-              {bottomChildren}
-            </>
-          )}
+          {/* Fold animates only a change, so a card that mounts with the
+              section does not play the opening on page load. */}
+          <Fold open={expanded}>
+            <div className="opal-message-card-bottom-content">
+              <Divider paddingParallel={3} paddingPerpendicular={0} />
+              {expanded ? bottomChildren : shownBottom}
+            </div>
+          </Fold>
         </div>
       </Card>
     </div>

@@ -91,6 +91,7 @@ export function buildLlmOptions(
         options.push({
           name: llmProvider.name ?? "",
           provider: llmProvider.provider,
+          providerId: llmProvider.id,
           providerDisplayName:
             llmProvider.name || getProvider(llmProvider.provider).productName,
           modelName: mc.name,
@@ -327,6 +328,9 @@ export function buildModelSelectOptions(
               {
                 value: String(option.modelConfigurationId),
                 title: option.displayName,
+                // The raw model name is what admins type, and what a server
+                // name search matched, so it must also match here.
+                keywords: [option.modelName],
                 icon: getModelIcon(option.provider, option.modelName),
               },
             ]

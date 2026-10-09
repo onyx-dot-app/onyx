@@ -46,10 +46,6 @@ class LLMFlow(StrEnum):
     CONTEXTUAL_RAG_CHUNK_CONTEXT = "contextual_rag_chunk_context"
     IMAGE_SUMMARIZATION = "image_summarization"
 
-    # Knowledge graph
-    KG_DOCUMENT_CLASSIFICATION = "kg_document_classification"
-    KG_DEEP_EXTRACTION = "kg_deep_extraction"
-
     # Image generation
     IMAGE_GENERATION = "image_generation"
     IMAGE_EDIT = "image_edit"
@@ -79,7 +75,5 @@ SYSTEM_TEXT_GENERATION_FLOWS: frozenset[LLMFlow] = frozenset(
         LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
         LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
         LLMFlow.IMAGE_SUMMARIZATION,
-        LLMFlow.KG_DOCUMENT_CLASSIFICATION,
-        LLMFlow.KG_DEEP_EXTRACTION,
     }
 )

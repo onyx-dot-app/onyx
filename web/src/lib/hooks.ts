@@ -5,11 +5,10 @@ import {
   Tag,
   UserGroup,
   ConnectorStatus,
-  FederatedConnectorDetail,
-  ValidSources,
   ConnectorIndexingStatusLiteResponse,
   IndexingStatusRequest,
 } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import {
@@ -27,12 +26,12 @@ import {
   parseLlmDescriptor,
 } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
-import type { Credential } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
   DefaultModel,
   LLMProviderDescriptor,
+  ModelPaging,
   ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
@@ -49,19 +48,6 @@ import {
   useLanguageModelsForAgent,
 } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
-
-export const usePublicCredentials = () => {
-  const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<Credential<any>[]>(
-    SWR_KEYS.adminCredentials,
-    errorHandlingFetcher
-  );
-
-  return {
-    ...swrResponse,
-    refreshCredentials: () => mutate(SWR_KEYS.adminCredentials),
-  };
-};
 
 const buildReactedDocsUrl = (ascending: boolean, limit: number) => {
   return `/api/manage/admin/doc-boosts?ascending=${ascending}&limit=${limit}`;
@@ -221,20 +207,6 @@ export const useConnectorStatus = (
   };
 };
 
-export const useFederatedConnectors = () => {
-  const { mutate } = useSWRConfig();
-  const url = SWR_KEYS.federatedConnectors;
-  const swrResponse = useSWR<FederatedConnectorDetail[]>(
-    url,
-    errorHandlingFetcher
-  );
-
-  return {
-    ...swrResponse,
-    refreshFederatedConnectors: () => mutate(url),
-  };
-};
-
 export interface LlmDescriptor {
   name: string;
   provider: string;
@@ -269,6 +241,8 @@ export interface LlmManager {
   /** True only when an override was set locally or is stored on the session. */
   hasTemperatureOverride: boolean;
   llmProviders: LLMProviderDescriptor[] | undefined;
+  /** Pages in the models `llmProviders` left out, for pickers fed that list. */
+  modelPaging: ModelPaging;
   isLoadingProviders: boolean;
   hasAnyProvider: boolean;
 }
@@ -470,6 +444,7 @@ export function useLlmManager(
     llmProviders: allUserProviders,
     defaultText: allUserDefaultText,
     isLoading: isLoadingAllProviders,
+    modelPaging: allUserModelPaging,
   } = useLanguageModels();
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
   // Only fetch if we have an agent selected
@@ -478,12 +453,15 @@ export function useLlmManager(
     llmProviders: personaProviders,
     defaultText: personaDefaultText,
     isLoading: isLoadingPersonaProviders,
+    modelPaging: personaModelPaging,
   } = useLanguageModelsForAgent(personaId);
 
   const llmProviders =
     personaProviders !== undefined ? personaProviders : allUserProviders;
   const defaultText =
     personaProviders !== undefined ? personaDefaultText : allUserDefaultText;
+  const modelPaging =
+    personaProviders !== undefined ? personaModelPaging : allUserModelPaging;
 
   const [userHasManuallyOverriddenLLM, setUserHasManuallyOverriddenLLM] =
     useState(false);
@@ -893,6 +871,7 @@ export function useLlmManager(
       temperatureExplicitlySet ||
       currentChatSession?.current_temperature_override != null,
     llmProviders,
+    modelPaging,
     isLoadingProviders:
       isLoadingAllProviders ||
       (personaId !== undefined && isLoadingPersonaProviders),

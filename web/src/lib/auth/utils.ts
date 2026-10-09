@@ -112,3 +112,39 @@ export function shouldAutoStartSso(
     (authTypeMetadata.ssoProviders ?? []).length === 1
   );
 }
+
+// ---------------------------------------------------------------------------
+// Stale SSO state restart
+// ---------------------------------------------------------------------------
+
+// Callback errors a fresh login clears: a saved or shared IdP link, a login
+// tab left open past the state's lifetime, or a second tab's flow.
+const STALE_SSO_STATE_ERRORS: ReadonlySet<string> = new Set([
+  "ACCESS_TOKEN_DECODE_ERROR",
+  "ACCESS_TOKEN_ALREADY_EXPIRED",
+  "OAUTH_INVALID_STATE",
+]);
+
+const SSO_RESTART_STORAGE_KEY = "onyx:sso-restart";
+// Covers one IdP round trip: a restart that fails again inside it shows the
+// error, and a later stale link in the same tab restarts again.
+const SSO_RESTART_WINDOW_MS = 5 * 60 * 1000;
+
+export function isStaleSsoStateError(code: string | null): boolean {
+  return code !== null && STALE_SSO_STATE_ERRORS.has(code);
+}
+
+/** Claims this tab's automatic SSO restart. False inside the window or when
+ * storage throws, since an unrecorded restart could loop. */
+export function claimSsoRestart(): boolean {
+  try {
+    const storage = window.sessionStorage;
+    const now = Date.now();
+    const lastRestart = Number(storage.getItem(SSO_RESTART_STORAGE_KEY));
+    if (now - lastRestart < SSO_RESTART_WINDOW_MS) return false;
+    storage.setItem(SSO_RESTART_STORAGE_KEY, String(now));
+    return true;
+  } catch {
+    return false;
+  }
+}

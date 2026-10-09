@@ -7,36 +7,43 @@ content, never an HTTP error.
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import (
     DocumentSource,
-    OnyxCeleryPriority,
-    OnyxCeleryQueues,
-    OnyxCeleryTask,
+)
+from onyx.connectors.capability_checks.draft_runs import (
+    DraftCheckPlan,
+    DraftCheckRunSnapshot,
+    DraftRerunMode,
+    read_draft_run_for_user,
 )
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
-from onyx.connectors.capability_checks.runner import (
-    capability_check_run_ceiling_seconds,
-    capability_check_run_stale_after,
+from onyx.connectors.credential_families import is_credential_usable_for_source
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.factory import (
+    CredentialBindingFieldError,
+    credential_binding_field_errors,
+    validate_connector_config,
+    validate_credential_binding,
 )
-from onyx.connectors.factory import validate_connector_config
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_connector_credential_pair_for_user,
     get_connector_credential_pairs_for_user,
 )
 from onyx.db.credential_capability import (
     get_capability_report_row,
     get_capability_report_rows_for_source,
-    mark_capability_report_running,
-    mark_capability_run_failed,
 )
 from onyx.db.credentials import (
     fetch_credential_by_id,
@@ -44,13 +51,23 @@ from onyx.db.credentials import (
     fetch_credentials_by_source_for_user,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus, Permission
-from onyx.db.models import CredentialCapabilityReportRow, User
+from onyx.db.enums import (
+    AccessType,
+    CapabilityCheckTrigger,
+    CapabilityReportRunStatus,
+    Permission,
+)
+from onyx.db.models import Credential, CredentialCapabilityReportRow, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.capability_check_runs import (
+    CapabilityRunEnqueueError,
+    plan_draft_capability_checks,
+    start_capability_check_run,
+    start_draft_capability_check_run,
+)
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -98,8 +115,8 @@ def _connector_pairing_visible(
 
     Global managers see every pairing, including failed-creation orphans whose
     cc-pair was never created (a support surface). Scoped managers see only
-    pairings within their managed scope: the read filter
-    (``get_editable=False``) would admit every public and sync pair, and is
+    pairings they may operate: the read filter
+    (``CCPairAccessLevel.READ``) would admit every public and sync pair, and is
     skipped outright for READ_CONNECTORS holders, so it must not authorize
     report internals.
     """
@@ -109,10 +126,44 @@ def _connector_pairing_visible(
             connector_id=connector_id,
             credential_id=credential_id,
             user=user,
-            get_editable=True,
+            access_level=CCPairAccessLevel.OPERATE,
         )
         is not None
     )
+
+
+def _validate_credential_usable_for_source(
+    credential: Credential, source: DocumentSource
+) -> None:
+    if not is_credential_usable_for_source(
+        credential.source,
+        (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        ),
+        source,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Credential {credential.id} cannot be used by a {source.value} connector.",
+        )
+
+
+def _fetch_credential_usable_for_source(
+    credential_id: int, source: DocumentSource, user: User, db_session: Session
+) -> Credential:
+    """The credential, for an unsaved form of ``source``. GATE 2 for
+    ``allow_scope``: the caller must see the credential. An unknown credential
+    is indistinguishable from an inaccessible one."""
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or is not accessible.",
+        )
+    _validate_credential_usable_for_source(credential, source)
+    return credential
 
 
 class CapabilityCheckRunRequest(BaseModel):
@@ -172,6 +223,9 @@ def trigger_capability_check(
             "connector_specific_config requires connector_id: the "
             "credential-scoped run is config-less by definition.",
         )
+    # A connector-scoped run checks the connector's source, which a family
+    # credential may not share.
+    run_source = credential.source
     if request.connector_id is not None:
         connector = fetch_connector_by_id(request.connector_id, db_session)
         # One shape for missing and inaccessible, so neither connector existence
@@ -182,13 +236,8 @@ def trigger_capability_check(
                 f"Connector {request.connector_id} does not exist or is not "
                 "accessible.",
             )
-        if connector.source != credential.source:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"Connector {request.connector_id} is a "
-                f"{connector.source.value} connector; credential "
-                f"{credential_id} is for {credential.source.value}.",
-            )
+        _validate_credential_usable_for_source(credential, connector.source)
+        run_source = connector.source
         if request.connector_specific_config is not None:
             try:
                 validate_connector_config(
@@ -196,14 +245,22 @@ def trigger_capability_check(
                 )
             except ValueError as e:
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
-    row = mark_capability_report_running(
-        db_session,
-        credential_id=credential_id,
-        connector_id=request.connector_id,
-        source=credential.source,
-        trigger=CapabilityCheckTrigger.MANUAL,
-        active_within=capability_check_run_stale_after(credential.source),
-    )
+    try:
+        row = start_capability_check_run(
+            db_session,
+            credential_id=credential_id,
+            connector_id=request.connector_id,
+            source=run_source,
+            trigger=CapabilityCheckTrigger.MANUAL,
+            connector_specific_config=request.connector_specific_config,
+        )
+    except CapabilityRunEnqueueError as e:
+        # No run was enqueued: FAILED_TO_RUN is the truth pollers read, and it
+        # does not block an immediate re-trigger.
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Could not enqueue the capability check run; try again shortly.",
+        ) from e
     if row is None:
         # An unexpired run is in flight; return its row without re-enqueueing.
         standing = get_capability_report_row(
@@ -219,52 +276,7 @@ def trigger_capability_check(
                 "deleted while the request was in flight.",
             )
         return CapabilityReportSnapshot.from_row(standing)
-    snapshot = CapabilityReportSnapshot.from_row(row)
-    run_id = row.run_id
-    assert run_id is not None, "The RUNNING mark always stamps a run_id."
-    # Commit before enqueueing so the worker can only observe the RUNNING mark.
-    db_session.commit()
-    try:
-        client_app.send_task(
-            OnyxCeleryTask.RUN_CAPABILITY_CHECKS,
-            kwargs={
-                "credential_id": credential_id,
-                "connector_id": request.connector_id,
-                "connector_specific_config": request.connector_specific_config,
-                "tenant_id": get_current_tenant_id(),
-                # The attempt's fence: the task's terminal writes land only
-                # while this id still owns the row.
-                "run_id": str(run_id),
-            },
-            queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
-            priority=OnyxCeleryPriority.HIGH,
-            # Queue wait is bounded by one execution ceiling; the staleness
-            # cutoff above allows for both, so an expired task never strands the
-            # scope.
-            expires=capability_check_run_ceiling_seconds(credential.source),
-        )
-    except Exception:
-        # The 503 handler logs no traceback, so record the cause here (broker
-        # down and a bad task payload must stay distinguishable in the logs).
-        logger.exception(
-            "Capability check enqueue failed for credential %s, connector %s.",
-            credential_id,
-            request.connector_id,
-        )
-        # No run was enqueued: FAILED_TO_RUN is the truth pollers should read,
-        # and it does not block an immediate re-trigger.
-        mark_capability_run_failed(
-            db_session,
-            credential_id=credential_id,
-            connector_id=request.connector_id,
-            run_id=run_id,
-        )
-        db_session.commit()
-        raise OnyxError(
-            OnyxErrorCode.SERVICE_UNAVAILABLE,
-            "Could not enqueue the capability check run; try again shortly.",
-        )
-    return snapshot
+    return CapabilityReportSnapshot.from_row(row)
 
 
 @router.get("/admin/credential/{credential_id}/capability-report")
@@ -343,7 +355,7 @@ def list_capability_reports_for_source(
             for pair in get_connector_credential_pairs_for_user(
                 db_session=db_session,
                 user=user,
-                get_editable=True,
+                access_level=CCPairAccessLevel.OPERATE,
                 source=source,
                 # Every pairing counts as visibility truth, whatever its mode.
                 processing_mode=None,
@@ -363,3 +375,196 @@ def list_capability_reports_for_source(
         for row in get_capability_report_rows_for_source(db_session, source)
         if is_visible(row)
     ]
+
+
+class CredentialBindingCheckRequest(BaseModel):
+    """Body of the binding-check endpoint. Only the credential-bound fields of
+    ``connector_specific_config`` are read; other keys are ignored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: DocumentSource
+    connector_specific_config: dict[str, Any]
+
+
+class CredentialBindingRejectionCode(str, Enum):
+    BINDING_REJECTED = "binding_rejected"
+
+
+class CredentialBindingRejection(BaseModel):
+    code: CredentialBindingRejectionCode
+    # English text from the source's binding rule, e.g. which site the
+    # credential is for. Clients show their own message for ``code`` and may
+    # add this as detail.
+    detail: str
+
+
+class CredentialBindingCheckResponse(BaseModel):
+    """The bound fields are valid with the credential when both fields are
+    empty. Clients map ``kind`` and ``code`` to their own messages; the
+    English ``detail`` texts are for what no client message covers."""
+
+    # Bound field name to its error.
+    field_errors: dict[str, CredentialBindingFieldError]
+    # Set when the credential cannot be used with valid bound fields.
+    rejection: CredentialBindingRejection | None
+
+
+@router.post("/admin/credential/{credential_id}/binding-check")
+def check_credential_binding(
+    credential_id: int,
+    request: CredentialBindingCheckRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CredentialBindingCheckResponse:
+    """Checks the bound fields of an unsaved connector form against the
+    credential, as pairing does. Does no I/O to the source. A rejected binding
+    is response content, not an HTTP error."""
+    if request.source not in CONNECTOR_CLASS_MAP:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{request.source.value} has no connector configuration.",
+        )
+    credential = _fetch_credential_usable_for_source(
+        credential_id, request.source, user, db_session
+    )
+    field_errors = credential_binding_field_errors(
+        request.source, request.connector_specific_config
+    )
+    if field_errors:
+        return CredentialBindingCheckResponse(field_errors=field_errors, rejection=None)
+    try:
+        validate_credential_binding(
+            request.source, request.connector_specific_config, credential
+        )
+    except ConnectorValidationError as e:
+        return CredentialBindingCheckResponse(
+            field_errors={},
+            rejection=CredentialBindingRejection(
+                code=CredentialBindingRejectionCode.BINDING_REJECTED, detail=str(e)
+            ),
+        )
+    return CredentialBindingCheckResponse(field_errors={}, rejection=None)
+
+
+class DraftCheckPlanRequest(BaseModel):
+    """Body of the draft plan endpoint: an unsaved connector form, with or
+    without a credential picked yet."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: DocumentSource
+    access_type: AccessType | None = None
+    form_state: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/admin/connector-checks/plan")
+def plan_draft_checks(
+    request: DraftCheckPlanRequest,
+    _: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+) -> DraftCheckPlan:
+    """Lists the checks a draft run would hold for an unsaved connector form,
+    each in its state before anything runs, so the page knows which checks
+    exist and which are required before the admin starts them.
+
+    Needs no credential: which checks apply depends only on the source, the
+    access type and the form. Does no I/O to the source and starts no run.
+    """
+    mapping = CONNECTOR_CLASS_MAP.get(request.source)
+    if mapping is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{request.source.value} has no connector configuration.",
+        )
+    return plan_draft_capability_checks(
+        source=request.source,
+        config_class=mapping.config_class,
+        access_type=request.access_type,
+        form_values=request.form_state,
+    )
+
+
+class DraftCheckRunRequest(BaseModel):
+    """Body of the draft run endpoint: an unsaved connector form."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: DocumentSource
+    credential_id: int
+    access_type: AccessType | None = None
+    # Client-chosen id of one form session. A new run for the same key
+    # supersedes the earlier one.
+    draft_key: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    form_state: dict[str, Any]
+    # Cached results to ignore. The client sends FAILED when the admin asks to
+    # create, so a fix made at the source is seen, and ALL to re-run every check.
+    rerun: DraftRerunMode = DraftRerunMode.NONE
+
+
+@router.post("/admin/connector-checks/runs")
+def start_draft_check_run(
+    request: DraftCheckRunRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> DraftCheckRunSnapshot:
+    """Starts the capability checks for an unsaved connector form.
+
+    Checks that cannot run yet resolve at once (waiting, not applicable), and
+    fresh cached results fill others; one task runs the rest. The caller polls
+    the GET with the returned ``run_id``. Never writes a stored report.
+    """
+    mapping = CONNECTOR_CLASS_MAP.get(request.source)
+    if mapping is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{request.source.value} has no connector configuration.",
+        )
+    credential = _fetch_credential_usable_for_source(
+        request.credential_id, request.source, user, db_session
+    )
+    try:
+        return start_draft_capability_check_run(
+            user_id=user.id,
+            credential=credential,
+            source=request.source,
+            config_class=mapping.config_class,
+            access_type=request.access_type,
+            draft_key=request.draft_key,
+            form_values=request.form_state,
+            rerun=request.rerun,
+        )
+    except CapabilityRunEnqueueError as e:
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Could not enqueue the capability check run; try again shortly.",
+        ) from e
+
+
+@router.get("/admin/connector-checks/runs/{run_id}")
+def get_draft_check_run(
+    run_id: UUID,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> DraftCheckRunSnapshot:
+    """Returns a draft run's per-check progress. Only the user who started the
+    run may read it, and only while they can still see its credential."""
+    snapshot = read_draft_run_for_user(run_id, user.id)
+    # GATE 2 again: the check messages come from the credential.
+    if (
+        snapshot is None
+        or fetch_credential_by_id_for_user(snapshot.credential_id, user, db_session)
+        is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Capability check run {run_id} does not exist or has expired.",
+        )
+    return snapshot

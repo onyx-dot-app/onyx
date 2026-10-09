@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders/icon-loader/components";
 import "@opal/layouts/auth/styles.css";
 import {
   Button,
@@ -11,7 +12,7 @@ import {
 import { Form } from "formik";
 import { Content } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { SvgArrowRightCircle, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowRightCircle } from "@opal/icons";
 
 const ICON_SIZE_PX = 44;
 
@@ -143,7 +144,7 @@ function Submit({
         (isValid !== undefined && !isValid) ||
         (dirty !== undefined && !dirty)
       }
-      icon={isSubmitting ? SvgSimpleLoader : undefined}
+      icon={isSubmitting ? IconLoader : undefined}
       rightIcon={SvgArrowRightCircle}
     >
       {children}

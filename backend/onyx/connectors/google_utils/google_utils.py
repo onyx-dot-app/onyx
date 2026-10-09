@@ -119,6 +119,37 @@ def _execute_with_retry(request: Any) -> Any:
     raise Exception(f"Failed to execute request after {max_attempts} attempts")
 
 
+_ACCESS_PROBE_SERVER_ERROR_TRIES = 3
+
+
+def is_access_denied(error: HttpError) -> bool:
+    """A 403 or 404 that is not a rate limit in disguise."""
+    return error.resp.status in (403, 404) and not _is_rate_limit_error(error)
+
+
+def execute_access_probe(request: Any) -> Any | None:
+    """Run a request whose 403 or 404 means "this principal has no access".
+
+    Returns None for that case. Rate limits (including Google's 403
+    userRateLimitExceeded) and server errors are retried, and raise if they
+    persist: a caller that read them as "no access" would pick a weaker
+    principal or skip a scope, and a prune would then delete its documents.
+    """
+    for attempt in range(1, _ACCESS_PROBE_SERVER_ERROR_TRIES + 1):
+        try:
+            return _execute_with_retry(request)
+        except HttpError as error:
+            if is_access_denied(error):
+                return None
+            if error.resp.status < 500 or attempt == _ACCESS_PROBE_SERVER_ERROR_TRIES:
+                raise
+            logger.warning(
+                "Server error on access probe (attempt %s): %s", attempt, error
+            )
+            time.sleep(attempt)
+    raise RuntimeError("unreachable")
+
+
 def get_file_owners(file: GoogleDriveFileType, primary_admin_email: str) -> list[str]:
     """
     Get the owners of a file if the attribute is present.

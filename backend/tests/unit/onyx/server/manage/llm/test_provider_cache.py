@@ -45,6 +45,7 @@ def _make_response() -> LLMProviderResponse[LLMProviderDescriptor]:
         provider="openai",
         provider_display_name="OpenAI",
         model_configurations=[],
+        next_model_configuration_offset=None,
     )
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=[descriptor],

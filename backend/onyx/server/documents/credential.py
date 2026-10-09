@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -6,7 +7,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.factory import parse_credential_binding, validate_ccpair_for_user
+from onyx.db.connector_credential_pair import (
+    get_manageable_cc_pairs_for_credentials,
+    verify_user_can_edit_connector,
+)
 from onyx.db.credentials import (
     CREDENTIAL_PERMISSIONS_TO_IGNORE,
     alter_credential,
@@ -14,8 +19,8 @@ from onyx.db.credentials import (
     delete_credential,
     delete_credential_for_user,
     fetch_credential_by_id_for_user,
-    fetch_credentials_by_source_for_user,
     fetch_credentials_for_user,
+    fetch_credentials_usable_by_source_for_user,
     swap_credentials_connector,
     update_credential,
 )
@@ -24,12 +29,17 @@ from onyx.db.enums import Permission
 from onyx.db.models import DocumentSource, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.capability_check_runs import (
+    start_capability_checks_for_new_credential,
+)
 from onyx.server.documents.models import (
     CredentialBase,
     CredentialDataUpdateRequest,
     CredentialSnapshot,
     CredentialSwapRequest,
+    CredentialUsage,
     ObjectCreationIdResponse,
+    SimilarCredentialSnapshot,
 )
 from onyx.server.documents.private_key_types import (
     FILE_TYPE_TO_FILE_PROCESSOR,
@@ -83,17 +93,45 @@ def get_cc_source_full_info(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
-) -> list[CredentialSnapshot]:
-    credentials = fetch_credentials_by_source_for_user(
+) -> list[SimilarCredentialSnapshot]:
+    """The credentials a ``source_type`` connector can use, shown in that
+    source's keys. Each lists the connectors using it that the user can manage,
+    with their credential-bound config values, to help pick one."""
+    credentials = fetch_credentials_usable_by_source_for_user(
         db_session=db_session,
         user=user,
         document_source=source_type,
     )
+    if not credentials:
+        return []
+    usages: defaultdict[int, list[CredentialUsage]] = defaultdict(list)
+    for cc_pair in get_manageable_cc_pairs_for_credentials(
+        db_session, user, [credential.id for credential in credentials]
+    ):
+        connector = cc_pair.connector
+        usages[cc_pair.credential_id].append(
+            CredentialUsage(
+                cc_pair_id=cc_pair.id,
+                cc_pair_name=cc_pair.name,
+                connector_id=connector.id,
+                source=connector.source,
+                credential_binding=parse_credential_binding(
+                    connector.source, connector.connector_specific_config
+                ),
+            )
+        )
 
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
-        CredentialSnapshot.from_credential_db_model(
-            credential, mask_credential_prefix=mask_credential_prefix
+        SimilarCredentialSnapshot(
+            **dict(
+                CredentialSnapshot.from_credential_db_model(
+                    credential,
+                    mask_credential_prefix=mask_credential_prefix,
+                    view_source=source_type,
+                )
+            ),
+            usages=usages[credential.id],
         )
         for credential in credentials
     ]
@@ -122,10 +160,21 @@ def delete_credential_by_id_admin(
 @router.put("/admin/credential/swap")
 def swap_credentials_for_connector(
     credential_swap_req: CredentialSwapRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     new_credential_id = credential_swap_req.new_credential_id
+
+    # GATE 2 on the connector: swapping its credential is an Editor action.
+    if not verify_user_can_edit_connector(
+        credential_swap_req.connector_id, db_session, user
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
+        )
 
     # GATE 2 on the credential: validate_ccpair_for_user builds and probes the
     # connector, so ownership has to be settled before it runs.
@@ -194,6 +243,7 @@ def create_credential_from_model(
         resource_id=credential.id,
         extra={"source": credential_info.source.value},
     )
+    start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
         credential=CredentialSnapshot.from_credential_db_model(
@@ -258,6 +308,7 @@ def create_credential_with_private_key(
         resource_id=credential.id,
         extra={"source": credential_info.source.value},
     )
+    start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
         credential=CredentialSnapshot.from_credential_db_model(
@@ -409,23 +460,9 @@ def update_credential_from_model(
         resource_id=credential_id,
     )
 
-    mask_credential_prefix = get_security_settings().mask_credential_prefix
-    credential_json_value = (
-        updated_credential.credential_json.get_value(apply_mask=mask_credential_prefix)
-        if updated_credential.credential_json
-        else {}
-    )
-
-    return CredentialSnapshot(
-        source=updated_credential.source,
-        id=updated_credential.id,
-        credential_json=credential_json_value,
-        user_id=updated_credential.user_id,
-        name=updated_credential.name,
-        admin_public=updated_credential.admin_public,
-        time_created=updated_credential.time_created,
-        time_updated=updated_credential.time_updated,
-        curator_public=updated_credential.curator_public,
+    return CredentialSnapshot.from_credential_db_model(
+        updated_credential,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
     )
 
 

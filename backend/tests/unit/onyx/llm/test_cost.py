@@ -157,6 +157,29 @@ class TestComputeCostCents:
         assert input_cents == pytest.approx(1.08)
         assert output_cents == 0
 
+    def test_long_context_tier_rates_apply_above_the_threshold(self) -> None:
+        """claude-haiku-5-5 bills 5x above 100k context tokens. Below it,
+        base rates apply."""
+        base_in, base_out = compute_cost_cents(
+            "claude-haiku-5-5",
+            "anthropic",
+            prompt_tokens=90_000,
+            completion_tokens=1_000,
+        )
+        # 90k * $0.1/Mtok + 1k * $0.5/Mtok
+        assert base_in == pytest.approx(0.9)
+        assert base_out == pytest.approx(0.05)
+
+        tiered_in, tiered_out = compute_cost_cents(
+            "claude-haiku-5-5",
+            "anthropic",
+            prompt_tokens=150_000,
+            completion_tokens=1_000,
+        )
+        # 150k * $0.5/Mtok + 1k * $2.5/Mtok — fivefold tier rates.
+        assert tiered_in == pytest.approx(7.5)
+        assert tiered_out == pytest.approx(0.25)
+
     def test_bedrock_model_priced_via_provider(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

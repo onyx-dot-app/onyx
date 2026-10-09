@@ -60,7 +60,7 @@ from onyx.db.search_settings import (
     get_search_settings_by_id,
     record_failure__no_commit,
 )
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.index_reclaim import (
     ReclaimOutcome,

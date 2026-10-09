@@ -1,11 +1,14 @@
 "use client";
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
-import { PageLoader } from "@opal/layouts";
+import {
+  useAdminLanguageModel,
+  useAdminLanguageModels,
+} from "@/lib/languageModels/hooks";
+import { PageLoader } from "@opal/loaders";
 import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
   Button,
@@ -89,6 +92,29 @@ function ExistingProviderCard({
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
+  // The listing holds one page of models and the edit modal needs them all,
+  // so a provider with more is loaded whole before the modal opens.
+  const isPaged = provider.next_model_configuration_offset != null;
+  const { llmProvider: fetchedProvider, error: fullProviderError } =
+    useAdminLanguageModel(isOpen && isPaged ? provider.id : null);
+  const fullProvider = isPaged ? fetchedProvider : provider;
+  useEffect(() => {
+    if (!fullProviderError) return;
+    toast.error(
+      t("toasts.providerLoadFailed", {
+        message:
+          fullProviderError instanceof Error
+            ? fullProviderError.message
+            : t("toasts.unknownError"),
+      })
+    );
+    setIsOpen(false);
+    // Drop the cached failure so the next open fetches again instead of
+    // replaying it.
+    void mutate(SWR_KEYS.adminLlmProvider(provider.id), undefined, {
+      revalidate: false,
+    });
+  }, [fullProviderError, provider.id, mutate, t]);
 
   const handleDelete = async () => {
     try {
@@ -106,8 +132,8 @@ function ExistingProviderCard({
 
   return (
     <>
-      {isOpen && (
-        <Modal existingLlmProvider={provider} onOpenChange={setIsOpen} />
+      {isOpen && fullProvider && (
+        <Modal existingLlmProvider={fullProvider} onOpenChange={setIsOpen} />
       )}
 
       {deleteModal.isOpen && (
@@ -340,8 +366,11 @@ export default function LanguageModelsPage() {
   const [pendingHideGrouping, setPendingHideGrouping] = useState<
     boolean | null
   >(null);
-  const { llmProviders: existingLlmProviders, defaultText } =
-    useAdminLanguageModels();
+  const {
+    llmProviders: existingLlmProviders,
+    defaultText,
+    modelPaging,
+  } = useAdminLanguageModels();
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );
@@ -490,6 +519,7 @@ export default function LanguageModelsPage() {
                   grouped={
                     !(pendingHideGrouping ?? settings.hide_provider_grouping)
                   }
+                  modelPaging={modelPaging}
                   onChange={(modelConfigurationId) => {
                     const opt = findLlmOptionById(
                       existingLlmProviders,

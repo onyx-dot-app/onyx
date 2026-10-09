@@ -12,6 +12,7 @@ def _result(
     status: CapabilityCheckStatus,
     required: bool = True,
     capability: CredentialCapability = CredentialCapability.INDEXING,
+    applicable: bool = True,
 ) -> CapabilityCheckResult:
     return CapabilityCheckResult(
         capability=capability,
@@ -19,6 +20,25 @@ def _result(
         display_name="Check",
         required=required,
         status=status,
+        applicable=applicable,
+    )
+
+
+def test_required_check_that_does_not_apply_does_not_hold_back_a_pass() -> None:
+    """Verifies that a SKIPPED check that does not apply is left out."""
+    # Precondition.
+    results = [
+        _result(CapabilityCheckStatus.PASSED),
+        _result(CapabilityCheckStatus.SKIPPED, applicable=False),
+    ]
+
+    # Under test and postcondition.
+    assert aggregate_capability_verdict(True, results) == CapabilityVerdict.PASSED
+    assert (
+        aggregate_capability_verdict(
+            True, [_result(CapabilityCheckStatus.SKIPPED, applicable=False)]
+        )
+        == CapabilityVerdict.SKIPPED
     )
 
 

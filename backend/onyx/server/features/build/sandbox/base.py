@@ -32,7 +32,8 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallProgress,
     ToolCallStart,
 )
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.models import (
@@ -40,7 +41,6 @@ from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     FatalWriteError,
     FileSet,
-    FilesystemEntry,
     PromptAttachment,
     PushFailure,
     PushResult,
@@ -480,9 +480,10 @@ class SandboxManager(_ServeMixin, ABC):
     ) -> OutputsManifestResponse:
         """Describe the session's outputs tree in one call.
 
-        Symlinks and non-regular files are counted, never followed. Regular
-        files carry size, mtime, and a content hash when under the hash
-        ceilings. A missing outputs tree is an empty manifest, not an error.
+        Return visible regular files with size and modification time.
+        Exclude hidden entries, symlinks, special files, and outputs/web.
+        Missing workspaces and bounded or unreadable scans are incomplete.
+        An existing workspace without outputs is complete and empty.
         Raises RuntimeError-family errors when the backend cannot answer.
         """
         ...

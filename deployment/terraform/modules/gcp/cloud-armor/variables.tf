@@ -121,6 +121,28 @@ variable "sensitivity" {
   }
 }
 
+variable "extra_uninspected_fields" {
+  type        = list(string)
+  description = "Request parameter and JSON body field names whose values the content WAF rule sets do not read, on top of the module default list of Onyx fields that carry free text, URLs and secrets. Add a field when the load balancer log shows a signature denying it."
+  default     = []
+
+  validation {
+    condition     = alltrue([for f in var.extra_uninspected_fields : can(regex("^[A-Za-z0-9_.-]+$", f))])
+    error_message = "Each uninspected field is a parameter name: letters, digits, _ . and - only."
+  }
+}
+
+variable "extra_uninspected_field_prefixes" {
+  type        = list(string)
+  description = "Prefixes of field names whose values the content WAF rule sets do not read, for whole free-form objects, on top of the module default list."
+  default     = []
+
+  validation {
+    condition     = alltrue([for f in var.extra_uninspected_field_prefixes : can(regex("^[A-Za-z0-9_.-]+$", f))])
+    error_message = "Each uninspected field prefix is the start of a parameter name: letters, digits, _ . and - only."
+  }
+}
+
 # The whole-policy equivalent of Azure Detection mode. IP and country rules
 # still enforce, because the caller listed those addresses on purpose.
 variable "preview" {

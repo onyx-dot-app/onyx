@@ -64,9 +64,9 @@ def test_no_auth_connection_checked_out_mid_stream(
     # session so the auth read transaction opens exactly as in production.
     async def fake_auth(
         session: AsyncSession = Depends(get_async_session),
-    ) -> _FakeUser:
+    ) -> tuple[_FakeUser, str]:
         await session.execute(text("SELECT 1"))
-        return _FakeUser()
+        return (_FakeUser(), "session-token")
 
     app = FastAPI(lifespan=dispose_async_clients_lifespan)
     app.dependency_overrides[optional_fastapi_current_user] = fake_auth

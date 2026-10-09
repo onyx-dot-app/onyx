@@ -1,12 +1,18 @@
+import type { ManageAccessEntry } from "@/lib/connectors/accessType";
 import { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import { createConnector, runConnector } from "@/lib/connector";
-import { createCredential, linkCredential } from "@/lib/credential";
+import { createCredential, linkCredential } from "@/lib/credentials/svc";
 import { parseErrorDetail, type ErrorResponseBody } from "@/lib/fetcher";
 import type { FileUploadResponse } from "@/lib/fileConnector";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import type { FileConfig, GoogleSitesConfig } from "@/lib/connectors/types";
-import { AccessType, ValidSources } from "@/lib/types";
+import { AccessType } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import type {
+  CredentialBindingCheckRequest,
+  CredentialBindingCheckResponse,
+} from "@/lib/connectors/bindingGate";
 
 // ---------------------------------------------------------------------------
 // Indexing
@@ -46,8 +52,12 @@ export async function triggerIndexing(
 export const submitFiles = async (
   selectedFiles: File[],
   name: string,
-  access_type: string,
-  groups?: number[]
+  access_type: AccessType,
+  groups?: number[],
+  /** Who reads a private connector's documents; left out, its `groups` do. */
+  dataAccess?: number[],
+  /** The manage groups with their roles; given, it replaces `groups`. */
+  manageAccess?: ManageAccessEntry[]
 ) => {
   const formData = new FormData();
 
@@ -113,8 +123,12 @@ export const submitFiles = async (
     connector.id,
     credentialId,
     name,
-    access_type as AccessType,
-    groups
+    access_type,
+    groups,
+    undefined,
+    undefined,
+    dataAccess,
+    manageAccess
   );
   if (!credentialResponse.ok) {
     const credentialResponseJson: ErrorResponseBody =
@@ -143,7 +157,11 @@ export const submitGoogleSite = async (
   indexingStart: Date,
   access_type: AccessType,
   groups: number[],
-  name?: string
+  name?: string,
+  /** Who reads a private connector's documents; left out, its `groups` do. */
+  dataAccess?: number[],
+  /** The manage groups with their roles; given, it replaces `groups`. */
+  manageAccess?: ManageAccessEntry[]
 ) => {
   const uploadCreateAndTriggerConnector = async () => {
     const formData = new FormData();
@@ -206,7 +224,11 @@ export const submitGoogleSite = async (
       0,
       base_url,
       access_type,
-      groups
+      groups,
+      undefined,
+      undefined,
+      dataAccess,
+      manageAccess
     );
     if (!credentialResponse.ok) {
       const credentialResponseJson: ErrorResponseBody =
@@ -268,4 +290,30 @@ export async function getConnectorOauthRedirectUrl(
     console.error(`${OAUTH_REDIRECT_LOG_ERROR} for ${connector}:`, error);
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Credential binding
+// ---------------------------------------------------------------------------
+
+const BINDING_CHECK_ERROR = "Unable to check the credential";
+
+/** Checks the credential-bound fields of an unsaved form against a credential. */
+export async function checkCredentialBinding(
+  credentialId: number,
+  request: CredentialBindingCheckRequest
+): Promise<CredentialBindingCheckResponse> {
+  const response = await fetch(
+    `/api/manage/admin/credential/${credentialId}/binding-check`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await parseErrorDetail(response, BINDING_CHECK_ERROR));
+  }
+  const body: CredentialBindingCheckResponse = await response.json();
+  return body;
 }

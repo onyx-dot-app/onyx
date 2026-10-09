@@ -118,6 +118,27 @@ export class IndexSettingsPage {
     this.currentSetupModal = modal;
   }
 
+  async openGoogleModelSetup(modelName: string): Promise<void> {
+    await this.page.getByText(modelName, { exact: true }).click();
+    const modal = this.setupModalFor("Google");
+    await expect(modal).toBeVisible();
+    this.currentSetupModal = modal;
+  }
+
+  async fillGoogleWorkloadIdentity(
+    projectId: string,
+    location: string
+  ): Promise<void> {
+    await this.activeSetupModal.getByRole("combobox").click();
+    await this.page
+      .getByRole("option", { name: "Workload Identity (GKE)", exact: true })
+      .click();
+    await this.activeSetupModal.getByLabel(/GCP Project ID/).fill(projectId);
+    await this.activeSetupModal
+      .getByLabel(/Google Cloud Region Name/)
+      .fill(location);
+  }
+
   // Fields are targeted by input id (which equals the Formik field name) rather
   // than by label: Opal's InputVertical folds each field's subDescription into
   // its accessible name, so a label match like "Deployment Name" also matches
@@ -189,8 +210,9 @@ export class IndexSettingsPage {
 
   /**
    * Open the model picker in the labelled row, search, and choose the row.
-   * The list is portalled and carries its own search box, scoped here so
-   * the page's search field is not matched; a search unfolds every
+   * The list is portalled and carries its own search box, pinned above the
+   * listbox rather than inside it; it takes focus as the list opens, which
+   * tells it apart from the page's search field. A search unfolds every
    * provider group.
    */
   private async pickModelInField(
@@ -203,7 +225,11 @@ export class IndexSettingsPage {
       .getByRole("combobox", { name: "Select model" })
       .click();
     const listbox = this.page.getByRole("listbox", { name: "Select model" });
-    await listbox.getByRole("textbox", { name: "Search" }).fill(displayName);
+    await expect(listbox).toBeVisible();
+    await this.page
+      .getByRole("textbox", { name: "Search" })
+      .and(this.page.locator(":focus"))
+      .fill(displayName);
     await listbox.getByRole("option", { name: displayName }).click();
   }
 
@@ -232,6 +258,17 @@ export class IndexSettingsPage {
 
   private get modelListbox(): Locator {
     return this.page.getByRole("listbox", { name: "Select model" });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Vector quantization
+  // ---------------------------------------------------------------------------
+
+  /** The Vector Quantization control is not rendered. */
+  async expectVectorQuantizationHidden(): Promise<void> {
+    await expect(
+      this.page.locator("label").filter({ hasText: "Vector Quantization" })
+    ).toHaveCount(0);
   }
 
   // ---------------------------------------------------------------------------

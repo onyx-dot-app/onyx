@@ -15,8 +15,8 @@ A plain line with no title or description.
 | Prop                   | Type                           | Default        | Description                                                      |
 | ---------------------- | ------------------------------ | -------------- | ---------------------------------------------------------------- |
 | `orientation`          | `"horizontal" \| "vertical"`   | `"horizontal"` | Direction of the line                                            |
-| `paddingParallel`      | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `2`            | Inset along the line direction, as a spacing step (`N / 4` rem)  |
-| `paddingPerpendicular` | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `1`            | Inset perpendicular to the line, as a spacing step (`N / 4` rem) |
+| `paddingParallel`      | `0 \| 0.5 \| 1 \| 2 \| 3 \| 4 \| 6` | `0.375rem`     | Inset along the line direction, as a spacing step (`N / 4` rem)  |
+| `paddingPerpendicular` | `0 \| 0.5 \| 1 \| 2 \| 3 \| 4 \| 6` | `0.25rem`      | Inset perpendicular to the line, as a spacing step (`N / 4` rem) |
 
 ### Titled divider
 
@@ -36,11 +36,12 @@ A plain line with no title or description.
 | -------------- | ------------------------- | -------------- | ------------------------------- |
 | `title`        | `string \| RichStr`       | **(required)** | Label to the left of the line   |
 | `foldable`     | `true`                    | **(required)** | Enables fold/expand behavior    |
-| `interaction`  | `"rest" \| "hover" \| "active"` | —      | Overrides the header's interaction state; unset, an open header reads as hover |
+| `interaction`  | `"rest" \| "hover" \| "active"` | —      | Overrides the header's interaction state; unset, the header follows the pointer, open or folded |
 | `open`         | `boolean`                 | —              | Controlled open state           |
 | `defaultOpen`  | `boolean`                 | `false`        | Uncontrolled initial open state |
 | `onOpenChange` | `(open: boolean) => void` | —              | Callback when toggled           |
 | `children`     | `ReactNode`               | —              | Content revealed when open; stays mounted while closed, inert and hidden from assistive tech, so the fold animates both ways |
+| `headerProps`  | ``Omit<HTMLAttributes<HTMLDivElement>, "onClick"> & Record<`data-${string}`, string \| number \| undefined>`` | — | Attributes for the header element, for an owner that addresses it: an id, a role, `aria-expanded`, `data-*` |
 
 ## Usage Examples
 

@@ -116,7 +116,19 @@ def _run_scheduled_eval() -> None:
             )
 
 
+def _run_oauth_provider_cleanup() -> None:
+    from onyx.background.celery.tasks.oauth_provider.tasks import (
+        cleanup_oauth_provider_clients,
+        cleanup_oauth_provider_grants,
+    )
+    from shared_configs.contextvars import get_current_tenant_id
+
+    cleanup_oauth_provider_grants.run(tenant_id=get_current_tenant_id())
+    cleanup_oauth_provider_clients.run()
+
+
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
+_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS = 24 * 3600
 # The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
 _LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 
@@ -125,11 +137,11 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
     from onyx.cache.interface import CacheBackendType
     from onyx.configs.app_configs import (
         AUTO_LLM_CONFIG_URL,
-        AUTO_LLM_UPDATE_INTERVAL_SECONDS,
         CACHE_BACKEND,
         SCHEDULED_EVAL_DATASET_NAMES,
     )
     from onyx.utils.variable_functionality import global_version
+    from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 
     tasks: list[_PeriodicTaskDef] = []
     if CACHE_BACKEND == CacheBackendType.POSTGRES:
@@ -170,6 +182,14 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
                 run_fn=_run_license_reclaim,
             )
         )
+    tasks.append(
+        _PeriodicTaskDef(
+            name="oauth-provider-cleanup",
+            interval_seconds=_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS,
+            lock_id=PERIODIC_TASK_LOCK_BASE + 4,
+            run_fn=_run_oauth_provider_cleanup,
+        )
+    )
     return tasks
 
 

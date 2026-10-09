@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Connect to Onyx",
+      "request": "Allow {clientName} to search Onyx?",
+      "account": "Signed in as {email}",
+      "workspace": "Workspace: {workspaceName}",
+      "appAddress": "App address: {origin}",
+      "access": "Read search results from documents you can access. Use web search and open web pages.",
+      "allow": "Allow access",
+      "deny": "Deny",
+      "pending": "Saving your choice...",
+      "loading": "Loading authorization request...",
+      "unavailable": "This request expired or changed. Start again from your app.",
+      "failed": "Authorization could not finish. Start again from your app.",
+      "signInRequired": "Sign in to authorize this app.",
+      "signIn": "Sign in",
+      "forbidden": "You cannot authorize this app. Contact your workspace administrator.",
+      "loadFailed": "Onyx could not load this request. Try again.",
+      "retry": "Try again"
+    },
+    "connections": {
+      "cancel": "Cancel",
+      "title": "Connected apps",
+      "description": "Apps you have allowed to search Onyx.",
+      "empty": "No connected apps.",
+      "loading": "Loading connected apps...",
+      "expires": "Expires {date}",
+      "disconnect": "Disconnect",
+      "disconnectAriaLabel": "Disconnect {clientName}",
+      "pending": "Disconnecting...",
+      "failed": "Could not disconnect the app. Try again.",
+      "loadFailed": "Could not load connected apps.",
+      "confirmTitle": "Disconnect {clientName}?",
+      "confirmDescription": "This app will lose access to Onyx. You can connect it again later."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "Account"
@@ -808,13 +844,7 @@
         "description": "Connect {appName} to your data sources."
       },
       "search": {
-        "placeholder": "Search connectors..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Federated connector already configured.</strong> Click to edit the existing connector.",
-          "slackCredentialsFound": "<strong>Existing Slack credentials found.</strong> Click to manage your Slack connector."
-        }
+        "placeholder": "Search connectors or press \"/\" to focus..."
       },
       "sourceCard": {
         "connectButton": {
@@ -1389,6 +1419,43 @@
         },
         "trialBilling": {
           "text": "You will be billed on <value>{date}</value> After your 1-month free trial ends."
+        }
+      },
+      "downgrade": {
+        "failed": {
+          "text": "Failed to downgrade"
+        },
+        "link": {
+          "label": "Downgrade to Community"
+        },
+        "modal": {
+          "changes": {
+            "text": "When you downgrade:"
+          },
+          "confirmButton": {
+            "label": "Downgrade",
+            "loading": "Downgrading..."
+          },
+          "deleted": {
+            "text": "**Deleted:** User groups, service account API keys, token rate limits, and hooks;"
+          },
+          "description": "Removes your license and every paid feature.",
+          "disabled": {
+            "text": "**Disabled:** Standard answers and SCIM tokens;"
+          },
+          "intro": {
+            "text": "Access controls are removed from this deployment. **This starts a re-index** so search results reflect the change, which can take a while on a large index."
+          },
+          "madePublic": {
+            "text": "**Made public:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
+          },
+          "reset": {
+            "text": "**Reset to defaults:** Custom branding and chat retention policy."
+          },
+          "title": "Downgrade to Community Edition",
+          "warning": {
+            "text": "Documents restricted by synced permissions or user groups become **visible to all users**. This cannot be undone."
+          }
         }
       },
       "footer": {
@@ -1969,25 +2036,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "We will automatically sync permissions from the source. A document will be searchable in {appName} if and only if the user performing the search has permission to access the document in the source.",
-          "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
-          "name": "Auto Sync Permissions"
-        },
-        "heading": {
-          "description": "Control who has access to the documents indexed by this connector.",
-          "title": "Document Access"
-        },
-        "privateOption": {
-          "description": "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
-          "name": "Private"
-        },
-        "publicOption": {
-          "description": "Everyone with an account on {appName} can access the documents pulled in by this connector",
-          "name": "Public"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# day} other {# days}}",
@@ -2163,6 +2211,7 @@
           "description": "Everyone keeps the access synced from the source.",
           "title": "No restriction until groups are added"
         },
+        "loadError": "Could not load groups. Reload the page to try again.",
         "memberCount": "{count, plural, one {# member} other {# members}}",
         "picker": {
           "placeholder": "Add groups to restrict access to this connector"
@@ -2170,26 +2219,12 @@
         "remove": {
           "tooltip": "Remove {name}"
         },
+        "table": {
+          "group": "Group"
+        },
         "toggle": {
           "description": "Limit access to members of selected groups. Synced permissions still apply.",
           "title": "Restrict Access to Groups"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "Assign group access for this Connector"
-        },
-        "assignToGroup": {
-          "title": "Groups that can manage this Connector"
-        },
-        "scopedManagerGroups": {
-          "description": "Select one or more of the groups you manage to give access to this Connector"
-        },
-        "syncGroups": {
-          "description": "The groups below control who can manage this Connector. Access to its documents is inherited from the source's own permissions."
-        },
-        "visibleToGroups": {
-          "description": "This Connector will be visible/accessible by the groups selected below"
         }
       },
       "indexAttemptsTable": {
@@ -2568,7 +2603,7 @@
       "oneDrive": {
         "description": "Configure OneDrive connector",
         "indexingScope": {
-          "label": "Whose OneDrive files should Onyx index?",
+          "label": "OneDrive files to index",
           "general": {
             "label": "General",
             "description": "Index all eligible users that the Microsoft application can access."
@@ -2584,7 +2619,7 @@
         },
         "excludedPaths": {
           "label": "Excluded Paths",
-          "description": "Glob patterns matched against each file path and filename, such as '*.tmp' or 'Archive/*'."
+          "description": "Glob patterns matched against each file path and filename, such as `*.tmp` or `Archive/*`."
         },
         "organizationLinks": {
           "label": "Treat organization links as public",
@@ -2604,6 +2639,12 @@
           "label": "Authorize with {source}",
           "pendingLabel": "Authorizing..."
         },
+        "collapseButton": {
+          "ariaLabel": "Collapse"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "Create New"
         },
@@ -2613,8 +2654,13 @@
         "credentialModal": {
           "title": "Create a {source} credential"
         },
+        "credentialsLoadFailed": {
+          "description": "Credentials can't be set up right now. Reload the page or try again later.",
+          "title": "Couldn't load your credentials"
+        },
         "credentialStep": {
-          "title": "Select a credential"
+          "description": "Use a shared service account. {appName} indexes content as this account.",
+          "title": "Authentication Account"
         },
         "credentialSwapped": {
           "toast": "Swapped credential successfully!"
@@ -2622,16 +2668,26 @@
         "error": {
           "toast": "Error: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Expand"
+        },
         "federated": {
           "tooltip": {
-            "description": "A federated search option is available for this connector. It will result in greater latency and reduced search quality.",
+            "description": "It will result in greater latency and reduced search quality.",
             "link": {
               "label": "Use federated version instead →"
-            }
+            },
+            "title": "A federated search option is available for this connector."
           }
         },
         "fileUploadFailed": {
           "toast": "Error uploading files"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "New {source} Account"
         },
         "oauthRedirectFailed": {
           "message": "We couldn't redirect you to sign in with {source}. Please try again."
@@ -2645,6 +2701,9 @@
         "retryButton": {
           "label": "Retry"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
+        },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
         },
@@ -2652,38 +2711,21 @@
           "toast": "An unknown error occurred"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Indexing Start Date",
-          "subtext": "Documents prior to this date will not be pulled in"
-        },
-        "pruneFrequency": {
-          "description": "Checks all documents against the source to delete those that no longer exist. Note: This process checks every document, so be cautious when increasing frequency. Default is {hours} hours ({days} days). Decimal hours are supported (e.g., 0.1 hours = 6 minutes). Enter 0 to disable pruning for this connector.",
-          "label": "Prune Frequency (hours)"
-        },
-        "refreshFrequency": {
-          "description": "This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector.",
-          "label": "Refresh Frequency (minutes)"
-        },
-        "resetButton": {
-          "label": "Reset"
-        },
-        "title": "Advanced Configuration"
-      },
-      "connectorName": {
-        "label": "Connector Name",
-        "subtext": "A descriptive name for the connector."
-      },
       "credentialRequired": {
         "tooltip": "Select a credential first."
+      },
+      "bindingGate": {
+        "enterField": "Enter the {field}.",
+        "fixField": "Check the {field}.",
+        "awaitingCheck": "Leave the field to check it with the credential.",
+        "checking": "Checking the credential…",
+        "fieldInvalid": "Check the {field}: {detail}",
+        "rejected": "This credential cannot be used with these settings. {detail}"
       },
       "credentialsLoadError": {
         "title": "Failed to load credentials."
       },
       "field": {
-        "optional": {
-          "label": "(optional)"
-        },
         "optionalSuffix": {
           "label": "optional"
         }
@@ -2718,7 +2760,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Drive you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Google Drive and Gmail access together, so one account can back both connectors. To use this account for Google Drive only, untick the Gmail scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
@@ -2776,7 +2819,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Gmail you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Gmail and Google Drive access together, so one account can back both connectors. To use this account for Gmail only, untick the Google Drive scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
@@ -2809,9 +2853,9 @@
           "label": "Cancel"
         },
         "connectButton": {
-          "label": "Connect"
+          "label": "Create Connector"
         },
-        "description": "Connect to {source} and set up the connector for {appName}."
+        "description": "Connect to {source} and set up the connector for {appName}.{hasDocs, select, true { View [docs]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -2914,28 +2958,104 @@
           "title": "Error during submission."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Configuration"
-        }
+      "content": {
+        "title": "Connector Content",
+        "description": "Select content to index for this connector."
       },
       "selectInput": {
         "emptyOption": {
           "label": "Select an option"
         }
       },
-      "stringPairList": {
-        "addButton": {
-          "label": "Add New"
-        },
-        "removeButton": {
-          "tooltip": "Remove"
-        }
-      },
       "tabs": {
         "empty": {
           "label": "No tabs to display."
         }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "subDescriptions": {
+        "siteUrl": "Paste your site URL. {connectorName}'s REST API must be reachable there."
+      },
+      "boundFields": {
+        "errors": {
+          "missing": "Enter a value.",
+          "invalid": "This value is not valid: {detail}"
+        }
+      },
+      "scheduled": {
+        "description": "Specify how the connector will operate indexing. Operator will be able to edit this section.",
+        "indexingStart": {
+          "description": "Documents with a last-updated date prior to this will be ignored.",
+          "placeholder": "All time",
+          "title": "Index Documents After"
+        },
+        "pruneFrequency": {
+          "description": "Check the source and delete documents that no longer exist.",
+          "title": "Prune Every"
+        },
+        "refreshFrequency": {
+          "description": "Pull new documents from the source.",
+          "title": "Refresh Every"
+        },
+        "title": "Schedule",
+        "units": {
+          "hours": "hours",
+          "minutes": "minutes"
+        }
+      },
+      "settings": {
+        "description": "Connector information and access.",
+        "displayName": {
+          "title": "Connector Display Name"
+        },
+        "documentAccess": {
+          "description": "Control who can access documents indexed by this connector.",
+          "everyone": {
+            "description": "Documents indexed by this connector will be public to everyone in your organization.",
+            "title": "Everyone in Your Organization"
+          },
+          "specificGroups": {
+            "description": "Name groups who can access documents from this connector.",
+            "required": "Pick at least one group.",
+            "title": "Specific Groups"
+          },
+          "sync": {
+            "description": "{appName} syncs permissions with the source. Users can search only what they can see in the source.",
+            "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
+            "title": "Sync with {source}"
+          },
+          "title": "Document Access"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "Always shared",
+            "title": "Admins"
+          },
+          "description": "Control who can operate (schedule and monitor indexing) and/or edit the connector configurations.",
+          "note": "Only users with “Manage Connectors” permissions (group manager role or group permissions) will be granted access to operate and/or edit connectors.",
+          "placeholder": "Add groups to share this connector",
+          "role": {
+            "editor": {
+              "description": "Update/delete configurations.",
+              "label": "Editor"
+            },
+            "menu": {
+              "ariaLabel": "Role for {name}"
+            },
+            "operator": {
+              "description": "Schedule/monitor indexing.",
+              "label": "Operator"
+            },
+            "removeAccess": {
+              "label": "Remove Access"
+            }
+          },
+          "title": "Connector Manage Access"
+        },
+        "title": "Connector Settings"
       }
     },
     "costOverrides": {
@@ -3198,15 +3318,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Use the account email that owns the API token."
+        },
+        "apiTokenField": {
+          "subDescription": "Paste your API token to access {source}."
+        },
         "createButton": {
           "label": "Create"
         },
         "created": {
           "toast": "Created new credential!"
         },
-        "name": {
-          "label": "Name:",
-          "placeholder": "(Optional) credential name.."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "Admins",
+            "description": "All admins can reuse this account to create connectors.",
+            "suffix": "(Default)"
+          },
+          "adminsAndGroups": {
+            "description": "Admins and groups named by you can reuse this account.",
+            "label": "Admins & Groups"
+          },
+          "onlyMe": {
+            "label": "Only Me"
+          },
+          "description": "Allow groups to reuse this account to create connectors.",
+          "title": "Share This Account"
         },
         "submitError": {
           "toast": "Error submitting credential"
@@ -3241,6 +3382,80 @@
           "toast": "Error updating credential"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source} Access Key ID",
+        "secretAccessKey": "{source} Secret Access Key",
+        "accountId": "{source} Account ID",
+        "apiToken": "API Token",
+        "clientId": "{source} Client ID",
+        "clientSecret": "{source} Client Secret",
+        "clientToken": "{source} Client Token",
+        "directoryId": "{source} Directory ID",
+        "certificatePassword": "{source} Certificate Password",
+        "privateKey": "{source} Private Key",
+        "certificate": "{source} Certificate",
+        "baseUrl": "{source} Base URL",
+        "apiBaseUrl": "{source} API Base URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} Bot Token",
+        "username": "{source} Username",
+        "apiUsername": "{source} API Username",
+        "userEmail": "{source} User Email",
+        "accountEmail": "{source} Account Email",
+        "password": "{source} Password",
+        "subdomain": "{source} Subdomain",
+        "domain": "{source} Domain",
+        "enterpriseId": "{source} Enterprise ID",
+        "teamId": "{source} Team ID",
+        "applicationId": "{source} Application ID",
+        "apiTokenId": "{source} API Token ID",
+        "apiTokenSecret": "{source} API Token Secret",
+        "securityToken": "{source} Security Token",
+        "integrationToken": "{source} Integration Token",
+        "accessKey": "{source} Access Key",
+        "accessKeySecret": "{source} Access Key Secret",
+        "key": "{source} Key",
+        "secret": "{source} Secret",
+        "roleArn": "{source} Role ARN",
+        "namespace": "{source} Namespace",
+        "region": "{source} Region",
+        "portalId": "{source} Portal ID",
+        "oauthTokens": "{source} Oauth Tokens",
+        "isSandbox": "Is Sandbox Environment",
+        "serviceUserEmail": "Service User Email",
+        "zuliprcContent": "Zuliprc Content",
+        "authenticationMethod": "Authentication Method"
+      },
+      "hints": {
+        "boxUserEmail": "Optional. The Box user to impersonate.",
+        "githubBaseUrl": "Optional. Set your server host, like https://github.example.com. Leave blank for github.com.",
+        "gongBaseUrl": "Optional. For data outside the US, set your region's host, like https://[region].api.gong.io.",
+        "jiraUserEmail": "Required for Jira Cloud.",
+        "lumappsServiceUser": "The user to index on behalf of.",
+        "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
+        "pfxFile": "A PFX file.",
+        "testrailBaseUrl": "For example https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Client Secret",
+          "certificateAuthentication": "Certificate Authentication",
+          "certificate": "Certificate",
+          "accessKeyAndSecret": "Access Key and Secret",
+          "iamRole": "IAM Role",
+          "assumeRole": "Assume Role"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
+          "sharepointCertificate": "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
+          "teamsClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret. Channel messages and members only: SharePoint refuses a secret, so Include Attachments needs the certificate option.",
+          "teamsCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Required for Include Attachments, which reads channel files and their readers from SharePoint.",
+          "outlookClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
+          "outlookCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
+          "s3AssumeRole": "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required."
+        }
+      },
       "modal": {
         "createTitle": "Create {source} Credential",
         "editTitle": "Edit Credential",
@@ -3269,6 +3484,10 @@
         },
         "retryButton": {
           "label": "Retry"
+        },
+        "signIn": {
+          "description": "{appName} requires read-only scopes.",
+          "title": "Sign in with {source}"
         },
         "startError": {
           "message": "Unable to start OAuth"
@@ -3321,6 +3540,13 @@
         "success": {
           "toast": "Updated credential"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Please select an authentication method",
+        "empty": "{field} cannot be empty",
+        "fileRequired": "Please select a {field} file",
+        "invalidEmail": "Please enter a valid {field}",
+        "required": "Please enter your {field}"
       }
     },
     "customAnalytics": {
@@ -4819,6 +5045,12 @@
         "azureGptImage2": {
           "description": "GPT Image 2 image generation model hosted on Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "GPT Image 2.5 Flare image generation model hosted on Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "GPT Image 2.5 Sunburst image generation model hosted on Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) model is designed for speed and efficiency."
         },
@@ -4835,7 +5067,13 @@
           "description": "OpenAI's previous flagship Image Generation model."
         },
         "openaiGptImage2": {
-          "description": "OpenAI's latest Image Generation model with the highest prompt fidelity."
+          "description": "OpenAI's previous-generation Image Generation model with high prompt fidelity."
+        },
+        "openaiGptImage25Flare": {
+          "description": "OpenAI's latest Image Generation model with high quality and fast generation."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "OpenAI's premium Image Generation model for the most precise edits."
         }
       },
       "setDefaultError": {
@@ -4895,6 +5133,10 @@
         "title": "Captioning LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "Stop generating context for new and updated documents now, or rebuild all documents to also remove the context already generated.",
+          "title": "Choose how to turn off Contextual Retrieval"
+        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run.",
           "title": "Select a Contextual Retrieval LLM"
@@ -5003,11 +5245,18 @@
           "description": "This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality.",
           "placeholder": "e.g., 'query: '",
           "title": "Query Prefix"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Use the GKE credentials of the API server and embedding workers. No JSON key is required."
         }
       },
       "forwardOnlyModal": {
         "description": "Existing documents will keep context generated by the previous model. The new model will apply only when documents are added or updated. Contextual enrichment can differ between documents.",
         "title": "Apply Contextual Retrieval LLM going forward"
+      },
+      "disableForwardModal": {
+        "description": "Contextual Retrieval stops for documents added or updated from now on. Existing documents keep the context already generated until they are updated or you re-index.",
+        "title": "Turn off Contextual Retrieval going forward"
       },
       "header": {
         "description": "Configure how documents are indexed, embedded, and prepared for search and retrieval."
@@ -5146,9 +5395,6 @@
           },
           "title": "Add configs for your {provider} embedding providers."
         },
-        "deprecated": {
-          "suffix": "(deprecated)"
-        },
         "disconnect": {
           "errorToast": "Failed to disconnect {provider}",
           "successToast": "Disconnected {provider}"
@@ -5227,6 +5473,8 @@
         "contextualModelRequired": "Select a Contextual Retrieval LLM before re-indexing.",
         "contextualModelUpdateFailed": "Failed to update Contextual Retrieval LLM",
         "contextualModelUpdated": "Contextual Retrieval LLM updated",
+        "contextualRetrievalDisableFailed": "Failed to turn off Contextual Retrieval",
+        "contextualRetrievalDisabled": "Contextual Retrieval turned off",
         "modelNotFound": "Could not find the selected model",
         "providerResolveFailed": "Could not resolve provider",
         "reindexCanceled": "Re-indexing canceled",
@@ -5246,7 +5494,24 @@
         "serviceAccountJsonInvalid": "Must be a valid Google service account JSON file",
         "serviceAccountJsonRequired": "Service account JSON is required",
         "targetUrlRequired": "Target URL is required",
-        "urlInvalid": "Must be a valid URL"
+        "urlInvalid": "Must be a valid URL",
+        "googleProjectRequired": "GCP Project ID is required"
+      },
+      "vectorQuantization": {
+        "description": "Store document vectors with fewer bits to use less memory. Fewer bits can lower search quality.",
+        "none": {
+          "description": "Full 32-bit precision.",
+          "label": "None"
+        },
+        "scalar1Bit": {
+          "description": "32x less memory. Needs OpenSearch 3.6 or later.",
+          "label": "1-bit"
+        },
+        "scalar7Bit": {
+          "description": "4x less memory. Almost no loss in search quality.",
+          "label": "7-bit"
+        },
+        "title": "Vector Quantization"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {This connector will be deleted} other {These # connectors will be deleted}}",
@@ -5268,6 +5533,9 @@
         "googleGeminiEmbedding2": "Google's latest multimodal embedding model (GA). Highest-quality retrieval with a 3072-dim output.",
         "googleGeminiEmbedding2Preview": "Preview version of Gemini Embedding 2. Superseded by gemini-embedding-2 for new setups.",
         "voyageLarge2Instruct": "Voyage's large embedding model. High performance with instruction fine-tuning.",
+        "voyage4Large": "Voyage's largest 4-series embedding model. Best Voyage retrieval quality, multilingual.",
+        "voyage4": "Voyage's general-purpose 4-series embedding model. High retrieval quality at moderate cost.",
+        "voyage4Lite": "Voyage's lightweight 4-series embedding model. Lowest cost and highest rate limits.",
         "voyageLight2Instruct": "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
         "nomicEmbedTextV1": "Nomic's embedding model specialized for retrieval, similarity, clustering and classification.",
         "e5BaseV2": "A smaller and faster model than the default. It is around 2x faster than the default model at the cost of lower search quality.",
@@ -5834,6 +6102,9 @@
           "optionalSuffix": {
             "label": "optional"
           },
+          "slowSave": {
+            "text": "This is taking longer than usual. Large model lists can take a minute."
+          },
           "submitButton": {
             "invalidTooltip": "Please fill in all required fields.",
             "pristineTooltip": "No changes to save."
@@ -5880,10 +6151,12 @@
             "title": "API Key"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud.",
             "title": "Google Cloud Region Name"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "The GCP project where Vertex AI is enabled. Required because ADC cannot reliably infer the target project under service-account impersonation.",
             "title": "GCP Project ID"
           },
@@ -5925,6 +6198,7 @@
       "toasts": {
         "providerDeleteFailed": "Failed to delete provider: {message}",
         "providerDeleted": "Provider deleted successfully!",
+        "providerLoadFailed": "Could not load the provider: {message}",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"
@@ -6082,12 +6356,6 @@
         "imageSummarization": {
           "label": "Image summarization"
         },
-        "kgDeepExtraction": {
-          "label": "Knowledge graph extraction"
-        },
-        "kgDocumentClassification": {
-          "label": "Knowledge graph classification"
-        },
         "other": {
           "label": "Other"
         },
@@ -6104,8 +6372,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
-        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
+        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
         "error": {
           "title": "Failed to load system usage for this period."
         },
@@ -8264,6 +8532,9 @@
         "makeAdmin": {
           "label": "Make Admin"
         },
+        "menuButton": {
+          "ariaLabel": "User actions"
+        },
         "removeAdmin": {
           "label": "Remove Admin Access"
         },
@@ -8619,6 +8890,93 @@
           "label": "API Base URL",
           "description": "Your Firecrawl API base URL."
         }
+      }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM Gateway",
+        "description": "Control direct API access to workspace language models from external tools."
+      },
+      "access": {
+        "title": "Direct model API access",
+        "description": "Allow users to call workspace language models from external tools such as Claude Code or Cursor. Calls use scoped access tokens and are billed to your configured providers.",
+        "toggle": {
+          "title": "Enable LLM Gateway",
+          "description": "When off, every gateway endpoint rejects requests, existing tokens stop working, and the gateway scope is hidden from the token picker. Craft sandbox traffic is controlled separately by the Craft settings."
+        }
+      },
+      "businessPlanTag": {
+        "label": "Business Plan"
+      },
+      "tierTooltip": "The LLM Gateway requires the Business or Enterprise plan.",
+      "scopeNote": {
+        "title": "Each user configures their own token and connection details under Settings → LLM Gateway."
+      },
+      "toasts": {
+        "settingsUpdated": "Settings updated",
+        "settingsUpdateFailed": "Failed to update settings"
+      }
+    },
+    "connectorChecks": {
+      "lockReason": "Run the connector checks above, and resolve any failures, to continue.",
+      "prompt": {
+        "title": "Test Connection",
+        "description": "{appName} will run checks to validate required scopes before proceeding.",
+        "startButton": {
+          "label": "Start Checks"
+        }
+      },
+      "title": "Connector Checks",
+      "groups": {
+        "failed": "{count} Failed",
+        "indeterminate": "{count} Unverified",
+        "passed": "{count} Completed",
+        "skipped": "{count} Skipped",
+        "running": "{count} Running",
+        "expected": "{count} Expected"
+      },
+      "status": {
+        "passed": "Passed",
+        "failed": "Failed",
+        "indeterminate": "Could not be verified",
+        "skipped": "Skipped",
+        "running": "Testing…",
+        "pending": "Queued",
+        "waiting": "Waiting for settings"
+      },
+      "required": {
+        "label": "Required"
+      },
+      "running": {
+        "label": "Running checks…"
+      },
+      "empty": {
+        "label": "No checks have run yet."
+      },
+      "docsLink": {
+        "label": "Documentation"
+      },
+      "rerunButton": {
+        "label": "Rerun Checks"
+      },
+      "foldButton": {
+        "fold": "Fold",
+        "expand": "Expand"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} failed",
+        "unverified": "{count} unverified",
+        "inProgress": "{count} in progress",
+        "expected": "{count} more expected",
+        "skipped": "{count} skipped",
+        "successful": "{count} successful"
+      },
+      "failedToRun": "Checks failed to run. Try again.",
+      "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
+      "state": {
+        "completed": "Checks completed",
+        "inProgress": "Checks in progress…"
       }
     }
   },
@@ -9174,6 +9532,7 @@
         "loginRequired": "You need to log in with your identity provider first.",
         "oauthUserAlreadyExists": "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
         "serverError": "Your identity provider encountered an error. Please try again.",
+        "staleSignIn": "This sign-in link has expired or is no longer valid. Please sign in again.",
         "temporarilyUnavailable": "Your identity provider is temporarily unavailable. Please try again later."
       },
       "credentialsIssue": {
@@ -10804,6 +11163,9 @@
         },
         "loading": {
           "text": "Loading models..."
+        },
+        "loadingMore": {
+          "text": "Loading more models..."
         }
       },
       "modelSettingsButton": {
@@ -11050,6 +11412,9 @@
         "expand": {
           "ariaLabel": "Expand project"
         },
+        "options": {
+          "label": "Project options"
+        },
         "rename": {
           "label": "Rename Project"
         }
@@ -11108,6 +11473,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {Choose files} other {Choose a file}}"
+      },
+      "prompt": "{multiple, select, true {Or drag and drop files here.} other {Or drag and drop a file here.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "Add New"
+      },
+      "removeButton": {
+        "tooltip": "Remove"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "Open Sidebar"
@@ -11271,6 +11650,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "If you are the administrator, please visit the <billingLink>Admin Billing</billingLink> page to {hadLicense, select, true {renew} other {activate}} your license, sign up through Stripe or reach out to <supportLink>support@onyx.app</supportLink> for billing assistance."
+        },
+        "downgradeButton": {
+          "label": "Downgrade to Community"
         },
         "heading": {
           "title": "Access Restricted"
@@ -11689,7 +12071,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "Associate {name}",
         "associateButton": "Associate existing",
         "create": {
           "github": {
@@ -11928,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Toggle {name}"
+      },
+      "status": {
+        "loading": "Loading outputs…",
+        "incomplete": "Some outputs could not be listed. Open Files to browse the workspace.",
+        "error": "Could not refresh outputs. Try again."
       }
     },
     "chatPanel": {
@@ -12073,17 +12459,11 @@
         "description": "Files created during the build will appear here",
         "title": "No files yet"
       },
-      "emptyDirectory": {
-        "label": "No files in this directory"
-      },
       "error": {
         "title": "Error loading files"
       },
       "loading": {
         "label": "Loading files..."
-      },
-      "loadingChildren": {
-        "label": "Loading..."
       },
       "preparing": {
         "description": "Setting up your development environment",
@@ -12243,6 +12623,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Close {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Start building something to see artifacts!"
       },
@@ -12266,6 +12649,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Slides"
+      },
+      "previous": {
+        "label": "Previous slide"
+      },
+      "next": {
+        "label": "Next slide"
+      },
       "converting": {
         "label": "Converting presentation..."
       },
@@ -12400,6 +12792,9 @@
       },
       "newSession": {
         "label": "Start Crafting"
+      },
+      "options": {
+        "label": "Session options"
       },
       "rename": {
         "label": "Rename"
@@ -12668,9 +13063,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# call} other {# calls}}"
-        },
-        "failed": {
-          "tag": "{count} failed"
         },
         "working": {
           "label": "Working"
@@ -13063,6 +13455,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "Expand",
+      "expandSection": "Expand {title}",
+      "fold": "Fold",
+      "foldSection": "Fold {title}"
+    },
     "comboBox": {
       "close": "Close dropdown",
       "create": "Create",
@@ -13083,6 +13481,7 @@
       "loading": "Loading",
       "loadingPage": "Loading …",
       "openCalendar": "Open calendar",
+      "optional": "(Optional)",
       "progress": "Progress",
       "remove": "Remove",
       "removeItem": "Remove {title}",
@@ -13100,6 +13499,9 @@
       "oneMonth": "1M",
       "sevenDays": "7D",
       "threeMonths": "3M"
+    },
+    "iconTooltip": {
+      "label": "More information"
     },
     "input": {
       "day": "Day",
@@ -13391,6 +13793,10 @@
       "title": "Danger Zone"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "An admin turned off the LLM gateway for this workspace. Contact an admin to turn it back on.",
+        "title": "LLM Gateway is off"
+      },
       "accessToken": {
         "button": "New token",
         "description": "Create a scoped token before you connect an application.",
@@ -13702,6 +14108,9 @@
         "languageModels": {
           "label": "Language Models"
         },
+        "llmGateway": {
+          "label": "LLM Gateway"
+        },
         "mcpActions": {
           "label": "MCP Actions"
         },
@@ -13850,6 +14259,9 @@
       },
       "moveToProject": {
         "label": "Move to Project"
+      },
+      "options": {
+        "label": "Chat options"
       },
       "projectSearchInput": {
         "placeholder": "Search Projects"
@@ -14412,5 +14824,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch needs more resources",
+    "disk": "OpenSearch disk usage is at least 85% on a data node. Indexing may stop as the disk fills.",
+    "jvmMemory": "OpenSearch JVM memory usage stayed above 85% across repeated checks. Search and indexing may fail.",
+    "vectorMemory": "OpenSearch vector memory is nearly full or has reached its limit. Search and indexing may fail.",
+    "contact": "Contact your system administrator or the Onyx team at [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "The latest check is unavailable. This warning reflects the last successful check; recovery has not been confirmed.",
+    "dismiss": "Dismiss",
+    "diskTitle": "Disk space",
+    "jvmMemoryTitle": "JVM memory",
+    "vectorMemoryTitle": "Vector memory",
+    "viewDetails": "View details"
   }
 }

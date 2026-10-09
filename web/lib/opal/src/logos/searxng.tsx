@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgSearxng = ({ size, ...props }: IconProps) => (
+const SvgSearXNG = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -20,4 +20,4 @@ const SvgSearxng = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgSearxng;
+export default SvgSearXNG;

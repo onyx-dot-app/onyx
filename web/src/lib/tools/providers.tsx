@@ -11,7 +11,7 @@ import {
 } from "@/lib/searchFilters/utils";
 import { getConfiguredSources } from "@/lib/sources";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 /** A source the picker can show: {@link getConfiguredSources} guarantees a key. */
 type ConfiguredSource = ReturnType<typeof getConfiguredSources>[number];

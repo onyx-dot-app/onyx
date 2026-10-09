@@ -34,7 +34,7 @@ from onyx.connectors.teams.utils import (
     next_page_url,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import parallel_yield
+from onyx.utils.threadpool_concurrency import drain
 
 logger = setup_logger()
 
@@ -42,6 +42,10 @@ logger = setup_logger()
 # content, so a tenant is walked several organizers at a time. Eight measured 7
 # times faster with no throttling, sixteen only 9 with slower calls.
 ORGANIZER_WORKERS = 8
+# Organizers a step takes off the checkpoint. The workers drain them from a
+# queue, so a slow organizer holds back only its own worker, and a resumed
+# attempt repeats at most one batch.
+ORGANIZER_BATCH = 32
 
 # A page of organizers rides in the indexing checkpoint, so pages stay small.
 USER_PAGE_SIZE = 100
@@ -244,23 +248,25 @@ class OrganizerStage:
         """Takes one batch of organizers off ``todo`` and indexes them side by
         side. The Graph client is shared: a direct request builds its own
         options, so threads do not collide."""
-        batch = todo[-ORGANIZER_WORKERS:]
-        del todo[-ORGANIZER_WORKERS:]
-        yield from parallel_yield(
-            [self._index_one(organizer, start, end) for organizer in batch],
-            max_workers=ORGANIZER_WORKERS,
+        batch = todo[-ORGANIZER_BATCH:]
+        del todo[-ORGANIZER_BATCH:]
+        yield from drain(
+            batch,
+            lambda organizer: self._index_one(organizer, start, end),
+            ORGANIZER_WORKERS,
         )
 
     def slim(self, walk: SlimWalk) -> Iterator[SlimDocument]:
         organizers = iter_organizers(
             self._session.graph(),
             self._principal_names,
-            before_page=walk.raise_if_stopped,
+            before_page=walk.page_signals,
         )
         yield from walk.fan_out(
             organizers,
             lambda organizer: self._slim_one(organizer, walk),
             ORGANIZER_WORKERS,
+            ORGANIZER_BATCH,
         )
 
     def _index_one(

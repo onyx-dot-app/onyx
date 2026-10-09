@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -14,7 +15,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { InputVertical, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import { SvgArrowExchange, SvgUnplug, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange, SvgUnplug } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { useModalClose } from "@opal/components";
 import type {
@@ -486,7 +487,7 @@ export function VoiceProviderSetupModal({
                 <Button
                   type="submit"
                   disabled={isSubmitting || !isValid || !dirty}
-                  icon={isSubmitting ? SvgSimpleLoader : undefined}
+                  icon={isSubmitting ? IconLoader : undefined}
                 >
                   {isEditing
                     ? t("setupModal.updateButton.label")
