@@ -127,10 +127,62 @@ function buildOneDriveConfiguration(
   };
 }
 
+interface LinearConfigurationText {
+  description: string;
+  teamsLabel: string;
+  teamsDescription: string;
+  projectsLabel: string;
+  projectsDescription: string;
+}
+
+const LINEAR_TRANSLATION_KEYS: LinearConfigurationText = {
+  description: "description",
+  teamsLabel: "teams.label",
+  teamsDescription: "teams.description",
+  projectsLabel: "projects.label",
+  projectsDescription: "projects.description",
+};
+
+function buildLinearConfiguration(
+  text: LinearConfigurationText
+): ConnectionConfiguration {
+  return {
+    description: text.description,
+    values: [
+      {
+        type: "list",
+        label: text.teamsLabel,
+        name: "team_keys",
+        description: text.teamsDescription,
+        optional: true,
+      },
+      {
+        type: "list",
+        label: text.projectsLabel,
+        name: "projects",
+        description: text.projectsDescription,
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  };
+}
+
 export function useConnectorConfiguration(
   connector: ConfigurableSources
 ): ConnectionConfiguration {
   const t = useTranslations("admin.connectorsList.oneDrive");
+  const linearText = useTranslations("admin.connectorsList.linear");
+
+  if (connector === "linear") {
+    return buildLinearConfiguration({
+      description: linearText("description"),
+      teamsLabel: linearText("teams.label"),
+      teamsDescription: linearText("teams.description"),
+      projectsLabel: linearText("projects.label"),
+      projectsDescription: linearText("projects.description"),
+    });
+  }
 
   if (connector !== "onedrive") {
     return connectorConfigs[connector];
@@ -1648,11 +1700,7 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
       },
     ],
   },
-  linear: {
-    description: "Configure Linear connector",
-    values: [],
-    advanced_values: [],
-  },
+  linear: buildLinearConfiguration(LINEAR_TRANSLATION_KEYS),
   box: {
     description: "Configure Box connector",
     values: [

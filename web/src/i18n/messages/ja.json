@@ -2634,6 +2634,17 @@
           "description": "Microsoft Graph ホスト。GCC High または DoD では https://graph.microsoft.us を使用してください。"
         }
       },
+      "linear": {
+        "description": "Linear コネクタを設定",
+        "teams": {
+          "label": "チーム",
+          "description": "インデックスする Linear のチームキー（例: ENG）。空のままにすると、接続ユーザーが閲覧できるすべてのチームをインデックスします。"
+        },
+        "projects": {
+          "label": "プロジェクト",
+          "description": "インデックスする Linear のプロジェクト名または URL。空のままにすると、すべてのプロジェクトをインデックスします。チームも設定した場合、イシューは両方に一致する必要があります。"
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "{source} で認可",
