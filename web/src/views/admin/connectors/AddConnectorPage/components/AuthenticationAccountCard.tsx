@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
+import { Disabled } from "@opal/core";
 import {
   Button,
   Card,
@@ -73,7 +74,7 @@ interface AuthenticationAccountCardProps {
   selected: boolean;
   /**
    * Whether the account can be picked: it works in the realm the form names.
-   * One that cannot is disabled, and its details still open.
+   * One that cannot is disabled.
    */
   selectable: boolean;
   /** Called when the user picks this account. */
@@ -189,175 +190,183 @@ export default function AuthenticationAccountCard({
         </Modal>
       )}
 
-      <SelectCard
-        expandable
-        expanded={expanded}
-        expandableContentHeight="full"
-        // The "Selected" label marks the pick; the card itself does not.
-        state="filled"
-        disabled={!selectable}
-        border="solid"
-        rounding={4}
-        padding={2}
-        data-testid="authentication-account"
-        onClick={() => (selected ? onDeselect() : onSelect())}
-        expandedContent={
-          <Section padding={2} width="full">
-            <Card border="none" padding={2} rounding={3}>
-              <Section gap={3} alignItems="stretch" width="full">
-                <ContentAction
-                  title={
-                    checkedAt
-                      ? t("lastTested.title", { date: checkedAt })
-                      : t("notTested.title")
-                  }
-                  description={t("details.description")}
-                  sizePreset="main-ui"
-                  variant="section"
-                  padding={0}
-                  rightChildren={
-                    <Section
-                      flexDirection="row"
-                      gap={1}
-                      width="fit"
-                      height="fit"
-                    >
-                      <Button
-                        variant="danger"
-                        prominence="tertiary"
-                        icon={SvgTrash}
-                        aria-label={t("deleteButton.label")}
-                        // The server refuses to delete an account that
-                        // connectors still use.
-                        disabled={inUse}
-                        tooltip={
-                          inUse ? t("deleteButton.inUseTooltip") : undefined
-                        }
-                        onClick={() => setConfirmingDelete(true)}
-                      />
-                      <Button
-                        prominence="secondary"
-                        // The label holds still while the checks run; only
-                        // the icon turns into a spinner.
-                        icon={running ? IconLoader : SvgPlay}
-                        disabled={running}
-                        onClick={rerunChecks}
+      <Disabled disabled={!selectable}>
+        <SelectCard
+          expandable
+          expanded={expanded}
+          expandableContentHeight="full"
+          // The "Selected" label marks the pick; the card itself does not.
+          state="filled"
+          border="solid"
+          rounding={4}
+          padding={2}
+          data-testid="authentication-account"
+          onClick={() => (selected ? onDeselect() : onSelect())}
+          expandedContent={
+            <Section padding={2} width="full">
+              <Card border="none" padding={2} rounding={3}>
+                <Section gap={3} alignItems="stretch" width="full">
+                  <ContentAction
+                    title={
+                      checkedAt
+                        ? t("lastTested.title", { date: checkedAt })
+                        : t("notTested.title")
+                    }
+                    description={t("details.description")}
+                    sizePreset="main-ui"
+                    variant="section"
+                    padding={0}
+                    rightChildren={
+                      <Section
+                        flexDirection="row"
+                        gap={1}
+                        width="fit"
+                        height="fit"
                       >
-                        {t("rerunButton.label")}
-                      </Button>
-                    </Section>
-                  }
-                />
-                {details.method && (
-                  <DetailRow
-                    label={t("authenticationType.label")}
-                    value={tCredentialCopy(
-                      `methods.labels.${details.method.label}`
-                    )}
+                        <Button
+                          variant="danger"
+                          prominence="tertiary"
+                          icon={SvgTrash}
+                          aria-label={t("deleteButton.label")}
+                          // The server refuses to delete an account that
+                          // connectors still use.
+                          disabled={inUse}
+                          tooltip={
+                            inUse ? t("deleteButton.inUseTooltip") : undefined
+                          }
+                          onClick={() => setConfirmingDelete(true)}
+                        />
+                        <Button
+                          prominence="secondary"
+                          // The label holds still while the checks run; only
+                          // the icon turns into a spinner.
+                          icon={running ? IconLoader : SvgPlay}
+                          disabled={running}
+                          onClick={rerunChecks}
+                        >
+                          {t("rerunButton.label")}
+                        </Button>
+                      </Section>
+                    }
                   />
-                )}
-                {details.fields.map(({ key, field, value }) => (
-                  <DetailRow
-                    key={key}
-                    label={fieldCopy(key).title}
-                    value={value}
-                    mono={field.kind === "secret"}
-                  />
-                ))}
-              </Section>
-            </Card>
-          </Section>
-        }
-      >
-        <Section flexDirection="row" alignItems="stretch" gap={4} width="full">
-          <Section alignItems="start" gap={0} padding={2} width="full">
-            <Content
-              icon={getSourceMetadata(source).icon}
-              // Named by who created it; the account's own name stands in
-              // for one with no creator.
-              title={
-                credential.user_email ?? credential.name ?? t("untitled.label")
-              }
-              suffix={t("sourceSuffix", { source: sourceName })}
-              description={t("addedOn.label", { date: addedOn })}
-              sizePreset="main-ui"
-              variant="section"
-            />
-            {/* One-sided padding, which Section's own padding overrides. */}
-            <div className="flex flex-row gap-4 ps-5.5 pt-2">
+                  {details.method && (
+                    <DetailRow
+                      label={t("authenticationType.label")}
+                      value={tCredentialCopy(
+                        `methods.labels.${details.method.label}`
+                      )}
+                    />
+                  )}
+                  {details.fields.map(({ key, field, value }) => (
+                    <DetailRow
+                      key={key}
+                      label={fieldCopy(key).title}
+                      value={value}
+                      mono={field.kind === "secret"}
+                    />
+                  ))}
+                </Section>
+              </Card>
+            </Section>
+          }
+        >
+          <Section
+            flexDirection="row"
+            alignItems="stretch"
+            gap={4}
+            width="full"
+          >
+            <Section alignItems="start" gap={0} padding={2} width="full">
               <Content
-                icon={SvgLinkedDots}
-                title={t("usedBy.label", { count: credential.usages.length })}
-                sizePreset="secondary"
-                variant="body"
-                color="muted"
-                width="fit"
+                icon={getSourceMetadata(source).icon}
+                // Named by who created it; the account's own name stands in
+                // for one with no creator.
+                title={
+                  credential.user_email ??
+                  credential.name ??
+                  t("untitled.label")
+                }
+                suffix={t("sourceSuffix", { source: sourceName })}
+                description={t("addedOn.label", { date: addedOn })}
+                sizePreset="main-ui"
+                variant="section"
               />
-              {ownerName !== null && (
+              {/* One-sided padding, which Section's own padding overrides. */}
+              <div className="flex flex-row gap-4 ps-5.5 pt-2">
                 <Content
-                  icon={SvgUserKey}
-                  title={
-                    isOwnAccount
-                      ? t("owner.you", { name: ownerName })
-                      : ownerName
-                  }
+                  icon={SvgLinkedDots}
+                  title={t("usedBy.label", { count: credential.usages.length })}
                   sizePreset="secondary"
                   variant="body"
                   color="muted"
                   width="fit"
                 />
-              )}
-            </div>
-          </Section>
-          <Section
-            alignItems="end"
-            justifyContent="between"
-            gap={1}
-            width="fit"
-          >
-            {selected ? (
-              <Button
-                variant="action"
-                prominence="tertiary"
-                rightIcon={SvgCheckSquare}
-                tabIndex={-1}
-              >
-                {t("selected.label")}
-              </Button>
-            ) : selectable ? (
-              // Repeats the card's own action, so it leaves the tab order.
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgArrowRightCircle}
-                tabIndex={-1}
-              >
-                {t("useButton.label")}
-              </Button>
-            ) : (
-              <div className="p-1.5">
-                <Text font="secondary-body" color="text-03">
-                  {t("unsupportedRealm.label")}
-                </Text>
+                {ownerName !== null && (
+                  <Content
+                    icon={SvgUserKey}
+                    title={
+                      isOwnAccount
+                        ? t("owner.you", { name: ownerName })
+                        : ownerName
+                    }
+                    sizePreset="secondary"
+                    variant="body"
+                    color="muted"
+                    width="fit"
+                  />
+                )}
               </div>
-            )}
-            <Button
-              icon={expanded ? SvgChevronUp : SvgChevronDown}
-              prominence="tertiary"
-              aria-label={
-                expanded
-                  ? t("collapseButton.ariaLabel")
-                  : t("expandButton.ariaLabel")
-              }
-              aria-expanded={expanded}
-              onClick={(event) => {
-                // Opens the details; it does not pick the account.
-                event.stopPropagation();
-                setExpanded((open) => !open);
-              }}
-            />
+            </Section>
+            <Section
+              alignItems="end"
+              justifyContent="between"
+              gap={1}
+              width="fit"
+            >
+              {selected ? (
+                <Button
+                  variant="action"
+                  prominence="tertiary"
+                  rightIcon={SvgCheckSquare}
+                  tabIndex={-1}
+                >
+                  {t("selected.label")}
+                </Button>
+              ) : selectable ? (
+                // Repeats the card's own action, so it leaves the tab order.
+                <Button
+                  prominence="tertiary"
+                  rightIcon={SvgArrowRightCircle}
+                  tabIndex={-1}
+                >
+                  {t("useButton.label")}
+                </Button>
+              ) : (
+                <div className="p-1.5">
+                  <Text font="secondary-body" color="text-03">
+                    {t("unsupportedRealm.label")}
+                  </Text>
+                </div>
+              )}
+              <Button
+                icon={expanded ? SvgChevronUp : SvgChevronDown}
+                prominence="tertiary"
+                aria-label={
+                  expanded
+                    ? t("collapseButton.ariaLabel")
+                    : t("expandButton.ariaLabel")
+                }
+                aria-expanded={expanded}
+                onClick={(event) => {
+                  // Opens the details; it does not pick the account.
+                  event.stopPropagation();
+                  setExpanded((open) => !open);
+                }}
+              />
+            </Section>
           </Section>
-        </Section>
-      </SelectCard>
+        </SelectCard>
+      </Disabled>
     </>
   );
 }
