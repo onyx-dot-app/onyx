@@ -35,18 +35,33 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.teams import groups, listing, threads
-from onyx.connectors.teams.config import CHANNEL_BATCH_PER_WORKER, MAX_WORKERS
+from onyx.connectors.teams.config import (
+    CHANNEL_BATCH_PER_WORKER,
+    EXPORT_TEAM_WORKERS,
+    MAX_WORKERS,
+)
+from onyx.connectors.teams.export import ExportSource
 from onyx.connectors.teams.files import FileSource
 from onyx.connectors.teams.meeting_chats import (
     ChatSource,
 )
-from onyx.connectors.teams.models import ChannelAdvance, ChannelCursor, ChannelRef
+from onyx.connectors.teams.models import (
+    ChannelAdvance,
+    ChannelCursor,
+    ChannelRef,
+    TeamExport,
+)
 from onyx.connectors.teams.organizers import (
     Organizer,
     OrganizerSource,
     OrganizerStage,
 )
-from onyx.connectors.teams.refusals import channel_failure, is_permanent, status
+from onyx.connectors.teams.refusals import (
+    ExportProbe,
+    channel_failure,
+    is_permanent,
+    status,
+)
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.threads import ThreadSource
@@ -58,6 +73,7 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import (
+    drain,
     run_functions_tuples_in_parallel,
     run_with_timeout,
 )
@@ -95,6 +111,9 @@ class TeamsCheckpoint(ConnectorCheckpoint):
     # TODO(nmgarza5): drop both once v4.9 checkpoints have aged out.
     current_channel: ChannelRef | None = None
     next_messages_url: str | None = None
+    # Whether the export API answers for this app, decided at the first team
+    # step and kept so every step of the attempt takes the same path.
+    export: bool | None = None
     # The meeting organizers follow the channels. None until their first page is
     # listed, then a batch of organizers per step and a page at a time. Whole
     # organizers ride along, not ids: the documents name the organizer, and a
@@ -154,6 +173,7 @@ class TeamsConnector(
         # page url Graph rejects recovers once per attempt and can never loop.
         self._restarted_channel_ids: set[str] = set()
         self._threads = ThreadSource(self, include_inline_images)
+        self._export = ExportSource(self, self._threads)
         self._files: FileSource | None = (
             FileSource(self, self.requested_team_list, lambda: self.raw_file_callback)
             if include_attachments
@@ -306,18 +326,23 @@ class TeamsConnector(
         elif checkpoint.active or checkpoint.todo_channels:
             yield from self._channel_step(checkpoint, start)
         elif checkpoint.todo_team_ids:
-            team_id = checkpoint.todo_team_ids.pop()
-            team = listing.get_team_by_id(graph_client=graph_client, team_id=team_id)
-            checkpoint.todo_channels = [
-                listing.channel_ref(team_id, channel)
-                for channel in listing.collect_all_channels_from_team(team=team)
-            ]
-            logger.info(
-                "Listed %s channel(s) of team %s; %s team(s) left",
-                len(checkpoint.todo_channels),
-                team_id,
-                len(checkpoint.todo_team_ids),
-            )
+            if checkpoint.export is None:
+                probe = self._export.available(checkpoint.todo_team_ids[-1])
+                # A probe team that is gone or locked says nothing about the
+                # app: it walks its channels and the next team probes again.
+                if probe is not ExportProbe.REFUSED_FOR_ITEM:
+                    checkpoint.export = probe is ExportProbe.ANSWERS
+            if checkpoint.export:
+                yield from self._export_step(checkpoint, start, end)
+            else:
+                team_id = checkpoint.todo_team_ids.pop()
+                checkpoint.todo_channels = listing.team_channels(graph_client, team_id)
+                logger.info(
+                    "Listed %s channel(s) of team %s; %s team(s) left",
+                    len(checkpoint.todo_channels),
+                    team_id,
+                    len(checkpoint.todo_team_ids),
+                )
         elif self._organizers is not None and checkpoint.todo_organizers:
             yield from self._organizers.index_batch(
                 checkpoint.todo_organizers, start, end
@@ -343,6 +368,62 @@ class TeamsConnector(
             )
         )
         return checkpoint
+
+    def _export_step(
+        self,
+        checkpoint: TeamsCheckpoint,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> Iterator[Document | ConnectorFailure]:
+        """The threads of a few teams, each team one export stream, side by
+        side and yielded as each team finishes, then the files of their
+        channels. The teams leave the queue only once every one finished, so
+        a raise in one leaves the step to be retried."""
+        if checkpoint.todo_team_ids is None:
+            raise RuntimeError("The teams are listed before any export step")
+        team_ids: list[str] = checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
+        for item in drain(
+            team_ids,
+            lambda team_id: self._export.team(team_id, start, end),
+            EXPORT_TEAM_WORKERS,
+        ):
+            if not isinstance(item, TeamExport):
+                yield item
+                continue
+            export: TeamExport = item
+            if export.refused_to_app:
+                # A 402 applies to the whole tenant, so the teams left walk
+                # their channels without another stream each.
+                checkpoint.export = False
+            if export.fell_back:
+                checkpoint.todo_channels.extend(export.channels)
+                continue
+            for channel in export.channels:
+                yield from self._opened_channel_files(channel, start)
+        del checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
+
+    def _opened_channel_files(
+        self, channel: ChannelRef, start: SecondsSinceUnixEpoch
+    ) -> Iterator[Document | ConnectorFailure]:
+        """A channel's files, library opened and left here. A channel Graph
+        describes without a library, or refuses, is one recorded failure.
+        Anything else fails the attempt."""
+        if self._files is None:
+            return
+        try:
+            self._files.open(channel)
+        except ChannelFilesUnavailable as e:
+            yield channel_failure(channel, "files", e)
+            return
+        except requests.HTTPError as e:
+            if not is_permanent(e):
+                raise
+            yield channel_failure(channel, "files", e)
+            return
+        try:
+            yield from self._channel_files(channel, start)
+        finally:
+            self._files.leave(channel)
 
     def _channel_step(
         self, checkpoint: TeamsCheckpoint, start: SecondsSinceUnixEpoch

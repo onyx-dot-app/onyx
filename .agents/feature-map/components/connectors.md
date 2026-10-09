@@ -368,16 +368,24 @@ credential: channel threads, channel files, meeting transcripts and the days
 of meeting chats.
 
 - **Teams, then channels.** The first step lists every team
-  (`listing.collect_all_teams`) and a team step lists its channels into
-  `todo_channels`. A channel step walks one delta page of up to `max_workers`
-  channels at once (`TeamsCheckpoint.active`, `_channel_step`,
-  `_advance_channel`): the roots of the page, then one replies call per root
-  and the images pasted into them. Cursors are advanced on copies and written
-  back only when every channel finished its page, so a raise in one leaves the
-  step to be retried. A checkpoint saved by the one-channel walk joins `active`
-  when it is loaded.
-- **Files.** After a channel's last page its library is read on the consuming
-  thread (`FileSource.index`): the folder children, each file's text, and its
+  (`listing.collect_all_teams`). The first team step probes the export API
+  once and keeps the answer in `TeamsCheckpoint.export`. With it, a team step
+  streams four teams at a time, the documents of each team yielded as it finishes (`export.py:ExportSource`): every message of
+  every channel changed in the window, replies included, grouped into threads;
+  a thread whose root was created inside the window is complete in the stream,
+  an older one that changed anywhere gets its replies from Graph, and its root
+  too when the stream lacks it. A team whose stream Graph refuses, or that
+  streams past 100k messages, goes to the channel walk; a probe team that is gone or locked walks its channels and the next team probes again, and a 402 mid-stream sends every team left to the channel walk.
+  An app the export API refuses walks every team the same way: the team's
+  channels into `todo_channels`, then a channel
+  step walks one delta page of up to `max_workers` channels at once
+  (`TeamsCheckpoint.active`, `_channel_step`, `_advance_channel`), the roots
+  of the page, one replies call per root and the images pasted into them.
+  Cursors are advanced on copies and written back only when every channel
+  finished its page, so a raise in one leaves the step to be retried. A
+  checkpoint saved by the one-channel walk joins `active` when it is loaded.
+- **Files.** After a channel's last page, or its team's export stream, its
+  library is read on the consuming thread (`FileSource.index`): the folder children, each file's text, and its
   readers through SharePoint REST, whose client is kept per site.
 - **Organizers.** The meeting side follows the channels: a page of licensed
   users per step, then 32 organizers per step drained by eight workers from a

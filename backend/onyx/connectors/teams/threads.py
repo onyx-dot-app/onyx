@@ -181,12 +181,23 @@ class ThreadSource:
         self, channel: ChannelRef, roots: list[Message], start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
         for root in roots:
-            # A thread is its root message. A deleted or system root drops the
-            # whole thread, which is what the slim walk lists for pruning too.
-            if not root.is_indexable:
-                if _deleted_since(root, start):
-                    yield _convert_thread_to_document(channel, root, [], None)
-                continue
+            yield from self.thread(channel, root, None, start)
+
+    def thread(
+        self,
+        channel: ChannelRef,
+        root: Message,
+        replies: list[Message] | None,
+        start: SecondsSinceUnixEpoch,
+    ) -> Iterator[Document | ConnectorFailure]:
+        """One thread, its replies fetched when the caller has none in hand."""
+        # A thread is its root message. A deleted or system root drops the
+        # whole thread, which is what the slim walk lists for pruning too.
+        if not root.is_indexable:
+            if _deleted_since(root, start):
+                yield _convert_thread_to_document(channel, root, [], None)
+            return
+        if replies is None:
             try:
                 replies = list(
                     fetch_replies(
@@ -204,15 +215,15 @@ class ThreadSource:
                     failure_message=f"Could not read the replies of {root.id} in channel {channel.id}",
                     exception=e,
                 )
-                continue
-            yield _convert_thread_to_document(
-                channel=channel,
-                root=root,
-                replies=replies,
-                message_images=(
-                    self._message_images if self._include_inline_images else None
-                ),
-            )
+                return
+        yield _convert_thread_to_document(
+            channel=channel,
+            root=root,
+            replies=replies,
+            message_images=(
+                self._message_images if self._include_inline_images else None
+            ),
+        )
 
     def slim(self, channel: ChannelRef, walk: SlimWalk) -> Iterator[SlimDocument]:
         # A thread names its channel's group, so readers cost no call.

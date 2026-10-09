@@ -45,6 +45,19 @@ class ChannelMember(BaseModel):
     )
 
 
+class ChannelIdentity(BaseModel):
+    """Which channel a message is in. Only the team-wide export needs it, whose
+    rows mix channels."""
+
+    team_id: str | None = None
+    channel_id: str | None = None
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+
 class Message(BaseModel):
     id: str
     replyToId: str | None
@@ -58,6 +71,7 @@ class Message(BaseModel):
     web_url: str
     # Graph also lists system events (member added, channel renamed) as messages.
     message_type: str | None = None
+    channel_identity: ChannelIdentity | None = None
 
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -100,6 +114,18 @@ class ChannelAdvance(BaseModel):
     done: bool = False
     files_due: bool = False
     restarted: bool = False
+
+
+class TeamExport(BaseModel):
+    """What a team's export stream leaves for the step once its documents are
+    out: the team's channels, and whether they go to the channel walk."""
+
+    channels: list[ChannelRef]
+    # The stream was refused or too large to hold, so the channels go to the
+    # channel walk.
+    fell_back: bool = False
+    # The refusal was a 402, which applies to the whole tenant.
+    refused_to_app: bool = False
 
 
 class ChannelLibrary(BaseModel):
