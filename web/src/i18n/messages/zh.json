@@ -2748,7 +2748,7 @@
           }
         },
         "realm": {
-          "description": "粘贴你的站点 URL 或子域名。该地址必须能访问 {source} 的 REST API。{hasDefault, select, true {如未提供，将改用 `{value}`。} other {}}"
+          "description": "粘贴你的站点 URL 或子域名。该地址必须能访问 {source} 的 REST API。{hasDefault, select, true {默认为 `{value}`。} other {}}"
         }
       },
       "credentialRequired": {

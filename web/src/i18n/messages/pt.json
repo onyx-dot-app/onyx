@@ -2748,7 +2748,7 @@
           }
         },
         "realm": {
-          "description": "Cole a URL ou o subdomínio do seu site. A API REST do {source} precisa estar acessível nele.{hasDefault, select, true { Se não for informado, `{value}` será usado no lugar.} other {}}"
+          "description": "Cole a URL ou o subdomínio do seu site. A API REST do {source} precisa estar acessível nele.{hasDefault, select, true { Valor padrão: `{value}`.} other {}}"
         }
       },
       "credentialRequired": {
