@@ -1,3 +1,4 @@
+import { Blob as NodeBlob } from "node:buffer";
 import { act, render, screen, waitFor } from "@tests/setup/test-utils";
 import BuildOutputPanel from "@/app/craft/components/OutputPanel";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -30,8 +31,40 @@ jest.mock("@/app/craft/components/output-panel/ArtifactsTab", () => ({
   default: () => null,
 }));
 
+const mockPdfDestroy = jest.fn().mockResolvedValue(undefined);
+const mockPdfGetDocument = jest.fn(() => ({
+  promise: Promise.resolve({ numPages: 2 }),
+  destroy: mockPdfDestroy,
+}));
+const mockPdfEvents = new Map<string, () => void>();
+
+jest.mock("pdfjs-dist", () => ({
+  version: "6.4.299",
+  GlobalWorkerOptions: {},
+  AnnotationMode: { ENABLE: 1 },
+  getDocument: () => mockPdfGetDocument(),
+}));
+jest.mock("pdfjs-dist/web/pdf_viewer.mjs", () => ({
+  EventBus: jest.fn().mockImplementation(() => ({
+    on: (name: string, callback: () => void) =>
+      mockPdfEvents.set(name, callback),
+  })),
+  PDFLinkService: jest.fn().mockImplementation(() => ({
+    setViewer: jest.fn(),
+    setDocument: jest.fn(),
+  })),
+  LinkTarget: { BLANK: 2 },
+  PDFViewer: jest.fn().mockImplementation(() => ({
+    currentScaleValue: "",
+    setDocument: (document: object | null) => {
+      if (document) mockPdfEvents.get("pagesinit")?.();
+    },
+  })),
+}));
+
 const sessionId = "preview-inventory";
 const store = () => useBuildSessionStore.getState();
+const originalBlob = globalThis.Blob;
 const originalCreateObjectURL = URL.createObjectURL;
 const originalRevokeObjectURL = URL.revokeObjectURL;
 const originalScrollIntoView = Element.prototype.scrollIntoView;
@@ -46,6 +79,12 @@ async function refreshInventory(files: OutputInventory["files"]) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockPdfEvents.clear();
+  Object.defineProperty(globalThis, "Blob", {
+    configurable: true,
+    writable: true,
+    value: NodeBlob,
+  });
   let nextObjectUrl = 0;
   URL.createObjectURL = jest.fn(() => `blob:preview-${++nextObjectUrl}`);
   URL.revokeObjectURL = jest.fn();
@@ -63,6 +102,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
+  globalThis.Blob = originalBlob;
   URL.createObjectURL = originalCreateObjectURL;
   URL.revokeObjectURL = originalRevokeObjectURL;
   Element.prototype.scrollIntoView = originalScrollIntoView;
@@ -106,10 +146,6 @@ it("refreshes an open PowerPoint through inventory updates and reuses unchanged 
   expect(fetchPptxPreview).toHaveBeenCalledTimes(3);
 });
 
-function isReportFrame(title: string, element: Element | null): boolean {
-  return title === "report.pdf" && element?.tagName === "IFRAME";
-}
-
 it("refreshes an open PDF through inventory updates and reuses unchanged bytes", async () => {
   const path = "outputs/report.pdf";
   const fetch = jest
@@ -123,9 +159,8 @@ it("refreshes an open PDF through inventory updates and reuses unchanged bytes",
   });
   render(<BuildOutputPanel isOpen />);
   act(() => store().openFilePreview(sessionId, path, "report.pdf"));
-  const originalUrl = (await screen.findByTitle(isReportFrame)).getAttribute(
-    "src"
-  );
+  await screen.findByRole("region", { name: "report.pdf" });
+  await waitFor(() => expect(mockPdfGetDocument).toHaveBeenCalledTimes(1));
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(fetch).toHaveBeenLastCalledWith(
     `/api/build/sessions/${sessionId}/artifacts/outputs/report.pdf`,
@@ -134,24 +169,25 @@ it("refreshes an open PDF through inventory updates and reuses unchanged bytes",
 
   await refreshInventory([{ path, revision: "200:1000", size: 1000 }]);
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-  expect(await screen.findByTitle(isReportFrame)).not.toHaveAttribute(
-    "src",
-    originalUrl
-  );
-  expect(URL.revokeObjectURL).toHaveBeenCalledWith(originalUrl);
-  const updatedFrame = screen.getByTitle(isReportFrame);
-  const updatedBlob = jest.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0];
+  await waitFor(() => expect(mockPdfGetDocument).toHaveBeenCalledTimes(2));
+  expect(mockPdfDestroy).toHaveBeenCalledTimes(1);
+  const updatedViewer = screen.getByRole("region", { name: "report.pdf" });
   act(() => store().setActiveOutputTab(sessionId, "artifacts"));
   act(() => store().setActivePanelTabId(sessionId, `file:${path}`));
-  expect(screen.getByTitle(isReportFrame)).toBe(updatedFrame);
+  expect(screen.getByRole("region", { name: "report.pdf" })).toBe(
+    updatedViewer
+  );
   expect(fetch).toHaveBeenCalledTimes(2);
+  expect(mockPdfGetDocument).toHaveBeenCalledTimes(2);
+  expect(mockPdfDestroy).toHaveBeenCalledTimes(1);
 
   act(() => store().closePanelTab(sessionId, `file:${path}`));
-  expect(screen.queryByTitle(isReportFrame)).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("region", { name: "report.pdf" })
+  ).not.toBeInTheDocument();
+  expect(mockPdfDestroy).toHaveBeenCalledTimes(2);
   act(() => store().openFilePreview(sessionId, path, "report.pdf"));
-  await screen.findByTitle(isReportFrame);
+  await screen.findByRole("region", { name: "report.pdf" });
+  await waitFor(() => expect(mockPdfGetDocument).toHaveBeenCalledTimes(3));
   expect(fetch).toHaveBeenCalledTimes(3);
-  expect(jest.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0]).not.toBe(
-    updatedBlob
-  );
 });
