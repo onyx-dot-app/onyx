@@ -7,7 +7,6 @@ from typing import Any
 
 import pytest
 
-from onyx.background.indexing.models import BackfillSpec
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
@@ -40,6 +39,7 @@ from onyx.connectors.planning_rule import (
     planning_rule_with_data,
 )
 from onyx.connectors.planning_rule_registry import PLANNING_RULES
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -92,6 +92,7 @@ def _inputs(**overrides: Any) -> EditPlanInputs:
     return EditPlanInputs.model_validate(
         {
             "supports_windowed_runs": True,
+            "prune_honors_indexing_start": True,
             "fetches_permissions_during_indexing": False,
             "access_filter_enforced": True,
             "attempt_running": False,
@@ -316,14 +317,70 @@ def test_indexing_start_earlier_on_a_load_state_source_reindexes() -> None:
 @pytest.mark.parametrize(
     "old_start, new_start", [(_EARLIER_START, _START), (None, _START)]
 )
-def test_indexing_start_later_only_notes(
+def test_indexing_start_later_prunes(
     old_start: datetime | None, new_start: datetime
 ) -> None:
     current = _current(indexing_start=old_start)
     plan = _plan(current, indexing_start=new_start)
 
+    assert _kinds(plan) == [EditStepKind.PRUNE]
+    step = plan.steps[0]
+    assert step.reasons == [EditStepReason.INDEXING_START_LATER]
+    assert not step.required
+    assert _notes(plan) == [EditNoteKind.INDEXING_START_LATER]
+
+
+@pytest.mark.parametrize(
+    "old_start, new_start", [(_EARLIER_START, _START), (None, _START)]
+)
+def test_indexing_start_later_without_a_dated_prune_only_notes(
+    old_start: datetime | None, new_start: datetime
+) -> None:
+    """A load-state source, or one whose prune lists all documents."""
+    current = _current(indexing_start=old_start)
+    plan = _plan(
+        current,
+        _inputs(prune_honors_indexing_start=False),
+        indexing_start=new_start,
+    )
+
     assert plan.steps == []
     assert _notes(plan) == [EditNoteKind.INDEXING_START_LATER]
+    assert "stay indexed" in plan.notes[0].message
+
+
+def test_indexing_start_later_and_a_reindex_reindex_then_prune() -> None:
+    current = _current(
+        DocumentSource.CONFLUENCE, _CONFLUENCE_SITE, indexing_start=_EARLIER_START
+    )
+    plan = _plan(
+        current,
+        connector_specific_config=_CONFLUENCE_SITE | {"timezone_offset": 5.0},
+        indexing_start=_START,
+    )
+
+    assert _kinds(plan) == [EditStepKind.FULL_REINDEX_THEN_PRUNE]
+    assert plan.steps[0].reasons == [
+        EditStepReason.BEHAVIOR_CHANGED,
+        EditStepReason.INDEXING_START_LATER,
+    ]
+
+
+def test_indexing_start_later_prune_folds_into_an_identity_change() -> None:
+    current = _current(
+        DocumentSource.GITHUB, {"repo_owner": "onyx"}, indexing_start=_EARLIER_START
+    )
+    plan = _plan(
+        current,
+        connector_specific_config={"repo_owner": "other"},
+        indexing_start=_START,
+    )
+
+    assert _kinds(plan) == [EditStepKind.FULL_REINDEX_THEN_PRUNE]
+    assert plan.steps[0].reasons == [
+        EditStepReason.IDENTITY_CHANGED,
+        EditStepReason.INDEXING_START_LATER,
+    ]
 
 
 def test_naive_indexing_start_is_utc() -> None:

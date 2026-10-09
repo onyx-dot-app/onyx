@@ -187,13 +187,17 @@ def _plan_draft(
     """Decides each check's state before it runs. Reads no credential and does
     no I/O to the source.
 
-    A create form with no values is config-less: config-reading checks wait.
-    With ``config_is_complete`` (a pair's proposed config), {} selects the
-    defaults."""
+    A create form with no values is config-less, and config-reading checks
+    wait, unless the defaults alone make a complete config (a source whose
+    fields all have defaults, such as Linear). With ``config_is_complete`` (a
+    pair's proposed config), {} selects the defaults."""
     form_state = validate_form_state(config_class, form_values)
     connector_specific_config: dict[str, Any] | None = (
         form_values
-        if config_is_complete or form_state.provided or form_state.errors
+        if config_is_complete
+        or form_state.provided
+        or form_state.errors
+        or form_state.complete is not None
         else None
     )
     context = CapabilityCheckContext(

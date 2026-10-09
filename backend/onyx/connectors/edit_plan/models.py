@@ -5,15 +5,16 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
-from onyx.background.indexing.models import BackfillSpec
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     ProposedPairingValidation,
 )
 from onyx.connectors.config_diff import ConfigFieldChange
+from onyx.connectors.field_policy import FieldClass, ScopeDirection
 from onyx.connectors.models import InputType
 from onyx.connectors.planning_rule import PlanningData
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 
 
@@ -82,11 +83,15 @@ class EditStepReason(str, Enum):
     ITEMS_REMOVED = "items_removed"
     OPAQUE_SCOPE_CHOICE = "opaque_scope_choice"
     INDEXING_START_EARLIER = "indexing_start_earlier"
+    INDEXING_START_LATER = "indexing_start_later"
     CREDENTIAL_FULL_PATH = "credential_full_path"
     ACCESS_CHANGED = "access_changed"
     # The source gets document permissions only while it indexes.
     PERMISSIONS_FETCHED_DURING_INDEXING = "permissions_fetched_during_indexing"
     ATTEMPT_RUNNING = "attempt_running"
+    # A backfill of an earlier edit waits or runs with a config built from the
+    # old config. A full re-index covers it.
+    SCOPED_BACKFILL_SUPERSEDED = "scoped_backfill_superseded"
     ADMIN_ADDED = "admin_added"
 
 
@@ -158,9 +163,13 @@ class EditPlanInputs(BaseModel):
     """What the planner needs besides the two states, gathered by the caller."""
 
     supports_windowed_runs: bool
+    # A prune lists only the documents from the indexing start.
+    prune_honors_indexing_start: bool
     fetches_permissions_during_indexing: bool
     access_filter_enforced: bool
     attempt_running: bool
+    # A backfill with a config override waits on the pair or runs.
+    scoped_backfill_outstanding: bool = False
     indexed_document_count: int
     now: datetime
     # None when nothing that validation checks changed.
@@ -209,3 +218,39 @@ class StoredEditPlan(BaseModel):
     proposed: ProposedPairState
     plan: EditPlan
     created_at: datetime
+
+
+class ConnectorEditAuditFieldChange(BaseModel):
+    """One changed config field, without its values."""
+
+    field_name: str
+    field_class: FieldClass
+    scope_direction: ScopeDirection
+    added_item_count: int
+    removed_item_count: int
+
+
+class ConnectorEditAudit(BaseModel):
+    """The field-level diff of an applied edit. Config values are left out:
+    free-form fields (queries, URLs, paths) can carry sensitive text."""
+
+    plan_id: UUID
+    field_changes: list[ConnectorEditAuditFieldChange]
+    changed_settings: list[str]
+    indexing_start_changed: bool
+    old_access_type: AccessType
+    new_access_type: AccessType
+    old_data_access_group_ids: list[int]
+    new_data_access_group_ids: list[int]
+    old_credential_id: int
+    new_credential_id: int
+    steps: list[EditStepKind]
+    reactivated: bool
+
+
+class AppliedConnectorEdit(BaseModel):
+    steps: list[EditStep]
+    reactivated: bool
+    # Revoke these after the commit (``revoke_restarted_attempt_tasks``).
+    restarted_task_ids: list[str]
+    audit: ConnectorEditAudit

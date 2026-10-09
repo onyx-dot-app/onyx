@@ -26,6 +26,7 @@ from onyx.connectors.edit_plan.planner import (
 from onyx.connectors.edit_plan.state import fetch_current_pair_state
 from onyx.connectors.edit_plan.store import compute_base_state_hash, save_edit_plan
 from onyx.connectors.factory import (
+    source_prune_honors_indexing_start,
     source_supports_windowed_runs,
     validate_connector_config,
     validate_proposed_pairing,
@@ -34,8 +35,11 @@ from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.connectors.planning_rule import PlanningData
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.context.search.models import CCPairAccessMode
-from onyx.db.connector_edit_requests import has_restartable_attempt
-from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.connector_edit_requests import (
+    has_restartable_attempt,
+    has_scoped_backfill_outstanding,
+)
+from onyx.db.credentials import credential_usable_for_source, fetch_credential_by_id
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.models import Credential, User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -52,10 +56,11 @@ def _fetch_proposed_credential(
             OnyxErrorCode.CREDENTIAL_NOT_FOUND,
             f"Credential {proposed.credential_id} does not exist.",
         )
-    if credential.source != current.source:
+    if not credential_usable_for_source(credential, current.source):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Credential {credential.id} is not a {current.source.value} credential.",
+            f"Credential {credential.id} cannot be used by a "
+            f"{current.source.value} connector.",
         )
     return credential
 
@@ -164,6 +169,7 @@ def plan_connector_edit(
     )
     inputs = EditPlanInputs(
         supports_windowed_runs=source_supports_windowed_runs(current.source),
+        prune_honors_indexing_start=source_prune_honors_indexing_start(current.source),
         fetches_permissions_during_indexing=(
             source_should_fetch_permissions_during_indexing(current.source)
         ),
@@ -171,6 +177,9 @@ def plan_connector_edit(
             get_cc_pair_access_mode(db_session) == CCPairAccessMode.ENFORCE
         ),
         attempt_running=has_restartable_attempt(db_session, cc_pair_id),
+        scoped_backfill_outstanding=has_scoped_backfill_outstanding(
+            db_session, cc_pair_id
+        ),
         indexed_document_count=_indexed_document_count(db_session, current),
         now=datetime.now(timezone.utc),
         validation=validation,
@@ -188,3 +197,34 @@ def plan_connector_edit(
     )
     save_edit_plan(stored)
     return stored
+
+
+def with_latest_dry_run_results(
+    db_session: Session, stored: StoredEditPlan
+) -> StoredEditPlan:
+    """The plan with the pair's dry-run results cached now for its proposed
+    state, so a dry run started after planning shows. Writes nothing.
+
+    Raises:
+        OnyxError: CREDENTIAL_NOT_FOUND when the proposed credential was
+            deleted after planning.
+    """
+    proposed = stored.proposed
+    credential = fetch_credential_by_id(proposed.credential_id, db_session)
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {proposed.credential_id} does not exist.",
+        )
+    if proposed.source not in CONNECTOR_CLASS_MAP:
+        return stored
+    results = get_cc_pair_dry_run_results(
+        cc_pair_id=stored.cc_pair_id,
+        credential=credential,
+        source=proposed.source,
+        access_type=proposed.access_type,
+        connector_specific_config=proposed.connector_specific_config,
+    )
+    return stored.model_copy(
+        update={"plan": stored.plan.model_copy(update={"dry_run_results": results})}
+    )

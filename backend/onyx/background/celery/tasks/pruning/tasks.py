@@ -18,7 +18,10 @@ from onyx.background.celery.celery_redis import (
     celery_get_queued_task_ids,
     celery_get_unacked_task_ids,
 )
-from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
+from onyx.background.celery.celery_utils import (
+    SlimConnectorExtractionResult,
+    extract_ids_from_runnable_connector,
+)
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallbackBase
 from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
@@ -57,8 +60,10 @@ from onyx.db.enums import (
 )
 from onyx.db.hierarchy import (
     cleanup_unowned_hierarchy_nodes,
+    get_hierarchy_node_ids_with_ancestors,
     persist_hierarchy_nodes_for_cc_pair,
     remove_stale_hierarchy_node_cc_pair_entries,
+    source_has_document_hierarchy_nodes,
     update_document_parent_hierarchy_nodes,
 )
 from onyx.db.models import ConnectorCredentialPair
@@ -165,6 +170,40 @@ def _resolve_and_update_document_parents(
     )
     task_logger.info(
         f"Pruning: resolved and updated parent hierarchy for {len(resolved)} documents (source={source.value})"
+    )
+
+
+def _get_live_hierarchy_node_ids(
+    db_session: Session,
+    source: DocumentSource,
+    extraction_result: SlimConnectorExtractionResult,
+    yielded_node_ids: set[int],
+) -> set[int]:
+    """Hierarchy nodes the pair keeps after the prune. A full listing yields
+    every live node. A listing from a start omits unchanged folders, so the
+    nodes above a kept document count as live too: the document still lies
+    under them at the source. So does the node of a kept document that is
+    also a node (e.g. a Confluence page). A deleted or revoked folder holds
+    no kept document, so it is not live."""
+    if extraction_result.listed_from is None:
+        return yielded_node_ids
+    parent_raw_ids = {
+        raw_parent_id
+        for raw_parent_id in extraction_result.raw_id_to_parent.values()
+        if raw_parent_id is not None
+    }
+    return get_hierarchy_node_ids_with_ancestors(
+        db_session=db_session,
+        source=source,
+        raw_node_ids=parent_raw_ids,
+        node_ids=yielded_node_ids,
+        # One cheap check per prune saves a walk per batch of documents for a
+        # source whose documents are never nodes.
+        document_ids=(
+            set(extraction_result.raw_id_to_parent)
+            if source_has_document_hierarchy_nodes(db_session, source)
+            else set()
+        ),
     )
 
 
@@ -572,6 +611,7 @@ def connector_pruning_generator_task(
         connector_source: DocumentSource | None = None
         connector_type: str = ""
         is_connector_public: bool = False
+        indexing_start: float | None = None
         runnable_connector: BaseConnector | None = None
         all_indexed_document_ids: set[str] = set()
 
@@ -604,6 +644,14 @@ def connector_pruning_generator_task(
             connector_source = cc_pair.connector.source
             connector_type = connector_source.value
             is_connector_public = cc_pair.access_type == AccessType.PUBLIC
+            # A scheduled prune also removes documents older than the indexing
+            # start, where the listing can filter by it. Same conversion as
+            # the indexing run.
+            indexing_start = (
+                cc_pair.connector.indexing_start.timestamp()
+                if cc_pair.connector.indexing_start
+                else None
+            )
 
             task_logger.info(
                 f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={connector_source}"
@@ -642,7 +690,10 @@ def connector_pruning_generator_task(
 
         # Extract docs and hierarchy nodes from the source (no DB session held).
         extraction_result = extract_ids_from_runnable_connector(
-            runnable_connector, callback, connector_type=connector_type
+            runnable_connector,
+            callback,
+            connector_type=connector_type,
+            start=indexing_start,
         )
         all_connector_doc_ids = extraction_result.raw_id_to_parent
 
@@ -731,7 +782,12 @@ def connector_pruning_generator_task(
             redis_connector.prune.generator_complete = tasks_generated
 
             # --- Hierarchy node pruning ---
-            live_node_ids = {n.id for n in upserted_nodes}
+            live_node_ids = _get_live_hierarchy_node_ids(
+                db_session=db_session,
+                source=source,
+                extraction_result=extraction_result,
+                yielded_node_ids={n.id for n in upserted_nodes},
+            )
             stale_removed = remove_stale_hierarchy_node_cc_pair_entries(
                 db_session=db_session,
                 connector_id=connector_id,

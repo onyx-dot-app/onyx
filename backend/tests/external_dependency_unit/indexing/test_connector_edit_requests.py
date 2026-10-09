@@ -29,6 +29,7 @@ from onyx.background.indexing.attempt_restart import revoke_restarted_attempt_ta
 from onyx.db.connector_edit_requests import (
     get_reindex_request_backoff,
     request_attempt_restart__no_commit,
+    request_full_reindex__no_commit,
     request_prune__no_commit,
     request_prune_after_reindex__no_commit,
     request_retry_delay,
@@ -673,3 +674,35 @@ def test_a_served_request_resets_the_backoff(
     *_, third = _attempts(db_session, cc_pair.id)
     assert third.id != second.id
     assert third.from_beginning
+
+
+def test_full_reindex_request_backs_off_after_failed_attempts(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> None:
+    request_full_reindex__no_commit(db_session, cc_pair.id)
+    db_session.commit()
+    _run_beat(db_session, cc_pair, search_settings)
+    (first,) = _attempts(db_session, cc_pair.id)
+    assert first.full_reindex_requested_at is not None
+
+    _fail(db_session, first)
+    _run_beat(db_session, cc_pair, search_settings)
+    assert len(_attempts(db_session, cc_pair.id)) == 1
+    backoff = get_reindex_request_backoff(db_session, cc_pair.id, search_settings.id)
+    assert backoff is not None
+    assert backoff.failure_count == 1
+
+    _fail(db_session, first, minutes_ago=6)
+    _run_beat(db_session, cc_pair, search_settings)
+    _, second = _attempts(db_session, cc_pair.id)
+    assert second.from_beginning
+
+    # A new request starts with no backoff.
+    _fail(db_session, second)
+    request_full_reindex__no_commit(db_session, cc_pair.id)
+    db_session.commit()
+    assert (
+        get_reindex_request_backoff(db_session, cc_pair.id, search_settings.id) is None
+    )

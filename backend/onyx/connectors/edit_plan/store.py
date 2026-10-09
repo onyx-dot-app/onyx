@@ -11,12 +11,16 @@ import json
 from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
-from onyx.connectors.edit_plan.constants import EDIT_PLAN_TTL_SECONDS
+from onyx.connectors.edit_plan.constants import (
+    EDIT_PLAN_APPLY_CLAIM_TTL_SECONDS,
+    EDIT_PLAN_TTL_SECONDS,
+)
 from onyx.connectors.edit_plan.models import PairState, StoredEditPlan
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 _EDIT_PLAN_KEY_PREFIX = "connector_edit_plan"
+_EDIT_PLAN_APPLY_CLAIM_KEY_PREFIX = "connector_edit_plan_applying"
 
 
 def compute_base_state_hash(state: PairState) -> str:
@@ -45,6 +49,10 @@ def _plan_key(plan_id: UUID) -> str:
     return f"{_EDIT_PLAN_KEY_PREFIX}:{plan_id}"
 
 
+def _apply_claim_key(plan_id: UUID) -> str:
+    return f"{_EDIT_PLAN_APPLY_CLAIM_KEY_PREFIX}:{plan_id}"
+
+
 def save_edit_plan(stored: StoredEditPlan) -> None:
     get_cache_backend().set(
         _plan_key(stored.plan_id),
@@ -71,3 +79,19 @@ def ensure_base_state_matches(stored: StoredEditPlan, current: PairState) -> Non
             OnyxErrorCode.EDIT_PLAN_STALE,
             "The connector changed after this plan was computed. Compute a new plan.",
         )
+
+
+def delete_edit_plan(plan_id: UUID) -> None:
+    get_cache_backend().delete(_plan_key(plan_id))
+
+
+def claim_edit_plan_for_apply(plan_id: UUID) -> bool:
+    """Marks the plan as being applied. Returns False when another apply
+    holds it. The claim expires, so a crashed apply frees the plan."""
+    return get_cache_backend().set_if_absent(
+        _apply_claim_key(plan_id), "1", ex=EDIT_PLAN_APPLY_CLAIM_TTL_SECONDS
+    )
+
+
+def release_edit_plan_claim(plan_id: UUID) -> None:
+    get_cache_backend().delete(_apply_claim_key(plan_id))

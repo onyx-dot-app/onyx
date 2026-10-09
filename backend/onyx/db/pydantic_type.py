@@ -8,6 +8,8 @@ from sqlalchemy.types import TypeDecorator
 
 class PydanticType(TypeDecorator):
     impl = JSONB
+    # The only state is the model class, so statements stay cacheable.
+    cache_ok = True
 
     def __init__(
         self, pydantic_model: Type[BaseModel], *args: Any, **kwargs: Any
@@ -36,6 +38,8 @@ class PydanticType(TypeDecorator):
 
 class PydanticListType(TypeDecorator):
     impl = JSONB
+    # The only state is the model class, so statements stay cacheable.
+    cache_ok = True
 
     def __init__(
         self, pydantic_model: Type[BaseModel], *args: Any, **kwargs: Any

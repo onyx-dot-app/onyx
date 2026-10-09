@@ -65,6 +65,7 @@ from onyx.configs.constants import (
     TokenRateLimitScope,
 )
 from onyx.connectors.models import InputType
+from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     AccountType,
@@ -1046,11 +1047,25 @@ class ConnectorCredentialPair(Base):
     prune_after_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # A full re-index an edit requested. While set, every new attempt on the
+    # current search settings is a full re-index. Cleared when one succeeds.
+    full_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Set when the pair enters a perm-synced access type. While set, the pair
     # grants no access at query time and the restricted guard hides its
     # documents. Cleared once its permissions are in the document index.
     perm_sync_pending_since: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    # Backfills an applied edit requested, oldest first. The indexing beat
+    # creates one at a time while the pair is ACTIVE and has no active attempt,
+    # and keeps each request until an attempt of it succeeds.
+    pending_backfills: Mapped[list[PendingBackfill]] = mapped_column(
+        PydanticListType(PendingBackfill),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
     )
 
     # Determines how documents are processed after fetching:
@@ -2563,6 +2578,11 @@ class IndexAttempt(Base):
     # The pair's prune_after_reindex_requested_at this full re-index serves,
     # copied at creation. Success turns it into a prune request.
     prune_after_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # The pair's full_reindex_requested_at this full re-index serves, copied at
+    # creation. Success clears it on the pair.
+    full_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     status: Mapped[IndexingStatus] = mapped_column(

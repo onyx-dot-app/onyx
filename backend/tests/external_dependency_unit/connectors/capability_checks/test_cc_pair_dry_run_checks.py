@@ -35,7 +35,10 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapability,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.factory import validate_ccpair_for_user, validate_proposed_pairing
+from onyx.connectors.factory import (
+    validate_and_record_pairing,
+    validate_proposed_pairing,
+)
 from onyx.connectors.models import InputType
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.credential_capability import get_capability_report_row
@@ -318,27 +321,33 @@ def test_edit_validations_read_the_pairs_dry_run_results(
     }
 
 
+def _validate_proposed_for_edit(
+    db_session: Session, pair: ConnectorCredentialPair, config: dict[str, Any]
+) -> bool:
+    return validate_and_record_pairing(
+        db_session,
+        connector_id=pair.connector_id,
+        cc_pair_id=pair.id,
+        source=DocumentSource.SLACK,
+        input_type=InputType.POLL,
+        connector_specific_config=config,
+        credential=pair.credential,
+        access_type=AccessType.PUBLIC,
+        enforce_creation=True,
+        trigger=CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE,
+    )
+
+
 @pytest.mark.usefixtures("tenant_context")
 def test_connector_config_update_runs_the_named_checks(
     db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
 ) -> None:
-    # Apply writes the proposed state before the validation reads it.
-    slack_pair.connector.connector_specific_config = _PROPOSED_CONFIG
-    db_session.commit()
+    # Apply validates the proposed config before it writes it.
     _dry_run(db_session, slack_pair, uuid4())
     harness.run_last_task()
     harness.runs.clear()
 
-    assert (
-        validate_ccpair_for_user(
-            slack_pair.connector_id,
-            slack_pair.credential_id,
-            AccessType.PUBLIC,
-            db_session,
-            trigger=CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE,
-        )
-        is True
-    )
+    assert _validate_proposed_for_edit(db_session, slack_pair, _PROPOSED_CONFIG)
 
     # The dry run's results are reused, and the report keeps the trigger.
     assert harness.runs == []
@@ -356,13 +365,5 @@ def test_connector_config_update_runs_the_named_checks(
 
     # A failed required check blocks the edit, as it blocks a pairing.
     harness.errors[_CHANNELS] = ConnectorValidationError("bot not in channel")
-    slack_pair.connector.connector_specific_config = {"channels": ["other"]}
-    db_session.commit()
     with pytest.raises(ConnectorValidationError, match="bot not in channel"):
-        validate_ccpair_for_user(
-            slack_pair.connector_id,
-            slack_pair.credential_id,
-            AccessType.PUBLIC,
-            db_session,
-            trigger=CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE,
-        )
+        _validate_proposed_for_edit(db_session, slack_pair, {"channels": ["other"]})

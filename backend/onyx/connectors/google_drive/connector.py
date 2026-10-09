@@ -316,6 +316,8 @@ class GoogleDriveConnector(
     CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint],
     Resolver,
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         include_shared_drives: bool = False,

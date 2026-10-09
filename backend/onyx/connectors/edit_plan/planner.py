@@ -14,7 +14,6 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
-from onyx.background.indexing.models import BackfillSpec
 from onyx.connectors.capability_checks.models import CapabilityCheckStatus
 from onyx.connectors.config_diff import (
     ConfigFieldChange,
@@ -43,6 +42,7 @@ from onyx.connectors.planning_rule_registry import (
     CREDENTIAL_SWAP_FULL_PATH_SOURCES,
 )
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -89,8 +89,13 @@ _INVALID_MESSAGE = (
     "The connector is invalid. A successful validation of the new settings "
     "makes it active again."
 )
+_INDEXING_START_LATER_PRUNE_MESSAGE = (
+    "The indexing start date is later. The prune removes documents older than "
+    "the new date."
+)
 _INDEXING_START_LATER_MESSAGE = (
-    "The indexing start date is later. Documents older than the new date stay indexed."
+    "The indexing start date is later. Documents older than the new date stay "
+    "indexed, because a prune of this source cannot filter by date."
 )
 _CREDENTIAL_FULL_PATH_MESSAGE = (
     "On this source, a new credential usually sees different content (for "
@@ -319,6 +324,16 @@ def _indexing_start_steps(
         return [], []
     # No start means no floor, the earliest start there is.
     if old_start is None or (new_start is not None and new_start > old_start):
+        # A prune lists only the documents from the indexing start, so it
+        # removes the older ones.
+        if inputs.prune_honors_indexing_start:
+            return [_step(EditStepKind.PRUNE, EditStepReason.INDEXING_START_LATER)], [
+                EditNote(
+                    kind=EditNoteKind.INDEXING_START_LATER,
+                    severity=EditNoteSeverity.INFO,
+                    message=_INDEXING_START_LATER_PRUNE_MESSAGE,
+                )
+            ]
         return [], [
             EditNote(
                 kind=EditNoteKind.INDEXING_START_LATER,
@@ -525,6 +540,26 @@ def _changed_settings(current: PairState, proposed: ProposedPairState) -> list[s
     return [name for name, (old, new) in settings.items() if old != new]
 
 
+def _fetched_config_changed(field_changes: list[ConfigFieldChange]) -> bool:
+    # A cosmetic change, or one with no effect (e.g. reordered items, defaults
+    # written out), does not change what a run fetches.
+    return any(change.field_class != FieldClass.COSMETIC for change in field_changes)
+
+
+def restart_inputs_changed(
+    current: PairState,
+    proposed: ProposedPairState,
+    field_changes: list[ConfigFieldChange],
+) -> bool:
+    """A running attempt fetches with the old config, credential and start,
+    so a change to any of them restarts it."""
+    return (
+        _fetched_config_changed(field_changes)
+        or proposed.credential_id != current.credential_id
+        or proposed.indexing_start != current.indexing_start
+    )
+
+
 def compute_edit_plan(
     current: CurrentPairState, proposed: ProposedPairState, inputs: EditPlanInputs
 ) -> EditPlan:
@@ -575,16 +610,17 @@ def compute_edit_plan(
     steps.extend(access_steps)
     notes.extend(access_notes)
 
-    # The running attempt fetches with the old config, credential and start. A
-    # cosmetic change, or one with no effect (e.g. reordered items, defaults
-    # written out), does not change what it fetches.
-    fetched_config_changed: bool = any(
-        change.field_class != FieldClass.COSMETIC for change in field_changes
-    )
-    restarts: bool = inputs.attempt_running and (
-        fetched_config_changed
-        or credential_changed
-        or proposed.indexing_start != current.indexing_start
+    if inputs.scoped_backfill_outstanding and _fetched_config_changed(field_changes):
+        steps.append(
+            _step(
+                EditStepKind.FULL_REINDEX,
+                EditStepReason.SCOPED_BACKFILL_SUPERSEDED,
+                required=True,
+            )
+        )
+
+    restarts: bool = inputs.attempt_running and restart_inputs_changed(
+        current, proposed, field_changes
     )
     if restarts:
         steps.append(

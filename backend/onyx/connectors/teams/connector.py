@@ -133,6 +133,9 @@ class TeamsConnector(
     files when attachments are on. What a scheduled meeting leaves behind is
     listed per organizer, so those sources follow the channels."""
 
+    # The slim listings of files, transcripts and chats ignore `start`.
+    slim_listing_honors_indexing_start = False
+
     def __init__(
         self,
         # TODO: (chris) move from "Display Names" to IDs, since display names
