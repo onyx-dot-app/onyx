@@ -1303,7 +1303,7 @@ echo "Session cleanup complete"
             "/bin/sh",
             "-c",
             (
-                f"cd {session_path} && tar -czf - "
+                f"cd {session_path} && tar --exclude=outputs/.document-thumbnails -czf - "
                 f"$([ -d outputs ] && echo outputs) "
                 f"$([ -d attachments ] && echo attachments)"
             ),
@@ -2095,6 +2095,8 @@ echo WRITE_OK"""
             raise ValueError("Document exceeds thumbnail size limit")
         if lines[0] == "ERROR_TIMEOUT":
             raise ValueError("Document thumbnail conversion timed out")
+        if lines[0] == "ERROR_SOURCE_CHANGED":
+            raise ValueError("Document changed while rendering; retry preview")
         if lines[0] == "ERROR_NO_PDF":
             raise ValueError("soffice did not produce a PDF file.")
 

@@ -741,3 +741,6 @@ JPEGs in the hidden .document-thumbnails directory under outputs. Inventory rule
 Thumbnail conversion has a 30-second deadline, including lock waiting.
 Finished JPEGs replace cached files atomically. Failed conversions retain the last complete image.
 Thumbnail caches are excluded from session snapshots.
+
+Both Docker and Kubernetes exclude thumbnail caches from new session snapshots.
+The converter discards renders whose source changed and records the published source revision.

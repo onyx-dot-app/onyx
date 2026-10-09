@@ -13,6 +13,7 @@ Usage:
 
 import argparse
 import fcntl
+import json
 import os
 import signal
 import subprocess
@@ -89,21 +90,40 @@ def main() -> None:
             print("ERROR_TIMEOUT")
 
 
+def _source_revision(document_path: Path) -> tuple[int, int, int, int, int]:
+    source_stat: os.stat_result = document_path.stat()
+    return (
+        source_stat.st_dev,
+        source_stat.st_ino,
+        source_stat.st_size,
+        source_stat.st_mtime_ns,
+        source_stat.st_ctime_ns,
+    )
+
+
 def _generate_preview(
     document_path: Path,
     cache_dir: Path,
     first_page_only: bool,
     deadline: float | None = None,
 ) -> None:
-    # Change time also detects copies that preserve the source modification time.
+    revision: tuple[int, int, int, int, int] = _source_revision(document_path)
+    revision_path: Path = cache_dir / ".source-revision.json"
     cached_slides: list[str] = _find_slides(cache_dir)
     if cached_slides:
-        source_stat: os.stat_result = document_path.stat()
-        source_changed_ns: int = max(source_stat.st_mtime_ns, source_stat.st_ctime_ns)
-        oldest_slide_mtime_ns: int = min(
-            Path(s).stat().st_mtime_ns for s in cached_slides
-        )
-        if oldest_slide_mtime_ns >= source_changed_ns:
+        cache_current: bool = False
+        try:
+            cached_revision: object = json.loads(revision_path.read_text())
+            cache_current = cached_revision == list(revision)
+        except (OSError, ValueError):
+            # Keep legacy full-slide caches; thumbnails require an exact source revision.
+            if not first_page_only and not revision_path.exists():
+                source_changed_ns: int = max(revision[3], revision[4])
+                cache_current = (
+                    min(Path(page).stat().st_mtime_ns for page in cached_slides)
+                    >= source_changed_ns
+                )
+        if cache_current:
             print("CACHED")
             for slide in cached_slides:
                 print(slide)
@@ -114,12 +134,23 @@ def _generate_preview(
         render_dir: Path = Path(temporary_dir)
         if not _render_preview(document_path, render_dir, first_page_only, deadline):
             return
+        try:
+            if _source_revision(document_path) != revision:
+                print("ERROR_SOURCE_CHANGED")
+                return
+        except FileNotFoundError:
+            print("ERROR_SOURCE_CHANGED")
+            return
         rendered: list[str] = _find_slides(render_dir)
         published: list[Path] = []
         for rendered_path in rendered:
             target: Path = cache_dir / Path(rendered_path).name
             os.replace(rendered_path, target)
             published.append(target)
+        # Persist the rendered revision so a change during publication cannot bless stale JPEGs.
+        rendered_revision: Path = render_dir / revision_path.name
+        rendered_revision.write_text(json.dumps(revision))
+        os.replace(rendered_revision, revision_path)
         for stale_path in cached_slides:
             if Path(stale_path) not in published:
                 Path(stale_path).unlink(missing_ok=True)

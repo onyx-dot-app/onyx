@@ -328,3 +328,77 @@ def test_real_conversion_process_stops_at_deadline() -> None:
             [sys.executable, "-c", "import time; time.sleep(30)"], started + 0.1
         )
     assert preview.time.monotonic() - started < 2
+
+
+@pytest.mark.parametrize("replace_inode", [False, True])
+def test_source_change_during_render_is_discarded(
+    replace_inode: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    preview: ModuleType = _load_preview()
+    source: Path = tmp_path / "report.pdf"
+    source.write_bytes(b"old source")
+    cache: Path = tmp_path / "cache"
+    cache.mkdir()
+    published: Path = cache / "slide-1.jpg"
+    published.write_bytes(b"previous complete thumbnail")
+    original: os.stat_result = source.stat()
+
+    def render(
+        command: list[str], _deadline: float
+    ) -> subprocess.CompletedProcess[str]:
+        (Path(command[-1]).parent / "slide-1.jpg").write_bytes(b"rendered old source")
+        if replace_inode:
+            replacement: Path = tmp_path / "replacement.pdf"
+            replacement.write_bytes(b"new source")
+            os.utime(replacement, ns=(original.st_atime_ns, original.st_mtime_ns))
+            replacement.replace(source)
+        else:
+            source.write_bytes(b"new source")
+            os.utime(source, ns=(original.st_atime_ns, original.st_mtime_ns))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(preview, "_run_conversion", render)
+    preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+    assert capsys.readouterr().out.strip() == "ERROR_SOURCE_CHANGED"
+    assert published.read_bytes() == b"previous complete thumbnail"
+    assert not (cache / ".source-revision.json").exists()
+
+
+def test_change_during_publish_cannot_make_old_revision_current(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    preview: ModuleType = _load_preview()
+    source: Path = tmp_path / "report.pdf"
+    source.write_bytes(b"old source")
+    cache: Path = tmp_path / "cache"
+    cache.mkdir()
+    original: os.stat_result = source.stat()
+    real_replace: Callable[..., None] = os.replace
+
+    def render(
+        command: list[str], _deadline: float
+    ) -> subprocess.CompletedProcess[str]:
+        (Path(command[-1]).parent / "slide-1.jpg").write_bytes(b"thumbnail")
+        return subprocess.CompletedProcess(command, 0)
+
+    def replace(rendered: str | Path, target: str | Path) -> None:
+        if Path(target).suffix == ".jpg":
+            source.write_bytes(b"new source")
+            os.utime(source, ns=(original.st_atime_ns, original.st_mtime_ns))
+        real_replace(rendered, target)
+
+    converter: MagicMock = MagicMock(side_effect=render)
+    monkeypatch.setattr(preview, "_run_conversion", converter)
+    monkeypatch.setattr(preview.os, "replace", replace)
+    preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+    assert capsys.readouterr().out.splitlines()[0] == "GENERATED"
+    monkeypatch.setattr(preview.os, "replace", real_replace)
+    preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+    assert capsys.readouterr().out.splitlines()[0] == "GENERATED"
+    assert converter.call_count == 2
+    preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+    assert capsys.readouterr().out.splitlines()[0] == "CACHED"
+    assert converter.call_count == 2

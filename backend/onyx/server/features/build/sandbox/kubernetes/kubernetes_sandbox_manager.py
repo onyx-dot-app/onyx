@@ -2201,6 +2201,8 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
                 raise ValueError("Document exceeds thumbnail size limit")
             if lines[0] == "ERROR_TIMEOUT":
                 raise ValueError("Document thumbnail conversion timed out")
+            if lines[0] == "ERROR_SOURCE_CHANGED":
+                raise ValueError("Document changed while rendering; retry preview")
             if lines[0] == "ERROR_NO_PDF":
                 raise ValueError("soffice did not produce a PDF file")
 
