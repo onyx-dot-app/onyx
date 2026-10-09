@@ -6,6 +6,8 @@ export const TIER_RANK: Record<Tier, number> = {
   [Tier.ENTERPRISE]: 2,
 };
 
+export const LLM_GATEWAY_MIN_TIER = Tier.BUSINESS;
+
 export function tierAtLeast(
   current: Tier | undefined,
   required: Tier

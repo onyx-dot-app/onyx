@@ -17,6 +17,7 @@ Multi-tenant cloud gating lives in `multi_tenant_gating_config.py` and is
 deliberately separate — cloud uses subscriptions, not licenses.
 """
 
+from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX, LLM_GATEWAY_MIN_TIER
 from onyx.server.settings.models import Tier
 
 # Paths that are ALWAYS accessible, even when license is expired/gated.
@@ -73,8 +74,8 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     "/admin/api-key": Tier.BUSINESS,  # service-account keys (no user-bound variant)
     "/admin/enterprise-settings": Tier.BUSINESS,  # admin writes; public /enterprise-settings stays open
     "/manage/admin/user-group": Tier.BUSINESS,  # groups + RBAC (Curator roles, group-scoped access)
+    GATEWAY_PATH_PREFIX: LLM_GATEWAY_MIN_TIER,  # external LLM gateway API
     # ----- ENTERPRISE -----
-    "/gateway": Tier.ENTERPRISE,  # external LLM gateway API
     "/admin/enterprise-settings/custom-analytics-script": Tier.ENTERPRISE,  # JS injection
     "/admin/enterprise-settings/scim": Tier.ENTERPRISE,  # SCIM token mgmt
     "/manage/admin/standard-answer": Tier.ENTERPRISE,
