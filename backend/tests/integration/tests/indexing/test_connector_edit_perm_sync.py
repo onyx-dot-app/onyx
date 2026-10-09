@@ -29,7 +29,7 @@ from tests.integration.common_utils.managers.connector_edit import (
 )
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.test_document_utils import create_test_document
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 _POLL_SECONDS = 3
 
@@ -54,6 +54,11 @@ def _set_next_run(mock_server_client: httpx.Client, text: str) -> None:
     assert response.status_code == 200
 
 
+@pytest.fixture(autouse=True)
+def _default_llm(llm_provider: DATestLLMProvider) -> None:  # noqa: ARG001
+    """The search endpoint these tests read through needs a default LLM."""
+
+
 def _can_find(text: str, user: DATestUser) -> bool:
     response = client.post(
         f"{API_SERVER_URL}/search",
@@ -65,7 +70,7 @@ def _can_find(text: str, user: DATestUser) -> bool:
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync is enterprise only",
 )
 def test_entering_and_leaving_perm_sync_changes_visibility(

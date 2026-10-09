@@ -33,14 +33,18 @@ from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestCCPair,
+    DATestLLMProvider,
+    DATestUser,
+)
 
 _FORBIDDEN = 403
 _NOT_FOUND = 404
 _BAD_REQUEST = 400
 _CONFLICT = 409
 _POLL_SECONDS = 3
-_IS_EE = os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
+_IS_EE = os.environ.get("RUN_EE_TESTS", "").lower() == "true"
 
 
 def _wait_until(condition: Callable[[], bool], what: str, timeout: float) -> None:
@@ -49,6 +53,11 @@ def _wait_until(condition: Callable[[], bool], what: str, timeout: float) -> Non
         if time.monotonic() > deadline:
             raise TimeoutError(f"Timed out waiting for {what}")
         time.sleep(_POLL_SECONDS)
+
+
+@pytest.fixture(autouse=True)
+def _default_llm(llm_provider: DATestLLMProvider) -> None:  # noqa: ARG001
+    """The search endpoint these tests read through needs a default LLM."""
 
 
 def _can_find(text: str, user: DATestUser) -> bool:
