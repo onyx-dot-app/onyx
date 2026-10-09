@@ -36,7 +36,6 @@ from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import RecordType, optional_telemetry
 
 logger = setup_logger()
 
@@ -425,16 +424,6 @@ def mark_attempt_in_progress(
         attempt.status = IndexingStatus.IN_PROGRESS
         attempt.time_started = index_attempt.time_started or func.now()
         db_session.commit()
-
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt.id,
-                "status": IndexingStatus.IN_PROGRESS.value,
-                "cc_pair_id": index_attempt.connector_credential_pair_id,
-            },
-        )
     except Exception:
         db_session.rollback()
         raise
@@ -455,15 +444,6 @@ def mark_attempt_succeeded(
         attempt.celery_task_id = None
         db_session.commit()
 
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.SUCCESS.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
@@ -495,15 +475,6 @@ def mark_attempt_partially_succeeded(
         attempt.celery_task_id = None
         db_session.commit()
 
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.COMPLETED_WITH_ERRORS.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
@@ -538,15 +509,6 @@ def mark_attempt_canceled(
         attempt.error_msg = reason
         db_session.commit()
 
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.CANCELED.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
@@ -583,15 +545,6 @@ def mark_attempt_failed(
         attempt.celery_task_id = None
         db_session.commit()
 
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.FAILED.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
@@ -635,14 +588,6 @@ def mark_attempt_interrupted(
         attempt.celery_task_id = None
         db_session.commit()
 
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.INTERRUPTED.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:

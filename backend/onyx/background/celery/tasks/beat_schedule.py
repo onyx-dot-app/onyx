@@ -6,6 +6,7 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import (
     AUTO_LLM_CONFIG_URL,
+    DISABLE_TELEMETRY,
     DISABLE_VECTOR_DB,
     SCHEDULED_EVAL_DATASET_NAMES,
 )
@@ -19,6 +20,7 @@ from onyx.document_index.opensearch.constants import (
     RESOURCE_CHECK_INTERVAL_SECONDS,
 )
 from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
+from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
 from onyx.utils.variable_functionality import is_ee_available
 from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS, MULTI_TENANT
 
@@ -215,16 +217,6 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
-    {
-        "name": "monitor-background-processes",
-        "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
-        "schedule": timedelta(minutes=5),
-        "options": {
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.MONITORING,
-        },
-    },
     # Craft scheduled tasks (per-tenant dispatcher + stuck-run sweeper).
     # Both are lightweight DB-only coordination tasks and run on the
     # primary queue. The dedicated `scheduled_tasks` worker is reserved
@@ -330,6 +322,20 @@ if SCHEDULED_EVAL_DATASET_NAMES:
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        }
+    )
+
+if not DISABLE_TELEMETRY:
+    beat_task_templates.append(
+        {
+            "name": "collect-fleet-telemetry",
+            "task": OnyxCeleryTask.COLLECT_FLEET_TELEMETRY,
+            "schedule": timedelta(seconds=COLLECTION_INTERVAL_SECONDS),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": COLLECTION_INTERVAL_SECONDS,
+                "queue": OnyxCeleryQueues.MONITORING,
             },
         }
     )
@@ -492,17 +498,6 @@ if not MULTI_TENANT:
                     "priority": OnyxCeleryPriority.HIGHEST,
                     "expires": BEAT_EXPIRES_DEFAULT,
                     "queue": OnyxCeleryQueues.PRIMARY,
-                },
-            },
-            # hourly tick; the task itself enforces a once-per-day cadence
-            {
-                "name": "emit-version-telemetry",
-                "task": OnyxCeleryTask.EMIT_VERSION_TELEMETRY,
-                "schedule": timedelta(hours=1),
-                "options": {
-                    "priority": OnyxCeleryPriority.LOW,
-                    "expires": BEAT_EXPIRES_DEFAULT,
-                    "queue": OnyxCeleryQueues.MONITORING,
                 },
             },
         ]

@@ -141,7 +141,7 @@ from onyx.server.metrics.connector_health_metrics import (
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
-from onyx.utils.telemetry import RecordType, mt_cloud_telemetry, optional_telemetry
+from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.configs import (
     INDEXING_MODEL_SERVER_HOST,
     INDEXING_MODEL_SERVER_PORT,
@@ -2145,7 +2145,6 @@ def _docprocessing_task(
 
         # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.
         _finalization_start = time.monotonic()
-        coordination_status = None
         # Record failures in the database
         if index_pipeline_result.failures:
             with get_session_with_current_tenant() as db_session:
@@ -2168,27 +2167,6 @@ def _docprocessing_task(
                     index_pipeline_result.failures[-1],
                 )
 
-        # Add telemetry for indexing progress using database coordination status
-        # only re-fetch coordination status if necessary
-        if coordination_status is None:
-            with get_session_with_current_tenant() as db_session:
-                coordination_status = IndexingCoordination.get_coordination_status(
-                    db_session, index_attempt_id
-                )
-
-        optional_telemetry(
-            record_type=RecordType.INDEXING_PROGRESS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "cc_pair_id": cc_pair_id,
-                "current_docs_indexed": coordination_status.total_docs,
-                "current_chunks_indexed": coordination_status.total_chunks,
-                "source": connector_source,
-                "completed_batches": coordination_status.completed_batches,
-                "total_batches": coordination_status.total_batches,
-            },
-            tenant_id=tenant_id,
-        )
         # Clean up this batch after successful processing
         storage.delete_batch_by_num(batch_num)
         safe_record_single_event(
@@ -2224,7 +2202,7 @@ def _docprocessing_task(
         # Record BATCH_TOTAL on the successful path. We deliberately do not
         # record on the exception path -- a partially-completed batch's total
         # would skew the average. BATCH_TOTAL spans run_indexing_pipeline and
-        # all post-indexing bookkeeping (coord update, telemetry, cleanup).
+        # all post-indexing bookkeeping (coord update, failure records, cleanup).
         batch_total_ms = max(0, int((time.monotonic() - batch_total_start) * 1000))
         safe_record_single_event(
             IndexAttemptStage.BATCH_TOTAL, index_attempt_id, batch_total_ms

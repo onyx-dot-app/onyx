@@ -232,6 +232,12 @@ mid-port, when a metadata update lands on the primary before the reindex port ha
 copied that document into the FUTURE index; callers use this to defer the secondary
 sync instead of failing outright.
 
+After a bulk write, `bulk_index_documents` sends the written and failed chunk
+counts as fleet `write` counters (`opensearch/client.py:_report_written_chunks`)
+when an index attempt is in context (`INDEX_ATTEMPT_INFO_CONTEXTVAR`). A benign
+create-only conflict counts as neither. A bulk call that raises sends no counters.
+See [[observability]] §4.11.
+
 `SchemaVerifiable.verify_and_create_index_if_necessary(embedding_dim)` is called on backend construction paths and at swap time
 (`swap_index.py:_perform_index_swap`) to make sure the physical index exists before
 anything writes to it.
@@ -435,6 +441,10 @@ comment reads `# No longer used`. See §9.
   and drive document-set/ACL updates through `Updatable.update`.
 - [[core-chat-loop]]: search tools ultimately bottom out in this component's retrieval
   methods.
+- [[observability]]: after each resource check,
+  `opensearch/resource_health.py:refresh_resource_health` also reads cluster health
+  and sends a fleet `resource` event (`_report_to_fleet`). Only status, counts,
+  pressure flags, and check times leave the process.
 
 ---
 

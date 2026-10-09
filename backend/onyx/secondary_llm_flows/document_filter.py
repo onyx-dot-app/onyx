@@ -98,7 +98,7 @@ def select_chunks_for_relevance(
     return all_chunks[start_index:end_index]
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def classify_section_relevance(
     document_title: str,
     section_text: str,
@@ -187,7 +187,7 @@ def classify_section_relevance(
     return classification
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def _parse_section_ids(llm_response: str) -> tuple[list[str], set[str]]:
     """Read section IDs from a response like "[1, 2!, 3]" or "1, 2!, 3".
 

@@ -51,7 +51,7 @@ def mark_sync_records_as_cancelled(
                 SyncRecord.sync_status == SyncStatus.IN_PROGRESS,
             )
         )
-        .values(sync_status=SyncStatus.CANCELED)
+        .values(sync_status=SyncStatus.CANCELED, sync_end_time=func.now())
     )
     db_session.execute(stmt)
     db_session.commit()
