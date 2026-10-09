@@ -6212,6 +6212,19 @@
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "settingsUpdated": "Einstellungen aktualisiert",
         "unknownError": "Unbekannter Fehler"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Auto-Modus",
+          "description": "Fügt der Modellauswahl eine Auto-Option hinzu, die für jede Nachricht das am besten passende Modell wählt."
+        },
+        "target": {
+          "title": "Router-Modell",
+          "description": "Übernimmt das Modell-Routing für den Auto-Modus.",
+          "empty": "Keine Router-Modelle gefunden. Aktivieren Sie zuerst ein Router-Modell bei einem Gateway-Anbieter.",
+          "error": "Router-Modelle konnten nicht geladen werden.",
+          "retry": "Erneut versuchen"
+        }
       }
     },
     "mcpActions": {
@@ -11236,6 +11249,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "Das Ändern dieser Einstellung wird für dieses Modell nicht unterstützt."
+      },
+      "autoItem": {
+        "label": "Auto",
+        "description": "Wählt für jede Nachricht das beste Modell"
       }
     },
     "nrf": {

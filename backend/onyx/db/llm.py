@@ -554,6 +554,8 @@ def upsert_llm_provider(
                 else existing.temperature_default
             )
             ensure_default_within_max(merged_reasoning_default, merged_reasoning_max)
+            # Router status is additive like the capability flags.
+            existing.is_router = existing.is_router or model_config.is_router
             update_model_configuration__no_commit(
                 db_session=db_session,
                 model_configuration_id=existing.id,
@@ -589,6 +591,7 @@ def upsert_llm_provider(
                     reasoning_effort_max=model_config.reasoning_effort_max,
                     reasoning_effort_default=model_config.reasoning_effort_default,
                     temperature_default=model_config.temperature_default,
+                    is_router=model_config.is_router,
                 )
             )
     insert_new_model_configurations__no_commit(
@@ -651,7 +654,7 @@ def sync_model_configurations(
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 
     new_models: list[NewModelConfiguration] = []
-    upgraded_flow_count = 0
+    upgraded_count: int = 0
     for model in models:
         existing = existing_by_name.get(model.name)
         if existing is None:
@@ -669,9 +672,15 @@ def sync_model_configurations(
                     is_visible=False,
                     max_input_tokens=model.max_input_tokens,
                     display_name=model.display_name,
+                    is_router=model.is_router,
                 )
             )
             continue
+
+        # Router status is additive like the capability flags.
+        if model.is_router and not existing.is_router:
+            existing.is_router = True
+            upgraded_count += 1
 
         # Existing model: add newly-reported capability flags (additive only).
         # TODO(ENG-4233): durable admin flow removals.
@@ -691,12 +700,12 @@ def sync_model_configurations(
                 model_configuration_id=existing.id,
                 flow_type=flow_type,
             )
-            upgraded_flow_count += 1
+            upgraded_count += 1
 
     insert_new_model_configurations__no_commit(db_session, provider.id, new_models)
     new_count = len(new_models)
 
-    if new_count > 0 or upgraded_flow_count > 0:
+    if new_count > 0 or upgraded_count > 0:
         db_session.commit()
 
     return new_count
@@ -820,9 +829,10 @@ def fetch_model_configurations_page(
     name_query: str | None = None,
 ) -> dict[int, ModelConfigurationWindow]:
     """The same LLM_PROVIDER_MODEL_PAGE_SIZE window of every provider's models,
-    visible first then by name. `name_query` narrows each provider to models
-    whose name or display names contain it, so a picker can search models it
-    has not paged in yet."""
+    visible first (routers before other visible models, so a picker's router
+    tab sees them all on page one) then by name. `name_query` narrows each
+    provider to models whose name or display names contain it, so a picker can
+    search models it has not paged in yet."""
     if not provider_ids:
         return {}
 
@@ -832,6 +842,7 @@ def fetch_model_configurations_page(
             partition_by=ModelConfiguration.llm_provider_id,
             order_by=(
                 ModelConfiguration.is_visible.desc(),
+                ModelConfiguration.is_router.desc(),
                 ModelConfiguration.name,
                 ModelConfiguration.id,
             ),
@@ -1193,6 +1204,59 @@ def fetch_model_configuration_by_id(
         .options(selectinload(ModelConfiguration.llm_provider))
         .where(ModelConfiguration.id == model_configuration_id)
     )
+
+
+def fetch_llm_providers_with_router_models(
+    db_session: Session,
+) -> list[LLMProviderModel]:
+    """Providers that own at least one router model configuration, each with
+    only its router rows loaded (`provider.model_configurations` is routers
+    only). For pickers offering a routing target without paging a whole
+    catalog."""
+    return list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(
+                LLMProviderModel.model_configurations.any(
+                    ModelConfiguration.is_router == True  # noqa: E712
+                )
+            )
+            .options(
+                selectinload(
+                    LLMProviderModel.model_configurations.and_(
+                        ModelConfiguration.is_router == True  # noqa: E712
+                    )
+                )
+            )
+            .order_by(LLMProviderModel.id)
+        )
+    )
+
+
+def mark_model_configuration_visible(
+    db_session: Session, model_configuration: ModelConfiguration
+) -> bool:
+    """Flip `is_visible` on and commit. False when it was already visible, so
+    the caller can skip downstream work like cache invalidation."""
+    if model_configuration.is_visible:
+        return False
+    model_configuration.is_visible = True
+    db_session.commit()
+    return True
+
+
+def require_router_model_configuration(
+    db_session: Session, model_configuration_id: int
+) -> ModelConfiguration:
+    model_configuration: ModelConfiguration | None = fetch_model_configuration_by_id(
+        db_session, model_configuration_id
+    )
+    if model_configuration is None or not model_configuration.is_router:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Model routing requires a router model configuration.",
+        )
+    return model_configuration
 
 
 def fetch_llm_provider_view(
@@ -1645,6 +1709,7 @@ class NewModelConfiguration(BaseModel):
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
+    is_router: bool = False
 
 
 # Rows per INSERT. Keeps bind-parameter counts modest while tens of
@@ -1680,6 +1745,7 @@ def insert_new_model_configurations__no_commit(
                         "reasoning_effort_max": model.reasoning_effort_max,
                         "reasoning_effort_default": model.reasoning_effort_default,
                         "temperature_default": model.temperature_default,
+                        "is_router": model.is_router,
                     }
                     for model in chunk
                 ]

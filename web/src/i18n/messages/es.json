@@ -6212,6 +6212,19 @@
         "settingsUpdateFailed": "No se pudo actualizar la configuración",
         "settingsUpdated": "Configuración actualizada",
         "unknownError": "Error desconocido"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Modo automático",
+          "description": "Agrega una opción Auto al selector de modelos que elige el modelo más adecuado para cada mensaje."
+        },
+        "target": {
+          "title": "Modelo de enrutamiento",
+          "description": "Gestiona el enrutamiento de modelos para el modo Auto.",
+          "empty": "No se encontraron modelos de router. Primero habilite un modelo de router en un proveedor de puerta de enlace.",
+          "error": "No se pudieron cargar los modelos de enrutamiento.",
+          "retry": "Reintentar"
+        }
       }
     },
     "mcpActions": {
@@ -11236,6 +11249,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "Modificar esta configuración no es compatible con este modelo."
+      },
+      "autoItem": {
+        "label": "Auto",
+        "description": "Elige el mejor modelo para cada mensaje"
       }
     },
     "nrf": {

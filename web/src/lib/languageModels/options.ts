@@ -107,6 +107,7 @@ export function buildLlmOptions(
           reasoningEffortDefault: mc.reasoning_effort_default,
           temperatureDefault: mc.temperature_default,
           supportsImageInput: mc.supports_image_input || false,
+          isRouter: mc.is_router || false,
         });
       });
   });

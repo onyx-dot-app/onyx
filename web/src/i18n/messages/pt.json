@@ -6212,6 +6212,19 @@
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "settingsUpdated": "Configurações atualizadas",
         "unknownError": "Erro desconhecido"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Modo automático",
+          "description": "Adiciona uma opção Auto ao seletor de modelos que escolhe o modelo mais adequado para cada mensagem."
+        },
+        "target": {
+          "title": "Modelo de roteamento",
+          "description": "Gerencia o roteamento de modelos para o modo Auto.",
+          "empty": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway.",
+          "error": "Falha ao carregar os modelos de roteamento.",
+          "retry": "Tentar novamente"
+        }
       }
     },
     "mcpActions": {
@@ -11236,6 +11249,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "Modificar esta configuração não é compatível com este modelo."
+      },
+      "autoItem": {
+        "label": "Auto",
+        "description": "Escolhe o melhor modelo para cada mensagem"
       }
     },
     "nrf": {
