@@ -236,6 +236,7 @@ export default function BuildChatPanel({
     currentMessageFiles,
     hasUploadingFiles,
     setActiveSession,
+    endSessionVisit,
     uploadFiles,
   } = useUploadFilesContext();
 
@@ -256,8 +257,8 @@ export default function BuildChatPanel({
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
   useEffect(() => {
-    return () => setActiveSession(null);
-  }, [setActiveSession]);
+    return endSessionVisit;
+  }, [endSessionVisit]);
 
   const maybeAutoOpenWebapp = useBuildSessionStore(
     (s) => s.maybeAutoOpenWebapp

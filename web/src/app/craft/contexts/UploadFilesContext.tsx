@@ -254,6 +254,9 @@ interface UploadFilesContextValue {
    */
   setActiveSession: (sessionId: string | null) => void;
 
+  /** End the current chat visit, including a pending welcome session. */
+  endSessionVisit: () => void;
+
   /**
    * Upload files to the active session.
    * - If session is available: uploads immediately
@@ -445,7 +448,11 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
         // Use deterministic IDs based on session and path for stable React keys
         const attachments: BuildFile[] = listing.entries
-          .filter((entry) => !entry.is_directory)
+          .filter(
+            (entry) =>
+              !entry.is_directory &&
+              !activeDeletionsRef.current.has(`${sessionId}:${entry.path}`)
+          )
           .map((entry) => ({
             id: `existing_${sessionId}_${entry.path}`,
             name: entry.name,
@@ -547,7 +554,9 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
     // Skip refetch if there are active deletions in progress
     // This prevents the deleted file from being re-added before backend deletion completes
-    const hasActiveDeletions = activeDeletionsRef.current.size > 0;
+    const hasActiveDeletions: boolean = [...activeDeletionsRef.current].some(
+      (key) => key.startsWith(`${activeSessionId}:`)
+    );
     // Skip refetch if caller explicitly suppressed (e.g. user hit Enter to dismiss file)
     const shouldSuppressRefetch = suppressRefetchRef.current;
     if (shouldSuppressRefetch) {
@@ -576,21 +585,35 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   /**
    * Set the active session. Triggers fetching/clearing as needed.
    */
-  const setActiveSession = useCallback((sessionId: string | null) => {
-    const previous: AttachmentScope = activeScopeRef.current;
-    if (previous.sessionId === sessionId) return;
-    const nextScope: AttachmentScope = { sessionId };
-    activeScopeRef.current = nextScope;
-    fetchingSessionRef.current = null;
-    isUploadingPendingRef.current = false;
-    activeDeletionsRef.current.clear();
-    if (previous.sessionId !== null) {
-      currentMessageFilesRef.current = [];
-      setCurrentMessageFiles([]);
-    }
-    suppressRefetchRef.current = false;
-    setActiveScope(nextScope);
-  }, []);
+  const resetActiveScope = useCallback(
+    (sessionId: string | null, preserveFiles: boolean) => {
+      const nextScope: AttachmentScope = { sessionId };
+      activeScopeRef.current = nextScope;
+      fetchingSessionRef.current = null;
+      isUploadingPendingRef.current = false;
+      if (!preserveFiles) {
+        currentMessageFilesRef.current = [];
+        setCurrentMessageFiles([]);
+      }
+      suppressRefetchRef.current = false;
+      setActiveScope(nextScope);
+    },
+    []
+  );
+
+  const setActiveSession = useCallback(
+    (sessionId: string | null) => {
+      const previous: AttachmentScope = activeScopeRef.current;
+      if (previous.sessionId === sessionId) return;
+      resetActiveScope(sessionId, previous.sessionId === null);
+    },
+    [resetActiveScope]
+  );
+
+  const endSessionVisit = useCallback(
+    () => resetActiveScope(null, false),
+    [resetActiveScope]
+  );
 
   /**
    * Upload files. Uses activeSessionId internally.
@@ -667,12 +690,13 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   const removeFile = useCallback(
     (fileId: string) => {
       const scope: AttachmentScope = activeScopeRef.current;
-      if (scope !== activeScope || activeDeletionsRef.current.has(fileId))
-        return;
+      if (scope !== activeScope) return;
       const currentFiles = currentMessageFilesRef.current;
       const removedIndex = currentFiles.findIndex((file) => file.id === fileId);
       const removedFile = currentFiles[removedIndex];
       if (!removedFile) return;
+      const deletionKey: string = `${activeSessionId}:${removedFile.path}`;
+      if (activeDeletionsRef.current.has(deletionKey)) return;
 
       // Removal must not trigger the refetch used after sending a message.
       suppressRefetchRef.current = true;
@@ -681,20 +705,20 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       );
       if (!removedFile.path || !activeSessionId) return;
 
-      activeDeletionsRef.current.add(fileId);
+      activeDeletionsRef.current.add(deletionKey);
       deleteFileApi(activeSessionId, removedFile.path)
         .then(() => {
           triggerFilesRefresh(activeSessionId);
+          activeDeletionsRef.current.delete(deletionKey);
           if (activeScopeRef.current !== scope) return;
-          activeDeletionsRef.current.delete(fileId);
         })
         .catch((error) => {
+          activeDeletionsRef.current.delete(deletionKey);
           if (activeScopeRef.current !== scope) return;
           console.error(
             "[UploadFilesContext] Failed to delete file from sandbox:",
             error
           );
-          activeDeletionsRef.current.delete(fileId);
           setCurrentMessageFiles((files) => {
             if (files.some((file) => file.id === removedFile.id)) return files;
             const restoredFiles = [...files];
@@ -731,6 +755,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       currentMessageFiles,
       activeSessionId,
       setActiveSession,
+      endSessionVisit,
       uploadFiles,
       removeFile,
       clearFiles,
@@ -741,6 +766,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       currentMessageFiles,
       activeSessionId,
       setActiveSession,
+      endSessionVisit,
       uploadFiles,
       removeFile,
       clearFiles,

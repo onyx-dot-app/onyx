@@ -368,8 +368,8 @@ it("rejects a listing from before the chat unmounted and revisited its session",
       useEffect(() => {
         if (!mounted) return;
         context.setActiveSession("session-a");
-        return () => context.setActiveSession(null);
-      }, [mounted, context.setActiveSession]);
+        return context.endSessionVisit;
+      }, [mounted, context.setActiveSession, context.endSessionVisit]);
       return context;
     },
     { initialProps: { mounted: true }, wrapper: Provider }
@@ -384,4 +384,48 @@ it("rejects a listing from before the chat unmounted and revisited its session",
   expect(result.current.currentMessageFiles.map((file) => file.name)).toEqual([
     "current.txt",
   ]);
+});
+
+it("ends a welcome visit without carrying pending files into the next session", async () => {
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockResolvedValue({ path: "attachments", entries: [] });
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  await act(async () =>
+    result.current.uploadFiles([new File(["draft"], "welcome.txt")])
+  );
+  expect(result.current.hasPendingFiles).toBe(true);
+  const oldVisit = result.current;
+  act(() => result.current.endSessionVisit());
+  expect(result.current.currentMessageFiles).toEqual([]);
+  await act(async () =>
+    oldVisit.uploadFiles([new File(["stale"], "stale.txt")])
+  );
+  act(() => result.current.setActiveSession("session-a"));
+  await waitFor(() => expect(fetchDirectoryListing).toHaveBeenCalledTimes(1));
+  expect(uploadFile).not.toHaveBeenCalled();
+  expect(result.current.currentMessageFiles).toEqual([]);
+});
+
+it("keeps a pending deletion out of listings after revisiting its session", async () => {
+  const deletion = deferred<void>();
+  jest.mocked(deleteFile).mockReturnValue(deletion.promise);
+  jest.mocked(fetchDirectoryListing).mockResolvedValue(listing("removed.txt"));
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  act(() => result.current.setActiveSession("session-a"));
+  await waitFor(() =>
+    expect(result.current.currentMessageFiles).toHaveLength(1)
+  );
+  const oldVisit = result.current;
+  const file = result.current.currentMessageFiles[0];
+  if (!file) throw new Error("Attachment missing");
+  act(() => result.current.removeFile(file.id));
+  act(() => result.current.endSessionVisit());
+  act(() => result.current.setActiveSession("session-a"));
+  await waitFor(() => expect(fetchDirectoryListing).toHaveBeenCalledTimes(2));
+  expect(result.current.currentMessageFiles).toEqual([]);
+  act(() => oldVisit.removeFile(file.id));
+  expect(deleteFile).toHaveBeenCalledTimes(1);
+  await act(async () => deletion.resolve());
+  expect(result.current.currentMessageFiles).toEqual([]);
 });
