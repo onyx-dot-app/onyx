@@ -2749,9 +2749,6 @@
           "rerunFailed": {
             "toast": "تعذّر بدء الفحوصات. حاول مرة أخرى."
           }
-        },
-        "realm": {
-          "description": "الصق عنوان URL لموقعك أو النطاق الفرعي. يجب أن تكون واجهة REST API الخاصة بـ {source} متاحة هناك.{hasDefault, select, true { القيمة الافتراضية `{value}`.} other {}}"
         }
       },
       "credentialRequired": {

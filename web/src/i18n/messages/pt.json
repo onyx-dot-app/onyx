@@ -2749,9 +2749,6 @@
           "rerunFailed": {
             "toast": "Não foi possível iniciar as verificações. Tente novamente."
           }
-        },
-        "realm": {
-          "description": "Cole a URL ou o subdomínio do seu site. A API REST do {source} precisa estar acessível nele.{hasDefault, select, true { Valor padrão: `{value}`.} other {}}"
         }
       },
       "credentialRequired": {

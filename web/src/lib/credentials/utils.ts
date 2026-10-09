@@ -69,30 +69,48 @@ export function realmFields(
   return Object.entries(spec.fields).filter(([, field]) => field.realm);
 }
 
-/** A realm as typed or stored, compared without case or a trailing slash. */
-function normalizeRealm(value: string): string {
-  return value.trim().replace(/\/+$/, "").toLowerCase();
+/**
+ * A realm as typed or stored, compared without case, scheme, a trailing slash
+ * or the field's host suffix. Mirrors the backend `RealmCredentialBinding`.
+ */
+function normalizeRealm(value: string, hostSuffix?: string): string {
+  const host = value
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+    .replace(/\/+$/, "");
+  return hostSuffix && host.endsWith(hostSuffix)
+    ? host.slice(0, -hostSuffix.length)
+    : host;
 }
 
 /**
- * Whether a saved account works where the form says: for each realm field
- * the form fills in, the account's value (or the field's default when it has
- * none) is the same. An empty form field restricts nothing.
+ * Whether a saved account works with the credential-bound fields above it,
+ * such as its realm: for each one the form fills in with text, the account's
+ * value under the same key (or the realm's default when it stores none) is
+ * the same. A field the account has no value for cannot tell, so it does not
+ * restrict. The backend binding rule makes the same comparison.
  */
-export function credentialMatchesRealm(
-  fields: [string, CredentialSpecField][],
+export function credentialMatchesBoundFields(
+  boundFieldNames: readonly string[],
+  specFields: Readonly<Record<string, CredentialSpecField>>,
   credentialJson: Readonly<Record<string, unknown>>,
   formValues: Readonly<Record<string, unknown>>
 ): boolean {
-  return fields.every(([key, field]) => {
-    const typed = formValues[key];
+  return boundFieldNames.every((name) => {
+    const typed = formValues[name];
     if (typeof typed !== "string" || typed.trim() === "") return true;
-    const stored = credentialJson[key];
-    const realm =
+    const field: CredentialSpecField | undefined = specFields[name];
+    const stored = credentialJson[name];
+    const accountValue =
       typeof stored === "string" && stored.trim() !== ""
         ? stored
-        : (field.defaultValue ?? "");
-    return normalizeRealm(realm) === normalizeRealm(typed);
+        : field?.defaultValue;
+    if (accountValue === undefined) return true;
+    return (
+      normalizeRealm(accountValue, field?.realmHostSuffix) ===
+      normalizeRealm(typed, field?.realmHostSuffix)
+    );
   });
 }
 

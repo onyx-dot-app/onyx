@@ -35,6 +35,11 @@ export interface CredentialFieldOptions {
   realm?: boolean;
   /** For an optional field: what the backend uses when it is left blank. */
   defaultValue?: string;
+  /**
+   * For a subdomain realm: the host after it, e.g. `.zendesk.com`, so a
+   * pasted host compares equal to the subdomain.
+   */
+  realmHostSuffix?: string;
 }
 
 interface CredentialFieldBase extends CredentialFieldOptions {

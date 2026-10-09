@@ -41,7 +41,8 @@ import {
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import {
-  credentialMatchesRealm,
+  credentialMatchesBoundFields,
+  getCredentialSpec,
   realmFields,
   shouldRedirectToOAuth,
   toCredentialRef,
@@ -49,6 +50,7 @@ import {
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import { credentialBoundFieldNames } from "@/lib/connectors/utils";
 import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage/components/AuthenticationAccountCard";
 import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 
@@ -130,14 +132,16 @@ export default function AuthenticationAccountSection({
     NEW_ACCOUNT_FIELD
   );
 
-  // The realm, filled in first above, restricts the saved accounts to the
-  // ones that work there.
-  const realmValues: Record<string, unknown> = newAccountValues ?? {};
+  // The credential-bound fields filled in first above, such as the realm,
+  // restrict the saved accounts to the ones that work with them.
+  const boundFieldNames = credentialBoundFieldNames(connector);
+  const specFields = getCredentialSpec(connector)?.fields ?? {};
   const isSelectable = (credential: Credential<any>): boolean =>
-    credentialMatchesRealm(
-      accountRealmFields,
+    credentialMatchesBoundFields(
+      boundFieldNames,
+      specFields,
       credential.credential_json ?? {},
-      realmValues
+      values
     );
   const pickOutsideRealm: boolean =
     currentCredential !== null && !isSelectable(currentCredential);
@@ -145,13 +149,8 @@ export default function AuthenticationAccountSection({
     if (pickOutsideRealm) onCredentialChange(null);
   }, [pickOutsideRealm, onCredentialChange]);
 
-  // Typing into the new account chooses it: the saved pick is dropped. The
-  // realm is not part of it, as it applies to saved accounts too.
-  const newAccountKey: string = JSON.stringify(
-    Object.entries(newAccountValues ?? {}).filter(
-      ([key]) => !realmKeys.has(key)
-    )
-  );
+  // Typing into the new account chooses it: the saved pick is dropped.
+  const newAccountKey: string = JSON.stringify(newAccountValues ?? null);
   const lastNewAccountKey = useRef<string>(newAccountKey);
   useEffect(() => {
     if (newAccountKey === lastNewAccountKey.current) return;

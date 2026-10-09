@@ -311,7 +311,10 @@ export const CREDENTIAL_SPECS = {
   loopio: defineCredentialSpec({
     brandName: "Loopio",
     fields: {
-      loopio_subdomain: text("subdomain", { realm: true }),
+      loopio_subdomain: text("subdomain", {
+        realm: true,
+        realmHostSuffix: ".loopio.com",
+      }),
       loopio_client_id: text("clientId"),
       loopio_client_token: secret("clientToken"),
     },
@@ -388,7 +391,10 @@ export const CREDENTIAL_SPECS = {
   zendesk: defineCredentialSpec({
     brandName: "Zendesk",
     fields: {
-      zendesk_subdomain: text("subdomain", { realm: true }),
+      zendesk_subdomain: text("subdomain", {
+        realm: true,
+        realmHostSuffix: ".zendesk.com",
+      }),
       zendesk_email: email("accountEmail"),
       zendesk_token: secret("apiToken"),
     },
@@ -463,7 +469,10 @@ export const CREDENTIAL_SPECS = {
   freshdesk: defineCredentialSpec({
     brandName: "Freshdesk",
     fields: {
-      freshdesk_domain: text("domain", { realm: true }),
+      freshdesk_domain: text("domain", {
+        realm: true,
+        realmHostSuffix: ".freshdesk.com",
+      }),
       freshdesk_api_key: secret("apiToken"),
     },
   }),
@@ -490,7 +499,7 @@ export const CREDENTIAL_SPECS = {
   egnyte: defineCredentialSpec({
     brandName: "Egnyte",
     fields: {
-      domain: text("domain", { realm: true }),
+      domain: text("domain", { realm: true, realmHostSuffix: ".egnyte.com" }),
       access_token: secret("apiToken"),
     },
   }),
