@@ -3728,6 +3728,11 @@ class ModelConfiguration(Base):
     )
     temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Virtual entry delegating model selection to a routing layer.
+    is_router: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",

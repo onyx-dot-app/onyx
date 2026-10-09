@@ -39,6 +39,9 @@ export interface ModelConfiguration {
   supported_features?: string[];
   /** True when this is the provider's recommended default model. */
   is_recommended_default?: boolean;
+  /** Virtual entry that delegates model selection to a routing layer
+   *  (openrouter/auto, a Portkey config) rather than naming a model. */
+  is_router?: boolean;
   display_name?: string;
   /** Admin-set override that takes precedence over display_name everywhere in the UI. */
   custom_display_name?: string;
@@ -167,6 +170,7 @@ export interface OpenRouterModelResponse {
   display_name: string;
   max_input_tokens: number | null;
   supports_image_input: boolean;
+  is_router: boolean;
 }
 
 export interface BedrockModelResponse {
@@ -381,6 +385,10 @@ export interface LLMOption {
   reasoningEffortDefault?: ReasoningEffortOverride | null;
   temperatureDefault?: number | null;
   supportsImageInput?: boolean;
+  /** See ModelConfiguration.is_router. */
+  isRouter?: boolean;
+  /** Synthesized picker item for model routing; selects the backing router. */
+  isAuto?: boolean;
 }
 
 export interface LLMOptionGroup {

@@ -6212,6 +6212,19 @@
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "オートモード",
+          "description": "各メッセージに最適なモデルを選ぶ Auto 項目をモデルピッカーに追加します。"
+        },
+        "target": {
+          "title": "ルーターモデル",
+          "description": "Auto モードのモデルルーティングを担当します。",
+          "empty": "ルーターモデルが見つかりません。先にゲートウェイプロバイダーでルーターモデルを有効にしてください。",
+          "error": "ルーターモデルを読み込めませんでした。",
+          "retry": "再試行"
+        }
       }
     },
     "mcpActions": {
@@ -11236,6 +11249,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "このモデルでは、この設定の変更に対応していません。"
+      },
+      "autoItem": {
+        "label": "オート",
+        "description": "各メッセージに最適なモデルを選択します"
       }
     },
     "nrf": {
