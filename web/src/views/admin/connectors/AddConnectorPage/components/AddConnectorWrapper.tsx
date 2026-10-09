@@ -76,6 +76,7 @@ import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/
 import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
 import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
+import { CredentialDerivedConfig } from "@/views/admin/connectors/AddConnectorPage/form/CredentialDerivedConfig";
 import {
   useConnectorChecks,
   useResetConnectorChecks,
@@ -659,6 +660,10 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                       </PageCenter>
                     ) : (
                       <>
+                        <CredentialDerivedConfig
+                          configuration={configuration}
+                          credential={formCredential}
+                        />
                         <BoundFieldsGate
                           source={connector}
                           credentialId={

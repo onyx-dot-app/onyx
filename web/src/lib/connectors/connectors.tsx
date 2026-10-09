@@ -7,6 +7,7 @@ import type {
   ListOption,
 } from "@/lib/connectors/types";
 import { OneDriveScope } from "@/lib/connectors/types";
+import { googleCredentialKind } from "@/lib/credentials/utils";
 
 const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
 const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";
@@ -544,7 +545,17 @@ export const connectorConfigs: Record<
   },
   google_drive: {
     description: "Configure Google Drive connector",
+    configFromCredential: (credential) => ({
+      credential_kind: googleCredentialKind(credential),
+    }),
     values: [
+      {
+        type: "text",
+        label: "Credential kind",
+        name: "credential_kind",
+        optional: true,
+        hidden: true,
+      },
       {
         type: "tab",
         name: "indexing_scope",
