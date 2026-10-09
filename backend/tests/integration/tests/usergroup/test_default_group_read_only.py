@@ -21,7 +21,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 ENTERPRISE_SKIP = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 
@@ -105,6 +105,11 @@ def test_default_group_rejects_every_non_membership_write(
                 "user_ids": [user.id for user in group.users],
                 "cc_pair_ids": [999999],
             },
+            headers=headers,
+        ),
+        "managed_connectors": client.put(
+            f"{GROUP_URL}/{group.id}/managed-cc-pairs",
+            json={"cc_pairs": [{"cc_pair_id": 999999, "role": "editor"}]},
             headers=headers,
         ),
         "delete": client.delete(f"{GROUP_URL}/{group.id}", headers=headers),

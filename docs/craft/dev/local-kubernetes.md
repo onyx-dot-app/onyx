@@ -119,8 +119,11 @@ script is idempotent and refuses to run unless your kubectl context is
 per cluster. New clusters use the `kindest/node:v1.33.1` node image so Craft's
 native init sidecar pod shape is supported. Existing clusters are not recreated;
 set `KIND_NODE_IMAGE` to override the default for a newly created cluster.
+The script removes Kindnet's CPU limit so network-policy processing can use available CPU.
+It keeps the CPU request and memory settings, then waits for the rollout.
+This applies to existing clusters too, including runs with `--skip-helm`.
 
-Watch pods (vespa and CNPG-postgres take a minute or two on first boot):
+Watch pods (opensearch and CNPG-postgres take a minute or two on first boot):
 
 ```bash
 kubectl -n onyx get pods -w
@@ -268,6 +271,12 @@ Each `(k8s)` config has `telepresence intercept onyx-api-server` as its
 connects + (re)creates the intercept idempotently. No manual telepresence
 invocation needed.
 
+The task checks for an unregistered traffic-agent with a recent stale-session
+error. It restarts only `onyx-api-server`, waits up to 120 seconds for the
+rollout, and creates the intercept. If the session becomes stale during intercept
+creation, it checks again and retries after recovery. Recovery runs at most once
+per launch. Other failures stop the task and show the original error.
+
 The intercept points cluster ingress to your local api_server using the same
 labels, secrets, and service account as the real pod — NetworkPolicies and
 pod-selector auth work transparently.
@@ -332,7 +341,7 @@ external-dependency-unit tests against a temp dir. See
 
 Run **`k8s: pause cluster`** (or `docker stop onyx-dev-control-plane`) to stop
 the kind node container. PVC data lives inside that container, so postgres,
-redis, opensearch, vespa, and minio state all survive. Resume with
+redis, opensearch, and minio state all survive. Resume with
 **`k8s: resume cluster`** — the kubelet reconciles pods automatically.
 
 Reach for **`k8s: cluster down (full teardown)`** only when you want a clean
@@ -381,6 +390,27 @@ and load it per [step 3 of One-time setup](#3-build-and-load-the-sandbox-image)
 before launching the api_server.
 
 ## Troubleshooting
+
+### Sandbox egress stalls with Kindnet CPU throttling
+
+Kindnet processes network-policy packets. Its default `100m` CPU limit can delay
+connections to the sandbox proxy and Kubernetes resource watches. OpenCode startup
+can then time out while installing plugins, before sending an LLM request.
+
+Apply the local networking configuration without reinstalling Onyx:
+
+```bash
+deployment/helm/dev/k8s-up.sh --skip-cluster-create --skip-helm
+```
+
+Check the active CPU quota and throttling counters:
+
+```bash
+kubectl --context kind-onyx-dev -n kube-system exec daemonset/kindnet -- \
+  cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpu.stat
+```
+
+`cpu.max` starts with `max` when the container has no CPU limit.
 
 ### VPN or proxy certificate errors
 

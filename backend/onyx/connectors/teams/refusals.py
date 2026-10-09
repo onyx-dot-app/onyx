@@ -1,15 +1,17 @@
 """How a refused Graph or SharePoint call is judged and worded. A refusal that
-stays (403, 404) is recorded and the walk moves on, anything else fails the
-attempt so it is retried."""
+stays (no grant, gone, locked) is recorded and the walk moves on, anything
+else fails the attempt so it is retried."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from enum import Enum
 from typing import Any
 
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.graph_client import is_permanent_refusal
 from onyx.connectors.models import ConnectorFailure, EntityFailure
 from onyx.connectors.teams.models import ChannelRef
 from onyx.utils.logger import setup_logger
@@ -22,10 +24,40 @@ def status(error: requests.RequestException) -> int | None:
 
 
 def is_permanent(error: requests.RequestException) -> bool:
-    """A refusal or a missing resource stays that way, so it is recorded and the
-    walk moves on. Anything else (expired token, exhausted retries) fails the
-    attempt so the saved checkpoint is retried, not skipped for good."""
-    return status(error) in (403, 404)
+    """Teams' name for the shared Graph classifier."""
+    return is_permanent_refusal(error)
+
+
+# Graph meters the export API for some tenants and refuses it to them with
+# 402.
+_PAYMENT_REQUIRED = 402
+
+
+def is_export_refusal(error: requests.RequestException) -> bool:
+    """Graph refuses the export API to an app without the approval, and with
+    402 to a tenant it meters. Anything else is an outage."""
+    return is_permanent(error) or status(error) == _PAYMENT_REQUIRED
+
+
+class ExportProbe(Enum):
+    """What one probe of the export API says."""
+
+    ANSWERS = "answers"
+    # 403 or 402: every probe of this tenant would say the same.
+    REFUSED_TO_APP = "refused_to_app"
+    # 404 or 423: the probed team or user is gone or locked, nothing more.
+    REFUSED_FOR_ITEM = "refused_for_item"
+
+
+def is_metered_refusal(error: requests.RequestException) -> bool:
+    """402 applies to the whole tenant, not to the team or user it came from."""
+    return status(error) == _PAYMENT_REQUIRED
+
+
+def export_probe_refusal(error: requests.RequestException) -> ExportProbe:
+    if status(error) in (403, _PAYMENT_REQUIRED):
+        return ExportProbe.REFUSED_TO_APP
+    return ExportProbe.REFUSED_FOR_ITEM
 
 
 @contextmanager
@@ -62,9 +94,10 @@ GRANT_BY_CALL = {
 
 
 def channel_remedy(call: str, error: requests.RequestException) -> str:
-    """404 is a channel that is gone or invisible to the app, 403 is a grant."""
-    if status(error) == 404:
-        return "Leave the team out of the connector if the channel is gone."
+    """404 is a channel that is gone or invisible to the app, 423 a locked or
+    archived team, 403 a grant."""
+    if status(error) in (404, 423):
+        return "Leave the team out of the connector if the channel is gone or locked."
     grant = GRANT_BY_CALL.get(call, "the application permission that call needs")
     return f"Grant {grant}, or leave the team out of the connector."
 

@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { markdown } from "@opal/utils";
-import { Divider, Text } from "@opal/components";
+import { Divider, InputFile } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
 import type {
@@ -27,14 +27,16 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 
 interface ApiKeyFieldProps {
   provider: EmbeddingProvider;
+  optional?: boolean;
 }
 
-export function ApiKeyField({ provider }: ApiKeyFieldProps) {
+export function ApiKeyField({ provider, optional = false }: ApiKeyFieldProps) {
   const t = useTranslations("admin.indexSettings");
 
   return (
     <InputVertical
       title={t("fields.apiKey.title")}
+      suffix={optional ? t("fields.optional.suffix") : undefined}
       withLabel="apiKey"
       subDescription={markdown(
         t("fields.apiKey.description", {
@@ -72,43 +74,27 @@ export function ApiUrlField({
 
 export function GoogleCredentialsField() {
   const t = useTranslations("admin.indexSettings");
-  const [, , helpers] = useField<string>("apiKey");
-  const [fileName, setFileName] = useState("");
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    setFileName("");
-    if (!file) {
-      void helpers.setValue("");
-      void helpers.setTouched(true);
-      return;
-    }
-    setFileName(file.name);
-    try {
-      const content = JSON.parse(await file.text());
-      void helpers.setValue(JSON.stringify(content));
-    } catch {
-      void helpers.setValue("");
-    }
-    void helpers.setTouched(true);
-  };
-
+  const [, meta, helpers] = useField<string>("apiKey");
   return (
     <InputVertical
       title={t("fields.googleCredentials.title")}
       withLabel="apiKey"
     >
-      <input
+      <InputFile
         id="apiKey"
-        type="file"
+        name="apiKey"
+        error={meta.touched && !!meta.error}
+        setValue={(value) => {
+          void helpers.setValue(value);
+        }}
+        onValueSet={() => {
+          void helpers.setTouched(true);
+        }}
+        onBlur={() => {
+          void helpers.setTouched(true);
+        }}
         accept=".json"
-        onChange={handleFileUpload}
       />
-      {fileName && (
-        <Text font="secondary-body" color="text-03">
-          {fileName}
-        </Text>
-      )}
     </InputVertical>
   );
 }
@@ -120,6 +106,7 @@ interface TextFieldProps {
   suffix?: string;
   placeholder?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  readOnly?: boolean;
 }
 
 export function TextField({
@@ -129,6 +116,7 @@ export function TextField({
   suffix,
   placeholder,
   inputMode,
+  readOnly = false,
 }: TextFieldProps) {
   return (
     <InputVertical
@@ -141,6 +129,7 @@ export function TextField({
         name={name}
         placeholder={placeholder}
         inputMode={inputMode}
+        variant={readOnly ? "readOnly" : undefined}
       />
     </InputVertical>
   );
@@ -175,6 +164,7 @@ export function ModelSpecFields({
   modelNameSubDescription,
 }: ModelSpecFieldsProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
 
   return (
     <>
@@ -183,7 +173,8 @@ export function ModelSpecFields({
         title={t("fields.modelName.title")}
         placeholder={t("fields.modelName.placeholder")}
         subDescription={
-          modelNameSubDescription ?? t("fields.modelName.selfHostedDescription")
+          modelNameSubDescription ??
+          t("fields.modelName.selfHostedDescription", { appName })
         }
       />
 

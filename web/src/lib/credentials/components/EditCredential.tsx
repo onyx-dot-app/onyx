@@ -1,23 +1,25 @@
+"use client";
+
 import { Button, Text } from "@opal/components";
 import { useTranslations } from "next-intl";
-
 import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
-import { getDisplayNameForCredentialKey } from "@/lib/connectors/utils";
-import type { Credential } from "@/lib/connectors/types";
+import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
+import type { Credential } from "@/lib/credentials/types";
 import {
   createEditingValidationSchema,
   createInitialValues,
+  getCredentialFileType,
+  getCredentialSpec,
   getEditableCredentialFields,
 } from "@/lib/credentials/utils";
-import { isTypedFileField } from "@/lib/connectors/utils";
 import { SvgCheckSquare, SvgTrash } from "@opal/icons";
 import type {
   CredentialFieldValues,
   CredentialFormValues,
 } from "@/lib/credentials/types";
-import type { ValidSources } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 
 export interface EditCredentialProps {
   credential: Credential<CredentialFieldValues>;
@@ -37,6 +39,21 @@ export default function EditCredential({
   onUpdate,
 }: EditCredentialProps) {
   const t = useTranslations("admin");
+  const fieldCopy = useCredentialFieldCopy(sourceType);
+  const spec = getCredentialSpec(sourceType);
+
+  // The spec says which fields are secret. A stored key it does not list
+  // keeps the old guess from its name.
+  function isSecretField(key: string): boolean {
+    const field = spec?.fields[key];
+    if (field) return field.kind === "secret";
+    const lower = key.toLowerCase();
+    return (
+      lower.includes("token") ||
+      lower.includes("password") ||
+      lower.includes("secret")
+    );
+  }
   const editableCredentialFields = getEditableCredentialFields(
     credential,
     sourceType
@@ -83,11 +100,11 @@ export default function EditCredential({
             />
 
             {Object.entries(editableCredentialFields).map(([key, value]) =>
-              isTypedFileField(key) ? (
+              getCredentialFileType(key) !== null ? (
                 <TypedFileUploadFormField
                   key={key}
                   name={key}
-                  label={getDisplayNameForCredentialKey(key)}
+                  label={fieldCopy(key).title}
                 />
               ) : (
                 <TextFormField
@@ -95,14 +112,8 @@ export default function EditCredential({
                   key={key}
                   name={key}
                   placeholder={value == null ? undefined : String(value)}
-                  label={getDisplayNameForCredentialKey(key)}
-                  type={
-                    key.toLowerCase().includes("token") ||
-                    key.toLowerCase().includes("password") ||
-                    key.toLowerCase().includes("secret")
-                      ? "password"
-                      : "text"
-                  }
+                  label={fieldCopy(key).title}
+                  type={isSecretField(key) ? "password" : "text"}
                   disabled={key === "authentication_method"}
                 />
               )

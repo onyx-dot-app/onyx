@@ -117,7 +117,7 @@ describe("grouping engine", () => {
     expect(ends).toHaveLength(1);
   });
 
-  it("keeps TOP_LEVEL_BRANCHING as metadata (not in any group)", () => {
+  it("drops TOP_LEVEL_BRANCHING sent by older servers", () => {
     const state = run([
       makePlacedPacket(
         { type: "top_level_branching", num_parallel_branches: 2 },
@@ -126,7 +126,6 @@ describe("grouping engine", () => {
       searchStart(0, 0),
       searchStart(0, 1),
     ]);
-    expect(state.expectedBranches.get(0)).toBe(2);
     expect(state.groupedPacketsMap.has("0-0")).toBe(true);
     expect(state.toolGroups.map(keyOf).sort()).toEqual(["0-0", "0-1"]);
   });

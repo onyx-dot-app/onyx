@@ -4,22 +4,27 @@ Every builder returns a complete shape, so a test names only the field under
 test and passes it as an override.
 """
 
+import base64
+import hashlib
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
 import requests
 
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
 from onyx.connectors.outlook.models import (
     OutlookAttachment,
     OutlookEvent,
     OutlookFolder,
-    OutlookGraphError,
     OutlookMailbox,
     OutlookMessage,
     OutlookMessageChange,
     OutlookRecipient,
 )
+from onyx.connectors.outlook.threads import thread_document_id, thread_key
 
 MAILBOX_ID = "user-1"
 MAILBOX_ADDRESS = "alice@contoso.com"
@@ -53,6 +58,11 @@ def user_json(**overrides: Any) -> dict[str, Any]:
         "mail": MAILBOX_ADDRESS,
         "userPrincipalName": MAILBOX_ADDRESS,
         "displayName": "Alice",
+        "proxyAddresses": [
+            f"SMTP:{MAILBOX_ADDRESS}",
+            "smtp:al@contoso.com",
+            "x500:/o=x",
+        ],
     }
     return fields | overrides
 
@@ -93,7 +103,11 @@ def change_json(**overrides: Any) -> dict[str, Any]:
     fields: dict[str, Any] = {
         "id": "msg-1",
         "conversationId": CONVERSATION_ID,
+        "conversationIndex": conversation_index(CONVERSATION_ID),
         "receivedDateTime": "2026-09-01T10:00:00Z",
+        "sender": recipient_json(MAILBOX_ADDRESS, "Alice"),
+        "toRecipients": [recipient_json("bob@contoso.com", "Bob")],
+        "ccRecipients": [],
     }
     return fields | overrides
 
@@ -128,6 +142,7 @@ def folder(**overrides: Any) -> OutlookFolder:
 def message(**overrides: Any) -> OutlookMessage:
     fields: dict[str, Any] = {
         "id": "msg-1",
+        "internet_message_id": f"<{overrides.get('id', 'msg-1')}@contoso.com>",
         "conversation_id": CONVERSATION_ID,
         "parent_folder_id": INBOX_ID,
         "subject": "Quarterly plan",
@@ -141,13 +156,52 @@ def message(**overrides: Any) -> OutlookMessage:
     return OutlookMessage(**(fields | overrides))
 
 
-def change(**overrides: Any) -> OutlookMessageChange:
+def conversation_index(conversation_id: str, reply: bool = False) -> str:
+    """A conversation index whose thread root is unique to the conversation
+    id: the root message's own, or a reply's with one child block appended."""
+    root = hashlib.sha256(conversation_id.encode()).digest()[:22]
+    return base64.b64encode(root + (bytes(5) if reply else b"")).decode()
+
+
+def thread_doc_id(conversation_id: str) -> str:
+    """The thread document id a change made with ``change()`` leads to."""
+    key = thread_key(conversation_index(conversation_id))
+    assert key is not None
+    return thread_document_id(key)
+
+
+def change(reply: bool = False, **overrides: Any) -> OutlookMessageChange:
+    """A listing row, the thread's first message unless ``reply`` says so.
+    Sent by Alice to Bob unless the headers are overridden."""
     fields: dict[str, Any] = {
         "id": "msg-1",
+        "internet_message_id": f"<{overrides.get('id', 'msg-1')}@contoso.com>",
         "conversation_id": CONVERSATION_ID,
+        "parent_folder_id": INBOX_ID,
         "received_at": RECEIVED,
+        "sender": OutlookRecipient(address=MAILBOX_ADDRESS, name="Alice"),
+        "to_recipients": [OutlookRecipient(address="bob@contoso.com", name="Bob")],
     }
+    conversation_id = overrides.get("conversation_id", CONVERSATION_ID)
+    if conversation_id is not None:
+        fields["conversation_index"] = conversation_index(conversation_id, reply)
     return OutlookMessageChange(**(fields | overrides))
+
+
+def change_of(m: OutlookMessage, reply: bool = False) -> OutlookMessageChange:
+    """The listing row a delta page or an outline reports for a message."""
+    return change(
+        reply,
+        id=m.id,
+        internet_message_id=m.internet_message_id,
+        conversation_id=m.conversation_id,
+        parent_folder_id=m.parent_folder_id,
+        received_at=m.received_at,
+        is_draft=m.is_draft,
+        sender=m.sender,
+        to_recipients=m.to_recipients,
+        cc_recipients=m.cc_recipients,
+    )
 
 
 def event_json(**overrides: Any) -> dict[str, Any]:

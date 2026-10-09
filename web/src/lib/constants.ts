@@ -11,10 +11,6 @@ export const DOCS_ADMINS_PATH = `${DOCS_BASE_URL}/admins`;
 export const MCP_INTERNAL_URL =
   process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090";
 
-export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
-  process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===
-  "true";
-
 // Name of the FastAPI-Users auth cookie. Configurable via env (shared with the
 // backend's AUTH_COOKIE_NAME) so deployments sharing a hostname — e.g. parallel
 // local worktrees on different ports of localhost — keep separate auth cookies.
@@ -34,15 +30,6 @@ export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 export const NEXT_PUBLIC_CUSTOM_REFRESH_URL =
   process.env.NEXT_PUBLIC_CUSTOM_REFRESH_URL;
 
-// NOTE: this should ONLY be used on the server-side. If used client side,
-// it will not be accurate (will always be false).
-// Mirrors backend logic: EE is enabled if EITHER the legacy flag OR license
-// enforcement is active. LICENSE_ENFORCEMENT_ENABLED defaults to true on the
-// backend, so we treat undefined as enabled here to match.
-export const SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED =
-  process.env.ENABLE_PAID_ENTERPRISE_EDITION_FEATURES?.toLowerCase() ===
-    "true" ||
-  process.env.LICENSE_ENFORCEMENT_ENABLED?.toLowerCase() !== "false";
 // NOTE: since this is a `NEXT_PUBLIC_` variable, it will be set at
 // build-time
 // TODO: consider moving this to an API call so that the api_server

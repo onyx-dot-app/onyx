@@ -10,7 +10,7 @@ enforcement intact.
 from typing import Any
 
 from onyx.configs.constants import DocumentSource
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
     DOCUMENT_SETS_FIELD_NAME,
@@ -27,6 +27,7 @@ def _get_search_filters(
         tenant_state=TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False),
         include_hidden=False,
         access_control_list=["user_email:test@example.com"],
+        cc_pair_access=None,
         source_types=[DocumentSource.FILE],
         tags=[],
         document_sets=document_sets or [],

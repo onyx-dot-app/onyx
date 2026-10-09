@@ -3,7 +3,8 @@
 The blocking paths (cc-pair validation, indexing-run start) already probe the
 source; this module records what they found as a fallback-shaped capability
 report, so reports accumulate before any check-running infrastructure exists. It
-runs no checks of its own.
+runs no checks of its own. Pairing validation for a source with named checks
+stores the full named report instead (``creation.py``).
 
 Deliberately import-light: the hook sites live in ``factory.py`` and the
 docfetching hot path, so this module must not pull in the check registry (which
@@ -24,8 +25,8 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapability,
     CredentialCapabilityReport,
     compute_capability_verdicts,
-    compute_connector_config_hash,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.credential_capability import (
     upsert_completed_capability_report_unless_granular,

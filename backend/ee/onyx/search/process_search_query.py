@@ -20,12 +20,13 @@ from onyx.context.search.pipeline import merge_individual_chunks, search_pipelin
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.factory import get_default_llm
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
+from onyx.utils.fleet_query_telemetry import telemetry_query
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -66,6 +67,7 @@ def _run_single_search(
     )
 
 
+@telemetry_query(mode="search")
 def stream_search_query(
     request: SendSearchQueryRequest,
     user: User,
@@ -81,8 +83,7 @@ def stream_search_query(
     """
     # Get document index.
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     # Determine queries to execute
     original_query = request.search_query

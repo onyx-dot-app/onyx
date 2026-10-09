@@ -1,11 +1,19 @@
 from typing import Any
 
-from sqlalchemy import Select, select, update
+from sqlalchemy import Select, exists, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_, or_
 
 from onyx.auth.permissions import get_effective_permissions
 from onyx.configs.constants import DocumentSource, NotificationType
+from onyx.connectors.credential_families import (
+    credential_family_for_source,
+    family_sources,
+    is_credential_usable_for_source,
+    stored_credential_family,
+    to_source_credential_json,
+    to_stored_credential_json,
+)
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.enums import ConnectorCredentialPairStatus, Permission
 from onyx.db.models import (
@@ -126,6 +134,26 @@ def fetch_credentials_by_source_for_user(
     return list(credentials)
 
 
+def fetch_credentials_usable_by_source_for_user(
+    db_session: Session,
+    user: User,
+    document_source: DocumentSource,
+) -> list[Credential]:
+    """The source's own credentials, plus the family credentials of the other
+    sources in its family."""
+    family = credential_family_for_source(document_source)
+    sources = family_sources(family) if family else [document_source]
+    base_query = select(Credential).where(Credential.source.in_(sources))
+    base_query = _add_user_filters(base_query, user)
+    return [
+        credential
+        for credential in db_session.execute(base_query).scalars().all()
+        if is_credential_usable_for_source(
+            credential.source, _stored_json(credential), document_source
+        )
+    ]
+
+
 def fetch_credentials_by_source(
     db_session: Session,
     document_source: DocumentSource | None = None,
@@ -133,6 +161,53 @@ def fetch_credentials_by_source(
     base_query = select(Credential).where(Credential.source == document_source)
     credentials = db_session.execute(base_query).scalars().all()
     return list(credentials)
+
+
+def credential_usable_for_source(
+    credential: Credential, source: DocumentSource
+) -> bool:
+    """True when a ``source`` connector can use the credential: its own
+    source, or a family credential the source accepts."""
+    return is_credential_usable_for_source(
+        credential.source, _stored_json(credential), source
+    )
+
+
+def swap_cc_pair_credential__no_commit(
+    db_session: Session, cc_pair: ConnectorCredentialPair, new_credential: Credential
+) -> None:
+    """Moves the pair and its indexed documents to ``new_credential``. Rows
+    are keyed by (connector, credential), so another pair of the connector
+    that already uses the credential is a CONFLICT. Hierarchy rows follow the
+    pair by their ON UPDATE CASCADE key."""
+    if (
+        db_session.scalar(
+            select(ConnectorCredentialPair.id).where(
+                ConnectorCredentialPair.connector_id == cc_pair.connector_id,
+                ConnectorCredentialPair.credential_id == new_credential.id,
+                ConnectorCredentialPair.id != cc_pair.id,
+            )
+        )
+        is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Connector {cc_pair.connector_id} already uses credential "
+            f"{new_credential.id} in another connection.",
+        )
+    db_session.execute(
+        update(DocumentByConnectorCredentialPair)
+        .where(
+            and_(
+                DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == cc_pair.credential_id,
+            )
+        )
+        .values(credential_id=new_credential.id)
+    )
+    cc_pair.credential_id = new_credential.id
+    cc_pair.credential = new_credential
 
 
 def swap_credentials_connector(
@@ -160,26 +235,12 @@ def swap_credentials_connector(
         )
 
     # Check if the new credential is compatible with the connector
-    if new_credential.source != existing_pair.connector.source:
+    if not credential_usable_for_source(new_credential, existing_pair.connector.source):
         raise ValueError(
-            f"New credential source {new_credential.source} does not match connector source {existing_pair.connector.source}"
+            f"New credential source {new_credential.source} cannot be used by connector source {existing_pair.connector.source}"
         )
 
-    db_session.execute(
-        update(DocumentByConnectorCredentialPair)
-        .where(
-            and_(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == existing_pair.credential_id,
-            )
-        )
-        .values(credential_id=new_credential_id)
-    )
-
-    # Update the existing pair with the new credential
-    existing_pair.credential_id = new_credential_id
-    existing_pair.credential = new_credential
+    swap_cc_pair_credential__no_commit(db_session, existing_pair, new_credential)
 
     # Update ccpair status if it's in INVALID state
     if existing_pair.status == ConnectorCredentialPairStatus.INVALID:
@@ -198,13 +259,23 @@ def swap_credentials_connector(
     return existing_pair
 
 
+def _stored_json(credential: Credential) -> dict[str, Any]:
+    return (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
+
+
 def create_credential(
     credential_data: CredentialBase,
     user: User,
     db_session: Session,
 ) -> Credential:
     credential = Credential(
-        credential_json=credential_data.credential_json,
+        credential_json=to_stored_credential_json(
+            credential_data.source, credential_data.credential_json, None
+        ),
         user_id=user.id,
         admin_public=credential_data.admin_public,
         source=credential_data.source,
@@ -255,10 +326,16 @@ def alter_credential(
         if credential.credential_json
         else {}
     )
-    credential.credential_json = {  # ty: ignore[invalid-assignment]
-        **existing_json,
-        **credential_json,
-    }
+    # Merge in the credential's own source keys; a family credential is stored
+    # in its family's shape.
+    source = credential.source or DocumentSource.NOT_APPLICABLE
+    credential.credential_json = (  # ty: ignore[invalid-assignment]
+        to_stored_credential_json(
+            source,
+            {**to_source_credential_json(source, existing_json), **credential_json},
+            existing_json,
+        )
+    )
 
     credential.user_id = user.id
     db_session.commit()
@@ -277,8 +354,22 @@ def update_credential(
     if credential is None:
         return None
 
+    current_stored_json = _stored_json(credential)
+    # A family credential is written in its own source's keys: another member
+    # source's shape would drop state only the own source keeps (e.g. OAuth).
+    if (
+        stored_credential_family(current_stored_json) is not None
+        and credential_data.source != credential.source
+    ):
+        raise ValueError(
+            f"Credential {credential_id} is a {credential.source.value} "
+            f"credential; update it as {credential.source.value}, not "
+            f"{credential_data.source.value}."
+        )
     credential.credential_json = (  # ty: ignore[invalid-assignment]
-        credential_data.credential_json
+        to_stored_credential_json(
+            credential_data.source, credential_data.credential_json, current_stored_json
+        )
     )
     credential.user_id = user.id if user is not None else None
 
@@ -298,7 +389,13 @@ def update_credential_json(
     if credential is None:
         return None
 
-    credential.credential_json = credential_json  # ty: ignore[invalid-assignment]
+    credential.credential_json = (  # ty: ignore[invalid-assignment]
+        to_stored_credential_json(
+            credential.source or DocumentSource.NOT_APPLICABLE,
+            credential_json,
+            _stored_json(credential),
+        )
+    )
     db_session.commit()
     # Expire to ensure credential_json is reloaded as SensitiveValue from DB
     db_session.expire(credential)
@@ -307,11 +404,18 @@ def update_credential_json(
 
 def backend_update_credential_json(
     credential: Credential,
+    source: DocumentSource,
     credential_json: dict[str, Any],
     db_session: Session,
 ) -> None:
-    """This should not be used in any flows involving the frontend or users"""
-    credential.credential_json = credential_json  # ty: ignore[invalid-assignment]
+    """This should not be used in any flows involving the frontend or users.
+
+    ``credential_json`` is in ``source``'s own keys: the source of the connector
+    that wrote it, which for a family credential may not be ``credential.source``.
+    """
+    credential.credential_json = (  # ty: ignore[invalid-assignment]
+        to_stored_credential_json(source, credential_json, _stored_json(credential))
+    )
     db_session.commit()
 
 
@@ -383,6 +487,41 @@ def delete_credential_for_user(
         )
 
     _delete_credential_internal(credential, credential_id, db_session, force)
+
+
+def discard_credential_if_unpaired(db_session: Session, credential_id: int) -> bool:
+    """The cleanup behind a failed creation validation: its own transaction, a
+    row lock so a pair landing concurrently is never cascaded, and it never
+    raises, because the caller's validation error is what the user needs."""
+    try:
+        with db_session.begin():
+            credential = db_session.execute(
+                select(Credential)
+                .where(Credential.id == credential_id)
+                .with_for_update()
+            ).scalar_one_or_none()
+            if credential is None:
+                return True
+            paired = db_session.scalar(
+                select(
+                    exists().where(
+                        ConnectorCredentialPair.credential_id == credential_id
+                    )
+                )
+            )
+            if paired:
+                return False
+            _cleanup_credential__user_group_relationships__no_commit(
+                db_session, credential_id
+            )
+            db_session.delete(credential)
+            return True
+    except Exception:
+        logger.exception(
+            "Left credential %s behind after a failed validation", credential_id
+        )
+        db_session.rollback()
+        return False
 
 
 def delete_credential(

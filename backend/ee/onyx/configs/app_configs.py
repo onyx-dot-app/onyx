@@ -120,8 +120,10 @@ TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 #####
 # Outlook
 #####
+# Polls keep readers current as mail changes, so the sync only repairs what
+# a poll missed and catches deletions.
 OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY = int(
-    os.environ.get("OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+    os.environ.get("OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY") or 24 * 60 * 60
 )
 
 #####
@@ -135,6 +137,30 @@ SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY = int(
 # In seconds, default is 5 minutes
 SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY = int(
     os.environ.get("SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+# In seconds, default is 30 minutes
+ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY_S = int(
+    os.environ.get("ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+
+# In seconds, default is 5 minutes
+ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S = int(
+    os.environ.get("ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+#####
+# Zoom
+#####
+# In seconds, default is 5 minutes
+ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+# In seconds, default is 6 hours: a sync lists every host's whole recording
+# history, about 170 calls per host, and reads the share settings of every
+# recording, one call each.
+ZOOM_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("ZOOM_PERMISSION_DOC_SYNC_FREQUENCY") or 6 * 60 * 60
 )
 
 
@@ -171,11 +197,6 @@ MARKETING_POSTHOG_API_KEY = os.environ.get("MARKETING_POSTHOG_API_KEY")
 HUBSPOT_TRACKING_URL = os.environ.get("HUBSPOT_TRACKING_URL")
 
 GATED_TENANTS_KEY = "gated_tenants"
-
-# License enforcement - when True, blocks API access for gated/expired licenses
-LICENSE_ENFORCEMENT_ENABLED = (
-    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "true").lower() == "true"
-)
 
 # Cloud data plane URL - self-hosted instances call this to reach cloud proxy endpoints
 # Used when MULTI_TENANT=false (self-hosted mode)

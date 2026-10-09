@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import { Button, OpenButton, SelectButton } from "@opal/components";
-import { SvgOpenai } from "@opal/logos";
+import { SvgOpenAI } from "@opal/logos";
 import {
   SvgPlusCircle,
   SvgArrowUp,
@@ -11,9 +11,11 @@ import {
   SvgHourglass,
   SvgEditBig,
 } from "@opal/icons";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function SharedAppInputBar() {
   const t = useTranslations("chat.input");
+  const { appName } = useSettings();
 
   return (
     <div className="relative w-full">
@@ -21,7 +23,7 @@ export default function SharedAppInputBar() {
         {/* Textarea area */}
         <div className="flex flex-row items-center w-full">
           <Text text03 className="w-full px-3 pt-3 pb-2 select-none">
-            {t("sharedAppInputBar.input.placeholder")}
+            {t("sharedAppInputBar.input.placeholder", { appName })}
           </Text>
         </div>
 
@@ -36,7 +38,7 @@ export default function SharedAppInputBar() {
 
           {/* Right side controls */}
           <div className="flex flex-row items-center gap-1">
-            <OpenButton disabled icon={SvgOpenai}>
+            <OpenButton disabled icon={SvgOpenAI}>
               {/* oxlint-disable-next-line i18n/no-raw-jsx-text -- model name, not copy */}
               GPT-4o
             </OpenButton>

@@ -1,6 +1,6 @@
 """Microsoft Graph transport: retry policies, the authenticated GET, paging.
 
-Two status sets live here because callers disagree about 5xx.
+Two retry status sets live here because callers disagree about 5xx.
 :data:`RETRYABLE_HTTP_STATUSES` is the narrow set and the default of
 :func:`sleep_and_retry`. :data:`GRAPH_API_RETRYABLE_STATUSES` adds the gateway
 5xx codes and is what the raw GET and Teams use. A caller that wants the wide
@@ -11,7 +11,7 @@ This layer carries no source identity, so a connector composes it.
 
 import random
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from typing import Any
 
 import requests
@@ -19,6 +19,7 @@ from office365.runtime.client_request import ClientRequestException
 from office365.runtime.queries.client_query import ClientQuery
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
@@ -42,6 +43,24 @@ TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
     requests.exceptions.ContentDecodingError,
 )
 
+# No grant (403), gone (404), admin-locked or M365-archived (423): true of one
+# entity whatever the caller does next, so a walk records it and moves on. 410
+# stays out, since Graph also answers it for an expired delta or page token.
+PERMANENT_REFUSAL_STATUSES: frozenset[int] = frozenset({403, 404, 423})
+
+
+def is_permanent_refusal_status(status: int | None) -> bool:
+    """Whether Graph refused this one entity for good. A missing status is a
+    transport failure, never a refusal."""
+    return status in PERMANENT_REFUSAL_STATUSES
+
+
+def is_permanent_refusal(error: requests.RequestException) -> bool:
+    """The requests form, for the raw GET's HTTPError and the SDK's exception."""
+    if error.response is None:
+        return False
+    return is_permanent_refusal_status(error.response.status_code)
+
 
 def backoff_seconds(attempt: int, retry_after: str | None) -> float:
     """Honor a server-provided Retry-After header (numeric seconds or HTTP-date)
@@ -52,13 +71,13 @@ def backoff_seconds(attempt: int, retry_after: str | None) -> float:
     from ``[base/2, base]`` so that many documents failing at the same instant
     (e.g. during a Graph throttling window) don't all retry on the same tick
     and re-create the thundering herd. Server-provided Retry-After values are
-    used verbatim, since those are an explicit instruction rather than a guess.
+    used verbatim (see ``bound_server_wait`` for logging and the cloud cap).
 
     ``attempt`` is 0-indexed (0 for the first retry).
     """
     parsed = parse_retry_after_seconds(retry_after)
     if parsed is not None:
-        return parsed
+        return bound_server_wait(parsed, "microsoft_graph")
     base = min(30, (2**attempt) * 5)
     return base / 2 + random.uniform(0, base / 2)
 
@@ -172,6 +191,18 @@ def sleep_and_retry(
             raise e
 
 
+def retry_wait(
+    response: requests.Response, attempt: int, max_retries: int
+) -> float | None:
+    """How long to wait before retrying this answer, or None when it is final:
+    a status Graph asks us to retry, with retries left, waits Retry-After."""
+    if response.status_code not in GRAPH_API_RETRYABLE_STATUSES:
+        return None
+    if attempt >= max_retries:
+        return None
+    return backoff_seconds(attempt, response.headers.get("Retry-After"))
+
+
 def graph_api_get_json(
     get_access_token: Callable[[], str],
     url: str,
@@ -194,18 +225,17 @@ def graph_api_get_json(
                 params=params,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
-            if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
-                if attempt < GRAPH_API_MAX_RETRIES:
-                    wait = backoff_seconds(attempt, response.headers.get("Retry-After"))
-                    logger.warning(
-                        "Graph API %s on attempt %s, retrying in %.1fs: %s",
-                        response.status_code,
-                        attempt + 1,
-                        wait,
-                        url,
-                    )
-                    time.sleep(wait)
-                    continue
+            wait = retry_wait(response, attempt, GRAPH_API_MAX_RETRIES)
+            if wait is not None:
+                logger.warning(
+                    "Graph API %s on attempt %s, retrying in %.1fs: %s",
+                    response.status_code,
+                    attempt + 1,
+                    wait,
+                    url,
+                )
+                time.sleep(wait)
+                continue
             log_and_raise_for_status(response)
             # ValueError covers the empty/non-JSON 2xx bodies Graph
             # intermittently returns under load.
@@ -251,17 +281,3 @@ class GraphApiClient:
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         return graph_api_get_json(self.get_access_token, url, params, headers)
-
-
-def iter_graph_collection(
-    client: GraphApiClient,
-    url: str,
-    params: dict[str, str] | None = None,
-) -> Generator[dict[str, Any], None, None]:
-    """Yield every item of a Graph collection, following nextLink page by page."""
-    page_url: str | None = url
-    while page_url:
-        data = client.get_json(page_url, params)
-        params = None  # nextLink already embeds the query
-        yield from data.get("value", [])
-        page_url = data.get("@odata.nextLink")

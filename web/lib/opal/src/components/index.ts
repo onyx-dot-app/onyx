@@ -124,6 +124,31 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Fold */
+export { Fold, type FoldProps } from "@opal/components/fold/components";
+
+/* IconTooltip */
+export {
+  IconTooltip,
+  type IconTooltipProps,
+  type IconTooltipStatus,
+} from "@opal/components/icon-tooltip/components";
+
+/* OverflowText */
+export {
+  OverflowText,
+  type OverflowTextProps,
+} from "@opal/components/overflow-text/components";
+
+/* Log */
+export {
+  Log,
+  type LogProps,
+  type LogStatus,
+  type LogVariant,
+  type LogWeight,
+} from "@opal/components/log/components";
+
 /* Divider */
 export {
   Divider,
@@ -160,6 +185,12 @@ export {
   type EmptyMessageCardProps,
 } from "@opal/components/cards/empty-message-card/components";
 
+/* Collapsible */
+export {
+  Collapsible,
+  type CollapsibleProps,
+} from "@opal/components/collapsible/components";
+
 /* MessageCard */
 export {
   MessageCard,
@@ -168,8 +199,6 @@ export {
 
 /* Loader */
 export {
-  IconLoader,
-  type IconLoaderProps,
   OnyxLoader,
   type OnyxLoaderProps,
   type LoaderColor,
@@ -196,13 +225,24 @@ export {
 
 /* Table */
 export { Table } from "@opal/components/table/components";
-export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
+export type {
+  TableColumn,
+  TableQualifierColumn,
+  TableFieldColumn,
+  TableValueColumn,
+  TableDisplayColumn,
+  TableActionsColumn,
+  TableCellValue,
+} from "@opal/components/table/types";
 
 /* ShadowDiv */
 export {
   ShadowDiv,
   type ShadowDivProps,
+  type ShadowDirection,
+  type ShadowDivVariant,
+  type ShadowDivVariants,
 } from "@opal/components/shadow-div/components";
 
 /* Popover */
@@ -251,19 +291,52 @@ export {
   type InputDatePickerProps,
 } from "@opal/components/inputs/chrono/input-date-picker/components";
 
-/* InputSingleSelect */
-export { InputSingleSelect } from "@opal/components/inputs/selects/input-single-select/components";
+/* Dropdown */
+export {
+  Dropdown,
+  type DropdownProps,
+  type DropdownAnchorProps,
+  type DropdownTriggerProps,
+  type DropdownDataProps,
+  type DropdownTriggerBehavior,
+  type DropdownTabKey,
+  type DropdownVirtualAnchor,
+} from "@opal/components/dropdown/components";
+export {
+  type DropdownItem,
+  type DropdownMenuItem,
+  type DropdownRow,
+  type DropdownMenuRow,
+  type DropdownOption,
+  type DropdownAction,
+  type DropdownToggle,
+  type DropdownCustom,
+  type DropdownGroup,
+  type DropdownRowState,
+  type DropdownRowProps,
+  type DropdownSearch,
+  type DropdownView,
+  type DropdownViews,
+  type DropdownWidth,
+  type DropdownAlign,
+  type DropdownSide,
+} from "@opal/components/dropdown/types";
+export { useDropdownViews } from "@opal/components/dropdown/context";
+
+/* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */
+export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";
+export { InputSingleComboBox } from "@opal/components/inputs/dropdowns/input-single-combo-box/components";
+export { InputMultiSelect } from "@opal/components/inputs/dropdowns/input-multi-select/components";
+export { InputMultiComboBox } from "@opal/components/inputs/dropdowns/input-multi-combo-box/components";
 export {
   type InputSingleSelectProps,
-  type SelectOption,
-  type SelectSection,
-} from "@opal/components/inputs/selects/types";
-
-/* InputMultiSelect */
-export {
-  InputMultiSelect,
+  type InputSingleComboBoxProps,
   type InputMultiSelectProps,
-} from "@opal/components/inputs/selects/input-multi-select/components";
+  type InputMultiComboBoxProps,
+  type SelectOption,
+  type SelectDivider,
+  type SelectOptions,
+} from "@opal/components/inputs/dropdowns/types";
 
 /* InputPasswordTypeIn */
 export {

@@ -7,7 +7,7 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/interfaces";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SearchChipList, SourceInfo } from "./SearchChipList";
 import {
   constructCurrentSearchState,

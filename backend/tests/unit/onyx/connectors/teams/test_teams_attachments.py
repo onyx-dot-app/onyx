@@ -1,6 +1,7 @@
 """Channel files as documents of their own: what is indexed, who may read it,
 and what the connector refuses to do without a certificate."""
 
+import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -18,6 +19,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.drive_delta import SHAREPOINT_IDS_PROPERTY
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemContent,
     DriveItemContentError,
@@ -28,15 +30,16 @@ from onyx.connectors.models import ConnectorFailure, Document, SlimDocument, Tex
 from onyx.connectors.teams import files as files_module
 from onyx.connectors.teams import listing as listing_module
 from onyx.connectors.teams import session as session_module
-from onyx.connectors.teams.connector import TeamsConnector
+from onyx.connectors.teams.connector import TeamsCheckpoint, TeamsConnector
 from onyx.connectors.teams.files import FileSource, file_document_id
-from onyx.connectors.teams.models import ChannelRef
+from onyx.connectors.teams.models import ChannelLibrary, ChannelRef
 from onyx.connectors.teams.utils import (
     GraphRetriesExhausted,
     channel_access,
     message_delta_url,
 )
 from tests.unit.onyx.connectors.teams.helpers import (
+    CHANNEL,
     CHANNEL_ID,
     DELTA_URL,
     MEMBERS_URL,
@@ -55,9 +58,10 @@ from tests.unit.onyx.connectors.teams.helpers import (
 
 FOLDER_URL = f"teams/{TEAM_ID}/channels/{CHANNEL_ID}/filesFolder"
 DRIVE = "drive-1"
+LIST_ID = "list-1"
 FOLDER_ID = "folder-1"
 SITE_URL = "https://tenant.sharepoint.example/sites/T"
-DRIVE_URL = f"drives/{DRIVE}?$select=name,sharePointIds"
+DRIVE_URL = f"drives/{DRIVE}?$select={SHAREPOINT_IDS_PROPERTY}"
 # The shape a live tenant answers with: the files folder names its drive and
 # leaves its site id empty, and the drive names the site.
 LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
@@ -65,7 +69,10 @@ LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
         "id": FOLDER_ID,
         "parentReference": {"driveId": DRIVE, "siteId": None},
     },
-    DRIVE_URL: {"name": "Documents", "sharePointIds": {"siteUrl": SITE_URL}},
+    # Literal on purpose: the drive resource answers with a capital P.
+    DRIVE_URL: {
+        "sharePointIds": {"listId": LIST_ID, "siteUrl": SITE_URL},
+    },
 }
 MEMBERS = {MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]}}
 # A thread names the group of its channel's members, without the source prefix
@@ -127,7 +134,7 @@ def library(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         )
 
     def access(**kwargs: Any) -> ExternalAccess:
-        seen["access"].append((kwargs["drive_item"].id, kwargs["drive_name"]))
+        seen["access"].append((kwargs["drive_item"].id, kwargs["list_id"]))
         return SHAREPOINT_READERS
 
     monkeypatch.setattr(files_module, "iter_drive_items_paged", iter_items)
@@ -225,7 +232,7 @@ def test_channel_files_become_documents_with_sharepoints_readers(
     assert [owner.email for owner in plan.primary_owners or []] == ["ada@example.com"]
     assert [section.text for section in plan.sections] == ["Text of Plan.pdf"]
     assert library["listed"] == [(DRIVE, FOLDER_ID, None)]
-    assert library["access"] == [("item-1", "Documents"), ("item-2", "Documents")]
+    assert library["access"] == [("item-1", LIST_ID), ("item-2", LIST_ID)]
     assert [token for _, token in library["extracted"]] == ["token", "token"]
     assert _requested(client).count(FOLDER_URL) == 1
 
@@ -253,6 +260,92 @@ def test_files_follow_the_last_page_and_respect_the_poll_window(
     assert library["listed"] == [
         (DRIVE, FOLDER_ID, datetime.fromtimestamp(start, tz=timezone.utc))
     ]
+    assert checkpoint.has_more is False
+
+
+OTHER_CHANNEL = ChannelRef(
+    team_id=TEAM_ID,
+    id="19:other@thread.tacv2",
+    display_name="Other",
+    membership_type="standard",
+)
+
+
+def _two_channels_with_files(
+    library: dict[str, Any],
+) -> tuple[MagicMock, TeamsCheckpoint]:
+    """Two channels on their last page, both on the one library, a file each."""
+    library["files"] = [_item("item-1", "Plan.pdf")]
+    routes = _channel_routes(message("m1", "one"))
+    routes[message_delta_url(TEAM_ID, OTHER_CHANNEL.id, 0)] = {
+        "value": [message("m2", "two")]
+    }
+    routes[replies_url("m2", OTHER_CHANNEL.id)] = {"value": []}
+    routes[f"teams/{TEAM_ID}/channels/{OTHER_CHANNEL.id}/filesFolder"] = routes[
+        FOLDER_URL
+    ]
+    checkpoint = TeamsCheckpoint(
+        has_more=True,
+        todo_team_ids=[],
+        todo_channels=[CHANNEL, OTHER_CHANNEL],
+    )
+    return graph_client(routes), checkpoint
+
+
+def test_the_files_of_finished_channels_are_read_side_by_side(
+    library: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, checkpoint = _two_channels_with_files(library)
+    extract = files_module.extract_drive_item_content
+    both_in_flight = threading.Barrier(2, timeout=5)
+
+    def meet(item: DriveItemData, **kwargs: Any) -> Any:
+        # Each file read waits for the other, so files read one channel at a
+        # time break the barrier.
+        both_in_flight.wait()
+        return extract(item, **kwargs)
+
+    monkeypatch.setattr(files_module, "extract_drive_item_content", meet)
+
+    items, checkpoint = step(connector(client, include_attachments=True), checkpoint)
+
+    assert [item for item in items if isinstance(item, ConnectorFailure)] == []
+    assert sorted(_document_ids(items)) == sorted(
+        ["m1", "m2", file_document_id("item-1"), file_document_id("item-1")]
+    )
+    assert checkpoint.has_more is False
+
+
+def test_a_file_listing_outage_fails_the_step_and_the_retry_reads_it_again(
+    library: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An outage while a channel's files are read fails the step, so the saved
+    checkpoint stays where it was and the retried step reads every file."""
+    client, checkpoint = _two_channels_with_files(library)
+    saved: str = checkpoint.model_dump_json()
+    outages: list[int] = [1]
+    listing = files_module.iter_drive_items_paged
+
+    def flaky(_client: Any, drive_id: str, **kwargs: Any) -> Any:
+        if outages:
+            outages.pop()
+            response = MagicMock(status_code=503, text="outage")
+            response.headers = {"Content-Type": "text/plain"}
+            raise requests.HTTPError("503", response=response)
+        return listing(_client, drive_id, **kwargs)
+
+    monkeypatch.setattr(files_module, "iter_drive_items_paged", flaky)
+    teams_connector = connector(client, include_attachments=True)
+
+    with pytest.raises(requests.HTTPError):
+        step(teams_connector, checkpoint)
+
+    retried = teams_connector.validate_checkpoint_json(saved)
+    items, checkpoint = step(teams_connector, retried)
+
+    assert sorted(_document_ids(items)) == sorted(
+        ["m1", "m2", file_document_id("item-1"), file_document_id("item-1")]
+    )
     assert checkpoint.has_more is False
 
 
@@ -475,6 +568,75 @@ def test_the_rest_context_is_reused_per_site_until_its_token_ages(
     assert teams_connector.rest_context(SITE_URL) is first
     assert teams_connector.rest_context(SITE_URL) is not first
     assert _rest_context_calls() == [(SITE_URL,), (SITE_URL,)]
+
+
+def test_each_thread_gets_its_own_graph_client_for_queries() -> None:
+    """SDK queries queue on their client, so file readers read side by side
+    must not share one; direct requests keep the shared client."""
+    teams_connector = connector(graph_client({}), include_attachments=True)
+    teams_connector._acquire_token = lambda: {"access_token": "token"}
+    first = teams_connector.graph_for_thread()
+    seen: list[Any] = []
+
+    worker = threading.Thread(
+        target=lambda: seen.append(teams_connector.graph_for_thread())
+    )
+    worker.start()
+    worker.join()
+
+    assert teams_connector.graph_for_thread() is first
+    assert seen[0] is not first
+    assert first is not teams_connector.graph()
+
+
+@pytest.mark.usefixtures("library")
+def test_a_file_without_a_list_item_id_is_looked_up_on_the_threads_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The readers lookup fetches a list item Graph did not name through the
+    drive item's own client, so a worker's drive item must carry the worker's
+    client, not the shared one the direct requests use."""
+    teams_connector = connector(graph_client({}), include_attachments=True)
+    teams_connector._acquire_token = lambda: {"access_token": "token"}
+    monkeypatch.setattr(DriveItemData, "to_sdk_driveitem", lambda _, client: client)
+    seen: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        files_module,
+        "get_sharepoint_external_access",
+        lambda **kwargs: seen.append(kwargs) or SHAREPOINT_READERS,
+    )
+    channel_library = ChannelLibrary(
+        drive_id=DRIVE, list_id="list-1", site_url=SITE_URL, folder_id="folder-1"
+    )
+
+    worker = threading.Thread(
+        target=lambda: _files(teams_connector)._file_access(
+            channel_library, _item("f1", "a.pdf"), for_indexing=True
+        )
+    )
+    worker.start()
+    worker.join()
+
+    assert seen[0]["drive_item"] is seen[0]["graph_client"]
+    assert seen[0]["graph_client"] is not teams_connector.graph()
+
+
+@pytest.mark.usefixtures("library")
+def test_each_thread_gets_its_own_rest_context_for_a_site() -> None:
+    """The SDK's context queues requests on the instance, so the walk that
+    reads file readers side by side cannot share one across workers."""
+    teams_connector = connector(graph_client({}), include_attachments=True)
+    first = teams_connector.rest_context(SITE_URL)
+    seen: list[Any] = []
+
+    worker = threading.Thread(
+        target=lambda: seen.append(teams_connector.rest_context(SITE_URL))
+    )
+    worker.start()
+    worker.join()
+
+    assert seen[0] is not first
+    assert teams_connector.rest_context(SITE_URL) is first
 
 
 def test_channel_site_urls_are_distinct_and_a_refused_channel_is_left_out(
@@ -706,7 +868,9 @@ def test_a_library_that_names_no_site_keeps_the_pair_active(
     routes = {**LIBRARY_ROUTES, DRIVE_URL: {"name": "Documents"}}
     teams_connector, teams = _validation_connector(monkeypatch, routes)
 
-    with pytest.raises(UnexpectedValidationError, match="without its name or its site"):
+    with pytest.raises(
+        UnexpectedValidationError, match="without its list or site identity"
+    ):
         _files(teams_connector).validate(teams)
 
 
@@ -738,7 +902,23 @@ def test_a_library_that_names_no_site_is_one_channel_failure(
     assert len(failures) == 1
     assert failures[0].failed_entity is not None
     assert failures[0].failed_entity.entity_id == CHANNEL_ID
-    assert "without its name or its site" in failures[0].failure_message
+    assert "without its list or site identity" in failures[0].failure_message
+
+
+def test_a_library_with_malformed_identity_is_one_channel_failure(
+    library: dict[str, Any],  # noqa: ARG001
+) -> None:
+    routes = {
+        **_channel_routes(message("m1", "Plan")),
+        DRIVE_URL: {"sharePointIds": {"listId": {"bad": "shape"}}},
+    }
+
+    items = walk_channel(connector(graph_client(routes), include_attachments=True))
+
+    assert _document_ids(items) == ["m1"]
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert "returned malformed identity" in failures[0].failure_message
 
 
 def test_a_refused_files_folder_names_the_grant(

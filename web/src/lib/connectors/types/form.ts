@@ -1,5 +1,5 @@
 /** The schema a connector's creation form is rendered from. */
-import type { Credential } from "./credential";
+import type { Credential } from "@/lib/credentials/types";
 
 export type InputType =
   | "list"
@@ -63,11 +63,18 @@ export interface StringPairListOption extends Option {
   rightPlaceholder?: string;
 }
 
+/** A key under `admin.connectorsList.subDescriptions` in the message catalog. */
+export type TextSubDescriptionKey = "siteUrl";
+
 export interface TextOption extends Option {
   type: "text";
   default?: string;
   initial?: string | ((currentCredential: Credential<any> | null) => string);
   isTextArea?: boolean;
+  /** Example value shown in the empty input. */
+  placeholder?: string;
+  /** Text below the input. It gets the connector's name as `connectorName`. */
+  subDescription?: TextSubDescriptionKey;
 }
 
 export interface NumberOption extends Option {
@@ -75,9 +82,18 @@ export interface NumberOption extends Option {
   default?: number;
 }
 
+/** A key under `admin.connectorsList.checkboxTabs` in the message catalog. */
+export type CheckboxTabLabelKey = "confluenceCloud" | "confluenceDataCenter";
+
 export interface BooleanOption extends Option {
   type: "checkbox";
   default?: boolean;
+  /** The value the credential sets; the form uses it while the field is disabled. */
+  initial?: (currentCredential: Credential<any> | null) => boolean | undefined;
+  /** Shows the value as two tabs with these labels instead of a checkbox. */
+  tabLabels?: { true: CheckboxTabLabelKey; false: CheckboxTabLabelKey };
+  /** Shows a checkbox instead of the standard switch. */
+  asCheckbox?: boolean;
 }
 
 export interface FileOption extends Option {
@@ -90,23 +106,26 @@ export interface StringTabOption extends Option {
   default?: string;
 }
 
-export interface TabOption extends Option {
+export type ConnectorValueField =
+  | BooleanOption
+  | ListOption
+  | StringPairListOption
+  | TextOption
+  | NumberOption
+  | SelectOption
+  | MultiSelectOption
+  | FileOption
+  | StringTabOption;
+
+export interface TabOption extends Omit<Option, "label"> {
   type: "tab";
+  /** Heading above the tabs. Leave it out when the tab labels say enough. */
+  label?: Option["label"];
   defaultTab?: string;
   tabs: {
     label: string;
     value: string;
-    fields: (
-      | BooleanOption
-      | ListOption
-      | StringPairListOption
-      | TextOption
-      | NumberOption
-      | SelectOption
-      | MultiSelectOption
-      | FileOption
-      | StringTabOption
-    )[];
+    fields: ConnectorValueField[];
   }[];
   default?: [];
 }
@@ -115,28 +134,8 @@ export interface ConnectionConfiguration {
   description: string;
   subtext?: string;
   initialConnectorName?: string; // a key in the credential to prepopulate the connector name field
-  values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
-  advanced_values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
+  values: (ConnectorValueField | TabOption)[];
+  advanced_values: (ConnectorValueField | TabOption)[];
   overrideDefaultFreq?: number;
   advancedValuesVisibleCondition?: (
     values: any,

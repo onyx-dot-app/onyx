@@ -48,7 +48,6 @@ export interface FeatureFlags {
   customAnalyticsEnabled: boolean;
   hasSubscription: boolean;
   hooksEnabled: boolean;
-  opensearchEnabled: boolean;
   queryHistoryEnabled: boolean;
   craftAvailable: boolean;
 }
@@ -153,6 +152,16 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "",
     requiredTier: null,
+    visibleWhen: null,
+  },
+  LLM_GATEWAY: {
+    path: "/admin/llm-gateway",
+    icon: SvgGlobe,
+    title: "LLM Gateway",
+    sidebarLabel: "LLM Gateway",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "",
+    requiredTier: Tier.BUSINESS,
     visibleWhen: null,
   },
   // ── Craft ─────────────────────────────────────────────────────────

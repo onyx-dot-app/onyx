@@ -10,7 +10,7 @@ import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, Divider } from "@opal/components";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import {
   SvgActions,
   SvgBubbleText,
@@ -20,9 +20,10 @@ import {
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import { useMcpServers } from "@/lib/tools/hooks";
+import { useMcpServers } from "@/lib/mcp/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
-import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
+import { ToolSnapshot } from "@/lib/tools/types";
+import { MCPServer } from "@/lib/mcp/types";
 import { EmptyMessageCard } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { Button } from "@opal/components";
@@ -35,8 +36,9 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import { getDisplayName } from "@/lib/languageModels/utils";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
+import { useSettings } from "@/lib/settings/hooks";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -153,8 +155,6 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       activeAgent={agent}
       stopGenerating={() => {}}
       handleFileUpload={() => {}}
-      currentSessionFileTokenCount={0}
-      availableContextTokens={Infinity}
       deepResearchEnabled={false}
       toggleDeepResearch={() => {}}
       disabled={false}
@@ -192,7 +192,8 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
   const t = useTranslations("agents.modals");
   const router = useRouter();
   const { allRecentFiles } = useProjectsContext();
-  const { llmProviders } = useLLMProviders(agent.id);
+  const { llmProviders } = useLanguageModelsForAgent(agent.id);
+  const { appName } = useSettings();
 
   const handleStartChat = useCallback(
     (message: string) => {
@@ -335,75 +336,71 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
           </Section>
 
           {/* Actions & Tools */}
-          <SimpleCollapsible>
-            <SimpleCollapsible.Header title={t("viewer.actions.title")} />
-            <SimpleCollapsible.Content>
-              {hasActions ? (
-                <Section gap={2} alignItems="start">
-                  {mcpServersWithTools.map(({ server, tools }) => (
-                    <ViewerMCPServerCard
-                      key={server.id}
-                      server={server}
-                      tools={tools}
-                    />
-                  ))}
-                  {openApiTools.map((tool) => (
-                    <ViewerOpenApiToolCard key={tool.id} tool={tool} />
-                  ))}
-                </Section>
-              ) : (
-                <EmptyMessageCard
-                  sizePreset="main-ui"
-                  title={t("viewer.actions.empty.title")}
-                />
-              )}
-            </SimpleCollapsible.Content>
-          </SimpleCollapsible>
+          <Collapsible title={t("viewer.actions.title")}>
+            {hasActions ? (
+              <Section gap={2} alignItems="start">
+                {mcpServersWithTools.map(({ server, tools }) => (
+                  <ViewerMCPServerCard
+                    key={server.id}
+                    server={server}
+                    tools={tools}
+                  />
+                ))}
+                {openApiTools.map((tool) => (
+                  <ViewerOpenApiToolCard key={tool.id} tool={tool} />
+                ))}
+              </Section>
+            ) : (
+              <EmptyMessageCard
+                sizePreset="main-ui"
+                title={t("viewer.actions.empty.title")}
+              />
+            )}
+          </Collapsible>
 
           {/* More Info (Collapsible) */}
           <Divider paddingParallel={0} paddingPerpendicular={0} />
-          <SimpleCollapsible>
-            <SimpleCollapsible.Header title={t("viewer.moreInfo.title")} />
-            <SimpleCollapsible.Content>
-              <Section gap={2} alignItems="start">
-                {agent.system_prompt && (
-                  <Content
-                    title={t("viewer.instructions.title")}
-                    description={agent.system_prompt}
-                    sizePreset="main-ui"
-                    variant="section"
-                  />
-                )}
-                {defaultModel && (
-                  <InputHorizontal
-                    title={t("viewer.defaultModel.title")}
-                    description={t("viewer.defaultModel.description")}
-                  >
-                    <Text>{defaultModel}</Text>
-                  </InputHorizontal>
-                )}
-                {agent.search_start_date && (
-                  <InputHorizontal
-                    title={t("viewer.knowledgeCutoff.title")}
-                    description={t("viewer.knowledgeCutoff.description")}
-                  >
-                    <Text mainUiMono>
-                      {formatMmDdYyyy(agent.search_start_date)}
-                    </Text>
-                  </InputHorizontal>
-                )}
+          <Collapsible title={t("viewer.moreInfo.title")}>
+            <Section gap={2} alignItems="start">
+              {agent.system_prompt && (
+                <Content
+                  title={t("viewer.instructions.title")}
+                  description={agent.system_prompt}
+                  sizePreset="main-ui"
+                  variant="section"
+                />
+              )}
+              {defaultModel && (
                 <InputHorizontal
-                  title={t("viewer.overwritePrompts.title")}
-                  description={t("viewer.overwritePrompts.description")}
+                  title={t("viewer.defaultModel.title")}
+                  description={t("viewer.defaultModel.description", {
+                    appName,
+                  })}
                 >
-                  <InputSwitch
-                    disabled
-                    checked={agent.replace_base_system_prompt}
-                  />
+                  <Text>{defaultModel}</Text>
                 </InputHorizontal>
-              </Section>
-            </SimpleCollapsible.Content>
-          </SimpleCollapsible>
+              )}
+              {agent.search_start_date && (
+                <InputHorizontal
+                  title={t("viewer.knowledgeCutoff.title")}
+                  description={t("viewer.knowledgeCutoff.description")}
+                >
+                  <Text mainUiMono>
+                    {formatMmDdYyyy(agent.search_start_date)}
+                  </Text>
+                </InputHorizontal>
+              )}
+              <InputHorizontal
+                title={t("viewer.overwritePrompts.title")}
+                description={t("viewer.overwritePrompts.description")}
+              >
+                <InputSwitch
+                  disabled
+                  checked={agent.replace_base_system_prompt}
+                />
+              </InputHorizontal>
+            </Section>
+          </Collapsible>
 
           {/* Prompt Reminders */}
           {agent.task_prompt && (

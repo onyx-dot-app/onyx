@@ -65,6 +65,7 @@ from onyx.configs.constants import (
     TokenRateLimitScope,
 )
 from onyx.connectors.models import InputType
+from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     AccountType,
@@ -76,8 +77,8 @@ from onyx.db.enums import (
     CapabilityReportRunStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     DefaultAppMode,
-    EmbeddingPrecision,
     EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
@@ -97,8 +98,6 @@ from onyx.db.enums import (
     MCPServerStatus,
     MCPTransport,
     NotificationSeverity,
-    OpenSearchDocumentMigrationStatus,
-    OpenSearchTenantMigrationStatus,
     PatType,
     Permission,
     PermissionSyncStatus,
@@ -122,6 +121,7 @@ from onyx.db.enums import (
     ThemePreference,
     UsageActorKind,
     UserFileStatus,
+    VectorQuantization,
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
@@ -130,6 +130,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride, PromptOverride
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
@@ -641,6 +642,60 @@ class PersonalAccessToken(Base):
     )
 
 
+class OAuthProviderGrant(Base):
+    __tablename__ = "oauth_provider_grant"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id: Mapped[str] = mapped_column(String(2048), nullable=False)
+    client_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    resource: Mapped[str] = mapped_column(String(2048), nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(postgresql.JSONB(), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    revoked_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    __table_args__ = (
+        Index("ix_oauth_provider_grant_user_created", "user_id", "created_at"),
+    )
+
+
+class OAuthProviderToken(Base):
+    __tablename__ = "oauth_provider_token"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    grant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("oauth_provider_grant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind: Mapped[Literal["access", "refresh"]] = mapped_column(
+        String(7), nullable=False
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    consumed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('access', 'refresh')", name="ck_oauth_provider_token_kind"
+        ),
+    )
+
+
 class Notification(Base):
     __tablename__ = "notification"
 
@@ -982,8 +1037,39 @@ class ConnectorCredentialPair(Base):
         Enum(IndexingMode, native_enum=False), nullable=True
     )
 
+    # A pending prune the pruning beat runs once, even without prune_freq.
+    # Cleared only by a prune dispatched after this time was set.
+    prune_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # A pending prune to request once a full re-index on the current search
+    # settings succeeds. While set, every new attempt there is a full re-index.
+    prune_after_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # A full re-index an edit requested. While set, every new attempt on the
+    # current search settings is a full re-index. Cleared when one succeeds.
+    full_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Set when the pair enters a perm-synced access type. While set, the pair
+    # grants no access at query time and the restricted guard hides its
+    # documents. Cleared once its permissions are in the document index.
+    perm_sync_pending_since: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Backfills an applied edit requested, oldest first. The indexing beat
+    # creates one at a time while the pair is ACTIVE and has no active attempt,
+    # and keeps each request until an attempt of it succeeds.
+    pending_backfills: Mapped[list[PendingBackfill]] = mapped_column(
+        PydanticListType(PendingBackfill),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+
     # Determines how documents are processed after fetching:
-    # REGULAR: Full pipeline (chunk → embed → Vespa)
+    # REGULAR: Full pipeline (chunk → embed → document index)
     # FILE_SYSTEM: Write to file system only (for CLI agent sandbox)
     processing_mode: Mapped[ProcessingMode] = mapped_column(
         Enum(ProcessingMode, native_enum=False),
@@ -1158,7 +1244,7 @@ class Document(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # Number of chunks in the document (in Vespa)
+    # Number of chunks in the document (in the document index)
     # Only null for documents indexed prior to this change
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -1167,13 +1253,13 @@ class Document(Base):
     # Null for documents indexed before this column was added.
     content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # last time any vespa relevant row metadata or the doc changed.
+    # last time any document-index-relevant row metadata or the doc changed.
     # does not include last_synced
     last_modified: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True, default=func.now()
     )
 
-    # last successful sync to vespa
+    # last successful sync to the document index
     last_synced: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
@@ -1270,121 +1356,6 @@ class Document(Base):
             "id",
             postgresql_where=text("secondary_only_sync_pending IS TRUE"),
         ),
-    )
-
-
-class OpenSearchDocumentMigrationRecord(Base):
-    """Tracks the migration status of documents from Vespa to OpenSearch.
-
-    This table can be dropped when the migration is complete for all Onyx
-    instances.
-    """
-
-    __tablename__ = "opensearch_document_migration_record"
-
-    document_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("document.id", ondelete="CASCADE"),
-        primary_key=True,
-        nullable=False,
-        index=True,
-    )
-    status: Mapped[OpenSearchDocumentMigrationStatus] = mapped_column(
-        Enum(OpenSearchDocumentMigrationStatus, native_enum=False),
-        default=OpenSearchDocumentMigrationStatus.PENDING,
-        nullable=False,
-        index=True,
-    )
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    attempts_count: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False, index=True
-    )
-    last_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-        index=True,
-    )
-
-    document: Mapped["Document"] = relationship("Document")
-
-
-class OpenSearchTenantMigrationRecord(Base):
-    """Tracks the state of the OpenSearch migration for a tenant.
-
-    Should only contain one row.
-
-    This table can be dropped when the migration is complete for all Onyx
-    instances.
-    """
-
-    __tablename__ = "opensearch_tenant_migration_record"
-    __table_args__ = (
-        # Singleton pattern - unique index on constant ensures only one row.
-        Index("idx_opensearch_tenant_migration_singleton", text("(true)"), unique=True),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
-    document_migration_record_table_population_status: Mapped[
-        OpenSearchTenantMigrationStatus
-    ] = mapped_column(
-        Enum(OpenSearchTenantMigrationStatus, native_enum=False),
-        default=OpenSearchTenantMigrationStatus.PENDING,
-        nullable=False,
-    )
-    num_times_observed_no_additional_docs_to_populate_migration_table: Mapped[int] = (
-        mapped_column(Integer, default=0, nullable=False)
-    )
-    overall_document_migration_status: Mapped[OpenSearchTenantMigrationStatus] = (
-        mapped_column(
-            Enum(OpenSearchTenantMigrationStatus, native_enum=False),
-            default=OpenSearchTenantMigrationStatus.PENDING,
-            nullable=False,
-        )
-    )
-    num_times_observed_no_additional_docs_to_migrate: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
-        nullable=False,
-    )
-    last_updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-    # Opaque continuation token from Vespa's Visit API.
-    # NULL means "not started".
-    # Otherwise contains a serialized mapping between slice ID and continuation
-    # token for that slice.
-    vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    total_chunks_migrated: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    total_chunks_errored: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    total_chunks_in_vespa: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    migration_completed_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    enable_opensearch_retrieval: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    approx_chunk_count_in_vespa: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
     )
 
 
@@ -2325,12 +2296,13 @@ class SearchSettings(Base):
         postgresql.ARRAY(Integer), nullable=True
     )
 
-    # allows for quantization -> less memory usage for a small performance hit.
-    # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
-    # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
-    embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
-        Enum(EmbeddingPrecision, native_enum=False),
-        default=EmbeddingPrecision.FLOAT,
+    # OpenSearch scalar quantization of the vector fields. Part of the index
+    # mapping, so it is fixed for the life of this row's index.
+    vector_quantization: Mapped[VectorQuantization] = mapped_column(
+        Enum(VectorQuantization, native_enum=False),
+        nullable=False,
+        default=VectorQuantization.NONE,
+        server_default=VectorQuantization.NONE.name,
     )
 
     # can be used to reduce dimensionality of vectors and save memory with
@@ -2592,6 +2564,27 @@ class IndexAttempt(Base):
     is_synthetic_seed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # A one-off run over the fixed window poll_range_start..poll_range_end,
+    # set at creation. It is a full run for concurrency, but stays out of the
+    # incremental cursor, checkpoint reuse, and the pair's status and schedule.
+    is_backfill: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # The config a backfill runs with in place of the connector's saved config
+    # (e.g. a config limited to newly included items). NULL runs the saved config.
+    connector_config_override: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    # The pair's prune_after_reindex_requested_at this full re-index serves,
+    # copied at creation. Success turns it into a prune request.
+    prune_after_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # The pair's full_reindex_requested_at this full re-index serves, copied at
+    # creation. Success clears it on the pair.
+    full_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)
     )
@@ -2621,6 +2614,11 @@ class IndexAttempt(Base):
     # Points to the last checkpoint that was saved for this run. The pointer here
     # can be taken to the FileStore to grab the actual checkpoint value
     checkpoint_pointer: Mapped[str | None] = mapped_column(String, nullable=True)
+    # sha256 of the connector config this attempt ran with (see
+    # compute_connector_config_hash). A later attempt does not reuse this
+    # attempt's checkpoint or poll window if the hashes differ. NULL on attempts
+    # created before this column existed; a NULL hash never blocks reuse.
+    connector_config_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Database-based coordination fields (replacing Redis fencing)
     celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -3319,11 +3317,10 @@ class ChatMessage(Base):
         ForeignKey("chat_message.id"), nullable=True
     )
 
-    # Only set on summary messages - the ID of the last message included in this summary
-    # Used for chat history compression
-    last_summarized_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="SET NULL"),
-        nullable=True,
+    # Set on summary messages: the ID of the last covered message. `chat:<id>`
+    # covers the whole chat message with that row ID.
+    last_summarized_message_id: Mapped[str | None] = mapped_column(
+        String, nullable=True
     )
 
     # For multi-model turns: the user message points to which assistant response
@@ -3731,6 +3728,11 @@ class ModelConfiguration(Base):
     )
     temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Virtual entry delegating model selection to a routing layer.
+    is_router: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
@@ -3875,6 +3877,9 @@ class CloudEmbeddingProvider(Base):
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(EncryptedString())
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    vertex_config: Mapped[VertexEmbeddingConfigDict | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
 
     search_settings: Mapped[list["SearchSettings"]] = relationship(
         "SearchSettings",
@@ -4195,9 +4200,8 @@ class Persona(Base):
     __tablename__ = "persona"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Owner user. SET NULL (not CASCADE) so deleting a user orphans shared
-    # personas instead of destroying them; the delete flow soft-deletes the
-    # private ones first.
+    # Owner user. SET NULL (not CASCADE) so deleting a user orphans their
+    # personas for the admins instead of destroying them.
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
@@ -4811,6 +4815,10 @@ class SecuritySettings(Base):
     llm_custom_config_env_injection: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    # Lets synced connectors narrow document access to chosen user groups.
+    allow_connector_group_restrictions: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True, default=None
     )
@@ -4881,6 +4889,17 @@ class FileRecord(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # The legacy copy looks records up by object, once per copied file.
+    __table_args__ = (
+        Index("ix_file_record_bucket_name_object_key", "bucket_name", "object_key"),
+        # Staged connector uploads (see STAGED_FOR_CC_PAIR_METADATA_KEY).
+        Index(
+            "ix_file_record_staged_connector_files",
+            "created_at",
+            postgresql_where=text("file_metadata ? 'staged_for_cc_pair_id'"),
+        ),
     )
 
 
@@ -5106,9 +5125,32 @@ class UserGroup__ConnectorCredentialPair(Base):
         default=True,
         primary_key=True,
     )
+    role: Mapped[ConnectorManageRole] = mapped_column(
+        Enum(ConnectorManageRole, native_enum=False), nullable=False
+    )
 
     cc_pair: Mapped[ConnectorCredentialPair] = relationship(
         "ConnectorCredentialPair",
+    )
+
+
+class UserGroup__CCPairDataAccess(Base):
+    """Data-access groups of a cc-pair: groups whose members may read its
+    documents. For a PRIVATE pair, members see every document. For a
+    SYNC_RESTRICTED pair, members see only what the source's own permissions
+    allow. Separate from UserGroup__ConnectorCredentialPair, which scopes who
+    may manage the pair."""
+
+    __tablename__ = "user_group__cc_pair_data_access"
+
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
     )
 
 
@@ -5206,7 +5248,8 @@ class UserGroup(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
-    # whether or not changes to the UserGroup have been propagated to Vespa
+    # whether or not changes to the UserGroup have been propagated to the
+    # document index
     is_up_to_date: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # tell the sync job to clean up the group
     is_up_for_deletion: Mapped[bool] = mapped_column(
@@ -5685,6 +5728,22 @@ class PublicBase(DeclarativeBase):
     __abstract__ = True
 
 
+class OAuthProviderClient(PublicBase):
+    __tablename__ = "oauth_provider_client"
+    __table_args__ = ({"schema": "public"},)
+
+    client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_metadata: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_used_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
 # Strictly keeps track of the tenant that a given user will authenticate to.
 class UserTenantMapping(PublicBase):
     __tablename__ = "user_tenant_mapping"
@@ -5746,6 +5805,27 @@ class AvailableTenant(PublicBase):
     # A pooled tenant is bound to the shard it was built on and cannot be handed out
     # as living anywhere else.
     shard_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class TenantSchemaSnapshot(PublicBase):
+    """SQL dump of a shard's template schema at one head revision, written by the
+    rollout job. apply_snapshot builds a tenant schema from it instead of replaying
+    the migration chain. The newest two per shard are kept so the image being
+    replaced keeps its own snapshot until the rollout completes."""
+
+    __tablename__ = "tenant_schema_snapshot"
+    __table_args__ = (
+        UniqueConstraint("shard_name", "alembic_revision"),
+        {"schema": "public"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shard_name: Mapped[str] = mapped_column(String, nullable=False)
+    alembic_revision: Mapped[str] = mapped_column(String, nullable=False)
+    dump: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 # This is a mapping from tenant IDs to anonymous user paths
@@ -7411,7 +7491,8 @@ class GatedApp(Base):
             if self.external_app_id is not None
             else self.mcp_server_id
         )
-        assert tid is not None  # guaranteed by ck_gated_app_single_target
+        if tid is None:
+            raise ValueError("Gated app must have a target")
         return tid
 
     @property

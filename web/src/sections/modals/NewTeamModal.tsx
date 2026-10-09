@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,7 +16,6 @@ import {
   SvgCheckCircle,
   SvgOrganization,
   SvgPlus,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 export interface TenantByDomainResponse {
@@ -190,7 +190,7 @@ export default function NewTeamModal() {
                 disabled={isSubmitting}
                 onClick={handleRequestInvite}
                 width="full"
-                icon={isSubmitting ? SvgSimpleLoader : SvgArrowUp}
+                icon={isSubmitting ? IconLoader : SvgArrowUp}
               >
                 {isSubmitting
                   ? t("requestButton.pendingLabel")

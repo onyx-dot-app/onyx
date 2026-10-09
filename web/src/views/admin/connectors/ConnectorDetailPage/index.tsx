@@ -2,7 +2,7 @@
 
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { toast } from "@opal/layouts";
@@ -12,7 +12,7 @@ import {
   updateConnectorCredentialPairName,
   updateConnectorCredentialPairProperty,
 } from "@/lib/connector";
-import { credentialTemplates } from "@/lib/connectors/credentials";
+import { getCredentialSpec } from "@/lib/credentials/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Title from "@/components/ui/title";
 import { useRouter } from "next/navigation";
@@ -41,34 +41,29 @@ import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import * as Yup from "yup";
-import {
-  AlertCircle,
-  PlayIcon,
-  PauseIcon,
-  Trash2Icon,
-  RefreshCwIcon,
-} from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { IndexAttemptSnapshot } from "@/lib/types";
 import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
 import { timeAgo } from "@opal/time";
 import { useStatusChange } from "@/lib/connectors/ccPair/hooks";
 import { useReIndexModal } from "./ReIndexModal";
-import { Button } from "@opal/components";
-import { SvgSettings } from "@opal/icons";
+import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
+import {
+  SvgPauseCircle,
+  SvgPlayCircle,
+  SvgRefreshCw,
+  SvgSettings,
+  SvgTrash,
+} from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
+import { isPermSynced } from "@/lib/connectors/accessType";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -368,6 +363,66 @@ function Main({ ccPairId }: { ccPairId: number }) {
     indexing_start: indexingStart,
   } = ccPair.connector;
 
+  // The reason a row is disabled is its tooltip.
+  const reIndexBlocked = ccPair.indexing
+    ? t("manageMenu.reIndex.tooltip.indexing")
+    : ccPair.status === ConnectorCredentialPairStatus.PAUSED
+      ? t("manageMenu.reIndex.tooltip.paused")
+      : ccPair.status === ConnectorCredentialPairStatus.INVALID
+        ? t("manageMenu.reIndex.tooltip.invalid")
+        : undefined;
+  const manageItems: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "re-index",
+      icon: SvgRefreshCw,
+      title: t("manageMenu.reIndex.label"),
+      tooltip: reIndexBlocked,
+      disabled: reIndexBlocked !== undefined,
+      onSelect: showReIndexModal,
+    },
+    ...(!isDeleting
+      ? [
+          {
+            kind: "action" as const,
+            id: "toggle-status",
+            icon: statusIsNotCurrentlyActive(ccPair.status)
+              ? SvgPlayCircle
+              : SvgPauseCircle,
+            title: statusIsNotCurrentlyActive(ccPair.status)
+              ? t("manageMenu.toggleStatus.resume.label")
+              : t("manageMenu.toggleStatus.pause.label"),
+            tooltip: isStatusUpdating
+              ? t("manageMenu.toggleStatus.tooltip.updating")
+              : undefined,
+            disabled: isStatusUpdating,
+            onSelect: () =>
+              handleStatusUpdate(
+                statusIsNotCurrentlyActive(ccPair.status)
+                  ? ConnectorCredentialPairStatus.ACTIVE
+                  : ConnectorCredentialPairStatus.PAUSED
+              ),
+          },
+        ]
+      : []),
+    ...(!isDeleting && can(ccPair, "delete")
+      ? [
+          {
+            kind: "action" as const,
+            id: "delete",
+            icon: SvgTrash,
+            danger: true,
+            title: t("manageMenu.delete.label"),
+            tooltip: !statusIsNotCurrentlyActive(ccPair.status)
+              ? t("manageMenu.delete.tooltip.active")
+              : undefined,
+            disabled: !statusIsNotCurrentlyActive(ccPair.status),
+            onSelect: () => setShowDeleteConnectorConfirmModal(true),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
       {showIsResolvingKickoffLoader && !isResolvingErrors && <Spinner />}
@@ -473,99 +528,25 @@ function Main({ ccPairId }: { ccPairId: number }) {
         <div className="ms-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 me-4">
           <EditableStringFieldDisplay
             value={ccPair.name}
-            isEditable={can(ccPair, "edit")}
+            isEditable={can(ccPair, "operate")}
             onUpdate={handleUpdateName}
             scale={2.1}
           />
         </div>
 
         <div className="ms-auto flex gap-x-2">
-          {can(ccPair, "edit") && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+          {can(ccPair, "operate") && (
+            <Dropdown>
+              <Dropdown.Trigger asChild>
                 <Button prominence="secondary" icon={SvgSettings}>
                   {t("manageMenu.trigger.label")}
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItemWithTooltip
-                  onClick={() => {
-                    if (
-                      !ccPair.indexing &&
-                      ccPair.status !== ConnectorCredentialPairStatus.PAUSED &&
-                      ccPair.status !== ConnectorCredentialPairStatus.INVALID
-                    ) {
-                      showReIndexModal();
-                    }
-                  }}
-                  disabled={
-                    ccPair.indexing ||
-                    ccPair.status === ConnectorCredentialPairStatus.PAUSED ||
-                    ccPair.status === ConnectorCredentialPairStatus.INVALID
-                  }
-                  className="flex items-center gap-x-2 cursor-pointer px-3 py-2"
-                  tooltip={
-                    ccPair.indexing
-                      ? t("manageMenu.reIndex.tooltip.indexing")
-                      : ccPair.status === ConnectorCredentialPairStatus.PAUSED
-                        ? t("manageMenu.reIndex.tooltip.paused")
-                        : ccPair.status ===
-                            ConnectorCredentialPairStatus.INVALID
-                          ? t("manageMenu.reIndex.tooltip.invalid")
-                          : undefined
-                  }
-                >
-                  <RefreshCwIcon className="h-4 w-4" />
-                  <span>{t("manageMenu.reIndex.label")}</span>
-                </DropdownMenuItemWithTooltip>
-                {!isDeleting && (
-                  <DropdownMenuItemWithTooltip
-                    onClick={() =>
-                      handleStatusUpdate(
-                        statusIsNotCurrentlyActive(ccPair.status)
-                          ? ConnectorCredentialPairStatus.ACTIVE
-                          : ConnectorCredentialPairStatus.PAUSED
-                      )
-                    }
-                    disabled={isStatusUpdating}
-                    className="flex items-center gap-x-2 cursor-pointer px-3 py-2"
-                    tooltip={
-                      isStatusUpdating
-                        ? t("manageMenu.toggleStatus.tooltip.updating")
-                        : undefined
-                    }
-                  >
-                    {statusIsNotCurrentlyActive(ccPair.status) ? (
-                      <PlayIcon className="h-4 w-4" />
-                    ) : (
-                      <PauseIcon className="h-4 w-4" />
-                    )}
-                    <span>
-                      {statusIsNotCurrentlyActive(ccPair.status)
-                        ? t("manageMenu.toggleStatus.resume.label")
-                        : t("manageMenu.toggleStatus.pause.label")}
-                    </span>
-                  </DropdownMenuItemWithTooltip>
-                )}
-                {!isDeleting && can(ccPair, "delete") && (
-                  <DropdownMenuItemWithTooltip
-                    onClick={() => {
-                      setShowDeleteConnectorConfirmModal(true);
-                    }}
-                    disabled={!statusIsNotCurrentlyActive(ccPair.status)}
-                    className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    tooltip={
-                      !statusIsNotCurrentlyActive(ccPair.status)
-                        ? t("manageMenu.delete.tooltip.active")
-                        : undefined
-                    }
-                  >
-                    <Trash2Icon className="h-4 w-4" />
-                    <span>{t("manageMenu.delete.label")}</span>
-                  </DropdownMenuItemWithTooltip>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("manageMenu.trigger.label")}
+                items={manageItems}
+              />
+            </Dropdown>
           )}
         </div>
       </div>
@@ -666,7 +647,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             </div>
           </div>
 
-          {ccPair.access_type === "sync" && (
+          {isPermSynced(ccPair.access_type) && (
             <>
               <div className="w-[200px]">
                 {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
@@ -704,7 +685,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
       </Card>
 
-      {credentialTemplates[ccPair.connector.source] && can(ccPair, "edit") && (
+      {getCredentialSpec(ccPair.connector.source) && can(ccPair, "edit") && (
         <>
           <Title size="md" className="mt-10 mb-2">
             {t("sections.credential.title")}
@@ -771,10 +752,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
                       refreshFreq={refreshFreq}
                       // No handler => no pencil, matching the rest of this page's edits.
                       onRefreshEdit={
-                        can(ccPair, "edit") ? handleRefreshEdit : undefined
+                        can(ccPair, "operate") ? handleRefreshEdit : undefined
                       }
                       onPruningEdit={
-                        can(ccPair, "edit") ? handlePruningEdit : undefined
+                        can(ccPair, "operate") ? handlePruningEdit : undefined
                       }
                     />
                   </div>
@@ -783,7 +764,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             )}
 
             {indexAttempts &&
-              (ccPair.access_type === "sync" ? (
+              (isPermSynced(ccPair.access_type) ? (
                 <Section height="auto" alignItems="stretch" className="mt-6">
                   <SyncAttemptsTabs
                     ccPair={ccPair}

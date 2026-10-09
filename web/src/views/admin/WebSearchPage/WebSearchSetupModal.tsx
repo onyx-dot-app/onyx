@@ -1,9 +1,10 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { Formik, Form } from "formik";
 import { useTranslations } from "next-intl";
 import * as Yup from "yup";
-import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
@@ -153,12 +154,17 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
   });
 
   async function mutate() {
+    // Providers whose key the backend syncs to the other side need both lists
+    // refreshed so the sibling card leaves the disconnected state.
+    const syncsSiblingSide = ["exa", "tavily", "firecrawl"].includes(
+      providerType
+    );
     if (category === "search") {
       await mutateSearchProviders();
-      if (providerType === "exa") await mutateContentProviders();
+      if (syncsSiblingSide) await mutateContentProviders();
     } else {
       await mutateContentProviders();
-      if (providerType === "exa") await mutateSearchProviders();
+      if (syncsSiblingSide) await mutateSearchProviders();
     }
   }
 
@@ -257,7 +263,7 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
                   disabled={
                     (!hasNoFields && (!dirty || !isValid)) || isSubmitting
                   }
-                  icon={isSubmitting ? SvgSimpleLoader : undefined}
+                  icon={isSubmitting ? IconLoader : undefined}
                 >
                   {isEditing
                     ? t("setupModal.updateButton.label")

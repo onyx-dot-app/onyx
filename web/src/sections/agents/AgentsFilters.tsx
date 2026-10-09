@@ -28,12 +28,14 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { FilterButton, LineItemButton } from "@opal/components";
+import {
+  Dropdown,
+  FilterButton,
+  type DropdownItem,
+  type DropdownOption,
+} from "@opal/components";
 import { SvgActions, SvgUser } from "@opal/icons";
-import { Popover, PopoverMenu } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import useFilter from "@/hooks/useFilter";
-import { useAdminMcpServers } from "@/lib/tools/hooks";
+import { useAdminMcpServers } from "@/lib/mcp/hooks";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";
@@ -144,8 +146,6 @@ export function useAgentsFilters<T extends MinimalAgent>(
     return creators;
   }, [usersData, user]);
 
-  const creatorFilter = useFilter(uniqueCreators, (c) => c.email);
-
   // -- Actions filter data ---------------------------------------------------
 
   /**
@@ -207,8 +207,6 @@ export function useAgentsFilters<T extends MinimalAgent>(
 
     return [...systemItems, ...mcpItems, ...otherItems];
   }, [allTools, mcpServerNames]);
-
-  const actionsFilter = useFilter(uniqueActions, (a) => a.name);
 
   // -- Derived selection sets ------------------------------------------------
 
@@ -287,11 +285,56 @@ export function useAgentsFilters<T extends MinimalAgent>(
 
   // -- filterBar node --------------------------------------------------------
 
+  const toggleIn =
+    (setSelected: React.Dispatch<React.SetStateAction<Set<string>>>) =>
+    (key: string) =>
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+  const toggleCreator = toggleIn(setSelectedCreatorIds);
+  const toggleAction = toggleIn(setSelectedActionKeys);
+
+  // Rows for the pickers. The list's own search filters them; system tools
+  // sit in a group of their own, above the rest.
+  const creatorItems: DropdownItem[] = uniqueCreators.map((creator) => ({
+    kind: "option",
+    value: creator.id,
+    icon: SvgUser,
+    title: creator.email,
+    description:
+      user != null && creator.id === user.id
+        ? t("filters.creator.me.description")
+        : undefined,
+  }));
+  const actionOption = (action: ActionFilterItem): DropdownOption => ({
+    kind: "option",
+    value: actionFilterKey(action),
+    icon:
+      action.type === "tool" && action.systemIcon
+        ? action.systemIcon
+        : SvgActions,
+    title: action.name,
+  });
+  const systemActions = uniqueActions.filter(isSystemTool);
+  const otherActions = uniqueActions.filter((a) => !isSystemTool(a));
+  const actionItems: DropdownItem[] = [];
+  if (systemActions.length > 0 && otherActions.length > 0) {
+    actionItems.push(
+      { kind: "group", items: systemActions.map(actionOption) },
+      { kind: "group", items: otherActions.map(actionOption) }
+    );
+  } else {
+    actionItems.push(...uniqueActions.map(actionOption));
+  }
+
   const filterBar = (
     <>
       {/* Created By filter */}
-      <Popover>
-        <Popover.Trigger asChild>
+      <Dropdown>
+        <Dropdown.Trigger asChild>
           <FilterButton
             icon={SvgUser}
             active={selectedCreatorIds.size > 0}
@@ -299,58 +342,19 @@ export function useAgentsFilters<T extends MinimalAgent>(
           >
             {creatorFilterButtonText}
           </FilterButton>
-        </Popover.Trigger>
-        <Popover.Content align="start">
-          <PopoverMenu>
-            {[
-              <InputTypeIn
-                key="created-by"
-                placeholder={t("filters.creator.search.placeholder")}
-                variant="internal"
-                searchIcon
-                value={creatorFilter.query}
-                onChange={(e) => creatorFilter.setQuery(e.target.value)}
-              />,
-              ...creatorFilter.filtered.map((creator) => {
-                const isSelected = selectedCreatorIds.has(creator.id);
-                const isCurrentUser = user != null && creator.id === user.id;
-
-                return (
-                  <LineItemButton
-                    key={creator.id}
-                    sizePreset="main-ui"
-                    rounding={2}
-                    selectVariant="select-heavy"
-                    icon={SvgUser}
-                    title={creator.email}
-                    description={
-                      isCurrentUser
-                        ? t("filters.creator.me.description")
-                        : undefined
-                    }
-                    state={isSelected ? "selected" : "empty"}
-                    onClick={() => {
-                      setSelectedCreatorIds((prev) => {
-                        const newSet = new Set(prev);
-                        if (newSet.has(creator.id)) {
-                          newSet.delete(creator.id);
-                        } else {
-                          newSet.add(creator.id);
-                        }
-                        return newSet;
-                      });
-                    }}
-                  />
-                );
-              }),
-            ]}
-          </PopoverMenu>
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={creatorFilterButtonText}
+          search={{ placeholder: t("filters.creator.search.placeholder") }}
+          values={selectedCreatorIds}
+          onSelect={(option) => toggleCreator(option.value)}
+          items={creatorItems}
+        />
+      </Dropdown>
 
       {/* Actions filter */}
-      <Popover>
-        <Popover.Trigger asChild>
+      <Dropdown>
+        <Dropdown.Trigger asChild>
           <FilterButton
             icon={SvgActions}
             active={selectedActionKeys.size > 0}
@@ -358,62 +362,15 @@ export function useAgentsFilters<T extends MinimalAgent>(
           >
             {actionsFilterButtonText}
           </FilterButton>
-        </Popover.Trigger>
-        <Popover.Content align="start">
-          <PopoverMenu>
-            {[
-              <InputTypeIn
-                key="actions"
-                placeholder={t("filters.actions.search.placeholder")}
-                variant="internal"
-                searchIcon
-                value={actionsFilter.query}
-                onChange={(e) => actionsFilter.setQuery(e.target.value)}
-              />,
-              ...actionsFilter.filtered.flatMap((action, index) => {
-                const key = actionFilterKey(action);
-                const isSelected = selectedActionKeys.has(key);
-                const icon =
-                  action.type === "tool" && action.systemIcon
-                    ? action.systemIcon
-                    : SvgActions;
-
-                // Separator between system tools and the rest
-                const nextAction = actionsFilter.filtered[index + 1];
-                const needsSeparator =
-                  isSystemTool(action) &&
-                  nextAction &&
-                  !isSystemTool(nextAction);
-
-                const lineItem = (
-                  <LineItemButton
-                    key={key}
-                    sizePreset="main-ui"
-                    rounding={2}
-                    selectVariant="select-heavy"
-                    icon={icon}
-                    title={action.name}
-                    state={isSelected ? "selected" : "empty"}
-                    onClick={() => {
-                      setSelectedActionKeys((prev) => {
-                        const newSet = new Set(prev);
-                        if (newSet.has(key)) {
-                          newSet.delete(key);
-                        } else {
-                          newSet.add(key);
-                        }
-                        return newSet;
-                      });
-                    }}
-                  />
-                );
-
-                return needsSeparator ? [lineItem, null] : [lineItem];
-              }),
-            ]}
-          </PopoverMenu>
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={actionsFilterButtonText}
+          search={{ placeholder: t("filters.actions.search.placeholder") }}
+          values={selectedActionKeys}
+          onSelect={(option) => toggleAction(option.value)}
+          items={actionItems}
+        />
+      </Dropdown>
     </>
   );
 

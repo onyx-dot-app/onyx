@@ -214,7 +214,8 @@ the database. The state container can be added to by any of the underlying layer
 ### Stopping Generation
 
 The drain loop in `_run_models` checks `check_is_connected()` every 50 ms (on queue timeout). The signal itself
-is stored in Redis and is set by the user calling the stop endpoint. On disconnect, the drain loop saves
+is stored in the shared cache, keyed by session and stream ID, and is set by the user calling the stop endpoint.
+A late Stop request for an earlier stream cannot stop a later stream in the same session. On disconnect, the drain loop saves
 partial state for every model, yields an `OverallStop(stop_reason="user_cancelled")` packet, and returns.
 A `drain_done` event signals emitters to stop blocking so worker threads can exit quickly. Workers that
 already completed successfully will self-complete (persist their response) if the drain loop exited before
@@ -247,5 +248,5 @@ tool calls and returns that to the LLM Loop to execute.
   1. **ChatMessage** — The database model. Should be converted into ChatMessageSimple early and never passed deep into the flow.
   2. **ChatMessageSimple** — The canonical data model used throughout the codebase. This is the rich, full-featured representation
      of a message. Any modifications or additions to message structure should be made here.
-  3. **LanguageModelInput** — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
+  3. **ChatCompletionMessage** (`onyx.llm.model_request`) — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
      easy to maintain/extend.

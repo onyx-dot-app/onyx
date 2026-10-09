@@ -3,12 +3,12 @@
 import * as Yup from "yup";
 import {
   Button,
+  Dropdown,
   InputTypeIn,
-  LineItemButton,
   Modal,
-  Popover,
   SelectCard,
   Text,
+  type DropdownItem,
 } from "@opal/components";
 import React, { useRef } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -66,6 +66,8 @@ function handleRadioOptionKeyDown(
   ) {
     return;
   }
+  // A dropdown trigger on the card may have taken the arrow for its list.
+  if (event.defaultPrevented) return;
   event.preventDefault();
   const group = event.currentTarget.closest('[role="radiogroup"]');
   const options = Array.from(
@@ -106,12 +108,13 @@ function ScopeOption({
       state={selected ? "selected" : "empty"}
       padding={2}
       rounding={2}
+      ref={ref}
+      {...rest}
+      // The card is a radio whatever a dropdown trigger spreads onto it.
       role="radio"
       aria-checked={selected}
       aria-label={option.title}
       tabIndex={selected ? 0 : -1}
-      ref={ref}
-      {...rest}
       onClick={(event) => {
         rest.onClick?.(event);
         onSelect();
@@ -151,46 +154,49 @@ interface GroupScopeOptionProps {
   onSelectGroup: (groupId: number) => void;
 }
 
-interface GroupMenuContentProps {
+interface GroupMenuProps {
   groups: { name: string; value: number }[];
   selectedGroupId: number | undefined;
   onSelectGroup: (groupId: number) => void;
 }
 
-function GroupMenuContent({
-  groups,
-  selectedGroupId,
-  onSelectGroup,
-}: GroupMenuContentProps) {
+/** The group rows, or one disabled row saying there are none. */
+function useGroupItems(groups: GroupMenuProps["groups"]): DropdownItem[] {
   const t = useTranslations("admin.tokenRateLimits");
+  if (groups.length === 0) {
+    return [
+      {
+        kind: "custom",
+        id: "empty",
+        disabled: true,
+        render: ({ props }) => (
+          <div {...props} className="p-2">
+            <Text font="secondary-body" color="text-03" as="p">
+              {t("modal.groupMenu.empty")}
+            </Text>
+          </div>
+        ),
+      },
+    ];
+  }
+  return groups.map((group) => ({
+    kind: "option",
+    value: String(group.value),
+    title: group.name,
+  }));
+}
 
+/** The list under either trigger: picks a group by id. */
+function GroupMenu({ groups, selectedGroupId, onSelectGroup }: GroupMenuProps) {
+  const t = useTranslations("admin.tokenRateLimits");
+  const items = useGroupItems(groups);
   return (
-    <Popover.Content align="start" side="bottom" width="lg">
-      <Popover.Menu>
-        {groups.length === 0
-          ? [
-              <div className="p-2" key="empty">
-                <Text font="secondary-body" color="text-03" as="p">
-                  {t("modal.groupMenu.empty")}
-                </Text>
-              </div>,
-            ]
-          : groups.map((group) => (
-              <Popover.Close asChild key={group.value}>
-                <LineItemButton
-                  onClick={() => onSelectGroup(group.value)}
-                  rounding={3}
-                  selectVariant="select-heavy"
-                  sizePreset="main-ui"
-                  state={group.value === selectedGroupId ? "selected" : "empty"}
-                  title={group.name}
-                  variant="section"
-                  width="full"
-                />
-              </Popover.Close>
-            ))}
-      </Popover.Menu>
-    </Popover.Content>
+    <Dropdown.Data
+      label={t("modal.groupPicker.placeholder")}
+      value={selectedGroupId === undefined ? "" : String(selectedGroupId)}
+      onSelect={(option) => onSelectGroup(Number(option.value))}
+      items={items}
+    />
   );
 }
 
@@ -203,20 +209,20 @@ function GroupScopeOption({
   onSelectGroup,
 }: GroupScopeOptionProps) {
   return (
-    <Popover>
-      <Popover.Trigger asChild>
+    <Dropdown>
+      <Dropdown.Trigger asChild>
         <ScopeOption
           option={option}
           selected={selected}
           onSelect={onSelectScope}
         />
-      </Popover.Trigger>
-      <GroupMenuContent
+      </Dropdown.Trigger>
+      <GroupMenu
         groups={groups}
         selectedGroupId={selectedGroupId}
         onSelectGroup={onSelectGroup}
       />
-    </Popover>
+    </Dropdown>
   );
 }
 
@@ -308,18 +314,18 @@ function GroupPicker({
   const selectedGroup = groups.find((group) => group.value === selectedGroupId);
 
   return (
-    <Popover>
-      <Popover.Trigger asChild>
+    <Dropdown>
+      <Dropdown.Trigger asChild>
         <Button prominence="secondary" width="full">
           {selectedGroup?.name ?? t("modal.groupPicker.placeholder")}
         </Button>
-      </Popover.Trigger>
-      <GroupMenuContent
+      </Dropdown.Trigger>
+      <GroupMenu
         groups={groups}
         selectedGroupId={selectedGroupId}
         onSelectGroup={onSelectGroup}
       />
-    </Popover>
+    </Dropdown>
   );
 }
 

@@ -1,11 +1,15 @@
 "use client";
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { useSWRConfig } from "swr";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
-import { PageLoader } from "@opal/layouts";
+import useSWR, { useSWRConfig } from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import {
+  useAdminLanguageModel,
+  useAdminLanguageModels,
+} from "@/lib/languageModels/hooks";
+import { PageLoader } from "@opal/loaders";
 import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
   Button,
@@ -15,24 +19,32 @@ import {
   InputSwitch,
   Text,
   Card,
+  OnyxLoader,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { getProvider } from "@/lib/languageModels";
+import { getProvider } from "@/lib/languageModels/utils";
 import {
   refreshLlmProviderCaches,
   setDefaultLlmModelAndRefresh,
 } from "@/lib/languageModels/cache";
-import { deleteLlmProvider } from "@/lib/languageModels/svc";
+import {
+  deleteLlmProvider,
+  updateModelRouting,
+} from "@/lib/languageModels/svc";
 import { buildLlmOptions, groupLlmOptions } from "@/lib/languageModels/options";
 import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
+import {
+  filterModelConfigurations,
+  findLlmOptionById,
+} from "@/lib/languageModels/options";
 import { useSettings } from "@/lib/settings/hooks";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
@@ -85,6 +97,29 @@ function ExistingProviderCard({
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
+  // The listing holds one page of models and the edit modal needs them all,
+  // so a provider with more is loaded whole before the modal opens.
+  const isPaged = provider.next_model_configuration_offset != null;
+  const { llmProvider: fetchedProvider, error: fullProviderError } =
+    useAdminLanguageModel(isOpen && isPaged ? provider.id : null);
+  const fullProvider = isPaged ? fetchedProvider : provider;
+  useEffect(() => {
+    if (!fullProviderError) return;
+    toast.error(
+      t("toasts.providerLoadFailed", {
+        message:
+          fullProviderError instanceof Error
+            ? fullProviderError.message
+            : t("toasts.unknownError"),
+      })
+    );
+    setIsOpen(false);
+    // Drop the cached failure so the next open fetches again instead of
+    // replaying it.
+    void mutate(SWR_KEYS.adminLlmProvider(provider.id), undefined, {
+      revalidate: false,
+    });
+  }, [fullProviderError, provider.id, mutate, t]);
 
   const handleDelete = async () => {
     try {
@@ -102,8 +137,8 @@ function ExistingProviderCard({
 
   return (
     <>
-      {isOpen && (
-        <Modal existingLlmProvider={provider} onOpenChange={setIsOpen} />
+      {isOpen && fullProvider && (
+        <Modal existingLlmProvider={fullProvider} onOpenChange={setIsOpen} />
       )}
 
       {deleteModal.isOpen && (
@@ -336,8 +371,17 @@ export default function LanguageModelsPage() {
   const [pendingHideGrouping, setPendingHideGrouping] = useState<
     boolean | null
   >(null);
-  const { llmProviders: existingLlmProviders, defaultText } =
-    useAdminLLMProviders();
+  const [pendingRoutingEnabled, setPendingRoutingEnabled] = useState<
+    boolean | null
+  >(null);
+  const [pendingRoutingTarget, setPendingRoutingTarget] = useState<
+    number | null
+  >(null);
+  const {
+    llmProviders: existingLlmProviders,
+    defaultText,
+    modelPaging,
+  } = useAdminLanguageModels();
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );
@@ -349,7 +393,27 @@ export default function LanguageModelsPage() {
     [existingLlmProviders]
   );
 
-  // Resolve the current default to a model_configuration_id for ModelSelector
+  // Includes hidden and persona-restricted routers, unlike the paged listings.
+  const {
+    data: routerProviders,
+    error: routerProvidersError,
+    mutate: mutateRouterProviders,
+  } = useSWR<LLMProviderView[]>(
+    SWR_KEYS.llmRouterModels,
+    async (url: string) => {
+      const providers = await errorHandlingFetcher<LLMProviderView[]>(url);
+      return providers.map((provider) => ({
+        ...provider,
+        model_configurations: provider.model_configurations.map((mc) => ({
+          ...mc,
+          effectiveDisplayName:
+            mc.custom_display_name || mc.display_name || mc.name,
+        })),
+      }));
+    }
+  );
+
+  // Resolve the current default to a model_configuration_id for the select
   const defaultModelConfigId = useMemo(() => {
     if (!defaultText || !existingLlmProviders) return null;
     const provider = existingLlmProviders.find(
@@ -367,7 +431,9 @@ export default function LanguageModelsPage() {
       {
         id: "addProvider",
         title: t("groups.addProvider.title"),
-        description: t("groups.addProvider.description"),
+        description: t("groups.addProvider.description", {
+          appName: settings.appName,
+        }),
         emphasis: true,
         providerNames: [
           LLMProviderName.OPENAI,
@@ -400,7 +466,7 @@ export default function LanguageModelsPage() {
         includeCustom: true,
       },
     ],
-    [t]
+    [t, settings.appName]
   );
 
   if (!existingLlmProviders) {
@@ -455,6 +521,47 @@ export default function LanguageModelsPage() {
     }
   }
 
+  const routingEnabled =
+    pendingRoutingEnabled ?? settings.model_routing_enabled ?? false;
+
+  async function handleRoutingEnabledChange(checked: boolean) {
+    if (pendingRoutingEnabled !== null) return;
+    setPendingRoutingEnabled(checked);
+    try {
+      await updateModelRouting({ model_routing_enabled: checked });
+      await mutate(SWR_KEYS.settings);
+      toast.success(t("toasts.settingsUpdated"));
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
+      );
+    } finally {
+      setPendingRoutingEnabled(null);
+    }
+  }
+
+  async function handleRoutingTargetChange(modelConfigurationId: number) {
+    if (pendingRoutingTarget !== null) return;
+    setPendingRoutingTarget(modelConfigurationId);
+    try {
+      await updateModelRouting({
+        model_routing_model_configuration_id: modelConfigurationId,
+      });
+      // The backend may have flipped the router's visibility.
+      await Promise.all([
+        mutate(SWR_KEYS.settings),
+        refreshLlmProviderCaches(mutate),
+      ]);
+      toast.success(t("toasts.settingsUpdated"));
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
+      );
+    } finally {
+      setPendingRoutingTarget(null);
+    }
+  }
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -469,13 +576,27 @@ export default function LanguageModelsPage() {
             <Section alignItems="stretch">
               <InputHorizontal
                 title={t("defaultModel.title")}
-                description={t("defaultModel.description")}
+                description={t("defaultModel.description", {
+                  appName: settings.appName,
+                })}
                 center
                 withLabel
               >
-                <ModelSelector
+                <SimpleModelSelector
+                  providers={filterModelConfigurations(
+                    existingLlmProviders ?? [],
+                    { keep: defaultModelConfigId }
+                  )}
                   value={defaultModelConfigId}
-                  onChange={(opt) => {
+                  grouped={
+                    !(pendingHideGrouping ?? settings.hide_provider_grouping)
+                  }
+                  modelPaging={modelPaging}
+                  onChange={(modelConfigurationId) => {
+                    const opt = findLlmOptionById(
+                      existingLlmProviders,
+                      modelConfigurationId
+                    );
                     // Keyed on the model configuration id. Matching on provider
                     // type plus display name picks the first of several
                     // same-named providers — and nameless providers are the
@@ -484,17 +605,75 @@ export default function LanguageModelsPage() {
                     // also hosts a model of that name, so this failed silently.
                     const provider = findProviderOwningModelConfig(
                       existingLlmProviders,
-                      opt.modelConfigurationId
+                      modelConfigurationId
                     );
-                    if (provider) {
+                    if (provider && opt) {
                       void handleDefaultModelChange(
                         `${provider.id}:${opt.modelName}`
                       );
                     }
                   }}
-                  side="bottom"
                 />
               </InputHorizontal>
+              <InputHorizontal
+                title={t("modelRouting.autoMode.title")}
+                description={t("modelRouting.autoMode.description")}
+                withLabel
+              >
+                <InputSwitch
+                  checked={routingEnabled}
+                  disabled={pendingRoutingEnabled !== null}
+                  onCheckedChange={(checked) => {
+                    void handleRoutingEnabledChange(checked);
+                  }}
+                />
+              </InputHorizontal>
+              {routingEnabled && (
+                <InputHorizontal
+                  title={t("modelRouting.target.title")}
+                  description={t("modelRouting.target.description")}
+                  withLabel
+                >
+                  {routerProvidersError ? (
+                    <Section flexDirection="row" alignItems="center" gap={2}>
+                      <Text font="secondary-body" color="text-03">
+                        {t("modelRouting.target.error")}
+                      </Text>
+                      <Button
+                        prominence="tertiary"
+                        size="sm"
+                        onClick={() => void mutateRouterProviders()}
+                      >
+                        {t("modelRouting.target.retry")}
+                      </Button>
+                    </Section>
+                  ) : routerProviders === undefined ? (
+                    <OnyxLoader size={24} />
+                  ) : routerProviders.length > 0 ? (
+                    <SimpleModelSelector
+                      providers={routerProviders}
+                      value={
+                        pendingRoutingTarget ??
+                        settings.model_routing_model_configuration_id ??
+                        null
+                      }
+                      disabled={pendingRoutingTarget !== null}
+                      grouped={
+                        !(
+                          pendingHideGrouping ?? settings.hide_provider_grouping
+                        )
+                      }
+                      onChange={(modelConfigurationId) => {
+                        void handleRoutingTargetChange(modelConfigurationId);
+                      }}
+                    />
+                  ) : (
+                    <Text font="secondary-body" color="text-03">
+                      {t("modelRouting.target.empty")}
+                    </Text>
+                  )}
+                </InputHorizontal>
+              )}
               {hasProviderGrouping && (
                 <InputHorizontal
                   title={t("hideProviderGrouping.title")}
@@ -556,7 +735,6 @@ export default function LanguageModelsPage() {
           <MessageCard
             title={t("configurationDisabled.title")}
             description={t("configurationDisabled.description")}
-            headerPadding={1}
           />
         )}
 

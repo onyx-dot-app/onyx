@@ -1,10 +1,11 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { SvgExternalLink, SvgUsers, SvgSimpleLoader } from "@opal/icons";
+import { SvgExternalLink, SvgUsers } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -18,9 +19,11 @@ import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
+import { useSettings } from "@/lib/settings/hooks";
 
 function GroupsPage() {
   const t = useTranslations("admin.groups");
+  const { appName } = useSettings();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useUser();
@@ -57,7 +60,7 @@ function GroupsPage() {
           <MessageCard
             variant="info"
             title={t("permissionsChanged.title")}
-            description={t("permissionsChanged.description")}
+            description={t("permissionsChanged.description", { appName })}
             rightChildren={
               <Button
                 icon={SvgExternalLink}
@@ -91,7 +94,7 @@ function GroupsPage() {
           actionLabel={canCreateGroup ? t("list.newGroup.label") : undefined}
         />
 
-        {isLoading && <SvgSimpleLoader />}
+        {isLoading && <IconLoader />}
 
         {error && (
           <IllustrationContent

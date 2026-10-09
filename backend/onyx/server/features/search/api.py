@@ -50,6 +50,7 @@ from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.utils.fleet_query_telemetry import telemetry_query
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search")
@@ -65,6 +66,7 @@ router = APIRouter(prefix="/search")
     ],
     tags=PUBLIC_API_TAGS,
 )
+@telemetry_query(mode="search")
 def search(
     request: SearchRequest,
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
@@ -156,7 +158,7 @@ def search(
 
     # 4. Get document index
     search_settings = get_current_search_settings(db_session)
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     # 5. Get tool_id
     all_tools = get_tools(db_session)

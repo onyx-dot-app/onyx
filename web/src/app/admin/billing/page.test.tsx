@@ -71,6 +71,10 @@ jest.mock("./LicenseActivationCard", () => ({
   __esModule: true,
   default: () => <div data-testid="license-activation-card" />,
 }));
+jest.mock("./DowngradeToCommunityLink", () => ({
+  __esModule: true,
+  default: () => null,
+}));
 
 jest.mock("@opal/components", () => {
   const actual = jest.requireActual("@opal/components");

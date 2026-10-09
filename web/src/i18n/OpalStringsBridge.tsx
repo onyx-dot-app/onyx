@@ -21,6 +21,7 @@ export default function OpalStringsBridge({
     return {
       close: t("common.close"),
       loading: t("common.loading"),
+      settingsHeaderCancel: t("settingsHeader.cancel"),
       loadingPage: t("common.loadingPage"),
       copy: t("common.copy"),
       copied: t("common.copied"),
@@ -59,6 +60,13 @@ export default function OpalStringsBridge({
       valueCannotBeRevealed: t("input.valueCannotBeRevealed"),
       scrollTabsLeft: t("tabs.scrollLeft"),
       scrollTabsRight: t("tabs.scrollRight"),
+      collapsibleFold: t("collapsible.fold"),
+      collapsibleExpand: t("collapsible.expand"),
+      collapsibleFoldSection: (title) =>
+        t("collapsible.foldSection", { title }),
+      collapsibleExpandSection: (title) =>
+        t("collapsible.expandSection", { title }),
+      contentOptional: t("common.optional"),
       previousPage: t("pagination.previousPage"),
       nextPage: t("pagination.nextPage"),
       goToPage: t("pagination.goToPage"),
@@ -92,6 +100,8 @@ export default function OpalStringsBridge({
         t("comboBox.createOption", { prefix, value }),
       selectEmptySet: t("select.emptySet"),
       selectInvalidOption: t("select.invalidOption"),
+      selectSearchPlaceholder: t("select.searchPlaceholder"),
+      iconTooltipLabel: t("iconTooltip.label"),
       keyValueKey: t("keyValue.key"),
       keyValueValue: t("keyValue.value"),
       keyValueAddLine: t("keyValue.addLine"),

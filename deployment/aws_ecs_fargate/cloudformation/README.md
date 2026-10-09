@@ -47,7 +47,6 @@ The deployment follows this order:
 2. Service stacks:
    - Postgres
    - Redis
-   - Vespa Engine
    - Model Server (Indexing)
    - Model Server (Inference)
    - Backend API Server

@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import LanguageModelInput, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 
 
@@ -22,7 +22,6 @@ def _make_llm(
 ) -> LitellmLLM:
     return LitellmLLM(
         api_key="vck-test-key",
-        timeout=30,
         model_provider=LlmProviderNames.VERCEL_AI_GATEWAY,
         model_name=model_name,
         max_input_tokens=200_000,
@@ -33,8 +32,8 @@ def _make_llm(
 def _completion_kwargs(llm: LitellmLLM) -> dict:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages))
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
+        list(llm.stream_raw(messages))
         return dict(mock_completion.call_args.kwargs)
 
 

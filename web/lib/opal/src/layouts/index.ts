@@ -31,6 +31,13 @@ export {
   type InputPadderProps,
 } from "@opal/layouts/inputs/components";
 
+/* StickyBox */
+export {
+  StickyBox,
+  type StickyBoxProps,
+  type StickyEdge,
+} from "@opal/layouts/sticky-box/components";
+
 /* IllustrationContent */
 export {
   IllustrationContent,
@@ -103,8 +110,8 @@ export {
   type ConfirmationModalProps,
 } from "@opal/layouts/modal/components";
 
-/* PageLoader */
+/* PageCenter */
 export {
-  PageLoader,
-  type PageLoaderProps,
-} from "@opal/layouts/page-loader/components";
+  PageCenter,
+  type PageCenterProps,
+} from "@opal/layouts/page-center/components";

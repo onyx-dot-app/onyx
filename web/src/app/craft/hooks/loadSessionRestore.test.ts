@@ -58,10 +58,33 @@ describe("loadSession restore status", () => {
     mockedApi.fetchMessages.mockResolvedValue([] as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
     mockedApi.fetchArtifacts.mockResolvedValue([] as never);
+    mockedApi.fetchOutputInventory.mockResolvedValue({
+      files: [],
+      complete: true,
+    });
     // Default: webapp already serving, so the readiness gate is a no-op.
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, true) as never
     );
+  });
+
+  it("loads the session while its inventory is still pending", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    const inventory =
+      deferred<Awaited<ReturnType<typeof api.fetchOutputInventory>>>();
+    mockedApi.fetchOutputInventory.mockReturnValueOnce(inventory.promise);
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      isLoaded: true,
+      outputInventory: null,
+    });
+    inventory.resolve({ files: [], complete: true });
+    // Wait for the serialized queue to settle before resetting the store.
+    await useBuildSessionStore
+      .getState()
+      .refreshOutputInventory(SESSION_ID, { silent: true });
   });
 
   it("keeps the sandbox running when the post-restore artifact fetch fails", async () => {
@@ -581,6 +604,10 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
     } as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
     mockedApi.fetchArtifacts.mockResolvedValue([] as never);
+    mockedApi.fetchOutputInventory.mockResolvedValue({
+      files: [],
+      complete: true,
+    });
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, true) as never
     );
@@ -681,14 +708,22 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
 });
 
 describe("waitForWebappReady", () => {
-  beforeEach(() => jest.clearAllMocks());
-  afterEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.useRealTimers();
+  });
 
   it("returns immediately when the session has no webapp", async () => {
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(false, false) as never
     );
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(1);
   });
 
@@ -696,7 +731,9 @@ describe("waitForWebappReady", () => {
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, true) as never
     );
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(1);
   });
 
@@ -705,23 +742,29 @@ describe("waitForWebappReady", () => {
       .mockResolvedValueOnce(webappInfo(true, false) as never)
       .mockResolvedValueOnce(webappInfo(true, false) as never)
       .mockResolvedValue(webappInfo(true, true) as never);
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(3);
   });
 
-  it("gives up after maxAttempts when the webapp never comes up", async () => {
+  it("stops at the deadline when the webapp never comes up", async () => {
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, false) as never
     );
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0, maxAttempts: 3 });
-    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(3);
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await expect(pending).resolves.toBe(false);
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(20);
   });
 
   it("keeps polling through transient fetch errors", async () => {
     mockedApi.fetchWebappInfo
       .mockRejectedValueOnce(new Error("sandbox not reachable"))
       .mockResolvedValue(webappInfo(true, true) as never);
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
   });
 
@@ -729,7 +772,9 @@ describe("waitForWebappReady", () => {
     mockedApi.fetchWebappInfo
       .mockResolvedValueOnce(webappInfo(null, false) as never)
       .mockResolvedValue(webappInfo(false, false) as never);
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
   });
 });

@@ -9,6 +9,8 @@ export type OpalStrings = {
   close: string;
   loading: string;
   loadingPage: string;
+  /** The Cancel action `SettingsLayouts.Header` renders when `cancel` is set. */
+  settingsHeaderCancel: string;
   copy: string;
   copied: string;
   copyCode: string;
@@ -45,6 +47,11 @@ export type OpalStrings = {
   valueCannotBeRevealed: string;
   scrollTabsLeft: string;
   scrollTabsRight: string;
+  collapsibleFold: string;
+  collapsibleExpand: string;
+  collapsibleFoldSection: (title: string) => string;
+  collapsibleExpandSection: (title: string) => string;
+  contentOptional: string;
   previousPage: string;
   nextPage: string;
   goToPage: string;
@@ -77,6 +84,9 @@ export type OpalStrings = {
   comboBoxCreateOption: (prefix: string, value: string) => string;
   selectEmptySet: string;
   selectInvalidOption: string;
+  selectSearchPlaceholder: string;
+  /** The name of an `IconTooltip`, read when it takes focus. */
+  iconTooltipLabel: string;
   keyValueKey: string;
   keyValueValue: string;
   keyValueAddLine: string;
@@ -106,6 +116,7 @@ export const defaultOpalStrings: OpalStrings = {
   close: "Close",
   loading: "Loading",
   loadingPage: "Loading …",
+  settingsHeaderCancel: "Cancel",
   copy: "Copy",
   copied: "Copied!",
   copyCode: "Copy code",
@@ -142,6 +153,11 @@ export const defaultOpalStrings: OpalStrings = {
   valueCannotBeRevealed: "Value cannot be revealed",
   scrollTabsLeft: "Scroll tabs left",
   scrollTabsRight: "Scroll tabs right",
+  collapsibleFold: "Fold",
+  collapsibleExpand: "Expand",
+  collapsibleFoldSection: (title) => `Fold ${title}`,
+  collapsibleExpandSection: (title) => `Expand ${title}`,
+  contentOptional: "(Optional)",
   previousPage: "Previous page",
   nextPage: "Next page",
   goToPage: "Go to page",
@@ -175,6 +191,8 @@ export const defaultOpalStrings: OpalStrings = {
   comboBoxCreateOption: (prefix, value) => `${prefix} "${value}"`,
   selectEmptySet: "No items found",
   selectInvalidOption: "Please select a valid option from the list",
+  selectSearchPlaceholder: "Search",
+  iconTooltipLabel: "More information",
   keyValueKey: "Key",
   keyValueValue: "Value",
   keyValueAddLine: "Add Line",

@@ -9,6 +9,7 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
 from ee.onyx.external_permissions.utils import credential_json
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.teams.connector import TeamsConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -20,7 +21,11 @@ def teams_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
-    connector = TeamsConnector(**cc_pair.connector.connector_specific_config)
+    connector = TeamsConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
+    )
     connector.load_credentials(credential_json(cc_pair))
     if connector.graph_client is None:
         raise RuntimeError("Graph client not initialized in connector")

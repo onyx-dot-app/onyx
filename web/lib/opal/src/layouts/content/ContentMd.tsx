@@ -76,7 +76,7 @@ interface ContentMdProps {
 
   /**
    * Muted suffix rendered beside the title.
-   * Use `"optional"` for the standard "(Optional)" label, or pass any string.
+   * Use `"optional"` for the translated "(Optional)" label (`OpalStrings.contentOptional`), or pass any string.
    */
   suffix?: ContentMdSuffix;
 
@@ -110,7 +110,8 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconSize: "1.25rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0",
-    optionalFont: "main-content-muted",
+    // A step smaller than the title, the same suffix font as main-ui.
+    optionalFont: "main-ui-muted",
     auxIconSize: "1.25rem",
     descriptionIndent: "1.625rem",
   },
@@ -262,6 +263,8 @@ function ContentMd({
             </div>
           ) : (
             <Text
+              // Lets a host (a toast) measure whether a clamped title overflows.
+              data-opal-content-title=""
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
@@ -274,11 +277,11 @@ function ContentMd({
           )}
 
           {suffix && (
-            <span className="opal-content-md-suffix">
-              <Text font={config.optionalFont} color="inherit">
-                {suffix === "optional" ? "(Optional)" : suffix}
+            <div className="opal-content-md-suffix">
+              <Text as="p" font={config.optionalFont} color="inherit">
+                {suffix === "optional" ? strings.contentOptional : suffix}
               </Text>
-            </span>
+            </div>
           )}
 
           {auxIcon &&

@@ -24,10 +24,7 @@ from __future__ import annotations
 
 import base64
 import json
-import os
-import shutil
 import subprocess
-from typing import NoReturn
 from uuid import UUID
 
 import pytest
@@ -43,7 +40,7 @@ from kubernetes import client
 import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 import onyx.server.features.build.sandbox.kubernetes.sidecar_client as sidecar
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
     SIDECAR_HEALTH_PATH,
     SIDECAR_READY_PATH,
@@ -51,23 +48,11 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from tests.common.paths import find_ancestor_containing
-
-_REPO_ROOT = find_ancestor_containing("deployment/helm/charts/onyx")
-_CHART_DIR = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
-_DEFAULT_KUBE_VERSION_ARGS = ["--kube-version", "1.33.0"]
-_HELM_TEST_SECRET_ARGS = [
-    "--set-string",
-    "auth.sandboxPushSecret.values.private_key=test-private-key",
-]
-
-
-def _chart_args_with_default_kube_version(
-    extra_args: list[str] | None = None,
-) -> list[str]:
-    if extra_args is not None and "--kube-version" in extra_args:
-        return list(extra_args)
-    return [*_DEFAULT_KUBE_VERSION_ARGS, *(extra_args or [])]
+from tests.external_dependency_unit.craft_helm.rendering import (
+    helm_template_command,
+    render_chart,
+    skip_or_fail,
+)
 
 
 def _gen_key_b64() -> str:
@@ -95,64 +80,30 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _skip_or_fail(reason: str) -> NoReturn:
-    """Skip locally, but fail in CI — a shard that renders nothing must not
-    report green."""
-    if os.environ.get("CI"):
-        pytest.fail(reason)
-    pytest.skip(reason)
-
-
-def _helm_template_cmd(extra_args: list[str] | None = None) -> list[str]:
-    helm = shutil.which("helm")
-    if helm is None:
-        _skip_or_fail("helm binary not available")
-    return [
-        helm,
-        "template",
-        "onyx",
-        str(_CHART_DIR),
-        "-n",
-        "onyx",
-        "-f",
-        str(_CHART_DIR / "values-ci.yaml"),
-        *_chart_args_with_default_kube_version(extra_args),
-        *_HELM_TEST_SECRET_ARGS,
-    ]
-
-
 def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
     """Render the sandbox-pod PodTemplate from the chart."""
     cmd = [
-        *_helm_template_cmd(extra_args),
+        *helm_template_command(extra_args),
         "--show-only",
         "templates/sandbox-podtemplate.yaml",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        _skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
+        skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
     return result.stdout
 
 
 def _render_config_map_yaml(extra_args: list[str] | None = None) -> str:
     """Render the shared runtime ConfigMap from the chart."""
     cmd = [
-        *_helm_template_cmd(extra_args),
+        *helm_template_command(extra_args),
         "--show-only",
         "templates/configmap.yaml",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        _skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
+        skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
     return result.stdout
-
-
-def _render_chart(
-    extra_args: list[str] | None = None,
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        _helm_template_cmd(extra_args), capture_output=True, text=True
-    )
 
 
 def _render_pod_template() -> client.V1PodTemplate:
@@ -293,7 +244,7 @@ def test_local_dev_sandbox_image_defaults_to_if_not_present() -> None:
 
 
 def test_craft_helm_version_guard_rejects_old_kubernetes() -> None:
-    result = _render_chart(
+    result = render_chart(
         [
             "--kube-version",
             "1.32.0",
@@ -306,7 +257,7 @@ def test_craft_helm_version_guard_rejects_old_kubernetes() -> None:
 
 
 def test_craft_helm_rejects_docker_sandbox_backend_override() -> None:
-    result = _render_chart(
+    result = render_chart(
         [
             "--kube-version",
             "1.33.0",
@@ -542,7 +493,7 @@ def test_no_proxy_is_loopback_only(pod: client.V1Pod) -> None:
     """Only loopback may bypass the proxy; the Onyx API host must route through
     it so the PAT can be injected on the wire."""
     env = {e.name: e.value for e in _container(pod, "sandbox").env}
-    assert set(env["NO_PROXY"].split(",")) == {"127.0.0.1", "localhost"}
+    assert set(env["NO_PROXY"].split(",")) == {"127.0.0.1", "localhost", "::1"}
     assert env["no_proxy"] == env["NO_PROXY"]
 
 
@@ -663,7 +614,7 @@ def test_redis_tls_mounts_ca_in_all_enabled_redis_workloads() -> None:
         "--set",
         "redisTls.caKey=redis-root.pem",
     ]
-    rendered = _render_chart(redis_tls_args)
+    rendered = render_chart(redis_tls_args)
     assert rendered.returncode == 0, rendered.stderr
     deployments = {
         doc["metadata"]["name"]: doc
@@ -710,7 +661,7 @@ def test_redis_tls_mounts_ca_in_all_enabled_redis_workloads() -> None:
 
 def test_redis_tls_rejects_bundled_redis() -> None:
     """Bundled Redis has no TLS listener, so the values cannot be combined."""
-    result = _render_chart(
+    result = render_chart(
         [
             "--set",
             "redis.enabled=true",
@@ -767,7 +718,7 @@ def test_redis_tls_null_hostname_verification_uses_secure_default() -> None:
 
 def test_null_redis_tls_map_renders_without_tls_configuration() -> None:
     """A reused null Redis TLS map must not cause a Helm template error."""
-    rendered = _render_chart(["--set", "redisTls=null"])
+    rendered = render_chart(["--set", "redisTls=null"])
 
     assert rendered.returncode == 0, rendered.stderr
 

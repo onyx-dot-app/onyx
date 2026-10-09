@@ -3,7 +3,7 @@ import time
 import traceback
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import sentry_sdk
 from celery import Celery
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import source_should_fetch_permissions_during_indexing
 from onyx.background.indexing.checkpointing_utils import (
+    attempt_config_differs,
     check_checkpoint_size,
     get_latest_valid_checkpoint,
     save_checkpoint,
@@ -36,6 +37,7 @@ from onyx.configs.constants import (
 from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -81,7 +83,7 @@ from onyx.db.index_attempt_metrics import (
     time_stage,
 )
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import Connector, Credential, IndexAttempt
+from onyx.db.models import Connector, Credential, IndexAttempt, SearchSettings
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
     get_document_batch_storage,
@@ -101,6 +103,7 @@ from onyx.redis.redis_hierarchy import (
     get_source_node_id_from_cache,
 )
 from onyx.redis.redis_pool import get_redis_client
+from onyx.utils.fleet_telemetry import emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import (
     sanitize_document_for_postgres,
@@ -115,6 +118,47 @@ logger = setup_logger(propagate=False)
 INDEXING_TRACER_NUM_PRINT_ENTRIES = 5
 
 
+def _get_run_config(attempt: IndexAttempt) -> dict[str, Any]:
+    """The connector config the attempt runs with: its override, else the
+    connector's saved config."""
+    if attempt.connector_config_override is not None:
+        return attempt.connector_config_override
+    return attempt.connector_credential_pair.connector.connector_specific_config
+
+
+def _get_backfill_window(attempt: IndexAttempt) -> tuple[datetime, datetime]:
+    if attempt.poll_range_start is None or attempt.poll_range_end is None:
+        raise RuntimeError(f"Backfill attempt {attempt.id} has no window")
+    return attempt.poll_range_start, attempt.poll_range_end
+
+
+def _get_incremental_window_start(
+    db_session: Session,
+    index_attempt: IndexAttempt,
+    search_settings: SearchSettings,
+    earliest_index_time: float,
+) -> datetime:
+    # A port-flow FUTURE's resume cursor comes from its synthetic seed
+    # (get_last_successful_... keeps ignore_synthetic_seed=False by default).
+    last_successful_index_poll_range_end = (
+        earliest_index_time
+        if index_attempt.from_beginning
+        else get_last_successful_attempt_poll_range_end(
+            cc_pair_id=index_attempt.connector_credential_pair_id,
+            earliest_index=earliest_index_time,
+            search_settings=search_settings,
+            db_session=db_session,
+        )
+    )
+
+    if last_successful_index_poll_range_end > POLL_CONNECTOR_OFFSET:
+        return datetime.fromtimestamp(
+            last_successful_index_poll_range_end, tz=timezone.utc
+        ) - timedelta(minutes=POLL_CONNECTOR_OFFSET)
+    # don't go into "negative" time if we've never indexed before
+    return datetime.fromtimestamp(0, tz=timezone.utc)
+
+
 def _get_connector_runner(
     db_session: Session,
     attempt: IndexAttempt,
@@ -126,7 +170,9 @@ def _get_connector_runner(
     raw_file_callback: RawFileCallback | None = None,
 ) -> ConnectorRunner:
     """
-    NOTE: `start_time` and `end_time` are only used for poll connectors
+    NOTE: `start_time` and `end_time` are only used for poll and checkpointed
+    connectors. A load-state connector ignores them and fetches everything,
+    so a backfill of such a source is a full run.
 
     Returns an iterator of document batches and whether the returned documents
     are the complete list of existing documents of the connector. If the task of
@@ -142,15 +188,16 @@ def _get_connector_runner(
     credential_id = attempt.connector_credential_pair.credential.id
     connector_id = attempt.connector_credential_pair.connector.id
     source = attempt.connector_credential_pair.connector.source
-    connector_specific_config = (
-        attempt.connector_credential_pair.connector.connector_specific_config
-    )
+    connector_specific_config = _get_run_config(attempt)
+    has_config_override = attempt.connector_config_override is not None
+    is_backfill = attempt.is_backfill
 
     def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
         # Best-effort scribe for the validation outcome below; never raises.
         # INTEGRATION_TESTS_MODE skips the validation itself, so there is no
-        # outcome to record.
-        if INTEGRATION_TESTS_MODE:
+        # outcome to record. The pair's report describes its saved config, so
+        # a run with an override records nothing.
+        if INTEGRATION_TESTS_MODE or has_config_override:
             return
         record_blocking_validation_outcome(
             credential_id=credential_id,
@@ -168,7 +215,7 @@ def _get_connector_runner(
                 db_session=db_session,
                 source=attempt.connector_credential_pair.connector.source,
                 input_type=task,
-                connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
+                connector_specific_config=connector_specific_config,
                 credential=attempt.connector_credential_pair.credential,
                 raw_file_callback=raw_file_callback,
             )
@@ -179,7 +226,7 @@ def _get_connector_runner(
 
         perm_sync_validated = (
             not INTEGRATION_TESTS_MODE
-            and attempt.connector_credential_pair.access_type == AccessType.SYNC
+            and attempt.connector_credential_pair.access_type.is_perm_synced()
         )
         if perm_sync_validated:
             with time_stage(IndexAttemptStage.PERMISSION_VALIDATION, attempt.id):
@@ -204,7 +251,8 @@ def _get_connector_runner(
         # leave_connector_active=True to allow it to continue.
         # For example, if there is nightly maintenance on a Confluence Server instance,
         # the connector will fail to initialize every night.
-        if not leave_connector_active:
+        # A backfill may run a partial config, so its failure never pauses the pair.
+        if not leave_connector_active and not is_backfill:
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
                 cc_pair_id=attempt.connector_credential_pair.id,
@@ -234,6 +282,23 @@ _TimedYield = TypeVar("_TimedYield")
 _CONNECTOR_FETCH_FLUSH_EVERY = 8
 
 
+def _emit_fetch_telemetry(
+    index_attempt_id: int, item: object, duration_ms: int
+) -> None:
+    """Count the documents and the failure of one ConnectorRunner batch."""
+    if isinstance(item, tuple) and len(item) == 4:
+        docs, _hierarchy, failure, _checkpoint = item
+        emit_stage_counter(
+            index_attempt_id,
+            "fetch",
+            {
+                "fetch_docs": len(docs) if isinstance(docs, list) else 0,
+                "fetch_errors": int(failure is not None),
+            },
+            duration_ms=duration_ms,
+        )
+
+
 def _timed_connector_runs(
     runner_iterable: Iterable[_TimedYield],
     index_attempt_id: int,
@@ -261,9 +326,18 @@ def _timed_connector_runs(
             except Exception:
                 # Record the partial duration of the failing fetch so the
                 # terminal error iteration isn't lost from the metric.
-                buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
+                failed_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
+                buffer.record(failed_ms)
+                emit_stage_counter(
+                    index_attempt_id,
+                    "fetch",
+                    {"fetch_errors": 1},
+                    duration_ms=failed_ms,
+                )
                 raise
-            buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
+            fetch_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
+            buffer.record(fetch_ms)
+            _emit_fetch_telemetry(index_attempt_id, item, fetch_ms)
             if buffer.count >= _CONNECTOR_FETCH_FLUSH_EVERY:
                 buffer.flush()
             yield item
@@ -387,9 +461,7 @@ def run_docfetching_entrypoint(
             tenant_str = f" for tenant {tenant_id}"
 
         connector_name = attempt.connector_credential_pair.connector.name
-        connector_config = (
-            attempt.connector_credential_pair.connector.connector_specific_config
-        )
+        connector_config = _get_run_config(attempt)
         credential_id = attempt.connector_credential_pair.credential_id
 
     logger.info(
@@ -464,9 +536,6 @@ def connector_document_extraction(
         tenant_id,
     )
 
-    # Get batch storage (transition to IN_PROGRESS is handled by run_indexing_entrypoint)
-    batch_storage = get_document_batch_storage(cc_pair_id, index_attempt_id)
-
     # Initialize memory tracer. NOTE: won't actually do anything if
     # `INDEXING_TRACER_INTERVAL` is 0.
     memory_tracer = MemoryTracer(interval=INDEXING_TRACER_INTERVAL)
@@ -488,8 +557,18 @@ def connector_document_extraction(
         if index_attempt.search_settings is None:
             raise ValueError("Search settings must be set for indexing")
 
-        # Clear the indexing trigger if it was set, to prevent duplicate indexing attempts
-        if index_attempt.connector_credential_pair.indexing_trigger is not None:
+        # Read once: the batch tasks get it so they need no lookup per batch.
+        is_backfill = index_attempt.is_backfill
+        batch_storage = get_document_batch_storage(
+            cc_pair_id, index_attempt_id, is_backfill=is_backfill
+        )
+
+        # Clear the indexing trigger if it was set, to prevent duplicate indexing
+        # attempts. A backfill does not serve the trigger, so it leaves it set.
+        if (
+            not index_attempt.is_backfill
+            and index_attempt.connector_credential_pair.indexing_trigger is not None
+        ):
             logger.info(
                 "Clearing indexing trigger: cc_pair=%s trigger=%s",
                 index_attempt.connector_credential_pair.id,
@@ -525,7 +604,7 @@ def connector_document_extraction(
             else 0
         )
         should_fetch_permissions_during_indexing = (
-            index_attempt.connector_credential_pair.access_type == AccessType.SYNC
+            index_attempt.connector_credential_pair.access_type.is_perm_synced()
             and source_should_fetch_permissions_during_indexing(db_connector.source)
             # if we've already successfully indexed, let the doc_sync job take care
             # of doc-level permissions. Zoom skips both halves: with no doc_sync to
@@ -537,55 +616,67 @@ def connector_document_extraction(
             )
         )
 
-        # Set up time windows for polling. A port-flow FUTURE's resume cursor comes from its
-        # synthetic seed (get_last_successful_... keeps ignore_synthetic_seed=False by default).
-        last_successful_index_poll_range_end = (
-            earliest_index_time
-            if from_beginning
-            else get_last_successful_attempt_poll_range_end(
-                cc_pair_id=cc_pair_id,
-                earliest_index=earliest_index_time,
-                search_settings=index_attempt.search_settings,
-                db_session=db_session,
+        # A backfill resumes nothing. The query skips backfills, so a normal
+        # attempt never resumes a backfill's window or checkpoint either.
+        most_recent_attempt = (
+            None
+            if index_attempt.is_backfill
+            else next(
+                iter(
+                    get_recent_completed_attempts_for_cc_pair(
+                        cc_pair_id=cc_pair_id,
+                        search_settings_id=index_attempt.search_settings_id,
+                        db_session=db_session,
+                        limit=1,
+                    )
+                ),
+                None,
             )
         )
 
-        if last_successful_index_poll_range_end > POLL_CONNECTOR_OFFSET:
-            window_start = datetime.fromtimestamp(
-                last_successful_index_poll_range_end, tz=timezone.utc
-            ) - timedelta(minutes=POLL_CONNECTOR_OFFSET)
-        else:
-            # don't go into "negative" time if we've never indexed before
-            window_start = datetime.fromtimestamp(0, tz=timezone.utc)
-
-        most_recent_attempt = next(
-            iter(
-                get_recent_completed_attempts_for_cc_pair(
-                    cc_pair_id=cc_pair_id,
-                    search_settings_id=index_attempt.search_settings_id,
-                    db_session=db_session,
-                    limit=1,
-                )
-            ),
-            None,
+        # The hash of the config this run uses. It replaces the hash stamped at
+        # creation, because the config can change before the attempt starts.
+        connector_config_hash = compute_connector_config_hash(
+            _get_run_config(index_attempt)
         )
+        config_changed_since_last_attempt = (
+            most_recent_attempt is not None
+            and attempt_config_differs(most_recent_attempt, connector_config_hash)
+        )
+        if config_changed_since_last_attempt:
+            logger.info(
+                "Connector config changed since the last attempt; starting a fresh window and checkpoint: cc_pair=%s",
+                cc_pair_id,
+            )
 
-        # if the last attempt didn't complete cleanly, reuse the same window. This
-        # is necessary to ensure correctness with checkpointing. If we don't do this,
-        # things like new slack channels could be missed (since existing slack
-        # channels are cached as part of the checkpoint).
-        if (
-            most_recent_attempt
-            and most_recent_attempt.poll_range_end
-            and most_recent_attempt.status.should_reuse_checkpoint()
-        ):
-            window_end = most_recent_attempt.poll_range_end
+        if index_attempt.is_backfill:
+            # exactly the requested window, outside the incremental cursor
+            window_start, window_end = _get_backfill_window(index_attempt)
         else:
-            window_end = datetime.now(tz=timezone.utc)
+            window_start = _get_incremental_window_start(
+                db_session,
+                index_attempt,
+                index_attempt.search_settings,
+                earliest_index_time,
+            )
+            # if the last attempt didn't complete cleanly, reuse the same window. This
+            # is necessary to ensure correctness with checkpointing. If we don't do this,
+            # things like new slack channels could be missed (since existing slack
+            # channels are cached as part of the checkpoint).
+            if (
+                most_recent_attempt
+                and most_recent_attempt.poll_range_end
+                and most_recent_attempt.status.should_reuse_checkpoint()
+                and not config_changed_since_last_attempt
+            ):
+                window_end = most_recent_attempt.poll_range_end
+            else:
+                window_end = datetime.now(tz=timezone.utc)
 
         # set time range in db
         index_attempt.poll_range_start = window_start
         index_attempt.poll_range_end = window_end
+        index_attempt.connector_config_hash = connector_config_hash
         db_session.commit()
 
         # TODO: maybe memory tracer here
@@ -606,9 +697,17 @@ def connector_document_extraction(
         # checkpointing / failure handling
         # OR
         # if the last attempt was successful
+        # OR
+        # if the connector config changed since the last attempt
+        # OR
+        # if this is a backfill, which never resumes. Its batch storage is
+        # separate, so the cleanup leaves normal attempts' batches alone.
         with time_stage(IndexAttemptStage.CHECKPOINT_LOAD, index_attempt_id):
-            if index_attempt.from_beginning or (
-                most_recent_attempt and most_recent_attempt.status.is_successful()
+            if (
+                index_attempt.from_beginning
+                or index_attempt.is_backfill
+                or (most_recent_attempt and most_recent_attempt.status.is_successful())
+                or config_changed_since_last_attempt
             ):
                 logger.info(
                     "Cleaning up all old batches for index attempt %s before starting new run",
@@ -628,6 +727,7 @@ def connector_document_extraction(
                     window_start=window_start,
                     window_end=window_end,
                     connector=connector_runner.connector,
+                    connector_config_hash=connector_config_hash,
                 )
 
                 # checkpoint resumption OR the connector already finished.
@@ -832,6 +932,10 @@ def connector_document_extraction(
                     "batch_num": batch_num,  # 0-indexed
                     "enqueue_time_ms": int(time.time() * 1000),
                 }
+                # Sent only when set, so a worker from before backfills still
+                # accepts normal batches during a rolling upgrade.
+                if is_backfill:
+                    processing_batch_data["is_backfill"] = True
 
                 # Queue document processing task
                 with time_stage(IndexAttemptStage.DOC_BATCH_ENQUEUE, index_attempt_id):
@@ -921,7 +1025,9 @@ def connector_document_extraction(
                     reason=f"{CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX}{str(e)}",
                 )
 
-                if is_primary:
+                # A backfill may run a partial config, so its failure never
+                # marks the pair invalid.
+                if is_primary and not is_backfill:
                     if not index_attempt:
                         # should always be set by now
                         raise RuntimeError("Should never happen.")

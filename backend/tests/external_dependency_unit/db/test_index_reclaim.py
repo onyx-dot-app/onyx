@@ -41,7 +41,6 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
-    EmbeddingPrecision,
     IndexModelStatus,
     IndexReclaimStatus,
     SwitchoverType,
@@ -83,7 +82,6 @@ def _make_settings(
         passage_prefix="",
         provider_type=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         index_name=index_name or f"test_reclaim_{uuid4().hex[:8]}",
         enable_contextual_rag=False,
     )

@@ -19,7 +19,6 @@ from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
-    EmbeddingPrecision,
     IndexModelStatus,
     IndexReclaimStatus,
 )
@@ -52,7 +51,6 @@ def _saved_settings(index_name: str | None = None) -> SavedSearchSettings:
         passage_prefix="",
         provider_type=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         index_name=index_name or f"test_reclaim_task_{uuid4().hex[:8]}",
         enable_contextual_rag=False,
     )

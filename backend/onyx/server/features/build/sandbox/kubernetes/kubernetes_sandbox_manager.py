@@ -78,13 +78,14 @@ from onyx.server.features.build.configs import (
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
 )
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
     SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
     SIDECAR_SNAPSHOT_CREATE_PATH,
+    FilesystemEntry,
     OutputsManifestResponse,
     SnapshotCreateRequest,
     sidecar_snapshot_restore_path,
@@ -110,7 +111,6 @@ from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     FatalWriteError,
     FileSet,
-    FilesystemEntry,
     RetriableWriteError,
     SandboxInfo,
     SandboxProvisionContentionError,
@@ -2038,7 +2038,8 @@ fi
     ) -> OutputsManifestResponse:
         try:
             return self._sidecar_client.outputs_manifest(
-                sandbox_id=sandbox_id, session_id=session_id
+                sandbox_id=sandbox_id,
+                session_id=session_id,
             )
         except SidecarRequestError as e:
             raise RuntimeError(f"Failed to build outputs manifest: {e}") from e

@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
@@ -45,7 +45,7 @@ export default function Page() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={t("newStandardAnswer.label")}
-        backButton
+        cancel
         divider
       />
       <SettingsLayouts.Body>

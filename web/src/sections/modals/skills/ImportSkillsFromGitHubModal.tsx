@@ -14,7 +14,7 @@ import {
   Text,
 } from "@opal/components";
 import { SvgArrowRight } from "@opal/icons";
-import { SvgGithub } from "@opal/logos";
+import { SvgGitHub } from "@opal/logos";
 import { cn } from "@opal/utils";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useUser } from "@/providers/UserProvider";
@@ -215,7 +215,7 @@ export function ImportSkillsFromGitHubModalView({
         height={preview || result ? "lg" : "fit"}
       >
         <Modal.Header
-          icon={SvgGithub}
+          icon={SvgGitHub}
           title={
             result
               ? t("importGithub.header.completeTitle")
@@ -236,6 +236,8 @@ export function ImportSkillsFromGitHubModalView({
           {result ? (
             <div className="flex w-full flex-col gap-3">
               <MessageCard
+                outerPadding={1}
+                innerPadding={1}
                 variant={
                   result.imported.length === 0
                     ? "error"
@@ -374,6 +376,8 @@ export function ImportSkillsFromGitHubModalView({
 
               {error && (
                 <MessageCard
+                  outerPadding={1}
+                  innerPadding={1}
                   variant="error"
                   title={
                     preview

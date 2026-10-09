@@ -67,6 +67,10 @@ class Settings(BaseModel):
     reasoning_override_enabled: bool | None = True
     # Model selector shows one flat list instead of per-provider groups.
     hide_provider_grouping: bool = False
+
+    # "Auto" picker item backed by the chosen router configuration.
+    model_routing_enabled: bool = False
+    model_routing_model_configuration_id: int | None = None
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
 
@@ -97,6 +101,11 @@ class Settings(BaseModel):
     # overrides win. The deployment-level Craft gate still applies on top.
     craft_default_enabled: bool = True
 
+    # Workspace-wide switch for the LLM gateway (/api/gateway — direct model
+    # API access for external tools like Claude Code or Cursor). When False,
+    # every gateway route rejects requests. Default on.
+    llm_gateway_enabled: bool = True
+
     # Workspace-wide instructions injected into every Craft agent's AGENTS.md
     # as an "Organization instructions" section.
     craft_instructions: str | None = Field(
@@ -107,11 +116,13 @@ class Settings(BaseModel):
     seat_count: int | None = None
     used_seats: int | None = None
 
-    # OpenSearch migration
-    opensearch_indexing_enabled: bool = False
+    # Deprecated: OpenSearch is the only document index, so this is always True.
+    # Kept for API clients that still read it (e.g. the Terraform provider).
+    opensearch_indexing_enabled: bool = True
 
 
 class UserSettings(Settings):
+    oauth_provider_enabled: bool = False
     notifications: list[NotificationResponse]
     needs_reindexing: bool
     tenant_id: str = POSTGRES_DEFAULT_SCHEMA
@@ -124,10 +135,12 @@ class UserSettings(Settings):
     # user's sandbox pod's opencode-serve logs. Gated by the
     # ENABLE_OPENCODE_DEBUGGING env var; never set in prod.
     opencode_debugging_enabled: bool = False
-    # True when a vector database (Vespa/OpenSearch) is available.
+    # True when a vector database (OpenSearch) is available.
     # False when DISABLE_VECTOR_DB is set — connectors, RAG search, and
     # document sets are unavailable.
     vector_db_enabled: bool = True
+    # HIDE_ONYX_BRANDING env var, honored only on the Enterprise tier.
+    hide_onyx_branding: bool = False
     # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.

@@ -1,23 +1,20 @@
 from typing import Any
-from unittest.mock import MagicMock, patch
-
-from jira.resources import Issue
+from unittest.mock import patch
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
 from onyx.connectors.models import SlimDocument
 
 
-def _make_issue(key: str, project_key: str = "TEST") -> MagicMock:
-    issue = MagicMock(spec=Issue)
-    issue.key = key
-    issue.fields = MagicMock()
-    issue.fields.project = MagicMock()
-    issue.fields.project.key = project_key
-    issue.fields.project.name = "Test Project"
-    issue.fields.parent = None
-    issue.fields.created = "2023-01-01T12:00:00.000+0000"
-    return issue
+def _make_issue(key: str, project_key: str = "TEST") -> dict[str, Any]:
+    return {
+        "key": key,
+        "fields": {
+            "project": {"key": project_key, "name": "Test Project"},
+            "parent": None,
+            "created": "2023-01-01T12:00:00.000+0000",
+        },
+    }
 
 
 def _stop_after_first_page(

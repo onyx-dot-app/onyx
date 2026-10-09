@@ -9,7 +9,7 @@ import HumanMessage from "@/app/app/message/HumanMessage";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Section } from "@/layouts/general-layouts";
@@ -42,7 +42,7 @@ export default function SharedChatDisplay({
 
   // The shared viewer is authenticated, so the user-facing provider list is
   // available for resolving each model's provider icon, same as the live view.
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders } = useLanguageModels();
   const modelProviderLookup = useMemo(
     () => buildModelProviderLookup(llmProviders),
     [llmProviders]

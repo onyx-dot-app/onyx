@@ -43,7 +43,7 @@ def admin_search(
 
     query = question.query
     logger.notice("Received admin search query: %s", query)
-    user_acl_filters = build_access_filters_for_user(user, db_session)
+    user_access_filters = build_access_filters_for_user(user, db_session)
 
     final_filters = IndexFilters(
         source_type=question.filters.source_type,
@@ -51,12 +51,12 @@ def admin_search(
         created_at_range=question.filters.created_at_range,
         updated_at_range=question.filters.updated_at_range,
         tags=question.filters.tags,
-        access_control_list=user_acl_filters,
+        access_control_list=user_access_filters.access_control_list,
+        cc_pair_access=user_access_filters.cc_pair_access,
         tenant_id=tenant_id,
     )
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     if not query or query.strip() == "":
         matching_chunks = document_index.random_retrieval(filters=final_filters)

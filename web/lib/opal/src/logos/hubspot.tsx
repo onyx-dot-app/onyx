@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgHubspot = ({ size, ...props }: IconProps) => (
+const SvgHubSpot = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -14,4 +14,4 @@ const SvgHubspot = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgHubspot;
+export default SvgHubSpot;

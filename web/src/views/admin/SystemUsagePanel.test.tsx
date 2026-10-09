@@ -7,6 +7,10 @@ jest.mock("@/lib/usage/hooks", () => ({
   useSystemUsage: jest.fn(),
 }));
 
+jest.mock("@/lib/settings/hooks", () => ({
+  useSettings: () => ({ appName: "Onyx" }),
+}));
+
 const mockUseSystemUsage = useSystemUsage as jest.MockedFunction<
   typeof useSystemUsage
 >;

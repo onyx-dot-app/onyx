@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -109,8 +110,13 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			ow := &overflow.Writer{Limit: truncateAt, Quiet: askQuiet, Out: ios.Out, ErrOut: ios.ErrOut}
 
 			for event := range ch {
-				if e, ok := event.(models.SessionCreatedEvent); ok {
+				switch e := event.(type) {
+				case models.SessionCreatedEvent:
 					sessionID = e.ChatSessionID
+				case models.StopEvent:
+					// Keep draining: the server saves the turn after it sends stop,
+					// and the rename below reads the saved history.
+					gotStop = true
 				}
 
 				if askJSON {
@@ -132,9 +138,6 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 						} else {
 							lastErr = exitcodes.New(exitcodes.General, sanitize.Terminal(errEvt.Error))
 						}
-					}
-					if _, ok := event.(models.StopEvent); ok {
-						gotStop = true
 					}
 					continue
 				}
@@ -174,9 +177,6 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", sanitize.Terminal(e.Error))
 					}
 					return exitcodes.New(exitcodes.General, sanitize.Terminal(e.Error))
-				case models.StopEvent:
-					ow.Finish()
-					return nil
 				}
 			}
 
@@ -197,6 +197,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			if !gotStop {
 				return exitcodes.New(exitcodes.General, "stream ended unexpectedly")
 			}
+			nameChatSession(ctx, ios, client, sessionID)
 			return nil
 		},
 	}
@@ -209,6 +210,18 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 	cmd.Flags().IntVar(&maxOutput, "max-output", defaultMaxOutputBytes,
 		"Max bytes to print before truncating (0 to disable, auto-enabled for non-TTY)")
 	return cmd
+}
+
+// nameChatSession asks the backend to title the session. The server only titles
+// on request, so without this a one-shot ask stays "New Chat" in the sidebar.
+// It runs after the answer is flushed so the naming LLM call never delays output.
+func nameChatSession(ctx context.Context, ios *iostreams.IOStreams, client *api.Client, sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	if _, err := client.RenameChatSession(ctx, sessionID, nil); err != nil && ctx.Err() == nil {
+		fmt.Fprintf(ios.ErrOut, "warning: could not name chat session: %s\n", sanitize.Terminal(err.Error()))
+	}
 }
 
 // resolveQuestion builds the final question string from args, --prompt, and stdin.

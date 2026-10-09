@@ -87,7 +87,6 @@ jobs:
         run: |
           echo "=== Adding Helm repositories ==="
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-          helm repo add vespa https://onyx-dot-app.github.io/vespa-helm-charts
           helm repo add opensearch https://opensearch-project.github.io/helm-charts
           helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
           helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
@@ -196,7 +195,6 @@ jobs:
             --helm-extra-set-args="\
               --set=nginx.enabled=false \
               --set=minio.enabled=false \
-              --set=vespa.enabled=false \
               --set=opensearch.enabled=true \
               --set=auth.opensearch.enabled=true \
               --set=auth.userauth.values.user_auth_secret=test-secret \
@@ -218,7 +216,8 @@ jobs:
               --set=celery_worker_primary.replicaCount=0 \
               --set=celery_worker_scheduled_tasks.replicaCount=0 \
               --set=celery_worker_user_file_processing.replicaCount=0 \
-              --set=celery_worker_user_files_indexing.replicaCount=0" \
+              --set=celery_worker_user_files_indexing.replicaCount=0 \
+              --set=configMap.DISABLE_TELEMETRY=true" \
             --helm-extra-args="--timeout 900s --debug" \
             --debug --config ct.yaml
           CT_EXIT=$?

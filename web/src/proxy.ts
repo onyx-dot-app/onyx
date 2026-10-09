@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import {
-  SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
-  SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
-} from "@/lib/constants";
+import { SERVER_SIDE_ONLY__AUTH_COOKIE_NAME } from "@/lib/constants";
 import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 
 // Route prefixes that never allow anonymous access, so we fast-fail at the edge
@@ -149,14 +146,13 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Enterprise Edition: Rewrite EE-specific routes to /ee prefix
-  if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
-    if (EE_ROUTES.some((route) => pathname.startsWith(route))) {
-      const newUrl = new URL(`/ee${pathname}`, request.url);
-      return withSecurityHeaders(
-        NextResponse.rewrite(newUrl, { request: { headers: requestHeaders } })
-      );
-    }
+  // Enterprise Edition: Rewrite EE-specific routes to /ee prefix. The /ee
+  // layout turns away a deployment whose license does not cover them.
+  if (EE_ROUTES.some((route) => pathname.startsWith(route))) {
+    const newUrl = new URL(`/ee${pathname}`, request.url);
+    return withSecurityHeaders(
+      NextResponse.rewrite(newUrl, { request: { headers: requestHeaders } })
+    );
   }
 
   return withSecurityHeaders(

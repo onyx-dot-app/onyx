@@ -1,30 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { IconLoader } from "@opal/loaders";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  BaseFilters,
-  MinimalOnyxDocument,
-  SourceMetadata,
-} from "@/lib/search/types";
+import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
 import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
-import { Tag, ValidSources } from "@/lib/types";
+import { Tag } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import {
+  countDocumentsBySource,
+  documentMatchesAnySource,
+} from "@/lib/search/utils";
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
-import { Popover, PopoverMenu } from "@opal/components";
-import { SvgCheck, SvgClock, SvgTag, SvgSimpleLoader } from "@opal/icons";
-import { FilterButton } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import useFilter from "@/hooks/useFilter";
-import { LineItemButton } from "@opal/components";
+import { Dropdown, FilterButton, LineItemButton } from "@opal/components";
+import { SvgClock, SvgTag } from "@opal/icons";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@opal/utils";
 
@@ -74,7 +72,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   }, [error]);
 
   // Filter state
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [selectedSources, setSelectedSources] = useState<ValidSources[]>([]);
   const [timeFilter, setTimeFilter] = useState<TimeFilter | null>(null);
   const [timeFilterOpen, setTimeFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
@@ -83,15 +81,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
-  const tagExtractor = useCallback(
-    (tag: Tag) => `${tag.tag_key} ${tag.tag_value}`,
-    []
-  );
-  const {
-    query: tagQuery,
-    setQuery: setTagQuery,
-    filtered: filteredTags,
-  } = useFilter(availableTags, tagExtractor);
+  // JSON, so a key or value holding "=" cannot collide with another pair.
+  const tagKey = (tag: Tag) => JSON.stringify([tag.tag_key, tag.tag_value]);
+  const selectedTagKeys = new Set(selectedTags.map(tagKey));
 
   // Build the combined server-side filters from current state
   const buildFilters = (
@@ -125,16 +117,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {
-    const filtered = results.filter((doc) => {
-      // Source filter (client-side)
-      if (selectedSources.length > 0) {
-        if (!doc.source_type || !selectedSources.includes(doc.source_type)) {
-          return false;
-        }
-      }
-
-      return true;
-    });
+    const filtered = results.filter((doc) =>
+      documentMatchesAnySource(doc, selectedSources)
+    );
 
     // Sort: LLM-selected first, then by score
     return filtered.sort((a, b) => {
@@ -160,34 +145,16 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
   // Extract unique sources with metadata for the source filter
   const sourcesWithMeta = useMemo(() => {
-    const sourceMap = new Map<
-      string,
-      { meta: SourceMetadata; count: number }
-    >();
-
-    for (const doc of results) {
-      if (doc.source_type) {
-        const existing = sourceMap.get(doc.source_type);
-        if (existing) {
-          existing.count++;
-        } else {
-          sourceMap.set(doc.source_type, {
-            meta: getSourceMetadata(doc.source_type as ValidSources),
-            count: 1,
-          });
-        }
-      }
-    }
-
-    return Array.from(sourceMap.entries())
-      .map(([source, data]) => ({
+    return Array.from(countDocumentsBySource(results).entries())
+      .map(([source, count]) => ({
         source,
-        ...data,
+        meta: getSourceMetadata(source),
+        count,
       }))
       .sort((a, b) => b.count - a.count);
   }, [results]);
 
-  const handleSourceToggle = (source: string) => {
+  const handleSourceToggle = (source: ValidSources) => {
     setCurrentPage(1);
     if (selectedSources.includes(source)) {
       setSelectedSources(selectedSources.filter((s) => s !== source));
@@ -202,7 +169,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   if (state.phase === "searching") {
     return (
       <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-        <SvgSimpleLoader />
+        <IconLoader />
       </div>
     );
   }
@@ -219,8 +186,8 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         >
           <div className="flex flex-row gap-2">
             {/* Time filter */}
-            <Popover open={timeFilterOpen} onOpenChange={setTimeFilterOpen}>
-              <Popover.Trigger asChild>
+            <Dropdown open={timeFilterOpen} onOpenChange={setTimeFilterOpen}>
+              <Dropdown.Trigger asChild>
                 <FilterButton
                   icon={SvgClock}
                   active={!!timeFilter}
@@ -232,31 +199,30 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   {timeFilterOptions.find((o) => o.value === timeFilter)
                     ?.label ?? t("timeFilter.all.label")}
                 </FilterButton>
-              </Popover.Trigger>
-              <Popover.Content align="start" width="md">
-                <PopoverMenu>
-                  {timeFilterOptions.map((opt) => (
-                    <LineItemButton
-                      key={opt.value}
-                      onClick={() => {
-                        setTimeFilter(opt.value);
-                        setTimeFilterOpen(false);
-                        onRefineSearch(buildFilters({ time: opt.value }));
-                      }}
-                      state={timeFilter === opt.value ? "selected" : "empty"}
-                      icon={timeFilter === opt.value ? SvgCheck : SvgClock}
-                      title={opt.label}
-                      sizePreset="main-ui"
-                      variant="section"
-                    />
-                  ))}
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("timeFilter.all.label")}
+                value={timeFilter ?? ""}
+                onSelect={(option) => {
+                  const next = timeFilterOptions.find(
+                    (o) => o.value === option.value
+                  );
+                  if (!next) return;
+                  setTimeFilter(next.value);
+                  onRefineSearch(buildFilters({ time: next.value }));
+                }}
+                items={timeFilterOptions.map((opt) => ({
+                  kind: "option",
+                  value: opt.value,
+                  icon: SvgClock,
+                  title: opt.label,
+                }))}
+              />
+            </Dropdown>
 
             {/* Tag filter */}
-            <Popover open={tagFilterOpen} onOpenChange={setTagFilterOpen}>
-              <Popover.Trigger asChild>
+            <Dropdown open={tagFilterOpen} onOpenChange={setTagFilterOpen}>
+              <Dropdown.Trigger asChild>
                 <FilterButton
                   icon={SvgTag}
                   active={selectedTags.length > 0}
@@ -271,48 +237,37 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                       })
                     : t("tagFilter.empty.label")}
                 </FilterButton>
-              </Popover.Trigger>
-              <Popover.Content align="start" width="lg">
-                <PopoverMenu>
-                  <InputTypeIn
-                    searchIcon
-                    placeholder={t("tagFilter.search.placeholder")}
-                    value={tagQuery}
-                    onChange={(e) => setTagQuery(e.target.value)}
-                    clearButton
-                    variant="internal"
-                  />
-                  {filteredTags.map((tag) => {
-                    const isSelected = selectedTags.some(
-                      (t) =>
-                        t.tag_key === tag.tag_key &&
-                        t.tag_value === tag.tag_value
-                    );
-                    return (
-                      <LineItemButton
-                        key={`${tag.tag_key}=${tag.tag_value}`}
-                        onClick={() => {
-                          const next = isSelected
-                            ? selectedTags.filter(
-                                (t) =>
-                                  t.tag_key !== tag.tag_key ||
-                                  t.tag_value !== tag.tag_value
-                              )
-                            : [...selectedTags, tag];
-                          setSelectedTags(next);
-                          onRefineSearch(buildFilters({ tags: next }));
-                        }}
-                        state={isSelected ? "selected" : "empty"}
-                        icon={isSelected ? SvgCheck : SvgTag}
-                        title={tag.tag_value}
-                        sizePreset="main-ui"
-                        variant="section"
-                      />
-                    );
-                  })}
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("tagFilter.empty.label")}
+                search={{ placeholder: t("tagFilter.search.placeholder") }}
+                values={selectedTagKeys}
+                onSelect={(option) => {
+                  const tag = availableTags.find(
+                    (candidate) => tagKey(candidate) === option.value
+                  );
+                  if (!tag) return;
+                  const next = selectedTagKeys.has(option.value)
+                    ? selectedTags.filter(
+                        (candidate) => tagKey(candidate) !== option.value
+                      )
+                    : [...selectedTags, tag];
+                  setSelectedTags(next);
+                  onRefineSearch(buildFilters({ tags: next }));
+                }}
+                items={availableTags.map((tag) => ({
+                  kind: "option",
+                  value: tagKey(tag),
+                  keywords: [
+                    tag.tag_key,
+                    `${tag.tag_key} ${tag.tag_value}`,
+                    `${tag.tag_key}=${tag.tag_value}`,
+                  ],
+                  icon: SvgTag,
+                  title: tag.tag_value,
+                }))}
+              />
+            </Dropdown>
           </div>
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
@@ -376,11 +331,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                 <LineItemButton
                   key={source}
                   icon={(props) => (
-                    <SourceIcon
-                      sourceType={source as ValidSources}
-                      iconSize={16}
-                      {...props}
-                    />
+                    <SourceIcon sourceType={source} iconSize={16} {...props} />
                   )}
                   onClick={() => handleSourceToggle(source)}
                   state={

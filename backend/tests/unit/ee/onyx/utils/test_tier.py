@@ -26,17 +26,9 @@ def _metadata(
     return m
 
 
-@patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
 @patch("ee.onyx.utils.tier.MULTI_TENANT", False)
 class TestSelfHostedTierCacheFailure:
-    """`_self_hosted_tier` must not leak RedisError to callers.
-
-    `LICENSE_ENFORCEMENT_ENABLED` is patched to True so the legacy
-    no-enforcement bypass (which short-circuits to ENTERPRISE) doesn't
-    mask the cache/db code paths under test. CI sets the env var to
-    False by default, so without this patch the assertions accidentally
-    pass-by-luck on the cache-hit path and fail on every other path.
-    """
+    """`_self_hosted_tier` must not leak RedisError to callers."""
 
     @patch("ee.onyx.utils.tier.get_cached_license_metadata")
     def test_cache_hit_returns_cached_tier(self, mock_get_cached: MagicMock) -> None:
@@ -89,46 +81,6 @@ class TestSelfHostedTierCacheFailure:
 
         with pytest.raises(ValueError, match="unexpected"):
             get_tier()
-
-
-@patch("ee.onyx.utils.tier.MULTI_TENANT", False)
-class TestSelfHostedTierLegacyBypass:
-    """`_self_hosted_tier` must mirror `apply_license_status_to_settings`
-    and `require_business_tier_for_sync_access` for the legacy
-    LICENSE_ENFORCEMENT_ENABLED=False case: treat as ENTERPRISE so tier_gate
-    doesn't 402 dev / legacy installs that load EE code but have no license.
-    """
-
-    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", False)
-    @patch("ee.onyx.utils.tier.global_version")
-    @patch("ee.onyx.utils.tier.get_cached_license_metadata")
-    def test_ee_loaded_returns_enterprise_without_license_lookup(
-        self,
-        mock_get_cached: MagicMock,
-        mock_global_version: MagicMock,
-    ) -> None:
-        from ee.onyx.utils.tier import get_tier
-
-        mock_global_version.is_ee_version.return_value = True
-
-        assert get_tier() == Tier.ENTERPRISE
-        mock_get_cached.assert_not_called()
-
-    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", False)
-    @patch("ee.onyx.utils.tier.global_version")
-    @patch("ee.onyx.utils.tier.get_cached_license_metadata")
-    def test_ee_not_loaded_returns_community(
-        self,
-        mock_get_cached: MagicMock,
-        mock_global_version: MagicMock,
-    ) -> None:
-        """Without EE code paths loaded there's nothing to upgrade to."""
-        from ee.onyx.utils.tier import get_tier
-
-        mock_global_version.is_ee_version.return_value = False
-
-        assert get_tier() == Tier.COMMUNITY
-        mock_get_cached.assert_not_called()
 
 
 class TestTierFromLicenseMetadata:
@@ -198,7 +150,6 @@ class TestRequireBusinessTierForSyncAccess:
         [AccessType.PUBLIC, AccessType.PRIVATE],
         ids=["public", "private"],
     )
-    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.utils.tier.get_tier")
     def test_non_sync_access_passes_without_checking_tier(
         self, mock_get_tier: MagicMock, access_type: AccessType
@@ -208,7 +159,6 @@ class TestRequireBusinessTierForSyncAccess:
         require_business_tier_for_sync_access(access_type)
         mock_get_tier.assert_not_called()
 
-    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.utils.tier.get_tier")
     def test_sync_at_community_raises_feature_not_available(
         self, mock_get_tier: MagicMock
@@ -225,7 +175,6 @@ class TestRequireBusinessTierForSyncAccess:
         [Tier.BUSINESS, Tier.ENTERPRISE],
         ids=["business", "enterprise"],
     )
-    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.utils.tier.get_tier")
     def test_sync_at_business_or_enterprise_passes(
         self, mock_get_tier: MagicMock, tier: Tier
@@ -235,25 +184,10 @@ class TestRequireBusinessTierForSyncAccess:
         mock_get_tier.return_value = tier
         require_business_tier_for_sync_access(AccessType.SYNC)
 
-    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", False)
-    @patch("ee.onyx.utils.tier.get_tier")
-    def test_legacy_enforcement_disabled_passes_without_checking_tier(
-        self, mock_get_tier: MagicMock
-    ) -> None:
-        """EE deployment with LICENSE_ENFORCEMENT_ENABLED=False — treat as
-        ENTERPRISE, same as `apply_license_status_to_settings`. Don't
-        block legacy installs that never loaded a license."""
-        from ee.onyx.utils.tier import require_business_tier_for_sync_access
-
-        require_business_tier_for_sync_access(AccessType.SYNC)
-        mock_get_tier.assert_not_called()
-
 
 class TestRequireBusinessTierForMultiSSO:
-    """Below BUSINESS raises FEATURE_NOT_AVAILABLE. Enforcement-off passes
-    without a tier read."""
+    """Below BUSINESS raises FEATURE_NOT_AVAILABLE."""
 
-    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.utils.tier.get_tier")
     def test_below_business_raises(self, mock_get_tier: MagicMock) -> None:
         from ee.onyx.utils.tier import require_business_tier_for_multi_sso
@@ -268,7 +202,6 @@ class TestRequireBusinessTierForMultiSSO:
         [Tier.BUSINESS, Tier.ENTERPRISE],
         ids=["business", "enterprise"],
     )
-    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.utils.tier.get_tier")
     def test_business_or_above_passes(
         self, mock_get_tier: MagicMock, tier: Tier
@@ -278,15 +211,34 @@ class TestRequireBusinessTierForMultiSSO:
         mock_get_tier.return_value = tier
         require_business_tier_for_multi_sso()
 
-    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", False)
-    @patch("ee.onyx.utils.tier.get_tier")
-    def test_enforcement_disabled_passes_without_tier_read(
-        self, mock_get_tier: MagicMock
-    ) -> None:
-        from ee.onyx.utils.tier import require_business_tier_for_multi_sso
 
-        require_business_tier_for_multi_sso()
-        mock_get_tier.assert_not_called()
+class TestRequireBusinessTierForConnectorGroupRestrictions:
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_below_business_raises(self, mock_get_tier: MagicMock) -> None:
+        from ee.onyx.utils.tier import (
+            require_business_tier_for_connector_group_restrictions,
+        )
+
+        mock_get_tier.return_value = Tier.COMMUNITY
+        with pytest.raises(OnyxError) as exc_info:
+            require_business_tier_for_connector_group_restrictions()
+        assert exc_info.value.error_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE
+
+    @pytest.mark.parametrize(
+        "tier",
+        [Tier.BUSINESS, Tier.ENTERPRISE],
+        ids=["business", "enterprise"],
+    )
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_business_or_above_passes(
+        self, mock_get_tier: MagicMock, tier: Tier
+    ) -> None:
+        from ee.onyx.utils.tier import (
+            require_business_tier_for_connector_group_restrictions,
+        )
+
+        mock_get_tier.return_value = tier
+        require_business_tier_for_connector_group_restrictions()
 
 
 @patch("ee.onyx.utils.tier.MULTI_TENANT", True)

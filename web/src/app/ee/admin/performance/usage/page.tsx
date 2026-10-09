@@ -25,8 +25,9 @@ export default function UsagePage() {
         title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
-        rightChildren={
+        actions={[
           <InputDateRangePicker
+            key="primary"
             value={timeRange}
             onValueChange={(value) => {
               if (!value) return;
@@ -36,8 +37,8 @@ export default function UsagePage() {
               }));
             }}
             size="sm"
-          />
-        }
+          />,
+        ]}
       />
       <SettingsLayouts.Body>
         <PerUserUsagePanel timeRange={timeRange} />

@@ -5,9 +5,8 @@ import {
   BraintrustIcon,
   BoxIcon,
 } from "@/components/icons/icons";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SourceCategory, SourceMetadata } from "@/lib/search/types";
-import { Agent } from "@/lib/agents/types";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
 import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
@@ -16,9 +15,9 @@ import {
   SvgAsana,
   SvgAxero,
   SvgBitbucket,
-  SvgBookstack,
+  SvgBookStack,
   SvgCanvas,
-  SvgClickup,
+  SvgClickUp,
   SvgCoda,
   SvgConfluence,
   SvgDiscord,
@@ -29,35 +28,37 @@ import {
   SvgEgnyte,
   SvgFireflies,
   SvgFreshdesk,
-  SvgGitbook,
-  SvgGithub,
-  SvgGitlab,
+  SvgGitBook,
+  SvgGitHub,
+  SvgGitLab,
   SvgGmail,
   SvgGong,
   SvgGoogleDrive,
   SvgGoogleSites,
   SvgGuru,
   SvgHighspot,
-  SvgHubspot,
+  SvgHubSpot,
   SvgJira,
   SvgLinear,
   SvgLoopio,
-  SvgLumapps,
-  SvgMediawiki,
+  SvgLumApps,
+  SvgMediaWiki,
   SvgNotion,
+  SvgOneDrive,
   SvgOracle,
   SvgOutline,
   SvgOutlook,
   SvgProductboard,
   SvgSalesforce,
-  SvgSharepoint,
+  SvgSharePoint,
   SvgSlab,
   SvgSlack,
   SvgTeams,
-  SvgTestrail,
+  SvgTestRail,
   SvgWikipedia,
-  SvgXenforo,
+  SvgXenForo,
   SvgZendesk,
+  SvgZoom,
   SvgZulip,
 } from "@opal/logos";
 
@@ -104,13 +105,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     isPopular: true,
   },
   lumapps: {
-    icon: SvgLumapps,
+    icon: SvgLumApps,
     displayName: "LumApps",
     category: SourceCategory.Wiki,
   },
   sharepoint: {
-    icon: SvgSharepoint,
-    displayName: "Sharepoint",
+    icon: SvgSharePoint,
+    displayName: "SharePoint",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/sharepoint`,
     isPopular: true,
@@ -128,7 +129,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/notion`,
   },
   bookstack: {
-    icon: SvgBookstack,
+    icon: SvgBookStack,
     displayName: "BookStack",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/bookstack`,
@@ -146,7 +147,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/discourse`,
   },
   gitbook: {
-    icon: SvgGitbook,
+    icon: SvgGitBook,
     displayName: "GitBook",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gitbook`,
@@ -176,7 +177,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/guru`,
   },
   mediawiki: {
-    icon: SvgMediawiki,
+    icon: SvgMediaWiki,
     displayName: "MediaWiki",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/mediawiki`,
@@ -208,6 +209,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview`,
     oauthSupported: true,
     isPopular: true,
+  },
+  onedrive: {
+    icon: SvgOneDrive,
+    displayName: "OneDrive",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/onedrive`,
   },
   box: {
     icon: BoxIcon,
@@ -292,8 +299,8 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/asana`,
   },
   clickup: {
-    icon: SvgClickup,
-    displayName: "Clickup",
+    icon: SvgClickUp,
+    displayName: "ClickUp",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/clickup`,
   },
@@ -304,7 +311,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/productboard`,
   },
   testrail: {
-    icon: SvgTestrail,
+    icon: SvgTestRail,
     displayName: "TestRail",
     category: SourceCategory.TicketingAndTaskManagement,
   },
@@ -323,6 +330,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Outlook",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/outlook`,
+  },
+  zoom: {
+    icon: SvgZoom,
+    displayName: "Zoom",
+    category: SourceCategory.Messaging,
   },
   gmail: {
     icon: SvgGmail,
@@ -348,8 +360,8 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/discord`,
   },
   xenforo: {
-    icon: SvgXenforo,
-    displayName: "Xenforo",
+    icon: SvgXenForo,
+    displayName: "XenForo",
     category: SourceCategory.Messaging,
   },
   zulip: {
@@ -368,7 +380,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     isPopular: true,
   },
   hubspot: {
-    icon: SvgHubspot,
+    icon: SvgHubSpot,
     displayName: "HubSpot",
     category: SourceCategory.Sales,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/hubspot`,
@@ -401,15 +413,15 @@ export const SOURCE_METADATA_MAP: SourceMap = {
 
   // Code Repository
   github: {
-    icon: SvgGithub,
-    displayName: "Github",
+    icon: SvgGitHub,
+    displayName: "GitHub",
     category: SourceCategory.CodeRepository,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/github`,
     isPopular: true,
   },
   gitlab: {
-    icon: SvgGitlab,
-    displayName: "Gitlab",
+    icon: SvgGitLab,
+    displayName: "GitLab",
     category: SourceCategory.CodeRepository,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gitlab`,
   },
@@ -514,7 +526,9 @@ export function listSourceMetadata(): SourceMetadata[] {
         // user_file is for internal use (projects), not the Add Connector page
         source !== "user_file" &&
         // craft_file backs the Craft user library, which has its own upload UI
-        source !== "craft_file"
+        source !== "craft_file" &&
+        // TODO: unhide once the rest of the Zoom connector stack has merged
+        source !== "zoom"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);

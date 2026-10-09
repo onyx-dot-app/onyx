@@ -6,7 +6,7 @@ import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputTypeIn, InputPasswordTypeIn } from "@opal/components";
-import { InputSingleSelect } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -96,7 +96,7 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
             <FormField.Label>{t("form.apiKey.label")}</FormField.Label>
             <FormField.Control>
               {apiKeyOptions.length > 0 ? (
-                <InputSingleSelect
+                <InputSingleComboBox
                   mode="open"
                   value={field.value}
                   onChange={(e) => {

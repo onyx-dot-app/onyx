@@ -424,7 +424,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User-group permission wiring is enterprise only",
 )
 def test_pat_group_permission_access_control(reset: None) -> None:  # noqa: ARG001

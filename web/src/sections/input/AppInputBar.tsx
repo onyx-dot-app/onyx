@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, {
   useCallback,
   useEffect,
@@ -31,7 +32,8 @@ import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
-import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import { ProjectFile } from "@/lib/projects/types";
+import { isFilePending } from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
 import {
@@ -48,7 +50,6 @@ import {
   SvgSearch,
   SvgStop,
   SvgX,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   Button,
@@ -84,8 +85,6 @@ export interface AppInputBarProps {
   onSubmit: (message: string) => void;
   llmManager: LlmManager;
   chatState: ChatState;
-  currentSessionFileTokenCount: number;
-  availableContextTokens: number;
 
   // agents
   activeAgent: MinimalAgent | undefined;
@@ -114,8 +113,6 @@ const AppInputBar = React.memo(
     stopGenerating,
     onSubmit,
     chatState,
-    currentSessionFileTokenCount,
-    availableContextTokens,
     activeAgent,
     handleFileUpload,
     llmManager,
@@ -213,6 +210,7 @@ const AppInputBar = React.memo(
     const appMode = state.phase === "idle" ? state.appMode : undefined;
     const isSearchMode =
       (isNewSession && appMode === "search") || isSearchActive;
+    const combinedSettingsData = useSettings();
 
     const activePlaceholder =
       queuedMessages.length > 0 && !message
@@ -220,7 +218,9 @@ const AppInputBar = React.memo(
         : isRecording
           ? t("appInputBar.input.listeningPlaceholder")
           : isVoicePlaybackActive
-            ? t("appInputBar.input.speakingPlaceholder")
+            ? t("appInputBar.input.speakingPlaceholder", {
+                appName: combinedSettingsData.appName,
+              })
             : isSearchMode
               ? t("appInputBar.input.searchPlaceholder")
               : t("appInputBar.input.placeholder");
@@ -345,20 +345,11 @@ const AppInputBar = React.memo(
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 
-    const currentIndexingFiles = useMemo(() => {
-      return currentMessageFiles.filter(
-        (file) => file.status === UserFileStatus.PROCESSING
-      );
-    }, [currentMessageFiles]);
-
-    const hasUploadingFiles = useMemo(() => {
-      return currentMessageFiles.some(
-        (file) => file.status === UserFileStatus.UPLOADING
-      );
-    }, [currentMessageFiles]);
-
-    // A file isn't queryable until indexing completes, so gate send on it.
-    const hasIndexingFiles = currentIndexingFiles.length > 0;
+    // A file isn't queryable until processing completes, so gate send on it.
+    const hasPendingFiles = useMemo(
+      () => currentMessageFiles.some((file) => isFilePending(file.status)),
+      [currentMessageFiles]
+    );
 
     // Convert ProjectFile to MinimalOnyxDocument format for viewing
     const handleFileClick = useCallback(
@@ -384,8 +375,6 @@ const AppInputBar = React.memo(
       },
       [handleFileUpload]
     );
-
-    const combinedSettingsData = useSettings();
 
     const prevChatStateRef = useRef(chatState);
     const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
@@ -510,34 +499,6 @@ const AppInputBar = React.memo(
       },
       [handleInput, hidePrompts, setPromptFilterQuery]
     );
-
-    // Determine if we should hide processing state based on context limits
-    const hideProcessingState = useMemo(() => {
-      if (currentMessageFiles.length > 0 && currentIndexingFiles.length > 0) {
-        // token_count is null until indexing finishes; don't hide the
-        // processing indicator while a file's size is still unknown.
-        const allTokenCountsKnown = currentIndexingFiles.every(
-          (file) => file.token_count !== null
-        );
-        if (!allTokenCountsKnown) {
-          return false;
-        }
-        const currentFilesTokenTotal = currentMessageFiles.reduce(
-          (acc, file) => acc + (file.token_count || 0),
-          0
-        );
-        const totalTokens =
-          (currentSessionFileTokenCount || 0) + currentFilesTokenTotal;
-        // Hide processing state when files are within context limits
-        return totalTokens < availableContextTokens;
-      }
-      return false;
-    }, [
-      currentMessageFiles,
-      currentSessionFileTokenCount,
-      currentIndexingFiles,
-      availableContextTokens,
-    ]);
 
     const shouldCompactImages = useMemo(() => {
       return currentMessageFiles.length > 1;
@@ -771,19 +732,18 @@ const AppInputBar = React.memo(
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
                 !message) ||
-              hasUploadingFiles ||
-              hasIndexingFiles ||
+              hasPendingFiles ||
               isClassifying
             }
             tooltip={
-              hasUploadingFiles || hasIndexingFiles
+              hasPendingFiles
                 ? t("appInputBar.sendButton.processingFilesTooltip")
                 : undefined
             }
             id="onyx-chat-input-send-button"
             icon={
               isClassifying
-                ? SvgSimpleLoader
+                ? IconLoader
                 : chatState !== "input" && message.trim()
                   ? SvgArrowUp
                   : chatState === "streaming" || isVoicePlaybackControllable
@@ -883,7 +843,6 @@ const AppInputBar = React.memo(
                     key={file.id}
                     file={file}
                     removeFile={handleRemoveMessageFile}
-                    hideProcessingState={hideProcessingState}
                     onFileClick={handleFileClick}
                     compactImages={shouldCompactImages}
                   />
@@ -958,7 +917,7 @@ const AppInputBar = React.memo(
                               message &&
                               !disabled &&
                               !isClassifying &&
-                              !hasUploadingFiles
+                              !hasPendingFiles
                             ) {
                               submitMessage(message);
                             }
@@ -966,7 +925,7 @@ const AppInputBar = React.memo(
                             message.trim() &&
                             !disabled &&
                             !isClassifying &&
-                            !hasUploadingFiles &&
+                            !hasPendingFiles &&
                             queuedMessages.length < MAX_QUEUED_MESSAGES
                           ) {
                             enqueueCurrentMessage(message.trim());
@@ -1040,9 +999,9 @@ const AppInputBar = React.memo(
                     prominence="tertiary"
                   />
                   <Button
-                    disabled={!message || isClassifying || hasUploadingFiles}
+                    disabled={!message || isClassifying || hasPendingFiles}
                     id="onyx-chat-input-send-button"
-                    icon={isClassifying ? SvgSimpleLoader : SvgSearch}
+                    icon={isClassifying ? IconLoader : SvgSearch}
                     onClick={() => {
                       if (chatState == "streaming") {
                         stopGenerating();
