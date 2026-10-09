@@ -9291,6 +9291,17 @@
           "validation": "Corrija primeiro as falhas de validação.",
           "reconciliation": "Escolha primeiro como conciliar a mudança de escopo."
         }
+      },
+      "pendingBackfills": {
+        "title": "Preenchimentos pendentes",
+        "description": "Uma edição solicitou estas execuções. Cada uma fica aqui até uma execução ser bem-sucedida.",
+        "window": "De {start} a {end}",
+        "windowFromStart": "Tudo até {end}",
+        "waiting": "Aguardando a execução.",
+        "retry": "{count, plural, one {Falhou uma vez. Próxima tentativa: {time}.} other {Falhou # vezes. Próxima tentativa: {time}.}}",
+        "scoped": "Somente itens adicionados",
+        "failures": "{count, plural, one {# falha} other {# falhas}}",
+        "running": "Um preenchimento com uma tentativa está em execução."
       }
     }
   },

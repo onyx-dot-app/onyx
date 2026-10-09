@@ -69,6 +69,7 @@ function githubPair(
     last_permission_sync_attempt_finished: null,
     last_permission_sync_attempt_error_message: null,
     supports_targeted_reindex: false,
+    pending_backfills: [],
     ...overrides,
   };
 }

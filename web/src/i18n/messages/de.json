@@ -9291,6 +9291,17 @@
           "validation": "Beheben Sie zuerst die Validierungsfehler.",
           "reconciliation": "Wählen Sie zuerst, wie die Bereichsänderung abgeglichen wird."
         }
+      },
+      "pendingBackfills": {
+        "title": "Ausstehende Nachindexierungen",
+        "description": "Eine Bearbeitung hat diese Läufe angefordert. Jeder bleibt hier, bis ein Lauf erfolgreich ist.",
+        "window": "{start} bis {end}",
+        "windowFromStart": "Alles bis {end}",
+        "waiting": "Wartet auf den Lauf.",
+        "retry": "{count, plural, one {Einmal fehlgeschlagen. Nächster Versuch: {time}.} other {# Mal fehlgeschlagen. Nächster Versuch: {time}.}}",
+        "scoped": "Nur hinzugefügte Elemente",
+        "failures": "{count, plural, one {# Fehler} other {# Fehler}}",
+        "running": "Eine Nachindexierung mit einem Versuch läuft gerade."
       }
     }
   },

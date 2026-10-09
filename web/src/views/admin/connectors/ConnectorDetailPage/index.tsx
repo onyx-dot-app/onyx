@@ -28,6 +28,7 @@ import {
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
 import InlineFileManagement from "./InlineFileManagement";
+import PendingBackfills from "@/views/admin/connectors/ConnectorDetailPage/PendingBackfills";
 import { SyncAttemptsTabs } from "./SyncAttemptsTabs";
 import { Section } from "@/layouts/general-layouts";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
@@ -615,6 +616,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
             )}
           </AlertDescription>
         </Alert>
+      )}
+
+      {ccPair.pending_backfills.length > 0 && (
+        <div className="mt-6">
+          <PendingBackfills backfills={ccPair.pending_backfills} />
+        </div>
       )}
 
       <Title className="mb-2 mt-6" size="md">

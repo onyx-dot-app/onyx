@@ -9291,6 +9291,17 @@
           "validation": "Corrige primero los errores de validación.",
           "reconciliation": "Elige primero cómo conciliar el cambio de alcance."
         }
+      },
+      "pendingBackfills": {
+        "title": "Rellenos pendientes",
+        "description": "Una edición solicitó estas ejecuciones. Cada una permanece aquí hasta que una ejecución tenga éxito.",
+        "window": "De {start} a {end}",
+        "windowFromStart": "Todo hasta {end}",
+        "waiting": "Espera su ejecución.",
+        "retry": "{count, plural, one {Falló una vez. Próximo reintento: {time}.} other {Falló # veces. Próximo reintento: {time}.}}",
+        "scoped": "Solo elementos agregados",
+        "failures": "{count, plural, one {# fallo} other {# fallos}}",
+        "running": "Ahora se ejecuta un relleno con un intento."
       }
     }
   },

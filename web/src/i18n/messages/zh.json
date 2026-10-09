@@ -9291,6 +9291,17 @@
           "validation": "请先修复验证失败。",
           "reconciliation": "请先选择如何协调范围更改。"
         }
+      },
+      "pendingBackfills": {
+        "title": "待处理的回填",
+        "description": "某次编辑请求了这些运行。每项会保留在此，直到其运行成功。",
+        "window": "{start} 至 {end}",
+        "windowFromStart": "截至 {end} 的全部内容",
+        "waiting": "等待运行。",
+        "retry": "{count, plural, other {已失败 # 次。下次重试：{time}。}}",
+        "scoped": "仅新增项",
+        "failures": "{count, plural, other {失败 # 次}}",
+        "running": "有一个回填正在运行。"
       }
     }
   },
