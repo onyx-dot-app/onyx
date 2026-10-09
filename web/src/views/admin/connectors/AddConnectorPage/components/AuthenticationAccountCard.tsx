@@ -325,16 +325,14 @@ export default function AuthenticationAccountCard({
                 {t("selected.label")}
               </Button>
             ) : (
-              selectable && (
-                // Repeats the card's own action, so it leaves the tab order.
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgArrowRightCircle}
-                  tabIndex={-1}
-                >
-                  {t("useButton.label")}
-                </Button>
-              )
+              // Repeats the card's own action, so it leaves the tab order.
+              <Button
+                prominence="tertiary"
+                rightIcon={SvgArrowRightCircle}
+                tabIndex={-1}
+              >
+                {t("useButton.label")}
+              </Button>
             )}
             <Button
               icon={expanded ? SvgChevronUp : SvgChevronDown}
