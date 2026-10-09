@@ -390,8 +390,11 @@ of meeting chats.
 - **Organizers.** The meeting side follows the channels: a page of licensed
   users per step, then 32 organizers per step drained by eight workers from a
   queue (`sources.drain`), each organizer read for its transcripts and the
-  days of its meeting chats that changed. A slow organizer holds back only its
-  own worker.
+  days of its meeting chats that changed. On a poll, never the first index,
+  one chats export stream per organizer says which chats changed
+  (`meeting_chats.fetch_touched_days`), so a quiet chat costs no request; an
+  app the export API refuses, or a stream refused or past 250k messages, asks
+  each chat what changed. A slow organizer holds back only its own worker.
 - **Prune and permission sync.** `_slim_docs` relists the channels through the
   delta, ids only and no replies, in batches of four channels per worker that
   `max_workers` workers drain, with or without readers (file readers come

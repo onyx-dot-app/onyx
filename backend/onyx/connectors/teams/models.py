@@ -58,6 +58,19 @@ class ChannelIdentity(BaseModel):
     )
 
 
+class ChatExportRow(BaseModel):
+    """The two fields a poll reads from a row of a user's chats export: which
+    chat changed and on which day."""
+
+    chat_id: str | None = None
+    created_date_time: datetime
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+
 class Message(BaseModel):
     id: str
     replyToId: str | None

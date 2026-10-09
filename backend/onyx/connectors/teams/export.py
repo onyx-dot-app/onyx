@@ -42,6 +42,20 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def export_api_answers(graph_client: GraphClient, probe_url: str) -> ExportProbe:
+    """Whether the export API behind the probe answers. A refusal means the
+    caller's slower path, for the app or for the probed item alone; anything
+    else is an outage and raises."""
+    try:
+        get_json_with_retry(graph_client, probe_url)
+    except requests.HTTPError as e:
+        if not is_export_refusal(e):
+            raise
+        logger.info("The export API is not available (%s at %s)", status(e), probe_url)
+        return export_probe_refusal(e)
+    return ExportProbe.ANSWERS
+
+
 class ExportSource:
     def __init__(self, session: TeamsSession, threads: ThreadSource) -> None:
         self._session = session
@@ -51,16 +65,7 @@ class ExportSource:
         """Whether the export API answers for this app, probed on one team. A
         refusal is for the app (403, 402) or for that team alone (gone,
         locked); anything else is an outage and raises."""
-        try:
-            get_json_with_retry(self._session.graph(), team_export_probe_url(team_id))
-        except requests.HTTPError as e:
-            if not is_export_refusal(e):
-                raise
-            logger.info(
-                "The export API is not available (%s on team %s)", status(e), team_id
-            )
-            return export_probe_refusal(e)
-        return ExportProbe.ANSWERS
+        return export_api_answers(self._session.graph(), team_export_probe_url(team_id))
 
     def team(
         self, team_id: str, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
