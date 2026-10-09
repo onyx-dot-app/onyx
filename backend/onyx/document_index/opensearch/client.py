@@ -175,6 +175,9 @@ _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
+# A scan that returns content vectors carries ~20 KB of JSON per chunk at 1024
+# dimensions, so it reads smaller pages to bound worker memory.
+_PIT_SCAN_PAGE_SIZE_WITH_VECTORS = 200
 # Ids per mget request, so the body stays under the cluster's http.max_content_length.
 _MGET_BATCH_SIZE = 500
 
@@ -2064,7 +2067,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         doc_ids: list[str],
         *,
         tenant_state: TenantState,
-        page_size: int = _PIT_SCAN_PAGE_SIZE,
+        page_size: int = _PIT_SCAN_PAGE_SIZE_WITH_VECTORS,
         keep_alive: str = PIT_KEEP_ALIVE,
     ) -> Iterator[list[DocumentChunk]]:
         """iter_chunks_for_doc_ids, with each chunk's stored content vector."""

@@ -63,6 +63,7 @@ from shared_configs.configs import (
     MODEL_SERVER_HOST,
     POSTGRES_DEFAULT_SCHEMA,
 )
+from shared_configs.enums import EmbeddingProvider
 
 
 def _stored_chunk(
@@ -136,8 +137,11 @@ class _ContentVecEmbedder:
 def _ss(
     enable_contextual_rag: bool = False,
     contextual_rag_model_configuration_id: int | None = None,
+    model_name: str = "model-a",
 ) -> SearchSettings:
-    return SearchSettings(
+    return _vector_ss(
+        VectorQuantization.NONE,
+        model_name=model_name,
         enable_contextual_rag=enable_contextual_rag,
         contextual_rag_model_configuration_id=contextual_rag_model_configuration_id,
     )
@@ -145,7 +149,10 @@ def _ss(
 
 def test_select_reembed_strategy() -> None:
     base = _ss()
-    assert select_reembed_strategy(base, _ss()) is ReembedStrategy.MODEL_ONLY
+    assert (
+        select_reembed_strategy(base, _ss(model_name="model-b"))
+        is ReembedStrategy.MODEL_ONLY
+    )
     assert (
         select_reembed_strategy(base, _ss(enable_contextual_rag=True))
         is ReembedStrategy.AUGMENTATION
@@ -158,11 +165,15 @@ def test_select_reembed_strategy() -> None:
         )
         is ReembedStrategy.AUGMENTATION
     )
-    # RAG on in both, same model -> only the embedder could differ -> MODEL_ONLY
+    # RAG on in both, same LLM, new embedder -> MODEL_ONLY
     assert (
         select_reembed_strategy(
             _ss(enable_contextual_rag=True, contextual_rag_model_configuration_id=1),
-            _ss(enable_contextual_rag=True, contextual_rag_model_configuration_id=1),
+            _ss(
+                enable_contextual_rag=True,
+                contextual_rag_model_configuration_id=1,
+                model_name="model-b",
+            ),
         )
         is ReembedStrategy.MODEL_ONLY
     )
@@ -171,7 +182,11 @@ def test_select_reembed_strategy() -> None:
     assert (
         select_reembed_strategy(
             _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=1),
-            _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=2),
+            _ss(
+                enable_contextual_rag=False,
+                contextual_rag_model_configuration_id=2,
+                model_name="model-b",
+            ),
         )
         is ReembedStrategy.MODEL_ONLY
     )
@@ -181,6 +196,8 @@ def _vector_ss(
     vector_quantization: VectorQuantization,
     model_name: str = "model-a",
     enable_contextual_rag: bool = False,
+    contextual_rag_model_configuration_id: int | None = None,
+    provider_type: EmbeddingProvider | None = None,
 ) -> SearchSettings:
     return SearchSettings(
         model_name=model_name,
@@ -188,10 +205,10 @@ def _vector_ss(
         normalize=True,
         query_prefix=None,
         passage_prefix=None,
-        provider_type=None,
+        provider_type=provider_type,
         reduced_dimension=None,
         enable_contextual_rag=enable_contextual_rag,
-        contextual_rag_model_configuration_id=None,
+        contextual_rag_model_configuration_id=contextual_rag_model_configuration_id,
         vector_quantization=vector_quantization,
     )
 
@@ -214,11 +231,33 @@ def test_select_reembed_strategy_copies_vectors_on_quantization_only_change() ->
         )
         is ReembedStrategy.MODEL_ONLY
     )
-    # Nothing changed -> an explicit re-index still re-embeds.
+    # Nothing changed (a re-index to apply a new mapping) -> the vector is reused.
     assert (
         select_reembed_strategy(_vector_ss(none), _vector_ss(none))
-        is ReembedStrategy.MODEL_ONLY
+        is ReembedStrategy.COPY_VECTORS
     )
+    # A provider whose model_name pins the model -> the vector is reused.
+    cohere = EmbeddingProvider.COHERE
+    assert (
+        select_reembed_strategy(
+            _vector_ss(none, provider_type=cohere),
+            _vector_ss(one_bit, provider_type=cohere),
+        )
+        is ReembedStrategy.COPY_VECTORS
+    )
+    # A provider whose model can change without a new SearchSettings -> re-embed.
+    for provider in (
+        EmbeddingProvider.AZURE,
+        EmbeddingProvider.LITELLM,
+        EmbeddingProvider.BIFROST,
+    ):
+        assert (
+            select_reembed_strategy(
+                _vector_ss(none, provider_type=provider),
+                _vector_ss(one_bit, provider_type=provider),
+            )
+            is ReembedStrategy.MODEL_ONLY
+        )
     # Quantization plus a contextual-RAG change -> the text changes.
     assert (
         select_reembed_strategy(

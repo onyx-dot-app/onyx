@@ -174,14 +174,14 @@ def _copy_stored_vectors(
 ) -> tuple[int, bool]:
     """COPY_VECTORS: write each PRESENT chunk with its stored content vector.
     Only a chunk whose stored context the FUTURE strips is re-embedded."""
-    chunks_written = 0
+    chunks_written: int = 0
     for page_chunks in present_client.iter_chunks_with_vectors_for_doc_ids(
         doc_ids, tenant_state=tenant_state
     ):
         if should_abort is not None and should_abort():
             return chunks_written, True
         copied, to_reembed = split_copyable_chunks(page_chunks, strip_stored_context)
-        reembedded = re_embed_chunks(
+        reembedded: list[DocumentChunk] = re_embed_chunks(
             [
                 DocumentChunkWithoutVectors(
                     **{k: v for k, v in dict(c).items() if k != "content_vector"}
@@ -215,21 +215,23 @@ def _write_port_chunks(
     # (create-only re-add after a concurrent delete) without touching a legitimately
     # re-added one, whose forward-written chunks are unmarked. DocumentChunk is
     # frozen, so rebuild via model_copy rather than mutating.
-    marked = [chunk.model_copy(update={"written_by_port": True}) for chunk in chunks]
+    marked: list[DocumentChunk] = [
+        chunk.model_copy(update={"written_by_port": True}) for chunk in chunks
+    ]
     # Stop writing the instant the attempt is cancelled (e.g. by a deletion).
     if should_abort is not None and should_abort():
         return 0, True
-    written = 0
+    written: int = 0
     # Heartbeat before each sub-page write.
     for i in range(0, len(marked), _PORT_WRITE_PAGE_SIZE):
         if should_abort is not None and should_abort():
             return written, True
-        sub = marked[i : i + _PORT_WRITE_PAGE_SIZE]
+        sub: list[DocumentChunk] = marked[i : i + _PORT_WRITE_PAGE_SIZE]
         # Drop chunks of docs deleted mid-batch, re-checked immediately before each
         # write (not once per page): a doc's chunks can span several sub-pages, and a
         # doc deleted between writes would otherwise be create-only resurrected.
         if surviving_doc_ids is not None:
-            surviving = surviving_doc_ids()
+            surviving: set[str] = surviving_doc_ids()
             sub = [c for c in sub if c.document_id in surviving]
             if not sub:
                 continue

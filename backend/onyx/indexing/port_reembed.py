@@ -61,6 +61,7 @@ from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk, IndexChunk
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.traces import TraceContentMode
+from shared_configs.enums import EmbeddingProvider
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
@@ -75,9 +76,25 @@ class ReembedStrategy(enum.Enum):
     MODEL_ONLY = "model_only"
     # The contextual-RAG enrichment changed; rebuild the text, then re-embed.
     AUGMENTATION = "augmentation"
-    # Only the vector quantization changed: the stored content vector is what
-    # re-embedding would produce, so copy it.
+    # No setting that shapes the content vector changed (e.g. only the vector
+    # quantization did): the stored vector is what re-embedding would produce,
+    # so copy it.
     COPY_VECTORS = "copy_vectors"
+
+
+# Providers whose model_name pins the model that produced a stored vector. Azure
+# picks the model by deployment, and the LiteLLM and Bifrost gateways can map a
+# name to any model. Those live on a shared provider row that can change without
+# a new SearchSettings, so a stored vector may not match what FUTURE embeds.
+_COPY_SAFE_PROVIDERS: frozenset[EmbeddingProvider | None] = frozenset(
+    {
+        None,
+        EmbeddingProvider.OPENAI,
+        EmbeddingProvider.COHERE,
+        EmbeddingProvider.VOYAGE,
+        EmbeddingProvider.GOOGLE,
+    }
+)
 
 
 @dataclass
@@ -100,8 +117,9 @@ def select_reembed_strategy(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> ReembedStrategy:
     """AUGMENTATION when the contextual-RAG *enrichment* differs (the embedded
-    text changes); COPY_VECTORS when only the vector quantization differs (the
-    stored vector is unchanged); otherwise MODEL_ONLY. A change in
+    text changes); COPY_VECTORS when the stored vector is still valid (e.g. only
+    the vector quantization differs, or a re-index applies a new mapping);
+    otherwise MODEL_ONLY. A change in
     `contextual_rag_model_configuration_id` only matters when contextual RAG is
     on in present or future — if it is off in both, no enrichment exists in
     either index, so a stale model-id difference must not force AUGMENTATION.
@@ -119,21 +137,20 @@ def select_reembed_strategy(
     )
     if augmentation_changed:
         return ReembedStrategy.AUGMENTATION
-    if (
-        _content_vector_settings_match(present_ss, future_ss)
-        and present_ss.vector_quantization != future_ss.vector_quantization
-    ):
+    if _stored_vectors_reusable(present_ss, future_ss):
         return ReembedStrategy.COPY_VECTORS
     return ReembedStrategy.MODEL_ONLY
 
 
-def _content_vector_settings_match(
+def _stored_vectors_reusable(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> bool:
-    """True when every setting that shapes a content vector is unchanged, so the
-    PRESENT vector is what re-embedding under FUTURE would produce."""
+    """True when every setting that shapes a content vector is unchanged and the
+    provider pins the model, so the PRESENT vector is what re-embedding under
+    FUTURE would produce."""
     return (
-        present_ss.model_name == future_ss.model_name
+        present_ss.provider_type in _COPY_SAFE_PROVIDERS
+        and present_ss.model_name == future_ss.model_name
         and present_ss.model_dim == future_ss.model_dim
         and present_ss.normalize == future_ss.normalize
         and present_ss.query_prefix == future_ss.query_prefix
