@@ -6,11 +6,17 @@ from collections.abc import Iterable, Iterator
 from typing import TypeVar
 
 import requests
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.connectors.hubspot.config import HUBSPOT_OBJECT_SPECS, HubSpotObjectType
+from onyx.connectors.hubspot.models import (
+    ApiActionPermittedUsers,
+    ApiPermittedUsersResponse,
+    ApiUsersResponse,
+    HubSpotUser,
+)
 from onyx.connectors.hubspot.rate_limit import HubSpotRateLimiter
 from onyx.utils.logger import setup_logger
 
@@ -31,33 +37,6 @@ SERVICE_ACCOUNT_DOMAIN_PREFIX = "appserviceaccount."
 _M = TypeVar("_M", bound=BaseModel)
 
 QueryParams = dict[str, str | int | list[str]]
-
-
-class HubSpotUser(BaseModel):
-    id: int
-    email: str | None = None
-
-
-class _PagingNext(BaseModel):
-    after: str | None = None
-
-
-class _Paging(BaseModel):
-    next: _PagingNext | None = None
-
-
-class _UsersPage(BaseModel):
-    results: list[HubSpotUser] = Field(default_factory=list)
-    paging: _Paging | None = None
-
-
-class _ActionPermittedUsers(BaseModel):
-    permitted_users: list[int] = Field(default_factory=list, alias="permittedUsers")
-
-
-class _PermittedUsersResponse(BaseModel):
-    # HCRN to action to the users allowed that action.
-    resources: dict[str, dict[str, _ActionPermittedUsers]] = Field(default_factory=dict)
 
 
 class HubSpotApiError(Exception):
@@ -88,9 +67,9 @@ class HubSpotPermissionReader:
     def __init__(
         self, access_token: str, portal_id: str, rate_limiter: HubSpotRateLimiter
     ) -> None:
-        self._headers = {"Authorization": f"Bearer {access_token}"}
-        self._portal_id = portal_id
-        self._rate_limiter = rate_limiter
+        self._headers: dict[str, str] = {"Authorization": f"Bearer {access_token}"}
+        self._portal_id: str = portal_id
+        self._rate_limiter: HubSpotRateLimiter = rate_limiter
         # User id to email, None when no person owns the id. Filled once per
         # walk, so each unlisted viewer costs one lookup.
         self._emails: dict[int, str | None] | None = None
@@ -98,7 +77,7 @@ class HubSpotPermissionReader:
     def _get(self, model: type[_M], path: str, params: QueryParams) -> _M:
         def request() -> _M:
             # Raised inside the limited call so a 429 is retried with its headers.
-            response = requests.get(
+            response: requests.Response = requests.get(
                 f"{HUBSPOT_API_BASE}{path}",
                 headers=self._headers,
                 params=params,
@@ -111,14 +90,16 @@ class HubSpotPermissionReader:
         return self._rate_limiter.call(request)
 
     def probe_users(self) -> None:
-        self._get(_UsersPage, USERS_PATH, {"limit": 1})
+        self._get(ApiUsersResponse, USERS_PATH, {"limit": 1})
 
     def list_users(self) -> Iterator[HubSpotUser]:
         params: QueryParams = {"limit": USERS_PAGE_SIZE}
         for _ in range(MAX_USERS_PAGES):
-            page = self._get(_UsersPage, USERS_PATH, params)
+            page: ApiUsersResponse = self._get(ApiUsersResponse, USERS_PATH, params)
             yield from page.results
-            after = page.paging.next.after if page.paging and page.paging.next else None
+            after: str | None = (
+                page.paging.next.after if page.paging and page.paging.next else None
+            )
             if not after:
                 return
             params["after"] = after
@@ -134,7 +115,7 @@ class HubSpotPermissionReader:
         # The listing leaves out ids HubSpot still names as viewers (deleted
         # users, the app itself), so those resolve one at a time.
         try:
-            email = _clean_email(
+            email: str | None = _clean_email(
                 self._get(HubSpotUser, f"{USERS_PATH}/{user_id}", {}).email
             )
         except HubSpotApiError as e:
@@ -152,17 +133,19 @@ class HubSpotPermissionReader:
             raise ValueError(
                 f"HubSpot answers for at most {PERMITTED_USERS_BATCH_SIZE} records per call"
             )
-        type_id = HUBSPOT_OBJECT_SPECS[object_type].type_id
-        hcrns = {
+        type_id: str = HUBSPOT_OBJECT_SPECS[object_type].type_id
+        hcrns: dict[str, str] = {
             f"hcrn:{self._portal_id}:crm-object:{type_id}:{record_id}": record_id
             for record_id in record_ids
         }
-        response = self._get(
-            _PermittedUsersResponse, PERMITTED_USERS_PATH, {"resource": list(hcrns)}
+        response: ApiPermittedUsersResponse = self._get(
+            ApiPermittedUsersResponse, PERMITTED_USERS_PATH, {"resource": list(hcrns)}
         )
         viewers: dict[str, set[int]] = {}
         for hcrn, record_id in hcrns.items():
-            actions = response.resources.get(hcrn)
+            actions: dict[str, ApiActionPermittedUsers] | None = response.resources.get(
+                hcrn
+            )
             if actions is None:
                 logger.warning(
                     "HubSpot gave no viewer list for %s %s, so it stays private",
@@ -171,16 +154,16 @@ class HubSpotPermissionReader:
                 )
                 viewers[record_id] = set()
                 continue
-            view = actions.get(VIEW_ACTION)
+            view: ApiActionPermittedUsers | None = actions.get(VIEW_ACTION)
             viewers[record_id] = set(view.permitted_users) if view else set()
         return viewers
 
     def access_for(self, viewer_ids: Iterable[int]) -> ExternalAccess:
         """Viewers with no person behind them (deleted users, the app itself) are left out."""
         emails: set[str] = set()
-        unmatched = 0
+        unmatched: int = 0
         for viewer_id in viewer_ids:
-            email = self._email_for(viewer_id)
+            email: str | None = self._email_for(viewer_id)
             if email is None:
                 unmatched += 1
                 continue

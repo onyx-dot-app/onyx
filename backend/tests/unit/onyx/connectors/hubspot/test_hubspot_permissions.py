@@ -5,6 +5,7 @@ connector's walk hands those out under the ids indexing gives the records."""
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -156,6 +157,28 @@ def test_a_refusal_carries_the_endpoint_and_status() -> None:
         _reader().probe_users()
 
     assert (refusal.value.path, refusal.value.status) == (USERS_PATH, 403)
+
+
+def test_a_viewers_answer_of_the_wrong_shape_raises_instead_of_hiding() -> None:
+    fake = _FakeHubSpot({PERMITTED_USERS_PATH: [_response(200, {"status": "ok"})]})
+
+    with (
+        patch(f"{PERMISSIONS}.requests.get", fake.get),
+        pytest.raises(ValidationError),
+    ):
+        _reader().viewers(HubSpotObjectType.DEALS, ["1"])
+
+
+def test_a_user_listing_of_the_wrong_shape_raises_instead_of_dropping_everyone() -> (
+    None
+):
+    fake = _FakeHubSpot({USERS_PATH: [_response(200, {"status": "ok"})]})
+
+    with (
+        patch(f"{PERMISSIONS}.requests.get", fake.get),
+        pytest.raises(ValidationError),
+    ):
+        _reader().access_for([10])
 
 
 def _connector() -> HubSpotConnector:

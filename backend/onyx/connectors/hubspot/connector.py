@@ -1,6 +1,6 @@
 import re
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterator
 from datetime import datetime, timezone
 from typing import Any, TypeVar, cast
 
@@ -1316,7 +1316,8 @@ class HubSpotConnector(
         start: datetime | None,
         end: datetime | None,
     ) -> Generator[str, None, None]:
-        crm_api = _crm_apis(api_client)[object_type]
+        crm_api: Any = _crm_apis(api_client)[object_type]
+        records: Iterator[Any]
         if start is None:
             # Pruning and doc sync pass a start at most, so this is the full listing.
             records = self._paginated_results(
@@ -1325,7 +1326,7 @@ class HubSpotConnector(
         else:
             # The search walk reads the modified date to pass the 10,000-result cap.
             # A partial listing would revoke access or prune live records.
-            modified_date_property = HUBSPOT_OBJECT_SPECS[
+            modified_date_property: str = HUBSPOT_OBJECT_SPECS[
                 object_type
             ].modified_date_property
             records = self._search_time_range(
@@ -1358,9 +1359,11 @@ class HubSpotConnector(
         end: datetime | None,
         callback: IndexingHeartbeatInterface | None,
     ) -> Generator[SlimDocument | HierarchyNode, None, None]:
-        reader = self._permission_reader()
+        reader: HubSpotPermissionReader = self._permission_reader()
         for object_type in self._configured_object_types():
-            record_ids = self._iter_record_ids(api_client, object_type, start, end)
+            record_ids: Iterator[str] = self._iter_record_ids(
+                api_client, object_type, start, end
+            )
             for chunk in batch_generator(record_ids, PERMITTED_USERS_BATCH_SIZE):
                 # Every chunk is a remote call, so the sync lock is refreshed here
                 # and not only once per yielded batch of _SLIM_BATCH_SIZE.
@@ -1370,7 +1373,7 @@ class HubSpotConnector(
                             f"{_SLIM_DOC_SYNC_LABEL}: Stop signal detected"
                         )
                     callback.progress(_SLIM_DOC_SYNC_LABEL, 1)
-                viewers = reader.viewers(object_type, chunk)
+                viewers: dict[str, set[int]] = reader.viewers(object_type, chunk)
                 for record_id in chunk:
                     yield SlimDocument(
                         id=hubspot_document_id(object_type, record_id),
@@ -1383,7 +1386,7 @@ class HubSpotConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
     ) -> GenerateSlimDocumentOutput:
-        api_client = HubSpot(access_token=self.access_token)
+        api_client: HubSpot = HubSpot(access_token=self.access_token)
         yield from batch_generator(
             self._iter_slim_docs(api_client, _utc(start), _utc(end)), _SLIM_BATCH_SIZE
         )
@@ -1395,7 +1398,7 @@ class HubSpotConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         """Every configured record with the emails of the users HubSpot lets view it."""
-        api_client = HubSpot(access_token=self.access_token)
+        api_client: HubSpot = HubSpot(access_token=self.access_token)
         yield from batch_generator(
             self._iter_slim_docs_with_access(
                 api_client, _utc(start), _utc(end), callback
@@ -1406,9 +1409,9 @@ class HubSpotConnector(
     def _sample_record(
         self, api_client: HubSpot
     ) -> tuple[HubSpotObjectType, str] | None:
-        crm_apis = _crm_apis(api_client)
+        crm_apis: dict[HubSpotObjectType, Any] = _crm_apis(api_client)
         for object_type in self._configured_object_types():
-            page = self._call_hubspot(
+            page: Any = self._call_hubspot(
                 crm_apis[object_type].basic_api.get_page,
                 limit=1,
                 properties=[HS_OBJECT_ID_PROPERTY],
@@ -1421,10 +1424,10 @@ class HubSpotConnector(
         """A 403 here is a missing private-app scope. Failing creation with the
         endpoint named beats a sync that never succeeds while every record stays
         hidden."""
-        api_client = HubSpot(access_token=self.access_token)
-        reader = self._permission_reader()
+        api_client: HubSpot = HubSpot(access_token=self.access_token)
+        reader: HubSpotPermissionReader = self._permission_reader()
         _probe_scope(reader.probe_users)
-        sample = self._sample_record(api_client)
+        sample: tuple[HubSpotObjectType, str] | None = self._sample_record(api_client)
         if sample is None:
             logger.warning(
                 "HubSpot has no records yet, so the viewer lookup stays "
