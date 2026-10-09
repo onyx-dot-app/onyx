@@ -8,6 +8,7 @@ from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermissionReader
 from onyx.connectors.models import ExternalAccess
 from onyx.db.enums import HierarchyNodeType
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
@@ -125,6 +126,40 @@ def _expected_site_hostnames(
     tenant = tenant_domain.lower().removesuffix(ONEDRIVE_HOST_SUFFIX)
     suffix = sharepoint_domain_suffix.lower()
     return {f"{tenant}.{suffix}", f"{tenant}{ONEDRIVE_HOST_SUFFIX}.{suffix}"}
+
+
+def validate_content_types(
+    include_site_documents: bool, include_site_pages: bool
+) -> None:
+    if not include_site_documents and not include_site_pages:
+        raise ConnectorValidationError(
+            "At least one content type must be enabled. Turn on 'Index Documents' "
+            "or 'Index ASPX Sites' (or both)."
+        )
+
+
+def is_site_url_well_formed(site_url: str) -> bool:
+    """A full SharePoint or OneDrive site URL: https and a site path."""
+    return site_url.startswith("https://") and (
+        "/sites/" in site_url or "/teams/" in site_url or "/personal/" in site_url
+    )
+
+
+def validate_site_url(
+    site_url: str, sharepoint_domain_suffix: str, tenant_domain: str | None
+) -> None:
+    """A full site URL, safe to request, on the tenant's host."""
+    if not is_site_url_well_formed(site_url):
+        raise ConnectorValidationError(
+            f"`{site_url}` is not a full SharePoint or OneDrive site URL "
+            "(https://tenant.sharepoint.com/sites/name or /teams/name, "
+            "https://tenant-my.sharepoint.com/personal/name)."
+        )
+    try:
+        validate_outbound_http_url(site_url, https_only=True)
+    except (SSRFException, ValueError) as e:
+        raise ConnectorValidationError(f"Invalid site URL '{site_url}': {e}") from e
+    validate_site_url_host(site_url, sharepoint_domain_suffix, tenant_domain)
 
 
 def validate_site_url_host(

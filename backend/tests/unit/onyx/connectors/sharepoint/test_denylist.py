@@ -10,37 +10,37 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.sharepoint.connector import (
     SharepointConnector,
     SiteDescriptor,
-    _is_site_excluded,
+    is_site_excluded,
 )
 
 
 class TestIsSiteExcluded:
     def test_exact_match(self) -> None:
-        assert _is_site_excluded(
+        assert is_site_excluded(
             "https://contoso.sharepoint.com/sites/archive",
             ["https://contoso.sharepoint.com/sites/archive"],
         )
 
     def test_trailing_slash_mismatch(self) -> None:
-        assert _is_site_excluded(
+        assert is_site_excluded(
             "https://contoso.sharepoint.com/sites/archive/",
             ["https://contoso.sharepoint.com/sites/archive"],
         )
 
     def test_glob_wildcard(self) -> None:
-        assert _is_site_excluded(
+        assert is_site_excluded(
             "https://contoso.sharepoint.com/sites/archive-2024",
             ["*/sites/archive-*"],
         )
 
     def test_no_match(self) -> None:
-        assert not _is_site_excluded(
+        assert not is_site_excluded(
             "https://contoso.sharepoint.com/sites/engineering",
             ["https://contoso.sharepoint.com/sites/archive"],
         )
 
     def test_empty_patterns(self) -> None:
-        assert not _is_site_excluded(
+        assert not is_site_excluded(
             "https://contoso.sharepoint.com/sites/engineering",
             [],
         )
@@ -50,11 +50,11 @@ class TestIsSiteExcluded:
             "*/sites/archive-*",
             "*/sites/hr-confidential",
         ]
-        assert _is_site_excluded(
+        assert is_site_excluded(
             "https://contoso.sharepoint.com/sites/hr-confidential",
             patterns,
         )
-        assert not _is_site_excluded(
+        assert not is_site_excluded(
             "https://contoso.sharepoint.com/sites/engineering",
             patterns,
         )

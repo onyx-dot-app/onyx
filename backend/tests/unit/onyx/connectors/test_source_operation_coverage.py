@@ -19,6 +19,12 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceSpacePermissionsVariant,
 )
 from onyx.connectors.jira.models import JiraGroupPage
+from onyx.connectors.microsoft_utils.drive_delta import (
+    DriveDeltaFetchResult,
+    DriveDeltaPage,
+)
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
+from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
@@ -78,11 +84,38 @@ def _configure_jira_server_spy(spy: MagicMock) -> None:
     spy._is_cloud.return_value = False
 
 
+def _configure_sharepoint_spy(spy: MagicMock) -> None:
+    """A tenant with one site holding one library, one small file and one
+    page, so the read checks reach the item-level operations."""
+    site_url: str = "https://contoso.sharepoint.com/sites/eng"
+    spy.list_site_urls.return_value = [site_url]
+    spy.get_site_id.return_value = "site-id"
+    spy.list_drives.return_value = [
+        SharepointDrive(
+            id="drive-id", name="Documents", web_url=f"{site_url}/Documents"
+        )
+    ]
+    item = {
+        "id": "item-id",
+        "name": "a.pdf",
+        "webUrl": f"{site_url}/Documents/a.pdf",
+        "size": 10,
+        "file": {"mimeType": "application/pdf"},
+        "parentReference": {"driveId": "drive-id"},
+    }
+    spy.get_delta_page.return_value = DriveDeltaFetchResult(
+        page=DriveDeltaPage.model_validate({"value": [item]})
+    )
+    spy.get_drive_item.return_value = DriveItemData.from_graph_json(item)
+    spy.list_site_pages.return_value = SitePagesPage(pages=[{"id": "page-id"}])
+
+
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.CONFLUENCE: [_configure_confluence_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
+    DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
 }
 
 
