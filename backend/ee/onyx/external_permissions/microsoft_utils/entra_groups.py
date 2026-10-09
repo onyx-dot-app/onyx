@@ -24,6 +24,7 @@ from urllib.parse import quote
 
 from office365.directory.object_collection import DirectoryObjectCollection
 from office365.graph_client import GraphClient
+from office365.runtime.paths.resource_path import ResourcePath
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
@@ -132,6 +133,43 @@ def resolve_entra_group_name(
 ) -> str:
     """The external group name for a group known only by an identifier."""
     return entra_group_name(display_name, resolve_group_id(graph_client, identifier))
+
+
+def list_nested_entra_groups(
+    graph_client: GraphClient, identifier: str
+) -> set[ResolvedEntraGroup]:
+    """One group's direct member groups. Graph filters to groups server side,
+    so a group of thousands of users costs one page instead of every member."""
+    group_id = resolve_group_id(graph_client, identifier)
+    if not group_id:
+        logger.error("Failed to get Entra group id for %s", identifier)
+        return set()
+    groups: set[ResolvedEntraGroup] = set()
+
+    def process_groups(members: DirectoryObjectCollection) -> None:
+        # Iterating the collection itself re-fetches pages and re-fires this
+        # callback, so only the page just loaded is read.
+        for member in members.current_page:
+            member_data = member.to_json()
+            member_id = member_data.get("id")
+            display_name = member_data.get("displayName")
+            if not member_id or not display_name:
+                logger.error("Nested group without an id or name: %s", member_data)
+                continue
+            name = resolve_entra_group_name(graph_client, member_id, display_name)
+            groups.add(ResolvedEntraGroup(id=member_id, name=name))
+
+    member_groups = DirectoryObjectCollection(
+        graph_client,
+        ResourcePath(
+            "microsoft.graph.group", graph_client.groups[group_id].members.resource_path
+        ),
+    )
+    sleep_and_retry(
+        member_groups.select(["id", "displayName"]).get_all(page_loaded=process_groups),
+        "list_nested_entra_groups",
+    )
+    return groups
 
 
 def expand_entra_group(
