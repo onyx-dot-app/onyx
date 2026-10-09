@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -26,7 +26,6 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import {
   NEW_ACCOUNT_FIELD,
-  initialNewAccountValues,
   typedAccountSpec,
   type NewAccountValues,
 } from "@/views/admin/connectors/AddConnectorPage/newAccount";
@@ -53,8 +52,8 @@ interface AuthenticationAccountSectionProps {
   /** Called when the user picks a saved account, or drops it. */
   onCredentialChange: (credential: Credential<any> | null) => void;
   /**
-   * Whether the account typed into the new-account form has valid values. It
-   * is then the chosen account, masking any saved pick; Create saves it.
+   * Whether the account typed into the new-account form has valid values.
+   * Without a saved pick it is then the chosen account; Create saves it.
    */
   newAccountReady: boolean;
   /** The account the capability checks run with; `null` locks them. */
@@ -104,10 +103,7 @@ export default function AuthenticationAccountSection({
   const newAccountLabel = t("add.newAccountButton.label", {
     source: displayName,
   });
-  // A saved pick shows as chosen unless a valid typed account masks it.
-  const selectedSavedId: number | null = newAccountReady
-    ? null
-    : (currentCredential?.id ?? null);
+  const selectedSavedId: number | null = currentCredential?.id ?? null;
   // The source's fields when a new account is typed into this form; `null`
   // when it saves through its own account form instead.
   const typedSpec = typedAccountSpec(connector);
@@ -115,12 +111,20 @@ export default function AuthenticationAccountSection({
     typedSpec ? realmFields(typedSpec).map(([key]) => key) : []
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { values, setFieldValue, setFieldTouched } =
-    useFormikContext<Record<string, unknown>>();
+  const { values } = useFormikContext<Record<string, unknown>>();
   const newAccountValues: NewAccountValues | undefined = getIn(
     values,
     NEW_ACCOUNT_FIELD
   );
+
+  // Typing into the new account chooses it: the saved pick is dropped.
+  const newAccountKey: string = JSON.stringify(newAccountValues ?? null);
+  const lastNewAccountKey = useRef<string>(newAccountKey);
+  useEffect(() => {
+    if (newAccountKey === lastNewAccountKey.current) return;
+    lastNewAccountKey.current = newAccountKey;
+    if (currentCredential !== null) onCredentialChange(null);
+  }, [newAccountKey, currentCredential, onCredentialChange]);
 
   async function onDeleteCredential(credential: Credential<any | null>) {
     const error = await remove(credential, t("add.unknownError.toast"));
@@ -133,12 +137,7 @@ export default function AuthenticationAccountSection({
   }
 
   async function onSwap(selectedCredential: Credential<any>) {
-    // Picking a saved account drops what was typed, so the typed account
-    // cannot mask the pick.
-    if (typedSpec) {
-      setFieldValue(NEW_ACCOUNT_FIELD, initialNewAccountValues(typedSpec));
-      setFieldTouched(NEW_ACCOUNT_FIELD, false);
-    }
+    // The typed values stay: typing into them again chooses the new account.
     onCredentialChange(selectedCredential);
     refresh();
   }
@@ -320,8 +319,7 @@ export default function AuthenticationAccountSection({
                 expandable
                 expanded={isCreating}
                 expandableContentHeight="full"
-                // The form keeps what was typed while folded, and a valid
-                // typed account stays the chosen one.
+                // The form keeps what was typed while folded.
                 expandableKeepMounted
                 border="solid"
                 state={isCreating ? "filled" : "empty"}
