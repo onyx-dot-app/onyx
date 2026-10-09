@@ -2,8 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Divider, Fold, SelectCard, Tabs } from "@opal/components";
-import { Content, ContentAction, Section, toast } from "@opal/layouts";
+import {
+  Button,
+  Divider,
+  Fold,
+  InputTypeIn,
+  SelectCard,
+  Tabs,
+} from "@opal/components";
+import {
+  Content,
+  ContentAction,
+  InputVertical,
+  Section,
+  toast,
+} from "@opal/layouts";
+import { Disabled } from "@opal/core";
+import { FormikField } from "@/refresh-components/form/FormikField";
 import { SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential, DraftCredential } from "@/lib/credentials/types";
 import {
@@ -19,6 +34,7 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import {
   NEW_ACCOUNT_FIELD,
+  NEW_ACCOUNT_NAME_FIELD,
   typedAccountSpec,
   type NewAccountValues,
 } from "@/views/admin/connectors/AddConnectorPage/newAccount";
@@ -72,6 +88,8 @@ export default function AuthenticationAccountSection({
   checksLocked,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
+  const tCreate = useTranslations("admin.credentials.create");
+  const newAccountNameField = `${NEW_ACCOUNT_FIELD}.${NEW_ACCOUNT_NAME_FIELD}`;
   const settings = useSettings();
   const {
     displayName,
@@ -190,15 +208,35 @@ export default function AuthenticationAccountSection({
                 : undefined
             }
           />
-          {businessTier && (
-            <>
-              <Divider paddingParallel={0} paddingPerpendicular={0} />
-              <ShareAccountField
-                namePrefix={NEW_ACCOUNT_FIELD}
-                disabled={!newAccountReady}
-              />
-            </>
-          )}
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
+          {/* Opens once the account's own fields are valid. */}
+          <Disabled disabled={!newAccountReady}>
+            <Section alignItems="stretch" gap={4}>
+              <InputVertical
+                withLabel={newAccountNameField}
+                title={tCreate("nameField.title")}
+                suffix="optional"
+              >
+                <FormikField<string>
+                  name={newAccountNameField}
+                  render={(formikField) => (
+                    <InputTypeIn
+                      {...formikField}
+                      id={newAccountNameField}
+                      value={formikField.value ?? ""}
+                      placeholder={tCreate("nameField.placeholder")}
+                    />
+                  )}
+                />
+              </InputVertical>
+              {businessTier && (
+                <ShareAccountField
+                  namePrefix={NEW_ACCOUNT_FIELD}
+                  disabled={!newAccountReady}
+                />
+              )}
+            </Section>
+          </Disabled>
         </Section>
       );
     }

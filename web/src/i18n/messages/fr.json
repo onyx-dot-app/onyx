@@ -3365,6 +3365,10 @@
         "accountEmailField": {
           "subDescription": "Utilisez l'adresse e-mail du compte propriétaire du jeton d'API."
         },
+        "nameField": {
+          "title": "Nom d'affichage",
+          "placeholder": "Nommez votre compte d'authentification"
+        },
         "apiTokenField": {
           "subDescription": "Collez votre jeton d'API pour accéder à {source}."
         },

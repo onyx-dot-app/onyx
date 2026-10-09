@@ -3365,6 +3365,10 @@
         "accountEmailField": {
           "subDescription": "استخدم البريد الإلكتروني للحساب الذي يملك رمز API."
         },
+        "nameField": {
+          "title": "الاسم المعروض",
+          "placeholder": "سمِّ حساب المصادقة الخاص بك"
+        },
         "apiTokenField": {
           "subDescription": "الصق رمز API للوصول إلى {source}."
         },
