@@ -349,9 +349,24 @@ def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
         _strip_colon_tag(c) for c in list(candidates) if ":" in c.split("/")[-1]
     )
 
-    for section in (_remote_section(provider), _catalog().get(provider)):
-        if section is None:
-            continue
+    remote = _remote_section(provider)
+    if remote is not None:
+        for candidate in candidates:
+            entry = _model_in_section(remote, candidate)
+            if entry is None:
+                continue
+            if not isinstance(entry, dict):
+                # A malformed remote entry is a remote miss — resolve against
+                # the vendored floor rather than return corrupt data to
+                # cost/limit lookups.
+                logger.warning(
+                    "Malformed remote catalog entry %s/%s", provider, candidate
+                )
+                break
+            return entry
+
+    section = _catalog().get(provider)
+    if section is not None:
         for candidate in candidates:
             entry = _model_in_section(section, candidate)
             if entry is not None:
