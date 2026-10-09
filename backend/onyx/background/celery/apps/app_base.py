@@ -46,6 +46,7 @@ from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import (
     ColoredFormatter,
     LoggerContextVars,
@@ -432,8 +433,6 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
 
 
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
-    from onyx.utils.fleet_telemetry import start_telemetry
-
     start_telemetry("worker")
     task_logger.info("worker_ready signal received.")
 
@@ -448,10 +447,6 @@ def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
 
 
 def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
-    from onyx.utils.fleet_telemetry import stop_telemetry
-
-    stop_telemetry()
-
     hostname: str = cast(str, sender.hostname)
     path = make_probe_path("readiness", hostname)
     path.unlink(missing_ok=True)

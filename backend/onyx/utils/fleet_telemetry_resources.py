@@ -1,16 +1,13 @@
-"""Resource reads run only in the sender worker or isolated collector."""
+"""Process resource reads. They run only in the sender thread."""
 
-import os
 import shutil
 import time
 from pathlib import Path
 
 import psutil
 
-from onyx.utils.fleet_telemetry import BoundedTelemetry, fingerprint
+from onyx.utils.fleet_telemetry import BoundedTelemetry
 
-# Disk usage is read for the mount that holds application data.
-_DISK_MOUNT: str = os.environ.get("ONYX_TELEMETRY_DISK_MOUNT", "/")
 _last_cpu: tuple[float, float] | None = None
 
 
@@ -53,13 +50,11 @@ def collect_process_resource(client: BoundedTelemetry) -> None:
             else None
         )
         _last_cpu = (cpu_seconds, now)
-        disk = shutil.disk_usage(_DISK_MOUNT)
+        disk = shutil.disk_usage("/")
         client.emit(
             "resource",
             {
-                "service_instance_id": fingerprint(
-                    str(os.getpid()) + ":" + os.uname().nodename
-                ),
+                "service_instance_id": client.instance_id,
                 "memory_bytes": memory,
                 "memory_limit_bytes": memory_limit,
                 "disk_bytes": disk.used,

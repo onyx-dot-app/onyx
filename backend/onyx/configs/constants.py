@@ -154,9 +154,6 @@ def lock_timeout_from_env(name: str, default: int, minimum: int = 1) -> int:
     return default
 
 
-# Joins a Celery queue name and its priority in broker list keys.
-CELERY_SEPARATOR = ":"
-
 CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
 # Beat lock for one document-index sync pass, reacquired every quarter of its
@@ -695,6 +692,7 @@ class OnyxCeleryTask:
     MONITOR_OPENSEARCH_RESOURCES = "monitor_opensearch_resources"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
+    COLLECT_FLEET_TELEMETRY = "collect_fleet_telemetry"
 
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"

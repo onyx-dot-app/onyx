@@ -89,7 +89,6 @@ spec:
                 name: {{ . }}
             {{- end }}
           env:
-            {{- include "onyx.fleetTelemetryEnv" . | nindent 12}}
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- /* The heavy worker runs the `sandbox` queue (cleanup_idle_sandboxes →
                    create_snapshot / create_opencode_history_snapshot). Those POSTs are

@@ -357,13 +357,6 @@ def verify_and_store_license(
     # wedge every other store, refresh, and delete behind it.
     db_session.commit()
 
-    try:
-        from onyx.utils.fleet_telemetry import emit_license_state
-
-        emit_license_state(True, "set")
-    except Exception:
-        pass
-
     resume_license_reclaim()
     publish_license_cache(db_session)
     return payload

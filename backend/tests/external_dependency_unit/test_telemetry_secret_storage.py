@@ -1,4 +1,4 @@
-"""Sentry instance identities persist encrypted-at-rest, never in the plain KV store."""
+"""Telemetry instance secrets persist encrypted-at-rest, never in the plain KV store."""
 
 from sqlalchemy.orm import Session
 
@@ -6,7 +6,7 @@ from onyx.configs.constants import KV_CUSTOMER_UUID_KEY
 from onyx.db.encrypted_kv_store import load_encrypted_kv
 from onyx.db.models import EncryptedKeyValueStore, KVStore
 from onyx.key_value_store.interface import unwrap_str
-from onyx.utils import instance_identity
+from onyx.utils import telemetry
 
 
 def _purge(db_session: Session, key: str) -> None:
@@ -16,10 +16,10 @@ def _purge(db_session: Session, key: str) -> None:
 
 
 def test_customer_uuid_persists_in_encrypted_table(db_session: Session) -> None:
-    instance_identity._CACHED_UUID = None
+    telemetry._CACHED_UUID = None
     _purge(db_session, KV_CUSTOMER_UUID_KEY)
     try:
-        generated = instance_identity.get_or_generate_uuid()
+        generated = telemetry.get_or_generate_uuid()
 
         assert unwrap_str(load_encrypted_kv(KV_CUSTOMER_UUID_KEY)) == generated
         assert (
@@ -27,4 +27,4 @@ def test_customer_uuid_persists_in_encrypted_table(db_session: Session) -> None:
             is None
         )
     finally:
-        instance_identity._CACHED_UUID = None
+        telemetry._CACHED_UUID = None

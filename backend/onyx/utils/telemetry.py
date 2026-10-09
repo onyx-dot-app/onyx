@@ -1,8 +1,11 @@
-"""Cloud product analytics. Fleet callhome uses fleet_telemetry instead."""
+"""Cloud product analytics and the instance UUID. Fleet callhome uses fleet_telemetry."""
 
+import uuid
 from typing import Any
 
-from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.constants import KV_CUSTOMER_UUID_KEY, MilestoneRecordType
+from onyx.db.encrypted_kv_store import load_encrypted_kv, upsert_encrypted_kv
+from onyx.key_value_store.interface import KvKeyNotFoundError, unwrap_str
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -11,6 +14,29 @@ from onyx.utils.variable_functionality import (
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
+
+
+_CACHED_UUID: str | None = None
+
+
+def get_or_generate_uuid() -> str:
+    # TODO: split out the whole "instance UUID" generation logic into a separate
+    # utility function. Telemetry should not be aware at all of how the UUID is
+    # generated/stored.
+    # TODO: handle potential race condition for UUID generation. Doesn't matter for
+    # the telemetry case, but if this is used generally it should be handled.
+    global _CACHED_UUID
+
+    if _CACHED_UUID is not None:
+        return _CACHED_UUID
+
+    try:
+        _CACHED_UUID = unwrap_str(load_encrypted_kv(KV_CUSTOMER_UUID_KEY))
+    except KvKeyNotFoundError:
+        _CACHED_UUID = str(uuid.uuid4())
+        upsert_encrypted_kv(KV_CUSTOMER_UUID_KEY, {"value": _CACHED_UUID})
+
+    return _CACHED_UUID
 
 
 def mt_cloud_telemetry(

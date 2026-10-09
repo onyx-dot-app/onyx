@@ -1349,15 +1349,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 )
                 db_session.commit()
 
-            try:
-                from onyx.utils.fleet_telemetry import emit_signup_domain
-
-                if user.account_type == AccountType.STANDARD:
-                    emit_signup_domain(user.email, user.created_at)
-            except Exception:
-                # Telemetry failures must not affect registration.
-                pass
-
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 

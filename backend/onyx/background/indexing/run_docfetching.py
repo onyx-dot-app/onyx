@@ -103,6 +103,7 @@ from onyx.redis.redis_hierarchy import (
     get_source_node_id_from_cache,
 )
 from onyx.redis.redis_pool import get_redis_client
+from onyx.utils.fleet_telemetry import emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import (
     sanitize_document_for_postgres,
@@ -282,34 +283,20 @@ _CONNECTOR_FETCH_FLUSH_EVERY = 8
 
 
 def _emit_fetch_telemetry(
-    index_attempt_id: int,
-    item: object,
-    duration_ms: int,
-    *,
-    failed: bool = False,
+    index_attempt_id: int, item: object, duration_ms: int
 ) -> None:
-    """Inspect only the fixed ConnectorRunner tuple; generic yields pass untouched."""
-    try:
-        from onyx.utils.fleet_telemetry import emit_stage_counter
-
-        if failed:
-            counters = {"fetch_errors": 1}
-        elif type(item) is tuple and len(item) == 4:
-            docs, _hierarchy, failure, _checkpoint = item
-            if docs is not None and type(docs) is not list:
-                return
-            if failure is not None and not isinstance(failure, ConnectorFailure):
-                return
-            counters = {
-                "fetch_docs": len(docs) if type(docs) is list else 0,
+    """Count the documents and the failure of one ConnectorRunner batch."""
+    if isinstance(item, tuple) and len(item) == 4:
+        docs, _hierarchy, failure, _checkpoint = item
+        emit_stage_counter(
+            index_attempt_id,
+            "fetch",
+            {
+                "fetch_docs": len(docs) if isinstance(docs, list) else 0,
                 "fetch_errors": int(failure is not None),
-            }
-        else:
-            return
-        emit_stage_counter(index_attempt_id, "fetch", counters, duration_ms=duration_ms)
-    except Exception:
-        # Unexpected metadata or telemetry failures cannot replace connector output.
-        pass
+            },
+            duration_ms=duration_ms,
+        )
 
 
 def _timed_connector_runs(
@@ -341,7 +328,12 @@ def _timed_connector_runs(
                 # terminal error iteration isn't lost from the metric.
                 failed_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
                 buffer.record(failed_ms)
-                _emit_fetch_telemetry(index_attempt_id, None, failed_ms, failed=True)
+                emit_stage_counter(
+                    index_attempt_id,
+                    "fetch",
+                    {"fetch_errors": 1},
+                    duration_ms=failed_ms,
+                )
                 raise
             fetch_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
             buffer.record(fetch_ms)

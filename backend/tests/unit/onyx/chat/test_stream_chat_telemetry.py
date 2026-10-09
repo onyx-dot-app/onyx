@@ -1,7 +1,13 @@
-"""Chat timing logs preserve success, failure, and disconnect behavior locally."""
+"""Verify every path through the send-message endpoint emits one ``query`` record.
+
+``handle_send_chat_message`` fans out to three flows: single-model streaming,
+multi-model streaming, and the non-streaming API. Each flow ends in a generator
+decorated with ``telemetry_chat``. These tests call the endpoint directly with
+the LLM turn stubbed out and assert the telemetry record for each flow, plus
+the failure and client-disconnect exits.
+"""
 
 import asyncio
-import re
 from collections.abc import Generator
 from typing import Any, cast
 from unittest.mock import Mock
@@ -15,7 +21,7 @@ from onyx.chat.models import AnswerStream, ChatFullResponse
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
-from onyx.utils import timing
+from onyx.utils import fleet_query_telemetry
 
 _USER_ID = "3f1c9a7e-0f38-4c3d-9a55-2d9e8a1b4c6d"
 
@@ -46,10 +52,11 @@ def _request() -> Request:
 
 
 @pytest.fixture
-def timing_sink(monkeypatch: pytest.MonkeyPatch) -> Mock:
-    sink = Mock(return_value=None)
-    monkeypatch.setattr(timing.logger, "info", sink)
-    monkeypatch.setattr(timing.logger, "notice", sink)
+def telemetry_sink(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    # The decorator resolves ``emit_telemetry`` from its own module's namespace,
+    # so patch it there rather than in ``onyx.utils.fleet_telemetry``.
+    sink = Mock(return_value=True)
+    monkeypatch.setattr(fleet_query_telemetry, "emit_telemetry", sink)
     return sink
 
 
@@ -87,24 +94,20 @@ def _drain(response: StreamingResponse) -> list[str]:
     return asyncio.run(collect())
 
 
-def _timing_records_by_function(sink: Mock) -> set[str]:
-    functions: set[str] = set()
+def _query_outcomes(sink: Mock) -> list[str]:
+    outcomes: list[str] = []
     for call in sink.call_args_list:
-        if call.args and call.args[0] == "%s took %s seconds":
-            float(call.args[2])
-            functions.add(call.args[1])
-        elif len(call.args) == 1 and isinstance(call.args[0], str):
-            match = re.fullmatch(
-                r"([a-zA-Z_][a-zA-Z0-9_]*) took ([0-9.]+) seconds\.", call.args[0]
-            )
-            if match:
-                float(match.group(2))
-                functions.add(match.group(1))
-    return functions
+        event_type, data = call.args
+        assert event_type == "query"
+        assert data["channel"] == "web" and data["mode"] == "chat"
+        # Records never carry the user.
+        assert _USER_ID not in str(data)
+        outcomes.append(data["outcome"])
+    return outcomes
 
 
-def test_single_model_stream_logs_elapsed_time(
-    monkeypatch: pytest.MonkeyPatch, timing_sink: Mock
+def test_single_model_stream_emits_query_record(
+    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
 ) -> None:
     _install_turn(monkeypatch, _two_packet_turn)
 
@@ -112,18 +115,16 @@ def test_single_model_stream_logs_elapsed_time(
 
     # The endpoint returns before the turn runs, so nothing is sent yet.
     assert isinstance(response, StreamingResponse)
-    assert not _timing_records_by_function(timing_sink)
+    telemetry_sink.assert_not_called()
 
     chunks = _drain(response)
 
     assert len(chunks) == 2
-    assert set(_timing_records_by_function(timing_sink)) == {
-        "handle_stream_message_objects"
-    }
+    assert _query_outcomes(telemetry_sink) == ["success"]
 
 
-def test_multi_model_stream_logs_elapsed_time(
-    monkeypatch: pytest.MonkeyPatch, timing_sink: Mock
+def test_multi_model_stream_emits_query_record(
+    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
 ) -> None:
     _install_turn(monkeypatch, _two_packet_turn)
 
@@ -135,18 +136,16 @@ def test_multi_model_stream_logs_elapsed_time(
     )
 
     assert isinstance(response, StreamingResponse)
-    assert not _timing_records_by_function(timing_sink)
+    telemetry_sink.assert_not_called()
 
     chunks = _drain(response)
 
     assert len(chunks) == 2
-    assert set(_timing_records_by_function(timing_sink)) == {
-        "handle_multi_model_stream"
-    }
+    assert _query_outcomes(telemetry_sink) == ["success"]
 
 
-def test_non_streaming_logs_elapsed_time(
-    monkeypatch: pytest.MonkeyPatch, timing_sink: Mock
+def test_non_streaming_emits_query_record(
+    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
 ) -> None:
     _install_turn(monkeypatch, _two_packet_turn)
 
@@ -154,15 +153,11 @@ def test_non_streaming_logs_elapsed_time(
 
     assert isinstance(response, ChatFullResponse)
     assert response.message_id == 2
-    # The turn record plus the aggregation record.
-    assert set(_timing_records_by_function(timing_sink)) == {
-        "handle_stream_message_objects",
-        "gather_stream_full",
-    }
+    assert _query_outcomes(telemetry_sink) == ["success"]
 
 
-def test_stream_failure_still_logs_elapsed_time(
-    monkeypatch: pytest.MonkeyPatch, timing_sink: Mock
+def test_stream_failure_still_emits_query_record(
+    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
 ) -> None:
     def failing_turn(**_: Any) -> AnswerStream:
         yield _packet()
@@ -178,13 +173,14 @@ def test_stream_failure_still_logs_elapsed_time(
     # The endpoint swallows the error into a final JSON line for the client.
     assert len(chunks) == 2
     assert "llm exploded" in chunks[-1]
-    assert set(_timing_records_by_function(timing_sink)) == {
-        "handle_stream_message_objects"
-    }
+    assert _query_outcomes(telemetry_sink) == ["failure"]
+    # The record names the error class, never its message.
+    assert telemetry_sink.call_args.args[1]["error_code"] == "internal"
+    assert "llm exploded" not in str(telemetry_sink.call_args)
 
 
-def test_client_disconnect_still_logs_elapsed_time(
-    monkeypatch: pytest.MonkeyPatch, timing_sink: Mock
+def test_client_disconnect_still_emits_query_record(
+    monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
 ) -> None:
     # Starlette closes the underlying sync generator when the client goes away.
     # That close is not reachable through ``StreamingResponse`` in a unit test,
@@ -205,6 +201,4 @@ def test_client_disconnect_still_logs_elapsed_time(
     next(stream)
     stream.close()
 
-    assert set(_timing_records_by_function(timing_sink)) == {
-        "handle_stream_message_objects"
-    }
+    assert _query_outcomes(telemetry_sink) == ["disconnected"]

@@ -191,8 +191,6 @@ jobs:
           # step should be ok in the short term.
           echo "=== Starting ct install ==="
           set +e
-          # DISABLE_TELEMETRY=true also leaves out the telemetry collector. Its
-          # backend image does not fit on the runner disk next to OpenSearch.
           ct install --all \
             --helm-extra-set-args="\
               --set=nginx.enabled=false \

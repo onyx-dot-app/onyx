@@ -93,7 +93,7 @@ from onyx.onyxbot.slack.utils import (
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
 from onyx.tracing.setup import setup_tracing
-from onyx.utils.fleet_telemetry import start_telemetry, stop_telemetry
+from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
@@ -1385,30 +1385,25 @@ def _get_socket_client(
     )
 
 
-def main() -> None:
+if __name__ == "__main__":
     # Initialize the SqlEngine
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
     # Start telemetry before the handler starts message-processing threads.
     start_telemetry("slack")
+
+    # Initialize the tenant handler which will manage tenant connections
+    logger.info("Starting SlackbotHandler")
+    tenant_handler = SlackbotHandler()
+
+    set_is_ee_if_available()
+    setup_tracing()
+
     try:
-        # Initialize the tenant handler which will manage tenant connections
-        logger.info("Starting SlackbotHandler")
-        tenant_handler = SlackbotHandler()
+        # Keep the main thread alive
+        while tenant_handler.running:
+            time.sleep(1)
 
-        set_is_ee_if_available()
-        setup_tracing()
-
-        try:
-            # Keep the main thread alive
-            while tenant_handler.running:
-                time.sleep(1)
-        except Exception:
-            logger.exception("Fatal error in main thread")
-            tenant_handler.shutdown(None, None)
-    finally:
-        stop_telemetry()
-
-
-if __name__ == "__main__":
-    main()
+    except Exception:
+        logger.exception("Fatal error in main thread")
+        tenant_handler.shutdown(None, None)

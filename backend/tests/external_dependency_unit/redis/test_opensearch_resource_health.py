@@ -65,7 +65,7 @@ def vector_stats(usage: float = 20, tripped: bool = False) -> VectorResourceStat
 @pytest.fixture
 def redis(monkeypatch: pytest.MonkeyPatch) -> Generator[TenantRedisClient, None, None]:
     client = get_redis_client(tenant_id=f"test_resource_health_{uuid4().hex}")
-    monkeypatch.setattr(health, "get_shared_redis_client", lambda **_: client)
+    monkeypatch.setattr(health, "get_shared_redis_client", lambda: client)
     monkeypatch.setattr(api, "get_redis_client", lambda: client)
     monkeypatch.setattr(health, "DISABLE_VECTOR_DB", False)
     yield client

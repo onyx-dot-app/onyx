@@ -18,7 +18,7 @@
 #   - Moves both model servers, OpenSearch, the object store, Redis (cache),
 #     and the background worker to profiles so they do not start by default
 #   - Makes depends_on references to removed services optional
-#   - Sets DISABLE_VECTOR_DB=true on the api_server and the telemetry collector
+#   - Sets DISABLE_VECTOR_DB=true on the api_server
 #   - Uses PostgreSQL for caching and auth instead of Redis
 #   - Uses PostgreSQL for file storage instead of the S3 object store
 #
@@ -56,11 +56,6 @@ services:
       - FILE_STORE_BACKEND=postgres
       - CACHE_BACKEND=postgres
       - AUTH_BACKEND=postgres
-
-  # The collector then skips OpenSearch and Celery queue reads.
-  telemetry_collector:
-    environment:
-      - DISABLE_VECTOR_DB=true
 
   # Move the background worker to a profile so it does not start by default.
   # The API server handles all background work in lite mode.

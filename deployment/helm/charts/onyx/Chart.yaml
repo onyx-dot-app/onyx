@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.10.0
+version: 0.9.10
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,11 +20,6 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: Automatic fleet enrollment and a namespace-scoped collector
-        for connector, job, queue, and service health, with source TLS settings
-        and PostgreSQL/Redis CA mounts. fleetTelemetry.collector.kubernetes (on
-        by default) creates a namespace Role that can list pods and pod metrics.
     - kind: added
       description: Configure Craft proxy, OpenCode, daemon, and generated web app
         listeners for IPv6-only clusters while keeping IPv4 defaults.

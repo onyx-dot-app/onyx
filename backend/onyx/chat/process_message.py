@@ -1885,8 +1885,8 @@ def handle_stream_message_objects(
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
     Emits a fleet ``query`` telemetry record for the whole turn once the stream
-    is exhausted or closed. Callers must pass ``user`` as a keyword argument so
-    the record carries the user id.
+    is exhausted or closed. Callers pass ``new_msg_req`` as a keyword argument
+    so the record names the request channel.
     """
     yield from _stream_chat_turn(
         new_msg_req=new_msg_req,

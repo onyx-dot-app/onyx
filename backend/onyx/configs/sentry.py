@@ -37,7 +37,7 @@ def _add_instance_tags(
         if MULTI_TENANT:
             instance_id = "multi-tenant-cloud"
         else:
-            from onyx.utils.instance_identity import get_or_generate_uuid
+            from onyx.utils.telemetry import get_or_generate_uuid
 
             instance_id = get_or_generate_uuid()
 

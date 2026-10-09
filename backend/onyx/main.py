@@ -169,6 +169,7 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx, setup_onyx
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
+from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger, setup_uvicorn_logger
 from onyx.utils.middleware import (
     add_endpoint_context_middleware,
@@ -428,8 +429,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     else:
         setup_multitenant_onyx()
 
-    from onyx.utils.fleet_telemetry import start_telemetry
-
     start_telemetry("api")
 
     if RATE_LIMITING_ENABLED:
@@ -449,9 +448,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     try:
         yield
     finally:
-        from onyx.utils.fleet_telemetry import stop_telemetry
-
-        stop_telemetry()
         # Flush buffered per-user usage before disposing the DB engines its drain
         # thread writes through.
         from onyx.tracing.setup import shutdown_tracing

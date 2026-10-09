@@ -1,83 +1,66 @@
-"""Isolated collector: python -m onyx.utils.fleet_telemetry_collector.
+"""Fleet telemetry snapshots of connectors, indexing, and background jobs.
 
-No collector queries run inside an API request or indexing task. Use a read-only
-source database role and container resource limits. Source failures only drop
-telemetry; bounded reads never hold source transactions open between polls.
+`collect_snapshots` runs every five minutes for each tenant: as a Celery task on
+the monitoring worker, or in the API server's poller in Onyx Lite. Each run reads
+the rows that changed since the previous run and the work that is still running.
 """
 
-import hashlib
 import json
-import os
 import re
-import signal
-import threading
-import time
 import uuid
-from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, TypeIs
 
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError
-
-from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.fleet_telemetry import (
-    ACTIVE_JOB_STATES,
-    PAGE_SIZE,
-    SOURCE_DATABASE_URL,
-    STAGE_HORIZON,
-    TERMINAL_INDEXING_STATES,
-    active_job_page,
-    attempt_page,
-    collector_engine,
-    connector_page,
-    email_domain_page,
-    job_page,
-    license_snapshot,
-    stage_metric_page,
-    tenant_schemas,
+    attempt_rows,
+    connector_rows,
+    email_domain_rows,
+    job_rows,
+    license_row,
+    limit_statement_time,
+    stage_rows,
 )
-from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.fleet_telemetry import (
-    CELERY_QUEUES,
-    CONNECTOR_CONFIG_COUNTS,
-    CONNECTOR_INTERVAL_SECONDS,
     CONNECTOR_ROW_SETTINGS,
-    QUEUE_INTERVAL_SECONDS,
-    RESOURCE_INTERVAL_SECONDS,
     SAFE_BOOLEAN_SETTINGS,
     SAFE_NUMBER_SETTINGS,
     BoundedTelemetry,
     fingerprint,
-    normalize_email_domain,
-    poll_due,
-    start_telemetry,
-    stop_telemetry,
+    get_sender,
 )
-from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
-SOURCE_EVENT_REVISION: int = 1
-# Attempt and job history stays inside the service's 190-day horizon.
-_HISTORY_HORIZON: timedelta = timedelta(days=184)
-# At the live edge, the next read re-covers a short overlap for rows that commit late.
-_REPAIR_OVERLAP: timedelta = timedelta(minutes=10)
-# A wider sweep resends recent rows every six hours and after deferred events expire.
-_REPAIR_WINDOW: timedelta = timedelta(hours=24)
-_REPAIR_INTERVAL_SECONDS: int = 6 * 3600
-# Explicit broker URL for queue reads; otherwise the standard Redis settings apply.
-_REDIS_URL: str | None = os.environ.get("ONYX_TELEMETRY_REDIS_URL") or None
-
-
-def _iso(value: Any) -> str | None:
-    if isinstance(value, datetime):
-        return (
-            value.replace(tzinfo=timezone.utc).isoformat()
-            if value.tzinfo is None
-            else value.isoformat()
-        )
-    return None
-
-
+# The first run reads one hour back. After a long pause, a run reads one day back.
+_FIRST_WINDOW: timedelta = timedelta(hours=1)
+_MAX_WINDOW: timedelta = timedelta(days=1)
+# Each run reads the last minutes of the previous run again, for rows that
+# committed late. Their event IDs repeat, so the service drops the copies.
+_OVERLAP: timedelta = timedelta(minutes=5)
+# Connectors, signup domains, and the license go out when they change, and at
+# least every six hours.
+_INVENTORY_SECONDS: int = 6 * 3600
+_LAST_RUN_KEY: str = "fleet_telemetry_last_run"
+_INVENTORY_KEY: str = "fleet_telemetry_inventory"
+_RUNNING_STATES: frozenset[str] = frozenset({"not_started", "in_progress"})
+# Connector configuration lists that select what to index. Only their sizes leave.
+_SELECTION_LISTS: tuple[str, ...] = (
+    "folder_ids",
+    "folder_paths",
+    "channels",
+    "channel_names",
+    "server_ids",
+    "spaces",
+    "pages",
+    "categories",
+    "mailboxes",
+    "workspaces",
+    "file_locations",
+    "spot_names",
+    "teams",
+    "connector_ids",
+)
 _ERROR_PATTERNS: tuple[tuple[str, str], ...] = (
     (
         "auth",
@@ -97,9 +80,24 @@ _ERROR_PATTERNS: tuple[tuple[str, str], ...] = (
         r"\b(?:502|503|504|connection|unreachable|unavailable|connectionerror)\b",
     ),
 )
+_ERROR_STAGES: dict[str, str] = {
+    "embedding": "embed",
+    "index_write": "write",
+    "parse": "prepare",
+}
+# A public DNS name. Addresses, single labels, and paths do not match.
+_EMAIL_DOMAIN: re.Pattern[str] = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\Z"
+)
 
 
-def classify_local_error(*samples: Any) -> str:
+def _iso(value: object) -> str | None:
+    if not isinstance(value, datetime):
+        return None
+    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
+
+
+def classify_local_error(*samples: object) -> str:
     """Examine bounded local samples; emit only a fixed category, never text."""
     candidate: str = " ".join(
         sample[:2048] for sample in samples if isinstance(sample, str)
@@ -110,714 +108,272 @@ def classify_local_error(*samples: Any) -> str:
     return "internal"
 
 
-def safe_attempt_error_data(
-    row: dict[str, Any], client: BoundedTelemetry
-) -> dict[str, Any]:
-    category: str = classify_local_error(
-        row.get("local_error_type"),
-        row.get("local_error_sample"),
-        row.get("local_item_error_sample"),
+def normalize_email_domain(domain: str) -> str | None:
+    if not domain or len(domain) > 253:
+        return None
+    try:
+        domain = domain.encode("idna").decode("ascii").lower()
+    except UnicodeError:
+        return None
+    return domain if len(domain) <= 253 and _EMAIL_DOMAIN.fullmatch(domain) else None
+
+
+def _is_count(value: object) -> TypeIs[int | float]:
+    return (
+        isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
     )
-    data: dict[str, Any] = {
-        "error_count": max(row["error_count"] or 0, int(row["has_error"])),
-        "error_code": category,
-        "error_fingerprint": fingerprint(
-            "attempt:" + str(row["connector_type"]) + ":" + category
-        ),
+
+
+def connector_data(row: dict[str, Any]) -> dict[str, Any]:
+    """Connector type, state, and counts. Names, paths, and raw settings stay local."""
+    config: Any = row.get("config")
+    settings: dict[str, Any] = config if isinstance(config, dict) else {}
+    metadata: dict[str, bool | int | float] = {
+        key: settings[key]
+        for key in SAFE_BOOLEAN_SETTINGS
+        if isinstance(settings.get(key), bool)
     }
-    stage: str | None = {
-        "embedding": "embed",
-        "index_write": "write",
-        "parse": "prepare",
-    }.get(category)
-    if stage is not None:
-        data["stage"] = stage
-    return data
-
-
-def _canonical_json(value: dict[str, Any]) -> str:
-    """Key-order-independent text, so equal payloads hash and compare equal."""
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
-
-
-def safe_connector_data(
-    row: dict[str, Any], client: BoundedTelemetry
-) -> dict[str, Any]:
-    raw: Any = row.get("metadata", {})
-    allowed: set[str] = set(
-        SAFE_BOOLEAN_SETTINGS + SAFE_NUMBER_SETTINGS + CONNECTOR_CONFIG_COUNTS
-    )
-    metadata: dict[str, bool | int | float] = (
+    metadata.update(
         {
-            key: value
-            for key, value in raw.items()
-            if key in allowed
-            and type(value) in {bool, int, float}
-            and 0 <= value <= 1e18
+            key: settings[key]
+            for key in SAFE_NUMBER_SETTINGS
+            if _is_count(settings.get(key))
         }
-        if isinstance(raw, dict)
-        else {}
+    )
+    metadata["selection_count"] = sum(
+        len(settings[key])
+        for key in _SELECTION_LISTS
+        if isinstance(settings.get(key), list)
+    )
+    metadata["has_time_filter"] = any(
+        key in settings for key in ("start_date", "time_range", "start_time")
     )
     for key in CONNECTOR_ROW_SETTINGS:
         value: object = row.get(key)
-        if isinstance(value, (bool, int, float)) and 0 <= value <= 1e18:
+        if isinstance(value, bool) or _is_count(value):
             metadata[key] = value
     return {
         "connector_id": row["connector_id"],
         "cc_pair_id": row["cc_pair_id"],
-        "connector_type": row["connector_type"].lower(),
-        "state": row["state"],
-        "doc_count": row.get("doc_count") or 0,
-        "last_success_at": _iso(row.get("last_success_at")),
-        "config_hash": fingerprint(_canonical_json(metadata)),
+        "connector_type": row["source"].value.lower(),
+        "state": row["status"].value.lower(),
+        "doc_count": row["doc_count"] or 0,
+        "last_success_at": _iso(row["last_success_at"]),
+        "config_hash": fingerprint(json.dumps(metadata, sort_keys=True)),
         "metadata": metadata,
     }
 
 
-class FleetCollector:
-    def __init__(
-        self, client: BoundedTelemetry, database_url: str, schemas: list[str]
-    ) -> None:
-        self.client: BoundedTelemetry = client
-        self.engine: Engine = collector_engine(database_url)
-        self.shard_count: int = max(
-            1, min(1000, int(os.environ.get("ONYX_TELEMETRY_SCHEMA_SHARD_COUNT", "1")))
+def attempt_data(row: dict[str, Any]) -> dict[str, Any]:
+    connector_type: str = row["source"].value.lower()
+    data: dict[str, Any] = {
+        "attempt_id": row["attempt_id"],
+        "connector_id": row["connector_id"],
+        "cc_pair_id": row["cc_pair_id"],
+        "connector_type": connector_type,
+        "state": row["status"].value.lower(),
+        "docs_indexed": row["docs_indexed"],
+        "chunks_indexed": row["chunks_indexed"],
+        "total_batches": row["total_batches"],
+        "completed_batches": row["completed_batches"],
+        "error_count": row["error_count"] or 0,
+        "counter_mode": "snapshot",
+        "started_at": _iso(row["started_at"]),
+        "last_progress_at": _iso(row["last_progress_at"]),
+        "last_heartbeat_at": _iso(row["last_heartbeat_at"]),
+    }
+    if row["status"].is_terminal():
+        data["ended_at"] = _iso(row["time_updated"])
+    if row["error_sample"] is not None or row["error_count"]:
+        category: str = classify_local_error(
+            row["item_error_type"], row["error_sample"], row["item_error_sample"]
         )
-        self.shard_index: int = int(
-            os.environ.get("ONYX_TELEMETRY_SCHEMA_SHARD_INDEX", "0")
+        data["error_count"] = max(
+            data["error_count"], int(row["error_sample"] is not None)
         )
-        if not 0 <= self.shard_index < self.shard_count:
-            raise ValueError("Invalid collector shard")
-        self.schemas: list[str] = self._partition(schemas)
-        self._last_discovery: float | None = None
-        self._discover: bool = (
-            MULTI_TENANT and "ONYX_TELEMETRY_SCHEMAS" not in os.environ
-        )
-        self._failed_schema: dict[str, tuple[float, int]] = {}
-        self._connector_cursor: dict[str, int] = {}
-        self._last_connectors: dict[str, float] = {}
-        self._domain_cursor: dict[str, str] = {}
-        self._last_domains: dict[str, float] = {}
-        self.email_domain_errors: int = 0
-        self.license_errors: int = 0
-        self._last_license: dict[str, float] = {}
-        self._stage_cursor: dict[str, tuple[datetime, int]] = {}
-        self._last_stages: dict[str, float] = {}
-        self.stage_errors: int = 0
-        self._last_opensearch: float | None = None
-        self._attempt_cursor: dict[str, tuple[datetime, int]] = {}
-        self._job_cursor: dict[str, tuple[datetime, str]] = {}
-        self._active_job_cursor: dict[str, str] = {}
-        self._last_attempts: dict[str, float] = {}
-        self._last_jobs: dict[str, float] = {}
-        self._last_active_jobs: dict[str, float] = {}
-        self._schema_position: int = 0
-        self._last_queues: float | None = None
-        self._last_aws: float | None = None
-        self._metadata: OrderedDict[tuple[str, str, str], tuple[str, float, int]] = (
-            OrderedDict()
-        )
-        self._last_issue_level: int = 0
-        self._scanned_at: dict[tuple[str, str], datetime] = {}
-        self._sweeps: dict[tuple[str, str], tuple[float, int]] = {}
-        self._source_success: dict[str, float] = {}
-        self.source_errors: int = 0
-        self._discovery_failures: int = 0
-        self.queue_errors: int = 0
-        self.aws_errors: int = 0
-        self.aws_consecutive_errors: int = 0
-        self.last_aws_success_at: str | None = None
+        data["error_code"] = category
+        data["error_fingerprint"] = fingerprint(f"attempt:{connector_type}:{category}")
+        if category in _ERROR_STAGES:
+            data["stage"] = _ERROR_STAGES[category]
+    return data
 
-    def _partition(self, schemas: list[str]) -> list[str]:
-        return [
-            schema
-            for schema in schemas[:10000]
-            if int.from_bytes(hashlib.sha256(schema.encode()).digest()[:8])
-            % self.shard_count
-            == self.shard_index
-        ]
 
-    def _event(
-        self,
-        event_type: str,
-        data: dict[str, Any],
-        schema: str,
-        revision: datetime,
-        entity: str,
-        *,
-        durable_id: bool,
-        observed_at: datetime | None = None,
-    ) -> bool:
-        customer: str | None = self.client.customer_uuid
-        if customer is None:
-            # Durable event IDs live in the namespace that enrollment assigns.
-            return False
-        identity: str = f"{self.client.deployment_id}:{schema}:{event_type}:{entity}:{revision.isoformat()}:{SOURCE_EVENT_REVISION}"
-        if durable_id and observed_at is not None:
-            # Active source rows may update counters without a revision timestamp,
-            # so a hash of the event data tells their snapshots apart.
-            identity += ":" + fingerprint(_canonical_json(data))
-        event_id: str | None = (
-            str(uuid.uuid5(uuid.UUID(customer), identity)) if durable_id else None
+def job_data(row: dict[str, Any]) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        key: row[key]
+        for key in (
+            "job_id",
+            "job_type",
+            "state",
+            "entity_id",
+            "docs_processed",
+            "users_processed",
+            "groups_processed",
+            "memberships_synced",
         )
-        metadata_key: tuple[str, str, str] = (event_type, schema, entity)
-        signature: str = ""
-        observed: float = time.monotonic()
-        loss: int = self.client.dropped + self.client.rejected
-        if event_type == "tenant_domain" or (
-            event_type == "license" and data.get("action") == "snapshot"
-        ):
-            signature = _canonical_json(data)
-            previous: tuple[str, float, int] | None = self._metadata.get(metadata_key)
-            if (
-                previous
-                and previous[0] == signature
-                and observed - previous[1] < _REPAIR_INTERVAL_SECONDS
-                and previous[2] == loss
-                and not self.client.failures
-            ):
-                return True
-        emitted: bool = self.client.emit(
-            event_type,
-            data,
-            tenant_id=schema if MULTI_TENANT else None,
-            event_id=event_id,
-            occurred_at=(observed_at or revision).timestamp(),
-            revision=SOURCE_EVENT_REVISION,
+    }
+    if row["cc_pair_id"] is not None:
+        data["cc_pair_id"] = row["cc_pair_id"]
+    data["started_at"] = _iso(row["started_at"])
+    data["ended_at"] = _iso(row["ended_at"])
+    data["error_count"] = max(row["error_count"], int(row["state"] == "failed"))
+    if row["started_at"] and row["ended_at"]:
+        data["duration_ms"] = max(
+            0, (row["ended_at"] - row["started_at"]).total_seconds() * 1000
         )
-        if emitted and signature:
-            self._metadata[metadata_key] = (signature, observed, loss)
-            self._metadata.move_to_end(metadata_key)
-            while len(self._metadata) > 20000:
-                self._metadata.popitem(last=False)
-        return emitted
+    return data
 
-    def _note_scan(self, schema: str, kind: str, rows: list[dict[str, Any]]) -> None:
-        # Source transaction time of this read; all rows of one read share it.
-        scanned: object = rows[-1].get("source_time") if rows else None
-        if isinstance(scanned, datetime):
-            self._scanned_at[(schema, kind)] = scanned
 
-    def _edge_start(
-        self, schema: str, kind: str, current: datetime, now: float
-    ) -> datetime:
-        """Where the next read starts after a cursor reaches the live edge.
+def _send(
+    sender: BoundedTelemetry,
+    tenant_id: str,
+    event_type: str,
+    data: dict[str, Any],
+    entity: str,
+    revision: datetime,
+    occurred_at: datetime | None = None,
+) -> None:
+    """Send with an event ID made from the row's identity and revision time."""
+    identity: str = f"{tenant_id}:{entity}:{revision.isoformat()}"
+    if occurred_at is not None:
+        # Running work changes its counters without a new revision time.
+        identity += ":" + fingerprint(json.dumps(data, sort_keys=True))
+    sender.emit(
+        event_type,
+        data,
+        tenant_id=tenant_id,
+        event_id=str(uuid.uuid5(uuid.UUID(str(sender.customer_uuid)), identity)),
+        occurred_at=(occurred_at or revision).timestamp(),
+    )
 
-        Normally a short overlap before the last read, on the source clock, so rows
-        that commit late are read again. Every six hours, and after the service
-        deferred events until they expired, a 24-hour sweep resends recent rows;
-        durable event IDs let the service deduplicate them.
-        """
-        expired: int = self.client.expired
-        swept_at, swept_expired = self._sweeps.setdefault(
-            (schema, kind), (now, expired)
-        )
-        if now - swept_at >= _REPAIR_INTERVAL_SECONDS or expired != swept_expired:
-            self._sweeps[(schema, kind)] = (now, expired)
-            return datetime.now(timezone.utc) - _REPAIR_WINDOW
-        scanned: datetime | None = self._scanned_at.get((schema, kind))
-        return scanned - _REPAIR_OVERLAP if scanned is not None else current
 
-    def collect_email_domains(self, schema: str, now: float) -> bool:
-        if not poll_due(
-            self._last_domains.get(schema),
-            now,
-            CONNECTOR_INTERVAL_SECONDS,
-        ):
-            return False
-        try:
-            rows: list[dict[str, Any]] = email_domain_page(
-                self.engine, schema, self._domain_cursor.get(schema, "")
+def _send_inventory(
+    sender: BoundedTelemetry,
+    cache: CacheBackend,
+    tenant_id: str,
+    inventory: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """Send the inventory when it changed, or when the last copy expired."""
+    signature: str = fingerprint(json.dumps(inventory, sort_keys=True))
+    previous: bytes | None = cache.get(_INVENTORY_KEY)
+    if previous is not None and previous.decode() == signature:
+        return
+    sent: list[bool] = [
+        sender.emit(event_type, data, tenant_id=tenant_id)
+        for event_type, data in inventory
+    ]
+    if all(sent):
+        cache.set(_INVENTORY_KEY, signature, ex=_INVENTORY_SECONDS)
+
+
+def collect_snapshots(tenant_id: str) -> None:
+    """One collection pass for one tenant. Never raises."""
+    sender: BoundedTelemetry | None = get_sender()
+    # Event IDs live in the namespace that enrollment assigns.
+    if sender is None or sender.customer_uuid is None:
+        return
+    started: datetime = datetime.now(timezone.utc)
+    try:
+        cache: CacheBackend = get_cache_backend(tenant_id=tenant_id)
+        last_run: bytes | None = cache.get(_LAST_RUN_KEY)
+        since: datetime = started - _FIRST_WINDOW
+        if last_run is not None:
+            since = max(
+                datetime.fromisoformat(last_run.decode()) - _OVERLAP,
+                started - _MAX_WINDOW,
             )
-        except SQLAlchemyError:
-            self.email_domain_errors += 1
-            self._last_domains[schema] = now
-            return False
-        for row in rows:
-            if not self._event(
-                "tenant_domain",
-                {
-                    "domain": row["domain"],
-                    "first_signup_at": _iso(row["first_signup_at"]),
-                },
-                schema,
-                datetime.now(timezone.utc),
-                row["domain"],
-                durable_id=False,
-            ):
-                # An invalid domain must not stop later inventory pages.
-                if normalize_email_domain(row["domain"]):
-                    break
-            self._domain_cursor[schema] = row["domain"]
-        else:
-            if len(rows) < PAGE_SIZE:
-                self._domain_cursor[schema] = ""
-                self._last_domains[schema] = now
-        return True
-
-    def collect_license(self, schema: str, now: float) -> bool:
-        if not poll_due(
-            self._last_license.get(schema),
-            now,
-            CONNECTOR_INTERVAL_SECONDS,
-        ):
-            return False
-        try:
-            row: dict[str, Any] = license_snapshot(self.engine, schema)
-        except SQLAlchemyError:
-            self.license_errors += 1
-            self._last_license[schema] = now
-            return False
-        sent: bool = self._event(
-            "license",
-            {
-                "license_present": row["license_present"],
-                "action": "snapshot",
-                "first_set_at": _iso(row["first_set_at"]),
-            },
-            schema,
-            datetime.now(timezone.utc),
-            "license",
-            durable_id=False,
-        )
-        if sent:
-            self._last_license[schema] = now
-        return sent
-
-    def collect_stages(self, schema: str, now: float) -> None:
-        if not poll_due(
-            self._last_stages.get(schema),
-            now,
-            CONNECTOR_INTERVAL_SECONDS,
-        ):
-            return
-        scan_started: datetime = datetime.now(timezone.utc)
-        oldest: datetime = scan_started - STAGE_HORIZON
-        since, after_id = self._stage_cursor.get(schema, (oldest, 0))
-        try:
-            rows: list[dict[str, Any]] = stage_metric_page(
-                self.engine, schema, max(since, oldest), after_id
-            )
-            for row in rows:
-                data: dict[str, Any] = {
-                    key: row[key]
-                    for key in (
-                        "attempt_id",
-                        "connector_id",
-                        "cc_pair_id",
-                        "event_count",
-                        "total_duration_ms",
-                        "min_duration_ms",
-                        "max_duration_ms",
-                        "m2_duration_ms",
-                    )
-                }
-                data.update(
-                    stage_name=row["stage"],
-                    connector_type=row["connector_type"].lower(),
-                    first_event_at=_iso(row["first_event_at"]),
-                    last_event_at=_iso(row["last_event_at"]),
-                )
-                updated: datetime = row["last_event_at"]
-                if not self._event(
-                    "stage",
-                    data,
-                    schema,
-                    updated,
-                    str(row["id"]),
-                    durable_id=True,
-                    observed_at=updated,
-                ):
-                    return
-                self._stage_cursor[schema] = (updated, row["id"])
-            if len(rows) < PAGE_SIZE:
-                # Reconcile small timestamp overlaps, including a source commit arriving late.
-                self._stage_cursor[schema] = (scan_started - timedelta(minutes=5), 0)
-                self._last_stages[schema] = now
-        except Exception:
-            self.stage_errors += 1
-            self._last_stages[schema] = now
-
-    def collect_one_schema(self) -> bool:
-        if not self.schemas:
-            return False
-        schema: str = self.schemas[self._schema_position % len(self.schemas)]
-        self._schema_position += 1
-        now: float = time.monotonic()
-        if self._failed_schema.get(schema, (0, 0))[0] > now:
-            return False
-        self.collect_stages(schema, now)
-        collected: bool = self.collect_email_domains(schema, now)
-        collected = self.collect_license(schema, now) or collected
-        if poll_due(
-            self._last_connectors.get(schema),
-            now,
-            CONNECTOR_INTERVAL_SECONDS,
-        ):
-            rows: list[dict[str, Any]] | None = connector_page(
-                self.engine, schema, self._connector_cursor.get(schema, 0)
-            )
-            collected = True
-            for row in rows:
-                if not self._event(
-                    "connector",
-                    safe_connector_data(row, self.client),
-                    schema,
-                    datetime.now(timezone.utc),
-                    str(row["cc_pair_id"]),
-                    durable_id=False,
-                ):
-                    break
-                self._connector_cursor[schema] = row["cc_pair_id"]
-            else:
-                if len(rows) < PAGE_SIZE:
-                    self._connector_cursor[schema] = 0
-                    self._last_connectors[schema] = now
-        oldest: datetime = datetime.now(timezone.utc) - _HISTORY_HORIZON
-        since, after_id = self._attempt_cursor.get(schema, (oldest, 0))
-        interval: int = CONNECTOR_INTERVAL_SECONDS
-        rows = (
-            attempt_page(self.engine, schema, since, after_id)
-            if poll_due(self._last_attempts.get(schema), now, interval)
-            else None
-        )
-        self._note_scan(schema, "attempt", rows or [])
-        collected = collected or rows is not None
-        for row in rows or []:
-            state: str = row["state"]
-            updated: datetime = row["time_updated"]
-            data: dict[str, Any] = {
-                key: row[key]
-                for key in {
-                    "attempt_id",
-                    "connector_id",
-                    "cc_pair_id",
-                    "state",
-                    "docs_indexed",
-                    "chunks_indexed",
-                    "total_batches",
-                    "completed_batches",
-                    "error_count",
-                }
-            }
-            data["counter_mode"] = "snapshot"
-            data["connector_type"] = row["connector_type"].lower()
-            for key in {"started_at", "last_progress_at", "last_heartbeat_at"}:
-                data[key] = _iso(row.get(key))
-            if state in TERMINAL_INDEXING_STATES:
-                data["ended_at"] = _iso(updated)
-            if row["has_error"] or row["error_count"]:
-                data.update(safe_attempt_error_data(row, self.client))
-            if not self._event(
-                "attempt",
-                data,
-                schema,
-                updated,
-                str(row["attempt_id"]),
-                durable_id=True,
-            ):
-                break
-            self._attempt_cursor[schema] = (updated, row["attempt_id"])
-        else:
-            if rows is not None and len(rows) < PAGE_SIZE:
-                self._attempt_cursor[schema] = (
-                    self._edge_start(schema, "attempt", since, now),
-                    0,
-                )
-                self._last_attempts[schema] = now
-        job_since, job_after_id = self._job_cursor.get(schema, (oldest, ""))
-        observed_at: datetime = datetime.now(timezone.utc)
-        historical: list[dict[str, Any]] | None = (
-            job_page(self.engine, schema, job_since, job_after_id)
-            if poll_due(self._last_jobs.get(schema), now, interval)
-            else None
-        )
-        self._note_scan(schema, "job", historical or [])
-        active: list[dict[str, Any]] | None = (
-            active_job_page(
-                self.engine, schema, self._active_job_cursor.get(schema, "")
-            )
-            if poll_due(self._last_active_jobs.get(schema), now, interval)
-            else None
-        )
-        collected = collected or historical is not None or active is not None
-        job_rows: list[tuple[dict[str, Any], bool]] = [
-            (row, False) for row in historical or []
-        ] + [(row, True) for row in active or []]
-        for row, active_only in job_rows:
-            data = {
-                "job_id": row["id"],
-                "entity_id": row["entity_id"],
-                "job_type": row["job_type"],
-                "state": row["state"],
-                "docs_processed": row["docs_processed"] or 0,
-                "users_processed": row["users_processed"] or 0,
-                "groups_processed": row["groups_processed"] or 0,
-                "memberships_synced": row["memberships_synced"] or 0,
-                "started_at": _iso(row["started_at"]),
-                "ended_at": _iso(row["ended_at"]),
-                "error_count": max(
-                    row["error_count"] or 0, int(row["state"] == "failed")
-                ),
-            }
-            if row["ended_at"] and row["started_at"]:
-                data["duration_ms"] = max(
-                    0, (row["ended_at"] - row["started_at"]).total_seconds() * 1000
-                )
-            if row["id"].split(":", 1)[0] in {
-                "permission",
-                "group",
-                "hierarchy",
-                "port",
-            }:
-                data["cc_pair_id"] = row["entity_id"]
-            if not self._event(
-                "job",
-                data,
-                schema,
-                row["revision_at"],
-                str(row["id"]),
-                durable_id=True,
-                observed_at=observed_at if row["state"] in ACTIVE_JOB_STATES else None,
-            ):
-                break
-            if active_only:
-                self._active_job_cursor[schema] = row["id"]
-            else:
-                self._job_cursor[schema] = (row["revision_at"], row["id"])
-        else:
-            if historical is not None and len(historical) < PAGE_SIZE:
-                self._job_cursor[schema] = (
-                    self._edge_start(schema, "job", job_since, now),
-                    "",
-                )
-                self._last_jobs[schema] = now
-            if active is not None and len(active) < PAGE_SIZE:
-                self._active_job_cursor[schema] = ""
-                self._last_active_jobs[schema] = now
-        return collected
-
-    def collect_queues(self) -> None:
-        # Without a vector DB, Onyx runs no Celery workers or broker.
-        if DISABLE_VECTOR_DB or not poll_due(
-            self._last_queues,
-            time.monotonic(),
-            QUEUE_INTERVAL_SECONDS,
-        ):
-            return
-        from redis import Redis
-
-        from onyx.configs.constants import CELERY_SEPARATOR, OnyxCeleryPriority
-
-        url: str | None = _REDIS_URL
-        tls_options: dict[str, Any] = {}
-        if not url and self.shard_index != 0:
-            return
-        if not url:
-            from urllib.parse import quote
-
-            from onyx.configs.app_configs import (
-                REDIS_DB_NUMBER_CELERY,
-                REDIS_HOST,
-                REDIS_PASSWORD,
-                REDIS_PORT,
-                REDIS_SSL,
-                REDIS_SSL_CA_CERTS,
-                REDIS_SSL_CERT_REQS,
-                REDIS_SSL_CERTFILE,
-                REDIS_SSL_CHECK_HOSTNAME,
-                REDIS_SSL_KEYFILE,
-                USE_REDIS_IAM_AUTH,
-            )
-
-            if USE_REDIS_IAM_AUTH:
-                return
-            scheme: str = "rediss" if REDIS_SSL else "redis"
-            password: str = (
-                ":" + quote(REDIS_PASSWORD, safe="") + "@" if REDIS_PASSWORD else ""
-            )
-            url = f"{scheme}://{password}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB_NUMBER_CELERY}"
-            if REDIS_SSL:
-                tls_options = {
-                    "ssl_cert_reqs": REDIS_SSL_CERT_REQS,
-                    "ssl_check_hostname": REDIS_SSL_CHECK_HOSTNAME,
-                    "ssl_ca_certs": REDIS_SSL_CA_CERTS,
-                    "ssl_certfile": REDIS_SSL_CERTFILE,
-                    "ssl_keyfile": REDIS_SSL_KEYFILE,
-                }
-        # Connection failures follow the same bounded poll cadence as success.
-        self._last_queues = time.monotonic()
-        redis: Redis = Redis.from_url(
-            url,
-            socket_connect_timeout=0.2,
-            socket_timeout=0.2,
-            max_connections=1,
-            **tls_options,
-        )
-        try:
-            priorities: int = len(OnyxCeleryPriority)
-            with redis.pipeline(transaction=False) as pipeline:
-                for queue in CELERY_QUEUES:
-                    for priority in range(priorities):
-                        pipeline.llen(
-                            queue
-                            if priority == 0
-                            else queue + CELERY_SEPARATOR + str(priority)
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+            limit_statement_time(db_session)
+            inventory: list[tuple[str, dict[str, Any]]] = [
+                ("connector", connector_data(row)) for row in connector_rows(db_session)
+            ]
+            for row in email_domain_rows(db_session):
+                domain: str | None = normalize_email_domain(row["domain"] or "")
+                if domain and row["first_signup_at"] is not None:
+                    inventory.append(
+                        (
+                            "tenant_domain",
+                            {
+                                "domain": domain,
+                                "first_signup_at": _iso(row["first_signup_at"]),
+                            },
                         )
-                lengths: list[int] = pipeline.execute()
-            for position, queue in enumerate(CELERY_QUEUES):
-                self.client.emit(
-                    "queue",
+                    )
+            license: dict[str, Any] = license_row(db_session)
+            inventory.append(
+                (
+                    "license",
                     {
-                        "queue": queue,
-                        "depth": sum(
-                            lengths[position * priorities : (position + 1) * priorities]
-                        ),
-                        "shared": True,
+                        "license_present": bool(license["license_present"]),
+                        "first_set_at": _iso(license["first_set_at"]),
                     },
                 )
-        finally:
-            redis.close()
-
-    def tick(self) -> None:
-        now: float = time.monotonic()
-        if self._discover and poll_due(self._last_discovery, now, 60):
-            try:
-                self.schemas = self._partition(tenant_schemas(self.engine))
-                self._discovery_failures = 0
-            except Exception:
-                self.source_errors += 1
-                self._discovery_failures = min(8, self._discovery_failures + 1)
-            self._last_discovery = now
-        started: float = time.monotonic()
-        for _ in range(min(10, len(self.schemas))):
-            # collect_one_schema skips this schema while its failure backoff lasts.
-            schema: str = self.schemas[self._schema_position % len(self.schemas)]
-            try:
-                if self.collect_one_schema():
-                    self._failed_schema.pop(schema, None)
-                    self._source_success[schema] = time.time()
-            except Exception:
-                # No SQL, endpoint, identifiers, or exception strings are logged.
-                failures: int = min(self._failed_schema.get(schema, (0, 0))[1] + 1, 8)
-                self._failed_schema[schema] = (
-                    time.monotonic() + min(300, 2**failures),
-                    failures,
-                )
-                self.source_errors += 1
-            if time.monotonic() - started >= 1:
-                break
-        try:
-            self.collect_queues()
-        except Exception:
-            self.queue_errors += 1
-        if poll_due(
-            self._last_aws,
-            time.monotonic(),
-            RESOURCE_INTERVAL_SECONDS,
-        ):
-            try:
-                from onyx.utils.fleet_telemetry_aws import collect_aws_resources
-
-                result: bool | None = collect_aws_resources(self.client)
-                if result is True:
-                    self.aws_consecutive_errors = 0
-                    self.last_aws_success_at = datetime.now(timezone.utc).isoformat()
-                elif result is False:
-                    self.aws_errors += 1
-                    self.aws_consecutive_errors += 1
-            except Exception:
-                self.aws_errors += 1
-                self.aws_consecutive_errors += 1
-            self._last_aws = time.monotonic()
-        if self.shard_index == 0 and poll_due(
-            self._last_opensearch,
-            time.monotonic(),
-            RESOURCE_INTERVAL_SECONDS,
-        ):
-            self._last_opensearch = time.monotonic()
-            try:
-                from onyx.utils.fleet_telemetry_opensearch import (
-                    collect_opensearch_health,
-                )
-
-                collect_opensearch_health(self.client)
-            except Exception:
-                self.source_errors += 1
-        self.client.health = {
-            "stage_errors": self.stage_errors,
-            "email_domain_errors": self.email_domain_errors,
-            "license_errors": self.license_errors,
-            "source_errors": self.source_errors,
-            "source_consecutive_errors": max(
-                self._discovery_failures,
-                max(
-                    (failures for _, failures in self._failed_schema.values()),
-                    default=0,
-                ),
-            ),
-            "last_source_success_at": datetime.fromtimestamp(
-                max(self._source_success.values()), timezone.utc
-            ).isoformat()
-            if self._source_success
-            else None,
-            "queue_errors": self.queue_errors,
-            "kubernetes_errors": self.client.health.get("kubernetes_errors", 0),
-            "schema_count": len(self.schemas),
-            "aws_errors": self.aws_errors,
-            "aws_consecutive_errors": self.aws_consecutive_errors,
-            "last_aws_success_at": self.last_aws_success_at,
-        }
-        level: int = self.client.health["source_consecutive_errors"]
-        if level >= 3 and self._last_issue_level < 3:
-            # The sender reports health on its own cadence; failures report at once.
-            self.client.emit(
-                "heartbeat",
-                {**self.client.delivery_health(), **self.client.health},
             )
-        self._last_issue_level = level
-
-
-def main() -> None:
-    stopped: threading.Event = threading.Event()
-    signal.signal(signal.SIGTERM, lambda *_: stopped.set())
-    signal.signal(signal.SIGINT, lambda *_: stopped.set())
-    client: BoundedTelemetry | None = None
-    if not DISABLE_TELEMETRY:
-        # The sender reads the deployment key through the application engine.
-        SqlEngine.init_engine(pool_size=1, max_overflow=0)
-        client = start_telemetry("collector")
-    if client is None:
-        # Wait idle instead of exiting, so the container does not restart in a loop.
-        stopped.wait()
-        return
-    schemas: list[str] = [
-        value
-        for value in os.environ.get(
-            "ONYX_TELEMETRY_SCHEMAS", "" if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA
-        ).split(",")
-        if value
-    ]
-    collector: FleetCollector = FleetCollector(client, SOURCE_DATABASE_URL, schemas)
-    from onyx.utils.fleet_telemetry_kubernetes import KubernetesCollector
-
-    kubernetes: KubernetesCollector | None = (
-        KubernetesCollector(client)
-        if os.environ.get("ONYX_TELEMETRY_KUBERNETES", "").lower() == "true"
-        else None
-    )
-    try:
-        while not stopped.is_set():
-            # Source reads start once the sender has enrolled.
-            if client.customer_uuid is not None:
-                collector.tick()
-                if kubernetes is not None:
-                    kubernetes.tick()
-            stopped.wait(2)
-    finally:
-        collector.engine.dispose()
-        stop_telemetry()
-
-
-if __name__ == "__main__":
-    main()
+            attempts: list[dict[str, Any]] = attempt_rows(db_session, since)
+            stages: list[dict[str, Any]] = stage_rows(
+                db_session, [row["attempt_id"] for row in attempts], since
+            )
+            jobs: list[dict[str, Any]] = job_rows(db_session, since)
+        _send_inventory(sender, cache, tenant_id, inventory)
+        for row in attempts:
+            _send(
+                sender,
+                tenant_id,
+                "attempt",
+                attempt_data(row),
+                f"attempt:{row['attempt_id']}",
+                row["time_updated"],
+            )
+        by_attempt: dict[int, dict[str, Any]] = {
+            row["attempt_id"]: row for row in attempts
+        }
+        for row in stages:
+            attempt: dict[str, Any] = by_attempt[row["attempt_id"]]
+            stage_data: dict[str, Any] = {
+                key: row[key]
+                for key in (
+                    "attempt_id",
+                    "event_count",
+                    "total_duration_ms",
+                    "min_duration_ms",
+                    "max_duration_ms",
+                    "m2_duration_ms",
+                )
+            }
+            stage_data.update(
+                connector_id=attempt["connector_id"],
+                cc_pair_id=attempt["cc_pair_id"],
+                connector_type=attempt["source"].value.lower(),
+                stage_name=row["stage"].value,
+                first_event_at=_iso(row["first_event_at"]),
+                last_event_at=_iso(row["last_event_at"]),
+            )
+            # The service requires the event time to equal the summary's last update.
+            _send(
+                sender,
+                tenant_id,
+                "stage",
+                stage_data,
+                f"stage:{row['attempt_id']}:{row['stage'].value}",
+                row["last_event_at"],
+            )
+        for row in jobs:
+            if row["revision_at"] is not None:
+                _send(
+                    sender,
+                    tenant_id,
+                    "job",
+                    job_data(row),
+                    row["job_id"],
+                    row["revision_at"],
+                    started if row["state"] in _RUNNING_STATES else None,
+                )
+        cache.set(_LAST_RUN_KEY, started.isoformat(), ex=7 * 24 * 3600)
+        sender.health["source_consecutive_errors"] = 0
+        sender.health["last_source_success_at"] = started.isoformat()
+    except Exception:
+        # No SQL, identifiers, or exception text leave the process.
+        sender.health["source_errors"] = sender.health.get("source_errors", 0) + 1
+        sender.health["source_consecutive_errors"] = (
+            sender.health.get("source_consecutive_errors", 0) + 1
+        )

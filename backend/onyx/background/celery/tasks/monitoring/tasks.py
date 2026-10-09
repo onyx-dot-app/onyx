@@ -5,6 +5,7 @@ from typing import cast
 import psutil
 from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
+from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy import text
 
@@ -34,6 +35,14 @@ from onyx.redis.redis_pool import (
     get_redis_client,
     redis_lock_dump,
 )
+from onyx.utils.fleet_telemetry import (
+    CELERY_QUEUES,
+    QUEUE_INTERVAL_SECONDS,
+    emit_telemetry,
+    get_sender,
+    poll_due,
+)
+from onyx.utils.fleet_telemetry_collector import collect_snapshots
 from onyx.utils.platform_utils import is_running_in_container, is_running_in_kubernetes
 from shared_configs.configs import MULTI_TENANT
 
@@ -294,6 +303,28 @@ def monitor_celery_queues_helper(
         f"monitoring={n_monitoring} "
         f"sandbox={n_sandbox} "
     )
+    _report_queue_depths(r_celery)
+
+
+_last_queue_report: float | None = None
+
+
+def _report_queue_depths(r_celery: Redis) -> None:
+    """Fleet telemetry: the depth of every queue, at most every QUEUE_INTERVAL_SECONDS."""
+    global _last_queue_report
+    now: float = time.monotonic()
+    if get_sender() is None or not poll_due(
+        _last_queue_report, now, QUEUE_INTERVAL_SECONDS
+    ):
+        return
+    _last_queue_report = now
+    try:
+        for queue in CELERY_QUEUES:
+            depth: int = celery_get_queue_length(queue, r_celery)
+            emit_telemetry("queue", {"queue": queue, "depth": depth, "shared": True})
+    except Exception:
+        # Telemetry never fails the queue monitor.
+        pass
 
 
 """Memory monitoring"""
@@ -444,3 +475,12 @@ def cloud_monitor_celery_pidbox(
 )
 def monitor_opensearch_resources(*, tenant_id: str | None = None) -> None:  # noqa: ARG001
     refresh_resource_health()
+
+
+@shared_task(
+    name=OnyxCeleryTask.COLLECT_FLEET_TELEMETRY,
+    ignore_result=True,
+    queue=OnyxCeleryQueues.MONITORING,
+)
+def collect_fleet_telemetry(*, tenant_id: str) -> None:
+    collect_snapshots(tenant_id)

@@ -114,6 +114,7 @@ from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.traces import TraceContentMode
 from onyx.utils.batching import batch_generator
+from onyx.utils.fleet_telemetry import emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -352,8 +353,6 @@ def embed_and_stream(
                 ...
     """
     with ChunkBatchStore() as store:
-        from onyx.utils.fleet_telemetry import emit_stage_counter
-
         embed_start = time.monotonic()
         result = _embed_chunks_to_store(
             chunks=chunks,
@@ -1476,14 +1475,6 @@ def index_doc_batch(
     )
 
     filtered_documents, filter_failures = filter_fnc(document_batch)
-    from onyx.utils.fleet_telemetry import emit_stage_counter
-
-    emit_stage_counter(
-        attempt_id,
-        "prepare",
-        {"prepare_docs": len(filtered_documents)},
-        tenant_id=tenant_id,
-    )
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(

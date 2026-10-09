@@ -15,6 +15,11 @@ from typing import Any, Literal, Optional
 
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.utils.fleet_telemetry import (
+    EXIT_FLUSH_SECONDS,
+    start_telemetry,
+    stop_telemetry,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.os_reaper import (
     become_child_subreaper,
@@ -85,12 +90,6 @@ def _initializer(
     # Initialize a new engine with desired parameters
     SqlEngine.init_engine(
         pool_size=4, max_overflow=12, pool_recycle=60, pool_pre_ping=True
-    )
-
-    from onyx.utils.fleet_telemetry import (
-        EXIT_FLUSH_SECONDS,
-        start_telemetry,
-        stop_telemetry,
     )
 
     # The parent worker reports this container; the child only delivers its counters.

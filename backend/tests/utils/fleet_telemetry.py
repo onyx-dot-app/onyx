@@ -54,7 +54,11 @@ def accept_all(url: str, **kwargs: Any) -> Response:
         return Response(TEST_ENROLLMENT)
     events: list[dict[str, Any]] = posted_events(kwargs)
     return Response(
-        {"results": [{"index": i, "status": "accepted"} for i in range(len(events))]}
+        {
+            "results": [{"index": i, "status": "accepted"} for i in range(len(events))],
+            "accepted": len(events),
+            "rejected": 0,
+        }
     )
 
 

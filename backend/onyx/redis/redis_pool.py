@@ -392,9 +392,7 @@ def get_redis_replica_client(
     return redis_pool.get_replica_client(tenant_id)
 
 
-def get_shared_redis_client(
-    *, operation_timeout_s: float | None = None
-) -> TenantRedisClient:
+def get_shared_redis_client() -> TenantRedisClient:
     """
     Returns a Redis client with a shared namespace prefix.
 
@@ -403,13 +401,8 @@ def get_shared_redis_client(
 
     Use this for data that should be shared across the application and
     isn't specific to any individual tenant.
-
-    `operation_timeout_s` bounds each Redis operation for callers that must not
-    wait on a slow server.
     """
-    return redis_pool.get_client(
-        DEFAULT_REDIS_PREFIX, operation_timeout_s=operation_timeout_s
-    )
+    return redis_pool.get_client(DEFAULT_REDIS_PREFIX)
 
 
 def get_shared_redis_replica_client() -> TenantRedisClient:

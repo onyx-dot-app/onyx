@@ -121,9 +121,10 @@ def test_cloud_key_comes_from_the_web_domain(
 ) -> None:
     monkeypatch.setattr(fleet, "MULTI_TENANT", True)
     monkeypatch.setattr(fleet, "WEB_DOMAIN", "https://cloud.example")
-    assert fleet.deployment_key() == hashlib.sha256(
-        b"onyx-cloud:https://cloud.example"
-    ).hexdigest()
+    assert (
+        fleet.deployment_key()
+        == hashlib.sha256(b"onyx-cloud:https://cloud.example").hexdigest()
+    )
 
 
 def test_cloud_tenants_report_as_scoped_customers(
@@ -133,7 +134,9 @@ def test_cloud_tenants_report_as_scoped_customers(
     sender: fleet.BoundedTelemetry = make_sender()
     for tenant in ("tenant_a", "tenant_b"):
         assert sender.emit("heartbeat", {"dropped_events": 0}, tenant_id=tenant)
-    assert sender.emit("resource", {"memory_bytes": 100, "shared": True})
+    assert sender.emit(
+        "resource", {"memory_bytes": 100, "shared": True}, tenant_id="tenant_a"
+    )
     first, second, shared = sender._take_batch()
     deployment: str = TEST_ENROLLMENT["customer_uuid"]
     assert first["customer_uuid"] != second["customer_uuid"]

@@ -6,6 +6,7 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import (
     AUTO_LLM_CONFIG_URL,
+    DISABLE_TELEMETRY,
     DISABLE_VECTOR_DB,
     SCHEDULED_EVAL_DATASET_NAMES,
 )
@@ -19,6 +20,7 @@ from onyx.document_index.opensearch.constants import (
     RESOURCE_CHECK_INTERVAL_SECONDS,
 )
 from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
+from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
 from onyx.utils.variable_functionality import is_ee_available
 from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS, MULTI_TENANT
 
@@ -320,6 +322,20 @@ if SCHEDULED_EVAL_DATASET_NAMES:
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        }
+    )
+
+if not DISABLE_TELEMETRY:
+    beat_task_templates.append(
+        {
+            "name": "collect-fleet-telemetry",
+            "task": OnyxCeleryTask.COLLECT_FLEET_TELEMETRY,
+            "schedule": timedelta(seconds=COLLECTION_INTERVAL_SECONDS),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": COLLECTION_INTERVAL_SECONDS,
+                "queue": OnyxCeleryQueues.MONITORING,
             },
         }
     )

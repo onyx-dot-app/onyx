@@ -67,7 +67,6 @@ spec:
                 name: {{ . }}
             {{- end }}
           env:
-            {{- include "onyx.fleetTelemetryEnv" . | nindent 12}}
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}

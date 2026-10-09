@@ -90,45 +90,16 @@ opensearch_logger.setLevel(logging.WARNING)
 SchemaDocumentModel = TypeVar("SchemaDocumentModel")
 
 
-class _MeasuredBulkClient:
-    """Observe actual item acknowledgments without changing bulk helper behavior."""
-
-    def __init__(self, client: OpenSearch, *, benign_conflicts: bool = False) -> None:
-        self.client = client
-        self.transport = client.transport
-        # Create-only writers yield to the live writer on a 409; that is not an error.
-        self.benign_conflicts = benign_conflicts
-
-    def bulk(self, *args: Any, **kwargs: Any) -> Any:
-        started = time.monotonic()
-        response = self.client.bulk(*args, **kwargs)
-        try:
-            context = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
-            if context is not None:
-                accepted = rejected = errors = 0
-                for operation in response.get("items", []):
-                    for result in operation.values():
-                        status = result.get("status", 500)
-                        if 200 <= status < 300:
-                            accepted += 1
-                        elif self.benign_conflicts and status == HTTPStatus.CONFLICT:
-                            continue
-                        else:
-                            errors += 1
-                            rejected += int(status == 429)
-                emit_stage_counter(
-                    context[1],
-                    "write",
-                    {
-                        "write_chunks": accepted,
-                        "write_errors": errors,
-                        "write_rejected": rejected,
-                    },
-                    duration_ms=max(0, int((time.monotonic() - started) * 1000)),
-                )
-        except Exception:
-            pass
-        return response
+def _report_written_chunks(written: int, failed: int, started: float) -> None:
+    """Fleet telemetry for one bulk write made for an index attempt."""
+    context: tuple[int, int] | None = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
+    if context is not None:
+        emit_stage_counter(
+            context[1],
+            "write",
+            {"write_chunks": written, "write_errors": max(0, failed)},
+            duration_ms=max(0, int((time.monotonic() - started) * 1000)),
+        )
 
 
 class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
@@ -1171,11 +1142,12 @@ class OpenSearchIndexClient(OpenSearchClient):
             }
             data.append(data_for_document)
 
+        started: float = time.monotonic()
         if use_create_only:
             # a chunk that already exists is owned by a live/forward writer, so
             # the port yields with a benign 409 instead of failing the batch
             successes, errors = bulk(
-                _MeasuredBulkClient(self._client, benign_conflicts=True),
+                self._client,
                 data,
                 max_retries=3,
                 raise_on_error=False,
@@ -1186,7 +1158,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             # any error fails the batch (the caller may refresh-retry
             # on the BulkIndexError that bulk raises)
             successes, _ = bulk(
-                _MeasuredBulkClient(self._client),
+                self._client,
                 data,
                 max_retries=3,
                 raise_on_error=True,
@@ -1194,6 +1166,9 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
             benign_conflicts = 0
 
+        _report_written_chunks(
+            successes, len(documents) - successes - benign_conflicts, started
+        )
         if successes + benign_conflicts != len(documents):
             raise OpenSearchIndexError(
                 f"Bulk index for index {self._index_name}: successful operations ({successes}) "

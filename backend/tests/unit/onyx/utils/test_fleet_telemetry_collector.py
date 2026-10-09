@@ -1,535 +1,328 @@
-"""The isolated collector reads bounded source pages and reports only safe data."""
+"""Collector rows become safe events with stable IDs. A failed read never escapes."""
 
 import json
-import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
-from onyx.configs import app_configs
-from onyx.db.fleet_telemetry import _schema
+from onyx.configs.constants import DocumentSource
+from onyx.db.enums import ConnectorCredentialPairStatus, IndexingStatus
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.utils import fleet_telemetry as fleet
-from onyx.utils import fleet_telemetry_collector as source
-from onyx.utils.fleet_telemetry_collector import (
-    FleetCollector,
-    classify_local_error,
-    safe_attempt_error_data,
-    safe_connector_data,
-)
+from onyx.utils import fleet_telemetry_collector as collector
+from tests.unit.fakes import FakeCache
 from tests.utils.fleet_telemetry import make_sender
 
-
-@pytest.fixture
-def stub_source(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An unused engine and one single-tenant schema with no domains or license."""
-    monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
-    monkeypatch.setattr(
-        source,
-        "license_snapshot",
-        Mock(return_value={"license_present": False, "first_set_at": None}),
-    )
-    monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
-    monkeypatch.setattr(source, "MULTI_TENANT", False)
+_NOW: datetime = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
 
 
-@pytest.mark.parametrize("explicit_url", [False, True])
-def test_database_reads_inherit_tls_without_overriding_explicit_url(
-    monkeypatch: pytest.MonkeyPatch, explicit_url: bool
-) -> None:
-    from onyx.db import fleet_telemetry
-    from onyx.db.engine import pg_ssl
-
-    monkeypatch.setattr(pg_ssl, "USE_IAM_AUTH", False)
-    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLMODE", "verify-full")
-    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLROOTCERT", "/test/ca.crt")
-    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLCERT", "/test/client.crt")
-    monkeypatch.setattr(pg_ssl, "POSTGRES_SSLKEY", "/test/client.key")
-    monkeypatch.setattr(
-        fleet_telemetry,
-        "TELEMETRY_DATABASE_URL",
-        "postgresql://explicit" if explicit_url else None,
-    )
-    factory: Mock = Mock(side_effect=RuntimeError("connection intercepted"))
-    monkeypatch.setattr(fleet_telemetry, "create_engine", factory)
-    with pytest.raises(RuntimeError, match="connection intercepted"):
-        fleet_telemetry.collector_engine("postgresql://test")
-    options: dict[str, Any] = factory.call_args.kwargs["connect_args"]
-    assert options["connect_timeout"] == 2
-    if explicit_url:
-        assert not any(key.startswith("ssl") for key in options)
-    else:
-        assert options["sslmode"] == "verify-full"
-        assert options["sslrootcert"] == "/test/ca.crt"
-        assert options["sslcert"] == "/test/client.crt"
-        assert options["sslkey"] == "/test/client.key"
-
-
-@pytest.mark.parametrize("explicit_url", [False, True])
-def test_queue_collection_inherits_tls_without_overriding_explicit_url(
-    monkeypatch: pytest.MonkeyPatch, explicit_url: bool
-) -> None:
-    monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
-    monkeypatch.setattr(app_configs, "USE_REDIS_IAM_AUTH", False)
-    monkeypatch.setattr(app_configs, "REDIS_SSL", True)
-    monkeypatch.setattr(app_configs, "REDIS_SSL_CERT_REQS", "required")
-    monkeypatch.setattr(app_configs, "REDIS_SSL_CHECK_HOSTNAME", True)
-    monkeypatch.setattr(app_configs, "REDIS_SSL_CA_CERTS", "/test/redis-ca.crt")
-    monkeypatch.setattr(app_configs, "REDIS_SSL_CERTFILE", "/test/redis-client.crt")
-    monkeypatch.setattr(app_configs, "REDIS_SSL_KEYFILE", "/test/redis-client.key")
-    monkeypatch.setattr(
-        source, "_REDIS_URL", "rediss://custom:6380/15" if explicit_url else None
-    )
-    sender: fleet.BoundedTelemetry = make_sender()
-    collector: FleetCollector = FleetCollector(sender, "postgresql://test", ["public"])
-    factory: Mock = Mock(side_effect=RuntimeError("connection intercepted"))
-    monkeypatch.setattr("redis.Redis.from_url", factory)
-    with pytest.raises(RuntimeError, match="connection intercepted"):
-        collector.collect_queues()
-    options: dict[str, Any] = dict(factory.call_args.kwargs)
-    assert factory.call_args.args[0].startswith("rediss://")
-    assert options["socket_timeout"] == options["socket_connect_timeout"] == 0.2
-    assert options["max_connections"] == 1
-    if explicit_url:
-        assert not any(key.startswith("ssl") for key in options)
-    else:
-        assert options["ssl_cert_reqs"] == "required"
-        assert options["ssl_check_hostname"] is True
-        assert options["ssl_ca_certs"] == "/test/redis-ca.crt"
-        assert options["ssl_certfile"] == "/test/redis-client.crt"
-        assert options["ssl_keyfile"] == "/test/redis-client.key"
-
-
-def test_no_vector_db_deployments_do_not_read_queues(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Lite deployments replace Celery with an in-process runner and have no broker.
-    monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
-    monkeypatch.setattr(source, "DISABLE_VECTOR_DB", True)
-    monkeypatch.setattr(source, "_REDIS_URL", "redis://localhost:1/0")
-    factory: Mock = Mock(side_effect=AssertionError("read a missing broker"))
-    monkeypatch.setattr("redis.Redis.from_url", factory)
-    sender: fleet.BoundedTelemetry = make_sender()
-    collector: FleetCollector = FleetCollector(sender, "postgresql://test", ["public"])
-    collector.collect_queues()
-    factory.assert_not_called()
-    assert collector.queue_errors == 0
-    assert not sender._take_batch()
-
-
-def test_unchanged_metadata_reconciles_after_loss_and_six_hours(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    clock = [100.0]
-    monkeypatch.setattr(source.time, "monotonic", lambda: clock[0])
-    monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
-    sender = make_sender()
-    collector = FleetCollector(sender, "postgresql://unused", ["public"])
-    data = {"license_present": True, "action": "snapshot"}
-    at = datetime.now(timezone.utc)
-    assert collector._event("license", data, "public", at, "license", durable_id=False)
-    assert len(sender._take_batch()) == 1
-    clock[0] += 300
-    assert collector._event("license", data, "public", at, "license", durable_id=False)
-    assert sender._take_batch() == []
-    sender.dropped += 1
-    assert collector._event("license", data, "public", at, "license", durable_id=False)
-    assert len(sender._take_batch()) == 1
-    clock[0] += 21600
-    assert collector._event("license", data, "public", at, "license", durable_id=False)
-    assert len(sender._take_batch()) == 1
-    assert collector._event(
-        "license",
-        {**data, "license_present": False},
-        "public",
-        at,
-        "license",
-        durable_id=False,
-    )
-    assert len(sender._take_batch()) == 1
-
-
-def test_source_configuration_returns_only_structural_metadata() -> None:
-    sender = make_sender()
-    data = safe_connector_data(
-        {
-            "connector_id": 1,
-            "cc_pair_id": 2,
-            "connector_type": "google_drive",
-            "state": "active",
-            "metadata": {
-                "batch_size": 16,
-                "folder_names": ["secret"],
-                "credential": "secret",
-                "include_shared_drives": True,
-            },
-            "connector_name": "secret",
-            "refresh_seconds": 60,
+def _connector_row(**overrides: Any) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "cc_pair_id": 3,
+        "connector_id": 2,
+        "source": DocumentSource.GOOGLE_DRIVE,
+        "status": ConnectorCredentialPairStatus.ACTIVE,
+        "doc_count": 40,
+        "last_success_at": _NOW,
+        "refresh_seconds": 1800,
+        "prune_seconds": None,
+        "auto_sync_enabled": False,
+        "permission_sync_enabled": True,
+        "config": {
+            "include_shared_drives": True,
+            "batch_size": 16,
+            "folder_paths": ["Private/Finance", "Private/Legal"],
+            "shared_folder_urls": "https://drive.example/private",
+            "start_date": "2024-01-01",
         },
-        sender,
-    )
-    assert sender.emit("connector", data)
-    assert "secret" not in json.dumps(data)
-    assert data["metadata"] == {
-        "batch_size": 16,
-        "include_shared_drives": True,
-        "refresh_seconds": 60,
     }
+    row.update(overrides)
+    return row
 
 
-@pytest.mark.parametrize(
-    ("sample", "expected"),
-    [
-        ("401 expired token abc-secret", "auth"),
-        ("403 permission denied for Private folder", "permission"),
-        ("HTTP429 too many requests", "rate_limit"),
-        ("ReadTimeout with password", "timeout"),
-        ("embedding failed on private-document", "embedding"),
-        ("BulkIndexError index name private", "index_write"),
-        ("parser malformed secret", "parse"),
-        ("source connection unavailable", "source_unavailable"),
-    ],
-)
-def test_errors_become_fixed_categories(sample: str, expected: str) -> None:
-    assert classify_local_error(sample) == expected
+def _attempt_row(**overrides: Any) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "attempt_id": 9,
+        "cc_pair_id": 3,
+        "connector_id": 2,
+        "source": DocumentSource.GOOGLE_DRIVE,
+        "status": IndexingStatus.IN_PROGRESS,
+        "docs_indexed": 12,
+        "chunks_indexed": 30,
+        "total_batches": 4,
+        "completed_batches": 2,
+        "started_at": _NOW - timedelta(minutes=3),
+        "time_updated": _NOW - timedelta(minutes=1),
+        "last_progress_at": _NOW - timedelta(minutes=1),
+        "last_heartbeat_at": _NOW,
+        "error_sample": None,
+        "item_error_type": None,
+        "item_error_sample": None,
+        "error_count": 0,
+    }
+    row.update(overrides)
+    return row
 
 
-def test_collector_schema_partition_covers_large_fleet_without_truncation() -> None:
-    schemas = [f"tenant_i-{index}" for index in range(7696)]
-    seen: list[str] = []
-    for shard in range(10):
-        collector = object.__new__(FleetCollector)
-        collector.shard_count = 10
-        collector.shard_index = shard
-        seen.extend(collector._partition(schemas))
-    assert len(seen) == len(set(seen)) == len(schemas)
-    assert set(seen) == set(schemas)
+def _stage_row(**overrides: Any) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "attempt_id": 9,
+        "stage": IndexAttemptStage.EMBEDDING,
+        "event_count": 2,
+        "total_duration_ms": 300,
+        "min_duration_ms": 100,
+        "max_duration_ms": 200,
+        "m2_duration_ms": 5000.0,
+        "first_event_at": _NOW - timedelta(minutes=2),
+        "last_event_at": _NOW - timedelta(minutes=1),
+    }
+    row.update(overrides)
+    return row
 
 
-def test_schema_names_allow_real_cloud_hyphens_and_reject_sql() -> None:
-    assert _schema("tenant_i-123-456") == '"tenant_i-123-456"'
-    for unsafe in [
-        'tenant"; DROP SCHEMA public; --',
-        "tenant.public",
-        "tenant/private",
-    ]:
-        with pytest.raises(ValueError):
-            _schema(unsafe)
-
-
-@pytest.mark.usefixtures("stub_source")
-def test_collector_failures_are_visible_without_exposing_source_errors(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sender = make_sender()
-    collector = FleetCollector(sender, "postgresql://unused", ["public"])
-    monkeypatch.setattr(
-        collector,
-        "collect_one_schema",
-        Mock(side_effect=TimeoutError("PRIVATE source URL")),
-    )
-    monkeypatch.setattr(collector, "collect_queues", Mock())
-    collector._last_aws = time.monotonic()
-    for _ in range(3):
-        if "public" in collector._failed_schema:
-            _, failures = collector._failed_schema["public"]
-            collector._failed_schema["public"] = (0, failures)
-        collector.tick()
-    assert sender.health["source_errors"] == 3
-    assert sender.health["source_consecutive_errors"] == 3
-    assert sender.health["last_source_success_at"] is None
-    assert sender.health["schema_count"] == 1
-    events = sender._take_batch()
-    assert events[-1]["data"]["source_consecutive_errors"] == 3
-    assert "PRIVATE" not in json.dumps(events)
-
-
-@pytest.mark.usefixtures("stub_source")
-def test_job_progress_identity_changes_with_counts_but_terminal_identity_is_stable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(source, "connector_page", Mock(return_value=[]))
-    monkeypatch.setattr(source, "attempt_page", Mock(return_value=[]))
-    sender = make_sender()
-    collector = FleetCollector(sender, "postgresql://unused", ["public"])
-    started = datetime.now(timezone.utc) - timedelta(minutes=10)
-    row = {
-        "id": "permission:1",
-        "entity_id": 1,
+def _job_row(**overrides: Any) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "job_id": "permission:5",
         "job_type": "permission_sync",
         "state": "in_progress",
-        "docs_processed": 2,
+        "entity_id": 3,
+        "cc_pair_id": 3,
+        "started_at": _NOW - timedelta(minutes=4),
+        "ended_at": None,
+        "revision_at": _NOW - timedelta(minutes=4),
+        "docs_processed": 7,
         "users_processed": 0,
         "groups_processed": 0,
         "memberships_synced": 0,
-        "started_at": started,
-        "ended_at": None,
         "error_count": 0,
-        "revision_at": started,
     }
-    monkeypatch.setattr(source, "job_page", lambda *_: [dict(row)])
-    monkeypatch.setattr(source, "active_job_page", Mock(return_value=[]))
-
-    def poll() -> None:
-        collector._last_jobs.clear()
-        collector._last_active_jobs.clear()
-        collector.collect_one_schema()
-
-    poll()
-    poll()
-    row["docs_processed"] = 3
-    poll()
-    active = [event for event in sender._take_batch() if event["event_type"] == "job"]
-    assert active[0]["event_id"] == active[1]["event_id"]
-    assert active[2]["event_id"] != active[1]["event_id"]
-    assert datetime.fromisoformat(active[2]["occurred_at"]) > started
-    ended = datetime.now(timezone.utc)
-    row.update(state="success", ended_at=ended, revision_at=ended)
-    poll()
-    poll()
-    terminal = [event for event in sender._take_batch() if event["event_type"] == "job"]
-    assert terminal[0]["event_id"] == terminal[1]["event_id"]
-    assert datetime.fromisoformat(terminal[0]["occurred_at"]) == ended
+    row.update(overrides)
+    return row
 
 
-@pytest.mark.usefixtures("stub_source")
-@pytest.mark.parametrize("uptime", [0.0, 1.0])
-def test_repair_cadence_avoids_idle_reads_and_still_polls_old_active_jobs(
-    monkeypatch: pytest.MonkeyPatch,
-    uptime: float,
-) -> None:
-    monkeypatch.setattr(
-        source, "time", SimpleNamespace(monotonic=lambda: uptime, time=time.time)
-    )
-    connectors = Mock(return_value=[])
-    attempts = Mock(return_value=[])
-    monkeypatch.setattr(source, "connector_page", connectors)
-    monkeypatch.setattr(source, "attempt_page", attempts)
-    sender = make_sender()
-    collector = FleetCollector(sender, "postgresql://unused", ["public"])
-    old = datetime.now(timezone.utc) - timedelta(days=90)
-    row = {
-        "id": "group:1",
-        "entity_id": 1,
-        "job_type": "group_sync",
-        "state": "in_progress",
-        "docs_processed": 0,
-        "users_processed": 2,
-        "groups_processed": 1,
-        "memberships_synced": 3,
-        "started_at": old,
-        "ended_at": None,
-        "error_count": 0,
-        "revision_at": old,
+class _Source:
+    """The database reads that `collect_snapshots` makes, served from lists."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.connectors: list[dict[str, Any]] = [_connector_row()]
+        self.domains: list[dict[str, Any]] = [
+            {"domain": "Example.COM", "first_signup_at": _NOW - timedelta(days=9)},
+            {"domain": "localhost", "first_signup_at": _NOW},
+        ]
+        self.license: dict[str, Any] = {"license_present": False, "first_set_at": None}
+        self.attempts: list[dict[str, Any]] = [_attempt_row()]
+        self.stages: list[dict[str, Any]] = [_stage_row()]
+        self.jobs: list[dict[str, Any]] = [_job_row()]
+        self.since: list[datetime] = []
+        self.cache: FakeCache = FakeCache()
+
+        @contextmanager
+        def session(tenant_id: str) -> Iterator[Mock]:
+            assert tenant_id == "public"
+            yield Mock()
+
+        def attempts(_session: Any, since: datetime) -> list[dict[str, Any]]:
+            self.since.append(since)
+            return self.attempts
+
+        monkeypatch.setattr(collector, "get_session_with_tenant", session)
+        monkeypatch.setattr(collector, "limit_statement_time", Mock())
+        monkeypatch.setattr(
+            collector, "connector_rows", lambda _session: self.connectors
+        )
+        monkeypatch.setattr(
+            collector, "email_domain_rows", lambda _session: self.domains
+        )
+        monkeypatch.setattr(collector, "license_row", lambda _session: self.license)
+        monkeypatch.setattr(collector, "attempt_rows", attempts)
+        monkeypatch.setattr(
+            collector, "stage_rows", lambda _session, _ids, _since: self.stages
+        )
+        monkeypatch.setattr(collector, "job_rows", lambda _session, _since: self.jobs)
+        monkeypatch.setattr(
+            collector, "get_cache_backend", Mock(return_value=self.cache)
+        )
+
+
+@pytest.fixture
+def source(monkeypatch: pytest.MonkeyPatch) -> _Source:
+    return _Source(monkeypatch)
+
+
+@pytest.fixture
+def sender(monkeypatch: pytest.MonkeyPatch) -> fleet.BoundedTelemetry:
+    enrolled: fleet.BoundedTelemetry = make_sender(capacity=256)
+    monkeypatch.setattr(collector, "get_sender", lambda: enrolled)
+    return enrolled
+
+
+def _event_ids(sender: fleet.BoundedTelemetry) -> dict[str, str]:
+    return {event["event_type"]: event["event_id"] for event in sender._take_batch()}
+
+
+def test_connector_data_keeps_reviewed_settings_and_counts_only() -> None:
+    data: dict[str, Any] = collector.connector_data(_connector_row())
+    assert data["connector_type"] == "google_drive" and data["state"] == "active"
+    assert data["metadata"] == {
+        "include_shared_drives": True,
+        "batch_size": 16,
+        "selection_count": 2,
+        "has_time_filter": True,
+        "refresh_seconds": 1800,
+        "auto_sync_enabled": False,
+        "permission_sync_enabled": True,
     }
-    history = Mock(return_value=[])
-    active = Mock(side_effect=lambda *_: [dict(row)])
-    monkeypatch.setattr(source, "job_page", history)
-    monkeypatch.setattr(source, "active_job_page", active)
-    assert collector.collect_one_schema()
-    initial = [event for event in sender._take_batch() if event["event_type"] == "job"]
-    assert initial[0]["data"]["memberships_synced"] == 3
-    assert datetime.fromisoformat(initial[0]["occurred_at"]) > old
-    assert not collector.collect_one_schema()
-    connectors.assert_called_once()
-    attempts.assert_called_once()
-    history.assert_called_once()
-    active.assert_called_once()
-    collector._last_active_jobs.clear()
-    row["memberships_synced"] = 4
-    assert collector.collect_one_schema()
-    assert sender._take_batch()[0]["event_id"] != initial[0]["event_id"]
-    history.assert_called_once()
-    assert active.call_count == 2
-
-
-@pytest.mark.usefixtures("stub_source")
-def test_live_edge_rereads_a_short_overlap_and_sweeps_after_expiry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    clock = [1000.0]
-    monkeypatch.setattr(
-        source, "time", SimpleNamespace(monotonic=lambda: clock[0], time=time.time)
+    assert "Private" not in json.dumps(data) and "drive.example" not in json.dumps(data)
+    assert fleet.sanitize_data("connector", data) == data
+    # The hash follows the reported settings.
+    changed: dict[str, Any] = collector.connector_data(
+        _connector_row(refresh_seconds=3600)
     )
-    monkeypatch.setattr(source, "connector_page", Mock(return_value=[]))
-    monkeypatch.setattr(source, "job_page", Mock(return_value=[]))
-    monkeypatch.setattr(source, "active_job_page", Mock(return_value=[]))
-    source_time = datetime.now(timezone.utc) - timedelta(minutes=3)
-    row = {
-        "attempt_id": 3,
-        "connector_id": 1,
-        "cc_pair_id": 2,
-        "connector_type": "file",
-        "state": "success",
-        "docs_indexed": 1,
-        "chunks_indexed": 1,
-        "total_batches": 1,
-        "completed_batches": 1,
-        "error_count": 0,
-        "has_error": False,
-        "time_updated": source_time - timedelta(hours=2),
-        "source_time": source_time,
-    }
-    attempts = Mock(return_value=[row])
-    monkeypatch.setattr(source, "attempt_page", attempts)
-    sender = make_sender(capacity=64)
-    collector = FleetCollector(sender, "postgresql://unused", ["public"])
+    assert changed["config_hash"] != data["config_hash"]
 
-    def poll() -> datetime:
-        clock[0] += fleet.CONNECTOR_INTERVAL_SECONDS
-        collector.collect_one_schema()
-        return collector._attempt_cursor["public"][0]
 
-    overlap = source_time - timedelta(minutes=10)
-    assert poll() == overlap
-    assert attempts.call_args.args[2] < datetime.now(timezone.utc) - timedelta(days=183)
-    attempts.return_value = []
-    # Idle reads keep the overlap anchored to the last source read; it never drifts.
-    assert poll() == overlap and poll() == overlap
-    assert attempts.call_args.args[2] == overlap
-    assert len([e for e in sender._take_batch() if e["event_type"] == "attempt"]) == 1
-    sender.expired += 1
-    swept = poll()
-    assert abs(datetime.now(timezone.utc) - timedelta(hours=24) - swept) < timedelta(
-        minutes=1
+def test_attempt_data_reports_an_error_category_but_no_error_text() -> None:
+    running: dict[str, Any] = collector.attempt_data(_attempt_row())
+    assert running["state"] == "in_progress" and "ended_at" not in running
+    assert "error_code" not in running
+    failed: dict[str, Any] = collector.attempt_data(
+        _attempt_row(
+            status=IndexingStatus.FAILED,
+            error_sample="Embedding request for PRIVATE-DOC failed",
+        )
     )
-    assert poll() == overlap
-    clock[0] += 6 * 3600
-    assert poll() < overlap - timedelta(hours=12)
+    assert failed["ended_at"] == (_NOW - timedelta(minutes=1)).isoformat()
+    assert failed["error_code"] == "embedding" and failed["stage"] == "embed"
+    assert failed["error_count"] == 1
+    assert "PRIVATE" not in json.dumps(failed)
+    for data in (running, failed):
+        assert fleet.sanitize_data("attempt", data) == data
 
 
-@pytest.mark.usefixtures("stub_source")
-@pytest.mark.parametrize("uptime", [0.0, 1.0])
-def test_failed_queue_reads_wait_for_configured_poll_interval(
-    monkeypatch: pytest.MonkeyPatch,
-    uptime: float,
-) -> None:
-    monkeypatch.setattr(
-        source, "time", SimpleNamespace(monotonic=lambda: uptime, time=time.time)
+def test_job_data_reports_duration_and_failure() -> None:
+    finished: dict[str, Any] = collector.job_data(
+        _job_row(state="failed", ended_at=_NOW, revision_at=_NOW)
     )
-    monkeypatch.setattr(source, "_REDIS_URL", "redis://localhost:1/0")
-    unavailable = Mock(side_effect=TimeoutError("PRIVATE unavailable Redis"))
-    monkeypatch.setattr("redis.Redis.from_url", unavailable)
-    sender = make_sender()
-    collector = FleetCollector(sender, "postgresql://unused", ["public"])
-    collector._last_aws = uptime
-    monkeypatch.setattr(collector, "collect_one_schema", Mock(return_value=False))
-    for _ in range(20):
-        collector.tick()
-    unavailable.assert_called_once()
-    assert collector.queue_errors == 1 and sender.health["queue_errors"] == 1
-    collector._last_queues = uptime - fleet.QUEUE_INTERVAL_SECONDS - 1
-    collector.tick()
-    assert unavailable.call_count == 2 and collector.queue_errors == 2
-
-
-@pytest.mark.usefixtures("stub_source")
-@pytest.mark.parametrize("uptime", [0.0, 1.0])
-def test_initial_discovery_aws_and_health_run_once_then_follow_intervals(
-    monkeypatch: pytest.MonkeyPatch, uptime: float
-) -> None:
-    clock = [uptime]
-    monkeypatch.setattr(
-        source, "time", SimpleNamespace(monotonic=lambda: clock[0], time=time.time)
+    assert finished["duration_ms"] == 240_000
+    assert finished["error_count"] == 1
+    assert "revision_at" not in finished
+    assert fleet.sanitize_data("job", finished) == finished
+    unlinked: dict[str, Any] = collector.job_data(
+        _job_row(job_id="sync:1", job_type="pruning", cc_pair_id=None)
     )
-    discovery = Mock(return_value=["public"])
-    monkeypatch.setattr(source, "tenant_schemas", discovery)
-    opensearch = Mock()
-    monkeypatch.setattr(
-        "onyx.utils.fleet_telemetry_opensearch.collect_opensearch_health", opensearch
-    )
-    managed = Mock(return_value=False)
-    monkeypatch.setattr("onyx.utils.fleet_telemetry_aws.collect_aws_resources", managed)
-    sender = make_sender()
-    collector = FleetCollector(sender, "postgresql://unused", ["public"])
-    collector._discover = True
-    monkeypatch.setattr(collector, "collect_one_schema", Mock(return_value=False))
-    monkeypatch.setattr(collector, "collect_queues", Mock())
-    collector.tick()
-    # The sender thread reports collector health on its own resource cadence.
-    assert not sender._take_batch()
-    assert sender.health["aws_consecutive_errors"] == 1
-    collector.tick()
-    discovery.assert_called_once()
-    managed.assert_called_once()
-    opensearch.assert_called_once()
-    assert not sender._take_batch()
-    clock[0] += 60
-    collector.tick()
-    assert discovery.call_count == 2 and managed.call_count == 1
-    assert not sender._take_batch()
-    clock[0] += 240
-    collector.tick()
-    assert managed.call_count == 2 and collector.aws_consecutive_errors == 2
-    assert opensearch.call_count == 2
+    assert "cc_pair_id" not in unlinked
 
 
 @pytest.mark.parametrize(
-    "sample,stage",
+    "samples, category",
     [
-        ("embedding failure PRIVATE TOKEN", "embed"),
-        ("opensearch rejected PRIVATE URL", "write"),
-        ("parser failed PRIVATE PATH", "prepare"),
-        ("401 unauthorized PRIVATE TOKEN", None),
+        (("HTTP 401 Unauthorized for PRIVATE",), "auth"),
+        (("403 Forbidden",), "permission"),
+        (("Too many requests",), "rate_limit"),
+        (("ReadTimeout while fetching",), "timeout"),
+        (("BulkIndexError: 2 document(s) failed",), "index_write"),
+        (("Could not parse the file",), "parse"),
+        (("Connection refused",), "source_unavailable"),
+        (("Something else",), "internal"),
+        ((None, 42), "internal"),
     ],
 )
-def test_safe_attempt_error_data_counts_fatal_errors_and_only_known_stages(
-    sample: str, stage: str | None
+def test_local_error_text_maps_to_a_fixed_category(
+    samples: tuple[object, ...], category: str
 ) -> None:
-    data = safe_attempt_error_data(
-        {
-            "local_error_sample": sample,
-            "has_error": True,
-            "error_count": 0,
-            "connector_type": "file",
-        },
-        make_sender(),
+    assert collector.classify_local_error(*samples) == category
+
+
+@pytest.mark.parametrize(
+    "domain, expected",
+    [
+        ("Onyx.App", "onyx.app"),
+        ("bücher.example", "xn--bcher-kva.example"),
+        ("http://onyx.app", None),
+        ("127.0.0.1", None),
+        ("localhost", None),
+        ("onyx.app@other.app", None),
+    ],
+)
+def test_signup_domains_are_normalized_or_dropped(
+    domain: str, expected: str | None
+) -> None:
+    assert collector.normalize_email_domain(domain) == expected
+
+
+def test_collection_waits_for_enrollment(
+    monkeypatch: pytest.MonkeyPatch, source: _Source
+) -> None:
+    monkeypatch.setattr(collector, "get_sender", lambda: None)
+    collector.collect_snapshots("public")
+    monkeypatch.setattr(
+        collector, "get_sender", lambda: fleet.BoundedTelemetry("worker")
     )
-    assert data["error_count"] == 1
-    assert data.get("stage") == stage
-    assert "PRIVATE" not in json.dumps(data)
+    collector.collect_snapshots("public")
+    assert source.since == [] and source.cache.store == {}
 
 
-def test_disabled_collector_waits_idle_without_opening_sources(
-    monkeypatch: pytest.MonkeyPatch,
+def test_first_run_sends_inventory_work_and_cursor(
+    source: _Source, sender: fleet.BoundedTelemetry
 ) -> None:
-    monkeypatch.setattr(source, "DISABLE_TELEMETRY", True)
-    blocked = Mock(
-        side_effect=AssertionError("Disabled collector must do no collection")
+    collector.collect_snapshots("public")
+    events: list[dict[str, Any]] = sender._take_batch()
+    assert [event["event_type"] for event in events] == [
+        "connector",
+        "tenant_domain",
+        "license",
+        "attempt",
+        "stage",
+        "job",
+    ]
+    assert events[1]["data"]["domain"] == "example.com"
+    stage: dict[str, Any] = events[4]
+    # The service requires a stage event at the time of its last update.
+    assert stage["occurred_at"] == (_NOW - timedelta(minutes=1)).isoformat()
+    assert stage["data"]["stage_name"] == "EMBEDDING"
+    assert stage["data"]["connector_type"] == "google_drive"
+    cursor: bytes | None = source.cache.get(collector._LAST_RUN_KEY)
+    assert cursor is not None
+    started: datetime = datetime.fromisoformat(cursor.decode())
+    assert started - source.since[0] == collector._FIRST_WINDOW
+    assert sender.health["source_consecutive_errors"] == 0
+    assert sender.health["last_source_success_at"] == started.isoformat()
+
+
+def test_repeated_runs_repeat_event_ids_and_skip_unchanged_inventory(
+    source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    collector.collect_snapshots("public")
+    first: dict[str, str] = _event_ids(sender)
+    collector.collect_snapshots("public")
+    # Unchanged rows repeat their event IDs, so the service drops the copies.
+    assert _event_ids(sender) == {
+        key: first[key] for key in ("attempt", "stage", "job")
+    }
+    # The overlap reads the end of the previous window again.
+    assert source.since[1] < source.since[0] + collector._FIRST_WINDOW
+    source.jobs = [_job_row(docs_processed=8)]
+    source.connectors = [_connector_row(doc_count=41)]
+    collector.collect_snapshots("public")
+    third: dict[str, str] = _event_ids(sender)
+    # A running job's progress and a changed inventory go out again.
+    assert third["job"] != first["job"] and third["attempt"] == first["attempt"]
+    assert {"connector", "tenant_domain", "license"} <= third.keys()
+
+
+def test_a_failed_read_counts_a_source_error_and_keeps_the_cursor(
+    monkeypatch: pytest.MonkeyPatch, source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    monkeypatch.setattr(
+        collector, "job_rows", Mock(side_effect=RuntimeError("PRIVATE SQL"))
     )
-    monkeypatch.setattr(source, "start_telemetry", blocked)
-    monkeypatch.setattr(source, "FleetCollector", blocked)
-    monkeypatch.setattr(source.SqlEngine, "init_engine", blocked)
-    monkeypatch.setattr(source.signal, "signal", Mock())
-    stopped = Mock()
-    monkeypatch.setattr(source.threading, "Event", Mock(return_value=stopped))
-    source.main()
-    blocked.assert_not_called()
-    stopped.wait.assert_called_once_with()
-
-
-def test_collector_reads_sources_only_after_enrollment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sender: fleet.BoundedTelemetry = fleet.BoundedTelemetry("collector")
-    collector = Mock()
-    monkeypatch.setattr(source, "DISABLE_TELEMETRY", False)
-    monkeypatch.setattr(source.SqlEngine, "init_engine", Mock())
-    monkeypatch.setattr(source, "start_telemetry", Mock(return_value=sender))
-    monkeypatch.setattr(source, "stop_telemetry", Mock())
-    monkeypatch.setattr(source, "FleetCollector", Mock(return_value=collector))
-    monkeypatch.setattr(source.signal, "signal", Mock())
-    stopped = Mock()
-    stopped.is_set.side_effect = [False, False, True]
-    monkeypatch.setattr(source.threading, "Event", Mock(return_value=stopped))
-
-    def enroll(_seconds: float) -> bool:
-        # The sender enrolls between the first and second pass.
-        sender._customer = "11111111-1111-4111-8111-111111111111"
-        return False
-
-    stopped.wait.side_effect = enroll
-    source.main()
-    collector.tick.assert_called_once_with()
+    for _ in range(2):
+        collector.collect_snapshots("public")
+    assert sender.health["source_errors"] == 2
+    assert sender.health["source_consecutive_errors"] == 2
+    assert collector._LAST_RUN_KEY not in source.cache.store
+    assert not sender._take_batch()
