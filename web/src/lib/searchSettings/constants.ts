@@ -1,6 +1,7 @@
 import { SvgHardDrive } from "@opal/icons";
 import {
   SvgAzure,
+  SvgBifrost,
   SvgCohere,
   SvgGoogle,
   SvgLiteLLM,
@@ -189,6 +190,14 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
       "https://docs.microsoft.com/en-us/azure/ai-services/openai/how-to/create-resource",
     costslink:
       "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai/",
+    embeddingModels: [],
+  },
+  {
+    providerName: EmbeddingProviderName.BIFROST,
+    displayName: "Bifrost",
+    icon: SvgBifrost,
+    apiLink:
+      "https://docs.getbifrost.ai/providers/supported-providers/overview",
     embeddingModels: [],
   },
 ];

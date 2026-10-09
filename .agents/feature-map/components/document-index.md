@@ -40,8 +40,9 @@ in the banner, but cannot trigger a popup. See `backend/onyx/document_index/open
 for thresholds, timeouts, and recovery behavior.
 
 An admin experiences it directly on the embedding-model page. They pick a new
-embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, and
-more), optionally run a sample embedding test (a fixed test string, not a document), and start a re-index. From that point,
+embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, Bifrost,
+and more), optionally run a sample embedding test (a fixed test string, not a document), and start a re-index. Bifrost
+always runs the test, because its model ID is free text. From that point,
 Onyx builds a second, parallel index in the background using the new model while the
 old index keeps serving live search. A progress view shows re-index status and errors.
 When indexing catches up (the exact criterion depends on the switchover type chosen),
@@ -63,7 +64,7 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 |---|---|---|---|
 | GET | `/manage/admin/opensearch-health` | `read_resource_health` | Cached resource pressure; requires `FULL_ADMIN_PANEL_ACCESS`. |
 | POST | `/manage/admin/opensearch-health/popup` | `claim_resource_popup` | Claims a tenant-scoped, per-admin 24-hour popup allowance in Redis. |
-| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. |
+| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. For Bifrost it first embeds a test string and rejects a failed call or a dimension mismatch. |
 | POST | `/search-settings/cancel-new-embedding` | `cancel_new_embedding` | Cancels the in-flight FUTURE re-index. |
 | DELETE | `/search-settings/delete-search-settings` | | |
 | GET | `/search-settings/get-current-search-settings` | | The PRESENT row. |
@@ -74,7 +75,7 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 | POST | `/search-settings/reindex/port/resume` | | Resumes a stalled reindex-port backfill. |
 | POST | `/search-settings/update-inference-settings` | | |
 | GET/PUT/DELETE | `/search-settings/unstructured-api-key-set`, `/upsert-unstructured-api-key`, `/delete-unstructured-api-key` | | Unrelated document-parsing key, colocated in this router. |
-| POST | `/admin/embedding/test-embedding` | `test_embedding_configuration` (`server/manage/embedding/api.py`) | Dry-run an embedding call against a candidate config. |
+| POST | `/admin/embedding/test-embedding` | `test_embedding_configuration` (`server/manage/embedding/api.py`) | Dry-run an embedding call against a candidate config. Returns the vector length as `dimension`. |
 | GET | `/admin/embedding` | `list_embedding_models` | |
 | GET/PUT/DELETE | `/admin/embedding/embedding-provider[/{provider_type}]` | | Cloud embedding provider credentials. |
 

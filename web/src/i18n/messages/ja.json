@@ -5121,6 +5121,16 @@
           "title": "ターゲット URL"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "Bifrost ゲートウェイのベース URL です。{appName} は埋め込みリクエストを /v1/embeddings エンドポイントに送信します。",
+          "title": "ベース URL"
+        },
+        "modelName": {
+          "description": "Bifrost のモデル ID（例: openai/text-embedding-3-large）。保存時に {appName} がテスト文字列を埋め込み、埋め込みモデルであることを確認して次元数を取得します。",
+          "editDescription": "{appName} は現在このモデルを使用しています。保存すると、新しい URL とキーでテストされます。別のモデルを使うには、モデル一覧から選択してください。"
+        }
+      },
       "cancelReindexModal": {
         "description": "キャンセルすると以前の embedding モデルに戻り、再インデックスの進捗はすべて失われます。",
         "submit": {
