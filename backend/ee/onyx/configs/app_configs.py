@@ -163,6 +163,16 @@ ZOOM_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("ZOOM_PERMISSION_DOC_SYNC_FREQUENCY") or 6 * 60 * 60
 )
 
+#####
+# HubSpot
+#####
+
+# In seconds, default is 1 hour: a sync pages every record (100 per call) and
+# asks for the viewers of 20 records per call, about 1,500 calls per 24,000 records.
+HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY") or 60 * 60
+)
+
 
 ####
 # Celery Job Frequency

@@ -308,10 +308,17 @@ class TestSearchWithTimeSplit:
         search_calls: list[tuple[datetime, datetime]] = []
         original = connector._search_time_range
 
-        def fake_split(fn: Any, props: Any, s: datetime, e: datetime, prop: Any) -> Any:
+        def fake_split(
+            fn: Any,
+            props: Any,
+            s: datetime,
+            e: datetime,
+            prop: Any,
+            incomplete_is_error: bool = False,
+        ) -> Any:
             search_calls.append((s, e))
             if s == start:
-                return original(fn, props, s, e, prop)
+                return original(fn, props, s, e, prop, incomplete_is_error)
             return iter(continuation)
 
         with patch.object(

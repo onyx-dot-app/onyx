@@ -31,4 +31,5 @@ export const autoSyncConfigBySource: Record<
   canvas: {},
   onedrive: {},
   zoom: {},
+  hubspot: {},
 };

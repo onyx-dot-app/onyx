@@ -14,6 +14,7 @@ from ee.onyx.configs.app_configs import (
     GITHUB_PERMISSION_DOC_SYNC_FREQUENCY,
     GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY,
     GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
+    HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY,
     JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
     JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
     ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY_S,
@@ -127,6 +128,12 @@ def _load_gmail_doc_sync() -> DocSyncFuncType:
     from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
 
     return gmail_doc_sync
+
+
+def _load_hubspot_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.hubspot.doc_sync import hubspot_doc_sync
+
+    return hubspot_doc_sync
 
 
 def _load_gdrive_doc_sync() -> DocSyncFuncType:
@@ -350,6 +357,16 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
     DocumentSource.SALESFORCE: SyncConfig(
         censoring_config=CensoringConfig(
             chunk_censoring_func=_lazy_censoring(_load_censor_salesforce_chunks),
+        ),
+    ),
+    # HubSpot names the users who may view each record, so there are no groups.
+    DocumentSource.HUBSPOT: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_hubspot_doc_sync),
+            # Indexing never fetches viewers (the runner carries access only for
+            # checkpointed connectors), so the first doc sync is what grants access.
+            initial_index_should_sync=False,
         ),
     ),
     # Domain sign-in rules: groups filled from the account's user roster.
