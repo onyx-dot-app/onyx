@@ -35,7 +35,7 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.teams import groups, listing, threads
-from onyx.connectors.teams.config import MAX_WORKERS
+from onyx.connectors.teams.config import CHANNEL_BATCH_PER_WORKER, MAX_WORKERS
 from onyx.connectors.teams.files import FileSource
 from onyx.connectors.teams.meeting_chats import (
     ChatSource,
@@ -582,6 +582,7 @@ class TeamsConnector(
             self._channels(),
             lambda channel: self._slim_channel(channel, walk),
             self.max_workers,
+            self.max_workers * CHANNEL_BATCH_PER_WORKER,
         )
 
     def _slim_organizers(self, walk: SlimWalk) -> Iterator[SlimDocument]:

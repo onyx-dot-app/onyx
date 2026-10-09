@@ -398,9 +398,10 @@ def fetch_messages(
     team_id: str,
     channel_id: str,
     start: SecondsSinceUnixEpoch,
+    before_page: Callable[[], None] | None = None,
 ) -> Generator[Message]:
     for value in iter_values(
-        graph_client, message_delta_url(team_id, channel_id, start)
+        graph_client, message_delta_url(team_id, channel_id, start), before_page
     ):
         yield Message(**_sanitize_message_user_display_name(value))
 

@@ -280,7 +280,10 @@ class FileSource:
         )
 
     def _channel_files(
-        self, library: ChannelLibrary, start: SecondsSinceUnixEpoch | None
+        self,
+        library: ChannelLibrary,
+        start: SecondsSinceUnixEpoch | None,
+        before_page: Callable[[], None] | None = None,
     ) -> Iterator[DriveItemData]:
         """Every indexable file under the channel's folder, changed since
         ``start``. Both walks apply the same eligibility rule, so pruning removes
@@ -291,6 +294,7 @@ class FileSource:
             library.drive_id,
             folder_id=library.folder_id,
             start=window_start,
+            before_page=before_page,
         )
         return (item for item in items if _indexable_file(item))
 
@@ -360,8 +364,9 @@ class FileSource:
         folder or site raises: a channel missing from this listing would have
         its documents pruned."""
         with channel_context(channel, "files"):
+            walk.page_signals()
             library = self.resolve_library(channel)
-            for item in self._channel_files(library, start=None):
+            for item in self._channel_files(library, None, walk.page_signals):
                 yield SlimDocument(
                     id=file_document_id(item.id),
                     external_access=(

@@ -2,6 +2,7 @@
 them can leave unread."""
 
 import threading
+from collections.abc import Iterator
 from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, call
@@ -16,6 +17,7 @@ from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.models import Document, SlimDocument
 from onyx.connectors.teams import files as files_module
 from onyx.connectors.teams import listing as listing_module
+from onyx.connectors.teams import sources as sources_module
 from onyx.connectors.teams.connector import (
     ORGANIZER_SOURCE_TYPES,
     PREFIXED_DOCUMENT_ID_PREFIXES,
@@ -24,9 +26,10 @@ from onyx.connectors.teams.connector import (
 from onyx.connectors.teams.files import FileSource, file_document_id
 from onyx.connectors.teams.meeting_chats import chat_document_id
 from onyx.connectors.teams.organizers import OrganizerSource
-from onyx.connectors.teams.sources import SLIM_WALK
+from onyx.connectors.teams.sources import SLIM_WALK, SlimWalk
 from onyx.connectors.teams.transcripts import transcript_document_id
 from onyx.connectors.teams.utils import message_delta_url
+from onyx.utils.threadpool_concurrency import drain
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL_ID,
     TEAM_ID,
@@ -237,6 +240,27 @@ def test_a_walk_with_readers_gives_each_channel_its_own_rest_context_and_client(
     assert seen[0][2] is not seen[1][2]
 
 
+def test_quiet_channels_report_progress_from_their_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A batch of channels with nothing to list yields no document, so the
+    runner's lock is renewed from the pages the workers read."""
+    _team_with_channels(monkeypatch)
+    client = graph_client(
+        {_delta_url(CHANNELS[0]): {"value": []}, _delta_url(CHANNELS[1]): {"value": []}}
+    )
+    callback: MagicMock = MagicMock()
+    callback.should_stop.return_value = False
+
+    assert (
+        list(connector(client).retrieve_all_slim_docs_perm_sync(callback=callback))
+        == []
+    )
+    reports = [c.args[1] for c in callback.progress.call_args_list]
+    # One report per page of every channel, besides the batch reports.
+    assert reports.count(0) == 2
+
+
 def test_a_refused_channel_fails_the_pruning_walk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -262,6 +286,7 @@ def test_every_batch_of_channels_reports_progress_and_honors_a_stop(
     # One channel per batch, so the stop lands between the two channels. The
     # runner's lock lives on the progress reports.
     teams_connector.max_workers = 1
+    monkeypatch.setattr("onyx.connectors.teams.connector.CHANNEL_BATCH_PER_WORKER", 1)
 
     with pytest.raises(RuntimeError, match="Stop signal"):
         list(teams_connector.retrieve_all_slim_docs_perm_sync(callback=callback))
@@ -329,3 +354,67 @@ def test_a_first_index_writes_nothing_for_a_deleted_thread() -> None:
     items, _ = step(connector(client), channel_checkpoint())
 
     assert items == []
+
+
+def test_a_slow_item_holds_back_only_its_own_worker() -> None:
+    """Three items, two workers: the first item waits for the third to start,
+    which only happens when a worker takes the next item off the queue instead
+    of the batch waiting for its slowest member."""
+    third_started: threading.Event = threading.Event()
+
+    def listing(item: str) -> Iterator[str]:
+        if item == "first":
+            assert third_started.wait(timeout=5), "the third item never started"
+        if item == "third":
+            third_started.set()
+        yield item
+
+    assert sorted(drain(["first", "second", "third"], listing, workers=2)) == [
+        "first",
+        "second",
+        "third",
+    ]
+
+
+def test_a_long_batch_keeps_reporting_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The permission-sync lock is renewed on progress reports, so a batch
+    that outlasts the lock timeout must report while it drains."""
+    monkeypatch.setattr(sources_module, "PROGRESS_EVERY_DOCUMENTS", 2)
+    callback: MagicMock = MagicMock()
+    callback.should_stop.return_value = False
+    walk: SlimWalk = SlimWalk(start=0, callback=callback, with_readers=False)
+
+    def listing(item: int) -> Iterator[SlimDocument]:
+        for n in range(3):
+            yield SlimDocument(id=f"{item}-{n}", external_access=None)
+
+    assert len(list(walk.fan_out([1, 2], listing, workers=2))) == 6
+    # One report for the batch of two items, then one per two documents.
+    assert (
+        callback.progress.call_args_list
+        == [call(SLIM_WALK, 2)] + [call(SLIM_WALK, 0)] * 3
+    )
+
+
+def test_quiet_listings_report_progress_from_their_pages() -> None:
+    """A batch of listings that page for long and yield nothing must still
+    renew the runner's lock, so each page reports from its worker, and the
+    reports are serialized for a callback not built for threads."""
+    callback: MagicMock = MagicMock()
+    callback.should_stop.return_value = False
+    walk: SlimWalk = SlimWalk(start=0, callback=callback, with_readers=False)
+    reporters: set[int] = set()
+
+    def listing(_item: int) -> Iterator[SlimDocument]:
+        for _ in range(2):
+            walk.page_signals()
+            reporters.add(threading.get_ident())
+        yield from ()
+
+    assert list(walk.fan_out([1, 2, 3, 4], listing, workers=2, batch=4)) == []
+    # One report for the batch, then one per page of every listing.
+    assert (
+        callback.progress.call_args_list
+        == [call(SLIM_WALK, 4)] + [call(SLIM_WALK, 0)] * 8
+    )
+    assert threading.get_ident() not in reporters
