@@ -334,9 +334,11 @@ export default function AuthenticationAccountCard({
                 {t("useButton.label")}
               </Button>
             ) : (
-              <Text font="secondary-body" color="text-03">
-                {t("unsupportedRealm.label")}
-              </Text>
+              <div className="p-1.5">
+                <Text font="secondary-body" color="text-03">
+                  {t("unsupportedRealm.label")}
+                </Text>
+              </div>
             )}
             <Button
               icon={expanded ? SvgChevronUp : SvgChevronDown}
