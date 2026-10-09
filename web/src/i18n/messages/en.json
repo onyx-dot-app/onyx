@@ -12459,17 +12459,11 @@
         "description": "Files created during the build will appear here",
         "title": "No files yet"
       },
-      "emptyDirectory": {
-        "label": "No files in this directory"
-      },
       "error": {
         "title": "Error loading files"
       },
       "loading": {
         "label": "Loading files..."
-      },
-      "loadingChildren": {
-        "label": "Loading..."
       },
       "preparing": {
         "description": "Setting up your development environment",

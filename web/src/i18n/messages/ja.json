@@ -12459,17 +12459,11 @@
         "description": "ビルド中に作成されたファイルがここに表示されます",
         "title": "まだファイルがありません"
       },
-      "emptyDirectory": {
-        "label": "このディレクトリにはファイルがありません"
-      },
       "error": {
         "title": "ファイルの読み込みエラー"
       },
       "loading": {
         "label": "ファイルを読み込んでいます..."
-      },
-      "loadingChildren": {
-        "label": "読み込み中..."
       },
       "preparing": {
         "description": "開発環境をセットアップしています",
