@@ -797,6 +797,31 @@ describe("loadSession restore status", () => {
     );
   });
 
+  it("keeps restored app readiness across a successor load", async () => {
+    mockedApi.fetchSession.mockResolvedValueOnce(sleepingSession() as never);
+    mockedApi.restoreSession.mockResolvedValueOnce(runningSession() as never);
+    const readiness =
+      deferred<Awaited<ReturnType<typeof api.fetchWebappInfo>>>();
+    mockedApi.fetchWebappInfo.mockReturnValueOnce(readiness.promise);
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    mockedApi.fetchSession.mockResolvedValueOnce(runningSession() as never);
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    expect(mockedApi.restoreSession).toHaveBeenCalledTimes(1);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+        ?.webappNeedsRemount
+    ).toBe(0);
+    readiness.resolve(webappInfo(true, true) as never);
+    await waitFor(() =>
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)
+          ?.webappNeedsRemount
+      ).toBe(1)
+    );
+  });
+
   it("ignores delayed app readiness after the sandbox is replaced", async () => {
     mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
     mockedApi.restoreSession.mockResolvedValue(runningSession() as never);

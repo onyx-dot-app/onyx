@@ -389,6 +389,7 @@ Sleeping, terminated, and failed cached sandboxes also load again on entry, incl
 Load responses must match the session instance, turn generation, and latest load generation.
 Restoration refreshes files and output inventory when the sandbox is running, even if a newer turn has started.
 App readiness runs separately and controls only the iframe remount.
+Readiness polling survives a successor load for the same session instance and sandbox.
 Readiness updates preserve the newer turn and require the same session instance, load, and sandbox.
 Cached skill notices accept server state only if no newer turn or skill reload intervened.
 

@@ -1938,10 +1938,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
         // App readiness controls iframe replacement, not restored filesystem access.
         void waitForWebappReady(sessionId).then(() => {
+          const current = get().sessions.get(sessionId);
           if (
-            !isCurrentRuntimeLoad() ||
-            get().sessions.get(sessionId)?.sandbox?.id !==
-              sessionData.sandbox?.id
+            current?.instanceId !== loadingSession.instanceId ||
+            current.sandbox?.id !== sessionData.sandbox?.id
           )
             return;
           updateSessionData(sessionId, {
