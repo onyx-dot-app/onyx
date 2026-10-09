@@ -183,7 +183,7 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
   memory. `db/fleet_enrollment.py:get_or_create_deployment_key` keeps one random
   key in `KVStore` (`key_value_store`) under `fleet_telemetry_deployment_key`.
   The collector keeps its read cursor and its inventory signature in the cache
-  backend (`fleet_telemetry_last_run`, `fleet_telemetry_inventory`).
+  backend (`fleet_telemetry_cursor`, `fleet_telemetry_inventory`).
 - Audit events are **not** a table. They are JSON-serialized log lines on the
   `onyx.audit` logger tree (`utils/audit.py`); there is no `audit_event` table
   yet (`docs/AUDIT_LOGGING.md` calls this a planned follow-up).
