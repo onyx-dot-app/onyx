@@ -5508,17 +5508,17 @@
         "googleProjectRequired": "GCP 프로젝트 ID가 필요합니다"
       },
       "vectorQuantization": {
-        "description": "문서 벡터를 더 적은 비트로 저장하여 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다.",
+        "description": "문서 벡터를 더 적은 비트로 저장하여 벡터 검색의 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다. 이 설정만 변경하면 저장된 벡터로 인덱스를 다시 구축하며, 다시 임베딩하지 않습니다.",
         "none": {
           "description": "32비트 전체 정밀도.",
           "label": "없음"
         },
         "scalar1Bit": {
-          "description": "메모리 사용량 32배 감소. OpenSearch 3.6 이상이 필요합니다.",
+          "description": "벡터 검색 메모리 사용량이 가장 적으며, 검색 품질이 약간 낮아집니다. 대규모 인덱스에 권장. OpenSearch 3.6 이상이 필요합니다.",
           "label": "1비트"
         },
         "scalar7Bit": {
-          "description": "메모리 사용량 4배 감소. 검색 품질 저하가 거의 없습니다.",
+          "description": "벡터 검색 메모리 사용량 약 4배 감소. 검색 품질 저하가 거의 없습니다.",
           "label": "7비트"
         },
         "title": "벡터 양자화"

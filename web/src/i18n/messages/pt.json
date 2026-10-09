@@ -5508,17 +5508,17 @@
         "googleProjectRequired": "O ID do projeto GCP é obrigatório"
       },
       "vectorQuantization": {
-        "description": "Armazene os vetores dos documentos com menos bits para usar menos memória. Menos bits podem reduzir a qualidade da pesquisa.",
+        "description": "Armazene os vetores dos documentos com menos bits para que a pesquisa vetorial use menos memória. Menos bits podem reduzir a qualidade da pesquisa. Se você alterar apenas esta configuração, o índice será reconstruído a partir dos vetores armazenados, sem gerar embeddings novamente.",
         "none": {
           "description": "Precisão completa de 32 bits.",
           "label": "Nenhuma"
         },
         "scalar1Bit": {
-          "description": "32 vezes menos memória. Requer OpenSearch 3.6 ou posterior.",
+          "description": "O menor uso de memória para a pesquisa vetorial, com uma pequena perda na qualidade da pesquisa. Recomendado para índices grandes. Requer OpenSearch 3.6 ou posterior.",
           "label": "1 bit"
         },
         "scalar7Bit": {
-          "description": "4 vezes menos memória. Quase nenhuma perda na qualidade da pesquisa.",
+          "description": "Cerca de 4 vezes menos memória para a pesquisa vetorial. Quase nenhuma perda na qualidade da pesquisa.",
           "label": "7 bits"
         },
         "title": "Quantização de vetores"

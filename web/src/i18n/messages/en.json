@@ -5508,17 +5508,17 @@
         "googleProjectRequired": "GCP Project ID is required"
       },
       "vectorQuantization": {
-        "description": "Store document vectors with fewer bits to use less memory. Fewer bits can lower search quality.",
+        "description": "Store document vectors with fewer bits so vector search uses less memory. Fewer bits can lower search quality. Changing only this setting rebuilds the index from the stored vectors, without re-embedding.",
         "none": {
           "description": "Full 32-bit precision.",
           "label": "None"
         },
         "scalar1Bit": {
-          "description": "32x less memory. Needs OpenSearch 3.6 or later.",
+          "description": "The least vector search memory, with a small loss in search quality. Recommended for large indexes. Needs OpenSearch 3.6 or later.",
           "label": "1-bit"
         },
         "scalar7Bit": {
-          "description": "4x less memory. Almost no loss in search quality.",
+          "description": "About 4x less vector search memory. Almost no loss in search quality.",
           "label": "7-bit"
         },
         "title": "Vector Quantization"
