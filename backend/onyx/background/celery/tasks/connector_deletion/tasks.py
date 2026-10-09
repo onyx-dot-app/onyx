@@ -95,6 +95,8 @@ def revoke_tasks_blocking_deletion(
                 search_settings_id=search_settings.id,
                 limit=1,
                 db_session=db_session,
+                # an active backfill also writes the pair's documents
+                ignore_backfill=False,
             )
             if (
                 recent_index_attempts
@@ -319,6 +321,8 @@ def try_generate_document_cc_pair_cleanup_tasks(
                 search_settings_id=search_settings.id,
                 limit=1,
                 db_session=db_session,
+                # an active backfill also writes the pair's documents
+                ignore_backfill=False,
             )
             if (
                 recent_index_attempts

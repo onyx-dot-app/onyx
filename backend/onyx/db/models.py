@@ -2532,6 +2532,17 @@ class IndexAttempt(Base):
     is_synthetic_seed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # A one-off run over the fixed window poll_range_start..poll_range_end,
+    # set at creation. It is a full run for concurrency, but stays out of the
+    # incremental cursor, checkpoint reuse, and the pair's status and schedule.
+    is_backfill: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # The config a backfill runs with in place of the connector's saved config
+    # (e.g. a config limited to newly included items). NULL runs the saved config.
+    connector_config_override: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)
     )

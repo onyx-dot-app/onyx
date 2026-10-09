@@ -756,6 +756,8 @@ def get_last_successful_attempt_poll_range_end(
     from it instead of refetching full history. This differs from the count/latest helpers,
     which keep `ignore_synthetic_seed=True` because a seed is not a real indexing run.
 
+    A backfill is never a resume point: its window is not the pair's cursor.
+
     Note that the attempts time_started is not necessarily correct - that gets set
     separately and is similar but not exactly the same as the `poll_range_end`.
     """
@@ -775,6 +777,7 @@ def get_last_successful_attempt_poll_range_end(
                     ~_has_unresolved_entity_error(),
                 ),
             ),
+            IndexAttempt.is_backfill.is_(False),
         )
     )
     if ignore_targeted_reindex:
@@ -1279,6 +1282,7 @@ def resync_cc_pair(
                 ConnectorCredentialPair.credential_id == credential_id,
                 IndexAttempt.search_settings_id == search_settings_id,
                 IndexAttempt.targeted_reindex_job_id.is_(None),
+                IndexAttempt.is_backfill.is_(False),
             )
         )
 
