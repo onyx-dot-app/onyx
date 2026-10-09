@@ -2689,6 +2689,9 @@
         "retryButton": {
           "label": "再試行"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
+        },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"
         },

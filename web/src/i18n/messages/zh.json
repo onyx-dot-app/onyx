@@ -2689,6 +2689,9 @@
         "retryButton": {
           "label": "重试"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}"
+        },
         "timeout": {
           "toast": "操作在 {seconds} 秒后超时。请检查配置是否有误。"
         },
