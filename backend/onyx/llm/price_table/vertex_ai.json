@@ -3,6 +3,7 @@
     "claude-fable-5": "claude-fable-5@default",
     "claude-fable-5-1": "claude-fable-5-1@default",
     "claude-haiku-4-5": "claude-haiku-4-5@20251001",
+    "claude-haiku-5-5": "claude-haiku-5-5@default",
     "claude-opus-4": "claude-opus-4@20250514",
     "claude-opus-4-1": "claude-opus-4-1@20250805",
     "claude-opus-4-5": "claude-opus-4-5@20251101",
@@ -117,6 +118,49 @@
       "reasoning": true,
       "release_date": "2025-10-15",
       "temperature": true,
+      "tool_call": true
+    },
+    "claude-haiku-5-5@default": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
     "claude-opus-4-1@20250805": {
@@ -1242,7 +1286,7 @@
       "cost": {
         "input": 3.5,
         "output": 21.0,
-        "second_input": 8.83333333333e-05
+        "second_input": 8.75e-05
       },
       "mode": "realtime",
       "name": "gemini-3.5-live-translate-preview"
@@ -1258,7 +1302,7 @@
     "gemini-3.5-transcribe-live": {
       "cost": {
         "output": 21.0,
-        "second_input": 8.33333333333e-05
+        "second_input": 8.75e-05
       },
       "mode": "audio_transcription",
       "name": "gemini-3.5-transcribe-live"

@@ -2,14 +2,16 @@
   "aliases": {},
   "models": {
     "codestral-2508": {
+      "attachment": false,
       "cost": {
         "cache_read": 0.03,
         "input": 0.3,
-        "output": 0.8999999999999999
+        "output": 0.9
       },
+      "family": "codestral",
       "limit": {
-        "context": 128000,
-        "output": 128000
+        "context": 256000,
+        "output": 8192
       },
       "modalities": {
         "input": [
@@ -20,8 +22,12 @@
         ]
       },
       "mode": "chat",
-      "name": "codestral-2508",
+      "name": "Codestral 25.08",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2025-07-30",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "codestral-embed": {
@@ -285,11 +291,13 @@
       "tool_call": true
     },
     "glm-5-2": {
+      "attachment": false,
       "cost": {
         "cache_read": 0.14,
         "input": 1.4,
         "output": 4.4
       },
+      "family": "glm",
       "limit": {
         "context": 1048576,
         "output": 131072
@@ -303,9 +311,13 @@
         ]
       },
       "mode": "chat",
-      "name": "glm-5-2",
+      "name": "GLM-5.2",
+      "open_weights": true,
       "reasoning": true,
+      "release_date": "2026-06-13",
+      "status": "deprecated",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "labs-devstral-small-2512": {
@@ -337,29 +349,37 @@
       "tool_call": true
     },
     "labs-leanstral-1-5-1": {
+      "attachment": true,
       "cost": {
-        "input": 0.0,
-        "output": 0.0
+        "input": 0,
+        "output": 0
       },
+      "family": "leanstral",
       "limit": {
         "context": 262144,
-        "output": 131072
+        "output": 128000
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "text"
         ]
       },
       "mode": "chat",
-      "name": "labs-leanstral-1-5-1",
+      "name": "Leanstral 1.5",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-30",
+      "status": "deprecated",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "magistral-medium-latest": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.15,
         "input": 2,
@@ -367,12 +387,13 @@
       },
       "family": "magistral-medium",
       "limit": {
-        "context": 128000,
+        "context": 262144,
         "output": 16384
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "text"
@@ -383,6 +404,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-03-17",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -412,11 +434,13 @@
       "tool_call": true
     },
     "ministral-14b-2512": {
+      "attachment": true,
       "cost": {
         "cache_read": 0.02,
-        "input": 0.19999999999999998,
-        "output": 0.19999999999999998
+        "input": 0.2,
+        "output": 0.2
       },
+      "family": "ministral",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -431,8 +455,12 @@
         ]
       },
       "mode": "chat",
-      "name": "ministral-14b-2512",
+      "name": "Ministral 3 14B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-12-02",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "ministral-14b-latest": {
@@ -532,14 +560,16 @@
       "tool_call": true
     },
     "ministral-3b-2512": {
+      "attachment": true,
       "cost": {
         "cache_read": 0.01,
-        "input": 0.09999999999999999,
-        "output": 0.09999999999999999
+        "input": 0.1,
+        "output": 0.1
       },
+      "family": "ministral",
       "limit": {
         "context": 131072,
-        "output": 131072
+        "output": 262144
       },
       "modalities": {
         "input": [
@@ -551,8 +581,12 @@
         ]
       },
       "mode": "chat",
-      "name": "ministral-3b-2512",
+      "name": "Ministral 3 3B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-12-02",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "ministral-3b-latest": {
@@ -585,11 +619,13 @@
       "tool_call": true
     },
     "ministral-8b-2512": {
+      "attachment": true,
       "cost": {
         "cache_read": 0.015,
         "input": 0.15,
         "output": 0.15
       },
+      "family": "ministral",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -604,8 +640,12 @@
         ]
       },
       "mode": "chat",
-      "name": "ministral-8b-2512",
+      "name": "Ministral 3 8B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-12-02",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "ministral-8b-latest": {
@@ -766,6 +806,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-11-18",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -955,6 +996,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-05-07",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -982,6 +1024,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-08-12",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1154,6 +1197,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-07-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1232,6 +1276,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-06-20",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1413,6 +1458,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2023-09-27",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1468,6 +1514,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-04-17",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1494,6 +1541,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2023-12-11",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1521,6 +1569,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-09-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1550,6 +1599,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-11-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1642,26 +1692,32 @@
       "tool_call": false
     },
     "voxtral-small-2507": {
+      "attachment": true,
       "cost": {
         "cache_read": 0.01,
-        "input": 0.09999999999999999,
-        "output": 0.39999999999999997
+        "input": 0.1,
+        "output": 0.4
       },
+      "family": "voxtral",
       "limit": {
         "context": 32768,
-        "output": 32768
+        "output": 32000
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "audio"
         ],
         "output": [
           "text"
         ]
       },
       "mode": "chat",
-      "name": "voxtral-small-2507",
-      "structured_output": true,
+      "name": "Voxtral Small",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-15",
+      "temperature": true,
       "tool_call": true
     },
     "voxtral-small-latest": {
@@ -1742,7 +1798,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-13",
-      "status": "beta",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

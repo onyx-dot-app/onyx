@@ -24,8 +24,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Catalog cost blocks carry a context_over_200k tier when a provider charges
-# more past a large-context threshold. The threshold is always 200k tokens.
+# Catalog cost blocks carry long-context tiers when a provider charges more
+# past a threshold: `context_over_200k` (legacy single tier at 200k) or
+# `tiers` entries carrying arbitrary `{"type": "context", "size": N}`
+# thresholds (e.g. claude-haiku-5-5's 5x rates above 100k).
 _LONG_CONTEXT_THRESHOLD_TOKENS = 200_000
 
 _LOCALLY_HOSTED_PROVIDERS = frozenset(
@@ -173,18 +175,38 @@ def _catalog_cost_cents(
     Cache reads bill at cache_read (missing rate = undiscounted, bills at
     input); cache writes bill at cache_write (missing rate = no write
     premium, bills at input). Providers charging a long-context premium get
-    their context_over_200k rates applied to every bucket.
+    their tier rates applied to every bucket.
     """
+    # Most specific applicable rate card wins: the highest long-context
+    # threshold the prompt clears. `context_over_200k` is the legacy single
+    # tier; `tiers` entries carry arbitrary context thresholds. Upstream
+    # vendors the legacy block verbatim next to `tiers` — sometimes with a
+    # different (correct) tier threshold — so explicit tiers win and the
+    # legacy block only applies when no context tiers exist.
+    candidates: list[tuple[float, dict[str, Any]]] = []
+    for tier_entry in cost.get("tiers") or []:
+        tier_meta: dict[str, Any] = tier_entry.get("tier") or {}
+        size: Any = tier_meta.get("size")
+        if tier_meta.get("type") == "context" and isinstance(size, (int, float)):
+            candidates.append((float(size), tier_entry))
+    legacy_tier: dict[str, Any] | None = cost.get("context_over_200k")
+    if legacy_tier and not candidates:
+        candidates.append((_LONG_CONTEXT_THRESHOLD_TOKENS, legacy_tier))
     rates = cost
-    if prompt_tokens > _LONG_CONTEXT_THRESHOLD_TOKENS:
-        tier = cost.get("context_over_200k")
-        if tier:
-            rates = tier
+    best: float = -1.0
+    for threshold, tier_rates in candidates:
+        if prompt_tokens > threshold and threshold > best:
+            best = threshold
+            rates = tier_rates
 
     def _rate(key: str, fallback: float | None = None) -> float:
         value = rates.get(key)
-        if value is None:
+        # Negative rates are upstream "unknown price" sentinels, never real —
+        # a negative tier rate defers to the base rate like a missing one.
+        if not isinstance(value, (int, float)) or value < 0:
             value = cost.get(key)
+        if not isinstance(value, (int, float)) or value < 0:
+            value = None
         return float(value) if value is not None else (fallback or 0.0)
 
     input_rate = _rate("input")

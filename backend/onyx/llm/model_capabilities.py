@@ -27,6 +27,7 @@ from onyx.configs.model_configs import (
 )
 from onyx.llm.api_surfaces import OPENAI_COMPATIBLE_SURFACES, LlmApiSurface
 from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS, LlmProviderNames
+from onyx.llm.model_catalog import CHAT_MODES
 from onyx.llm.models import ReasoningEffort
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -82,7 +83,13 @@ def _strip_colon_from_model_name(model_name: str) -> str:
     return ":".join(model_name.split(":")[:-1]) if ":" in model_name else model_name
 
 
-def find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | None:
+def find_model_obj(
+    model_map: dict,
+    provider: str,
+    model_name: str,
+    *,
+    chat_only: bool = False,
+) -> dict | None:
     stripped_model_name = _strip_extra_provider_from_model_name(model_name)
 
     model_names = [
@@ -101,16 +108,24 @@ def find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | No
     # First try all model names with provider prefix
     for model_name in filtered_model_names:
         model_obj = model_map.get(f"{provider}/{model_name}")
-        if model_obj:
+        if model_obj and not (chat_only and not _is_chat_entry(model_obj)):
             return model_obj
 
     # Then try all model names without provider prefix
     for model_name in filtered_model_names:
         model_obj = model_map.get(model_name)
-        if model_obj:
+        if model_obj and not (chat_only and not _is_chat_entry(model_obj)):
             return model_obj
 
     return None
+
+
+# litellm modes that are chat-shaped for token-budget purposes; mirrors the
+# sync script's classification (image/embedding/audio modes stay excluded).
+def _is_chat_entry(model_obj: dict) -> bool:
+    """Budget lookups must not land on non-chat entries — a bare-name scan can
+    resolve e.g. a custom deployment named like an image/embedding model."""
+    return (model_obj.get("mode") or "chat") in CHAT_MODES
 
 
 def llm_max_input_tokens(
@@ -128,6 +143,7 @@ def llm_max_input_tokens(
         model_map,
         model_provider,
         model_name,
+        chat_only=True,
     )
     if not model_obj:
         logger.warning(
@@ -161,7 +177,7 @@ def get_llm_max_output_tokens(
     """Best effort attempt to get the max output tokens for the LLM."""
     default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
 
-    model_obj = find_model_obj(model_map, model_provider, model_name)
+    model_obj = find_model_obj(model_map, model_provider, model_name, chat_only=True)
 
     if not model_obj:
         logger.warning(

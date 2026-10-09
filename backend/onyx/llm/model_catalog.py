@@ -158,17 +158,40 @@ def provider_names() -> list[str]:
     return sorted(_catalog())
 
 
+# Modes a catalog entry can serve a chat request under — entries in any
+# other mode (embedding/rerank/image/audio/...) must stay out of
+# chat-model surfaces.
+CHAT_MODES = frozenset({"chat", "responses", "completion"})
+
+
+def _catalog_mode(entry: dict[str, Any], model_name: str) -> str:
+    """Entries vendored from sources without a mode concept (models.dev-only
+    providers like vercel_ai_gateway) ship no mode; without one every
+    embedding/rerank entry would resolve as a chat model. Infer the class
+    from the id — the same name heuristic is_embedding_model_name already
+    applies to uncataloged models."""
+    mode: Any = entry.get("mode")
+    if mode:
+        return mode
+    tail = model_name.split("/")[-1]
+    if _RERANK_NAME_PATTERN.search(tail):
+        return "rerank"
+    if _EMBEDDING_NAME_PATTERN.search(tail):
+        return "embedding"
+    return "chat"
+
+
 def iter_models(provider: str, mode: str | None = None) -> list[str]:
     """Real model ids under a provider (aliases excluded). Pass ``mode``
     (e.g. "chat") to restrict to that kind; entries without a mode field
-    are chat models."""
+    count as chat unless the id looks non-chat."""
     models = _catalog().get(provider, {}).get("models", {})
     if mode is None:
         return sorted(models)
     return sorted(
         model_id
         for model_id, entry in models.items()
-        if entry.get("mode", "chat") == mode
+        if _catalog_mode(entry, model_id) == mode
     )
 
 
@@ -232,7 +255,9 @@ def find_model_cost(provider: str, model_name: str) -> dict[str, Any] | None:
     return entry.get("cost") if entry else None
 
 
-def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
+def _compat_entry(
+    provider: str, entry: dict[str, Any], model_name: str
+) -> dict[str, Any]:
     """Render a catalog entry in the legacy litellm.model_cost shape consumed
     by model_capabilities and the model name parser."""
     limit = entry.get("limit") or {}
@@ -240,18 +265,36 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
     inputs = modalities.get("input") or []
     display_name = re.sub(r"\s*\(latest\)\s*$", "", entry.get("name") or "")
 
+    mode: str = _catalog_mode(entry, model_name)
+
     # Meta-models (openrouter/auto and friends) route each request to a
     # pool endpoint smaller than their advertised pool-max limits. Emitting
     # no output limit keeps callers from sending a max_tokens the routed
     # endpoint then rejects.
     unbounded: bool = bool(entry.get("unbounded"))
 
+    # An output limit at or above the context window is a pool-max
+    # fabrication — no chat model emits its whole context on top of input.
+    # Upstream vendors these anyway (~250 entries), so treat the claim as
+    # untrusted and emit no output limit, same as unbounded.
+    limit_output: Any = limit.get("output")
+    context: Any = limit.get("context")
+    if (
+        not unbounded
+        and mode == "chat"
+        and isinstance(limit_output, (int, float))
+        and isinstance(context, (int, float))
+        and context > 0
+        and limit_output >= context
+    ):
+        limit_output = None
+
     return {
         "litellm_provider": provider,
-        "mode": entry.get("mode") or "chat",
+        "mode": mode,
         "max_input_tokens": limit.get("input") or limit.get("context"),
         "max_tokens": limit.get("context"),
-        "max_output_tokens": None if unbounded else limit.get("output"),
+        "max_output_tokens": None if unbounded else limit_output,
         "unbounded": unbounded or None,
         "supports_vision": "image" in inputs,
         "supports_reasoning": entry.get("reasoning"),
@@ -282,14 +325,14 @@ def build_model_map() -> dict[str, dict[str, Any]]:
     for provider in ordered_providers:
         section = catalog[provider]
         for model_id, entry in section["models"].items():
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, model_id)
             model_map[f"{provider}/{model_id}"] = compat
             model_map.setdefault(model_id, compat)
         for alias, target in section["aliases"].items():
             entry = section["models"].get(target)
             if entry is None:
                 continue
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, alias)
             model_map[f"{provider}/{alias}"] = compat
             model_map.setdefault(alias, compat)
 
@@ -317,9 +360,26 @@ _EMBEDDING_NAME_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Rerank ids classify as "rerank", not "embedding" — checked before
+# _EMBEDDING_NAME_PATTERN, which lumps the whole not-chat class together
+# for the uncataloged-name fallback below.
+_RERANK_NAME_PATTERN = re.compile(r"rerank", re.IGNORECASE)
+
 
 def is_embedding_model_name(model_name: str) -> bool:
+    """Is this an embedding model? Cataloged entries answer from their mode;
+    uncataloged names fall back to the id pattern."""
     entry = build_model_map().get(model_name)
     if entry is not None and entry.get("mode"):
         return entry["mode"] == "embedding"
+    return bool(_EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1]))
+
+
+def is_non_chat_model_name(model_name: str) -> bool:
+    """Should this name stay out of chat-model listings? Cataloged entries
+    answer from their mode (embedding/rerank/image/etc. are all non-chat);
+    uncataloged names fall back to the id pattern."""
+    entry = build_model_map().get(model_name)
+    if entry is not None and entry.get("mode"):
+        return entry["mode"] not in CHAT_MODES
     return bool(_EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1]))

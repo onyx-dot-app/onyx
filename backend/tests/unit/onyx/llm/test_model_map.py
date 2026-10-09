@@ -148,7 +148,7 @@ def test_unbounded_entry_drops_max_output_tokens() -> None:
                     "unbounded": True,
                 },
                 "vendor/real-model": {
-                    "limit": {"context": 2_000_000, "output": 2_000_000},
+                    "limit": {"context": 2_000_000, "output": 128_000},
                 },
             },
             "aliases": {},
@@ -169,8 +169,106 @@ def test_unbounded_entry_drops_max_output_tokens() -> None:
                 model_map, LlmProviderNames.OPENROUTER, "vendor/real-model"
             )
             assert bounded is not None
-            assert bounded["max_output_tokens"] == 2_000_000
+            assert bounded["max_output_tokens"] == 128_000
             assert bounded["unbounded"] is None
+        finally:
+            _reset_caches()
+
+
+def test_inflated_output_claim_drops_max_output_tokens() -> None:
+    """Chat-mode entries whose vendored output limit is at or above the
+    context window carry a pool-max fabrication, not a per-request cap —
+    the model map must not emit it. Non-chat modes (image/TTS limits mean
+    something else) are left alone."""
+    mock_catalog: dict[str, Any] = {
+        "wandb": {
+            "models": {
+                "vendor/fabricated": {
+                    "mode": "chat",
+                    "limit": {"context": 262_144, "output": 262_144},
+                },
+                "vendor/real": {
+                    "mode": "chat",
+                    "limit": {"context": 262_144, "output": 131_072},
+                },
+                "vendor/veo": {
+                    "mode": "image",
+                    "limit": {"context": 480, "output": 8192},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            fabricated = find_model_obj(model_map, "wandb", "vendor/fabricated")
+            assert fabricated is not None
+            assert fabricated["max_output_tokens"] is None
+            assert fabricated["unbounded"] is None
+
+            real = find_model_obj(model_map, "wandb", "vendor/real")
+            assert real is not None
+            assert real["max_output_tokens"] == 131_072
+
+            image = find_model_obj(model_map, "wandb", "vendor/veo")
+            assert image is not None
+            assert image["max_output_tokens"] == 8192
+        finally:
+            _reset_caches()
+
+
+def test_chat_only_skips_non_chat_entries() -> None:
+    """A bare-name scan can resolve a chat lookup to an image/embedding entry;
+    chat_only makes it behave like a miss so callers get fallbacks."""
+    mock_catalog: dict[str, Any] = {
+        "openai": {
+            "models": {
+                "gpt-image-1": {
+                    "mode": "image",
+                    "limit": {"context": 0, "output": 0},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            # Unfiltered lookup still resolves (cost/existence checks need it).
+            assert find_model_obj(model_map, "custom", "gpt-image-1") is not None
+            assert (
+                find_model_obj(model_map, "custom", "gpt-image-1", chat_only=True)
+                is None
+            )
+        finally:
+            _reset_caches()
+
+
+def test_chat_only_accepts_responses_mode_entries() -> None:
+    """Responses-API models (mode "responses") are chat-shaped: budget lookups
+    must keep their real limits, not the 32k fallback."""
+    mock_catalog: dict[str, Any] = {
+        "openai": {
+            "models": {
+                "gpt-5-pro": {
+                    "mode": "responses",
+                    "limit": {"context": 400_000, "output": 272_000},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "openai", "gpt-5-pro", chat_only=True)
+            assert obj is not None
+            assert obj["max_tokens"] == 400_000
+            assert obj["max_output_tokens"] == 272_000
         finally:
             _reset_caches()
 
@@ -189,3 +287,79 @@ def test_twelvelabs_pegasus_override_present() -> None:
         assert model_obj["supports_reasoning"] is False
     finally:
         _reset_caches()
+
+
+def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
+    """Providers vendored from sources without a mode concept (e.g.
+    vercel_ai_gateway) ship no mode field; embed/rerank ids must infer a
+    non-chat mode or gateway model lists would offer them as chat models."""
+    mock_catalog: dict[str, Any] = {
+        "vercel_ai_gateway": {
+            "models": {
+                "cohere/embed-v5.0-fast": {
+                    "limit": {"context": 512, "output": 512},
+                },
+                "cohere/rerank-v4-pro": {
+                    "limit": {"context": 128_000, "output": 0},
+                },
+                "cohere/command-a": {
+                    "limit": {"context": 256_000, "output": 8_000},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            for name, want_mode in {
+                "cohere/embed-v5.0-fast": "embedding",
+                "cohere/rerank-v4-pro": "rerank",
+            }.items():
+                obj = find_model_obj(model_map, "vercel_ai_gateway", name)
+                assert obj is not None
+                assert obj["mode"] == want_mode
+                assert (
+                    find_model_obj(model_map, "vercel_ai_gateway", name, chat_only=True)
+                    is None
+                )
+                assert model_catalog.is_non_chat_model_name(name) is True
+                assert name not in model_catalog.iter_models(
+                    "vercel_ai_gateway", mode="chat"
+                )
+                assert name in model_catalog.iter_models(
+                    "vercel_ai_gateway", mode=want_mode
+                )
+
+            chat = find_model_obj(model_map, "vercel_ai_gateway", "cohere/command-a")
+            assert chat is not None
+            assert chat["mode"] == "chat"
+            assert model_catalog.is_embedding_model_name("cohere/command-a") is False
+        finally:
+            _reset_caches()
+
+
+def test_explicit_mode_wins_over_name_heuristic() -> None:
+    """A vendored mode beats the name fallback — an upstream 'chat' entry
+    named *-embed stays chat."""
+    mock_catalog: dict[str, Any] = {
+        "wandb": {
+            "models": {
+                "vendor/embed-named-chat": {
+                    "mode": "chat",
+                    "limit": {"context": 8_000},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+        model_map = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "wandb", "vendor/embed-named-chat")
+            assert obj is not None
+            assert obj["mode"] == "chat"
+        finally:
+            _reset_caches()

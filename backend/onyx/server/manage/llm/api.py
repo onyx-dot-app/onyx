@@ -125,7 +125,7 @@ from onyx.server.manage.llm.utils import (
     ModelMetadata,
     generate_bedrock_display_name,
     generate_ollama_display_name,
-    is_embedding_model,
+    is_non_chat_model,
     is_reasoning_model,
     is_valid_bedrock_model,
     lm_studio_capability_enabled,
@@ -1799,8 +1799,8 @@ def get_litellm_available_models(
 
             litellm_params_model = model_details.get_litellm_params_model()
 
-            # Skip embedding models
-            if is_embedding_model(litellm_params_model) or is_embedding_model(
+            # Skip non-chat models
+            if is_non_chat_model(litellm_params_model) or is_non_chat_model(
                 model_details.model_name
             ):
                 continue
@@ -1953,8 +1953,8 @@ def get_bifrost_available_models(
             if not model_id:
                 continue
 
-            # Skip embedding models
-            if is_embedding_model(model_id):
+            # Skip non-chat models
+            if is_non_chat_model(model_id):
                 continue
 
             results.append(
@@ -2087,7 +2087,7 @@ def get_nebius_tokenfactory_available_models(
             model_id = model.get("id", "")
             if not model_id:
                 continue
-            if is_embedding_model(model_id):
+            if is_non_chat_model(model_id):
                 continue
 
             # Only keep models whose output modality is text (chat / vision-chat);
@@ -2203,8 +2203,8 @@ def get_openai_compatible_server_available_models(
             if not model_id:
                 continue
 
-            # Skip embedding models
-            if is_embedding_model(model_id):
+            # Skip non-chat models
+            if is_non_chat_model(model_id):
                 continue
 
             results.append(
@@ -2416,8 +2416,8 @@ def get_portkey_available_models(
             if not model_id:
                 continue
 
-            # Skip embedding models
-            if is_embedding_model(model_id):
+            # Skip non-chat models
+            if is_non_chat_model(model_id):
                 continue
 
             results.append(
