@@ -2,6 +2,8 @@
 vector quantization: the port copies stored vectors and makes no embedding
 calls."""
 
+import math
+import random
 import uuid
 from typing import cast
 
@@ -39,10 +41,13 @@ class _NoEmbedder:
         raise AssertionError(f"COPY_VECTORS embedded {len(chunks)} chunk(s)")
 
 
-def _vector(position: int) -> list[float]:
-    vector: list[float] = [0.0] * EMBEDDING_DIM
-    vector[position] = 1.0
-    return vector
+def _vector(seed: int) -> list[float]:
+    """A dense unit vector; one-hot vectors survive quantization exactly and
+    would hide a lossy copy."""
+    rng: random.Random = random.Random(seed)
+    raw: list[float] = [rng.uniform(-1.0, 1.0) for _ in range(EMBEDDING_DIM)]
+    norm: float = math.sqrt(sum(x * x for x in raw))
+    return [x / norm for x in raw]
 
 
 def _document_index(
@@ -71,11 +76,21 @@ def _stored_chunks(client: OpenSearchIndexClient) -> dict[str, DocumentChunk]:
     return stored
 
 
+@pytest.mark.parametrize(
+    "present_quantization,future_quantization",
+    [
+        (VectorQuantization.NONE, VectorQuantization.SCALAR_1_BIT),
+        (VectorQuantization.SCALAR_1_BIT, VectorQuantization.NONE),
+        (VectorQuantization.SCALAR_7_BIT, VectorQuantization.SCALAR_1_BIT),
+    ],
+)
 def test_quantization_only_port_copies_vectors_without_embedding(
     tenant_context: None,  # noqa: ARG001
+    present_quantization: VectorQuantization,
+    future_quantization: VectorQuantization,
 ) -> None:
-    """A float32 -> 1-bit port writes every chunk with its stored vector and
-    unchanged fields, without calling the embedder."""
+    """A quantization-only port writes every chunk with its original float32
+    vector and unchanged fields, without calling the embedder."""
     if not wait_for_opensearch_with_timeout():
         pytest.fail("OpenSearch is not available.")
 
@@ -83,17 +98,20 @@ def test_quantization_only_port_copies_vectors_without_embedding(
     present_name: str = f"test_copy_present_{suffix}"
     future_name: str = f"test_copy_future_{suffix}"
     present: OpenSearchDocumentIndex = _document_index(
-        present_name, VectorQuantization.NONE
+        present_name, present_quantization
     )
-    future: OpenSearchDocumentIndex = _document_index(
-        future_name, VectorQuantization.SCALAR_1_BIT
-    )
+    future: OpenSearchDocumentIndex = _document_index(future_name, future_quantization)
     present.verify_and_create_index_if_necessary(embedding_dim=EMBEDDING_DIM)
     future.verify_and_create_index_if_necessary(embedding_dim=EMBEDDING_DIM)
     with (
         OpenSearchIndexClient(index_name=present_name) as present_client,
         OpenSearchIndexClient(index_name=future_name) as future_client,
     ):
+        original_vectors: dict[str, list[float]] = {
+            f"{doc_id}:{chunk_id}": _vector(2 * i + chunk_id)
+            for i, doc_id in enumerate(_DOC_IDS)
+            for chunk_id in (0, 1)
+        }
         try:
             present.index(
                 chunks=[
@@ -102,7 +120,7 @@ def test_quantization_only_port_copies_vectors_without_embedding(
                     ).model_copy(
                         update={
                             "embeddings": ChunkEmbedding(
-                                full_embedding=_vector(2 * i + chunk_id),
+                                full_embedding=original_vectors[f"{doc_id}:{chunk_id}"],
                                 mini_chunk_embeddings=[],
                             )
                         }
@@ -138,7 +156,7 @@ def test_quantization_only_port_copies_vectors_without_embedding(
             for key, present_chunk in present_chunks.items():
                 future_chunk: DocumentChunk = future_chunks[key]
                 assert future_chunk.content_vector == pytest.approx(
-                    present_chunk.content_vector
+                    original_vectors[key], abs=1e-6
                 )
                 assert future_chunk.written_by_port
                 assert (
