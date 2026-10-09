@@ -1,4 +1,9 @@
+from datetime import datetime
+from typing import Generic, TypeVar
+
 from pydantic import BaseModel, Field
+
+_ItemT = TypeVar("_ItemT")
 
 
 class HubSpotObjectSpec(BaseModel):
@@ -10,12 +15,42 @@ class HubSpotObjectSpec(BaseModel):
     modified_date_property: str
 
 
+class HubSpotPage(BaseModel, Generic[_ItemT]):
+    items: list[_ItemT]
+    next_after: str | None = None
+
+
+class HubSpotAssociationIds(BaseModel):
+    ids: list[str]
+    # True when HubSpot paged the inline list, so it is incomplete.
+    has_more: bool
+
+
+class HubSpotRecord(BaseModel):
+    id: str
+    properties: dict[str, str | None] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+    # Inline association ids by object type. None when none were requested or
+    # HubSpot sent none.
+    associations: dict[str, HubSpotAssociationIds] | None = None
+
+
 class HubSpotUser(BaseModel):
     id: int
     email: str | None = None
 
 
-# Api* models validate HubSpot's raw REST answers. The listed fields are
+class HubSpotDocumentParts(BaseModel):
+    """The per-type half of a document. The rest is shared by every type."""
+
+    title: str
+    text: str
+    metadata: dict[str, str]
+
+
+# Api* models validate HubSpot's raw answers: the SDK's to_dict() shapes and
+# the REST bodies of the APIs the SDK has no client for. The listed fields are
 # required, so a body of the wrong shape fails the call instead of reading as
 # an empty answer that would hide records.
 class ApiPagingNext(BaseModel):
@@ -24,6 +59,41 @@ class ApiPagingNext(BaseModel):
 
 class ApiPaging(BaseModel):
     next: ApiPagingNext | None = None
+
+
+class ApiAssociatedId(BaseModel):
+    id: str
+
+
+class ApiAssociationCollection(BaseModel):
+    results: list[ApiAssociatedId] = Field(default_factory=list)
+    paging: ApiPaging | None = None
+
+
+class ApiRecord(BaseModel):
+    id: str
+    properties: dict[str, str | None] | None = None
+    created_at: datetime
+    updated_at: datetime
+    associations: dict[str, ApiAssociationCollection] | None = None
+
+
+class ApiRecordPage(BaseModel):
+    results: list[ApiRecord] = Field(default_factory=list)
+    paging: ApiPaging | None = None
+
+
+class ApiAssociation(BaseModel):
+    to_object_id: int
+
+
+class ApiAssociationPage(BaseModel):
+    results: list[ApiAssociation] = Field(default_factory=list)
+    paging: ApiPaging | None = None
+
+
+class ApiPortalInfo(BaseModel):
+    portal_id: int = Field(alias="portalId")
 
 
 class ApiUsersResponse(BaseModel):
