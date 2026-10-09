@@ -12479,6 +12479,9 @@
       },
       "noContent": {
         "label": "Kein Inhalt"
+      },
+      "csv": {
+        "truncated": "Die Vorschau zeigt die ersten 1.000 Zeilen und 100 Spalten. Laden Sie das Original für alle Daten herunter."
       }
     },
     "filesTab": {
@@ -12507,6 +12510,9 @@
       },
       "preview": {
         "ariaLabel": "Vorschau von {name}"
+      },
+      "background": {
+        "contrast": "Kontrasthintergrund"
       }
     },
     "inputBar": {
@@ -12699,6 +12705,9 @@
       },
       "slide": {
         "counter": "Folie {current} von {total}"
+      },
+      "resize": {
+        "ariaLabel": "Folienminiaturen skalieren"
       }
     },
     "previewTab": {

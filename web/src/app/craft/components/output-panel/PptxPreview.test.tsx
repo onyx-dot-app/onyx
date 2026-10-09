@@ -392,3 +392,39 @@ it("keeps a hidden deck intact and converts only the latest revision on activati
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
   expect(fetchPptxPreview).toHaveBeenCalledTimes(requests + 1);
 });
+
+it("resizes thumbnails with quick pointer release and keyboard limits", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 1,
+    slide_paths: ["slide-1.jpg"],
+    cached: false,
+  });
+  render(
+    <PptxPreview sessionId="resizable-deck" filePath="outputs/deck.pptx" />
+  );
+  const divider = await screen.findByRole("separator", {
+    name: "Resize slide thumbnails",
+  });
+  divider.setPointerCapture = jest.fn();
+  divider.hasPointerCapture = () => true;
+  divider.releasePointerCapture = jest.fn();
+  const pointer = (type: string, clientX: number) => {
+    const event = new MouseEvent(type, { bubbles: true, button: 0, clientX });
+    Object.defineProperty(event, "pointerId", { value: 1 });
+    fireEvent(divider, event);
+  };
+  pointer("pointerdown", 112);
+  pointer("pointerup", 180);
+  expect(divider).toHaveAttribute("aria-valuenow", "180");
+  expect(screen.getByRole("toolbar")).toHaveStyle({ width: "180px" });
+  fireEvent.keyDown(divider, { key: "ArrowRight" });
+  expect(divider).toHaveAttribute("aria-valuenow", "190");
+  fireEvent.keyDown(divider, { key: "End" });
+  expect(divider).toHaveAttribute("aria-valuenow", "320");
+  fireEvent.keyDown(divider, { key: "Home" });
+  expect(divider).toHaveAttribute("aria-valuenow", "88");
+  pointer("pointerdown", 88);
+  pointer("pointermove", 160);
+  pointer("pointercancel", 250);
+  expect(divider).toHaveAttribute("aria-valuenow", "160");
+});

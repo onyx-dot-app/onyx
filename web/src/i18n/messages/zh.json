@@ -12479,6 +12479,9 @@
       },
       "noContent": {
         "label": "无内容"
+      },
+      "csv": {
+        "truncated": "预览仅显示前1,000行和100列。请下载原文件查看全部数据。"
       }
     },
     "filesTab": {
@@ -12507,6 +12510,9 @@
       },
       "preview": {
         "ariaLabel": "{name} 的预览"
+      },
+      "background": {
+        "contrast": "对比背景"
       }
     },
     "inputBar": {
@@ -12699,6 +12705,9 @@
       },
       "slide": {
         "counter": "幻灯片 {current} / {total}"
+      },
+      "resize": {
+        "ariaLabel": "调整幻灯片缩略图宽度"
       }
     },
     "previewTab": {

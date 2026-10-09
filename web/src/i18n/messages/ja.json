@@ -12479,6 +12479,9 @@
       },
       "noContent": {
         "label": "コンテンツがありません"
+      },
+      "csv": {
+        "truncated": "プレビューは最初の1,000行と100列に制限されています。すべてのデータは元のファイルをダウンロードしてください。"
       }
     },
     "filesTab": {
@@ -12507,6 +12510,9 @@
       },
       "preview": {
         "ariaLabel": "{name} のプレビュー"
+      },
+      "background": {
+        "contrast": "コントラスト背景"
       }
     },
     "inputBar": {
@@ -12699,6 +12705,9 @@
       },
       "slide": {
         "counter": "スライド {current} / {total}"
+      },
+      "resize": {
+        "ariaLabel": "スライドのサムネイルの幅を変更"
       }
     },
     "previewTab": {

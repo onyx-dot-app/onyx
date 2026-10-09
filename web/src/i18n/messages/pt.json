@@ -12479,6 +12479,9 @@
       },
       "noContent": {
         "label": "Sem conteúdo"
+      },
+      "csv": {
+        "truncated": "A prévia mostra as primeiras 1.000 linhas e 100 colunas. Baixe o original para obter todos os dados."
       }
     },
     "filesTab": {
@@ -12507,6 +12510,9 @@
       },
       "preview": {
         "ariaLabel": "Pré-visualização de {name}"
+      },
+      "background": {
+        "contrast": "Fundo de contraste"
       }
     },
     "inputBar": {
@@ -12699,6 +12705,9 @@
       },
       "slide": {
         "counter": "Slide {current} de {total}"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionar miniaturas dos slides"
       }
     },
     "previewTab": {

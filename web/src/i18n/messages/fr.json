@@ -12479,6 +12479,9 @@
       },
       "noContent": {
         "label": "Aucun contenu"
+      },
+      "csv": {
+        "truncated": "L’aperçu est limité aux 1 000 premières lignes et 100 colonnes. Téléchargez l’original pour toutes les données."
       }
     },
     "filesTab": {
@@ -12507,6 +12510,9 @@
       },
       "preview": {
         "ariaLabel": "Aperçu de {name}"
+      },
+      "background": {
+        "contrast": "Fond contrasté"
       }
     },
     "inputBar": {
@@ -12699,6 +12705,9 @@
       },
       "slide": {
         "counter": "Diapositive {current} sur {total}"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionner les miniatures des diapositives"
       }
     },
     "previewTab": {

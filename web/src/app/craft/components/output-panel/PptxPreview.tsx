@@ -6,7 +6,9 @@ import {
   useCallback,
   useRef,
   type KeyboardEvent,
+  type PointerEvent,
 } from "react";
+import { useDirection } from "@radix-ui/react-direction";
 import { useFormatter, useTranslations } from "next-intl";
 import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -41,6 +43,20 @@ export default function PptxPreview({
 }: PptxPreviewProps) {
   const t = useTranslations("craft.pptxPreview");
   const format: ReturnType<typeof useFormatter> = useFormatter();
+  const direction = useDirection();
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const resizeGesture = useRef<{
+    pointerId: number;
+    startX: number;
+    width: number;
+  } | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(112);
+  const [layoutWidth, setLayoutWidth] = useState(0);
+  const minimumWidth = 88;
+  const maximumWidth = layoutWidth
+    ? Math.max(minimumWidth, Math.min(320, layoutWidth * 0.4))
+    : 320;
+  const width = Math.max(minimumWidth, Math.min(maximumWidth, sidebarWidth));
   const selectedThumbnailRef = useRef<HTMLDivElement>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imageLoading, setImageLoading] = useState(true);
@@ -55,6 +71,54 @@ export default function PptxPreview({
     refreshKey,
     isActive
   );
+
+  useEffect(() => {
+    const layout = layoutRef.current;
+    if (!layout) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setLayoutWidth(entry.contentRect.width);
+    });
+    observer.observe(layout);
+    return () => observer.disconnect();
+  }, [Boolean(data?.slide_count)]);
+
+  function resizeAt(clientX: number) {
+    const gesture = resizeGesture.current;
+    if (!gesture) return;
+    const delta = (clientX - gesture.startX) * (direction === "rtl" ? -1 : 1);
+    setSidebarWidth(
+      Math.max(minimumWidth, Math.min(maximumWidth, gesture.width + delta))
+    );
+  }
+
+  function finishResize(
+    event: PointerEvent<HTMLDivElement>,
+    cancelled = false
+  ) {
+    if (resizeGesture.current?.pointerId !== event.pointerId) return;
+    if (!cancelled) resizeAt(event.clientX);
+    resizeGesture.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function resizeWithKeyboard(event: KeyboardEvent<HTMLDivElement>) {
+    const step = direction === "rtl" ? -10 : 10;
+    const next =
+      event.key === "Home"
+        ? minimumWidth
+        : event.key === "End"
+          ? maximumWidth
+          : event.key === "ArrowRight"
+            ? width + step
+            : event.key === "ArrowLeft"
+              ? width - step
+              : null;
+    if (next === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSidebarWidth(Math.max(minimumWidth, Math.min(maximumWidth, next)));
+  }
 
   const slideCount = data?.slide_count ?? 0;
   const activeSlide = Math.min(currentSlide, Math.max(0, slideCount - 1));
@@ -172,14 +236,18 @@ export default function PptxPreview({
   const slideUrl = `${buildArtifactUrl(sessionId, slidePath)}?revision=${data.imageRevision}`;
 
   return (
-    <div className="h-full min-h-0 flex overflow-hidden">
+    <div
+      ref={layoutRef}
+      className="relative h-full min-h-0 flex overflow-hidden"
+    >
       <div
         role="toolbar"
         aria-label={t("slides.label")}
         aria-orientation="vertical"
         tabIndex={0}
         onKeyDown={handleKeyDown}
-        className="w-28 shrink-0 overflow-y-auto overscroll-contain border-e border-border-02 p-2"
+        style={{ width }}
+        className="shrink-0 overflow-y-auto overscroll-contain p-2"
       >
         <div className="flex flex-col gap-2">
           {data.slide_paths.map((path, index) => (
@@ -213,6 +281,38 @@ export default function PptxPreview({
             </SelectCard>
           ))}
         </div>
+      </div>
+      <div
+        role="separator"
+        tabIndex={0}
+        aria-label={t("resize.ariaLabel")}
+        aria-orientation="vertical"
+        aria-valuemin={minimumWidth}
+        aria-valuemax={Math.round(maximumWidth)}
+        aria-valuenow={Math.round(width)}
+        className="group flex w-2 shrink-0 justify-center cursor-col-resize touch-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-border-03"
+        onPointerDown={(event) => {
+          if (event.button !== 0 || resizeGesture.current) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          resizeGesture.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            width,
+          };
+        }}
+        onPointerMove={(event) => {
+          if (resizeGesture.current?.pointerId === event.pointerId)
+            resizeAt(event.clientX);
+        }}
+        onPointerUp={(event) => finishResize(event)}
+        onPointerCancel={(event) => finishResize(event, true)}
+        onLostPointerCapture={() => {
+          resizeGesture.current = null;
+        }}
+        onKeyDown={resizeWithKeyboard}
+      >
+        <div className="pointer-events-none w-1 border-e border-border-02 group-hover:bg-border-01 group-focus-visible:bg-border-01" />
       </div>
       <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
         <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden">

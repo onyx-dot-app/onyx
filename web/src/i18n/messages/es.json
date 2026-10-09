@@ -12479,6 +12479,9 @@
       },
       "noContent": {
         "label": "Sin contenido"
+      },
+      "csv": {
+        "truncated": "La vista previa muestra las primeras 1.000 filas y 100 columnas. Descarga el original para obtener todos los datos."
       }
     },
     "filesTab": {
@@ -12507,6 +12510,9 @@
       },
       "preview": {
         "ariaLabel": "Vista previa de {name}"
+      },
+      "background": {
+        "contrast": "Fondo de contraste"
       }
     },
     "inputBar": {
@@ -12699,6 +12705,9 @@
       },
       "slide": {
         "counter": "Diapositiva {current} de {total}"
+      },
+      "resize": {
+        "ariaLabel": "Cambiar el tamaño de las miniaturas"
       }
     },
     "previewTab": {

@@ -22,6 +22,10 @@ script this document's provisioning section maps to code.
 
 ## 1. What the user experiences
 
+CSV files display a bounded table with a sticky header.
+Image previews offer a contrast background toggle.
+Presentation thumbnails support pointer and keyboard resizing.
+
 A user asks Craft to build a web app. As the agent writes code, a Preview tab
 in the session view shows the running app in an iframe, hot-reloading as the
 agent edits files. The user never runs a command to see this; the dev server
