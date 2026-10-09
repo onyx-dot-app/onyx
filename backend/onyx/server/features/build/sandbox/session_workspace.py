@@ -31,6 +31,7 @@ SETUP_IN_PROGRESS_MARKER = ".setup-in-progress"
 # when its timeout lapses (and never raises on a nonzero exit), so the
 # sentinel is the only reliable success signal.
 WORKSPACE_SETUP_COMPLETE_SENTINEL = "ONYX_WORKSPACE_SETUP_COMPLETE"
+SESSION_CONFIG_COMPLETE_SENTINEL = "ONYX_SESSION_CONFIG_COMPLETE"
 
 
 def build_workspace_exists_check_script(session_path: str) -> str:
@@ -46,7 +47,11 @@ def build_workspace_exists_check_script(session_path: str) -> str:
 def build_opencode_dependency_setup_command(session_path: str) -> str:
     """Older sandbox images use OpenCode's runtime-install fallback."""
     script = "/usr/local/bin/seed-opencode-dependencies"
-    return f"if [ -x {script} ]; then {script} {shlex.quote(session_path)}; fi"
+    return (
+        f"if [ -x {script} ]; then flock -x "
+        f"{shlex.quote(session_path + '.opencode-seed.lock')} "
+        f"{script} {shlex.quote(session_path)}; fi"
+    )
 
 
 def build_session_workspace_setup_script(

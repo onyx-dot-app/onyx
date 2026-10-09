@@ -31,7 +31,10 @@ Each session has its own copy, so sessions cannot modify each other's SDK files.
 Older images without the template retain OpenCode's runtime install fallback.
 
 The image-owned `seed-opencode-dependencies.sh` seeds new and restored sessions.
-Python invokes the script with the session path; it does not generate the copy logic.
+Python invokes the script under a session seed lock.
+The script copies dependencies into a temporary directory and publishes them by rename.
+A failed copy leaves no visible dependency directory, so the next attempt can retry.
+Kubernetes verifies a completion sentinel after configuration regeneration.
 The SDK stays outside snapshots, which contain outputs and attachments.
 
 ## SHA-pinned base + helper images

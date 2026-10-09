@@ -235,6 +235,8 @@ remain intact. Older images without this template use OpenCode's install fallbac
 The image-owned script handles SDK copies
 (`backend/onyx/server/features/build/sandbox/image/seed-opencode-dependencies.sh`).
 Configuration regeneration also calls this script after snapshot restore.
+A session seed lock serializes copies. Dependencies publish by rename after copying.
+Kubernetes verifies a completion sentinel before reporting configuration regeneration success.
 SDK files stay outside snapshots, which contain outputs and attachments.
 A completion sentinel (`ONYX_WORKSPACE_SETUP_COMPLETE`) is the only reliable
 success signal, because the K8s exec client returns buffered output without

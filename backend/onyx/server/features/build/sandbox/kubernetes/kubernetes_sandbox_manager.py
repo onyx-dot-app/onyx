@@ -124,6 +124,7 @@ from onyx.server.features.build.sandbox.nextjs_dev import (
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
+    SESSION_CONFIG_COMPLETE_SENTINEL,
     SESSIONS_ROOT,
     WORKSPACE_SETUP_COMPLETE_SENTINEL,
     build_opencode_dependency_setup_command,
@@ -1946,10 +1947,11 @@ if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 
     printf '\n\n' >> {session_path}/AGENTS.md
     echo '{attachments_content_b64}' | base64 -d >> {session_path}/AGENTS.md
 fi
+echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
 """
 
         logger.info("Regenerating session configuration files")
-        k8s_stream(
+        exec_response = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,
             name=pod_name,
             namespace=self._namespace,
@@ -1959,7 +1961,13 @@ fi
             stdin=False,
             stdout=True,
             tty=False,
+            _request_timeout=WORKSPACE_SETUP_DEADLINE_SECONDS,
         )
+        if SESSION_CONFIG_COMPLETE_SENTINEL not in exec_response.splitlines():
+            raise RuntimeError(
+                f"Session configuration regeneration for session {session_id} "
+                f"did not complete (output tail: {exec_response[-500:]!r})"
+            )
         logger.info("Session configuration files regenerated")
 
     def health_check(self, sandbox_id: UUID, timeout: float) -> bool:
