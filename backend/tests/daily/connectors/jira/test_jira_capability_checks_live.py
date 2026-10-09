@@ -7,6 +7,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
+    CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
@@ -16,8 +17,13 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
+from onyx.connectors.jira.capability_checks import (
+    build_jira_doc_permission_sync_checks,
+    build_jira_group_sync_checks,
+    build_jira_indexing_checks,
+)
 from onyx.connectors.jira.source_operations import JiraSourceOperations
+from onyx.db.enums import AccessType
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(
@@ -54,12 +60,15 @@ def _credential(
 
 
 def _results(
-    credential_json: dict[str, Any], config: dict[str, Any]
+    credential_json: dict[str, Any],
+    config: dict[str, Any],
+    perm_sync: bool = False,
 ) -> dict[str, CapabilityCheckResult]:
     context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.JIRA,
         credential_json=credential_json,
         connector_specific_config=config,
+        access_type=AccessType.SYNC if perm_sync else None,
         source_operations=JiraSourceOperations(
             credentials_provider=OnyxStaticCredentialsProvider(
                 None, DocumentSource.JIRA.value, credential_json
@@ -67,9 +76,12 @@ def _results(
             connector_specific_config=config,
         ),
     )
-    results: list[CapabilityCheckResult] = run_capability_checks(
-        build_jira_indexing_checks(), context
+    checks: list[CapabilityCheck] = (
+        build_jira_doc_permission_sync_checks() + build_jira_group_sync_checks()
+        if perm_sync
+        else build_jira_indexing_checks()
     )
+    results: list[CapabilityCheckResult] = run_capability_checks(checks, context)
     return {result.check_id: result for result in results}
 
 
@@ -192,3 +204,53 @@ def test_scoped_sign_in_fails_for_a_bad_token(
 
     result: CapabilityCheckResult = by_id["jira_scoped_token_auth"]
     assert result.status == CapabilityCheckStatus.FAILED, result
+
+
+def test_perm_sync_checks_pass_with_the_classic_token(
+    test_secrets: dict[TestSecret, str],
+) -> None:
+    """The test account is a Jira admin, so every permission-sync and
+    group-sync check passes."""
+    by_id = _results(
+        _credential(test_secrets, False),
+        _form(False, project_key=_PROJECT),
+        perm_sync=True,
+    )
+
+    failures = {
+        check_id: result.message
+        for check_id, result in by_id.items()
+        if result.status != CapabilityCheckStatus.PASSED
+    }
+    assert not failures, failures
+    verdicts = compute_capability_verdicts(
+        {
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
+        list(by_id.values()),
+    )
+    assert (
+        verdicts[CredentialCapability.DOC_PERMISSION_SYNC] == CapabilityVerdict.PASSED
+    )
+    assert (
+        verdicts[CredentialCapability.EXTERNAL_GROUP_SYNC] == CapabilityVerdict.PASSED
+    )
+
+
+def test_ci_scoped_token_cannot_read_group_members(
+    test_secrets: dict[TestSecret, str],
+) -> None:
+    """The CI scoped token reads permission schemes and project roles but lacks
+    a scope that ``group/member`` needs (HTTP 401: scope does not match), so
+    group sync cannot work with it."""
+    by_id = _results(
+        _credential(test_secrets, True),
+        _form(True, project_key=_PROJECT),
+        perm_sync=True,
+    )
+
+    assert by_id["jira_permission_scheme_read"].status == CapabilityCheckStatus.PASSED
+    membership = by_id["jira_group_membership"]
+    assert membership.status == CapabilityCheckStatus.FAILED, membership
+    assert "read:jira-user" in membership.message

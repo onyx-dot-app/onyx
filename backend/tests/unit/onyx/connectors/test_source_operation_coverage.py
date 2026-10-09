@@ -18,6 +18,7 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
+from onyx.connectors.jira.source_operations import JiraGroupPage
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
@@ -45,14 +46,35 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
     spy.get_space_permissions.side_effect = get_space_permissions
 
 
+def _configure_jira_site(spy: MagicMock) -> None:
+    """A project that grants Browse Projects to a role with one user, and a
+    group with one member, so the permission checks reach every read."""
+    spy.list_projects.return_value = [{"key": "AS"}]
+    spy.get_project_permission_scheme.return_value = {
+        "permissions": [
+            {
+                "permission": "BROWSE_PROJECTS",
+                "holder": {"type": "projectRole", "value": "10003"},
+            }
+        ]
+    }
+    spy.get_project_role.return_value = {
+        "actors": [{"actorUser": {"accountId": "a1", "name": "a1"}}]
+    }
+    spy.list_groups.return_value = JiraGroupPage(group_names=["devs"], total=1)
+    spy.get_group_members_page.return_value = {"values": [{"name": "a1"}]}
+
+
 def _configure_jira_cloud_spy(spy: MagicMock) -> None:
     """A Cloud credential: the checks search with enhanced search and bulk
     fetch."""
+    _configure_jira_site(spy)
     spy._is_cloud.return_value = True
 
 
 def _configure_jira_server_spy(spy: MagicMock) -> None:
     """A Data Center credential: the checks search with the v2 search."""
+    _configure_jira_site(spy)
     spy._is_cloud.return_value = False
 
 

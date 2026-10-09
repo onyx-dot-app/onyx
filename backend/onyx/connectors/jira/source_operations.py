@@ -41,7 +41,6 @@ _MAX_RESULTS_FETCH_IDS = 5000
 # https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
 _JIRA_BULK_FETCH_LIMIT = 100
 _GROUP_PICKER_MAX_RESULTS = 9999
-_UNTESTED = "Capability checks land in a follow-up PR."
 
 
 class JiraApiError(Exception):
@@ -316,7 +315,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_project_permission_scheme(self, *, project_key: str) -> dict[str, Any]:
         """Returns the permission scheme of a project with its grants and
@@ -329,7 +327,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_project_role(self, *, project_key: str, role_id: str) -> dict[str, Any]:
         """Returns a project role with its actors (users and groups)."""
@@ -339,7 +336,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_user(self, *, user_id: str) -> dict[str, Any]:
         """Returns a user: ``user_id`` is the accountId on Cloud and the
@@ -350,7 +346,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def list_groups(self) -> JiraGroupPage:
         """Returns the group names from ``groups/picker``, sorted."""
@@ -368,7 +363,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_group_members_page(
         self, *, group_name: str, start_at: int, max_results: int

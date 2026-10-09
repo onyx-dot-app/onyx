@@ -1,6 +1,8 @@
 """Capability checks for the Jira connector.
 
-The indexing checks register in ``registry.py``. Each check makes small probes
+The indexing checks register in ``registry.py``; the permission-sync and
+group-sync checks register in the EE registry
+(``ee/onyx/connectors/capability_checks.py``). Each check makes small probes
 (one issue, one project) with the gateway operations that its sync calls.
 
 The gateway reaches the site through the bound config fields
@@ -39,8 +41,17 @@ from onyx.connectors.jira.connector import build_jql_query, jira_error_messages
 from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
+    JiraGroupPage,
     JiraSourceOperations,
     is_cloud_gateway,
+)
+from onyx.connectors.jira.utils import (
+    ATLASSIAN_USER_ROLE_ACTOR_TYPE,
+    BROWSE_PROJECTS_PERMISSION,
+    HOLDER_TYPE_PROJECT_ROLE,
+    HOLDER_TYPE_USER,
+    SUPPORTED_STATIC_HOLDER_TYPES,
+    get_issue_field,
 )
 from onyx.connectors.source_operations import SourceOperations
 
@@ -512,4 +523,542 @@ def build_jira_indexing_checks() -> list[CapabilityCheck]:
         _ConfiguredProjectCheck(),
         _JqlQueryCheck(),
         _IssueReadCheck(),
+    ]
+
+
+# Permission sync. The EE registry registers these checks. Doc sync reads the
+# Browse Projects grants of each project's permission scheme, the actors of its
+# project roles, and the email of each user. Group sync lists the groups and
+# the members of each group. Both map Jira users to Onyx users by email.
+
+_PERMISSION_SYNC_SCOPES = "`read:jira-user` and `manage:jira-configuration`"
+_SAMPLE_USERS = 5
+_SAMPLE_GROUPS = 3
+_GROUP_MEMBER_PAGE_SIZE = 50
+_ATLASSIAN_ACCOUNT_TYPE = "atlassian"
+
+_ADMIN_HINT = (
+    "Give the token's account Administer Jira, or Administer Projects on every "
+    "project to sync (the Administrator role in team-managed projects)."
+)
+_CLOUD_EMAIL_HINT = (
+    "Atlassian returns a user's email only when the user's profile shows it "
+    "(Profile and visibility > Contact), or when the organization makes emails "
+    "visible to apps. Users without a visible email get no access in Onyx."
+)
+_DC_EMAIL_HINT = (
+    "Jira Data Center returns emails only when 'User email visibility' "
+    "(General configuration) is 'Public', or 'Only visible to logged-in users' "
+    "with a token account that can see them."
+)
+_GROUP_ACCESS_HINT = (
+    "Give the token's account Administer Jira, or the global Browse users and "
+    "groups permission. On Data Center the account must be in a Jira "
+    "administrators group."
+)
+
+
+def _perm_sync_hint(config: JiraConnectorConfig, admin_hint: str) -> str:
+    if config.scoped_token:
+        return (
+            f"The scoped API token needs the {_PERMISSION_SYNC_SCOPES} scopes, and "
+            f"its account needs admin access. {admin_hint}"
+        )
+    return admin_hint
+
+
+def _email_hint(gateway: JiraSourceOperations) -> str:
+    return _CLOUD_EMAIL_HINT if is_cloud_gateway(gateway) else _DC_EMAIL_HINT
+
+
+def _probe_project_key(
+    context: CapabilityCheckContext, config: JiraConnectorConfig
+) -> str:
+    """The configured project in project mode, the project of the first
+    matching issue in JQL mode, else the first visible project. Permission sync
+    reads the scheme of every project with indexed issues."""
+    project_key = _project_key(config)
+    if project_key and not _jql(config):
+        return project_key
+    if _jql(config):
+        try:
+            issue = _search_one_issue(_gateway(context), _scope_jql(config))
+        except JiraApiError as e:
+            raise UnexpectedValidationError(
+                "Onyx cannot run the JQL query, so it cannot pick a project to "
+                "probe. jira_jql_query reports why."
+            ) from e
+        project = get_issue_field(issue, "project") if issue else None
+        if isinstance(project, dict) and project.get("key"):
+            return str(project["key"])
+    try:
+        projects = _gateway(context).list_projects()
+    except JiraApiError as e:
+        _raise_for_api_error(e, denied="The credential cannot list Jira projects")
+    if not projects:
+        raise UnexpectedValidationError(
+            "No Jira project is visible, so Onyx cannot read a permission scheme. "
+            "jira_projects_visible reports why."
+        )
+    return str(projects[0]["key"])
+
+
+def _browse_holders(scheme: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        permission["holder"]
+        for permission in scheme.get("permissions") or []
+        if isinstance(permission, dict)
+        and permission.get("permission") == BROWSE_PROJECTS_PERMISSION
+        and isinstance(permission.get("holder"), dict)
+    ]
+
+
+def _role_id(holder: dict[str, Any]) -> str | None:
+    role_id = holder.get("value") or holder.get("parameter")
+    return str(role_id) if role_id else None
+
+
+def _read_permission_scheme(
+    context: CapabilityCheckContext, config: JiraConnectorConfig, project_key: str
+) -> dict[str, Any]:
+    try:
+        scheme = _gateway(context).get_project_permission_scheme(
+            project_key=project_key
+        )
+    except JiraApiError as e:
+        _raise_for_api_error(
+            e,
+            denied=(
+                "The credential cannot read the permission scheme of the project "
+                f"`{project_key}`. {_perm_sync_hint(config, _ADMIN_HINT)}"
+            ),
+            not_found=(
+                f"Jira does not return the permission scheme of the project "
+                f"`{project_key}` to this credential. "
+                f"{_perm_sync_hint(config, _ADMIN_HINT)}"
+            ),
+        )
+    if not isinstance(scheme.get("permissions"), list):
+        raise InsufficientPermissionsError(
+            f"Jira returned the permission scheme of the project `{project_key}` "
+            f"without its grants. {_perm_sync_hint(config, _ADMIN_HINT)}"
+        )
+    return scheme
+
+
+def _read_scheme_for_dependent_check(
+    context: CapabilityCheckContext, config: JiraConnectorConfig
+) -> tuple[str, dict[str, Any]]:
+    """The probe project and its scheme, for a check that needs the scheme
+    first. A failed read is jira_permission_scheme_read's failure."""
+    try:
+        project_key = _probe_project_key(context, config)
+        return project_key, _read_permission_scheme(context, config, project_key)
+    except ConnectorValidationError as e:
+        raise UnexpectedValidationError(
+            "Onyx cannot read the permission scheme, so this check cannot run. "
+            "jira_permission_scheme_read reports why."
+        ) from e
+
+
+class _PermissionSchemeReadCheck(_JiraCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="jira_permission_scheme_read",
+            display_name="Project permission schemes are readable",
+            remediation=(
+                f"{_ADMIN_HINT} Scoped API token: the {_PERMISSION_SYNC_SCOPES} scopes."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config = self.config(context)
+        project_key = _probe_project_key(context, config)
+        scheme = _read_permission_scheme(context, config, project_key)
+        if not _browse_holders(scheme):
+            raise InsufficientPermissionsError(
+                f"The permission scheme of the project `{project_key}` grants "
+                "Browse Projects to nobody that Jira shows to this credential. "
+                f"{_perm_sync_hint(config, _ADMIN_HINT)}"
+            )
+
+
+class _ProjectAccessMappableCheck(_JiraCheck):
+    """Warns when Browse Projects is granted only through holders that have no
+    static Onyx equivalent (Reporter, Assignee, Project Lead, user fields)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="jira_project_access_mappable",
+            display_name="Project access maps to Onyx",
+            required=False,
+            remediation=(
+                "Grant Browse Projects to users, groups or project roles. Onyx "
+                "cannot map Reporter, Assignee, Project Lead or user-field grants, "
+                "so those users get no access in Onyx."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config = self.config(context)
+        project_key, scheme = _read_scheme_for_dependent_check(context, config)
+        holder_types = {str(holder.get("type")) for holder in _browse_holders(scheme)}
+        unsupported = sorted(holder_types - SUPPORTED_STATIC_HOLDER_TYPES)
+        if unsupported:
+            raise ConnectorValidationError(
+                f"The project `{project_key}` grants Browse Projects through "
+                f"{', '.join(unsupported)}. Onyx cannot map these grants, so the "
+                "users they cover get no access to the project's issues in Onyx."
+            )
+
+
+def _role_actor_user(actor: dict[str, Any]) -> dict[str, Any] | None:
+    """The user of a role actor: nested ``actorUser`` on Cloud, the flat actor
+    on Data Center."""
+    actor_user = actor.get("actorUser")
+    if isinstance(actor_user, dict):
+        return actor_user
+    if actor.get("type") == ATLASSIAN_USER_ROLE_ACTOR_TYPE:
+        return actor
+    return None
+
+
+def _user_lookup_id(gateway: JiraSourceOperations, user: dict[str, Any]) -> str | None:
+    fields = (
+        ("accountId", "name", "key")
+        if is_cloud_gateway(gateway)
+        else (
+            "name",
+            "key",
+            "accountId",
+        )
+    )
+    for field in fields:
+        value = user.get(field)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _read_first_role(
+    context: CapabilityCheckContext,
+    config: JiraConnectorConfig,
+    project_key: str,
+    scheme: dict[str, Any],
+) -> dict[str, Any] | None:
+    """The first project role that holds Browse Projects, or None when no role
+    does. Raises the validation family on a failed read."""
+    role_ids = [
+        role_id
+        for holder in _browse_holders(scheme)
+        if holder.get("type") == HOLDER_TYPE_PROJECT_ROLE
+        and (role_id := _role_id(holder))
+    ]
+    if not role_ids:
+        return None
+    try:
+        return _gateway(context).get_project_role(
+            project_key=project_key, role_id=role_ids[0]
+        )
+    except JiraApiError as e:
+        _raise_for_api_error(
+            e,
+            denied=(
+                f"The credential cannot read the roles of the project "
+                f"`{project_key}`. {_perm_sync_hint(config, _ADMIN_HINT)}"
+            ),
+            not_found=(
+                f"Jira does not return the role {role_ids[0]} of the project "
+                f"`{project_key}` to this credential. "
+                f"{_perm_sync_hint(config, _ADMIN_HINT)}"
+            ),
+        )
+
+
+class _ProjectRolesReadCheck(_JiraCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="jira_project_roles_read",
+            display_name="Project roles are readable",
+            remediation=(
+                f"{_ADMIN_HINT} Scoped API token: the {_PERMISSION_SYNC_SCOPES} scopes."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config = self.config(context)
+        project_key, scheme = _read_scheme_for_dependent_check(context, config)
+        role = _read_first_role(context, config, project_key, scheme)
+        if role is not None and not isinstance(role.get("actors"), list):
+            raise InsufficientPermissionsError(
+                f"Jira returned a role of the project `{project_key}` without its "
+                f"members. {_perm_sync_hint(config, _ADMIN_HINT)}"
+            )
+
+
+class _PermissionUserEmailsCheck(_JiraCheck):
+    """People who hold Browse Projects, directly or through a project role,
+    have emails. Permission sync maps them to Onyx users by email."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="jira_permission_user_emails",
+            display_name="Users in permissions have emails",
+            remediation=(
+                "Make user emails visible to the token's account. "
+                f"Cloud: {_CLOUD_EMAIL_HINT} Data Center: {_DC_EMAIL_HINT}"
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config = self.config(context)
+        gateway = _gateway(context)
+        project_key, scheme = _read_scheme_for_dependent_check(context, config)
+        # Direct user grants carry the expanded user.
+        emails = [
+            holder["user"].get("emailAddress")
+            for holder in _browse_holders(scheme)
+            if holder.get("type") == HOLDER_TYPE_USER
+            and isinstance(holder.get("user"), dict)
+        ]
+        try:
+            role = _read_first_role(context, config, project_key, scheme)
+        except ConnectorValidationError as e:
+            raise UnexpectedValidationError(
+                "Onyx cannot read the project roles, so this check cannot run. "
+                "jira_project_roles_read reports why."
+            ) from e
+        actors = role.get("actors") if role is not None else None
+        role_users = [
+            user
+            for actor in actors or []
+            if isinstance(actor, dict) and (user := _role_actor_user(actor))
+        ]
+        for user in role_users[:_SAMPLE_USERS]:
+            lookup_id = _user_lookup_id(gateway, user)
+            if not lookup_id:
+                continue
+            try:
+                details = gateway.get_user(user_id=lookup_id)
+            except JiraApiError as e:
+                _raise_for_api_error(
+                    e,
+                    denied=(
+                        "The credential cannot read Jira users. "
+                        f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
+                    ),
+                )
+            account_type = details.get("accountType")
+            if account_type is not None and account_type != _ATLASSIAN_ACCOUNT_TYPE:
+                # Apps and customers never map to Onyx users.
+                continue
+            emails.append(details.get("emailAddress"))
+        if emails and not any(emails):
+            raise InsufficientPermissionsError(
+                f"No user who can browse the project `{project_key}` has a visible "
+                "email, so their access cannot map to Onyx users. "
+                f"{_email_hint(gateway)}"
+            )
+
+
+def _list_groups(
+    context: CapabilityCheckContext, config: JiraConnectorConfig
+) -> JiraGroupPage:
+    try:
+        return _gateway(context).list_groups()
+    except JiraApiError as e:
+        _raise_for_api_error(
+            e,
+            denied=(
+                "The credential cannot list Jira groups. "
+                f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
+            ),
+        )
+
+
+def _list_groups_for_dependent_check(
+    context: CapabilityCheckContext, config: JiraConnectorConfig
+) -> list[str]:
+    try:
+        group_names = _list_groups(context, config).group_names
+    except ConnectorValidationError as e:
+        raise UnexpectedValidationError(
+            "Onyx cannot list Jira groups, so this check cannot run. "
+            "jira_group_listing reports why."
+        ) from e
+    if not group_names:
+        raise UnexpectedValidationError(
+            "Jira listed no groups, so Onyx cannot read group members. "
+            "jira_group_listing reports why."
+        )
+    return group_names
+
+
+def _sample_group_members(
+    context: CapabilityCheckContext, config: JiraConnectorConfig
+) -> list[dict[str, Any]]:
+    """The first page of members of the first groups that have members."""
+    gateway = _gateway(context)
+    for group_name in _list_groups_for_dependent_check(context, config)[
+        :_SAMPLE_GROUPS
+    ]:
+        try:
+            page = gateway.get_group_members_page(
+                group_name=group_name,
+                start_at=0,
+                max_results=_GROUP_MEMBER_PAGE_SIZE,
+            )
+        except JiraApiError as e:
+            if e.status_code == 404 and "does not exist" in (e.text or ""):
+                # The group was deleted after the listing; group sync skips it.
+                continue
+            _raise_for_api_error(
+                e,
+                denied=(
+                    f"The credential cannot read the members of the group "
+                    f"`{group_name}`. {_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
+                ),
+                not_found=(
+                    "Jira has no group-member API (GET /group/member, Jira 6.0+). "
+                    "Upgrade Jira"
+                ),
+            )
+        members = page.get("values")
+        if isinstance(members, list) and members:
+            return members
+    return []
+
+
+class _GroupListingCheck(_JiraCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="jira_group_listing",
+            display_name="Groups can be listed",
+            remediation=(
+                f"{_GROUP_ACCESS_HINT} Scoped API token: the "
+                f"{_PERMISSION_SYNC_SCOPES} scopes."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config = self.config(context)
+        if not _list_groups(context, config).group_names:
+            # Group sync fails when the listing is empty.
+            raise InsufficientPermissionsError(
+                "Jira listed no groups, and group sync fails without groups. "
+                f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
+            )
+
+
+class _GroupListingCompleteCheck(_JiraCheck):
+    """``groups/picker`` returns at most its result limit, which a site can set
+    lower than the number of groups."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="jira_group_listing_complete",
+            display_name="Group listing is complete",
+            required=False,
+            remediation=(
+                "Group sync skips the groups after the limit, so their members "
+                "lose access in Onyx. A Jira administrator can raise the "
+                "jira.ajax.autocomplete.limit setting (Data Center)."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config = self.config(context)
+        try:
+            page = _list_groups(context, config)
+        except ConnectorValidationError as e:
+            raise UnexpectedValidationError(
+                "Onyx cannot list Jira groups, so this check cannot run. "
+                "jira_group_listing reports why."
+            ) from e
+        if page.total is not None and page.total > len(page.group_names):
+            raise ConnectorValidationError(
+                f"Jira matched {page.total} groups but returned only "
+                f"{len(page.group_names)}, so group sync misses "
+                f"{page.total - len(page.group_names)} groups."
+            )
+
+
+class _GroupMembershipCheck(_JiraCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="jira_group_membership",
+            display_name="Group members are readable",
+            remediation=(
+                f"{_GROUP_ACCESS_HINT} Scoped API token: the `read:jira-user` "
+                "scope, or the granular `read:group:jira`, `read:user:jira` and "
+                "`read:avatar:jira` scopes."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config = self.config(context)
+        if not _sample_group_members(context, config):
+            # The reads succeeded: the first groups can be empty.
+            raise UnexpectedValidationError(
+                "The first listed groups have no members, so Onyx cannot verify "
+                "that group members are readable."
+            )
+
+
+class _GroupMemberEmailsCheck(_JiraCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="jira_group_member_emails",
+            display_name="Group members have emails",
+            remediation=(
+                "Make user emails visible to the token's account. "
+                f"Cloud: {_CLOUD_EMAIL_HINT} Data Center: {_DC_EMAIL_HINT}"
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config = self.config(context)
+        try:
+            members = _sample_group_members(context, config)
+        except ConnectorValidationError as e:
+            raise UnexpectedValidationError(
+                "Onyx cannot read group members, so this check cannot run. "
+                "jira_group_membership reports why."
+            ) from e
+        # Group sync skips app and customer accounts.
+        people = [
+            member
+            for member in members
+            if member.get("accountType") in (None, _ATLASSIAN_ACCOUNT_TYPE)
+        ]
+        if people and not any(member.get("emailAddress") for member in people):
+            raise InsufficientPermissionsError(
+                "No member of the sampled group has a visible email, so group "
+                f"members cannot map to Onyx users. {_email_hint(_gateway(context))}"
+            )
+
+
+def build_jira_doc_permission_sync_checks() -> list[CapabilityCheck]:
+    return [
+        _PermissionSchemeReadCheck(),
+        _ProjectAccessMappableCheck(),
+        _ProjectRolesReadCheck(),
+        _PermissionUserEmailsCheck(),
+    ]
+
+
+def build_jira_group_sync_checks() -> list[CapabilityCheck]:
+    return [
+        _GroupListingCheck(),
+        _GroupListingCompleteCheck(),
+        _GroupMembershipCheck(),
+        _GroupMemberEmailsCheck(),
     ]
