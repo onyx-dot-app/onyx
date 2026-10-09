@@ -4,7 +4,7 @@ Converts PPTX -> PDF -> JPEG slides with caching. If cached slides
 already exist and are up-to-date, returns them without reconverting.
 
 Output protocol (stdout):
-    Line 1: status — one of CACHED, GENERATED, ERROR_NOT_FOUND, ERROR_NO_PDF
+    Line 1: status — CACHED, GENERATED, or an ERROR_* code
     Lines 2+: sorted absolute paths to slide-*.jpg files
 
 Usage:
@@ -14,15 +14,19 @@ Usage:
 import argparse
 import fcntl
 import os
+import signal
 import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 # Allow importing office.soffice from the scripts directory
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
-CONVERSION_DPI = 150
+CONVERSION_DPI: int = 150
+THUMBNAIL_TIMEOUT_SECONDS: float = 30.0
 
 
 class PreviewArguments(argparse.Namespace):
@@ -34,18 +38,18 @@ class PreviewArguments(argparse.Namespace):
 
 def _find_slides(directory: Path) -> list[str]:
     """Find slide-*.jpg files in directory, sorted by page number."""
-    slides = list(directory.glob("slide-*.jpg"))
+    slides: list[Path] = list(directory.glob("slide-*.jpg"))
     slides.sort(key=lambda p: int(p.stem.split("-")[-1]))
     return [str(s) for s in slides]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("document_path", type=Path)
     parser.add_argument("cache_dir", type=Path)
     parser.add_argument("--first-page", action="store_true")
     parser.add_argument("--session-root", type=Path)
-    arguments = PreviewArguments()
+    arguments: PreviewArguments = PreviewArguments()
     parser.parse_args(namespace=arguments)
     document_path: Path = arguments.document_path
     cache_dir: Path = arguments.cache_dir
@@ -67,17 +71,32 @@ def main() -> None:
         return
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    # Requests for the same document share one conversion and cannot delete each other's cache.
+    deadline: float | None = (
+        time.monotonic() + THUMBNAIL_TIMEOUT_SECONDS if first_page_only else None
+    )
     with (cache_dir / ".conversion.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        _generate_preview(document_path, cache_dir, first_page_only)
+        try:
+            while True:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if deadline is not None and time.monotonic() >= deadline:
+                        raise TimeoutError("Thumbnail conversion timed out")
+                    time.sleep(0.05)
+            _generate_preview(document_path, cache_dir, first_page_only, deadline)
+        except TimeoutError:
+            print("ERROR_TIMEOUT")
 
 
 def _generate_preview(
-    document_path: Path, cache_dir: Path, first_page_only: bool
+    document_path: Path,
+    cache_dir: Path,
+    first_page_only: bool,
+    deadline: float | None = None,
 ) -> None:
     # Change time also detects copies that preserve the source modification time.
-    cached_slides = _find_slides(cache_dir)
+    cached_slides: list[str] = _find_slides(cache_dir)
     if cached_slides:
         source_stat: os.stat_result = document_path.stat()
         source_changed_ns: int = max(source_stat.st_mtime_ns, source_stat.st_ctime_ns)
@@ -89,55 +108,106 @@ def _generate_preview(
             for slide in cached_slides:
                 print(slide)
             return
-        # Stale cache — remove old slides
-        for slide in cached_slides:
-            os.remove(slide)
 
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    # Keep published files readable until a complete replacement is ready.
+    with tempfile.TemporaryDirectory(prefix=".render-", dir=cache_dir) as temporary_dir:
+        render_dir: Path = Path(temporary_dir)
+        if not _render_preview(document_path, render_dir, first_page_only, deadline):
+            return
+        rendered: list[str] = _find_slides(render_dir)
+        published: list[Path] = []
+        for rendered_path in rendered:
+            target: Path = cache_dir / Path(rendered_path).name
+            os.replace(rendered_path, target)
+            published.append(target)
+        for stale_path in cached_slides:
+            if Path(stale_path) not in published:
+                Path(stale_path).unlink(missing_ok=True)
+    print("GENERATED")
+    for page in published:
+        print(page)
 
+
+def _run_conversion(
+    command: list[str], deadline: float, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    remaining: float = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("Thumbnail conversion timed out")
+    with subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        start_new_session=True,
+    ) as process:
+        stdout: str
+        stderr: str
+        try:
+            stdout, stderr = process.communicate(timeout=remaining)
+        except subprocess.TimeoutExpired as error:
+            # LibreOffice can spawn children; stop the whole conversion group.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.communicate()
+            raise TimeoutError("Thumbnail conversion timed out") from error
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _render_preview(
+    document_path: Path,
+    cache_dir: Path,
+    first_page_only: bool,
+    deadline: float | None,
+) -> bool:
     if document_path.suffix.lower() == ".pdf":
-        pdf_file = document_path
+        pdf_file: Path = document_path
     else:
-        from office.soffice import run_soffice
+        from office.soffice import get_soffice_env, run_soffice
 
         # Convert PPTX -> PDF via LibreOffice
-        result = run_soffice(
-            [
-                "--headless",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                str(cache_dir),
-                str(document_path),
-            ],
-            capture_output=True,
-            text=True,
+        office_args: list[str] = [
+            "--headless",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            str(cache_dir),
+            str(document_path),
+        ]
+        result: subprocess.CompletedProcess[str] = (
+            _run_conversion(["soffice", *office_args], deadline, get_soffice_env())
+            if deadline is not None
+            else run_soffice(office_args, capture_output=True, text=True)
         )
         if result.returncode != 0:
             print("CONVERSION_ERROR", file=sys.stderr)
             sys.exit(1)
 
         # Find the generated PDF
-        pdfs = sorted(cache_dir.glob("*.pdf"))
+        pdfs: list[Path] = sorted(cache_dir.glob("*.pdf"))
         if not pdfs:
             print("ERROR_NO_PDF")
-            return
+            return False
 
         pdf_file = pdfs[0]
 
     # Convert PDF -> JPEG slides
-    result = subprocess.run(
-        [
-            "pdftoppm",
-            "-jpeg",
-            "-r",
-            str(CONVERSION_DPI),
-            *(["-f", "1", "-l", "1", "-scale-to", "640"] if first_page_only else []),
-            str(pdf_file),
-            str(cache_dir / "slide"),
-        ],
-        capture_output=True,
-        text=True,
+    command: list[str] = [
+        "pdftoppm",
+        "-jpeg",
+        "-r",
+        str(CONVERSION_DPI),
+        *(["-f", "1", "-l", "1", "-scale-to", "640"] if first_page_only else []),
+        str(pdf_file),
+        str(cache_dir / "slide"),
+    ]
+    result = (
+        _run_conversion(command, deadline)
+        if deadline is not None
+        else subprocess.run(command, capture_output=True, text=True)
     )
     if result.returncode != 0:
         print("CONVERSION_ERROR", file=sys.stderr)
@@ -147,10 +217,7 @@ def _generate_preview(
     if pdf_file != document_path:
         pdf_file.unlink(missing_ok=True)
 
-    slides = _find_slides(cache_dir)
-    print("GENERATED")
-    for slide in slides:
-        print(slide)
+    return True
 
 
 if __name__ == "__main__":

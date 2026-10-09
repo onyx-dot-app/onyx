@@ -28,7 +28,9 @@ class SnapshotError(RuntimeError):
 
 
 _SNAPSHOT_ROOTS = frozenset({"outputs", "attachments"})
-_SNAPSHOT_GENERATED_DIR_NAMES = frozenset({"node_modules", ".next"})
+_SNAPSHOT_GENERATED_DIR_NAMES = frozenset(
+    {"node_modules", ".next", ".document-thumbnails"}
+)
 # Excluded so a restore can't reintroduce a stale port/pid that would mislead
 # the webapp tool's liveness check when auto-start is skipped.
 _SNAPSHOT_GENERATED_FILE_NAMES = frozenset({".nextjs-port", "nextjs.pid"})

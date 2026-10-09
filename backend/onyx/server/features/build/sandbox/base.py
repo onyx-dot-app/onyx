@@ -19,6 +19,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from functools import cache
 from uuid import UUID
 
 from onyx.server.features.build.configs import TURN_BUDGET_FILE_NAME
@@ -76,7 +77,9 @@ SandboxEvent = (
 )
 
 
-_DOCUMENT_PREVIEW_SOURCE = (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_text()
+@cache
+def _document_preview_source() -> str:
+    return (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_text()
 
 
 def document_preview_command(
@@ -89,7 +92,7 @@ def document_preview_command(
 ) -> list[str]:
     """Run the packaged converter without replacing the agent's managed skills."""
     # The unchanged office helper remains in the managed skill's scripts directory.
-    source = f"__file__ = {json.dumps(script_path)}\n" + _DOCUMENT_PREVIEW_SOURCE
+    source: str = f"__file__ = {json.dumps(script_path)}\n" + _document_preview_source()
     return [
         "python",
         "-c",

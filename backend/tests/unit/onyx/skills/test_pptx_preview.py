@@ -60,15 +60,18 @@ def test_preserved_mtime_edit_replaces_cached_slides(
     monkeypatch.setattr(Path, "stat", controlled_stat)
     monkeypatch.setattr(sys, "argv", [str(_SCRIPT), str(source), str(cache)])
 
-    def convert(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        (cache / "report.pdf").write_bytes(b"converted PDF")
+    def convert(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        (Path(args[args.index("--outdir") + 1]) / "report.pdf").write_bytes(
+            b"converted PDF"
+        )
         return subprocess.CompletedProcess([], 0)
 
     def rasterize(
-        *_args: object, **_kwargs: object
+        command: list[str], **_kwargs: object
     ) -> subprocess.CompletedProcess[str]:
-        slide.write_bytes(b"new preview")
-        os.utime(slide, ns=(40_000_000_000, 40_000_000_000))
+        rendered_slide: Path = Path(command[-1]).parent / "slide-1.jpg"
+        rendered_slide.write_bytes(b"new preview")
+        os.utime(rendered_slide, ns=(40_000_000_000, 40_000_000_000))
         return subprocess.CompletedProcess([], 0)
 
     convert_mock: MagicMock = MagicMock(side_effect=convert)
@@ -107,33 +110,35 @@ def test_thumbnail_renders_only_first_page_and_preserves_pdf_source(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.syspath_prepend(str(_SCRIPT.parent))
-    spec = importlib.util.spec_from_file_location("document_thumbnail", _SCRIPT)
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
+        "document_thumbnail", _SCRIPT
+    )
     assert spec is not None and spec.loader is not None
-    preview = importlib.util.module_from_spec(spec)
+    preview: ModuleType = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(preview)
-    source = tmp_path / f"report.{extension}"
+    source: Path = tmp_path / f"report.{extension}"
     source.write_bytes(b"source document")
-    cache = tmp_path / "thumbnails"
+    cache: Path = tmp_path / "thumbnails"
     monkeypatch.setattr(
         sys, "argv", [str(_SCRIPT), str(source), str(cache), "--first-page"]
     )
 
-    def convert(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        (cache / "report.pdf").write_bytes(b"converted")
-        return subprocess.CompletedProcess([], 0)
-
-    def rasterize(
-        command: list[str], **_kwargs: object
+    def convert(
+        command: list[str], _deadline: float, _env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
-        assert command[:2] == ["pdftoppm", "-jpeg"]
-        assert command[4:10] == ["-f", "1", "-l", "1", "-scale-to", "640"]
-        (cache / "slide-1.jpg").write_bytes(b"thumbnail")
+        if command[0] == "soffice":
+            (Path(command[command.index("--outdir") + 1]) / "report.pdf").write_bytes(
+                b"converted"
+            )
+        else:
+            assert command[:2] == ["pdftoppm", "-jpeg"]
+            assert command[4:10] == ["-f", "1", "-l", "1", "-scale-to", "640"]
+            (Path(command[-1]).parent / "slide-1.jpg").write_bytes(b"thumbnail")
         return subprocess.CompletedProcess(command, 0)
 
-    converter = MagicMock(side_effect=convert)
-    renderer = MagicMock(side_effect=rasterize)
-    monkeypatch.setattr("office.soffice.run_soffice", converter)
-    monkeypatch.setattr(preview.subprocess, "run", renderer)
+    converter: MagicMock = MagicMock(side_effect=convert)
+    monkeypatch.setattr("office.soffice.get_soffice_env", dict)
+    monkeypatch.setattr(preview, "_run_conversion", converter)
     preview.main()
     assert capsys.readouterr().out.splitlines() == [
         "GENERATED",
@@ -141,10 +146,10 @@ def test_thumbnail_renders_only_first_page_and_preserves_pdf_source(
     ]
     assert source.read_bytes() == b"source document"
     assert not (cache / "report.pdf").exists()
-    assert converter.call_count == (0 if extension == "pdf" else 1)
+    assert converter.call_count == (1 if extension == "pdf" else 2)
     preview.main()
     assert capsys.readouterr().out.splitlines()[0] == "CACHED"
-    renderer.assert_called_once()
+    assert converter.call_count == (1 if extension == "pdf" else 2)
 
 
 def test_thumbnail_rejects_source_symlink_outside_session(
@@ -153,17 +158,19 @@ def test_thumbnail_rejects_source_symlink_outside_session(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.syspath_prepend(str(_SCRIPT.parent))
-    spec = importlib.util.spec_from_file_location("confined_thumbnail", _SCRIPT)
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
+        "confined_thumbnail", _SCRIPT
+    )
     assert spec is not None and spec.loader is not None
-    preview = importlib.util.module_from_spec(spec)
+    preview: ModuleType = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(preview)
-    outside = tmp_path / "private.pdf"
+    outside: Path = tmp_path / "private.pdf"
     outside.write_bytes(b"private")
-    session = tmp_path / "session"
+    session: Path = tmp_path / "session"
     session.mkdir()
-    source = session / "linked.pdf"
+    source: Path = session / "linked.pdf"
     source.symlink_to(outside)
-    cache = session / "cache"
+    cache: Path = session / "cache"
     monkeypatch.setattr(
         sys,
         "argv",
@@ -187,17 +194,137 @@ def test_thumbnail_rejects_oversized_document_before_rendering(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.syspath_prepend(str(_SCRIPT.parent))
-    spec = importlib.util.spec_from_file_location("bounded_thumbnail", _SCRIPT)
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
+        "bounded_thumbnail", _SCRIPT
+    )
     assert spec is not None and spec.loader is not None
-    preview = importlib.util.module_from_spec(spec)
+    preview: ModuleType = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(preview)
-    source = tmp_path / "large.pdf"
+    source: Path = tmp_path / "large.pdf"
     with source.open("wb") as stream:
         stream.truncate(20 * 1024 * 1024 + 1)
-    cache = tmp_path / "cache"
+    cache: Path = tmp_path / "cache"
     monkeypatch.setattr(
         sys, "argv", [str(_SCRIPT), str(source), str(cache), "--first-page"]
     )
     preview.main()
     assert capsys.readouterr().out.strip() == "ERROR_TOO_LARGE"
     assert not cache.exists()
+
+
+def _load_preview() -> ModuleType:
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
+        "bounded_preview", _SCRIPT
+    )
+    assert spec is not None and spec.loader is not None
+    preview: ModuleType = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(preview)
+    return preview
+
+
+def test_replacement_keeps_published_thumbnail_readable_until_atomic_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    preview: ModuleType = _load_preview()
+    source: Path = tmp_path / "report.pdf"
+    source.write_bytes(b"source")
+    cache: Path = tmp_path / "cache"
+    cache.mkdir()
+    published: Path = cache / "slide-1.jpg"
+    published.write_bytes(b"old complete JPEG")
+    os.utime(published, ns=(1, 1))
+
+    def render(
+        command: list[str], _deadline: float
+    ) -> subprocess.CompletedProcess[str]:
+        assert published.read_bytes() == b"old complete JPEG"
+        rendered: Path = Path(command[-1]).parent / "slide-1.jpg"
+        rendered.write_bytes(b"partial")
+        assert published.read_bytes() == b"old complete JPEG"
+        rendered.write_bytes(b"new complete JPEG")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(preview, "_run_conversion", render)
+    with published.open("rb") as previous_reader:
+        preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+        assert previous_reader.read() == b"old complete JPEG"
+    assert published.read_bytes() == b"new complete JPEG"
+    assert not list(cache.glob(".render-*"))
+
+
+def test_failed_conversion_keeps_last_published_thumbnail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    preview: ModuleType = _load_preview()
+    source: Path = tmp_path / "report.pdf"
+    source.write_bytes(b"source")
+    cache: Path = tmp_path / "cache"
+    cache.mkdir()
+    published: Path = cache / "slide-1.jpg"
+    published.write_bytes(b"last good thumbnail")
+    os.utime(published, ns=(1, 1))
+    monkeypatch.setattr(
+        preview,
+        "_run_conversion",
+        MagicMock(return_value=subprocess.CompletedProcess([], 1)),
+    )
+    with pytest.raises(SystemExit):
+        preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+    assert published.read_bytes() == b"last good thumbnail"
+    assert not list(cache.glob(".render-*"))
+
+
+def test_thumbnail_lock_wait_has_a_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    preview: ModuleType = _load_preview()
+    source: Path = tmp_path / "report.pdf"
+    source.write_bytes(b"source")
+    cache: Path = tmp_path / "cache"
+    cache.mkdir()
+    monkeypatch.setattr(
+        sys, "argv", [str(_SCRIPT), str(source), str(cache), "--first-page"]
+    )
+    monkeypatch.setattr(preview, "THUMBNAIL_TIMEOUT_SECONDS", 0.05)
+    converter: MagicMock = MagicMock()
+    monkeypatch.setattr(preview, "_run_conversion", converter)
+    with (cache / ".conversion.lock").open("a") as other_request:
+        preview.fcntl.flock(
+            other_request, preview.fcntl.LOCK_EX | preview.fcntl.LOCK_NB
+        )
+        started: float = preview.time.monotonic()
+        preview.main()
+        assert preview.time.monotonic() - started < 1
+    assert capsys.readouterr().out.strip() == "ERROR_TIMEOUT"
+    converter.assert_not_called()
+
+
+def test_conversion_timeout_terminates_child_process_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    preview: ModuleType = _load_preview()
+    process: MagicMock = MagicMock(pid=12345)
+    process.communicate.side_effect = [
+        subprocess.TimeoutExpired("soffice", 0.1),
+        ("", ""),
+    ]
+    popen: MagicMock = MagicMock()
+    popen.return_value.__enter__.return_value = process
+    kill_group: MagicMock = MagicMock()
+    monkeypatch.setattr(preview.subprocess, "Popen", popen)
+    monkeypatch.setattr(preview.os, "killpg", kill_group)
+    with pytest.raises(TimeoutError):
+        preview._run_conversion(["soffice"], preview.time.monotonic() + 1)
+    assert popen.call_args.kwargs["start_new_session"] is True
+    kill_group.assert_called_once_with(12345, preview.signal.SIGKILL)
+    assert process.communicate.call_count == 2
+
+
+def test_real_conversion_process_stops_at_deadline() -> None:
+    preview: ModuleType = _load_preview()
+    started: float = preview.time.monotonic()
+    with pytest.raises(TimeoutError):
+        preview._run_conversion(
+            [sys.executable, "-c", "import time; time.sleep(30)"], started + 0.1
+        )
+    assert preview.time.monotonic() - started < 2

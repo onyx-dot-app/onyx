@@ -737,3 +737,7 @@ PowerPoint slides and first-page PDF or PowerPoint thumbnails. The shared
 `backend/onyx/skills/builtin/pptx/scripts/preview.py` script checks session workspace
 confinement. Thumbnail conversion is limited to 20 MB source files. It caches
 JPEGs in the hidden .document-thumbnails directory under outputs. Inventory rules exclude hidden directories.
+
+Thumbnail conversion has a 30-second deadline, including lock waiting.
+Finished JPEGs replace cached files atomically. Failed conversions retain the last complete image.
+Thumbnail caches are excluded from session snapshots.

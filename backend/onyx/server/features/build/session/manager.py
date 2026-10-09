@@ -1463,7 +1463,7 @@ class SessionManager:
             raise ValueError("Only .ppt and .pptx files are supported for preview")
 
         # Compute cache directory from path hash
-        path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
+        path_hash: str = hashlib.sha256(path.encode()).hexdigest()[:12]
         cache_dir = f"outputs/.pptx-preview/{path_hash}"
 
         slide_paths, cached = self._sandbox_manager.generate_document_preview(
@@ -1487,12 +1487,12 @@ class SessionManager:
         if resolved is None:
             return None
         _, sandbox = resolved
-        source = Path(path)
+        source: Path = Path(path)
         if source.is_absolute() or ".." in source.parts:
             raise ValueError("Path traversal is not allowed")
         if source.suffix.lower() not in {".pdf", ".ppt", ".pptx"}:
             raise ValueError("Only PDF and PowerPoint files support thumbnails")
-        path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
+        path_hash: str = hashlib.sha256(path.encode()).hexdigest()[:12]
         pages, _ = self._sandbox_manager.generate_document_preview(
             sandbox_id=sandbox.id,
             session_id=session_id,

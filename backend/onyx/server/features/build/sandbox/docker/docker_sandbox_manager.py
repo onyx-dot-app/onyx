@@ -2093,6 +2093,8 @@ echo WRITE_OK"""
             raise ValueError("Access denied: source escapes session workspace")
         if lines[0] == "ERROR_TOO_LARGE":
             raise ValueError("Document exceeds thumbnail size limit")
+        if lines[0] == "ERROR_TIMEOUT":
+            raise ValueError("Document thumbnail conversion timed out")
         if lines[0] == "ERROR_NO_PDF":
             raise ValueError("soffice did not produce a PDF file.")
 

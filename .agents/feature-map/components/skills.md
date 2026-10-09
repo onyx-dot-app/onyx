@@ -539,3 +539,7 @@ The built-in PowerPoint preview script also renders first-page PDF and PowerPoin
 thumbnails for Outputs. Sandbox providers execute the backend’s current script
 without updating managed skills or the running agent’s context. PDF rendering
 uses Poppler directly; PowerPoint rendering also uses the existing LibreOffice helper.
+
+Thumbnail conversion has a 30-second deadline, including lock waiting.
+Finished JPEGs replace cached files atomically. Failed conversions retain the last complete image.
+Thumbnail caches are excluded from session snapshots.
