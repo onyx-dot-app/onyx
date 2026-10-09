@@ -46,4 +46,5 @@ def test_group_sync_uses_the_connector_config_flag(exhaustive: bool) -> None:
             )
         )
 
+    assert get_groups.call_args.args[1] == _SITE_URL
     assert get_groups.call_args.kwargs["enumerate_all_ad_groups"] is exhaustive

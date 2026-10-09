@@ -82,6 +82,10 @@ from onyx.connectors.microsoft_utils.graph_client import (
     is_permanent_refusal,
 )
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
+from onyx.connectors.microsoft_utils.sharepoint_rest import (
+    SharepointPermissionReader,
+    SharepointRestReads,
+)
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
@@ -360,8 +364,8 @@ def _create_entity_failure(
 def _convert_driveitem_to_document_with_permissions(
     driveitem: DriveItemData,
     drive: SiteDrive,
-    ctx: ClientContext | None,
-    graph_client: GraphClient,
+    reader: SharepointPermissionReader | None,
+    site_url: str,
     graph_api_base: str,
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
@@ -373,8 +377,8 @@ def _convert_driveitem_to_document_with_permissions(
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
-    if include_permissions and ctx is None:
-        raise ValueError("ClientContext is required for permissions")
+    if include_permissions and reader is None:
+        raise ValueError("A permission reader is required for permissions")
     permission_cache = permission_cache or SharepointPermissionCache()
 
     try:
@@ -395,14 +399,13 @@ def _convert_driveitem_to_document_with_permissions(
     sections = content.sections
     staged_file_id = content.staged_file_id
 
-    if include_permissions and ctx is not None:
+    if include_permissions and reader is not None:
         logger.info("Getting external access for %s", driveitem.name)
-        sdk_item = driveitem.to_sdk_driveitem(graph_client)
         external_access = get_sharepoint_external_access(
-            ctx=ctx,
-            graph_client=graph_client,
+            reader=reader,
+            site_url=site_url,
             permission_cache=permission_cache,
-            drive_item=sdk_item,
+            drive_item=driveitem,
             list_id=drive.list_id,
             add_prefix=True,
             treat_sharing_link_as_public=treat_sharing_link_as_public,
@@ -434,8 +437,8 @@ def _convert_driveitem_to_document_with_permissions(
 def _convert_sitepage_to_document(
     site_page: dict[str, Any],
     site_name: str | None,
-    ctx: ClientContext | None,
-    graph_client: GraphClient,
+    reader: SharepointPermissionReader | None,
+    site_url: str,
     permission_cache: SharepointPermissionCache,
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
@@ -547,9 +550,11 @@ def _convert_sitepage_to_document(
     semantic_identifier = semantic_identifier.removesuffix(ASPX_EXTENSION)
 
     if include_permissions:
+        if reader is None:
+            raise ValueError("A permission reader is required for permissions")
         external_access = get_sharepoint_external_access(
-            ctx=ctx,  # ty: ignore[invalid-argument-type]
-            graph_client=graph_client,
+            reader=reader,
+            site_url=site_url,
             permission_cache=permission_cache,
             site_page=site_page,
             add_prefix=True,
@@ -582,21 +587,17 @@ def _convert_sitepage_to_document(
 def _convert_driveitem_to_slim_document(
     driveitem: DriveItemData,
     drive: SiteDrive,
-    ctx: ClientContext,
-    graph_client: GraphClient,
+    reader: SharepointPermissionReader,
+    site_url: str,
     permission_cache: SharepointPermissionCache,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
-    if driveitem.id is None:
-        raise ValueError("DriveItem ID is required")
-
-    sdk_item = driveitem.to_sdk_driveitem(graph_client)
     external_access = get_sharepoint_external_access(
-        ctx=ctx,
-        graph_client=graph_client,
+        reader=reader,
+        site_url=site_url,
         permission_cache=permission_cache,
-        drive_item=sdk_item,
+        drive_item=driveitem,
         list_id=drive.list_id,
         treat_sharing_link_as_public=treat_sharing_link_as_public,
     )
@@ -611,8 +612,8 @@ def _convert_driveitem_to_slim_document(
 
 def _convert_sitepage_to_slim_document(
     site_page: dict[str, Any],
-    ctx: ClientContext | None,
-    graph_client: GraphClient,
+    reader: SharepointPermissionReader,
+    site_url: str,
     permission_cache: SharepointPermissionCache,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
@@ -623,8 +624,8 @@ def _convert_sitepage_to_slim_document(
         raise ValueError("Site page ID is required")
 
     external_access = get_sharepoint_external_access(
-        ctx=ctx,  # ty: ignore[invalid-argument-type]
-        graph_client=graph_client,
+        reader=reader,
+        site_url=site_url,
         permission_cache=permission_cache,
         site_page=site_page,
         treat_sharing_link_as_public=treat_sharing_link_as_public,
@@ -1399,6 +1400,11 @@ class SharepointConnector(
         """The raw Graph REST surface, bound to this connector's token source."""
         return GraphApiClient(self._get_graph_access_token, self.graph_api_base)
 
+    def permission_reader(self) -> SharepointRestReads:
+        return SharepointRestReads(
+            self._create_rest_client_context, self.graph_client, self.graph_api
+        )
+
     @staticmethod
     def _clear_drive_checkpoint_state(
         checkpoint: "SharepointConnectorCheckpoint",
@@ -1582,13 +1588,12 @@ class SharepointConnector(
                     try:
                         logger.debug("Processing: %s", driveitem.web_url)
                         if include_permissions:
-                            ctx = self._create_rest_client_context(site_descriptor.url)
                             doc_batch.append(
                                 _convert_driveitem_to_slim_document(
                                     driveitem,
                                     drive,
-                                    ctx,
-                                    self.graph_client,
+                                    self.permission_reader(),
+                                    site_descriptor.url,
                                     temp_checkpoint.permission_cache,
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
                                     treat_sharing_link_as_public=self.treat_sharing_link_as_public,
@@ -1625,14 +1630,11 @@ class SharepointConnector(
                         )
                         try:
                             if include_permissions:
-                                ctx = self._create_rest_client_context(
-                                    site_descriptor.url
-                                )
                                 doc_batch.append(
                                     _convert_sitepage_to_slim_document(
                                         site_page,
-                                        ctx,
-                                        self.graph_client,
+                                        self.permission_reader(),
+                                        site_descriptor.url,
                                         temp_checkpoint.permission_cache,
                                         parent_hierarchy_raw_node_id=site_descriptor.url,
                                         treat_sharing_link_as_public=self.treat_sharing_link_as_public,
@@ -1802,10 +1804,9 @@ class SharepointConnector(
         display_name = site_url.rstrip("/").split("/")[-1]
         external_access = None
         if include_permissions:
-            ctx = self._create_rest_client_context(site_url)
             external_access = get_sharepoint_hierarchy_node_external_access(
-                ctx,
-                self.graph_client,
+                self.permission_reader(),
+                site_url,
                 checkpoint.permission_cache,
                 HierarchyNodeType.SITE,
             )
@@ -1836,10 +1837,9 @@ class SharepointConnector(
         checkpoint.seen_hierarchy_node_raw_ids.add(drive.web_url)
         external_access = None
         if include_permissions:
-            ctx = self._create_rest_client_context(site_url)
             external_access = get_sharepoint_hierarchy_node_external_access(
-                ctx,
-                self.graph_client,
+                self.permission_reader(),
+                site_url,
                 checkpoint.permission_cache,
                 HierarchyNodeType.DRIVE,
                 list_id=drive.list_id,
@@ -1882,10 +1882,9 @@ class SharepointConnector(
                 # One folder must not fail the whole sync. A node without
                 # external_access keeps the permissions it already has.
                 try:
-                    ctx = self._create_rest_client_context(site_url)
                     external_access = get_sharepoint_hierarchy_node_external_access(
-                        ctx,
-                        self.graph_client,
+                        self.permission_reader(),
+                        site_url,
                         checkpoint.permission_cache,
                         HierarchyNodeType.FOLDER,
                         folder_server_relative_path=folder_server_relative_path,
@@ -1989,16 +1988,12 @@ class SharepointConnector(
         )
 
         try:
-            ctx: ClientContext | None = None
-            if include_permissions:
-                ctx = self._create_rest_client_context(site_url)
-
             access_token = self._get_graph_access_token()
             doc_or_failure = _convert_driveitem_to_document_with_permissions(
                 driveitem,
                 drive,
-                ctx,
-                self.graph_client,
+                self.permission_reader() if include_permissions else None,
+                site_url,
                 permission_cache=checkpoint.permission_cache,
                 include_permissions=include_permissions,
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
@@ -2360,17 +2355,14 @@ class SharepointConnector(
                     # token refresh blip, etc.).
                     try:
                         logger.debug("Processing site page: %s", page_label)
-                        client_ctx: ClientContext | None = None
-                        if include_permissions:
-                            client_ctx = self._create_rest_client_context(
-                                site_descriptor.url
-                            )
                         yield (
                             _convert_sitepage_to_document(
                                 site_page,
                                 site_descriptor.drive_name,
-                                client_ctx,
-                                self.graph_client,
+                                self.permission_reader()
+                                if include_permissions
+                                else None,
+                                site_descriptor.url,
                                 permission_cache=checkpoint.permission_cache,
                                 include_permissions=include_permissions,
                                 # Site pages have the site as their parent
@@ -2605,14 +2597,11 @@ class SharepointConnector(
             include_permissions=include_permissions,
         )
 
-        ctx: ClientContext | None = None
-        if include_permissions:
-            ctx = self._create_rest_client_context(site_descriptor.url)
         yield _convert_sitepage_to_document(
             page,
             site_descriptor.drive_name,
-            ctx,
-            self.graph_client,
+            self.permission_reader() if include_permissions else None,
+            site_descriptor.url,
             permission_cache=dedup.permission_cache,
             include_permissions=include_permissions,
             parent_hierarchy_raw_node_id=site_descriptor.url,
