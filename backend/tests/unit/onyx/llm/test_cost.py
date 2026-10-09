@@ -180,6 +180,78 @@ class TestComputeCostCents:
         assert tiered_in == pytest.approx(7.5)
         assert tiered_out == pytest.approx(0.25)
 
+    def test_explicit_tier_threshold_beats_legacy_200k_block(self) -> None:
+        """Entries vendoring both `context_over_200k` and a `tiers` block with
+        a different threshold bill the explicit tier — the legacy block only
+        fills in when no context tiers exist."""
+        cost = {
+            "input": 2.0,
+            "output": 10.0,
+            "context_over_200k": {"input": 4.0, "output": 15.0},
+            "tiers": [
+                {
+                    "tier": {"type": "context", "size": 272_000},
+                    "input": 4.0,
+                    "output": 15.0,
+                }
+            ],
+        }
+        # 250k clears the stale 200k legacy claim but not the real 272k tier.
+        in_cents, out_cents = cost_mod._catalog_cost_cents(
+            cost,
+            prompt_tokens=250_000,
+            completion_tokens=1_000,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        assert in_cents == pytest.approx(250_000 * 2.0 / 1_000_000 * 100)
+        assert out_cents == pytest.approx(1_000 * 10.0 / 1_000_000 * 100)
+
+        in_cents, out_cents = cost_mod._catalog_cost_cents(
+            cost,
+            prompt_tokens=300_000,
+            completion_tokens=1_000,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        assert in_cents == pytest.approx(300_000 * 4.0 / 1_000_000 * 100)
+        assert out_cents == pytest.approx(1_000 * 15.0 / 1_000_000 * 100)
+
+    def test_legacy_200k_block_applies_when_no_tier_entries(self) -> None:
+        cost = {
+            "input": 2.0,
+            "output": 10.0,
+            "context_over_200k": {"input": 4.0, "output": 15.0},
+        }
+        in_cents, _ = cost_mod._catalog_cost_cents(
+            cost,
+            prompt_tokens=250_000,
+            completion_tokens=1_000,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        assert in_cents == pytest.approx(250_000 * 4.0 / 1_000_000 * 100)
+
+    def test_negative_tier_rate_defers_to_base_rate(self) -> None:
+        """A -1 'unknown price' sentinel in a tier rate behaves like a missing
+        rate — the base rate applies instead of recording zero."""
+        cost = {
+            "input": 2.0,
+            "output": 10.0,
+            "tiers": [
+                {"tier": {"type": "context", "size": 100}, "input": -1, "output": -1}
+            ],
+        }
+        in_cents, out_cents = cost_mod._catalog_cost_cents(
+            cost,
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        assert in_cents == pytest.approx(1_000 * 2.0 / 1_000_000 * 100)
+        assert out_cents == pytest.approx(1_000 * 10.0 / 1_000_000 * 100)
+
     def test_bedrock_model_priced_via_provider(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

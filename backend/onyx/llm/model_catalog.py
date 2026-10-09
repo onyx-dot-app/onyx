@@ -164,17 +164,49 @@ def provider_names() -> list[str]:
     return sorted(_catalog())
 
 
+# Modes a catalog entry can serve a chat request under — entries in any
+# other mode (embedding/rerank/image/audio/...) must stay out of
+# chat-model surfaces.
+CHAT_MODES = frozenset({"chat", "responses", "completion"})
+
+# Name heuristic behind resolve_model_mode's fallback — used for catalog
+# entries vendored without a mode and for names outside the catalog. Rerank
+# ids check first: the embed-class pattern matches them too.
+_RERANK_NAME_PATTERN = re.compile(r"rerank", re.IGNORECASE)
+_EMBEDDING_NAME_PATTERN = re.compile(
+    r"embed|e5-|bge-|gte-|jina|voyage|rerank|colbert|uae-|instructor",
+    re.IGNORECASE,
+)
+
+
+def _mode_from_name(model_name: str) -> str:
+    tail = model_name.split("/")[-1]
+    if _RERANK_NAME_PATTERN.search(tail):
+        return "rerank"
+    if _EMBEDDING_NAME_PATTERN.search(tail):
+        return "embedding"
+    return "chat"
+
+
+def _catalog_mode(entry: dict[str, Any], model_name: str) -> str:
+    """Entries vendored from sources without a mode concept (models.dev-only
+    providers like vercel_ai_gateway) ship no mode; without one every
+    embedding/rerank entry would resolve as a chat model."""
+    mode: Any = entry.get("mode")
+    return mode or _mode_from_name(model_name)
+
+
 def iter_models(provider: str, mode: str | None = None) -> list[str]:
     """Real model ids under a provider (aliases excluded). Pass ``mode``
     (e.g. "chat") to restrict to that kind; entries without a mode field
-    are chat models."""
+    count as chat unless the id looks non-chat."""
     models = _catalog().get(provider, {}).get("models", {})
     if mode is None:
         return sorted(models)
     return sorted(
         model_id
         for model_id, entry in models.items()
-        if entry.get("mode", "chat") == mode
+        if _catalog_mode(entry, model_id) == mode
     )
 
 
@@ -276,26 +308,27 @@ def _remote_section(provider: str) -> dict[str, Any] | None:
         return section
 
 
-def find_remote_model_entry(
+def find_remote_model_obj(
     provider: str, candidates: list[str]
 ) -> dict[str, Any] | None:
-    """Resolve model candidates against the provider's remote section."""
+    """Remote entry rendered in the compat model-map shape."""
     section = _remote_section(provider)
     if section is None:
         return None
     for candidate in candidates:
         entry = _model_in_section(section, candidate)
-        if entry is not None:
-            return entry
+        if entry is None:
+            continue
+        try:
+            return _compat_entry(provider, entry, candidate)
+        except Exception as e:
+            # A malformed remote entry is a remote miss, not an error — the
+            # vendored floor still resolves the lookup.
+            logger.warning(
+                "Malformed remote catalog entry %s/%s: %s", provider, candidate, e
+            )
+            return None
     return None
-
-
-def find_remote_model_obj(
-    provider: str, candidates: list[str]
-) -> dict[str, Any] | None:
-    """Remote entry rendered in the compat model-map shape."""
-    entry = find_remote_model_entry(provider, candidates)
-    return _compat_entry(provider, entry) if entry else None
 
 
 def reset_remote_cache() -> None:
@@ -325,9 +358,24 @@ def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
         _strip_colon_tag(c) for c in list(candidates) if ":" in c.split("/")[-1]
     )
 
-    for section in (_remote_section(provider), _catalog().get(provider)):
-        if section is None:
-            continue
+    remote = _remote_section(provider)
+    if remote is not None:
+        for candidate in candidates:
+            entry = _model_in_section(remote, candidate)
+            if entry is None:
+                continue
+            if not isinstance(entry, dict):
+                # A malformed remote entry is a remote miss — resolve against
+                # the vendored floor rather than return corrupt data to
+                # cost/limit lookups.
+                logger.warning(
+                    "Malformed remote catalog entry %s/%s", provider, candidate
+                )
+                break
+            return entry
+
+    section = _catalog().get(provider)
+    if section is not None:
         for candidate in candidates:
             entry = _model_in_section(section, candidate)
             if entry is not None:
@@ -352,13 +400,17 @@ def find_model_cost(provider: str, model_name: str) -> dict[str, Any] | None:
     return entry.get("cost") if entry else None
 
 
-def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
+def _compat_entry(
+    provider: str, entry: dict[str, Any], model_name: str
+) -> dict[str, Any]:
     """Render a catalog entry in the legacy litellm.model_cost shape consumed
     by model_capabilities and the model name parser."""
     limit = entry.get("limit") or {}
     modalities = entry.get("modalities") or {}
     inputs = modalities.get("input") or []
     display_name = re.sub(r"\s*\(latest\)\s*$", "", entry.get("name") or "")
+
+    mode: str = _catalog_mode(entry, model_name)
 
     # Meta-models (openrouter/auto and friends) route each request to a
     # pool endpoint smaller than their advertised pool-max limits. Emitting
@@ -374,7 +426,7 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
     context: Any = limit.get("context")
     if (
         not unbounded
-        and (entry.get("mode") or "chat") == "chat"
+        and mode == "chat"
         and isinstance(limit_output, (int, float))
         and isinstance(context, (int, float))
         and context > 0
@@ -384,7 +436,7 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "litellm_provider": provider,
-        "mode": entry.get("mode") or "chat",
+        "mode": mode,
         "max_input_tokens": limit.get("input") or limit.get("context"),
         "max_tokens": limit.get("context"),
         "max_output_tokens": None if unbounded else limit_output,
@@ -418,14 +470,14 @@ def build_model_map() -> dict[str, dict[str, Any]]:
     for provider in ordered_providers:
         section = catalog[provider]
         for model_id, entry in section["models"].items():
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, model_id)
             model_map[f"{provider}/{model_id}"] = compat
             model_map.setdefault(model_id, compat)
         for alias, target in section["aliases"].items():
             entry = section["models"].get(target)
             if entry is None:
                 continue
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, alias)
             model_map[f"{provider}/{alias}"] = compat
             model_map.setdefault(alias, compat)
 
@@ -445,17 +497,21 @@ def build_model_map() -> dict[str, dict[str, Any]]:
     return model_map
 
 
-# Name-pattern heuristic for models outside the catalog — used to filter
-# model lists fetched from user gateways (LiteLLM proxy, OpenRouter, LM
-# Studio). Catalog-known models use their ``mode`` field instead.
-_EMBEDDING_NAME_PATTERN = re.compile(
-    r"embed|e5-|bge-|gte-|jina|voyage|rerank|colbert|uae-|instructor",
-    re.IGNORECASE,
-)
+def resolve_model_mode(model_name: str) -> str:
+    """Resolve a model's type ("chat", "embedding", "rerank", "image", ...)
+    from its name — the codebase's single name-based resolver. A cataloged
+    entry's mode wins; mode-less and uncataloged names fall back to the
+    shared id heuristic."""
+    entry = build_model_map().get(model_name)
+    if entry is not None:
+        return _catalog_mode(entry, model_name)
+    return _mode_from_name(model_name)
 
 
 def is_embedding_model_name(model_name: str) -> bool:
-    entry = build_model_map().get(model_name)
-    if entry is not None and entry.get("mode"):
-        return entry["mode"] == "embedding"
-    return bool(_EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1]))
+    return resolve_model_mode(model_name) == "embedding"
+
+
+def is_non_chat_model_name(model_name: str) -> bool:
+    """Should this name stay out of chat-model listings?"""
+    return resolve_model_mode(model_name) not in CHAT_MODES
