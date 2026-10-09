@@ -2,7 +2,7 @@ import "@opal/components/buttons/text-button/styles.css";
 import type { HTMLAttributes } from "react";
 import type { Route } from "next";
 import Link from "next/link";
-import { Interactive } from "@opal/core";
+import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type { RichStr, WithoutStyles } from "@opal/types";
 import { Text, type TextFont } from "@opal/components";
 
@@ -10,9 +10,10 @@ import { Text, type TextFont } from "@opal/components";
 // Types
 // ---------------------------------------------------------------------------
 
-interface TextButtonProps extends WithoutStyles<
-  Omit<HTMLAttributes<HTMLElement>, "color" | "children">
-> {
+interface TextButtonProps
+  extends
+    Pick<InteractiveStatelessProps, "passive">,
+    WithoutStyles<Omit<HTMLAttributes<HTMLElement>, "color" | "children">> {
   /** Font preset. Default: `"main-ui-body"`. */
   font?: TextFont;
 
@@ -55,6 +56,7 @@ function TextButton({
   font = "main-ui-body",
   nowrap = true,
   disabled,
+  passive,
   href,
   target,
   children,
@@ -77,6 +79,7 @@ function TextButton({
       variant="default"
       prominence="tertiary"
       disabled={disabled}
+      passive={passive}
       href={href}
       target={target}
       {...rest}

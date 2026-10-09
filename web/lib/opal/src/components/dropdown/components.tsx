@@ -49,6 +49,7 @@ import type {
   DropdownMode,
   DropdownOption,
   DropdownRow,
+  DropdownSizePreset,
   DropdownSearch,
   DropdownView,
   DropdownViews,
@@ -392,6 +393,8 @@ function DropdownTrigger({
 // ---------------------------------------------------------------------------
 
 interface DropdownDataBaseProps {
+  /** Typography and spacing for built-in rows. Defaults to `"main-ui"`. */
+  sizePreset?: DropdownSizePreset;
   /** Names the list for assistive technology. */
   label?: string;
   /**
@@ -524,6 +527,7 @@ type PendingHighlight =
 function DropdownData(props: DropdownDataProps) {
   const {
     items: rootItems,
+    sizePreset = "main-ui",
     label,
     query,
     search: rootSearch,
@@ -936,6 +940,7 @@ function DropdownData(props: DropdownDataProps) {
         viewKey={currentViewKey}
         viewDirection={viewDirection}
         groups={foldedGroups}
+        sizePreset={sizePreset}
         emptySet={allRows.length === 0}
         isSelected={isSelected}
         exactValue={exactValue}
