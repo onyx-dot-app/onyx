@@ -126,7 +126,7 @@ from onyx.server.features.build.sandbox.serve_transport import ServeConnectionIn
 from onyx.server.features.build.sandbox.session_workspace import (
     SESSIONS_ROOT,
     WORKSPACE_SETUP_COMPLETE_SENTINEL,
-    build_opencode_dependency_setup_script,
+    build_opencode_dependency_setup_command,
     build_session_workspace_setup_script,
     build_workspace_exists_check_script,
 )
@@ -1937,7 +1937,7 @@ echo "Session cleanup complete"
         config_script = f"""
 set -e
 mkdir -p {session_path}/.opencode
-{build_opencode_dependency_setup_script(session_path)}
+{build_opencode_dependency_setup_command(session_path)}
 ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
 ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md

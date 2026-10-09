@@ -30,7 +30,8 @@ into a new `.opencode` directory. It preserves existing dependencies and manifes
 Each session has its own copy, so sessions cannot modify each other's SDK files.
 Older images without the template retain OpenCode's runtime install fallback.
 
-Session configuration regeneration also seeds the SDK after snapshot restore.
+The image-owned `seed-opencode-dependencies.sh` seeds new and restored sessions.
+Python invokes the script with the session path; it does not generate the copy logic.
 The SDK stays outside snapshots, which contain outputs and attachments.
 
 ## SHA-pinned base + helper images

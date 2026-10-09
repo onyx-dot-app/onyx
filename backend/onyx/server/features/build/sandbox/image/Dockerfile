@@ -220,6 +220,8 @@ RUN chmod +x /workspace/firewall-init.sh
 # kubernetes_sandbox_manager._OPENCODE_SESSION_TAG_PLUGIN_PATH.
 COPY opencode-plugins/ /workspace/opencode-plugins/
 
+COPY --chmod=0755 seed-opencode-dependencies.sh /usr/local/bin/seed-opencode-dependencies
+
 COPY browser-cli.sh /usr/local/bin/browser
 RUN chmod 0755 /usr/local/bin/browser
 

@@ -43,21 +43,10 @@ def build_workspace_exists_check_script(session_path: str) -> str:
     )
 
 
-def build_opencode_dependency_setup_script(session_path: str) -> str:
-    """Seed disposable SDK dependencies for new and restored sessions."""
-    session_path = shlex.quote(session_path)
-    return f"""
-# Older images have no SDK template. Keep their runtime installation fallback.
-if [ -d /workspace/templates/opencode/node_modules ] && \\
-   [ ! -e {session_path}/.opencode/node_modules ]; then
-    cp -a /workspace/templates/opencode/node_modules {session_path}/.opencode/
-    for manifest in package.json package-lock.json; do
-        if [ ! -e {session_path}/.opencode/$manifest ]; then
-            cp /workspace/templates/opencode/$manifest {session_path}/.opencode/
-        fi
-    done
-fi
-"""
+def build_opencode_dependency_setup_command(session_path: str) -> str:
+    """Older sandbox images use OpenCode's runtime-install fallback."""
+    script = "/usr/local/bin/seed-opencode-dependencies"
+    return f"if [ -x {script} ]; then {script} {shlex.quote(session_path)}; fi"
 
 
 def build_session_workspace_setup_script(
@@ -101,7 +90,7 @@ mkdir -p {session_path}/attachments
 # which fails if the mount is a real directory. Dangling until the first
 # push lands is fine; nothing reads these during the rest of setup.
 mkdir -p {session_path}/.opencode
-{build_opencode_dependency_setup_script(session_path)}
+{build_opencode_dependency_setup_command(session_path)}
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 echo "Linked skills to {MANAGED_SKILLS_PATH}"
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
