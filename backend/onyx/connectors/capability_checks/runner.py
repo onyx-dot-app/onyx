@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings_setting import check_findings_enabled
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -303,8 +304,11 @@ def run_capability_checks(
 
     results: list[CapabilityCheckResult] = []
     outcome_by_check_id: dict[str, _CheckOutcome] = {}
+    keep_findings: bool = check_findings_enabled()
 
     def record(check: CapabilityCheck, outcome: _CheckOutcome) -> None:
+        if not keep_findings:
+            outcome = outcome.model_copy(update={"findings": []})
         results.append(_build_result(check, outcome))
         if on_result is not None:
             # A snapshot: the callback must not observe later appends.

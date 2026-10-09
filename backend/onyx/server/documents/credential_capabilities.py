@@ -25,6 +25,9 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftRerunMode,
     read_draft_run_for_user,
 )
+from onyx.connectors.capability_checks.findings_setting import (
+    hide_findings_if_disabled,
+)
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
 from onyx.connectors.credential_families import is_credential_usable_for_source
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -94,6 +97,13 @@ class CapabilityReportSnapshot(BaseModel):
 
     @classmethod
     def from_row(cls, row: CredentialCapabilityReportRow) -> "CapabilityReportSnapshot":
+        report = (
+            CredentialCapabilityReport.model_validate(row.report)
+            if row.report is not None
+            else None
+        )
+        if report is not None:
+            hide_findings_if_disabled(report.check_results)
         return cls(
             credential_id=row.credential_id,
             connector_id=row.connector_id,
@@ -102,11 +112,7 @@ class CapabilityReportSnapshot(BaseModel):
             run_status=row.run_status,
             run_started_at=row.run_started_at,
             connector_config_hash=row.connector_config_hash,
-            report=(
-                CredentialCapabilityReport.model_validate(row.report)
-                if row.report is not None
-                else None
-            ),
+            report=report,
             time_updated=row.time_updated,
         )
 
