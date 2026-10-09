@@ -1,12 +1,17 @@
 """Entra group expansion and enumeration shared by the Microsoft perm-sync paths."""
 
+import json
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+import requests
+from office365.graph_client import GraphClient
 
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
     ResolvedEntraGroup,
     enumerate_entra_groups,
     expand_entra_group,
+    list_nested_entra_groups,
     normalize_email,
     resolve_entra_group_name,
 )
@@ -149,3 +154,44 @@ def test_expand_names_nested_groups_for_onyx(_mock_sleep: MagicMock) -> None:
         )
     }
     assert user_emails == set()
+
+
+def _graph_page(body: dict[str, Any]) -> requests.Response:
+    response = requests.Response()
+    response.status_code = 200
+    response.headers["Content-Type"] = "application/json"
+    response._content = json.dumps(body).encode()
+    return response
+
+
+def test_nested_groups_are_listed_through_the_group_cast() -> None:
+    """Only member groups are requested and every page is read, so a large
+    group's users are never paged."""
+    parent_id = "11111111-1111-1111-1111-111111111111"
+    second_id = "33333333-3333-3333-3333-333333333333"
+    members_url = f"{GRAPH_API_BASE}/groups/{parent_id}/members/microsoft.graph.group"
+    pages = [
+        _graph_page(
+            {
+                "value": [{"id": NESTED_GROUP_ID, "displayName": "Platform"}],
+                "@odata.nextLink": f"{members_url}?$skiptoken=next",
+            }
+        ),
+        _graph_page({"value": [{"id": second_id, "displayName": "Infra"}]}),
+    ]
+    client = GraphClient(lambda: {"access_token": "token", "token_type": "Bearer"})
+
+    with patch(
+        "office365.runtime.client_request.requests.get", side_effect=pages
+    ) as mock_get:
+        groups = list_nested_entra_groups(client, parent_id)
+
+    requested: list[str] = [call.kwargs["url"] for call in mock_get.call_args_list]
+    assert requested == [
+        f"{members_url}?$select=id,displayName",
+        f"{members_url}?$skiptoken=next",
+    ]
+    assert groups == {
+        ResolvedEntraGroup(id=NESTED_GROUP_ID, name=f"Platform_{NESTED_GROUP_ID}"),
+        ResolvedEntraGroup(id=second_id, name=f"Infra_{second_id}"),
+    }

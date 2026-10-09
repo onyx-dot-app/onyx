@@ -19,6 +19,7 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     GroupsResult,
     _get_azuread_groups,
     _get_folder_unique_id,
+    _get_nested_azuread_groups,
     _get_sharepoint_list_item_id,
     _has_only_limited_access,
     _is_public_item,
@@ -90,10 +91,10 @@ def test_list_item_id_builds_numeric_sdk_resource_path() -> None:
     assert item.resource_path.to_url().endswith("/items/GetById(42)")
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_document_group_expansion_is_cached(mock_get_group: MagicMock) -> None:
     group = _make_ad_group("Engineering", "engineering-id")
-    mock_get_group.return_value = (set(), {"alice@contoso.com"})
+    mock_get_group.return_value = set()
     cache = SharepointPermissionCache()
 
     first = _resolve_document_groups(MagicMock(), MagicMock(), {group}, cache)
@@ -134,14 +135,14 @@ def test_sharepoint_group_404_is_not_cached(mock_get_group: MagicMock) -> None:
     assert cache.group_expansions == {}
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_ad_group_claims_token_and_guid_share_cache(
     mock_get_group: MagicMock,
 ) -> None:
     group_id = "11111111-1111-1111-1111-111111111111"
     claims_group = _make_ad_group("Engineering Members", f"c:0t.c|tenant|{group_id}")
     guid_group = _make_ad_group("Engineering Owners", group_id)
-    mock_get_group.return_value = (set(), set())
+    mock_get_group.return_value = set()
     cache = SharepointPermissionCache()
 
     result = _resolve_document_groups(
@@ -152,13 +153,13 @@ def test_ad_group_claims_token_and_guid_share_cache(
     assert result.group_ids == {"Engineering Members", "Engineering Owners"}
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_document_group_cache_survives_checkpoint(
     mock_get_group: MagicMock,
 ) -> None:
     group = _make_ad_group("Engineering", "engineering-id")
     nested_group = _make_ad_group("Platform", "platform-id")
-    mock_get_group.side_effect = [({nested_group}, set()), (set(), set())]
+    mock_get_group.side_effect = [{nested_group}, set()]
     cache = SharepointPermissionCache()
     _resolve_document_groups(MagicMock(), MagicMock(), {group}, cache)
 
@@ -184,7 +185,7 @@ def test_document_group_cache_survives_checkpoint(
     assert mock_get_group.call_count == 2
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_nested_public_group_uses_cached_parent_expansion(
     mock_get_group: MagicMock,
 ) -> None:
@@ -193,7 +194,7 @@ def test_nested_public_group_uses_cached_parent_expansion(
         "Everyone",
         "c:0-.f|rolemanager|spo-grid-all-users/tenant-id",
     )
-    mock_get_group.return_value = ({public}, set())
+    mock_get_group.return_value = {public}
     cache = SharepointPermissionCache()
 
     first = _resolve_document_groups(MagicMock(), MagicMock(), {parent}, cache)
@@ -204,7 +205,7 @@ def test_nested_public_group_uses_cached_parent_expansion(
     mock_get_group.assert_called_once()
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_direct_public_group_skips_expansion(mock_get_group: MagicMock) -> None:
     public = _make_ad_group(
         "Everyone",
@@ -222,13 +223,13 @@ def test_direct_public_group_skips_expansion(mock_get_group: MagicMock) -> None:
     mock_get_group.assert_not_called()
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_document_group_cycles_are_resolved_once(mock_get_group: MagicMock) -> None:
     first_group = _make_ad_group("First", "first-id")
     second_group = _make_ad_group("Second", "second-id")
     mock_get_group.side_effect = [
-        ({second_group}, set()),
-        ({first_group}, set()),
+        {second_group},
+        {first_group},
     ]
 
     result = _resolve_document_groups(
@@ -260,6 +261,20 @@ def test_azuread_groups_wrap_shared_expansion(mock_expand: MagicMock) -> None:
 
     assert groups == {_make_ad_group("Nested_g2", login_name="g2")}
     assert user_emails == {"alice@contoso.com"}
+
+
+@patch(f"{MODULE}.expand_entra_group")
+@patch(f"{MODULE}.list_nested_entra_groups")
+def test_document_readers_list_nested_groups_without_members(
+    mock_nested: MagicMock, mock_expand: MagicMock
+) -> None:
+    """A document's readers need only nested groups, so its members are never listed."""
+    mock_nested.return_value = {ResolvedEntraGroup(id="g2", name="Nested_g2")}
+
+    groups = _get_nested_azuread_groups(MagicMock(), "g1")
+
+    assert groups == {_make_ad_group("Nested_g2", login_name="g2")}
+    mock_expand.assert_not_called()
 
 
 @pytest.mark.parametrize(

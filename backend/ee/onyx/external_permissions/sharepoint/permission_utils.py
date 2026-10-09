@@ -20,9 +20,11 @@ from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
+    ResolvedEntraGroup,
     enumerate_entra_groups,
     expand_entra_group,
     extract_guid,
+    list_nested_entra_groups,
     normalize_email,
     resolve_entra_group_name,
 )
@@ -207,6 +209,17 @@ def _get_sharepoint_groups(
     return groups, user_emails
 
 
+def _as_sharepoint_groups(groups: set[ResolvedEntraGroup]) -> set[SharepointGroup]:
+    return {
+        SharepointGroup(
+            login_name=group.id,
+            principal_type=AZURE_AD_GROUP_PRINCIPAL_TYPE,
+            name=group.name,
+        )
+        for group in groups
+    }
+
+
 def _get_azuread_groups(
     graph_client: GraphClient, group_name: str
 ) -> tuple[set[SharepointGroup], set[str]]:
@@ -216,15 +229,15 @@ def _get_azuread_groups(
     principal type is attached here rather than in the shared code.
     """
     nested, user_emails = expand_entra_group(graph_client, group_name)
-    groups = {
-        SharepointGroup(
-            login_name=group.id,
-            principal_type=AZURE_AD_GROUP_PRINCIPAL_TYPE,
-            name=group.name,
-        )
-        for group in nested
-    }
-    return groups, user_emails
+    return _as_sharepoint_groups(nested), user_emails
+
+
+def _get_nested_azuread_groups(
+    graph_client: GraphClient, group_name: str
+) -> set[SharepointGroup]:
+    """The groups inside an Entra group, without its users. A document's readers
+    name groups, not people, so listing every member would be wasted work."""
+    return _as_sharepoint_groups(list_nested_entra_groups(graph_client, group_name))
 
 
 def _get_groups_and_members_recursively(
@@ -318,7 +331,7 @@ def _get_cached_group_expansion(
                 client_context, group.login_name, graph_client
             )
         else:
-            nested_groups, _ = _get_azuread_groups(graph_client, group.login_name)
+            nested_groups = _get_nested_azuread_groups(graph_client, group.login_name)
     except ClientRequestException as e:
         if (
             group.principal_type != AZURE_AD_GROUP_PRINCIPAL_TYPE
