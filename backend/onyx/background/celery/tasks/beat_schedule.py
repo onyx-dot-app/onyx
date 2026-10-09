@@ -151,11 +151,11 @@ beat_task_templates: list[dict] = [
         },
     },
     {
-        # Runs daily (about every 8 days in cloud, with the beat multiplier) and
-        # selects by age, so the cadence does not decide what is stale.
+        # Runs monthly (x8 in cloud, with the beat multiplier) because it rarely
+        # has work. It selects by age, so the cadence does not decide what is stale.
         "name": "cleanup-stale-draft-credentials",
         "task": OnyxCeleryTask.CLEANUP_STALE_DRAFT_CREDENTIALS,
-        "schedule": timedelta(days=1),
+        "schedule": timedelta(days=30),
         "options": {
             "queue": OnyxCeleryQueues.PRIMARY,
             "priority": OnyxCeleryPriority.LOW,
