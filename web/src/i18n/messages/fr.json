@@ -2758,6 +2758,7 @@
         "enterField": "Saisissez le champ « {field} ».",
         "fixField": "Vérifiez le champ « {field} ».",
         "awaitingCheck": "Quittez le champ pour le vérifier avec les identifiants.",
+        "runChecks": "Lancez les vérifications pour vérifier le nouveau compte avec ces paramètres.",
         "checking": "Vérification des identifiants…",
         "fieldInvalid": "Vérifiez le champ « {field} » : {detail}",
         "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}"

@@ -2758,6 +2758,7 @@
         "enterField": "‘{field}’을(를) 입력하세요.",
         "fixField": "‘{field}’을(를) 확인하세요.",
         "awaitingCheck": "필드를 벗어나면 자격 증명으로 확인합니다.",
+        "runChecks": "검사를 실행하여 새 계정을 이 설정으로 확인합니다.",
         "checking": "자격 증명을 확인하는 중…",
         "fieldInvalid": "‘{field}’을(를) 확인하세요: {detail}",
         "rejected": "이 자격 증명은 이 설정으로 사용할 수 없습니다. {detail}"

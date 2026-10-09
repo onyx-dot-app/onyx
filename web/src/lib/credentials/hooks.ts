@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
@@ -39,6 +39,7 @@ import type {
   GoogleDriveCredentialJson,
   GoogleDriveServiceAccountCredentialJson,
   OAuthDetails,
+  SavedDraftCredential,
   SourceCredentialsResult,
 } from "@/lib/credentials/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -441,4 +442,53 @@ export function useCredentialCheckReports(
       await refresh();
     },
   };
+}
+
+export interface SavedDraftCredentialState {
+  /** The draft a check run saved the typed account as; `null` before one. */
+  savedDraft: SavedDraftCredential | null;
+  /** Records the draft a check run saved `values` in. */
+  rememberDraft: (
+    credentialId: number,
+    values: Record<string, unknown>
+  ) => Promise<void>;
+}
+
+/**
+ * The draft credential that the add-connector form of `source` saved its
+ * typed account as. The checks card, the binding check and Create share it
+ * through the SWR cache.
+ */
+export function useSavedDraftCredential(
+  source: ValidSources
+): SavedDraftCredentialState {
+  const { mutate: mutateKey } = useSWRConfig();
+  const { data } = useSWR<SavedDraftCredential | null>(
+    SWR_KEYS.connectorDraftCredential(source),
+    null
+  );
+  const rememberDraft = useCallback(
+    async (credentialId: number, values: Record<string, unknown>) => {
+      await mutateKey<SavedDraftCredential>(
+        SWR_KEYS.connectorDraftCredential(source),
+        { credential_id: credentialId, sent_values: JSON.stringify(values) },
+        { revalidate: false }
+      );
+    },
+    [source, mutateKey]
+  );
+  return { savedDraft: data ?? null, rememberDraft };
+}
+
+/**
+ * Forgets the saved draft of `source` when the add-connector page mounts, so
+ * each visit saves its own. A draft left behind is deleted by the server.
+ */
+export function useResetSavedDraftCredential(source: ValidSources): void {
+  const { mutate: mutateKey } = useSWRConfig();
+  useEffect(() => {
+    void mutateKey(SWR_KEYS.connectorDraftCredential(source), undefined, {
+      revalidate: false,
+    });
+  }, [source, mutateKey]);
 }

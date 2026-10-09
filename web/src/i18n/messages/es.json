@@ -2758,6 +2758,7 @@
         "enterField": "Introduce el campo «{field}».",
         "fixField": "Revisa el campo «{field}».",
         "awaitingCheck": "Sal del campo para comprobarlo con la credencial.",
+        "runChecks": "Ejecuta las comprobaciones para comprobar la cuenta nueva con esta configuración.",
         "checking": "Comprobando la credencial…",
         "fieldInvalid": "Revisa el campo «{field}»: {detail}",
         "rejected": "Esta credencial no se puede usar con esta configuración. {detail}"

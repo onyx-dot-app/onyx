@@ -85,6 +85,12 @@ export const SWR_KEYS = {
     "connector-check-session",
     source,
   ],
+  // The draft credential a check run saved the add-connector form's typed
+  // account as. Client state.
+  connectorDraftCredential: (source: string) => [
+    "connector-draft-credential",
+    source,
+  ],
   // The checks a run would hold for an unsaved connector form (a POST).
   connectorCheckPlan: (
     source: string,

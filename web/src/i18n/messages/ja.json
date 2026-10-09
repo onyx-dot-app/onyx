@@ -2758,6 +2758,7 @@
         "enterField": "「{field}」を入力してください。",
         "fixField": "「{field}」を確認してください。",
         "awaitingCheck": "フィールドから移動すると、認証情報で確認します。",
+        "runChecks": "チェックを実行して、新しいアカウントをこの設定で確認します。",
         "checking": "認証情報を確認しています…",
         "fieldInvalid": "「{field}」を確認してください: {detail}",
         "rejected": "この認証情報はこの設定では使用できません。{detail}"
