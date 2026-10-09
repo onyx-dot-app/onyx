@@ -316,6 +316,7 @@ export default function AuthenticationAccountSection({
               })}
               sizePreset="main-ui"
               variant="body"
+              color="muted"
               width="fit"
             />
             <Button
