@@ -189,6 +189,9 @@ _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
+# A scan that returns content vectors carries ~20 KB of JSON per chunk at 1024
+# dimensions, so it reads smaller pages to bound worker memory.
+_PIT_SCAN_PAGE_SIZE_WITH_VECTORS = 200
 # Ids per mget request, so the body stays under the cluster's http.max_content_length.
 _MGET_BATCH_SIZE = 500
 
@@ -1927,12 +1930,14 @@ class OpenSearchIndexClient(OpenSearchClient):
         search_after: list[object] | None = None,
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
+        include_content_vector: bool = False,
     ) -> tuple[list[DocumentChunkWithoutVectors], list[object] | None, str]:
         """Fetches one page of regular chunks for a batch of documents from a PIT.
 
         Filters to regular chunks (max_chunk_size == DEFAULT_MAX_CHUNK_SIZE),
         sorts by (document_id, chunk_index), and pages with search_after.
-        Vectors are excluded — the port re-embeds. If the PIT expired the scan
+        Vectors are excluded unless include_content_vector, in which case each
+        chunk is a DocumentChunk carrying its stored content vector. If the PIT expired the scan
         re-opens it and retries once.
 
         Args:
@@ -1964,7 +1969,13 @@ class OpenSearchIndexClient(OpenSearchClient):
         try:
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive, tenant_state
+                    pit_id,
+                    doc_ids,
+                    search_after,
+                    page_size,
+                    keep_alive,
+                    tenant_state,
+                    include_content_vector,
                 )
             )
         except NotFoundError as e:
@@ -1978,7 +1989,13 @@ class OpenSearchIndexClient(OpenSearchClient):
             pit_id = self.open_pit(keep_alive)
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive, tenant_state
+                    pit_id,
+                    doc_ids,
+                    search_after,
+                    page_size,
+                    keep_alive,
+                    tenant_state,
+                    include_content_vector,
                 )
             )
 
@@ -1998,7 +2015,11 @@ class OpenSearchIndexClient(OpenSearchClient):
                 raise RuntimeError(
                     f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
                 )
-            chunks.append(DocumentChunkWithoutVectors.model_validate(source))
+            chunks.append(
+                DocumentChunk.model_validate(source)
+                if include_content_vector
+                else DocumentChunkWithoutVectors.model_validate(source)
+            )
             last_sort = hit.get("sort")
 
         # A short page means the batch is exhausted; a full page means resume from
@@ -2013,6 +2034,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         tenant_state: TenantState,
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
+        include_content_vector: bool = False,
     ) -> Iterator[list[DocumentChunkWithoutVectors]]:
         """Scans regular chunks for a batch of documents, one page at a time.
 
@@ -2026,6 +2048,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 tenant when multitenant.
             page_size: Max chunks per page.
             keep_alive: PIT lease extension applied on each search.
+            include_content_vector: Return DocumentChunks with their stored
+                content vector instead of chunks without vectors.
 
         Yields:
             One page (list) of chunks at a time.
@@ -2043,6 +2067,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                     search_after=search_after,
                     page_size=page_size,
                     keep_alive=keep_alive,
+                    include_content_vector=include_content_vector,
                 )
                 if chunks:
                     yield chunks
@@ -2050,6 +2075,31 @@ class OpenSearchIndexClient(OpenSearchClient):
                     return
         finally:
             self.close_pit(pit_id)
+
+    def iter_chunks_with_vectors_for_doc_ids(
+        self,
+        doc_ids: list[str],
+        *,
+        tenant_state: TenantState,
+        page_size: int = _PIT_SCAN_PAGE_SIZE_WITH_VECTORS,
+        keep_alive: str = PIT_KEEP_ALIVE,
+    ) -> Iterator[list[DocumentChunk]]:
+        """iter_chunks_for_doc_ids, with each chunk's stored content vector."""
+        for page in self.iter_chunks_for_doc_ids(
+            doc_ids,
+            tenant_state=tenant_state,
+            page_size=page_size,
+            keep_alive=keep_alive,
+            include_content_vector=True,
+        ):
+            chunks: list[DocumentChunk] = []
+            for chunk in page:
+                if not isinstance(chunk, DocumentChunk):
+                    raise TypeError(
+                        "Bug: chunk scanned with include_content_vector has no vector."
+                    )
+                chunks.append(chunk)
+            yield chunks
 
     def _pit_scan_body(
         self,
@@ -2059,6 +2109,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         page_size: int,
         keep_alive: str,
         tenant_state: TenantState,
+        include_content_vector: bool = False,
     ) -> dict[str, Any]:
         """Builds the PIT search body for one page.
 
@@ -2081,7 +2132,11 @@ class OpenSearchIndexClient(OpenSearchClient):
             "pit": {"id": pit_id, "keep_alive": keep_alive},
             "size": page_size,
             "_source": {
-                "excludes": [CONTENT_VECTOR_FIELD_NAME, TITLE_VECTOR_FIELD_NAME]
+                "excludes": (
+                    [TITLE_VECTOR_FIELD_NAME]
+                    if include_content_vector
+                    else [CONTENT_VECTOR_FIELD_NAME, TITLE_VECTOR_FIELD_NAME]
+                )
             },
             "query": {"bool": {"filter": filter_clauses}},
             "sort": [
