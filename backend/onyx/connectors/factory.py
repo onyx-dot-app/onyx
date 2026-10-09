@@ -6,7 +6,6 @@ import pydantic
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.sealed import DraftCredential
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -16,10 +15,7 @@ from onyx.connectors.capability_checks.recorder import (
 )
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
-from onyx.connectors.credentials_provider import (
-    OnyxStaticCredentialsProvider,
-    build_db_credentials_provider,
-)
+from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.interfaces import (
     BaseConnector,
@@ -38,7 +34,6 @@ from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -224,33 +219,6 @@ def instantiate_connector(
     return connector
 
 
-def instantiate_connector_with_draft_credential(
-    source: DocumentSource,
-    input_type: InputType | None,
-    connector_specific_config: dict[str, Any],
-    credential_json: dict[str, Any],
-) -> BaseConnector:
-    """``instantiate_connector`` for a draft credential: values in the source's
-    own keys that were never saved. Nothing is written back, so a refreshed
-    token lives only as long as the connector."""
-    connector_class = identify_connector_class(source, input_type)
-    connector = connector_class(
-        **build_connector_kwargs(source, connector_specific_config)
-    )
-    if isinstance(connector, CredentialsConnector):
-        connector.set_credentials_provider(
-            OnyxStaticCredentialsProvider(
-                tenant_id=get_current_tenant_id(),
-                connector_name=source,
-                credential_json=credential_json,
-            )
-        )
-    else:
-        connector.load_credentials(credential_json)
-    connector.set_allow_images(get_image_extraction_and_analysis_enabled())
-    return connector
-
-
 def _credential_binding_class(
     source: DocumentSource,
 ) -> type[CredentialBinding] | None:
@@ -281,12 +249,11 @@ def parse_credential_binding(
 def validate_credential_binding(
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
-    credential: Credential | DraftCredential,
+    credential: Credential,
 ) -> None:
     """Raises ``ConnectorValidationError`` if the config's credential-bound
     values cannot be used with the credential, or cannot be checked because they
-    do not match the source's binding model. A draft credential is checked on
-    its own values, which are already in the source's keys."""
+    do not match the source's binding model."""
     # A source without a connector class fails at instantiation with a clearer
     # error.
     binding_class = _credential_binding_class(source)
@@ -303,9 +270,6 @@ def validate_credential_binding(
             f"The connector's credential-bound settings are invalid: {e}"
         ) from e
     if not credential.credential_json:
-        return
-    if isinstance(credential, DraftCredential):
-        binding.validate_credential(credential.credential_json)
         return
     emit_credential_access(
         credential_type="connector", provider=str(source), row_id=credential.id
@@ -508,10 +472,7 @@ def validate_ccpair_for_user(
     db_session: Session,
     enforce_creation: bool = True,
     trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.CC_PAIR_VALIDATION,
-    saved_from_draft: DraftCredential | None = None,
 ) -> bool:
-    """``saved_from_draft`` is the draft that the credential was just saved
-    from: the checks that already ran on the draft are not run again."""
     if INTEGRATION_TESTS_MODE:
         return True
 
@@ -542,7 +503,6 @@ def validate_ccpair_for_user(
         access_type=access_type,
         enforce_creation=enforce_creation,
         trigger=trigger,
-        saved_from_draft=saved_from_draft,
     )
 
 
@@ -558,13 +518,11 @@ def validate_and_record_pairing(
     access_type: AccessType,
     enforce_creation: bool,
     trigger: CapabilityCheckTrigger,
-    saved_from_draft: DraftCredential | None = None,
 ) -> bool:
     """Validates a pairing from the given values and records the outcome as
     the pairing's capability report under ``trigger``. ``cc_pair_id`` is the
     edited pair whose fresh dry-run results are reused; None for a new
     pairing. An edit passes its proposed values before it writes them.
-    ``saved_from_draft`` is as for ``validate_ccpair_for_user``.
 
     Raises:
         ValidationError: The binding, the construction or a required check
@@ -633,7 +591,6 @@ def validate_and_record_pairing(
             credential=credential,
             access_type=access_type,
             enforce_creation=enforce_creation,
-            saved_from_draft=saved_from_draft,
         )
 
     _record_outcome(None, perm_sync_validated=access_type.is_perm_synced())

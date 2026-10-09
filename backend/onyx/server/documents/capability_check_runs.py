@@ -7,7 +7,6 @@ from uuid import UUID, uuid4
 from pydantic_core import to_jsonable_python
 from sqlalchemy.orm import Session
 
-from onyx.auth.sealed import DraftCredential
 from onyx.background.celery.tasks.capability_checks.enqueue import (
     send_capability_check_run_task,
 )
@@ -31,7 +30,6 @@ from onyx.connectors.capability_checks.draft_runs import (
     apply_cached_result,
     cc_pair_draft_key,
     clear_latest_draft_run,
-    credential_cache_identity,
     decide_draft_check_state,
     draft_result_cache_key,
     draft_run_start_lock,
@@ -249,7 +247,7 @@ def plan_draft_capability_checks(
 def start_draft_capability_check_run(
     *,
     user_id: UUID,
-    credential: Credential | DraftCredential,
+    credential: Credential,
     source: DocumentSource,
     config_class: type[ConnectorConfig],
     access_type: AccessType | None,
@@ -257,7 +255,6 @@ def start_draft_capability_check_run(
     form_values: dict[str, Any],
     rerun: DraftRerunMode = DraftRerunMode.NONE,
     pair_scope: DraftRunPairScope | None = None,
-    sealed_draft_credential: str | None = None,
 ) -> DraftCheckRunSnapshot:
     """Decides every check's draft state, fills results from the cache, and
     enqueues one task for the checks that are left. Does no I/O to the source.
@@ -268,17 +265,12 @@ def start_draft_capability_check_run(
     result is run again, so a fix made at the source since the last run shows;
     with ALL, every check runs again. Fresh results still go to the cache.
 
-    A ``DraftCredential`` needs ``sealed_draft_credential``, its sealed form: the
-    task message carries that, so no secret is stored with the run.
-
     Raises:
         CapabilityRunEnqueueError: The broker did not accept the task. The run
             is stored as FAILED_TO_RUN.
         OnyxError: A concurrent start of the same draft key held the start
             lock for too long.
     """
-    if isinstance(credential, DraftCredential) and sealed_draft_credential is None:
-        raise ValueError("A draft credential's run needs its sealed form.")
     plan = _plan_draft(
         config_is_complete=pair_scope is not None,
         source=source,
@@ -295,7 +287,8 @@ def start_draft_capability_check_run(
         if check_state.state != DraftCheckStateKind.PENDING:
             continue
         cache_key = draft_result_cache_key(
-            credential_identity=credential_cache_identity(credential),
+            credential_id=credential.id,
+            credential_updated_at=credential.time_updated,
             source=source,
             access_type=access_type,
             check=check,
@@ -322,9 +315,7 @@ def start_draft_capability_check_run(
             run_id=uuid4(),
             draft_key=draft_key,
             source=source,
-            credential_id=(
-                None if isinstance(credential, DraftCredential) else credential.id
-            ),
+            credential_id=credential.id,
             access_type=access_type,
             status=DraftRunStatus.RUNNING if has_pending else DraftRunStatus.COMPLETED,
             form_errors=form_state.errors,
@@ -364,14 +355,6 @@ def start_draft_capability_check_run(
                     else None
                 ),
                 "tenant_id": get_current_tenant_id(),
-                # Sealed: the broker sees ciphertext only. Left out for a
-                # saved credential, so a worker that predates drafts still
-                # runs those.
-                **(
-                    {"draft_credential": sealed_draft_credential}
-                    if sealed_draft_credential is not None
-                    else {}
-                ),
             },
             queue=OnyxCeleryQueues.CAPABILITY_CHECKS_DRAFT,
             priority=OnyxCeleryPriority.HIGH,
@@ -380,8 +363,7 @@ def start_draft_capability_check_run(
         )
     except Exception as e:
         logger.exception(
-            "Draft capability check enqueue failed for credential %s.",
-            run.snapshot.credential_id or "(draft)",
+            "Draft capability check enqueue failed for credential %s.", credential.id
         )
         run.snapshot.status = DraftRunStatus.FAILED_TO_RUN
         save_draft_run(run)

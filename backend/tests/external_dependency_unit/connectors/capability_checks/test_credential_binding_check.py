@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.sealed import seal_draft_credential
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import CredentialBindingFieldErrorKind
 from onyx.db.models import Credential, User
@@ -18,6 +17,7 @@ from onyx.server.documents.credential_capabilities import (
     CredentialBindingCheckResponse,
     CredentialBindingRejectionCode,
     DraftCredentialBindingCheckRequest,
+    DraftCredentialBindingCheckResponse,
     check_credential_binding,
     check_draft_credential_binding,
 )
@@ -184,32 +184,54 @@ def test_source_without_a_connector_is_rejected(
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_a_draft_credential_is_checked_on_its_own_values(
-    users: tuple[User, User],
+def test_a_new_account_is_checked_as_its_owners_draft(
+    db_session: Session, users: tuple[User, User]
 ) -> None:
     admin, other = users
-    draft = seal_draft_credential(
-        {"confluence_access_token": "fake_token", "wiki_base": _AUTHORIZED_SITE},
-        user_id=admin.id,
-        source=DocumentSource.CONFLUENCE,
-    )
+    # Typed values as a save takes them: an access token binds to no site.
+    values = {"confluence_access_token": "fake_token"}
+    config = {"wiki_base": _AUTHORIZED_SITE, "is_cloud": True}
 
-    def check(user: User, site: str) -> CredentialBindingCheckResponse:
+    def check_values(
+        user: User, credential_id: int | None = None
+    ) -> DraftCredentialBindingCheckResponse:
         return check_draft_credential_binding(
             DraftCredentialBindingCheckRequest(
                 source=DocumentSource.CONFLUENCE,
-                connector_specific_config={"wiki_base": site, "is_cloud": True},
-                draft_credential=draft,
+                connector_specific_config=config,
+                credential_id=credential_id,
+                credential_json=values,
             ),
             user=user,
+            db_session=db_session,
         )
 
-    assert check(admin, _AUTHORIZED_SITE) == CredentialBindingCheckResponse(
-        field_errors={}, rejection=None
-    )
-    rejected = check(admin, "https://other.atlassian.net/wiki")
-    assert rejected.rejection is not None
-    assert rejected.rejection.code == CredentialBindingRejectionCode.BINDING_REJECTED
-    with pytest.raises(OnyxError) as error:
-        check(other, _AUTHORIZED_SITE)
-    assert error.value.error_code == OnyxErrorCode.INVALID_INPUT
+    first = check_values(admin)
+    draft_ids = [first.credential_id]
+    try:
+        assert first.field_errors == {} and first.rejection is None
+        draft = db_session.get(Credential, first.credential_id)
+        assert draft is not None
+        assert draft.is_draft and not draft.admin_public
+        assert draft.user_id == admin.id
+
+        # The same draft again: by id with values, and by id alone.
+        assert check_values(admin, first.credential_id).credential_id == draft.id
+        assert _check(db_session, admin, draft, config) == (
+            CredentialBindingCheckResponse(field_errors={}, rejection=None)
+        )
+
+        # Another user cannot reach the draft: by id alone it does not exist,
+        # and with values they get a draft of their own.
+        with pytest.raises(OnyxError) as error:
+            _check(db_session, other, draft, {"wiki_base": _AUTHORIZED_SITE})
+        assert error.value.error_code == OnyxErrorCode.CREDENTIAL_NOT_FOUND
+        others = check_values(other, first.credential_id)
+        draft_ids.append(others.credential_id)
+        assert others.credential_id != first.credential_id
+    finally:
+        for credential_id in draft_ids:
+            credential = db_session.get(Credential, credential_id)
+            if credential is not None:
+                db_session.delete(credential)
+        db_session.commit()

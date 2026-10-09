@@ -1,75 +1,101 @@
-"""A new credential named in a request, which is not saved until its connector
-is created: values typed into the form (``credential_json``), or an OAuth
-sign-in's tokens that the server sealed (``draft_credential``)."""
+"""The credential named by a connector form's request: a saved one
+(``credential_id``), or a new account the form typed (``credential_json``).
+
+A new account is saved as a draft (``Credential.is_draft``), which only its
+owner can see, and the response returns its id. Later requests name the draft
+by that id, and send ``credential_json`` again only when the values changed.
+Creating the connector promotes the draft to a saved credential."""
 
 from typing import Any
 
-from onyx.auth.sealed import (
-    DraftCredential,
-    seal_draft_credential,
-    unseal_draft_credential,
-)
+from sqlalchemy.orm import Session
+
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.credential_families import (
-    to_source_credential_json,
-    to_stored_credential_json,
+from onyx.db.credentials import (
+    create_draft_credential,
+    credential_usable_for_source,
+    fetch_credential_by_id_for_user,
+    update_draft_credential_json,
 )
-from onyx.db.models import User
+from onyx.db.models import Credential, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.models import NAMES_A_CREDENTIAL
 from onyx.utils.encryption import reject_masked_credentials
 
-EXACTLY_ONE_CREDENTIAL = (
-    "Give exactly one of credential_id, credential_json and draft_credential."
-)
 
-
-def names_exactly_one_credential(
+def resolve_form_credential(
+    *,
     credential_id: int | None,
     credential_json: dict[str, Any] | None,
-    draft_credential: str | None,
-) -> bool:
-    return (
-        sum(
-            value is not None
-            for value in (credential_id, credential_json, draft_credential)
-        )
-        == 1
-    )
-
-
-def resolve_draft_credential(
-    *,
-    credential_json: dict[str, Any] | None,
-    draft_credential: str | None,
     source: DocumentSource,
     user: User,
-) -> tuple[DraftCredential, str] | None:
-    """The request's new credential, and its sealed form for a task message;
-    None when the request names a saved credential instead.
+    db_session: Session,
+) -> Credential:
+    """The request's credential, for a ``source`` connector form:
 
-    Typed values are checked as a save would check them. A sealed draft must
-    belong to ``user`` and to ``source``.
+    - ``credential_json`` alone saves a new draft;
+    - both update the user's draft ``credential_id``; when that draft is gone
+      (deleted as stale, or already promoted), a new draft is saved instead;
+    - ``credential_id`` alone is a saved credential the user can see, or the
+      user's own draft.
+
+    Raises:
+        OnyxError: CREDENTIAL_NOT_FOUND when ``credential_id`` alone names
+            nothing the user can see; INVALID_INPUT for values a save rejects,
+            values sent for a saved credential, or a credential ``source``
+            cannot use.
     """
-    if draft_credential is not None:
-        draft = unseal_draft_credential(draft_credential, user_id=user.id)
-        if draft.source != source:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"This draft credential is for {draft.source.value}, not "
-                f"{source.value}.",
-            )
-        return draft, draft_credential
     if credential_json is not None:
         try:
             reject_masked_credentials(credential_json)
-            # Validates the values as a save would, without saving them, and
-            # gives them the shape the connector reads after a save.
-            source_json = to_source_credential_json(
-                source, to_stored_credential_json(source, credential_json, None)
-            )
         except ValueError as e:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
-        sealed = seal_draft_credential(source_json, user_id=user.id, source=source)
-        return unseal_draft_credential(sealed, user_id=user.id), sealed
-    return None
+
+    credential = (
+        fetch_credential_by_id_for_user(
+            credential_id, user, db_session, include_own_drafts=True
+        )
+        if credential_id is not None
+        else None
+    )
+    if credential_id is not None and credential is None and credential_json is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or is not accessible.",
+        )
+    if credential is not None and credential_json is not None:
+        if not credential.is_draft:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Credential {credential.id} is saved; edit it from its "
+                "connector, not with a new account's values.",
+            )
+        if credential.source != source:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Credential {credential.id} is a {credential.source.value} "
+                f"draft, not {source.value}.",
+            )
+
+    try:
+        if credential_json is not None:
+            if credential is None:
+                # A new draft, or a lost draft made again.
+                return create_draft_credential(
+                    source, credential_json, user, db_session
+                )
+            update_draft_credential_json(
+                credential, source, credential_json, db_session
+            )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+    if credential is None:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, NAMES_A_CREDENTIAL)
+
+    if not credential_usable_for_source(credential, source):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Credential {credential.id} cannot be used by a {source.value} connector.",
+        )
+    return credential

@@ -11,12 +11,12 @@ retire once the mark outlives its source's run ceiling.
 """
 
 from collections.abc import Sequence
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
 from celery import Task, shared_task
 
-from onyx.auth.sealed import DraftCredential, unseal_draft_credential
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
@@ -49,10 +49,12 @@ from onyx.db.credential_capability import (
     mark_stale_capability_runs_failed,
     upsert_completed_capability_report,
 )
-from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.credentials import (
+    delete_stale_draft_credentials,
+    fetch_credential_by_id,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
-from onyx.db.models import Credential
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -200,14 +202,12 @@ def run_draft_capability_checks_task(
     run_id: str,
     connector_specific_config: dict[str, Any] | None,
     tenant_id: str | None,
-    draft_credential: str | None = None,
 ) -> None:
     """Runs a draft run's PENDING checks and writes each result into the stored
     run as it lands. The task is the only writer of the run after its start.
     Before each next check it stops if a newer run for the same draft key
     started. A dry run of a pair builds the connector with the pair's input
-    type, as creation does. A run on a draft credential gets it sealed in
-    ``draft_credential``."""
+    type, as creation does."""
     run = load_draft_run(UUID(run_id))
     if run is None:
         task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
@@ -255,16 +255,8 @@ def run_draft_capability_checks_task(
     try:
         if is_superseded(run):
             raise _DraftRunSupersededError()
-        credential: Credential | DraftCredential | None
-        if snapshot.credential_id is None:
-            credential = (
-                unseal_draft_credential(draft_credential, user_id=run.user_id)
-                if draft_credential is not None
-                else None
-            )
-        else:
-            with get_session_with_current_tenant() as db_session:
-                credential = fetch_credential_by_id(snapshot.credential_id, db_session)
+        with get_session_with_current_tenant() as db_session:
+            credential = fetch_credential_by_id(snapshot.credential_id, db_session)
         if credential is None:
             task_logger.info(
                 f"Draft capability run {run_id} stopped: credential "
@@ -333,3 +325,24 @@ def check_for_stale_capability_runs(
                 )
         # The accessors leave the transaction to the caller.
         db_session.commit()
+
+
+# Far longer than any form session: a draft is changed on every edit.
+DRAFT_CREDENTIAL_MAX_AGE = timedelta(days=7)
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLEANUP_STALE_DRAFT_CREDENTIALS, ignore_result=True, trail=False
+)
+def cleanup_stale_draft_credentials(*, tenant_id: str) -> None:
+    """Deletes draft credentials of connector forms that were never
+    submitted."""
+    with get_session_with_current_tenant() as db_session:
+        deleted = delete_stale_draft_credentials(
+            db_session,
+            updated_before=datetime.now(timezone.utc) - DRAFT_CREDENTIAL_MAX_AGE,
+        )
+    if deleted:
+        task_logger.info(
+            f"Deleted {deleted} stale draft credential(s) (tenant {tenant_id})."
+        )

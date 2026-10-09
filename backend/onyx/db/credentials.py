@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, exists, select, update
+from sqlalchemy import Select, delete, exists, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_, or_
 
@@ -48,10 +49,20 @@ PUBLIC_CREDENTIAL_ID = 0
 def _add_user_filters(
     stmt: Select,
     user: User,
+    include_own_drafts: bool = False,
 ) -> Select:
-    """Attaches filters to ensure the user can only access appropriate credentials."""
+    """Attaches filters to ensure the user can only access appropriate credentials.
+
+    Drafts are hidden; ``include_own_drafts`` shows the user's own, for the
+    connector form that made them."""
     if user.is_anonymous:
         raise ValueError("Anonymous users are not allowed to access credentials")
+
+    stmt = stmt.where(
+        or_(Credential.is_draft.is_(False), Credential.user_id == user.id)
+        if include_own_drafts
+        else Credential.is_draft.is_(False)
+    )
 
     effective = get_effective_permissions(user)
 
@@ -101,12 +112,14 @@ def fetch_credential_by_id_for_user(
     credential_id: int,
     user: User,
     db_session: Session,
+    include_own_drafts: bool = False,
 ) -> Credential | None:
     stmt = select(Credential).distinct()
     stmt = stmt.where(Credential.id == credential_id)
     stmt = _add_user_filters(
         stmt=stmt,
         user=user,
+        include_own_drafts=include_own_drafts,
     )
     result = db_session.execute(stmt)
     credential = result.scalar_one_or_none()
@@ -295,6 +308,166 @@ def create_credential(
     # Expire to ensure credential_json is reloaded as SensitiveValue from DB
     db_session.expire(credential)
     return credential
+
+
+def create_draft_credential(
+    source: DocumentSource,
+    credential_json: dict[str, Any],
+    user: User,
+    db_session: Session,
+) -> Credential:
+    """Saves a connector form's new account as a draft: private to ``user``
+    and hidden from every listing until its connector is created."""
+    credential = Credential(
+        credential_json=to_stored_credential_json(source, credential_json, None),
+        user_id=user.id,
+        admin_public=False,
+        curator_public=False,
+        source=source,
+        is_draft=True,
+    )
+    db_session.add(credential)
+    db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
+    return credential
+
+
+def update_draft_credential_json(
+    credential: Credential,
+    source: DocumentSource,
+    credential_json: dict[str, Any],
+    db_session: Session,
+) -> None:
+    """Replaces a draft's values. Writes only when they changed: an edit
+    changes ``time_updated``, which names the draft in the check-result
+    cache."""
+    if not credential.is_draft:
+        raise ValueError(f"Credential {credential.id} is not a draft.")
+    stored_json = to_stored_credential_json(source, credential_json, None)
+    if stored_json == _stored_json(credential):
+        return
+    credential.credential_json = stored_json  # ty: ignore[invalid-assignment]
+    db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
+
+
+def promote_draft_credential(
+    credential: Credential,
+    admin_public: bool,
+    curator_public: bool,
+    groups: list[int],
+    name: str | None,
+    db_session: Session,
+) -> None:
+    """Makes a draft a saved credential with the given sharing. Keeps
+    ``time_updated``, so check results cached for the draft still apply."""
+    _set_draft_state__no_commit(
+        db_session,
+        credential.id,
+        is_draft=False,
+        admin_public=admin_public,
+        curator_public=curator_public,
+        name=name,
+    )
+    _relate_credential_to_user_groups__no_commit(
+        db_session=db_session, credential_id=credential.id, user_group_ids=groups
+    )
+    db_session.commit()
+    db_session.expire(credential)
+
+
+def restore_draft_credential(db_session: Session, credential_id: int) -> None:
+    """Undoes ``promote_draft_credential`` after a failed connector creation,
+    so the form can retry with the same draft. Leaves a credential that a
+    pair took meanwhile alone. Never raises: the caller's error is what the
+    user needs."""
+    try:
+        with db_session.begin():
+            credential = db_session.execute(
+                select(Credential)
+                .where(Credential.id == credential_id)
+                .with_for_update()
+            ).scalar_one_or_none()
+            if credential is None or db_session.scalar(
+                select(
+                    exists().where(
+                        ConnectorCredentialPair.credential_id == credential_id
+                    )
+                )
+            ):
+                return
+            _cleanup_credential__user_group_relationships__no_commit(
+                db_session, credential_id
+            )
+            _set_draft_state__no_commit(
+                db_session,
+                credential_id,
+                is_draft=True,
+                admin_public=False,
+                curator_public=False,
+                name=None,
+            )
+    except Exception:
+        logger.exception(
+            "Left credential %s saved after a failed connector creation",
+            credential_id,
+        )
+        db_session.rollback()
+
+
+def _set_draft_state__no_commit(
+    db_session: Session,
+    credential_id: int,
+    *,
+    is_draft: bool,
+    admin_public: bool,
+    curator_public: bool,
+    name: str | None,
+) -> None:
+    db_session.execute(
+        update(Credential)
+        .where(Credential.id == credential_id)
+        .values(
+            is_draft=is_draft,
+            admin_public=admin_public,
+            curator_public=curator_public,
+            name=name,
+            # Setting the column skips its ``onupdate``.
+            time_updated=Credential.time_updated,
+        )
+        .execution_options(synchronize_session=False)
+    )
+
+
+def delete_stale_draft_credentials(
+    db_session: Session, updated_before: datetime
+) -> int:
+    """Deletes drafts last changed before ``updated_before``: accounts typed
+    into a connector form that was never submitted. Returns how many."""
+    credential_ids = list(
+        db_session.scalars(
+            select(Credential.id)
+            .where(
+                Credential.is_draft.is_(True),
+                Credential.time_updated < updated_before,
+            )
+            .with_for_update(skip_locked=True)
+        ).all()
+    )
+    if not credential_ids:
+        return 0
+    db_session.query(Credential__UserGroup).filter(
+        Credential__UserGroup.credential_id.in_(credential_ids)
+    ).delete(synchronize_session=False)
+    db_session.execute(
+        delete(Credential)
+        .where(Credential.id.in_(credential_ids), Credential.is_draft.is_(True))
+        .execution_options(synchronize_session=False)
+    )
+    db_session.commit()
+    return len(credential_ids)
 
 
 def _cleanup_credential__user_group_relationships__no_commit(

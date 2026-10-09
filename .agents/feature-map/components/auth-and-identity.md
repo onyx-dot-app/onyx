@@ -122,7 +122,7 @@ the coding-agent sandbox).
 
 | Variable | File | Default | Effect |
 |---|---|---|---|
-| `USER_AUTH_SECRET` | `configs/app_configs.py` | `""` | Signs password-reset/verification tokens, OAuth state, captcha cookies, the SSO tenant-pin token, and anonymous-user JWTs. It also keys the AES-GCM sealing of draft credentials (`auth/sealed.py`, HKDF label `onyx-draft-credential-v1`), so rotating it voids drafts in flight. `verify_user_auth_secret` (`auth/users.py`) refuses to start a real deployment with it empty; `DEV_MODE`/`INTEGRATION_TESTS_MODE` downgrade the refusal to a warning. |
+| `USER_AUTH_SECRET` | `configs/app_configs.py` | `""` | Signs password-reset/verification tokens, OAuth state, captcha cookies, the SSO tenant-pin token, and anonymous-user JWTs. `verify_user_auth_secret` (`auth/users.py`) refuses to start a real deployment with it empty; `DEV_MODE`/`INTEGRATION_TESTS_MODE` downgrade the refusal to a warning. |
 | `SESSION_EXPIRE_TIME_SECONDS` | `configs/app_configs.py` | 7 days (`86400 * 7`) | Redis/Postgres/JWT session lifetime; also read from the legacy `REDIS_AUTH_EXPIRE_TIME_SECONDS` name. |
 | `AUTH_BACKEND` | `configs/app_configs.py` | `redis` | `redis` \| `postgres` \| `jwt`; selects `TenantAwareRedisStrategy` / `RefreshableDatabaseStrategy` / `SingleTenantJWTStrategy` (`auth/users.py`). |
 | `SIGNUP_RATE_LIMIT_ENABLED` | `configs/app_configs.py` | | Gates `signup_rate_limit.py`; only enforced under `MULTI_TENANT`. |

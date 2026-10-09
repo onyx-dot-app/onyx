@@ -17,7 +17,6 @@ from functools import partial
 from typing import Any
 from uuid import UUID
 
-from onyx.auth.sealed import DraftCredential
 from onyx.background.celery.tasks.capability_checks.enqueue import (
     send_capability_check_run_task,
 )
@@ -26,7 +25,6 @@ from onyx.connectors.capability_checks.draft_runs import (
     CachedDraftResult,
     DraftCheckStateKind,
     cached_check_result,
-    credential_cache_identity,
     draft_result_cache_key,
     get_cached_draft_result,
 )
@@ -71,7 +69,7 @@ _REJECTED_MESSAGE = "Did not finish before the connector was rejected."
 def _cached_draft_results(
     checks: list[CapabilityCheck[Any]],
     *,
-    credential: Credential | DraftCredential,
+    credential: Credential,
     source: DocumentSource,
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
@@ -87,7 +85,8 @@ def _cached_draft_results(
     for check in checks:
         cached = get_cached_draft_result(
             draft_result_cache_key(
-                credential_identity=credential_cache_identity(credential),
+                credential_id=credential.id,
+                credential_updated_at=credential.time_updated,
                 source=source,
                 access_type=access_type,
                 check=check,
@@ -103,7 +102,7 @@ def _cached_draft_results(
 def _fresh_draft_results(
     checks: list[CapabilityCheck[Any]],
     *,
-    credential: Credential | DraftCredential,
+    credential: Credential,
     source: DocumentSource,
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
@@ -384,21 +383,18 @@ def run_named_checks_within_budget(
     connector_specific_config: dict[str, Any],
     credential: Credential,
     access_type: AccessType,
-    saved_from_draft: DraftCredential | None = None,
 ) -> NamedCheckRun:
     """Runs the source's named checks for a pairing, with no writes.
 
     Fresh draft results for the same form are reused and count as finished at
-    once: with ``cc_pair_id``, those of the pair's dry runs; with
-    ``saved_from_draft``, those of the draft that ``credential`` was saved
-    from. The other checks run for at most ``CREATION_BLOCKING_BUDGET_SECONDS``.
-    Does not claim or store a report row and does not start a background run.
+    once: with ``cc_pair_id``, those of the pair's dry runs. The other checks
+    run for at most ``CREATION_BLOCKING_BUDGET_SECONDS``. Does not claim or
+    store a report row and does not start a background run.
     """
     checks = get_capability_checks(source)
     reused = _fresh_draft_results(
         checks,
-        # The draft's runs cached their results under the draft's name.
-        credential=saved_from_draft or credential,
+        credential=credential,
         source=source,
         access_type=access_type,
         connector_specific_config=connector_specific_config,
@@ -436,7 +432,6 @@ def validate_pairing_with_named_checks(
     credential: Credential,
     access_type: AccessType,
     enforce_creation: bool,
-    saved_from_draft: DraftCredential | None = None,
 ) -> bool:
     """Runs the source's named checks for a pairing and stores the report
     under ``trigger``. ``cc_pair_id`` is the edited pair whose dry-run results
@@ -472,7 +467,6 @@ def validate_pairing_with_named_checks(
             connector_specific_config=connector_specific_config,
             credential=credential,
             access_type=access_type,
-            saved_from_draft=saved_from_draft,
         )
         finished = run.finished_results
         unfinished = run.unfinished_check_ids

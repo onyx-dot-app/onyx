@@ -242,8 +242,7 @@ class CapabilityCheckResult(BaseModel):
 class CredentialCapabilityReport(BaseModel):
     """The full outcome of one capability-check run for a credential."""
 
-    # None for a draft credential, which has no row.
-    credential_id: int | None
+    credential_id: int
     source: DocumentSource
     # None means a config-less credential-time run.
     connector_id: int | None = None

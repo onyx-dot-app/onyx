@@ -20,7 +20,6 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic_core import to_jsonable_python
 
-from onyx.auth.sealed import DraftCredential, draft_credential_digest
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock
 from onyx.configs.constants import DocumentSource
@@ -39,7 +38,6 @@ from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
 from onyx.connectors.source_operations import get_source_operations_class
 from onyx.db.enums import AccessType
-from onyx.db.models import Credential
 
 DRAFT_RUN_TTL_SECONDS = 30 * 60
 # Caps every hang guard of a draft run. A check that times out is
@@ -135,8 +133,7 @@ class DraftCheckRunSnapshot(BaseModel):
     run_id: UUID
     draft_key: str
     source: DocumentSource
-    # None for a draft credential, which has no row.
-    credential_id: int | None
+    credential_id: int
     access_type: AccessType | None
     status: DraftRunStatus
     # Field name to error message, for the form.
@@ -231,17 +228,10 @@ def decide_draft_check_state(
     return state
 
 
-def credential_cache_identity(credential: Credential | DraftCredential) -> str:
-    """Names the credential in result cache keys. A saved credential's edits
-    change its name; a draft is named by its values."""
-    if isinstance(credential, DraftCredential):
-        return f"draft-{draft_credential_digest(credential)}"
-    return f"{credential.id}:{credential.time_updated.isoformat()}"
-
-
 def draft_result_cache_key(
     *,
-    credential_identity: str,
+    credential_id: int,
+    credential_updated_at: datetime,
     source: DocumentSource,
     access_type: AccessType | None,
     check: CapabilityCheck[Any],
@@ -274,8 +264,8 @@ def draft_result_cache_key(
                 config_hash = _config_hash(gateway_values)
     access = access_type.value if access_type is not None else "none"
     key = (
-        f"{_DRAFT_RESULT_KEY_PREFIX}:{credential_identity}:"
-        f"{source.value}:{check.check_id}:"
+        f"{_DRAFT_RESULT_KEY_PREFIX}:{credential_id}:"
+        f"{credential_updated_at.isoformat()}:{source.value}:{check.check_id}:"
         f"{access}:{config_hash}"
     )
     return key if cc_pair_id is None else f"{key}:{_CC_PAIR_KEY_PART}{cc_pair_id}"

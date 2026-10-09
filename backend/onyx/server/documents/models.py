@@ -44,10 +44,6 @@ from onyx.db.models import (
     TaskStatus,
 )
 from onyx.db.models import Document as DbDocument
-from onyx.server.documents.draft_credentials import (
-    EXACTLY_ONE_CREDENTIAL,
-    names_exactly_one_credential,
-)
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.logger import setup_logger
@@ -829,6 +825,17 @@ def manage_access_by_group(
     return {entry.group_id: entry.role for entry in entries}
 
 
+NAMES_A_CREDENTIAL = "Give credential_id, credential_json or both."
+
+
+def names_a_credential(
+    credential_id: int | None, credential_json: dict[str, Any] | None
+) -> bool:
+    """A connector form's request names a saved credential or draft, a new
+    account's values, or both (see onyx/server/documents/draft_credentials.py)."""
+    return credential_id is not None or credential_json is not None
+
+
 class CredentialSharing(BaseModel):
     """Who may reuse a new credential: ``CredentialBase``'s sharing fields."""
 
@@ -866,26 +873,23 @@ class ConnectorCredentialPairMetadata(BaseModel):
 
 class ConnectorWithCredentialCreateRequest(BaseModel):
     """Creates a connector and pairs it with a credential in one request: a
-    saved credential, or a new one that this request saves (see
+    saved credential, or a new account that this request saves (see
     onyx/server/documents/draft_credentials.py)."""
 
     connector: ConnectorUpdateRequest
     pairing: ConnectorCredentialPairMetadata
-    # Exactly one: a saved credential, typed values, or a sealed OAuth draft.
+    # A saved credential or the user's draft, a new account's values, or a
+    # draft with its changed values.
     credential_id: int | None = None
     credential_json: dict[str, Any] | None = None
-    draft_credential: str | None = None
-    # How the new credential (typed or drafted) is shared.
+    # How a new account (a draft) is shared once saved. Rejected for a saved
+    # credential.
     credential_sharing: CredentialSharing | None = None
 
     @model_validator(mode="after")
-    def _one_credential(self) -> Self:
-        if not names_exactly_one_credential(
-            self.credential_id, self.credential_json, self.draft_credential
-        ):
-            raise ValueError(EXACTLY_ONE_CREDENTIAL)
-        if self.credential_sharing is not None and self.credential_id is not None:
-            raise ValueError("credential_sharing applies only to a new credential.")
+    def _names_a_credential(self) -> Self:
+        if not names_a_credential(self.credential_id, self.credential_json):
+            raise ValueError(NAMES_A_CREDENTIAL)
         return self
 
 

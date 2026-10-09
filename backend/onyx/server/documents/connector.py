@@ -31,7 +31,6 @@ from onyx.auth.permissions import (
     require_permission,
 )
 from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.auth.sealed import DraftCredential
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
@@ -101,6 +100,8 @@ from onyx.db.credentials import (
     create_credential,
     discard_credential_if_unpaired,
     fetch_credential_by_id_for_user,
+    promote_draft_credential,
+    restore_draft_credential,
 )
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_all_cc_pairs
@@ -153,10 +154,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.cc_pair import authorize_pairing
 from onyx.server.documents.credential import assert_credential_share_within_scope
-from onyx.server.documents.draft_credentials import (
-    EXACTLY_ONE_CREDENTIAL,
-    resolve_draft_credential,
-)
+from onyx.server.documents.draft_credentials import resolve_form_credential
 from onyx.server.documents.models import (
     AuthStatus,
     AuthUrl,
@@ -1762,11 +1760,10 @@ def create_connector_with_credential(
     ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    """Creates a connector and pairs it with a credential: a saved one
-    (``credential_id``), or a new one (typed ``credential_json`` or an OAuth
-    ``draft_credential``) that is saved here, with ``credential_sharing``, for
-    the first time. A failure leaves neither the connector nor a new credential
-    behind."""
+    """Creates a connector and pairs it with a credential: a saved one, or the
+    user's draft (see onyx/server/documents/draft_credentials.py), which is
+    promoted to a saved credential with ``credential_sharing``. A failure
+    leaves no connector behind, and a draft stays a draft for the retry."""
     tenant_id = get_current_tenant_id()
     connector_data = request.connector
     manage_access = authorize_pairing(request.pairing, user, db_session)
@@ -1778,65 +1775,63 @@ def create_connector_with_credential(
         data_access_group_ids=request.pairing.data_access,
     )
 
-    # A new credential (typed values or an OAuth draft), saved by this request.
-    new_credential: CredentialBase | None = None
-    draft: DraftCredential | None = None
-    resolved = resolve_draft_credential(
+    # GATE 2 on the credential: validation builds and probes the connector.
+    credential = resolve_form_credential(
+        credential_id=request.credential_id,
         credential_json=request.credential_json,
-        draft_credential=request.draft_credential,
         source=connector_data.source,
         user=user,
+        db_session=db_session,
     )
-    if resolved is not None:
-        draft, _ = resolved
-        sharing = request.credential_sharing or CredentialSharing()
-        new_credential = CredentialBase(
-            credential_json=draft.credential_json,
-            source=draft.source,
-            admin_public=sharing.admin_public,
-            curator_public=sharing.curator_public,
-            groups=sharing.groups,
-            name=sharing.name,
+    credential_id = credential.id
+    is_draft = credential.is_draft
+    sharing = request.credential_sharing or CredentialSharing()
+    if is_draft:
+        assert_credential_share_within_scope(
+            CredentialBase(
+                credential_json={},
+                source=credential.source,
+                admin_public=sharing.admin_public,
+                curator_public=sharing.curator_public,
+                groups=sharing.groups,
+                name=sharing.name,
+            ),
+            user,
+            db_session,
         )
-        assert_credential_share_within_scope(new_credential, user, db_session)
-    elif request.credential_id is not None:
-        # GATE 2 on the credential: validation builds and probes the connector.
-        if (
-            fetch_credential_by_id_for_user(request.credential_id, user, db_session)
-            is None
-        ):
-            raise OnyxError(
-                OnyxErrorCode.CREDENTIAL_NOT_FOUND,
-                f"Credential {request.credential_id} does not exist or is not "
-                "accessible.",
-            )
+    elif request.credential_sharing is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "credential_sharing applies only to a new account.",
+        )
 
     connector_id: int | None = None
-    # Only a credential made here is discarded on failure.
-    new_credential_id: int | None = None
+    # Only a draft promoted here is restored on failure.
+    promoted_draft_id: int | None = None
     try:
         _validate_connector_request(connector_data)
         connector_id = create_connector(
             db_session=db_session,
             connector_data=connector_data.to_connector_base(),
         ).id
-        if new_credential is not None:
-            # Committed before validation, which reads it on its own sessions.
-            credential_id = create_credential(
-                credential_data=new_credential, user=user, db_session=db_session
-            ).id
-            new_credential_id = credential_id
-        elif request.credential_id is not None:
-            credential_id = request.credential_id
-        else:
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, EXACTLY_ONE_CREDENTIAL)
+        if is_draft:
+            # Committed before validation, which reads it on its own sessions,
+            # and before pairing, which only sees saved credentials.
+            promote_draft_credential(
+                credential,
+                admin_public=sharing.admin_public,
+                curator_public=sharing.curator_public,
+                groups=sharing.groups,
+                name=sharing.name,
+                db_session=db_session,
+            )
+            promoted_draft_id = credential_id
 
         validate_ccpair_for_user(
             connector_id,
             credential_id,
             request.pairing.access_type,
             db_session,
-            saved_from_draft=draft,
         )
         response = add_credential_to_connector(
             db_session=db_session,
@@ -1855,16 +1850,22 @@ def create_connector_with_credential(
     except ValidationError as e:
         # The base class: a transient source failure raises the unexpected
         # variant, and it must free the name the same way.
-        _discard_unpaired_creation(db_session, connector_id, new_credential_id)
+        _discard_unpaired_creation(
+            db_session, connector_id, None, promoted_draft_id=promoted_draft_id
+        )
         raise OnyxError(
             OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
             "Connector validation error: " + str(e),
         )
     except ValueError as e:
-        _discard_unpaired_creation(db_session, connector_id, new_credential_id)
+        _discard_unpaired_creation(
+            db_session, connector_id, None, promoted_draft_id=promoted_draft_id
+        )
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
     except Exception:
-        _discard_unpaired_creation(db_session, connector_id, new_credential_id)
+        _discard_unpaired_creation(
+            db_session, connector_id, None, promoted_draft_id=promoted_draft_id
+        )
         raise
 
     maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
@@ -1888,13 +1889,13 @@ def create_connector_with_credential(
         resource_id=connector_id,
         extra={"source": connector_data.source.value},
     )
-    if new_credential_id is not None:
+    if promoted_draft_id is not None:
         emit_audit_event(
             AuditAction.CREDENTIAL_CREATE,
             AuditOutcome.SUCCESS,
             actor=actor,
             resource_type="credential",
-            resource_id=new_credential_id,
+            resource_id=promoted_draft_id,
             extra={"source": connector_data.source.value},
         )
     emit_audit_event(
@@ -1909,10 +1910,14 @@ def create_connector_with_credential(
 
 
 def _discard_unpaired_creation(
-    db_session: Session, connector_id: int | None, credential_id: int | None
+    db_session: Session,
+    connector_id: int | None,
+    credential_id: int | None,
+    promoted_draft_id: int | None = None,
 ) -> None:
     """Both rows are committed before validation runs, so a failed creation has
-    to remove them or the name stays taken for the retry."""
+    to remove them or the name stays taken for the retry. A promoted draft
+    becomes a draft again instead, for the retry."""
     db_session.rollback()
     if connector_id is not None:
         # False when paired by another request meanwhile, which keeps the
@@ -1923,6 +1928,8 @@ def _discard_unpaired_creation(
         # An empty mock credential nobody can see. The name is what matters, so a
         # refused or failed delete is only logged.
         discard_credential_if_unpaired(db_session, credential_id)
+    if promoted_draft_id is not None:
+        restore_draft_credential(db_session, promoted_draft_id)
 
 
 def _assert_can_edit_connector(

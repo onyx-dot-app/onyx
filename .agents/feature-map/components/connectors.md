@@ -79,8 +79,8 @@ frontend changes a new connector requires.
 | Method | Path | Notes |
 |---|---|---|
 | POST | `/admin/connector` | Create a `Connector` row (`create_connector_from_model`). |
-| POST | `/admin/connector-with-credential` | Create a connector and pair it with exactly one of a saved `credential_id`, typed `credential_json`, or a sealed OAuth `draft_credential`; a new one is saved here (`create_connector_with_credential`). A failure removes the connector and a draft's new credential. The add-connector page uses it. |
-| POST | `/admin/draft-credential/binding-check` | Check a form's bound fields against a new, unsaved credential: typed `credential_json` or a sealed OAuth `draft_credential` (`server/documents/draft_credentials.py`). |
+| POST | `/admin/connector-with-credential` | Create a connector and pair it with a saved credential or the user's draft (`create_connector_with_credential`). The request names the credential by `credential_id`, `credential_json` or both, as for draft runs. A draft is promoted to a saved credential with `credential_sharing`. A failure removes the connector and makes a promoted draft a draft again. The add-connector page uses it. |
+| POST | `/admin/draft-credential/binding-check` | Check a form's bound fields against a new account's `credential_json`, which is saved as (or updates) the user's draft first; the response returns the draft's `credential_id` (`server/documents/draft_credentials.py`). |
 | PATCH | `/admin/connector/{connector_id}` | Update config, schedule, etc. |
 | DELETE | `/admin/connector/{connector_id}` | |
 | POST | `/admin/connector/run-once` | On-demand index trigger. |
@@ -90,7 +90,7 @@ frontend changes a new connector requires.
 | GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | Google-specific OAuth flows in `connector.py`. |
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
 | POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). |
-| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved `credential_id`, typed `credential_json`, or a sealed OAuth `draft_credential`. A run on a new credential stores no secret: the server seals it into the task message (see [[auth-and-identity]]). Cancel stops a run its starter owns; the form calls it when its credential changes. |
+| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. |
 | POST | `/admin/connector-checks/plan` | The checks a draft run would hold for an unsaved form, each in its state before anything runs (pending, waiting, not applicable). Needs no credential and starts no run. |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 

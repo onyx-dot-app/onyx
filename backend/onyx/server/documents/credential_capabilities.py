@@ -16,7 +16,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.auth.sealed import DraftCredential
 from onyx.configs.constants import (
     DocumentSource,
 )
@@ -68,11 +67,8 @@ from onyx.server.documents.capability_check_runs import (
     start_capability_check_run,
     start_draft_capability_check_run,
 )
-from onyx.server.documents.draft_credentials import (
-    EXACTLY_ONE_CREDENTIAL,
-    names_exactly_one_credential,
-    resolve_draft_credential,
-)
+from onyx.server.documents.draft_credentials import resolve_form_credential
+from onyx.server.documents.models import NAMES_A_CREDENTIAL, names_a_credential
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 
@@ -155,22 +151,6 @@ def _validate_credential_usable_for_source(
             OnyxErrorCode.INVALID_INPUT,
             f"Credential {credential.id} cannot be used by a {source.value} connector.",
         )
-
-
-def _fetch_credential_usable_for_source(
-    credential_id: int, source: DocumentSource, user: User, db_session: Session
-) -> Credential:
-    """The credential, for an unsaved form of ``source``. GATE 2 for
-    ``allow_scope``: the caller must see the credential. An unknown credential
-    is indistinguishable from an inaccessible one."""
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
-    if credential is None:
-        raise OnyxError(
-            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
-            f"Credential {credential_id} does not exist or is not accessible.",
-        )
-    _validate_credential_usable_for_source(credential, source)
-    return credential
 
 
 class CapabilityCheckRunRequest(BaseModel):
@@ -427,31 +407,34 @@ def check_credential_binding(
     db_session: Session = Depends(get_session),
 ) -> CredentialBindingCheckResponse:
     """Checks the bound fields of an unsaved connector form against the
-    credential, as pairing does. Does no I/O to the source. A rejected binding
-    is response content, not an HTTP error."""
+    credential (a saved one, or the user's own draft), as pairing does. Does no
+    I/O to the source. A rejected binding is response content, not an HTTP
+    error."""
     if request.source not in CONNECTOR_CLASS_MAP:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"{request.source.value} has no connector configuration.",
         )
-    credential = _fetch_credential_usable_for_source(
-        credential_id, request.source, user, db_session
+    credential = resolve_form_credential(
+        credential_id=credential_id,
+        credential_json=None,
+        source=request.source,
+        user=user,
+        db_session=db_session,
     )
     return _check_binding(request, credential)
 
 
 class DraftCredentialBindingCheckRequest(CredentialBindingCheckRequest):
-    # Exactly one: typed values, or a sealed OAuth draft.
-    credential_json: dict[str, Any] | None = None
-    draft_credential: str | None = None
+    # A new account's values, and the id of its draft once the server saved
+    # one (see onyx/server/documents/draft_credentials.py).
+    credential_id: int | None = None
+    credential_json: dict[str, Any]
 
-    @model_validator(mode="after")
-    def _one_credential(self) -> "DraftCredentialBindingCheckRequest":
-        if (self.credential_json is None) == (self.draft_credential is None):
-            raise ValueError(
-                "Give exactly one of credential_json and draft_credential."
-            )
-        return self
+
+class DraftCredentialBindingCheckResponse(CredentialBindingCheckResponse):
+    # The draft the values are saved in; later requests name it.
+    credential_id: int
 
 
 @router.post("/admin/draft-credential/binding-check")
@@ -460,31 +443,33 @@ def check_draft_credential_binding(
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
-) -> CredentialBindingCheckResponse:
-    """``check_credential_binding`` for a new credential, which has no id."""
+    db_session: Session = Depends(get_session),
+) -> DraftCredentialBindingCheckResponse:
+    """``check_credential_binding`` for a new account's values, which are saved
+    as (or update) the user's draft first."""
     if request.source not in CONNECTOR_CLASS_MAP:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"{request.source.value} has no connector configuration.",
         )
-    resolved = resolve_draft_credential(
+    credential = resolve_form_credential(
+        credential_id=request.credential_id,
         credential_json=request.credential_json,
-        draft_credential=request.draft_credential,
         source=request.source,
         user=user,
+        db_session=db_session,
     )
-    if resolved is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Give exactly one of credential_json and draft_credential.",
-        )
-    draft, _ = resolved
-    return _check_binding(request, draft)
+    result = _check_binding(request, credential)
+    return DraftCredentialBindingCheckResponse(
+        field_errors=result.field_errors,
+        rejection=result.rejection,
+        credential_id=credential.id,
+    )
 
 
 def _check_binding(
     request: CredentialBindingCheckRequest,
-    credential: Credential | DraftCredential,
+    credential: Credential,
 ) -> CredentialBindingCheckResponse:
     field_errors = credential_binding_field_errors(
         request.source, request.connector_specific_config
@@ -550,11 +535,12 @@ class DraftCheckRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: DocumentSource
-    # Exactly one: a saved credential, typed values, or a sealed OAuth draft
-    # (see onyx/server/documents/draft_credentials.py).
+    # A saved credential or the user's draft, a new account's values, or a
+    # draft with its changed values (see
+    # onyx/server/documents/draft_credentials.py). The snapshot's
+    # credential_id names the draft that values were saved in.
     credential_id: int | None = None
     credential_json: dict[str, Any] | None = None
-    draft_credential: str | None = None
     access_type: AccessType | None = None
     # Client-chosen id of one form session. A new run for the same key
     # supersedes the earlier one.
@@ -565,11 +551,9 @@ class DraftCheckRunRequest(BaseModel):
     rerun: DraftRerunMode = DraftRerunMode.NONE
 
     @model_validator(mode="after")
-    def _one_credential(self) -> "DraftCheckRunRequest":
-        if not names_exactly_one_credential(
-            self.credential_id, self.credential_json, self.draft_credential
-        ):
-            raise ValueError(EXACTLY_ONE_CREDENTIAL)
+    def _names_a_credential(self) -> "DraftCheckRunRequest":
+        if not names_a_credential(self.credential_id, self.credential_json):
+            raise ValueError(NAMES_A_CREDENTIAL)
         return self
 
 
@@ -593,27 +577,17 @@ def start_draft_check_run(
             OnyxErrorCode.INVALID_INPUT,
             f"{request.source.value} has no connector configuration.",
         )
-    credential: Credential | DraftCredential
-    sealed: str | None = None
-    resolved = resolve_draft_credential(
+    credential = resolve_form_credential(
+        credential_id=request.credential_id,
         credential_json=request.credential_json,
-        draft_credential=request.draft_credential,
         source=request.source,
         user=user,
+        db_session=db_session,
     )
-    if resolved is not None:
-        credential, sealed = resolved
-    elif request.credential_id is not None:
-        credential = _fetch_credential_usable_for_source(
-            request.credential_id, request.source, user, db_session
-        )
-    else:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, EXACTLY_ONE_CREDENTIAL)
     try:
         return start_draft_capability_check_run(
             user_id=user.id,
             credential=credential,
-            sealed_draft_credential=sealed,
             source=request.source,
             config_class=mapping.config_class,
             access_type=request.access_type,
@@ -653,13 +627,15 @@ def get_draft_check_run(
     db_session: Session = Depends(get_session),
 ) -> DraftCheckRunSnapshot:
     """Returns a draft run's per-check progress. Only the user who started the
-    run may read it, and only while they can still see its credential. A run on
-    a draft credential has no saved credential to see: its starter made it."""
+    run may read it, and only while they can still see its credential (their
+    own draft included)."""
     snapshot = read_draft_run_for_user(run_id, user.id)
     # GATE 2 again: the check messages come from the credential.
-    if snapshot is None or (
-        snapshot.credential_id is not None
-        and fetch_credential_by_id_for_user(snapshot.credential_id, user, db_session)
+    if (
+        snapshot is None
+        or fetch_credential_by_id_for_user(
+            snapshot.credential_id, user, db_session, include_own_drafts=True
+        )
         is None
     ):
         raise OnyxError(

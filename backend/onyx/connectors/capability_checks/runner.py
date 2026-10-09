@@ -6,7 +6,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from onyx.auth.sealed import DraftCredential
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -22,19 +21,12 @@ from onyx.connectors.capability_checks.registry import (
     get_capability_checks,
 )
 from onyx.connectors.credential_families import to_source_credential_json
-from onyx.connectors.credentials_provider import (
-    OnyxStaticCredentialsProvider,
-    build_db_credentials_provider,
-)
+from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
 )
-from onyx.connectors.factory import (
-    identify_connector_class,
-    instantiate_connector,
-    instantiate_connector_with_draft_credential,
-)
+from onyx.connectors.factory import identify_connector_class, instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.source_operations import (
@@ -48,7 +40,6 @@ from onyx.db.models import Credential
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -449,23 +440,8 @@ def _instantiate_connector_isolated(
         return connector, credential_json
 
 
-def _instantiate_draft_connector(
-    *,
-    source: DocumentSource,
-    input_type: InputType | None,
-    connector_specific_config: dict[str, Any],
-    credential_json: dict[str, Any],
-) -> tuple[BaseConnector, dict[str, Any]]:
-    """``_instantiate_connector_isolated`` for a draft: no row to load or
-    write, so the material is the draft's own."""
-    connector = instantiate_connector_with_draft_credential(
-        source, input_type, connector_specific_config, credential_json
-    )
-    return connector, credential_json
-
-
 def generate_capability_report(
-    credential: Credential | DraftCredential,
+    credential: Credential,
     source: DocumentSource | None = None,
     connector_specific_config: dict[str, Any] | None = None,
     connector_id: int | None = None,
@@ -497,9 +473,6 @@ def generate_capability_report(
 
     ``timeout_cap_seconds`` caps every hang guard of the run: each check's and
     the connector instantiation's.
-
-    A ``DraftCredential`` (never saved) runs on its own values in the source's
-    keys: no row is read or written, and the report has no ``credential_id``.
     """
     source = source or credential.source
     checks = get_capability_checks(source)
@@ -527,25 +500,14 @@ def generate_capability_report(
             # Under the guard the run ceiling budgets for it: construction and
             # ``load_credentials`` can probe the source with no timeout of their
             # own, and the stale-run sweep trusts the ceiling.
-            timeout = _capped(CAPABILITY_CHECK_TIMEOUT_SECONDS, timeout_cap_seconds)
-            if isinstance(credential, DraftCredential):
-                connector, fresh_credential_json = run_with_timeout(
-                    timeout,
-                    _instantiate_draft_connector,
-                    source=source,
-                    input_type=input_type,
-                    connector_specific_config=instantiation_config,
-                    credential_json=credential.credential_json,
-                )
-            else:
-                connector, fresh_credential_json = run_with_timeout(
-                    timeout,
-                    _instantiate_connector_isolated,
-                    source=source,
-                    input_type=input_type,
-                    connector_specific_config=instantiation_config,
-                    credential_id=credential.id,
-                )
+            connector, fresh_credential_json = run_with_timeout(
+                _capped(CAPABILITY_CHECK_TIMEOUT_SECONDS, timeout_cap_seconds),
+                _instantiate_connector_isolated,
+                source=source,
+                input_type=input_type,
+                connector_specific_config=instantiation_config,
+                credential_id=credential.id,
+            )
         except Exception as e:
             # A config-less probe construction fails routinely and stays a
             # skip; a failure with the real config is actionable and is
@@ -565,19 +527,11 @@ def generate_capability_report(
     source_operations_class = get_source_operations_class(source)
     if source_operations_class is not None:
         source_operations = source_operations_class(
-            credentials_provider=(
-                OnyxStaticCredentialsProvider(
-                    tenant_id=get_current_tenant_id(),
-                    connector_name=source,
-                    credential_json=credential.credential_json,
-                )
-                if isinstance(credential, DraftCredential)
-                else build_db_credentials_provider(source, credential.id)
-            ),
+            credentials_provider=build_db_credentials_provider(source, credential.id),
             connector_specific_config=connector_specific_config,
         )
 
-    if not isinstance(credential, DraftCredential) and credential.credential_json:
+    if credential.credential_json:
         # Audits the run's own decrypt of the material (the isolated
         # instantiation's post-load read, or the fallback below), a distinct
         # site from ``instantiate_connector``'s paths. Best-effort, never
@@ -592,8 +546,6 @@ def generate_capability_report(
     credential_json = (
         fresh_credential_json
         if fresh_credential_json is not None
-        else credential.credential_json
-        if isinstance(credential, DraftCredential)
         else to_source_credential_json(
             source,
             (
@@ -619,9 +571,7 @@ def generate_capability_report(
         checks, context, on_result=on_result, timeout_cap_seconds=timeout_cap_seconds
     )
     return CredentialCapabilityReport(
-        credential_id=None
-        if isinstance(credential, DraftCredential)
-        else credential.id,
+        credential_id=credential.id,
         source=source,
         connector_id=connector_id,
         checked_at=datetime.now(timezone.utc),

@@ -1,5 +1,6 @@
 """Draft states from the readiness decision, and draft result cache keys."""
 
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -140,7 +141,8 @@ def _key(
     source: DocumentSource = DocumentSource.SLACK,
 ) -> str:
     return draft_result_cache_key(
-        credential_identity="1:2026-01-01T00:00:00+00:00",
+        credential_id=1,
+        credential_updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         source=source,
         access_type=AccessType.PUBLIC,
         check=check,
