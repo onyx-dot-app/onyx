@@ -12647,6 +12647,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Folien"
+      },
+      "previous": {
+        "label": "Vorherige Folie"
+      },
+      "next": {
+        "label": "Nächste Folie"
+      },
       "converting": {
         "label": "Präsentation wird konvertiert..."
       },

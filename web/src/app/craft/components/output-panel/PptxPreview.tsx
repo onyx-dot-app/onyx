@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useTranslations } from "next-intl";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type KeyboardEvent,
+} from "react";
+import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
+import { Button, SelectCard, Text } from "@opal/components";
 import { SvgChevronLeft, SvgChevronRight, SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { fetchPptxPreview } from "@/app/craft/services/apiServices";
@@ -16,6 +22,7 @@ interface PptxPreviewProps {
   filePath: string;
   revision?: string;
   refreshKey?: number;
+  isActive?: boolean;
 }
 
 /**
@@ -28,8 +35,11 @@ export default function PptxPreview({
   filePath,
   revision,
   refreshKey,
+  isActive = true,
 }: PptxPreviewProps) {
   const t = useTranslations("craft.pptxPreview");
+  const format: ReturnType<typeof useFormatter> = useFormatter();
+  const selectedThumbnailRef = useRef<HTMLDivElement>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imageLoading, setImageLoading] = useState(true);
 
@@ -82,20 +92,33 @@ export default function PptxPreview({
     setImageLoading(true);
   }, [currentSlide, data]);
 
-  // Keyboard navigation
   useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      // Horizontal arrows follow the reading direction, so RTL swaps them.
-      const isRtl = document.documentElement.dir === "rtl";
-      if (e.key === (isRtl ? "ArrowRight" : "ArrowLeft")) {
-        goToPrev();
-      } else if (e.key === (isRtl ? "ArrowLeft" : "ArrowRight")) {
-        goToNext();
-      }
+    if (isActive) {
+      selectedThumbnailRef.current?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
     }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goToPrev, goToNext]);
+  }, [activeSlide, data?.imageRevision, isActive]);
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!isActive || event.defaultPrevented) return;
+    // Horizontal arrows follow the reading direction.
+    const isRtl = document.documentElement.dir === "rtl";
+    if (
+      event.key === "ArrowUp" ||
+      event.key === (isRtl ? "ArrowRight" : "ArrowLeft")
+    ) {
+      event.preventDefault();
+      goToPrev();
+    } else if (
+      event.key === "ArrowDown" ||
+      event.key === (isRtl ? "ArrowLeft" : "ArrowRight")
+    ) {
+      event.preventDefault();
+      goToNext();
+    }
+  }
 
   if (isLoading) {
     return (
@@ -154,66 +177,98 @@ export default function PptxPreview({
   const slideUrl = `${getArtifactUrl(sessionId, slidePath)}?revision=${data.imageRevision}`;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Slide image */}
-      <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-        {imageLoading && (
-          <div className="absolute">
-            <Text font="secondary-body" color="text-03">
-              {t("loadingSlide.label")}
-            </Text>
-          </div>
-        )}
-        <img
-          src={slideUrl}
-          alt={t("slide.counter", {
-            current: activeSlide + 1,
-            total: slideCount,
-          })}
-          className={cn(
-            "max-w-full max-h-full object-contain transition-opacity",
-            imageLoading ? "opacity-0" : "opacity-100"
-          )}
-          onLoad={() => setImageLoading(false)}
-          onError={() => setImageLoading(false)}
-        />
+    <div className="h-full min-h-0 flex overflow-hidden">
+      <div
+        role="toolbar"
+        aria-label={t("slides.label")}
+        aria-orientation="vertical"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        className="w-28 shrink-0 overflow-y-auto overscroll-contain border-e border-border-02 p-2"
+      >
+        <div className="flex flex-col gap-2">
+          {data.slide_paths.map((path, index) => (
+            <SelectCard
+              key={path}
+              ref={index === activeSlide ? selectedThumbnailRef : undefined}
+              role="button"
+              tabIndex={0}
+              aria-label={t("slide.counter", {
+                current: index + 1,
+                total: slideCount,
+              })}
+              aria-current={index === activeSlide ? "true" : undefined}
+              state={index === activeSlide ? "selected" : "empty"}
+              padding={1}
+              rounding={2}
+              onClick={() => setCurrentSlide(index)}
+            >
+              <div className="flex flex-col gap-1">
+                <img
+                  src={`${getArtifactUrl(sessionId, path)}?revision=${data.imageRevision}`}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full aspect-video object-contain rounded-04 bg-background-neutral-02"
+                />
+                <Text font="secondary-body" color="text-03">
+                  {format.number(index + 1)}
+                </Text>
+              </div>
+            </SelectCard>
+          ))}
+        </div>
       </div>
-
-      {/* Navigation bar */}
-      {slideCount > 1 && (
-        <div className="flex items-center justify-center gap-3 p-2 border-t border-border-02">
-          <button
-            onClick={goToPrev}
-            disabled={activeSlide === 0}
-            className={cn(
-              "p-1 rounded-sm",
-              activeSlide === 0
-                ? "opacity-30 cursor-not-allowed"
-                : "hover:bg-background-neutral-03 cursor-pointer"
-            )}
-          >
-            <SvgChevronLeft size={16} className="stroke-text-02" />
-          </button>
-          <Text font="secondary-body" color="text-03">
-            {t("slide.counter", {
+      <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
+        <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden">
+          {imageLoading && (
+            <div className="absolute">
+              <Text font="secondary-body" color="text-03">
+                {t("loadingSlide.label")}
+              </Text>
+            </div>
+          )}
+          <img
+            src={slideUrl}
+            alt={t("slide.counter", {
               current: activeSlide + 1,
               total: slideCount,
             })}
-          </Text>
-          <button
-            onClick={goToNext}
-            disabled={activeSlide === slideCount - 1}
             className={cn(
-              "p-1 rounded-sm",
-              activeSlide === slideCount - 1
-                ? "opacity-30 cursor-not-allowed"
-                : "hover:bg-background-neutral-03 cursor-pointer"
+              "max-w-full max-h-full object-contain transition-opacity",
+              imageLoading ? "opacity-0" : "opacity-100"
             )}
-          >
-            <SvgChevronRight size={16} className="stroke-text-02" />
-          </button>
+            onLoad={() => setImageLoading(false)}
+            onError={() => setImageLoading(false)}
+          />
         </div>
-      )}
+        {slideCount > 1 && (
+          <div className="flex items-center justify-center gap-3 p-2 border-t border-border-02">
+            <Button
+              icon={SvgChevronLeft}
+              prominence="tertiary"
+              size="sm"
+              aria-label={t("previous.label")}
+              onClick={goToPrev}
+              disabled={activeSlide === 0}
+            />
+            <Text font="secondary-body" color="text-03">
+              {t("slide.counter", {
+                current: activeSlide + 1,
+                total: slideCount,
+              })}
+            </Text>
+            <Button
+              icon={SvgChevronRight}
+              prominence="tertiary"
+              size="sm"
+              aria-label={t("next.label")}
+              onClick={goToNext}
+              disabled={activeSlide === slideCount - 1}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

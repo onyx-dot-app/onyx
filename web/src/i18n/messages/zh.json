@@ -12647,6 +12647,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "幻灯片"
+      },
+      "previous": {
+        "label": "上一张幻灯片"
+      },
+      "next": {
+        "label": "下一张幻灯片"
+      },
       "converting": {
         "label": "正在转换演示文稿..."
       },

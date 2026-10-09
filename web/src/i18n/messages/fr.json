@@ -12647,6 +12647,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Diapositives"
+      },
+      "previous": {
+        "label": "Diapositive précédente"
+      },
+      "next": {
+        "label": "Diapositive suivante"
+      },
       "converting": {
         "label": "Conversion de la présentation..."
       },

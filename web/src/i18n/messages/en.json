@@ -12647,6 +12647,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Slides"
+      },
+      "previous": {
+        "label": "Previous slide"
+      },
+      "next": {
+        "label": "Next slide"
+      },
       "converting": {
         "label": "Converting presentation..."
       },

@@ -12647,6 +12647,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "슬라이드"
+      },
+      "previous": {
+        "label": "이전 슬라이드"
+      },
+      "next": {
+        "label": "다음 슬라이드"
+      },
       "converting": {
         "label": "프레젠테이션 변환 중..."
       },

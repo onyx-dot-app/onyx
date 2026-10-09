@@ -483,6 +483,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
 
   return (
     <div
+      inert={!isOpen}
       className={cn(
         "absolute z-20 inset-y-0 end-0 w-1/2 flex flex-col border-s border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
         // rtl: the panel hides toward the inline end, so RTL negates.
