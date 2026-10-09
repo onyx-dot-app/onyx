@@ -77,6 +77,7 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
+    document_preview_command,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
@@ -124,6 +125,7 @@ from onyx.server.features.build.sandbox.nextjs_dev import (
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
+    MANAGED_SKILLS_PATH,
     SESSION_CONFIG_COMPLETE_SENTINEL,
     SESSIONS_ROOT,
     WORKSPACE_SETUP_COMPLETE_SENTINEL,
@@ -2131,14 +2133,16 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
         """
         return self._get_nextjs_url(str(sandbox_id), port)
 
-    def generate_pptx_preview(
+    def generate_document_preview(
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        pptx_path: str,
+        document_path: str,
         cache_dir: str,
+        *,
+        first_page_only: bool = False,
     ) -> tuple[list[str], bool]:
-        """Convert PPTX to slide images using soffice + pdftoppm in the pod.
+        """Convert PDF or PowerPoint to page images using soffice + pdftoppm in the pod.
 
         Runs preview.py in the sandbox container which:
         1. Checks if cached slides exist and are newer than the PPTX
@@ -2148,24 +2152,27 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
         pod_name = self._get_pod_name(str(sandbox_id))
 
         # Security: sanitize paths
-        pptx_path_obj = Path(pptx_path.lstrip("/"))
-        pptx_clean_parts = [p for p in pptx_path_obj.parts if p != ".."]
-        clean_pptx = str(Path(*pptx_clean_parts)) if pptx_clean_parts else "."
+        document_path_obj = Path(document_path.lstrip("/"))
+        document_clean_parts = [p for p in document_path_obj.parts if p != ".."]
+        clean_document = (
+            str(Path(*document_clean_parts)) if document_clean_parts else "."
+        )
 
         cache_path_obj = Path(cache_dir.lstrip("/"))
         cache_clean_parts = [p for p in cache_path_obj.parts if p != ".."]
         clean_cache = str(Path(*cache_clean_parts)) if cache_clean_parts else "."
 
         session_root = f"/workspace/sessions/{session_id}"
-        pptx_abs = f"{session_root}/{clean_pptx}"
+        document_abs = f"{session_root}/{clean_document}"
         cache_abs = f"{session_root}/{clean_cache}"
 
-        exec_command = [
-            "python",
-            "/workspace/managed/skills/pptx/scripts/preview.py",
-            pptx_abs,
+        exec_command = document_preview_command(
+            document_abs,
             cache_abs,
-        ]
+            session_root,
+            script_path=f"{MANAGED_SKILLS_PATH}/pptx/scripts/preview.py",
+            first_page_only=first_page_only,
+        )
 
         try:
             resp = k8s_stream(
@@ -2186,8 +2193,12 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
                 raise ValueError("Empty response from PPTX conversion")
 
             if lines[0] == "ERROR_NOT_FOUND":
-                raise ValueError(f"File not found: {pptx_path}")
+                raise ValueError(f"File not found: {document_path}")
 
+            if lines[0] == "ERROR_ACCESS_DENIED":
+                raise ValueError("Access denied: source escapes session workspace")
+            if lines[0] == "ERROR_TOO_LARGE":
+                raise ValueError("Document exceeds thumbnail size limit")
             if lines[0] == "ERROR_NO_PDF":
                 raise ValueError("soffice did not produce a PDF file")
 

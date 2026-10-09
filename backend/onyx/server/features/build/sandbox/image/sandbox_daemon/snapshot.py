@@ -16,7 +16,7 @@ from pathlib import Path
 from uuid import UUID
 
 SESSIONS_ROOT = Path("/workspace/sessions")
-# Must match onyx.server.features.build.sandbox.base.BUN_CACHE_DIR -- the
+# Must match onyx.server.features.build.configs.BUN_CACHE_DIR -- the
 # daemon can't import from the main package at runtime, hence the copy.
 BUN_CACHE_DIR = SESSIONS_ROOT / ".bun-cache"
 BUN_IMAGE_CACHE_DIR = Path("/home/sandbox/.bun/install/cache")

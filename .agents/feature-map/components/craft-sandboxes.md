@@ -532,7 +532,7 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    `SESSIONS_ROOT` is defined twice (`session_workspace.py:19` on the
    api-server side, `image/sandbox_daemon/snapshot.py:18` inside the image)
    because the daemon cannot import the api-server package at runtime
-   (`base.py:62-67`). A path change on one side without the other silently
+   (`backend/onyx/server/features/build/configs.py`). A path change on one side without the other silently
    breaks snapshot/restore or workspace setup.
 6. **Every sidecar-mutating request must be Ed25519-signed and fresh.**
    `_verify_signature` (`sandbox_daemon/server.py`) checks both the signature
@@ -729,3 +729,11 @@ set.
   it (rare, but the sidecar's SQLite backup step exists specifically to avoid
   copying a hot, inconsistent DB file) has no fallback prior version to
   restore from the way a session's outputs/attachments do.
+
+### Document thumbnail conversion
+
+Both sandbox providers use `SandboxManager.generate_document_preview` for full
+PowerPoint slides and first-page PDF or PowerPoint thumbnails. The shared
+`backend/onyx/skills/builtin/pptx/scripts/preview.py` script checks session workspace
+confinement. Thumbnail conversion is limited to 20 MB source files. It caches
+JPEGs in the hidden .document-thumbnails directory under outputs. Inventory rules exclude hidden directories.

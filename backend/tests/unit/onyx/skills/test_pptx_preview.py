@@ -73,7 +73,7 @@ def test_preserved_mtime_edit_replaces_cached_slides(
 
     convert_mock: MagicMock = MagicMock(side_effect=convert)
     rasterize_mock: MagicMock = MagicMock(side_effect=rasterize)
-    monkeypatch.setattr(preview, "run_soffice", convert_mock)
+    monkeypatch.setattr("office.soffice.run_soffice", convert_mock)
     monkeypatch.setattr(preview.subprocess, "run", rasterize_mock)
 
     preview.main()
@@ -97,3 +97,107 @@ def test_preserved_mtime_edit_replaces_cached_slides(
     assert capsys.readouterr().out.splitlines()[0] == "CACHED"
     convert_mock.assert_called_once()
     rasterize_mock.assert_called_once()
+
+
+@pytest.mark.parametrize("extension", ["pdf", "pptx"])
+def test_thumbnail_renders_only_first_page_and_preserves_pdf_source(
+    extension: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.syspath_prepend(str(_SCRIPT.parent))
+    spec = importlib.util.spec_from_file_location("document_thumbnail", _SCRIPT)
+    assert spec is not None and spec.loader is not None
+    preview = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(preview)
+    source = tmp_path / f"report.{extension}"
+    source.write_bytes(b"source document")
+    cache = tmp_path / "thumbnails"
+    monkeypatch.setattr(
+        sys, "argv", [str(_SCRIPT), str(source), str(cache), "--first-page"]
+    )
+
+    def convert(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        (cache / "report.pdf").write_bytes(b"converted")
+        return subprocess.CompletedProcess([], 0)
+
+    def rasterize(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        assert command[:2] == ["pdftoppm", "-jpeg"]
+        assert command[4:10] == ["-f", "1", "-l", "1", "-scale-to", "640"]
+        (cache / "slide-1.jpg").write_bytes(b"thumbnail")
+        return subprocess.CompletedProcess(command, 0)
+
+    converter = MagicMock(side_effect=convert)
+    renderer = MagicMock(side_effect=rasterize)
+    monkeypatch.setattr("office.soffice.run_soffice", converter)
+    monkeypatch.setattr(preview.subprocess, "run", renderer)
+    preview.main()
+    assert capsys.readouterr().out.splitlines() == [
+        "GENERATED",
+        str(cache / "slide-1.jpg"),
+    ]
+    assert source.read_bytes() == b"source document"
+    assert not (cache / "report.pdf").exists()
+    assert converter.call_count == (0 if extension == "pdf" else 1)
+    preview.main()
+    assert capsys.readouterr().out.splitlines()[0] == "CACHED"
+    renderer.assert_called_once()
+
+
+def test_thumbnail_rejects_source_symlink_outside_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.syspath_prepend(str(_SCRIPT.parent))
+    spec = importlib.util.spec_from_file_location("confined_thumbnail", _SCRIPT)
+    assert spec is not None and spec.loader is not None
+    preview = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(preview)
+    outside = tmp_path / "private.pdf"
+    outside.write_bytes(b"private")
+    session = tmp_path / "session"
+    session.mkdir()
+    source = session / "linked.pdf"
+    source.symlink_to(outside)
+    cache = session / "cache"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(_SCRIPT),
+            str(source),
+            str(cache),
+            "--first-page",
+            "--session-root",
+            str(session),
+        ],
+    )
+    preview.main()
+    assert capsys.readouterr().out.strip() == "ERROR_ACCESS_DENIED"
+    assert not cache.exists()
+
+
+def test_thumbnail_rejects_oversized_document_before_rendering(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.syspath_prepend(str(_SCRIPT.parent))
+    spec = importlib.util.spec_from_file_location("bounded_thumbnail", _SCRIPT)
+    assert spec is not None and spec.loader is not None
+    preview = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(preview)
+    source = tmp_path / "large.pdf"
+    with source.open("wb") as stream:
+        stream.truncate(20 * 1024 * 1024 + 1)
+    cache = tmp_path / "cache"
+    monkeypatch.setattr(
+        sys, "argv", [str(_SCRIPT), str(source), str(cache), "--first-page"]
+    )
+    preview.main()
+    assert capsys.readouterr().out.strip() == "ERROR_TOO_LARGE"
+    assert not cache.exists()

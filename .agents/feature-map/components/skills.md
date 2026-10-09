@@ -532,3 +532,10 @@ See `backend/AGENTS.md` for authoritative test commands and required env.
   the same as `True` (include and attempt to hydrate); only an explicit
   `False` excludes. A skill can therefore ride along as "probably fine"
   until its bundle is actually read and classified.
+
+### Shared document preview script
+
+The built-in PowerPoint preview script also renders first-page PDF and PowerPoint
+thumbnails for Outputs. Sandbox providers execute the backend’s current script
+without updating managed skills or the running agent’s context. PDF rendering
+uses Poppler directly; PowerPoint rendering also uses the existing LibreOffice helper.
