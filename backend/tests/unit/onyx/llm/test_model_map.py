@@ -313,22 +313,23 @@ def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
     with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
         model_map = _fresh_model_map()
         try:
-            for embed_name in ("cohere/embed-v5.0-fast", "cohere/rerank-v4-pro"):
-                obj = find_model_obj(model_map, "vercel_ai_gateway", embed_name)
+            for name, want_mode in {
+                "cohere/embed-v5.0-fast": "embedding",
+                "cohere/rerank-v4-pro": "rerank",
+            }.items():
+                obj = find_model_obj(model_map, "vercel_ai_gateway", name)
                 assert obj is not None
-                assert obj["mode"] == "embedding"
+                assert obj["mode"] == want_mode
                 assert (
-                    find_model_obj(
-                        model_map, "vercel_ai_gateway", embed_name, chat_only=True
-                    )
+                    find_model_obj(model_map, "vercel_ai_gateway", name, chat_only=True)
                     is None
                 )
-                assert model_catalog.is_embedding_model_name(embed_name) is True
-                assert embed_name not in model_catalog.iter_models(
+                assert model_catalog.is_embedding_model_name(name) is True
+                assert name not in model_catalog.iter_models(
                     "vercel_ai_gateway", mode="chat"
                 )
-                assert embed_name in model_catalog.iter_models(
-                    "vercel_ai_gateway", mode="embedding"
+                assert name in model_catalog.iter_models(
+                    "vercel_ai_gateway", mode=want_mode
                 )
 
             chat = find_model_obj(model_map, "vercel_ai_gateway", "cohere/command-a")

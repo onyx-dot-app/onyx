@@ -158,20 +158,27 @@ def provider_names() -> list[str]:
     return sorted(_catalog())
 
 
+# Modes a catalog entry can serve a chat request under — entries in any
+# other mode (embedding/rerank/image/audio/...) must stay out of
+# chat-model surfaces.
+CHAT_MODES = frozenset({"chat", "responses", "completion"})
+
+
 def _catalog_mode(entry: dict[str, Any], model_name: str) -> str:
     """Entries vendored from sources without a mode concept (models.dev-only
     providers like vercel_ai_gateway) ship no mode; without one every
-    embedding/rerank entry would resolve as a chat model. Infer non-chat
-    classes from the id — the same name heuristic is_embedding_model_name
-    already applies to uncataloged models."""
+    embedding/rerank entry would resolve as a chat model. Infer the class
+    from the id — the same name heuristic is_embedding_model_name already
+    applies to uncataloged models."""
     mode: Any = entry.get("mode")
     if mode:
         return mode
-    return (
-        "embedding"
-        if _EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1])
-        else "chat"
-    )
+    tail = model_name.split("/")[-1]
+    if _RERANK_NAME_PATTERN.search(tail):
+        return "rerank"
+    if _EMBEDDING_NAME_PATTERN.search(tail):
+        return "embedding"
+    return "chat"
 
 
 def iter_models(provider: str, mode: str | None = None) -> list[str]:
@@ -353,9 +360,16 @@ _EMBEDDING_NAME_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Rerank ids classify as "rerank", not "embedding" — checked before
+# _EMBEDDING_NAME_PATTERN, which lumps the whole not-chat class together
+# for the uncataloged-name fallback below.
+_RERANK_NAME_PATTERN = re.compile(r"rerank", re.IGNORECASE)
+
 
 def is_embedding_model_name(model_name: str) -> bool:
+    """Should this name stay out of chat-model listings? Cataloged entries
+    answer from their mode; uncataloged names fall back to the id pattern."""
     entry = build_model_map().get(model_name)
     if entry is not None and entry.get("mode"):
-        return entry["mode"] == "embedding"
+        return entry["mode"] not in CHAT_MODES
     return bool(_EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1]))
