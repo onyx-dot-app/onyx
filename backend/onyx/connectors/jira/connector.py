@@ -146,6 +146,46 @@ def _perform_jql_search(
         )
 
 
+def jira_error_messages(text: str | None) -> str | None:
+    """The ``errorMessages`` of a Jira error body, joined, or None."""
+    try:
+        payload = json.loads(text or "")
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    messages = payload.get("errorMessages")
+    if isinstance(messages, list) and messages:
+        return "; ".join(str(message) for message in messages)
+    return str(messages) if messages else None
+
+
+def build_jql_query(
+    *,
+    project_key: str | None,
+    jql_query: str | None,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> str:
+    """JQL for the configured project/query plus the poll window.
+
+    Unquoted epoch-ms so Jira does not reinterpret naive datetimes in the
+    API user's profile timezone.
+    https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
+    """
+    time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
+
+    # If custom JQL query is provided, use it and combine with time constraints
+    if jql_query:
+        return f"({jql_query}) AND {time_jql}"
+
+    # Otherwise, use project key if provided. Quote it to handle reserved words.
+    if project_key:
+        return f'project = "{project_key}" AND {time_jql}'
+
+    return time_jql
+
+
 def _handle_jira_search_error(e: JiraApiError, jql: str) -> None:
     """Handle common Jira search errors and raise appropriate exceptions.
 
@@ -439,13 +479,6 @@ class JiraConnector(
             raise ConnectorMissingCredentialError("Jira")
         return self._source_operations
 
-    @property
-    def quoted_jira_project(self) -> str:
-        # Quote the project name to handle reserved words
-        if not self.jira_project:
-            return ""
-        return f'"{self.jira_project}"'
-
     def _get_project_permissions(
         self, project_key: str, add_prefix: bool = False
     ) -> Any:
@@ -583,24 +616,12 @@ class JiraConnector(
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
-        """JQL for the configured project/query plus the poll window.
-
-        Unquoted epoch-ms so Jira does not reinterpret naive datetimes in the
-        API user's profile timezone.
-        https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
-        """
-        time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
-
-        # If custom JQL query is provided, use it and combine with time constraints
-        if self.jql_query:
-            return f"({self.jql_query}) AND {time_jql}"
-
-        # Otherwise, use project key if provided
-        if self.jira_project:
-            base_jql = f"project = {self.quoted_jira_project}"
-            return f"{base_jql} AND {time_jql}"
-
-        return time_jql
+        return build_jql_query(
+            project_key=self.jira_project,
+            jql_query=self.jql_query,
+            start=start,
+            end=end,
+        )
 
     def load_from_checkpoint(
         self,

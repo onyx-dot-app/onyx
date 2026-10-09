@@ -235,3 +235,11 @@ def test_credential_selects_the_api_family(
 ) -> None:
     assert is_cloud_credential(credentials) is expected_cloud
     assert is_cloud_gateway(_gateway(credentials=credentials)) is expected_cloud
+
+
+@pytest.mark.parametrize("email", [None, ""], ids=["null", "blank"])
+def test_blank_email_selects_data_center(email: str | None) -> None:
+    """An edited Data Center credential can store ``jira_user_email: null``."""
+    credentials = {"jira_user_email": email, "jira_api_token": "pat"}
+    assert is_cloud_credential(credentials) is False
+    assert is_cloud_gateway(_gateway(credentials=credentials)) is False

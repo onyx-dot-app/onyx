@@ -61,8 +61,9 @@ class JiraApiError(Exception):
 
 def rest_api_version(credentials: Mapping[str, Any]) -> str:
     """The REST API version a credential uses: Cloud with an account email,
-    Server / Data Center without one."""
-    if JIRA_USER_EMAIL_KEY in credentials:
+    Server / Data Center without one. A blank or null email (an edited Data
+    Center credential stores ``null``) counts as no email."""
+    if credentials.get(JIRA_USER_EMAIL_KEY):
         return JIRA_CLOUD_API_VERSION
     return JIRA_SERVER_API_VERSION
 
@@ -179,9 +180,10 @@ class JiraSourceOperations(SourceOperations):
         options: dict[str, str | bool | Any] = {
             "rest_api_version": rest_api_version(credentials)
         }
-        if JIRA_USER_EMAIL_KEY in credentials:
+        email: str | None = credentials.get(JIRA_USER_EMAIL_KEY)
+        if email:
             return JIRA(
-                basic_auth=(credentials[JIRA_USER_EMAIL_KEY], api_token),
+                basic_auth=(email, api_token),
                 server=api_url,
                 options=options,
             )
@@ -200,7 +202,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_myself(self) -> dict[str, Any]:
         """Returns the user the credential acts as (``myself``)."""
@@ -210,7 +211,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def list_projects(self) -> list[dict[str, Any]]:
         """Returns the projects the credential can browse."""
@@ -220,7 +220,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_UNTESTED,
     )
     def get_project(self, *, project_key: str) -> dict[str, Any]:
         """Returns one project. Raises ``JiraApiError`` (404) when it does not
@@ -231,10 +230,13 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_UNTESTED,
     )
     def search_issue_ids(
-        self, *, jql: str, next_page_token: str | None = None
+        self,
+        *,
+        jql: str,
+        next_page_token: str | None = None,
+        max_results: int = _MAX_RESULTS_FETCH_IDS,
     ) -> JiraIssueIdPage:
         """Cloud only: one page of issue ids from the enhanced JQL search
         (``search/jql``). The SDK does not support this endpoint."""
@@ -243,7 +245,7 @@ class JiraSourceOperations(SourceOperations):
         client: JIRA = self._client()
         params: dict[str, str | int | None] = {
             "jql": jql,
-            "maxResults": _MAX_RESULTS_FETCH_IDS,
+            "maxResults": max_results,
             "nextPageToken": next_page_token,
             "fields": "id",
         }
@@ -261,7 +263,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_UNTESTED,
     )
     def bulk_fetch_issues(
         self, *, issue_ids: list[str], fields: str | None = None
@@ -283,7 +284,6 @@ class JiraSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_UNTESTED,
     )
     def search_issues(
         self,
