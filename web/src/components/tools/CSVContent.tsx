@@ -1,4 +1,4 @@
-import { parseCSV } from "@/lib/csv";
+import { parseCsv } from "@/lib/csv";
 // CsvContent
 import { IconLoader } from "@opal/loaders";
 import React, { useState, useEffect } from "react";
@@ -61,7 +61,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
       }
 
       const csvData = await response.text();
-      const rows = parseCSV(csvData.trim());
+      const rows = parseCsv(csvData.trim()).rows;
       const firstRow = rows[0];
       if (!firstRow) {
         throw new Error("CSV file is empty");

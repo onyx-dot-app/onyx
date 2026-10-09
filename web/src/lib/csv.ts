@@ -3,7 +3,6 @@ export interface CsvParseResult {
   truncated: boolean;
 }
 
-/** Parses RFC 4180 cells, including quoted newlines, with bounded work. */
 interface CsvLimits {
   maxRows?: number;
   maxColumns?: number;
@@ -11,6 +10,7 @@ interface CsvLimits {
   maxCells?: number;
 }
 
+/** Parses RFC 4180 cells, including quoted newlines, with bounded work. */
 export function parseCsv(
   content: string,
   {
@@ -67,8 +67,4 @@ export function parseCsv(
     rows.push(row);
   }
   return { rows, truncated };
-}
-
-export function parseCSV(content: string): string[][] {
-  return parseCsv(content).rows;
 }

@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
-import { parseCSV } from "@/lib/csv";
+import { parseCsv } from "@/lib/csv";
 import { SvgAlertCircle } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -93,7 +93,7 @@ function SheetTable({ sheet }: SheetTableProps) {
   try {
     // Drop at most one trailing newline; trimming any further would mutate
     // cell data (significant leading/trailing whitespace).
-    rows = parseCSV(sheet.csv.replace(/\r?\n$/, ""));
+    rows = parseCsv(sheet.csv.replace(/\r?\n$/, "")).rows;
   } catch (error) {
     console.error(
       `Failed to parse CSV for spreadsheet preview sheet "${sheet.name}":`,

@@ -1,36 +1,36 @@
-import { parseCSV } from "@/lib/csv";
+import { parseCsv } from "@/lib/csv";
 
-describe("parseCSV", () => {
+describe("parseCsv", () => {
   it("parses simple comma-separated rows", () => {
-    expect(parseCSV("a,b,c\n1,2,3")).toEqual([
+    expect(parseCsv("a,b,c\n1,2,3").rows).toEqual([
       ["a", "b", "c"],
       ["1", "2", "3"],
     ]);
   });
 
   it("preserves commas inside quoted fields", () => {
-    expect(parseCSV('name,address\nAlice,"123 Main St, Apt 4"')).toEqual([
+    expect(parseCsv('name,address\nAlice,"123 Main St, Apt 4"').rows).toEqual([
       ["name", "address"],
       ["Alice", "123 Main St, Apt 4"],
     ]);
   });
 
   it("handles escaped double quotes inside quoted fields", () => {
-    expect(parseCSV('a,b\n"say ""hello""",world')).toEqual([
+    expect(parseCsv('a,b\n"say ""hello""",world').rows).toEqual([
       ["a", "b"],
       ['say "hello"', "world"],
     ]);
   });
 
   it("handles newlines inside quoted fields", () => {
-    expect(parseCSV('a,b\n"line1\nline2",val')).toEqual([
+    expect(parseCsv('a,b\n"line1\nline2",val').rows).toEqual([
       ["a", "b"],
       ["line1\nline2", "val"],
     ]);
   });
 
   it("handles CRLF line endings", () => {
-    expect(parseCSV("a,b\r\n1,2\r\n3,4")).toEqual([
+    expect(parseCsv("a,b\r\n1,2\r\n3,4").rows).toEqual([
       ["a", "b"],
       ["1", "2"],
       ["3", "4"],
@@ -38,67 +38,82 @@ describe("parseCSV", () => {
   });
 
   it("handles empty fields", () => {
-    expect(parseCSV("a,b,c\n1,,3")).toEqual([
+    expect(parseCsv("a,b,c\n1,,3").rows).toEqual([
       ["a", "b", "c"],
       ["1", "", "3"],
     ]);
   });
 
   it("handles a single element", () => {
-    expect(parseCSV("a")).toEqual([["a"]]);
+    expect(parseCsv("a").rows).toEqual([["a"]]);
   });
 
   it("handles a single row with no newline", () => {
-    expect(parseCSV("a,b,c")).toEqual([["a", "b", "c"]]);
+    expect(parseCsv("a,b,c").rows).toEqual([["a", "b", "c"]]);
   });
 
   it("handles quoted fields that are entirely empty", () => {
-    expect(parseCSV('a,b\n"",val')).toEqual([
+    expect(parseCsv('a,b\n"",val').rows).toEqual([
       ["a", "b"],
       ["", "val"],
     ]);
   });
 
   it("handles multiple quoted fields with commas", () => {
-    expect(parseCSV('"foo, bar","baz, qux"\n"1, 2","3, 4"')).toEqual([
+    expect(parseCsv('"foo, bar","baz, qux"\n"1, 2","3, 4"').rows).toEqual([
       ["foo, bar", "baz, qux"],
       ["1, 2", "3, 4"],
     ]);
   });
 
   it("throws on unterminated quoted field", () => {
-    expect(() => parseCSV('a,b\n"foo,bar')).toThrow(
+    expect(() => parseCsv('a,b\n"foo,bar').rows).toThrow(
       "Malformed CSV: unterminated quoted field"
     );
   });
 
   it("throws on unterminated quote at end of input", () => {
-    expect(() => parseCSV('"unterminated')).toThrow(
+    expect(() => parseCsv('"unterminated').rows).toThrow(
       "Malformed CSV: unterminated quoted field"
     );
   });
 
   it("returns empty array for empty input", () => {
-    expect(parseCSV("")).toEqual([]);
+    expect(parseCsv("").rows).toEqual([]);
   });
 });
 
 it.each(['"account"oops,balance', '""oops,balance', '"account" ,balance'])(
   "rejects trailing text after a closed quoted field: %s",
   (content) => {
-    expect(() => parseCSV(content)).toThrow(
+    expect(() => parseCsv(content)).toThrow(
       "Malformed CSV: text after a quoted field"
     );
   }
 );
 it("rejects quotes within an unquoted field", () => {
-  expect(() => parseCSV('account"oops,balance')).toThrow(
+  expect(() => parseCsv('account"oops,balance').rows).toThrow(
     "Malformed CSV: quote in an unquoted field"
   );
 });
 it("accepts separators and record endings after a closed quoted field", () => {
-  expect(parseCSV('"account","balance"\r\n"checking","42"')).toEqual([
+  expect(parseCsv('"account","balance"\r\n"checking","42"').rows).toEqual([
     ["account", "balance"],
     ["checking", "42"],
   ]);
+});
+
+it("preserves an empty quoted cell and strips a UTF-8 marker", () => {
+  expect(parseCsv('""').rows).toEqual([[""]]);
+  expect(parseCsv("\uFEFFname,value\na,b").rows).toEqual([
+    ["name", "value"],
+    ["a", "b"],
+  ]);
+});
+
+it("marks character-limited quoted input as truncated", () => {
+  expect(parseCsv('a,b\n"long value",c', { maxCharacters: 8 })).toEqual({
+    rows: [["a", "b"], ["lon"]],
+    truncated: true,
+  });
 });

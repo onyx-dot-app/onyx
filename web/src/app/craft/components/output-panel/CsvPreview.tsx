@@ -9,7 +9,7 @@ import {
   type FilePreviewScrollPosition,
 } from "@/app/craft/components/output-panel/FilePreviewScrollArea";
 
-import { parseCsv as parseCsvContent } from "@/lib/csv";
+import { parseCsv } from "@/lib/csv";
 
 const PREVIEW_LIMITS = {
   maxRows: 1000,
@@ -17,10 +17,6 @@ const PREVIEW_LIMITS = {
   maxCharacters: 2_000_000,
   maxCells: 5000,
 };
-
-export function parseCsv(content: string) {
-  return parseCsvContent(content, PREVIEW_LIMITS);
-}
 
 interface CsvPreviewProps extends FilePreviewScrollPosition {
   content: string;
@@ -35,7 +31,7 @@ export function CsvPreview({
   const t = useTranslations("craft.filePreview");
   const parsed = useMemo(() => {
     try {
-      return { result: parseCsv(content), error: false };
+      return { result: parseCsv(content, PREVIEW_LIMITS), error: false };
     } catch {
       return { result: { rows: [], truncated: false }, error: true };
     }
