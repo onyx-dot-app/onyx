@@ -443,7 +443,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     settings=index_settings,
                 )
             else:
-                legacy_encoder = self._unset_7_bit_confidence_interval_encoder()
+                legacy_encoder: dict[str, Any] | None = (
+                    self._unset_7_bit_confidence_interval_encoder()
+                )
                 if legacy_encoder is not None:
                     # OpenSearch cannot change an existing field's encoder, so
                     # keep this index's encoder until a reindex. The rest of the
