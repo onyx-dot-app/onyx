@@ -110,11 +110,14 @@ The configuration row for one embedding model generation. Selected by status:
   `status == IndexModelStatus.PRESENT`, the live model.
 - `get_secondary_search_settings`: the row with `status == IndexModelStatus.FUTURE`,
   a re-index in progress, or `None`.
-- `ActiveSearchSettings` / `get_active_search_settings`: bundles both.
+- `ActiveSearchSettings` / `get_active_search_settings`: bundles both. One statement
+  reads the two rows, and it refreshes rows that the session loaded before.
 
 `IndexModelStatus` (`db/enums.py`): `PAST`, `PRESENT`, `FUTURE`. Only one row is
 normally PRESENT and at most one is FUTURE at a time; `get_current_search_settings`
-raises if none is PRESENT.
+raises if none is PRESENT. The model declares unique partial indexes for this, but
+migrated databases do not have them: `776b3bbe9092` dropped the `status` column that
+they used.
 
 Fields that matter to this component: `model_name`, `model_dim`, `normalize`,
 `query_prefix`, `passage_prefix`, `api_key`, `provider_type`, `api_url`,
@@ -328,8 +331,7 @@ afterward. The other types wait on `_port_swap_ready` for the required cc-pairs.
 Without `use_port_flow`, INSTANT swaps at once and deletes the cc-pairs' document
 rows, REINDEX waits until every connector has a successful attempt on the new
 settings, and ACTIVE_ONLY waits only on non-paused connectors. `_perform_index_swap` does the actual promotion:
-`update_search_settings_status(current, PAST)`,
-`update_search_settings_status(new, PRESENT)`, then calls
+it sets the current row to PAST and the new row to PRESENT in one commit, then calls
 `verify_and_create_index_if_necessary` on the index from
 `get_default_document_index(new_search_settings, None)` before returning.
 
@@ -406,9 +408,12 @@ comment reads `# No longer used`. See §9.
    helpers can desynchronize `reclaim_stopped_reading_at` from the actual state.
 9. **`get_current_search_settings` returns the highest-id PRESENT row and raises
     only when none exists.** `swap_index.py:_perform_index_swap` commits the old
-    row as PAST before it commits the new row as PRESENT. The transition briefly
-    has no PRESENT row. Do not build code that assumes exactly one PRESENT row at
-    every instant.
+    row as PAST and the new row as PRESENT together, so a reader always finds a
+    PRESENT row. Two separate reads can still fall on each side of the swap
+    commit. When the PRESENT and FUTURE rows must agree, as for the port target
+    in `run_port_attempt`, read them with `get_active_search_settings`. No unique
+    index stops a second PRESENT row, so do not build code that assumes exactly
+    one.
 
 ---
 

@@ -1,9 +1,10 @@
-"""Workflow-level test for the INSTANT index swap.
+"""Workflow-level tests for the INSTANT index swap.
 
 When `check_and_perform_index_swap` runs against an `INSTANT` switchover, it
 calls `delete_all_documents_for_connector_credential_pair` for each cc_pair.
 This test exercises that full workflow end-to-end and asserts that the
 attached `Document.file_id`s are also reaped — not just the document rows.
+`TestSwapVisibility` checks what other sessions read while a swap commits.
 
 Mocks the document index (`get_default_document_index`) since this is testing
 the postgres + file_store side effects of the swap, not the document index
@@ -15,14 +16,22 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.context.search.models import SavedSearchSettings
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SwitchoverType
-from onyx.db.models import ConnectorCredentialPair, IndexModelStatus
-from onyx.db.search_settings import create_search_settings
-from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.db.models import ConnectorCredentialPair, IndexModelStatus, SearchSettings
+from onyx.db.port_orphan_candidate import port_target_settings_id
+from onyx.db.search_settings import (
+    create_search_settings,
+    get_active_search_settings,
+    get_current_search_settings,
+    get_search_settings_by_id,
+)
+from onyx.db.swap_index import _perform_index_swap, check_and_perform_index_swap
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -30,7 +39,9 @@ from tests.external_dependency_unit.indexing_helpers import (
     get_filerecord,
     make_cc_pair,
     make_doc,
+    make_instant_port_future,
     stage_file,
+    undo_index_swap,
 )
 
 # ---------------------------------------------------------------------------
@@ -184,3 +195,90 @@ class TestInstantIndexSwap:
         assert get_doc_row(db_session, doc_with.id) is None
         assert get_doc_row(db_session, doc_without.id) is None
         assert get_filerecord(db_session, file_id) is None
+
+
+@pytest.fixture
+def instant_port_future(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[tuple[int, SearchSettings], None, None]:
+    """The live PRESENT id and an INSTANT port-flow FUTURE. Teardown makes the
+    original row PRESENT again and deletes the FUTURE."""
+    present_id = get_current_search_settings(db_session).id
+    future = make_instant_port_future(db_session)
+    future_id = future.id
+    try:
+        yield present_id, future
+    finally:
+        undo_index_swap(db_session, present_id, future_id)
+        db_session.query(SearchSettings).filter(SearchSettings.id == future_id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
+
+
+class TestSwapVisibility:
+    """At each commit of a swap, other sessions see exactly one of the two swapped
+    rows as PRESENT, and after it one consistent PRESENT/FUTURE pair. A port
+    attempt that starts during an INSTANT swap reads these rows."""
+
+    def test_swap_never_commits_without_a_present_row(
+        self,
+        db_session: Session,
+        instant_port_future: tuple[int, SearchSettings],
+    ) -> None:
+        present_id, future = instant_port_future
+        present_rows_per_commit: list[int] = []
+
+        def _count_present_rows(_session: Session) -> None:
+            # Count only the two swapped rows: other tests can leave PRESENT rows.
+            with get_session_with_current_tenant() as reader:
+                present_rows_per_commit.append(
+                    reader.scalar(
+                        select(func.count())
+                        .select_from(SearchSettings)
+                        .where(
+                            SearchSettings.id.in_([present_id, future.id]),
+                            SearchSettings.status == IndexModelStatus.PRESENT,
+                        )
+                    )
+                    or 0
+                )
+
+        event.listen(db_session, "after_commit", _count_present_rows)
+        try:
+            with patch("onyx.db.swap_index.get_default_document_index"):
+                assert (
+                    _perform_index_swap(db_session, future, all_cc_pairs=[]) is not None
+                )
+        finally:
+            event.remove(db_session, "after_commit", _count_present_rows)
+
+        assert present_rows_per_commit
+        assert all(count == 1 for count in present_rows_per_commit)
+
+    def test_active_settings_refresh_a_row_loaded_before_the_swap(
+        self,
+        db_session: Session,
+        instant_port_future: tuple[int, SearchSettings],
+    ) -> None:
+        present_id, future = instant_port_future
+        with get_session_with_current_tenant() as port_session:
+            # A starting port attempt loads its FUTURE row, then the swap commits.
+            loaded = get_search_settings_by_id(port_session, future.id)
+            assert loaded is not None
+            assert loaded.status == IndexModelStatus.FUTURE
+
+            with patch("onyx.db.swap_index.get_default_document_index"):
+                assert (
+                    _perform_index_swap(db_session, future, all_cc_pairs=[]) is not None
+                )
+
+            active = get_active_search_settings(port_session)
+            assert active.primary.id == future.id
+            assert active.primary.port_backfill_source_id == present_id
+            assert active.secondary is None
+            # The attempt is still the port target, so it does not cancel itself.
+            assert (
+                port_target_settings_id(active.primary, active.secondary) == future.id
+            )

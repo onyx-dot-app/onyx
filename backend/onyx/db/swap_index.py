@@ -49,7 +49,6 @@ from onyx.db.port_attempt import (
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
-    update_search_settings_status,
 )
 from onyx.db.user_file import (
     PortedUserScope,
@@ -120,17 +119,13 @@ def _perform_index_swap(
     ):
         new_search_settings.port_backfill_source_id = current_search_settings.id
 
-    # swap over search settings
-    update_search_settings_status(
-        search_settings=current_search_settings,
-        new_status=IndexModelStatus.PAST,
-        db_session=db_session,
-    )
-    update_search_settings_status(
-        search_settings=new_search_settings,
-        new_status=IndexModelStatus.PRESENT,
-        db_session=db_session,
-    )
+    # Swap over search settings in one commit. Between two commits no row is
+    # PRESENT, and get_current_search_settings raises for every reader. Demote
+    # first, so that no statement makes a second PRESENT row.
+    current_search_settings.status = IndexModelStatus.PAST
+    db_session.flush()
+    new_search_settings.status = IndexModelStatus.PRESENT
+    db_session.commit()
 
     # FUTURE is now live: cancel stragglers that dropped out of the required set
     # (paused/INVALID) so they stop writing into the live index. Skip for INSTANT —

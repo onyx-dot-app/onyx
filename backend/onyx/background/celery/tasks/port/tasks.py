@@ -80,6 +80,7 @@ from onyx.db.port_orphan_candidate import (
     port_target_settings_id,
 )
 from onyx.db.search_settings import (
+    get_active_search_settings,
     get_current_search_settings,
     get_search_settings_by_id,
     get_secondary_search_settings,
@@ -289,9 +290,11 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         # enqueue can leave a fresh attempt that cancel_active_port_attempts never flagged.
         # Cancel through request_port_cancel, not outright — a second dispatch of an
         # attempt another worker owns must not ack for it.
+        # One snapshot gives the target and the source: an INSTANT swap can commit
+        # between separate reads, which cancels a live port or copies FUTURE into itself.
+        active_search_settings = get_active_search_settings(db_session)
         target_id = port_target_settings_id(
-            get_current_search_settings(db_session),
-            get_secondary_search_settings(db_session),
+            active_search_settings.primary, active_search_settings.secondary
         )
         if target_id != attempt.search_settings_id:
             request_port_cancel(db_session, port_attempt_id)
@@ -317,7 +320,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 )
                 return
         else:
-            present_search_settings = get_current_search_settings(db_session)
+            present_search_settings = active_search_settings.primary
 
         if not mark_port_in_progress(
             db_session, port_attempt_id, celery_task_id=celery_task_id

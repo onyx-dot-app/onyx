@@ -52,6 +52,7 @@ from onyx.db.document import (
     mark_document_as_synced,
     mark_document_synced_secondary_pending,
 )
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     IndexingStatus,
@@ -99,7 +100,7 @@ from onyx.db.port_orphan_candidate import (
     record_port_orphan_candidates,
 )
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
-from onyx.db.swap_index import _port_swap_ready
+from onyx.db.swap_index import _perform_index_swap, _port_swap_ready
 from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch import port_copy
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
@@ -111,6 +112,8 @@ from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair_and_future,
     make_cc_pair,
     make_future_search_settings,
+    make_instant_port_future,
+    undo_index_swap,
 )
 from tests.external_dependency_unit.indexing_helpers import (
     seed_cc_pair_documents as _seed_cc_pair_documents,
@@ -339,6 +342,23 @@ def cc_pair_and_port_future(
     try:
         yield pair, future_id
     finally:
+        cleanup_cc_pair_and_future(db_session, pair, future_id)
+
+
+@pytest.fixture
+def cc_pair_and_instant_future(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[tuple[ConnectorCredentialPair, int, int], None, None]:
+    """A cc_pair, the live PRESENT id, and an INSTANT port-flow FUTURE id. The test
+    can swap: teardown makes the original row PRESENT again."""
+    pair = make_cc_pair(db_session)
+    present_id = get_current_search_settings(db_session).id
+    future_id = make_instant_port_future(db_session).id
+    try:
+        yield pair, present_id, future_id
+    finally:
+        undo_index_swap(db_session, present_id, future_id)
         cleanup_cc_pair_and_future(db_session, pair, future_id)
 
 
@@ -950,6 +970,49 @@ def test_run_port_attempt_soft_time_limit_yields(
     row = db_session.get(PortAttempt, attempt_id)
     assert row is not None
     assert row.status == PortAttemptStatus.FAILED  # reschedulable; resumes from cursor
+
+
+def test_run_port_attempt_survives_instant_swap_at_startup(
+    db_session: Session,
+    cc_pair_and_instant_future: tuple[ConnectorCredentialPair, int, int],
+) -> None:
+    """The INSTANT swap commits after the attempt loads its FUTURE row and before
+    the target check. The attempt still targets the promoted row, and it copies
+    from the row that the swap made PAST."""
+    cc_pair, present_id, future_id = cc_pair_and_instant_future
+    _seed_cc_pair_documents(db_session, cc_pair, 2)
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+
+    load_settings = port_task.get_search_settings_by_id
+    swapped = False
+
+    def _load_then_swap(db: Session, search_settings_id: int) -> SearchSettings | None:
+        nonlocal swapped
+        row = load_settings(db, search_settings_id)
+        if not swapped:
+            swapped = True
+            with get_session_with_current_tenant() as swap_session:
+                promoted = swap_session.get(SearchSettings, future_id)
+                assert promoted is not None
+                with patch("onyx.db.swap_index.get_default_document_index"):
+                    _perform_index_swap(swap_session, promoted, all_cc_pairs=[])
+        return row
+
+    mock_copier = MagicMock()
+    mock_copier.copy_doc_batch.side_effect = lambda ids, **_: (len(ids), False)
+    with (
+        patch.object(port_task, "get_search_settings_by_id", _load_then_swap),
+        patch.object(port_task, "PortCopier", return_value=mock_copier) as copier_cls,
+    ):
+        run_port_attempt(attempt_id)
+
+    assert swapped
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.SUCCESS
+    present, future = copier_cls.call_args.args
+    assert (present.id, future.id) == (present_id, future_id)
 
 
 def test_check_for_port_creates_and_enqueues(

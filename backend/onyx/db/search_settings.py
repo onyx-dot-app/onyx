@@ -197,11 +197,29 @@ def active_secondary_port_target(db_session: Session) -> SearchSettings | None:
 
 
 def get_active_search_settings(db_session: Session) -> ActiveSearchSettings:
-    """Returns active search settings. Secondary search settings may be None."""
+    """Returns active search settings. Secondary search settings may be None.
 
-    # Get the primary and secondary search settings
-    primary_search_settings = get_current_search_settings(db_session)
-    secondary_search_settings = get_secondary_search_settings(db_session)
+    One statement reads both rows, so an index swap can not commit between two
+    reads and give a pair that never existed. populate_existing refreshes rows
+    that this session loaded before the swap."""
+    rows = db_session.scalars(
+        select(SearchSettings)
+        .where(
+            SearchSettings.status.in_(
+                [IndexModelStatus.PRESENT, IndexModelStatus.FUTURE]
+            )
+        )
+        .order_by(SearchSettings.id.desc())
+        .execution_options(populate_existing=True)
+    ).all()
+    primary_search_settings = next(
+        (row for row in rows if row.status == IndexModelStatus.PRESENT), None
+    )
+    if primary_search_settings is None:
+        raise RuntimeError("No search settings specified; DB is not in a valid state.")
+    secondary_search_settings = next(
+        (row for row in rows if row.status == IndexModelStatus.FUTURE), None
+    )
     return ActiveSearchSettings(
         primary=primary_search_settings, secondary=secondary_search_settings
     )

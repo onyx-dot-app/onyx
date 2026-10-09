@@ -41,7 +41,11 @@ from onyx.db.models import (
     SearchSettings,
 )
 from onyx.db.port_attempt import get_port_attempt
-from onyx.db.search_settings import create_search_settings, get_current_search_settings
+from onyx.db.search_settings import (
+    ActiveSearchSettings,
+    create_search_settings,
+    get_current_search_settings,
+)
 from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
@@ -252,12 +256,18 @@ def test_port_flow_end_to_end(
         attempt_id = celery_app.send_task.call_args.kwargs["kwargs"]["port_attempt_id"]
 
         # --- PORT: real PortCopier (re-embed via model server) ---
-        # get_current_search_settings is patched to our present-like row only
+        # The active settings are patched to our present-like row and FUTURE only
         # (the dev DB's live current row has no real model / index).
+        def _our_active_settings(db: Session) -> ActiveSearchSettings:
+            present_like_row = db.get(SearchSettings, present_like_id)
+            assert present_like_row is not None
+            return ActiveSearchSettings(
+                primary=present_like_row,
+                secondary=db.get(SearchSettings, future_id),
+            )
+
         with patch.object(
-            port_task,
-            "get_current_search_settings",
-            lambda db: db.get(SearchSettings, present_like_id),
+            port_task, "get_active_search_settings", _our_active_settings
         ):
             run_port_attempt(attempt_id)
 

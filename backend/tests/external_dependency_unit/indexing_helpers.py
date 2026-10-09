@@ -17,7 +17,12 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.models import Document, InputType, TextSection
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, IndexModelStatus
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    IndexModelStatus,
+    SwitchoverType,
+)
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import (
     Connector,
@@ -30,7 +35,11 @@ from onyx.db.models import (
     SearchSettings,
 )
 from onyx.db.models import Document as DBDocument
-from onyx.db.search_settings import create_search_settings, get_current_search_settings
+from onyx.db.search_settings import (
+    create_search_settings,
+    get_current_search_settings,
+    get_secondary_search_settings,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.kg.models import KGStage
 
@@ -234,6 +243,33 @@ def make_future_search_settings(
     return create_search_settings(
         saved, db_session, status=status, use_port_flow=use_port_flow
     )
+
+
+def make_instant_port_future(db_session: Session) -> SearchSettings:
+    """An INSTANT port-flow FUTURE that is the only FUTURE row, so that the global
+    active-settings reads see it. Older FUTURE rows, such as the bootstrap row of
+    a fresh database, go to PAST."""
+    while (stale := get_secondary_search_settings(db_session)) is not None:
+        stale.status = IndexModelStatus.PAST
+        db_session.commit()
+    future = make_future_search_settings(db_session, use_port_flow=True)
+    future.switchover_type = SwitchoverType.INSTANT
+    db_session.commit()
+    return future
+
+
+def undo_index_swap(db_session: Session, present_id: int, promoted_id: int) -> None:
+    """Make `present_id` PRESENT again after a test swap promoted `promoted_id`. The
+    promoted row goes to PAST first, so that no statement makes a second PRESENT
+    row. Safe when the swap did not run."""
+    db_session.rollback()
+    db_session.query(SearchSettings).filter(SearchSettings.id == promoted_id).update(
+        {SearchSettings.status: IndexModelStatus.PAST}, synchronize_session="fetch"
+    )
+    db_session.query(SearchSettings).filter(SearchSettings.id == present_id).update(
+        {SearchSettings.status: IndexModelStatus.PRESENT}, synchronize_session="fetch"
+    )
+    db_session.commit()
 
 
 def seed_cc_pair_documents(

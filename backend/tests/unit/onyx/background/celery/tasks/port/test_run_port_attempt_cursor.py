@@ -49,8 +49,7 @@ def _patched(copy_result: tuple[int, bool], attempt: MagicMock) -> Any:
         "get_search_settings_by_id": MagicMock(
             return_value=MagicMock(port_backfill_source_id=None)
         ),
-        "get_current_search_settings": MagicMock(return_value=MagicMock()),
-        "get_secondary_search_settings": MagicMock(return_value=None),
+        "get_active_search_settings": MagicMock(return_value=MagicMock()),
         # Startup target-validation guard: the attempt's settings is still the port target.
         "port_target_settings_id": MagicMock(return_value=attempt.search_settings_id),
         "mark_port_in_progress": MagicMock(return_value=True),
