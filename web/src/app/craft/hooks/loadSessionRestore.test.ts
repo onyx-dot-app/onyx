@@ -1150,6 +1150,42 @@ describe("loadSession completed transcript handoff", () => {
     }
   });
 
+  it("resumes completion polling after a delayed restoration", async () => {
+    jest.useFakeTimers();
+    try {
+      mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+      mockedApi.fetchActiveTurn.mockResolvedValue({
+        turn_id: "completed-turn",
+        turn_index: 0,
+      } as never);
+      mockedApi.fetchMessages.mockResolvedValue([user]);
+      mockedApi.fetchWebappInfo.mockResolvedValue(
+        webappInfo(true, true) as never
+      );
+      const restore =
+        deferred<Awaited<ReturnType<typeof api.restoreSession>>>();
+      mockedApi.restoreSession.mockReturnValueOnce(restore.promise);
+      const loading: Promise<void> = useBuildSessionStore
+        .getState()
+        .loadSession(SESSION_ID, { force: true });
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(mockedApi.restoreSession).toHaveBeenCalled();
+      restore.resolve(runningSession() as never);
+      await loading;
+      mockedApi.fetchActiveTurn.mockResolvedValue(null);
+      mockedApi.fetchMessages.mockResolvedValue([
+        { ...answer, id: "canonical-answer" },
+      ]);
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)
+          ?.pendingCompletedTurnId
+      ).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("does not replace a newer turn during completion polling", async () => {
     jest.useFakeTimers();
     try {

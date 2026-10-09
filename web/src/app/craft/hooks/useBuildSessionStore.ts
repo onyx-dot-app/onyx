@@ -1059,7 +1059,7 @@ function reconcileCompletedTranscript(
   sessionId: string,
   started: BuildSessionData
 ): void {
-  const requestKey: string = `${sessionId}:${started.instanceId}:${started.loadGeneration}`;
+  const requestKey: string = `${sessionId}:${started.instanceId}:${started.loadGeneration}:${started.turnGeneration}:${started.pendingCompletedTurnId}`;
   if (completedTranscriptReads.has(requestKey)) return;
   const ownsCompletion: () => boolean = () => {
     const current: BuildSessionData | undefined = useBuildSessionStore
@@ -1975,6 +1975,17 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       updateSessionData(sessionId, {
         error: (err as Error).message,
       });
+    } finally {
+      const completedSession: BuildSessionData | undefined =
+        get().sessions.get(sessionId);
+      if (
+        isCurrentRuntimeLoad() &&
+        completedSession?.pendingCompletedTurnId != null &&
+        completedSession.status !== "running" &&
+        completedSession.status !== "creating"
+      ) {
+        reconcileCompletedTranscript(sessionId, completedSession);
+      }
     }
   },
 
