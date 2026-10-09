@@ -12,11 +12,8 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
-from onyx.connectors.jira.source_operations import (
-    JiraApiError,
-    JiraIssueIdPage,
-    JiraSourceOperations,
-)
+from onyx.connectors.jira.models import JiraIssueIdPage
+from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
 
 _CLOUD_URL = "https://example.atlassian.net"
 _DC_URL = "https://jira.example.com"

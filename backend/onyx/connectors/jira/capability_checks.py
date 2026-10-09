@@ -36,11 +36,13 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.jira.config import JiraConnectorConfig
 from onyx.connectors.jira.connector import build_jql_query, jira_error_messages
+from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
     JiraSourceOperations,
     is_cloud_gateway,
 )
+from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/jira"
 _SITE_FIELDS = frozenset({"jira_base_url"})
@@ -59,7 +61,7 @@ _INDEXING_SCOPE = "read:jira-work"
 
 
 def _gateway(context: CapabilityCheckContext) -> JiraSourceOperations:
-    gateway = context.source_operations
+    gateway: SourceOperations | None = context.source_operations
     if not isinstance(gateway, JiraSourceOperations):
         raise TypeError(
             "Bug: The runner constructs the registered gateway for migrated sources."
@@ -99,7 +101,7 @@ def _access_hint(
 
 
 def _error_detail(error: JiraApiError) -> str:
-    messages = jira_error_messages(error.text)
+    messages: str | None = jira_error_messages(error.text)
     return (messages or error.text or str(error))[:_ERROR_DETAIL_CHARS]
 
 
@@ -112,8 +114,8 @@ def _raise_for_api_error(
 ) -> NoReturn:
     """Maps a Jira API error onto the validation-exception family. ``denied``
     explains a 403 (or a scoped token without the scope) for this probe."""
-    status = error.status_code
-    detail = _error_detail(error)
+    status: int | None = error.status_code
+    detail: str = _error_detail(error)
     if status == 401 and _SCOPE_MISMATCH_TEXT in (error.text or ""):
         raise InsufficientPermissionsError(
             f"{denied}. The scoped API token does not have the scope of this API "
@@ -166,7 +168,7 @@ class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
 
 
 def _is_cloud_site(config: JiraConnectorConfig) -> bool:
-    host = urlparse(config.jira_base_url).hostname or ""
+    host: str = urlparse(config.jira_base_url).hostname or ""
     return host.endswith(_CLOUD_HOST_SUFFIX)
 
 
@@ -210,7 +212,7 @@ class _SiteAuthCheck(_JiraCheck):
         return form_state.config.scoped_token == self._scoped
 
     def run(self, context: CapabilityCheckContext) -> None:
-        gateway = _gateway(context)
+        gateway: JiraSourceOperations = _gateway(context)
         try:
             gateway.get_myself()
             return
@@ -218,8 +220,8 @@ class _SiteAuthCheck(_JiraCheck):
             # Only the scoped token's tenant_info call raises a raw HTTPError.
             # tenant_info needs no auth: a 4xx means the URL is not a Cloud
             # site. 429 and 5xx fall through as INDETERMINATE.
-            response = e.response
-            config = self.config(context)
+            response: requests.Response | None = e.response
+            config: JiraConnectorConfig = self.config(context)
             if (
                 response is not None
                 and _TENANT_INFO_PATH in (response.url or "")
@@ -260,8 +262,8 @@ class _SiteAuthCheck(_JiraCheck):
         gateway: JiraSourceOperations,
         error: JiraApiError,
     ) -> NoReturn:
-        config = self.config(context)
-        is_cloud_credential = is_cloud_gateway(gateway)
+        config: JiraConnectorConfig = self.config(context)
+        is_cloud_credential: bool = is_cloud_gateway(gateway)
         if not is_cloud_credential and (self._scoped or _is_cloud_site(config)):
             raise ConnectorValidationError(
                 "Jira Cloud needs the email of the token's Atlassian account with "
@@ -301,9 +303,9 @@ class _ProjectsVisibleCheck(_JiraCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
-            projects = _gateway(context).list_projects()
+            projects: list[dict[str, Any]] = _gateway(context).list_projects()
         except JiraApiError as e:
-            config = self.config(context)
+            config: JiraConnectorConfig = self.config(context)
             _raise_for_api_error(
                 e,
                 denied="The credential cannot list Jira projects. "
@@ -314,7 +316,7 @@ class _ProjectsVisibleCheck(_JiraCheck):
                 ),
             )
         if not projects:
-            config = self.config(context)
+            config: JiraConnectorConfig = self.config(context)
             raise InsufficientPermissionsError(
                 "No Jira project is visible to this credential. "
                 + _access_hint(
@@ -330,7 +332,7 @@ def _matching_project_keys(
 ) -> list[str]:
     """Keys of visible projects whose key or name matches ``project_key``,
     ignoring case."""
-    wanted = project_key.casefold()
+    wanted: str = project_key.casefold()
     return sorted(
         str(project["key"])
         for project in projects
@@ -351,14 +353,14 @@ class _ConfiguredProjectCheck(_JiraCheck):
         )
 
     def applies(self, form_state: FormState[JiraConnectorConfig]) -> bool:
-        config = form_state.config
+        config: JiraConnectorConfig = form_state.config
         return bool(_project_key(config)) and not _jql(config)
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
-        raw_key = config.project_key or ""
-        project_key = raw_key.strip()
-        gateway = _gateway(context)
+        config: JiraConnectorConfig = self.config(context)
+        raw_key: str = config.project_key or ""
+        project_key: str = raw_key.strip()
+        gateway: JiraSourceOperations = _gateway(context)
         try:
             gateway.get_project(project_key=project_key)
         except JiraApiError as e:
@@ -379,10 +381,12 @@ class _ConfiguredProjectCheck(_JiraCheck):
         self, gateway: JiraSourceOperations, project_key: str, error: JiraApiError
     ) -> NoReturn:
         try:
-            matches = _matching_project_keys(gateway.list_projects(), project_key)
+            matches: list[str] = _matching_project_keys(
+                gateway.list_projects(), project_key
+            )
         except JiraApiError:
             matches = []
-        hint = (
+        hint: str = (
             f" Did you mean the key `{matches[0]}`?"
             if matches and matches[0] != project_key
             else ""
@@ -397,7 +401,7 @@ class _ConfiguredProjectCheck(_JiraCheck):
 def _validate_jql_shape(jql: str) -> None:
     """Rejects ORDER BY outside quoted values. The connector wraps the query in
     parentheses and adds a time filter, so ORDER BY makes it invalid."""
-    unquoted = _QUOTED_PATTERN.sub('""', jql)
+    unquoted: str = _QUOTED_PATTERN.sub('""', jql)
     if _ORDER_BY_PATTERN.search(unquoted):
         raise ConnectorValidationError(
             "Remove ORDER BY from the JQL query. Onyx wraps the query in "
@@ -410,12 +414,16 @@ def _search_one_issue(gateway: JiraSourceOperations, jql: str) -> dict[str, Any]
     """The first issue the query matches, with all fields, read through the
     API family the connector uses. Raises ``JiraApiError``."""
     if is_cloud_gateway(gateway):
-        page = gateway.search_issue_ids(jql=jql, max_results=1)
+        page: JiraIssueIdPage = gateway.search_issue_ids(jql=jql, max_results=1)
         if not page.issue_ids:
             return None
-        issues = gateway.bulk_fetch_issues(issue_ids=page.issue_ids[:1])
+        issues: list[dict[str, Any]] = gateway.bulk_fetch_issues(
+            issue_ids=page.issue_ids[:1]
+        )
         return issues[0] if issues else {}
-    issues = gateway.search_issues(jql=jql, start_at=0, max_results=1)
+    issues: list[dict[str, Any]] = gateway.search_issues(
+        jql=jql, start_at=0, max_results=1
+    )
     return issues[0] if issues else None
 
 
@@ -434,10 +442,12 @@ class _JqlQueryCheck(_JiraCheck):
         return bool(_jql(form_state.config))
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
+        config: JiraConnectorConfig = self.config(context)
         _validate_jql_shape(_jql(config))
         try:
-            issue = _search_one_issue(_gateway(context), _scope_jql(config))
+            issue: dict[str, Any] | None = _search_one_issue(
+                _gateway(context), _scope_jql(config)
+            )
         except JiraApiError as e:
             _raise_for_api_error(
                 e,
@@ -468,14 +478,16 @@ class _IssueReadCheck(_JiraCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
-        hint = _access_hint(
+        config: JiraConnectorConfig = self.config(context)
+        hint: str = _access_hint(
             config,
             scope=_INDEXING_SCOPE,
             user_permission="Browse Projects on the projects to index",
         )
         try:
-            issue = _search_one_issue(_gateway(context), _scope_jql(config))
+            issue: dict[str, Any] | None = _search_one_issue(
+                _gateway(context), _scope_jql(config)
+            )
         except JiraApiError as e:
             if e.status_code == 400:
                 # jira_jql_query / jira_configured_project report a bad scope.
@@ -492,7 +504,7 @@ class _IssueReadCheck(_JiraCheck):
                 "The indexing scope has no issue that this credential can read, "
                 f"so Onyx cannot verify that issues are readable. {hint}"
             )
-        fields = issue.get("fields")
+        fields: object = issue.get("fields")
         if not isinstance(fields, dict) or "summary" not in fields:
             raise InsufficientPermissionsError(
                 "Jira found an issue but did not return its fields, so issues "
