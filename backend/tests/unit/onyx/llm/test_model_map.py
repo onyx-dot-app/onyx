@@ -26,7 +26,7 @@ def test_partial_match_in_model_map() -> None:
     """
     We should handle adding/not adding the provider prefix to the model name.
     """
-    model_map = _fresh_model_map()
+    model_map: dict[str, Any] = _fresh_model_map()
     try:
         _EXPECTED_FIELDS = {
             "max_input_tokens": 128000,
@@ -86,7 +86,7 @@ def test_bare_key_prefers_canonical_owner() -> None:
     }
 
     with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
-        model_map = _fresh_model_map()
+        model_map: dict[str, Any] = _fresh_model_map()
         try:
             bare = find_model_obj(model_map, "custom_provider", "gpt-4o")
             assert bare is not None
@@ -156,7 +156,7 @@ def test_unbounded_entry_drops_max_output_tokens() -> None:
     }
 
     with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
-        model_map = _fresh_model_map()
+        model_map: dict[str, Any] = _fresh_model_map()
         try:
             router = find_model_obj(
                 model_map, LlmProviderNames.OPENROUTER, "openrouter/auto"
@@ -201,7 +201,7 @@ def test_inflated_output_claim_drops_max_output_tokens() -> None:
     }
 
     with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
-        model_map = _fresh_model_map()
+        model_map: dict[str, Any] = _fresh_model_map()
         try:
             fabricated = find_model_obj(model_map, "wandb", "vendor/fabricated")
             assert fabricated is not None
@@ -235,7 +235,7 @@ def test_chat_only_skips_non_chat_entries() -> None:
     }
 
     with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
-        model_map = _fresh_model_map()
+        model_map: dict[str, Any] = _fresh_model_map()
         try:
             # Unfiltered lookup still resolves (cost/existence checks need it).
             assert find_model_obj(model_map, "custom", "gpt-image-1") is not None
@@ -263,7 +263,7 @@ def test_chat_only_accepts_responses_mode_entries() -> None:
     }
 
     with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
-        model_map = _fresh_model_map()
+        model_map: dict[str, Any] = _fresh_model_map()
         try:
             obj = find_model_obj(model_map, "openai", "gpt-5-pro", chat_only=True)
             assert obj is not None
@@ -273,8 +273,200 @@ def test_chat_only_accepts_responses_mode_entries() -> None:
             _reset_caches()
 
 
+def _remote_response(section: dict[str, Any]) -> Any:
+    class _Resp:
+        status_code = 200
+
+        def json(self) -> dict[str, Any]:
+            return section
+
+    return _Resp()
+
+
+def test_remote_catalog_resolves_missing_models() -> None:
+    """Models absent from the vendored table resolve from the provider's
+    remote price_table: compat conversion applies, hits stamp into the map,
+    and the provider file is fetched at most once."""
+    remote_section: dict[str, Any] = {
+        "models": {
+            "vendor/new-model": {
+                "mode": "chat",
+                "limit": {"context": 1_000_000, "output": 64_000},
+                "cost": {"input": 1.0, "output": 2.0},
+            },
+        },
+        "aliases": {"vendor/new-alias": "vendor/new-model"},
+    }
+    calls: list[str] = []
+
+    def fake_get(provider: str) -> Any:
+        calls.append(provider)
+        return _remote_response(remote_section)
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value={}),
+        patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map: dict[str, Any] = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "wandb", "vendor/new-model")
+            assert obj is not None
+            assert obj["max_output_tokens"] == 64_000
+            assert obj["litellm_provider"] == "wandb"
+
+            # Second hit serves from the stamped map — no refetch.
+            assert find_model_obj(model_map, "wandb", "vendor/new-model") is not None
+            # Alias resolves against the same remote section.
+            assert find_model_obj(model_map, "wandb", "vendor/new-alias") is not None
+            assert len(calls) == 1
+
+            # Cost lookups go through find_model_entry -> same remote file.
+            assert model_catalog.find_model_cost("wandb", "vendor/new-model") == {
+                "input": 1.0,
+                "output": 2.0,
+            }
+            assert len(calls) == 1
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
+def test_remote_catalog_overrides_vendored() -> None:
+    """Remote wins for entries it defines; vendored-only entries still
+    resolve (the vendored file is the floor, not the primary)."""
+    vendored: dict[str, Any] = {
+        "wandb": {
+            "models": {
+                "vendor/m": {
+                    "mode": "chat",
+                    "limit": {"context": 100, "output": 50},
+                    "cost": {"input": 1.0, "output": 1.0},
+                },
+                "vendor/old": {
+                    "mode": "chat",
+                    "limit": {"context": 10, "output": 5},
+                    "cost": {"input": 0.5, "output": 0.5},
+                },
+            },
+            "aliases": {},
+        }
+    }
+    remote_section: dict[str, Any] = {
+        "models": {
+            "vendor/m": {
+                "mode": "chat",
+                "limit": {"context": 200, "output": 80},
+                "cost": {"input": 5.0, "output": 5.0},
+            },
+        },
+        "aliases": {},
+    }
+
+    def fake_get(_provider: str) -> Any:
+        return _remote_response(remote_section)
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value=vendored),
+        patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map: dict[str, Any] = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "wandb", "vendor/m")
+            assert obj is not None
+            assert obj["max_tokens"] == 200
+            assert model_catalog.find_model_cost("wandb", "vendor/m") == {
+                "input": 5.0,
+                "output": 5.0,
+            }
+
+            # Absent from remote but vendored — still resolves.
+            assert find_model_obj(model_map, "wandb", "vendor/old") is not None
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
+def test_remote_catalog_fails_closed() -> None:
+    """Fetch failures degrade to the normal miss and are negative-cached."""
+    calls: list[str] = []
+
+    def failing_get(provider: str) -> Any:
+        calls.append(provider)
+        raise model_catalog.httpx.ConnectError("offline")
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value={}),
+        patch.object(model_catalog, "_fetch_provider_file", side_effect=failing_get),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map: dict[str, Any] = _fresh_model_map()
+        try:
+            assert find_model_obj(model_map, "wandb", "vendor/x") is None
+            assert find_model_obj(model_map, "wandb", "vendor/y") is None
+            assert len(calls) == 1
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
+def test_remote_catalog_respects_airgap() -> None:
+    """ONYX_AIRGAPPED deployments never consult the remote catalog."""
+    with (
+        patch.object(model_catalog, "_catalog", return_value={}),
+        patch.object(model_catalog, "ONYX_AIRGAPPED", True),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            side_effect=AssertionError("must not fetch when air-gapped"),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map: dict[str, Any] = _fresh_model_map()
+        try:
+            assert find_model_obj(model_map, "wandb", "vendor/x") is None
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
+def test_remote_catalog_respects_chat_only() -> None:
+    """A remote non-chat entry resolves unfiltered but not under chat_only."""
+    remote_section: dict[str, Any] = {
+        "models": {
+            "vendor/new-image": {
+                "mode": "image",
+                "limit": {"context": 0, "output": 0},
+            },
+        },
+        "aliases": {},
+    }
+    calls: list[str] = []
+
+    def fake_get(provider: str) -> Any:
+        calls.append(provider)
+        return _remote_response(remote_section)
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value={}),
+        patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map: dict[str, Any] = _fresh_model_map()
+        try:
+            assert find_model_obj(model_map, "wandb", "vendor/new-image") is not None
+            assert (
+                find_model_obj(model_map, "wandb", "vendor/new-image", chat_only=True)
+                is None
+            )
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
 def test_twelvelabs_pegasus_override_present() -> None:
-    model_map = _fresh_model_map()
+    model_map: dict[str, Any] = _fresh_model_map()
     try:
         model_obj = find_model_obj(
             model_map,
@@ -310,14 +502,25 @@ def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
         },
     }
 
-    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
-        model_map = _fresh_model_map()
+    with (
+        patch.object(model_catalog, "_catalog", return_value=mock_catalog),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            side_effect=model_catalog.httpx.ConnectError("offline"),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map: dict[str, Any] = _fresh_model_map()
         try:
-            for name, want_mode in {
+            mode_expectations: dict[str, str] = {
                 "cohere/embed-v5.0-fast": "embedding",
                 "cohere/rerank-v4-pro": "rerank",
-            }.items():
-                obj = find_model_obj(model_map, "vercel_ai_gateway", name)
+            }
+            for name, want_mode in mode_expectations.items():
+                obj: dict[str, Any] | None = find_model_obj(
+                    model_map, "vercel_ai_gateway", name
+                )
                 assert obj is not None
                 assert obj["mode"] == want_mode
                 assert (
@@ -332,12 +535,15 @@ def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
                     "vercel_ai_gateway", mode=want_mode
                 )
 
-            chat = find_model_obj(model_map, "vercel_ai_gateway", "cohere/command-a")
+            chat: dict[str, Any] | None = find_model_obj(
+                model_map, "vercel_ai_gateway", "cohere/command-a"
+            )
             assert chat is not None
             assert chat["mode"] == "chat"
             assert model_catalog.is_embedding_model_name("cohere/command-a") is False
         finally:
             _reset_caches()
+            model_catalog.reset_remote_cache()
 
 
 def test_explicit_mode_wins_over_name_heuristic() -> None:
@@ -355,11 +561,70 @@ def test_explicit_mode_wins_over_name_heuristic() -> None:
         },
     }
 
-    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
-        model_map = _fresh_model_map()
+    with (
+        patch.object(model_catalog, "_catalog", return_value=mock_catalog),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            side_effect=model_catalog.httpx.ConnectError("offline"),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map: dict[str, Any] = _fresh_model_map()
         try:
-            obj = find_model_obj(model_map, "wandb", "vendor/embed-named-chat")
+            obj: dict[str, Any] | None = find_model_obj(
+                model_map, "wandb", "vendor/embed-named-chat"
+            )
             assert obj is not None
             assert obj["mode"] == "chat"
         finally:
             _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
+def test_remote_catalog_malformed_entry_falls_back_to_vendored() -> None:
+    """A remote entry _compat_entry can't render is a remote miss, not an
+    error — the vendored floor still resolves the lookup."""
+    vendored: dict[str, Any] = {
+        "wandb": {
+            "models": {
+                "vendor/model": {
+                    "mode": "chat",
+                    "limit": {"context": 8_000},
+                    "cost": {"input": 1.5, "output": 3.0},
+                },
+            },
+            "aliases": {},
+        }
+    }
+    remote_section: dict[str, Any] = {
+        "models": {"vendor/model": "not-an-entry"},
+        "aliases": {},
+    }
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value=vendored),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            return_value=_remote_response(remote_section),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map: dict[str, Any] = _fresh_model_map()
+        try:
+            obj: dict[str, Any] | None = find_model_obj(
+                model_map, "wandb", "vendor/model"
+            )
+            assert obj is not None
+            assert obj["litellm_provider"] == "wandb"
+            assert obj["max_tokens"] == 8_000
+            # Cost/limit lookups also fall back to the vendored entry rather
+            # than returning the malformed remote payload.
+            cost: dict[str, Any] | None = model_catalog.find_model_cost(
+                "wandb", "vendor/model"
+            )
+            assert cost == {"input": 1.5, "output": 3.0}
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()

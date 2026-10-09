@@ -14,11 +14,17 @@ models), and OpenRouter (gap-fill pricing for its section).
 
 import json
 import re
+import threading
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import ThreadSafeDict
+from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS, ONYX_AIRGAPPED
 
 logger = setup_logger()
 
@@ -195,15 +201,131 @@ def iter_models(provider: str, mode: str | None = None) -> list[str]:
     )
 
 
-def _lookup_provider(provider: str, model_name: str) -> dict[str, Any] | None:
+def _vendored_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
+    """A model's vendored catalog entry for the provider (direct or alias)."""
     section = _catalog().get(provider)
     if not section:
         return None
+    return _model_in_section(section, model_name)
+
+
+def _model_in_section(
+    section: dict[str, Any], model_name: str
+) -> dict[str, Any] | None:
+    """A model's raw catalog entry inside one provider's section."""
     entry = section["models"].get(model_name)
     if entry is not None:
         return entry
     target = section["aliases"].get(model_name)
     return section["models"].get(target) if target else None
+
+
+# Providers whose inference runs on customer-owned hardware — there is no
+# per-token API bill, so catalog pricing (and the cross-provider fallback scan,
+# which could match identically-named hosted models) must not apply. Admins
+# can still assign a rate via ModelCostOverride.
+_LOCAL_PROVIDERS = frozenset({"ollama_chat", "lm_studio"})
+
+
+# ---------------------------------------------------------------------------
+# Remote catalog (preferred)
+#
+# Lookups prefer the provider's price_table file on main over the vendored
+# copy — a deployment's vendored table is frozen at release time and main's
+# sync keeps pace with new models and corrected specs. The vendored file is
+# the offline floor: unreachable/failed fetches (and ONYX_AIRGAPPED, which
+# never fetches) resolve against it, and entries remote lacks still resolve
+# vendored. Provider-scoped only — remote never bare-scans, so a file is
+# fetched at most once per provider per TTL window.
+# ---------------------------------------------------------------------------
+
+_REMOTE_CATALOG_URL = (
+    "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/"
+    "backend/onyx/llm/price_table"
+)
+_REMOTE_FETCH_TIMEOUT_SECONDS = 5.0
+# provider -> (fetched_at epoch, section or None). None negative-caches
+# failures so repeated misses don't refetch every lookup.
+_remote_sections: ThreadSafeDict[str, tuple[float, dict[str, Any] | None]] = (
+    ThreadSafeDict()
+)
+# One lock per provider: workers missing the same provider share one
+# download per cache window without serializing unrelated providers
+# behind each other's timeouts.
+_remote_locks: ThreadSafeDict[str, threading.Lock] = ThreadSafeDict()
+
+
+def _fetch_provider_file(provider: str) -> httpx.Response:
+    """One HTTP call for the provider's remote file. Tests patch this seam
+    instead of ``httpx.get`` so unrelated httpx users stay untouched."""
+    return httpx.get(
+        f"{_REMOTE_CATALOG_URL}/{provider}.json",
+        timeout=_REMOTE_FETCH_TIMEOUT_SECONDS,
+        follow_redirects=True,
+    )
+
+
+def _remote_section(provider: str) -> dict[str, Any] | None:
+    """The provider's price_table file from main, TTL + negative cached."""
+    if ONYX_AIRGAPPED or provider in _LOCAL_PROVIDERS:
+        return None
+    now: float = time.time()
+    cached: tuple[float, dict[str, Any] | None] | None = _remote_sections.get(provider)
+    if cached is not None and now - cached[0] < AUTO_LLM_UPDATE_INTERVAL_SECONDS:
+        return cached[1]
+    provider_lock: threading.Lock = _remote_locks.setdefault(provider, threading.Lock())
+    with provider_lock:
+        # Another worker may have fetched while we waited on the lock.
+        cached = _remote_sections.get(provider)
+        if cached is not None and now - cached[0] < AUTO_LLM_UPDATE_INTERVAL_SECONDS:
+            return cached[1]
+        section: dict[str, Any] | None = None
+        try:
+            response: httpx.Response = _fetch_provider_file(provider)
+            if response.status_code == 200:
+                # Reject malformed payloads instead of caching shapes that
+                # would raise inside _model_in_section / _compat_entry.
+                data: dict[str, Any] = response.json()
+                models: Any = data.get("models")
+                if isinstance(data, dict) and isinstance(models, dict):
+                    aliases: Any = data.get("aliases")
+                    section = {
+                        "models": models,
+                        "aliases": aliases if isinstance(aliases, dict) else {},
+                    }
+        except Exception as e:
+            logger.warning("Remote catalog fetch failed for %s: %s", provider, e)
+        _remote_sections[provider] = (now, section)
+        return section
+
+
+def find_remote_model_obj(
+    provider: str, candidates: list[str]
+) -> dict[str, Any] | None:
+    """Remote entry rendered in the compat model-map shape."""
+    section = _remote_section(provider)
+    if section is None:
+        return None
+    for candidate in candidates:
+        entry = _model_in_section(section, candidate)
+        if entry is None:
+            continue
+        try:
+            return _compat_entry(provider, entry, candidate)
+        except Exception as e:
+            # A malformed remote entry is a remote miss, not an error — the
+            # vendored floor still resolves the lookup.
+            logger.warning(
+                "Malformed remote catalog entry %s/%s: %s", provider, candidate, e
+            )
+            return None
+    return None
+
+
+def reset_remote_cache() -> None:
+    """Testing hook: forget fetched sections."""
+    _remote_sections.clear()
+    _remote_locks.clear()
 
 
 def _strip_colon_tag(model_name: str) -> str:
@@ -213,9 +335,12 @@ def _strip_colon_tag(model_name: str) -> str:
 def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
     """Resolve a catalog entry for (provider, model_name).
 
-    Tries provider-scoped direct hits and aliases first, with the same name
-    normalization find_model_obj used (extra provider prefix strip, Ollama
-    ``:tag`` strip), then a bare-name scan across providers.
+    The provider's remote section wins when fetchable (fresher than the
+    release-frozen vendored file), then vendored provider-scoped hits and
+    aliases — with the same name normalization find_model_obj used (extra
+    provider prefix strip, Ollama ``:tag`` strip) — then a bare-name scan
+    across vendored providers. Remote is provider-scoped only; a remote
+    bare-scan would fetch a file per provider per miss.
     """
     candidates = [model_name]
     if "/" in model_name:
@@ -224,26 +349,37 @@ def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
         _strip_colon_tag(c) for c in list(candidates) if ":" in c.split("/")[-1]
     )
 
-    for candidate in candidates:
-        entry = _lookup_provider(provider, candidate)
-        if entry is not None:
+    remote = _remote_section(provider)
+    if remote is not None:
+        for candidate in candidates:
+            entry = _model_in_section(remote, candidate)
+            if entry is None:
+                continue
+            if not isinstance(entry, dict):
+                # A malformed remote entry is a remote miss — resolve against
+                # the vendored floor rather than return corrupt data to
+                # cost/limit lookups.
+                logger.warning(
+                    "Malformed remote catalog entry %s/%s", provider, candidate
+                )
+                break
             return entry
+
+    section = _catalog().get(provider)
+    if section is not None:
+        for candidate in candidates:
+            entry = _model_in_section(section, candidate)
+            if entry is not None:
+                return entry
 
     for other in provider_names():
         if other == provider:
             continue
         for candidate in candidates:
-            entry = _lookup_provider(other, candidate)
+            entry = _vendored_model_entry(other, candidate)
             if entry is not None:
                 return entry
     return None
-
-
-# Providers whose inference runs on customer-owned hardware — there is no
-# per-token API bill, so catalog pricing (and the cross-provider fallback scan,
-# which could match identically-named hosted models) must not apply. Admins
-# can still assign a rate via ModelCostOverride.
-_LOCAL_PROVIDERS = frozenset({"ollama_chat", "lm_studio"})
 
 
 def find_model_cost(provider: str, model_name: str) -> dict[str, Any] | None:
