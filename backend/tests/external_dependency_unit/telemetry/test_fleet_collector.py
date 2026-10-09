@@ -169,13 +169,14 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
 def test_sync_canceled_by_a_new_run_is_read_as_canceled(schema: str) -> None:
     with get_session_with_tenant(tenant_id=schema) as db_session:
         # Text SQL is not schema-translated, so it names the schema.
-        db_session.execute(
+        stale_id: int = db_session.execute(
             text(
                 f'INSERT INTO "{schema}".sync_record '
-                "(id, entity_id, sync_type, sync_status, num_docs_synced, sync_start_time) "
-                "VALUES (1, 7, 'DOCUMENT_SET', 'IN_PROGRESS', 0, now() - interval '3 days')"
+                "(entity_id, sync_type, sync_status, num_docs_synced, sync_start_time) "
+                "VALUES (7, 'DOCUMENT_SET', 'IN_PROGRESS', 0, now() - interval '3 days') "
+                "RETURNING id"
             )
-        )
+        ).scalar_one()
         db_session.commit()
         insert_sync_record(db_session, 7, SyncType.DOCUMENT_SET)
         jobs: list[dict[str, Any]] = job_rows(
@@ -184,7 +185,7 @@ def test_sync_canceled_by_a_new_run_is_read_as_canceled(schema: str) -> None:
     syncs: dict[str, str] = {
         row["job_id"]: row["state"] for row in jobs if row["job_id"].startswith("sync:")
     }
-    assert syncs.pop("sync:1") == "canceled"
+    assert syncs.pop(f"sync:{stale_id}") == "canceled"
     assert list(syncs.values()) == ["in_progress"]
 
 
