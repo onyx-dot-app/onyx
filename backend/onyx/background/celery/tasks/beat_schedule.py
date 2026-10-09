@@ -153,6 +153,20 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        # Runs monthly (x8 in cloud, with the beat multiplier) because it rarely
+        # has work. It selects by age, so the cadence does not decide what is stale.
+        "name": "cleanup-stale-draft-credentials",
+        "task": OnyxCeleryTask.CLEANUP_STALE_DRAFT_CREDENTIALS,
+        "schedule": timedelta(days=30),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-stale-capability-runs",
         "task": OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
         "schedule": timedelta(minutes=10),

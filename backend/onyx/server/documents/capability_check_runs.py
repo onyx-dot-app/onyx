@@ -29,10 +29,13 @@ from onyx.connectors.capability_checks.draft_runs import (
     StoredDraftRun,
     apply_cached_result,
     cc_pair_draft_key,
+    clear_latest_draft_run,
     decide_draft_check_state,
     draft_result_cache_key,
     draft_run_start_lock,
     get_cached_draft_result,
+    is_superseded,
+    load_draft_run,
     save_draft_run,
     set_latest_draft_run,
 )
@@ -419,3 +422,27 @@ def start_cc_pair_draft_check_run(
             input_type=connector.input_type,
         ),
     )
+
+
+def cancel_draft_capability_check_run(*, run_id: UUID, user_id: UUID) -> bool:
+    """Stops a draft run the user started: it reads as SUPERSEDED, and its task
+    stops before its next check. A check already running still finishes.
+
+    Returns False when the run expired or another user started it. A run a
+    newer run already replaced is left alone, so the newer one keeps going.
+    """
+    run = load_draft_run(run_id)
+    if run is None or run.user_id != user_id:
+        return False
+    start_lock = draft_run_start_lock(user_id, run.snapshot.draft_key)
+    if not start_lock.acquire(blocking_timeout=_DRAFT_START_LOCK_WAIT_SECONDS):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "A check run for this form is starting; try again shortly.",
+        )
+    try:
+        if not is_superseded(run):
+            clear_latest_draft_run(run)
+    finally:
+        start_lock.release()
+    return True

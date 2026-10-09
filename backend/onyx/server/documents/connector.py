@@ -32,6 +32,7 @@ from onyx.auth.permissions import (
 )
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.users import current_chat_accessible_user
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import (
@@ -99,6 +100,8 @@ from onyx.db.credentials import (
     create_credential,
     discard_credential_if_unpaired,
     fetch_credential_by_id_for_user,
+    promote_draft_credential,
+    restore_draft_credential,
 )
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_all_cc_pairs
@@ -149,6 +152,9 @@ from onyx.file_store.file_store import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.cc_pair import authorize_pairing
+from onyx.server.documents.credential import assert_credential_share_within_scope
+from onyx.server.documents.draft_credentials import resolve_form_credential
 from onyx.server.documents.models import (
     AuthStatus,
     AuthUrl,
@@ -163,7 +169,9 @@ from onyx.server.documents.models import (
     ConnectorSnapshot,
     ConnectorStatus,
     ConnectorUpdateRequest,
+    ConnectorWithCredentialCreateRequest,
     CredentialBase,
+    CredentialSharing,
     CredentialSnapshot,
     DocsCountOperator,
     FailedConnectorIndexingStatus,
@@ -1741,11 +1749,172 @@ def create_connector_with_mock_credential(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
 
+@router.post("/admin/connector-with-credential")
+def create_connector_with_credential(
+    request: ConnectorWithCredentialCreateRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse[int]:
+    """Creates a connector and pairs it with a credential: a saved one, or the
+    user's draft (see onyx/server/documents/draft_credentials.py), which is
+    promoted to a saved credential with ``credential_sharing``. A failure
+    leaves no connector behind, and a draft stays a draft for the retry."""
+    tenant_id = get_current_tenant_id()
+    connector_data = request.connector
+    manage_access = authorize_pairing(request.pairing, user, db_session)
+    validate_pairing_access(
+        db_session,
+        user=user,
+        source=connector_data.source,
+        access_type=request.pairing.access_type,
+        data_access_group_ids=request.pairing.data_access,
+    )
+
+    # GATE 2 on the credential: validation builds and probes the connector.
+    credential = resolve_form_credential(
+        credential_id=request.credential_id,
+        credential_json=request.credential_json,
+        source=connector_data.source,
+        user=user,
+        db_session=db_session,
+    )
+    credential_id = credential.id
+    is_draft = credential.is_draft
+    sharing = request.credential_sharing or CredentialSharing()
+    if is_draft:
+        assert_credential_share_within_scope(
+            CredentialBase(
+                credential_json={},
+                source=credential.source,
+                admin_public=sharing.admin_public,
+                curator_public=sharing.curator_public,
+                groups=sharing.groups,
+                name=sharing.name,
+            ),
+            user,
+            db_session,
+        )
+    elif request.credential_sharing is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "credential_sharing applies only to a new account.",
+        )
+
+    connector_id: int | None = None
+    # Only a draft promoted here is restored on failure.
+    promoted_draft_id: int | None = None
+    try:
+        _validate_connector_request(connector_data)
+        connector_id = create_connector(
+            db_session=db_session,
+            connector_data=connector_data.to_connector_base(),
+        ).id
+        if is_draft:
+            # Committed before validation, which reads it on its own sessions,
+            # and before pairing, which only sees saved credentials.
+            promote_draft_credential(
+                credential,
+                admin_public=sharing.admin_public,
+                curator_public=sharing.curator_public,
+                groups=sharing.groups,
+                name=sharing.name,
+                db_session=db_session,
+            )
+            promoted_draft_id = credential_id
+
+        validate_ccpair_for_user(
+            connector_id,
+            credential_id,
+            request.pairing.access_type,
+            db_session,
+        )
+        response = add_credential_to_connector(
+            db_session=db_session,
+            user=user,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            cc_pair_name=request.pairing.name,
+            access_type=request.pairing.access_type,
+            auto_sync_options=request.pairing.auto_sync_options,
+            manage_access=manage_access,
+            data_access_group_ids=request.pairing.data_access,
+            processing_mode=request.pairing.processing_mode,
+        )
+        if not response.success:
+            raise OnyxError(OnyxErrorCode.CONFLICT, response.message)
+    except ValidationError as e:
+        # The base class: a transient source failure raises the unexpected
+        # variant, and it must free the name the same way.
+        _discard_unpaired_creation(
+            db_session, connector_id, None, promoted_draft_id=promoted_draft_id
+        )
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
+            "Connector validation error: " + str(e),
+        )
+    except ValueError as e:
+        _discard_unpaired_creation(
+            db_session, connector_id, None, promoted_draft_id=promoted_draft_id
+        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+    except Exception:
+        _discard_unpaired_creation(
+            db_session, connector_id, None, promoted_draft_id=promoted_draft_id
+        )
+        raise
+
+    maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
+    client_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_INDEXING,
+        priority=OnyxCeleryPriority.HIGH,
+        kwargs={"tenant_id": tenant_id},
+        expires=BEAT_EXPIRES_DEFAULT,
+    )
+    mt_cloud_telemetry(
+        tenant_id=tenant_id,
+        distinct_id=str(user.id),
+        event=MilestoneRecordType.CREATED_CONNECTOR,
+    )
+    actor = actor_from_user(user)
+    emit_audit_event(
+        AuditAction.CONNECTOR_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=actor,
+        resource_type="connector",
+        resource_id=connector_id,
+        extra={"source": connector_data.source.value},
+    )
+    if promoted_draft_id is not None:
+        emit_audit_event(
+            AuditAction.CREDENTIAL_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor,
+            resource_type="credential",
+            resource_id=promoted_draft_id,
+            extra={"source": connector_data.source.value},
+        )
+    emit_audit_event(
+        AuditAction.CC_PAIR_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=actor,
+        resource_type="cc_pair",
+        resource_id=response.data,
+        extra={"connector_id": connector_id, "credential_id": credential_id},
+    )
+    return response
+
+
 def _discard_unpaired_creation(
-    db_session: Session, connector_id: int | None, credential_id: int | None
+    db_session: Session,
+    connector_id: int | None,
+    credential_id: int | None,
+    promoted_draft_id: int | None = None,
 ) -> None:
     """Both rows are committed before validation runs, so a failed creation has
-    to remove them or the name stays taken for the retry."""
+    to remove them or the name stays taken for the retry. A promoted draft
+    becomes a draft again instead, for the retry."""
     db_session.rollback()
     if connector_id is not None:
         # False when paired by another request meanwhile, which keeps the
@@ -1756,6 +1925,8 @@ def _discard_unpaired_creation(
         # An empty mock credential nobody can see. The name is what matters, so a
         # refused or failed delete is only logged.
         discard_credential_if_unpaired(db_session, credential_id)
+    if promoted_draft_id is not None:
+        restore_draft_credential(db_session, promoted_draft_id)
 
 
 def _assert_can_edit_connector(

@@ -2073,6 +2073,12 @@ class Credential(Base):
     )
 
     curator_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    # A new account in a connector form, not yet saved with a connector. Only
+    # its owner sees it; creating the connector clears the flag, and a
+    # periodic task deletes drafts that were left behind.
+    is_draft: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
 
     connectors: Mapped[list["ConnectorCredentialPair"]] = relationship(
         "ConnectorCredentialPair",
@@ -2088,6 +2094,14 @@ class Credential(Base):
     )
 
     user: Mapped[User | None] = relationship("User", back_populates="credentials")
+
+    __table_args__ = (
+        Index(
+            "ix_credential_draft_time_updated",
+            "time_updated",
+            postgresql_where=text("is_draft"),
+        ),
+    )
 
 
 class CredentialCapabilityReportRow(Base):
