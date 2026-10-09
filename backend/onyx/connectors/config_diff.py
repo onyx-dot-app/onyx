@@ -1,5 +1,6 @@
 """Classifies a connector config edit field by field, using the field policies
-declared on the typed config models (see ``field_policy``)."""
+declared on the typed config models (see ``field_policy``) and the source's
+planning rule, if it has one (see ``planning_rule``)."""
 
 from typing import Any
 
@@ -15,9 +16,12 @@ from onyx.connectors.field_policy import (
     ScopeExclude,
     ScopeInclude,
     ScopeOpaque,
+    ScopeOrdered,
     ScopeToggle,
     get_field_policy,
 )
+from onyx.connectors.planning_rule import ConnectorChangeOverride, PlanningRule
+from onyx.connectors.planning_rule_registry import PLANNING_RULES
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.utils.logger import setup_logger
 
@@ -47,18 +51,19 @@ class _ScopeChange(BaseModel):
     removed_items: list[str] = []
 
 
-def _to_items(value: Any) -> list[str] | None:
-    """Normalizes a list, None, or comma-separated string into unique items,
-    in order. None for any other type.
+def _to_items(value: Any, split_on_commas: bool) -> list[str] | None:
+    """Normalizes a list, None, or string into unique items, in order. A
+    string is one item unless ``split_on_commas``. None for any other type.
 
     List entries are kept exactly, since connectors (e.g. Slack) match them
-    exactly. Only the pieces of a comma-separated string are stripped, and
-    blank pieces are dropped.
+    exactly. Only the pieces of a string are stripped, and blank pieces are
+    dropped.
     """
     if value is None:
         return []
     if isinstance(value, str):
-        pieces = (piece.strip() for piece in value.split(ITEM_SEPARATOR))
+        raw_pieces = value.split(ITEM_SEPARATOR) if split_on_commas else [value]
+        pieces = (piece.strip() for piece in raw_pieces)
         return list(dict.fromkeys(piece for piece in pieces if piece))
     if isinstance(value, list):
         return list(dict.fromkeys(str(item) for item in value))
@@ -89,12 +94,42 @@ def _inverted(direction: ScopeDirection) -> ScopeDirection:
     return direction
 
 
+def _ordered_direction(
+    field_name: str, scope: ScopeOrdered, old_value: Any, new_value: Any
+) -> ScopeDirection:
+    old: Any = scope.none_means if old_value is None else old_value
+    new: Any = scope.none_means if new_value is None else new_value
+    if old == new or (old in scope.unbounded and new in scope.unbounded):
+        return ScopeDirection.NONE
+    if old in scope.unbounded:
+        return ScopeDirection.NARROW
+    if new in scope.unbounded:
+        return ScopeDirection.WIDEN
+    try:
+        larger = new > old
+    except TypeError:
+        logger.warning(
+            "Ordered scope field %s has values that do not compare", field_name
+        )
+        return ScopeDirection.UNKNOWN
+    return (
+        ScopeDirection.WIDEN
+        if larger == scope.widens_when_larger
+        else ScopeDirection.NARROW
+    )
+
+
 def _scope_change(
     field_name: str, policy: FieldPolicy, old_value: Any, new_value: Any
 ) -> _ScopeChange:
     scope = policy.scope
     if scope is None or isinstance(scope, ScopeOpaque):
         return _ScopeChange(direction=ScopeDirection.UNKNOWN)
+
+    if isinstance(scope, ScopeOrdered):
+        return _ScopeChange(
+            direction=_ordered_direction(field_name, scope, old_value, new_value)
+        )
 
     if isinstance(scope, ScopeToggle):
         if not isinstance(old_value, bool) or not isinstance(new_value, bool):
@@ -110,8 +145,8 @@ def _scope_change(
             )
         )
 
-    old_items = _to_items(old_value)
-    new_items = _to_items(new_value)
+    old_items = _to_items(old_value, scope.split_on_commas)
+    new_items = _to_items(new_value, scope.split_on_commas)
     if old_items is None or new_items is None:
         logger.warning("Scope field %s is not a list, a string, or None", field_name)
         return _ScopeChange(direction=ScopeDirection.UNKNOWN)
@@ -169,34 +204,54 @@ def _validate(
         return None
 
 
+def classify_source_config_change(
+    source: DocumentSource,
+    old_config: dict[str, Any],
+    new_config: dict[str, Any],
+) -> list[ConfigFieldChange]:
+    """``classify_config_change`` with the source's config class and planning
+    rule."""
+    return classify_config_change(
+        CONNECTOR_CLASS_MAP[source].config_class,
+        old_config,
+        new_config,
+        PLANNING_RULES.get(source),
+    )
+
+
 def classify_config_change(
     config_class: type[ConnectorConfig],
     old_config: dict[str, Any],
     new_config: dict[str, Any],
+    rule: PlanningRule | None = None,
 ) -> list[ConfigFieldChange]:
     """One entry per field whose value differs between the two configs.
 
     Configs are compared as validated models, so defaults and coercion do not
     show as changes. If either config fails validation, raw values (with field
-    defaults filled in) are compared and the ``classify_scope_change`` hook is
-    skipped. A field with no policy counts as BEHAVIOR. A SCOPE change with no
-    effect on scope (e.g. reordered items) is left out.
+    defaults filled in) are compared and ``rule`` is skipped. A field with no
+    policy counts as BEHAVIOR. A SCOPE change with no effect on scope (e.g.
+    reordered items) is left out. A direction from ``rule`` replaces the one
+    derived from the field's descriptor.
     """
     old_model = _validate(config_class, old_config)
     new_model = _validate(config_class, new_config)
+    override: ConnectorChangeOverride | None = None
     if old_model and new_model:
         old_values = old_model.model_dump(mode="json")
         new_values = new_model.model_dump(mode="json")
-        hook_directions = config_class.classify_scope_change(old_model, new_model)
+        if rule:
+            override = rule.apply(old_model, new_model)
     else:
         old_values = _with_defaults(config_class, old_config)
         new_values = _with_defaults(config_class, new_config)
-        hook_directions = {}
-    for name in hook_directions:
+    rule_directions = override.scope_directions if override else {}
+    rule_added_items = override.added_items if override else {}
+    for name in [*rule_directions, *rule_added_items]:
         policy = _policy_for(config_class, name)
         if policy is None or policy.field_class != FieldClass.SCOPE:
             raise ValueError(
-                f"{config_class.__name__}.classify_scope_change returned {name}, which is not a SCOPE field"
+                f"The planning rule for {config_class.__name__} returned {name}, which is not a SCOPE field"
             )
 
     changed_names = [
@@ -227,7 +282,7 @@ def classify_config_change(
             dependency in changed_name_set for dependency in policy.depends_on
         ):
             direction = ScopeDirection.UNKNOWN
-        direction = hook_directions.get(name, direction)
+        direction = rule_directions.get(name, direction)
         if direction == ScopeDirection.NONE:
             continue
         changes.append(
@@ -235,7 +290,7 @@ def classify_config_change(
                 field_name=name,
                 field_class=FieldClass.SCOPE,
                 scope_direction=direction,
-                added_items=scope_change.added_items,
+                added_items=rule_added_items.get(name, scope_change.added_items),
                 removed_items=scope_change.removed_items,
             )
         )
@@ -243,10 +298,26 @@ def classify_config_change(
     return changes
 
 
+def build_source_scoped_backfill_config(
+    source: DocumentSource,
+    old_config: dict[str, Any],
+    new_config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """``build_scoped_backfill_config`` with the source's config class and
+    planning rule."""
+    return build_scoped_backfill_config(
+        CONNECTOR_CLASS_MAP[source].config_class,
+        old_config,
+        new_config,
+        PLANNING_RULES.get(source),
+    )
+
+
 def build_scoped_backfill_config(
     config_class: type[ConnectorConfig],
     old_config: dict[str, Any],
     new_config: dict[str, Any],
+    rule: PlanningRule | None = None,
 ) -> dict[str, Any] | None:
     """The new config limited to the items a widening added, for a one-off
     backfill of just those items.
@@ -259,7 +330,7 @@ def build_scoped_backfill_config(
     """
     changes = [
         change
-        for change in classify_config_change(config_class, old_config, new_config)
+        for change in classify_config_change(config_class, old_config, new_config, rule)
         if change.field_class != FieldClass.COSMETIC
     ]
     if len(changes) != 1:
@@ -276,11 +347,17 @@ def build_scoped_backfill_config(
         return None
 
     delta_config = dict(new_config)
-    delta_config[change.field_name] = (
-        ITEM_SEPARATOR.join(change.added_items)
-        if isinstance(new_config.get(change.field_name), str)
-        else change.added_items
-    )
+    new_value = new_config.get(change.field_name)
+    if isinstance(new_value, str):
+        # A one-item string keeps its exact value.
+        delta_config[change.field_name] = (
+            ITEM_SEPARATOR.join(change.added_items)
+            if policy.scope.split_on_commas
+            else new_value
+        )
+    else:
+        delta_config[change.field_name] = change.added_items
+
     if _validate(config_class, delta_config) is None:
         return None
     return delta_config

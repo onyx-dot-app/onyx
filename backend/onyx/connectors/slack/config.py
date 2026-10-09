@@ -1,4 +1,4 @@
-from typing import Annotated, Self
+from typing import Annotated
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, SLACK_NUM_THREADS
 from onyx.connectors.connector_config import ConnectorConfig
@@ -11,6 +11,7 @@ from onyx.connectors.field_policy import (
     ScopeOpaque,
     ScopeToggle,
 )
+from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 _COSMETIC = FieldPolicy(FieldClass.COSMETIC)
 _INCLUDE_BOT_MESSAGES = "include_bot_messages"
@@ -47,13 +48,15 @@ class SlackConnectorConfig(ConnectorConfig):
     num_threads: Annotated[int, _COSMETIC] = SLACK_NUM_THREADS
     use_redis: Annotated[bool, _COSMETIC] = True
 
-    @classmethod
-    def classify_scope_change(  # ty: ignore[invalid-method-override]
-        cls, old: Self, new: Self
-    ) -> dict[str, ScopeDirection]:
-        # Bot messages are also part of thread documents with human messages.
-        # Turning them off drops bot-only threads (prune) and changes mixed
-        # threads, which only a from-beginning run rewrites.
-        if old.include_bot_messages and not new.include_bot_messages:
-            return {_INCLUDE_BOT_MESSAGES: ScopeDirection.BOTH}
-        return {}
+
+def slack_planning_rule(
+    old: SlackConnectorConfig, new: SlackConnectorConfig
+) -> ConnectorChangeOverride | None:
+    # Bot messages are also part of thread documents with human messages.
+    # Turning them off drops bot-only threads (prune) and changes mixed
+    # threads, which only a from-beginning run rewrites.
+    if old.include_bot_messages and not new.include_bot_messages:
+        return ConnectorChangeOverride(
+            scope_directions={_INCLUDE_BOT_MESSAGES: ScopeDirection.BOTH}
+        )
+    return None

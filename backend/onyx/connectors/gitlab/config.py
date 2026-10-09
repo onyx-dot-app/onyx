@@ -1,15 +1,33 @@
+from typing import Annotated
+
 from onyx.configs.app_configs import (
     GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
     INDEX_BATCH_SIZE,
 )
 from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.field_policy import (
+    FieldClass,
+    FieldPolicy,
+    ScopeOpaque,
+    ScopeToggle,
+)
+
+# Merge request and issue document ids are web URLs that contain the project path.
+_PROJECT_PATH = FieldPolicy(FieldClass.IDENTITY)
+_DOCUMENT_TYPE_TOGGLE = FieldPolicy(
+    FieldClass.SCOPE, scope=ScopeToggle(widens_when=True)
+)
 
 
 class GitlabConnectorConfig(ConnectorConfig):
-    project_owner: str
-    project_name: str
-    batch_size: int = INDEX_BATCH_SIZE
-    state_filter: str = "all"
-    include_mrs: bool = True
-    include_issues: bool = True
-    include_code_files: bool = GITLAB_CONNECTOR_INCLUDE_CODE_FILES
+    project_owner: Annotated[str, _PROJECT_PATH]
+    project_name: Annotated[str, _PROJECT_PATH]
+    batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
+    state_filter: Annotated[str, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())] = (
+        "all"
+    )
+    include_mrs: Annotated[bool, _DOCUMENT_TYPE_TOGGLE] = True
+    include_issues: Annotated[bool, _DOCUMENT_TYPE_TOGGLE] = True
+    include_code_files: Annotated[bool, _DOCUMENT_TYPE_TOGGLE] = (
+        GITLAB_CONNECTOR_INCLUDE_CODE_FILES
+    )

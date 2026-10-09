@@ -1,8 +1,7 @@
-from typing import Annotated, Any, Self
+from typing import Annotated, Any
 
 import pytest
 
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.config_diff import (
     ConfigFieldChange,
     build_field_policy_report,
@@ -18,10 +17,14 @@ from onyx.connectors.field_policy import (
     ScopeExclude,
     ScopeInclude,
     ScopeOpaque,
+    ScopeOrdered,
     ScopeToggle,
 )
-from onyx.connectors.github.config import GithubConnectorConfig
-from onyx.connectors.slack.config import SlackConnectorConfig
+from onyx.connectors.planning_rule import (
+    ConnectorChangeOverride,
+    PlanningRule,
+    planning_rule,
+)
 
 
 class _Config(ConnectorConfig):
@@ -64,32 +67,32 @@ class _Config(ConnectorConfig):
     unclassified: int = 0
 
 
-class _HookConfig(_Config):
-    @classmethod
-    def classify_scope_change(  # ty: ignore[invalid-method-override]
-        cls, old: Self, new: Self
-    ) -> dict[str, ScopeDirection]:
-        if old.query == "a" and new.query == "a OR b":
-            return {"query": ScopeDirection.WIDEN}
-        return {}
+def _query_rule(old: _Config, new: _Config) -> ConnectorChangeOverride | None:
+    if old.query == "a" and new.query == "a OR b":
+        return ConnectorChangeOverride(scope_directions={"query": ScopeDirection.WIDEN})
+    return None
 
 
-class _BadHookConfig(_Config):
-    @classmethod
-    def classify_scope_change(  # ty: ignore[invalid-method-override]
-        cls,
-        old: Self,  # noqa: ARG003
-        new: Self,  # noqa: ARG003
-    ) -> dict[str, ScopeDirection]:
-        return {"parse_tables": ScopeDirection.WIDEN}
+def _non_scope_rule(
+    old: _Config,  # noqa: ARG001
+    new: _Config,  # noqa: ARG001
+) -> ConnectorChangeOverride:
+    return ConnectorChangeOverride(
+        scope_directions={"parse_tables": ScopeDirection.WIDEN}
+    )
+
+
+_QUERY_RULE = planning_rule(_Config, _query_rule)
+_NON_SCOPE_RULE = planning_rule(_Config, _non_scope_rule)
 
 
 def _only_change(
     old: dict[str, Any],
     new: dict[str, Any],
     config_class: type[ConnectorConfig] = _Config,
+    rule: PlanningRule | None = None,
 ) -> ConfigFieldChange:
-    changes = classify_config_change(config_class, old, new)
+    changes = classify_config_change(config_class, old, new, rule)
     assert len(changes) == 1, changes
     return changes[0]
 
@@ -282,20 +285,44 @@ def test_invalid_config_compares_raw_values() -> None:
     assert changes[1].field_class == FieldClass.BEHAVIOR
 
 
-def test_hook_overrides_descriptor() -> None:
-    assert (
-        _only_change({"query": "a"}, {"query": "a OR b"}, _HookConfig).scope_direction
-        == ScopeDirection.WIDEN
-    )
-    assert (
-        _only_change({"query": "a"}, {"query": "c"}, _HookConfig).scope_direction
-        == ScopeDirection.UNKNOWN
-    )
+def test_rule_overrides_descriptor() -> None:
+    change = _only_change({"query": "a"}, {"query": "a OR b"}, rule=_QUERY_RULE)
+
+    assert change.scope_direction == ScopeDirection.WIDEN
 
 
-def test_hook_naming_a_non_scope_field_raises() -> None:
+def test_rule_returning_none_uses_the_default_rules() -> None:
+    change = _only_change({"query": "a"}, {"query": "c"}, rule=_QUERY_RULE)
+
+    assert change.scope_direction == ScopeDirection.UNKNOWN
+
+
+def test_rule_leaves_fields_it_does_not_name_to_the_default_rules() -> None:
+    changes = classify_config_change(
+        _Config,
+        {"query": "a", "spaces": ["x"]},
+        {"query": "a OR b", "spaces": ["x", "y"]},
+        _QUERY_RULE,
+    )
+
+    by_name = {change.field_name: change for change in changes}
+    assert by_name.keys() == {"query", "spaces"}
+    assert by_name["query"].scope_direction == ScopeDirection.WIDEN
+    assert by_name["spaces"].scope_direction == ScopeDirection.WIDEN
+    assert by_name["spaces"].added_items == ["y"]
+
+
+def test_rule_naming_a_non_scope_field_raises() -> None:
     with pytest.raises(ValueError):
-        classify_config_change(_BadHookConfig, {}, {"parse_tables": True})
+        classify_config_change(_Config, {}, {"parse_tables": True}, _NON_SCOPE_RULE)
+
+
+def test_rule_is_skipped_when_a_config_does_not_validate() -> None:
+    changes = classify_config_change(
+        _Config, {"legacy_key": 1}, {"parse_tables": True}, _NON_SCOPE_RULE
+    )
+
+    assert {change.field_name for change in changes} == {"legacy_key", "parse_tables"}
 
 
 def test_field_policy_rejects_scope_on_non_scope_field() -> None:
@@ -358,72 +385,6 @@ def test_scoped_backfill_is_none(old: dict[str, Any], new: dict[str, Any]) -> No
     assert build_scoped_backfill_config(_Config, old, new) is None
 
 
-def test_slack_regex_mode_change_is_unknown() -> None:
-    changes = classify_config_change(
-        SlackConnectorConfig,
-        {"channels": ["general"]},
-        {"channels": ["gen.*"], "channel_regex_enabled": True},
-    )
-
-    assert {change.field_name: change.scope_direction for change in changes} == {
-        "channels": ScopeDirection.UNKNOWN,
-        "channel_regex_enabled": ScopeDirection.UNKNOWN,
-    }
-
-
-@pytest.mark.parametrize(
-    "old, new, direction",
-    [
-        (False, True, ScopeDirection.WIDEN),
-        (True, False, ScopeDirection.BOTH),
-    ],
-)
-def test_slack_bot_messages(old: bool, new: bool, direction: ScopeDirection) -> None:
-    change = _only_change(
-        {"include_bot_messages": old},
-        {"include_bot_messages": new},
-        SlackConnectorConfig,
-    )
-
-    assert change.scope_direction == direction
-
-
-@pytest.mark.parametrize(
-    "raw, expected",
-    [(None, None), ("", None), ("  ", None), (" main ", "main")],
-)
-def test_github_branch_and_repositories_are_stripped(
-    raw: str | None, expected: str | None
-) -> None:
-    config = GithubConnectorConfig.model_validate(
-        {"repo_owner": "onyx", "repositories": raw, "branch": raw}
-    )
-
-    assert config.repositories == expected
-    assert config.branch == expected
-
-
-def test_github_whitespace_is_not_a_change() -> None:
-    assert (
-        classify_config_change(
-            GithubConnectorConfig,
-            {"repo_owner": "onyx", "repositories": "a", "branch": "main"},
-            {"repo_owner": "onyx", "repositories": " a ", "branch": " main "},
-        )
-        == []
-    )
-
-
-def test_github_scoped_backfill_for_added_repositories() -> None:
-    delta = build_scoped_backfill_config(
-        GithubConnectorConfig,
-        {"repo_owner": "onyx", "repositories": "a", "include_issues": True},
-        {"repo_owner": "onyx", "repositories": "a,b", "include_issues": True},
-    )
-
-    assert delta == {"repo_owner": "onyx", "repositories": "b", "include_issues": True}
-
-
 class _GapConfig(ConnectorConfig):
     classified: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = 0
     no_descriptor: Annotated[str, FieldPolicy(FieldClass.SCOPE)] = ""
@@ -437,8 +398,98 @@ def test_find_field_policy_gaps() -> None:
     assert gaps.scope_fields_without_descriptor == ["no_descriptor"]
 
 
-def test_worked_example_sources_have_complete_policies() -> None:
-    report = build_field_policy_report()
+def test_every_source_has_complete_policies() -> None:
+    # A new config field needs a FieldPolicy, and a SCOPE field a descriptor.
+    assert build_field_policy_report() == {}
 
-    assert DocumentSource.SLACK not in report
-    assert DocumentSource.GITHUB not in report
+
+class _PathConfig(ConnectorConfig):
+    folder_path: Annotated[
+        str | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=False, split_on_commas=False),
+        ),
+    ] = None
+
+
+def test_one_item_string_is_not_split_on_commas() -> None:
+    changes = classify_config_change(
+        _PathConfig, {"folder_path": "/a"}, {"folder_path": "/Q1, 2024"}
+    )
+
+    assert len(changes) == 1
+    assert changes[0].scope_direction == ScopeDirection.BOTH
+    assert changes[0].added_items == ["/Q1, 2024"]
+    assert changes[0].removed_items == ["/a"]
+
+
+def test_one_item_string_backfill_keeps_the_exact_value() -> None:
+    delta = build_scoped_backfill_config(
+        _PathConfig, {"folder_path": None}, {"folder_path": " /Q1, 2024"}
+    )
+
+    assert delta == {"folder_path": " /Q1, 2024"}
+
+
+class _LimitConfig(ConnectorConfig):
+    max_pages: Annotated[
+        int | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=True, none_means=100),
+        ),
+    ] = None
+    depth: Annotated[
+        int,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=True, unbounded=(-1,)),
+        ),
+    ] = 0
+    start_date: Annotated[
+        str | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=False, unbounded=(None, "")),
+        ),
+    ] = None
+
+
+@pytest.mark.parametrize(
+    ("field_name", "old_value", "new_value", "expected"),
+    [
+        ("max_pages", 10, 20, ScopeDirection.WIDEN),
+        ("max_pages", 20, 10, ScopeDirection.NARROW),
+        ("max_pages", None, 200, ScopeDirection.WIDEN),
+        ("max_pages", None, 50, ScopeDirection.NARROW),
+        ("depth", 2, -1, ScopeDirection.WIDEN),
+        ("depth", -1, 5, ScopeDirection.NARROW),
+        ("start_date", "2024-01-01", "2023-06-01", ScopeDirection.WIDEN),
+        ("start_date", "2023-06-01", "2024-01-01", ScopeDirection.NARROW),
+        ("start_date", "2024-01-01", None, ScopeDirection.WIDEN),
+        ("start_date", None, "2024-01-01", ScopeDirection.NARROW),
+    ],
+)
+def test_ordered_scope_direction(
+    field_name: str, old_value: Any, new_value: Any, expected: ScopeDirection
+) -> None:
+    changes = classify_config_change(
+        _LimitConfig, {field_name: old_value}, {field_name: new_value}
+    )
+
+    assert [change.scope_direction for change in changes] == [expected]
+
+
+def test_ordered_scope_none_means_its_default() -> None:
+    # None stands for 100, so 100 is no change.
+    assert (
+        classify_config_change(_LimitConfig, {"max_pages": None}, {"max_pages": 100})
+        == []
+    )
+
+
+def test_ordered_widening_has_no_scoped_backfill() -> None:
+    assert (
+        build_scoped_backfill_config(_LimitConfig, {"depth": 1}, {"depth": 2}) is None
+    )

@@ -12,6 +12,7 @@ BaseModel instance in ``Annotated`` metadata as a schema for the field.
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from pydantic.fields import FieldInfo
 
@@ -41,11 +42,14 @@ class ScopeInclude:
 
     With ``empty_means_all``, an empty value fetches everything. With
     ``empty_list_means_none`` too, only None (or a blank string) fetches
-    everything, and an empty list fetches nothing.
+    everything, and an empty list fetches nothing. Set ``split_on_commas`` to
+    False for a string that holds one item which can contain commas (e.g. a
+    folder path).
     """
 
     empty_means_all: bool
     empty_list_means_none: bool = False
+    split_on_commas: bool = True
 
     def __post_init__(self) -> None:
         if self.empty_list_means_none and not self.empty_means_all:
@@ -54,7 +58,12 @@ class ScopeInclude:
 
 @dataclass(frozen=True)
 class ScopeExclude:
-    """Items to skip. Values are a list, None, or a comma-separated string."""
+    """Items to skip. Values are a list, None, or a comma-separated string.
+
+    ``split_on_commas`` works as on ``ScopeInclude``.
+    """
+
+    split_on_commas: bool = True
 
 
 @dataclass(frozen=True)
@@ -65,11 +74,23 @@ class ScopeToggle:
 
 
 @dataclass(frozen=True)
+class ScopeOrdered:
+    """A limit or a date floor. A larger value fetches more documents when
+    ``widens_when_larger``, fewer otherwise. ``unbounded`` lists the values
+    that mean no limit (the widest scope). ``none_means`` is the value the
+    connector uses when the field is None."""
+
+    widens_when_larger: bool
+    unbounded: tuple[Any, ...] = ()
+    none_means: Any = None
+
+
+@dataclass(frozen=True)
 class ScopeOpaque:
     """A scope field whose change direction cannot be derived from its values."""
 
 
-ScopeDescriptor = ScopeInclude | ScopeExclude | ScopeToggle | ScopeOpaque
+ScopeDescriptor = ScopeInclude | ScopeExclude | ScopeToggle | ScopeOrdered | ScopeOpaque
 
 
 @dataclass(frozen=True)
