@@ -16,8 +16,9 @@ lib/shared/dist
 
 # Vendored oxlint plugin sources. They run only in pre-commit and CI lint, never
 # at build or run time. They are also excluded from tsconfig.json, so `next build`
-# does not type check them.
-tools
+# does not type check them. The PDF.js asset preparation script runs during builds.
+tools/**
+!tools/prepare-pdfjs.mts
 
 # Explicitly include src/app/build (overrides .gitignore /build pattern)
 !src/app/build
