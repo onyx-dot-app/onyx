@@ -2746,6 +2746,9 @@
           "rerunFailed": {
             "toast": "Couldn't start the checks. Try again."
           }
+        },
+        "realm": {
+          "defaultHint": "If not provided, will use {value}"
         }
       },
       "credentialRequired": {

@@ -57,6 +57,16 @@ export function initialFieldValue(
   return "";
 }
 
+/**
+ * The fields that say where an account works (its site, host or subdomain),
+ * in the spec's order.
+ */
+export function realmFields(
+  spec: CredentialSpec
+): [string, CredentialSpecField][] {
+  return Object.entries(spec.fields).filter(([, field]) => field.realm);
+}
+
 /** A method's fields, in the order the method lists them. */
 export function methodFields(
   spec: CredentialSpec,

@@ -2746,6 +2746,9 @@
           "rerunFailed": {
             "toast": "No se pudieron iniciar las comprobaciones. Inténtalo de nuevo."
           }
+        },
+        "realm": {
+          "defaultHint": "Si no se indica, se usará {value}"
         }
       },
       "credentialRequired": {

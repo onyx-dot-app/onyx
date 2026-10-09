@@ -33,6 +33,7 @@ import {
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import {
+  realmFields,
   shouldRedirectToOAuth,
   toCredentialRef,
 } from "@/lib/credentials/utils";
@@ -110,6 +111,9 @@ export default function AuthenticationAccountSection({
   // The source's fields when a new account is typed into this form; `null`
   // when it saves through its own account form instead.
   const typedSpec = typedAccountSpec(connector);
+  const realmKeys: ReadonlySet<string> = new Set(
+    typedSpec ? realmFields(typedSpec).map(([key]) => key) : []
+  );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { values, setFieldValue, setFieldTouched } =
     useFormikContext<Record<string, unknown>>();
@@ -164,6 +168,8 @@ export default function AuthenticationAccountSection({
             source={connector}
             spec={typedSpec}
             namePrefix={NEW_ACCOUNT_FIELD}
+            // Asked for above this section, first.
+            exclude={realmKeys}
             authMethod={
               typeof newAccountValues?.authentication_method === "string"
                 ? newAccountValues.authentication_method
