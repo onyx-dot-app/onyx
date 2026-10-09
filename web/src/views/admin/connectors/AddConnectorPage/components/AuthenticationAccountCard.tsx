@@ -324,7 +324,7 @@ export default function AuthenticationAccountCard({
               >
                 {t("selected.label")}
               </Button>
-            ) : (
+            ) : selectable ? (
               // Repeats the card's own action, so it leaves the tab order.
               <Button
                 prominence="tertiary"
@@ -333,6 +333,10 @@ export default function AuthenticationAccountCard({
               >
                 {t("useButton.label")}
               </Button>
+            ) : (
+              <Text font="main-ui-action" color="text-03">
+                {t("unsupportedRealm.label")}
+              </Text>
             )}
             <Button
               icon={expanded ? SvgChevronUp : SvgChevronDown}

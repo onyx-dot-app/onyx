@@ -2709,6 +2709,9 @@
           "useButton": {
             "label": "使用此账户"
           },
+          "unsupportedRealm": {
+            "label": "不支持的网站域名"
+          },
           "expandButton": {
             "ariaLabel": "显示账户详情"
           },

@@ -2709,6 +2709,9 @@
           "useButton": {
             "label": "Konto verwenden"
           },
+          "unsupportedRealm": {
+            "label": "Nicht unterstützte Website-Domain"
+          },
           "expandButton": {
             "ariaLabel": "Kontodetails anzeigen"
           },

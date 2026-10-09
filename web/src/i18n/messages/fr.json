@@ -2709,6 +2709,9 @@
           "useButton": {
             "label": "Utiliser le compte"
           },
+          "unsupportedRealm": {
+            "label": "Domaine de site non pris en charge"
+          },
           "expandButton": {
             "ariaLabel": "Afficher les détails du compte"
           },
