@@ -66,7 +66,7 @@ class ApiAssociatedId(BaseModel):
 
 
 class ApiAssociationCollection(BaseModel):
-    results: list[ApiAssociatedId] = Field(default_factory=list)
+    results: list[ApiAssociatedId]
     paging: ApiPaging | None = None
 
 
@@ -79,7 +79,7 @@ class ApiRecord(BaseModel):
 
 
 class ApiRecordPage(BaseModel):
-    results: list[ApiRecord] = Field(default_factory=list)
+    results: list[ApiRecord]
     paging: ApiPaging | None = None
 
 
@@ -88,7 +88,7 @@ class ApiAssociation(BaseModel):
 
 
 class ApiAssociationPage(BaseModel):
-    results: list[ApiAssociation] = Field(default_factory=list)
+    results: list[ApiAssociation]
     paging: ApiPaging | None = None
 
 

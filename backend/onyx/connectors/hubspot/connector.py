@@ -15,7 +15,10 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.hubspot.config import HUBSPOT_OBJECT_SPECS, HubSpotObjectType
 from onyx.connectors.hubspot.models import (
+    HubSpotAssociationIds,
     HubSpotDocumentParts,
+    HubSpotObjectSpec,
+    HubSpotPage,
     HubSpotRecord,
 )
 from onyx.connectors.hubspot.permissions import HubSpotPermissionReader
@@ -186,7 +189,7 @@ def _probe_scope(call: Callable[[], object]) -> None:
 
 def _clean_html(html_content: str) -> str:
     """Strips tags and the common entities, which is enough for note bodies."""
-    clean_text = re.sub(r"<[^>]+>", "", html_content)
+    clean_text: str = re.sub(r"<[^>]+>", "", html_content)
     for entity, char in (
         ("&nbsp;", " "),
         ("&amp;", "&"),
@@ -506,7 +509,7 @@ class HubSpotConnector(
         to_object_type: str,
     ) -> list[str]:
         """Deduplicated, since HubSpot returns one entry per association label."""
-        ids = iter_pages(
+        ids: Iterator[str] = iter_pages(
             lambda after: self.ops.list_associations(
                 object_type=object_type,
                 object_id=object_id,
@@ -529,8 +532,10 @@ class HubSpotConnector(
         10,000-result cap the search restarts from the last modified timestamp,
         so records sharing that timestamp may repeat. A cap the search cannot
         pass ends the listing early, or raises when incomplete_is_error."""
-        modified_date_prop = HUBSPOT_OBJECT_SPECS[object_type].modified_date_property
-        pages = iter_pages(
+        modified_date_prop: str = HUBSPOT_OBJECT_SPECS[
+            object_type
+        ].modified_date_property
+        pages: Iterator[HubSpotRecord] = iter_pages(
             lambda after: self.ops.search_records(
                 variant=object_type,
                 properties=properties,
@@ -540,7 +545,7 @@ class HubSpotConnector(
             ),
             _SEARCH_PAGES,
         )
-        results = list(islice(pages, HUBSPOT_SEARCH_LIMIT))
+        results: list[HubSpotRecord] = list(islice(pages, HUBSPOT_SEARCH_LIMIT))
 
         yield from results
 
@@ -548,7 +553,7 @@ class HubSpotConnector(
             return
 
         def incomplete(reason: str) -> None:
-            message = (
+            message: str = (
                 f"HubSpot search limit reached but {reason}. Records after the "
                 f"{HUBSPOT_SEARCH_LIMIT}th may be missing."
             )
@@ -557,14 +562,14 @@ class HubSpotConnector(
             logger.error(message)
 
         # Hit the cap, so continue from the last seen modified timestamp.
-        last_ts_ms = results[-1].properties.get(modified_date_prop)
+        last_ts_ms: str | None = results[-1].properties.get(modified_date_prop)
         if last_ts_ms is None:
             incomplete("the last modified timestamp is unavailable")
             return
 
         try:
             # Search API returns ISO 8601 strings; filter values use ms epoch.
-            next_start = datetime.fromisoformat(last_ts_ms)
+            next_start: datetime = datetime.fromisoformat(last_ts_ms)
         except ValueError:
             try:
                 next_start = datetime.fromtimestamp(
@@ -608,7 +613,7 @@ class HubSpotConnector(
         )
 
     def _record_url(self, object_type: HubSpotObjectType, object_id: str) -> str:
-        type_id = HUBSPOT_OBJECT_SPECS[object_type].type_id
+        type_id: str = HUBSPOT_OBJECT_SPECS[object_type].type_id
         return (
             f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/{type_id}/{object_id}"
         )
@@ -627,7 +632,7 @@ class HubSpotConnector(
         list or paged it, so the caller reads the v4 API. [] when the type has none."""
         if record.associations is None:
             return None
-        inline = record.associations.get(assoc_type)
+        inline: HubSpotAssociationIds | None = record.associations.get(assoc_type)
         if inline is None:
             return []
         if inline.has_more:
@@ -641,7 +646,9 @@ class HubSpotConnector(
         to_object_type: HubSpotObjectType,
     ) -> list[HubSpotRecord]:
         try:
-            object_ids = self._extract_inline_association_ids(record, to_object_type)
+            object_ids: list[str] | None = self._extract_inline_association_ids(
+                record, to_object_type
+            )
             if object_ids is None:
                 object_ids = self._list_association_ids(
                     object_type, record.id, to_object_type.value
@@ -669,7 +676,7 @@ class HubSpotConnector(
         self, object_type: HubSpotObjectType, object_id: str
     ) -> list[HubSpotRecord]:
         try:
-            note_ids = self._list_association_ids(
+            note_ids: list[str] = self._list_association_ids(
                 object_type, object_id, NOTES_OBJECT_TYPE
             )
             associated_notes: list[HubSpotRecord] = []
@@ -703,7 +710,7 @@ class HubSpotConnector(
     ) -> None:
         """Note ids stay out of the metadata, only record ids are listed."""
         for to_object_type in ASSOCIATED_TYPES[object_type]:
-            associated = self._get_associated_objects(
+            associated: list[HubSpotRecord] = self._get_associated_objects(
                 object_type, record, to_object_type
             )
             sections.extend(
@@ -711,7 +718,7 @@ class HubSpotConnector(
                 for obj in associated
             )
             if associated:
-                noun = HUBSPOT_OBJECT_SPECS[to_object_type].document_noun
+                noun: str = HUBSPOT_OBJECT_SPECS[to_object_type].document_noun
                 metadata[f"associated_{noun}_ids"] = [obj.id for obj in associated]
         sections.extend(
             self._create_object_section(note, NOTES_OBJECT_TYPE)
@@ -724,7 +731,7 @@ class HubSpotConnector(
         start: datetime | None,
         end: datetime | None,
     ) -> Generator[Document | HierarchyNode, None, None]:
-        spec = HUBSPOT_OBJECT_SPECS[object_type]
+        spec: HubSpotObjectSpec = HUBSPOT_OBJECT_SPECS[object_type]
         for record in self._iter_records(
             object_type, INDEXED_PROPERTIES[object_type], start, end
         ):
@@ -783,11 +790,13 @@ class HubSpotConnector(
     ) -> Generator[str, None, None]:
         if start is None:
             # Pruning and doc sync pass a start at most, so this is the full listing.
-            records = self._list_all_records(object_type, [HS_OBJECT_ID_PROPERTY])
+            records: Iterator[HubSpotRecord] = self._list_all_records(
+                object_type, [HS_OBJECT_ID_PROPERTY]
+            )
         else:
             # The search walk reads the modified date to pass the 10,000-result cap.
             # A partial listing would revoke access or prune live records.
-            modified_date_property = HUBSPOT_OBJECT_SPECS[
+            modified_date_property: str = HUBSPOT_OBJECT_SPECS[
                 object_type
             ].modified_date_property
             records = self._search_time_range(
@@ -816,9 +825,9 @@ class HubSpotConnector(
         end: datetime | None,
         callback: IndexingHeartbeatInterface | None,
     ) -> Generator[SlimDocument | HierarchyNode, None, None]:
-        reader = self._permission_reader()
+        reader: HubSpotPermissionReader = self._permission_reader()
         for object_type in self._configured_object_types():
-            record_ids = self._iter_record_ids(object_type, start, end)
+            record_ids: Iterator[str] = self._iter_record_ids(object_type, start, end)
             for chunk in batch_generator(record_ids, PERMITTED_USERS_BATCH_SIZE):
                 # Every chunk is a remote call, so the sync lock is refreshed here
                 # and not only once per yielded batch of _SLIM_BATCH_SIZE.
@@ -828,7 +837,7 @@ class HubSpotConnector(
                             f"{_SLIM_DOC_SYNC_LABEL}: Stop signal detected"
                         )
                     callback.progress(_SLIM_DOC_SYNC_LABEL, 1)
-                viewers = reader.viewers(object_type, chunk)
+                viewers: dict[str, set[int]] = reader.viewers(object_type, chunk)
                 for record_id in chunk:
                     yield SlimDocument(
                         id=hubspot_document_id(object_type, record_id),
@@ -859,7 +868,7 @@ class HubSpotConnector(
 
     def _sample_record(self) -> tuple[HubSpotObjectType, str] | None:
         for object_type in self._configured_object_types():
-            page = self.ops.list_records(
+            page: HubSpotPage[HubSpotRecord] = self.ops.list_records(
                 variant=object_type, properties=[HS_OBJECT_ID_PROPERTY], limit=1
             )
             if page.items:
@@ -871,7 +880,7 @@ class HubSpotConnector(
         refused operation named beats a sync that never succeeds while every
         record stays hidden."""
         _probe_scope(lambda: self.ops.list_users(limit=1))
-        sample = self._sample_record()
+        sample: tuple[HubSpotObjectType, str] | None = self._sample_record()
         if sample is None:
             logger.warning(
                 "HubSpot has no records yet, so the viewer lookup stays "
@@ -879,7 +888,7 @@ class HubSpotConnector(
             )
             return
         object_type, record_id = sample
-        reader = self._permission_reader()
+        reader: HubSpotPermissionReader = self._permission_reader()
         _probe_scope(lambda: reader.viewers(object_type, [record_id]))
 
 
