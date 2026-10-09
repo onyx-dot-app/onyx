@@ -27,6 +27,8 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleGroupMember,
 )
 from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
+    DB_CREDENTIALS_DICT_TOKEN_KEY,
     MISSING_SCOPES_ERROR_STR,
     GoogleCredentialKind,
 )
@@ -36,6 +38,10 @@ _ADMIN = f"admin@{_DOMAIN}"
 _SA = GoogleCredentialKind.SERVICE_ACCOUNT
 _OAUTH = GoogleCredentialKind.OAUTH
 _FOLDER_URL = "https://drive.google.com/drive/folders/{}"
+_CREDENTIAL_KEYS = {
+    _SA: DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
+    _OAUTH: DB_CREDENTIALS_DICT_TOKEN_KEY,
+}
 
 
 def _http_error(status: int, *reasons: str) -> GoogleDriveHttpError:
@@ -84,11 +90,11 @@ def _run(
         for check in build_google_drive_indexing_checks()
         if check.check_id == check_id
     ]
+    # The form sets the kind of the picked credential in the config.
     context = CapabilityCheckContext(
         source=DocumentSource.GOOGLE_DRIVE,
-        credential_json={},
-        connector_specific_config=config,
-        credential_kind=kind.value,
+        credential_json={_CREDENTIAL_KEYS[kind]: "{}"},
+        connector_specific_config={**(config or {}), "credential_kind": kind.value},
         source_operations=ops,
     )
     (result,) = run_capability_checks([check], context)
@@ -158,6 +164,25 @@ def test_service_account_checks_do_not_apply_to_oauth() -> None:
 
     assert result.status == CapabilityCheckStatus.SKIPPED
     assert result.applicable is False
+
+
+def test_service_account_checks_wait_for_the_credential_kind() -> None:
+    (check,) = [
+        check
+        for check in build_google_drive_indexing_checks()
+        if check.check_id == "google_drive_workspace_users"
+    ]
+    context = CapabilityCheckContext(
+        source=DocumentSource.GOOGLE_DRIVE,
+        credential_json={},
+        connector_specific_config={"include_my_drives": True},
+        source_operations=_ops(),
+    )
+
+    (result,) = run_capability_checks([check], context)
+
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert "credential_kind" in result.message
 
 
 def test_workspace_users_denied_names_the_admin_requirement() -> None:

@@ -6,7 +6,6 @@ from typing import Any
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.credential_kinds import resolve_credential_kind
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
@@ -38,13 +37,12 @@ def _run(
     credential_json = build_credentials(
         ADMIN_EMAIL, oauth=False, test_secrets=test_secrets
     )
+    # The form sets the kind of the picked credential.
+    config = {**config, "credential_kind": "service_account"}
     context = CapabilityCheckContext(
         source=DocumentSource.GOOGLE_DRIVE,
         credential_json=credential_json,
         connector_specific_config=config,
-        credential_kind=resolve_credential_kind(
-            DocumentSource.GOOGLE_DRIVE, credential_json
-        ),
         source_operations=GoogleDriveSourceOperations(
             credentials_provider=OnyxStaticCredentialsProvider(
                 None, DocumentSource.GOOGLE_DRIVE.value, credential_json
