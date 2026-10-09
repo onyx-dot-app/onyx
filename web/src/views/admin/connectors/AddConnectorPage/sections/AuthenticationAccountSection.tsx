@@ -38,6 +38,7 @@ import { Tier } from "@/lib/settings/types";
 import {
   NEW_ACCOUNT_FIELD,
   NEW_ACCOUNT_NAME_FIELD,
+  initialNewAccountValues,
   typedAccountSpec,
   type NewAccountValues,
 } from "@/views/admin/connectors/AddConnectorPage/newAccount";
@@ -134,7 +135,7 @@ export default function AuthenticationAccountSection({
     accountRealmFields.map(([key]) => key)
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { values, setFieldError, setFieldTouched } =
+  const { values, setFieldError, setFieldTouched, setFieldValue } =
     useFormikContext<Record<string, unknown>>();
 
   const newAccountValues: NewAccountValues | undefined = getIn(
@@ -191,7 +192,20 @@ export default function AuthenticationAccountSection({
   }
 
   async function onSwap(selectedCredential: Credential<any>) {
-    // The typed values stay: typing into them again chooses the new account.
+    // Picking a saved account starts the new account over: its values and
+    // errors clear, and its card closes.
+    if (typedSpec) {
+      const cleared: NewAccountValues = initialNewAccountValues(typedSpec);
+      // A reset, not typing: the pick below must stay.
+      lastNewAccountKey.current = JSON.stringify(cleared);
+      void setFieldValue(NEW_ACCOUNT_FIELD, cleared, false);
+      for (const key of Object.keys(cleared)) {
+        const path = `${NEW_ACCOUNT_FIELD}.${key}`;
+        void setFieldTouched(path, false, false);
+        setFieldError(path, undefined);
+      }
+    }
+    close();
     onCredentialChange(selectedCredential);
     refresh();
   }
