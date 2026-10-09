@@ -44,7 +44,7 @@ def _form(scoped_token: bool, **scope: Any) -> dict[str, Any]:
 def _credential(
     test_secrets: dict[TestSecret, str], scoped_token: bool
 ) -> dict[str, Any]:
-    secret = (
+    secret: TestSecret = (
         TestSecret.JIRA_API_TOKEN_SCOPED if scoped_token else TestSecret.JIRA_API_TOKEN
     )
     return {
@@ -56,7 +56,7 @@ def _credential(
 def _results(
     credential_json: dict[str, Any], config: dict[str, Any]
 ) -> dict[str, CapabilityCheckResult]:
-    context = CapabilityCheckContext(
+    context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.JIRA,
         credential_json=credential_json,
         connector_specific_config=config,
@@ -67,7 +67,9 @@ def _results(
             connector_specific_config=config,
         ),
     )
-    results = run_capability_checks(build_jira_indexing_checks(), context)
+    results: list[CapabilityCheckResult] = run_capability_checks(
+        build_jira_indexing_checks(), context
+    )
     return {result.check_id: result for result in results}
 
 
@@ -87,11 +89,11 @@ def test_indexing_checks_pass_on_the_test_site(
     scope: dict[str, Any],
     mode_check_id: str | None,
 ) -> None:
-    by_id = _results(
+    by_id: dict[str, CapabilityCheckResult] = _results(
         _credential(test_secrets, scoped_token), _form(scoped_token, **scope)
     )
 
-    failures = {
+    failures: dict[str, str] = {
         check_id: result.message
         for check_id, result in by_id.items()
         if result.applicable and result.status != CapabilityCheckStatus.PASSED
@@ -101,8 +103,10 @@ def test_indexing_checks_pass_on_the_test_site(
         assert by_id[mode_check_id].status == CapabilityCheckStatus.PASSED
     auth_check_id = "jira_scoped_token_auth" if scoped_token else "jira_auth"
     assert by_id[auth_check_id].status == CapabilityCheckStatus.PASSED
-    verdicts = compute_capability_verdicts(
-        {CredentialCapability.INDEXING}, list(by_id.values())
+    verdicts: dict[CredentialCapability, CapabilityVerdict] = (
+        compute_capability_verdicts(
+            {CredentialCapability.INDEXING}, list(by_id.values())
+        )
     )
     assert verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.PASSED
 
@@ -155,11 +159,16 @@ def test_invalid_configs_fail(
     check_id: str,
     message: str,
 ) -> None:
-    credential_json = {**_credential(test_secrets, False), **credential_override}
+    credential_json: dict[str, Any] = {
+        **_credential(test_secrets, False),
+        **credential_override,
+    }
 
-    by_id = _results(credential_json, _form(False, **scope))
+    by_id: dict[str, CapabilityCheckResult] = _results(
+        credential_json, _form(False, **scope)
+    )
 
-    result = by_id[check_id]
+    result: CapabilityCheckResult = by_id[check_id]
     assert result.status == CapabilityCheckStatus.FAILED, result
     assert message in result.message, result.message
 
@@ -167,12 +176,14 @@ def test_invalid_configs_fail(
 def test_scoped_sign_in_fails_for_a_bad_token(
     test_secrets: dict[TestSecret, str],
 ) -> None:
-    credential_json = {
+    credential_json: dict[str, Any] = {
         **_credential(test_secrets, True),
         "jira_api_token": "not-a-real-token",
     }
 
-    by_id = _results(credential_json, _form(True, project_key=_PROJECT))
+    by_id: dict[str, CapabilityCheckResult] = _results(
+        credential_json, _form(True, project_key=_PROJECT)
+    )
 
-    result = by_id["jira_scoped_token_auth"]
+    result: CapabilityCheckResult = by_id["jira_scoped_token_auth"]
     assert result.status == CapabilityCheckStatus.FAILED, result

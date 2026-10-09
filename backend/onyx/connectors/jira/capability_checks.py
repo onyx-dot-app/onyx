@@ -81,8 +81,8 @@ def _scope_jql(config: JiraConnectorConfig) -> str:
     """The query of a full indexing run: the configured scope, from the epoch
     to now."""
     return build_jql_query(
-        project_key=config.project_key or None,
-        jql_query=config.jql_query or None,
+        project_key=_project_key(config) or None,
+        jql_query=_jql(config) or None,
         start=0,
         end=time.time(),
     )
@@ -358,8 +358,7 @@ class _ConfiguredProjectCheck(_JiraCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         config: JiraConnectorConfig = self.config(context)
-        raw_key: str = config.project_key or ""
-        project_key: str = raw_key.strip()
+        project_key: str = _project_key(config)
         gateway: JiraSourceOperations = _gateway(context)
         try:
             gateway.get_project(project_key=project_key)
@@ -370,12 +369,6 @@ class _ConfiguredProjectCheck(_JiraCheck):
                     denied=f"The credential cannot read the project `{project_key}`",
                 )
             self._raise_not_found(gateway, project_key, e)
-        if raw_key != project_key:
-            # The connector quotes the key as entered, spaces included.
-            raise ConnectorValidationError(
-                f"The project key `{raw_key}` has spaces around it. Remove them; "
-                "the connector searches for the key exactly as entered."
-            )
 
     def _raise_not_found(
         self, gateway: JiraSourceOperations, project_key: str, error: JiraApiError

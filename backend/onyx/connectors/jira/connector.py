@@ -149,12 +149,12 @@ def _perform_jql_search(
 def jira_error_messages(text: str | None) -> str | None:
     """The ``errorMessages`` of a Jira error body, joined, or None."""
     try:
-        payload = json.loads(text or "")
+        payload: Any = json.loads(text or "")
     except ValueError:
         return None
     if not isinstance(payload, dict):
         return None
-    messages = payload.get("errorMessages")
+    messages: Any = payload.get("errorMessages")
     if isinstance(messages, list) and messages:
         return "; ".join(str(message) for message in messages)
     return str(messages) if messages else None
@@ -173,7 +173,7 @@ def build_jql_query(
     API user's profile timezone.
     https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
     """
-    time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
+    time_jql: str = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
 
     # If custom JQL query is provided, use it and combine with time constraints
     if jql_query:
@@ -460,10 +460,11 @@ class JiraConnector(
         # So, the user's base url is stored here, but converted to a scoped url when passed
         # to the jira client.
         self.jira_base = jira_base_url.rstrip("/")  # Remove trailing slash if present
-        self.jira_project = project_key
+        # Blank scope fields mean "not set", as on the create form.
+        self.jira_project = (project_key or "").strip() or None
         self._comment_email_blacklist = comment_email_blacklist or []
         self.labels_to_skip = set(labels_to_skip)
-        self.jql_query = jql_query
+        self.jql_query = (jql_query or "").strip() or None
         self.scoped_token = scoped_token
         self._source_operations: JiraSourceOperations | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
