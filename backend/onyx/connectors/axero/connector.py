@@ -276,6 +276,8 @@ class AxeroConnector(PollConnector):
         include_wiki: bool = True,
         include_forum: bool = True,
         batch_size: int = INDEX_BATCH_SIZE,
+        # Checked against the credential by the binding; unused here.
+        base_url: str | None = None,  # noqa: ARG002
     ) -> None:
         self.include_article = include_article
         self.include_blog = include_blog

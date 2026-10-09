@@ -1,7 +1,8 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.field_policy import FieldClass, FieldPolicy
 
 
@@ -25,6 +26,47 @@ class BaseUrlCredentialBinding(CredentialBinding):
     """For sources whose only credential-bound field is the site URL."""
 
     base_url: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
+
+
+def normalize_realm(realm: str) -> str:
+    """A realm as typed or stored, compared without case, scheme or a trailing
+    slash."""
+    cleaned = realm.strip().lower()
+    if "://" in cleaned:
+        cleaned = cleaned.split("://", 1)[1]
+    return cleaned.rstrip("/")
+
+
+class RealmCredentialBinding(CredentialBinding):
+    """For sources whose account records its realm (site, host or subdomain) in
+    the credential under ``REALM_KEY``. The config holds the same key, and the
+    credential must record the same realm. An empty config realm accepts every
+    credential; a credential without one counts as ``DEFAULT_REALM``.
+
+    The connector keeps reading the realm from the credential.
+    """
+
+    REALM_KEY: ClassVar[str]
+    DEFAULT_REALM: ClassVar[str | None] = None
+
+    @classmethod
+    def normalize(cls, realm: str) -> str:
+        return normalize_realm(realm)
+
+    def validate_credential(self, credential_json: dict[str, Any]) -> None:
+        configured = self.model_dump().get(self.REALM_KEY)
+        if not isinstance(configured, str) or not configured.strip():
+            return
+        stored = credential_json.get(self.REALM_KEY)
+        account_realm = (
+            stored if isinstance(stored, str) and stored.strip() else self.DEFAULT_REALM
+        )
+        if account_realm is None:
+            return
+        if self.normalize(configured) != self.normalize(account_realm):
+            raise ConnectorValidationError(
+                f"This account works at {account_realm}, not {configured}."
+            )
 
 
 class ConnectorConfig(BaseModel):
