@@ -12,6 +12,27 @@ PROJECT_URL_PAT = "projects"
 JIRA_SERVER_API_VERSION = os.environ.get("JIRA_SERVER_API_VERSION") or "2"
 JIRA_CLOUD_API_VERSION = os.environ.get("JIRA_CLOUD_API_VERSION") or "3"
 
+# Permission sync reads who holds this permission in each project.
+BROWSE_PROJECTS_PERMISSION = "BROWSE_PROJECTS"
+HOLDER_TYPE_ANYONE = "anyone"
+HOLDER_TYPE_APPLICATION_ROLE = "applicationRole"
+HOLDER_TYPE_USER = "user"
+HOLDER_TYPE_PROJECT_ROLE = "projectRole"
+HOLDER_TYPE_GROUP = "group"
+
+SUPPORTED_STATIC_HOLDER_TYPES = {
+    HOLDER_TYPE_ANYONE,
+    HOLDER_TYPE_APPLICATION_ROLE,
+    HOLDER_TYPE_USER,
+    HOLDER_TYPE_PROJECT_ROLE,
+    HOLDER_TYPE_GROUP,
+}
+
+# Jira DC/Server returns project-role actors flat with this `type` discriminator;
+# Jira Cloud v3 instead wraps them in nested `actorGroup` / `actorUser` objects.
+ATLASSIAN_GROUP_ROLE_ACTOR_TYPE = "atlassian-group-role-actor"
+ATLASSIAN_USER_ROLE_ACTOR_TYPE = "atlassian-user-role-actor"
+
 
 def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
     display_name = None

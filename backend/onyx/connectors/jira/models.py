@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -15,3 +17,11 @@ class JiraGroupPage(BaseModel):
 
     group_names: list[str]
     total: int | None
+
+
+class JiraGroupMemberSample(BaseModel):
+    """The first page of members of the first listed groups. ``complete`` is
+    True when those pages are every member of every listed group."""
+
+    members: list[dict[str, Any]]
+    complete: bool

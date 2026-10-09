@@ -12,32 +12,23 @@ from onyx.connectors.jira.source_operations import (
     JiraSourceOperations,
     is_cloud_gateway,
 )
+from onyx.connectors.jira.utils import (
+    ATLASSIAN_GROUP_ROLE_ACTOR_TYPE,
+    ATLASSIAN_USER_ROLE_ACTOR_TYPE,
+    BROWSE_PROJECTS_PERMISSION,
+    HOLDER_TYPE_ANYONE,
+    HOLDER_TYPE_APPLICATION_ROLE,
+    HOLDER_TYPE_GROUP,
+    HOLDER_TYPE_PROJECT_ROLE,
+    HOLDER_TYPE_USER,
+    SUPPORTED_STATIC_HOLDER_TYPES,
+)
 from onyx.utils.logger import setup_logger
 
 HolderMap = dict[str, list[Holder]]
 
 
 logger = setup_logger()
-
-BROWSE_PROJECTS_PERMISSION = "BROWSE_PROJECTS"
-HOLDER_TYPE_ANYONE = "anyone"
-HOLDER_TYPE_APPLICATION_ROLE = "applicationRole"
-HOLDER_TYPE_USER = "user"
-HOLDER_TYPE_PROJECT_ROLE = "projectRole"
-HOLDER_TYPE_GROUP = "group"
-
-SUPPORTED_STATIC_HOLDER_TYPES = {
-    HOLDER_TYPE_ANYONE,
-    HOLDER_TYPE_APPLICATION_ROLE,
-    HOLDER_TYPE_USER,
-    HOLDER_TYPE_PROJECT_ROLE,
-    HOLDER_TYPE_GROUP,
-}
-
-# Jira DC/Server returns project-role actors flat with this `type` discriminator;
-# Jira Cloud v3 instead wraps them in nested `actorGroup` / `actorUser` objects.
-ATLASSIAN_GROUP_ROLE_ACTOR_TYPE = "atlassian-group-role-actor"
-ATLASSIAN_USER_ROLE_ACTOR_TYPE = "atlassian-user-role-actor"
 
 
 class _RoleActorCategory(StrEnum):
