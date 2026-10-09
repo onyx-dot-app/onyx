@@ -26,6 +26,8 @@ interface ChatSessionData {
   chatSessionSharedStatus: ChatSessionSharedStatus;
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
+  // Backend ID of the in-flight stream, so Stop cannot target a later one.
+  streamId?: number;
   hasPerformedInitialScroll: boolean;
   documentSidebarVisible: boolean;
   hasSentLocalUserMessage: boolean;
@@ -41,6 +43,8 @@ interface ChatSessionData {
   isLoaded: boolean;
   description?: string;
   personaId?: number;
+  // Pinned at creation server-side, so it outlives the live UI toggle.
+  incognito?: boolean;
 
   // Streaming duration tracking
   streamingStartTime?: number;
@@ -181,7 +185,7 @@ const createInitialSessionData = (
 ): ChatSessionData => ({
   sessionId,
   messageTree: new Map<number, Message>(),
-  chatState: "input" as ChatState,
+  chatState: "input",
   regenerationState: null,
   canContinue: false,
   submittedMessage: "",
@@ -613,6 +617,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       isLoaded: true,
       description: backendSession?.description,
       personaId: backendSession?.persona_id,
+      incognito: backendSession?.incognito ?? false,
     };
 
     const existingSession = get().sessions.get(sessionId);
@@ -714,6 +719,20 @@ export const useDocumentSidebarVisible = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.documentSidebarVisible || false;
+  });
+
+/**
+ * The agent the open session was created with, from the session the backend
+ * actually returned. `useChatSessions` cannot answer this for every session:
+ * it pages 50 at a time, so an older chat is missing from its list.
+ */
+export const useCurrentSessionPersonaId = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.personaId ?? null;
   });
 
 export const useSelectedNodeForDocDisplay = () =>

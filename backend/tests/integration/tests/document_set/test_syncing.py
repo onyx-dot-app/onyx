@@ -2,22 +2,26 @@ from uuid import uuid4
 
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
+from tests.integration.common_utils.document_index import DocumentIndexClient
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
+from tests.integration.common_utils.managers.user_group import UserGroupManager
+from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
 
 
 def test_multiple_document_sets_syncing_same_connnector(
-    vespa_client: vespa_fixture,
+    document_index_client: DocumentIndexClient,
     admin_user: DATestUser,
 ) -> None:
-    # create api key
+    # create api key with admin-group scope so it can hit the ingestion API
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connector
@@ -58,7 +62,7 @@ def test_multiple_document_sets_syncing_same_connnector(
 
     # make sure documents are as expected
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair_1,
         doc_set_names=[doc_set_1.name, doc_set_2.name],
         doc_creating_user=admin_user,
@@ -66,12 +70,16 @@ def test_multiple_document_sets_syncing_same_connnector(
 
 
 def test_removing_connector(
-    vespa_client: vespa_fixture,
+    document_index_client: DocumentIndexClient,
     admin_user: DATestUser,
 ) -> None:
-    # create api key
+    # create api key with admin-group scope so it can hit the ingestion API
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connectors
@@ -114,7 +122,7 @@ def test_removing_connector(
 
     # make sure cc_pair_1 docs are doc_set_1 only
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair_1,
         doc_set_names=[doc_set_1.name],
         doc_creating_user=admin_user,
@@ -122,7 +130,7 @@ def test_removing_connector(
 
     # make sure cc_pair_2 docs are doc_set_1 only
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair_2,
         doc_set_names=[doc_set_1.name],
         doc_creating_user=admin_user,
@@ -141,7 +149,7 @@ def test_removing_connector(
 
     # make sure cc_pair_1 docs are doc_set_1 only
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair_1,
         doc_set_names=[doc_set_1.name],
         doc_creating_user=admin_user,
@@ -149,7 +157,7 @@ def test_removing_connector(
 
     # make sure cc_pair_2 docs have no doc set
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair_2,
         doc_set_names=[],
         doc_creating_user=admin_user,
@@ -157,7 +165,7 @@ def test_removing_connector(
 
 
 def test_renaming_document_set(
-    vespa_client: vespa_fixture,
+    document_index_client: DocumentIndexClient,
     admin_user: DATestUser,
 ) -> None:
     api_key: DATestAPIKey = APIKeyManager.create(
@@ -202,7 +210,7 @@ def test_renaming_document_set(
     )
 
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair,
         doc_set_names=[new_name],
         doc_creating_user=admin_user,

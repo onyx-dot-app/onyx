@@ -2,18 +2,19 @@ import functools
 import logging
 from collections.abc import Callable
 from logging import Logger
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
 import requests
-from tenacity import before_sleep_log
+from tenacity import (
+    before_sleep_log,
+    before_sleep_nothing,
+    retry_if_exception_type,
+    stop_after_attempt,
+    stop_never,
+    wait_exponential,
+    wait_random,
+)
 from tenacity import retry as tenacity_retry
-from tenacity import retry_if_exception_type
-from tenacity import stop_after_attempt
-from tenacity import stop_never
-from tenacity import wait_exponential
-from tenacity import wait_random
 from tenacity.stop import stop_base
 from tenacity.wait import wait_base
 
@@ -21,6 +22,8 @@ from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_REDACTED_REQUEST_DATA = "<redacted>"
 
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -33,6 +36,7 @@ def retry_builder(
     backoff: float = 2,
     jitter: tuple[float, float] | float = 1,
     exceptions: type[Exception] | tuple[type[Exception], ...] = (Exception,),
+    log_errors: bool = True,
 ) -> Callable[[F], F]:
     """Builds a generic wrapper/decorator for calls to external APIs that
     may fail due to rate limiting, flakes, or other reasons. Applies exponential
@@ -63,7 +67,9 @@ def retry_builder(
             retry=retry_if_exception_type(exceptions),
             wait=wait,
             stop=stop,
-            before_sleep=before_sleep_log(cast(Logger, logger), logging.WARNING),
+            before_sleep=before_sleep_log(cast(Logger, logger), logging.WARNING)
+            if log_errors
+            else before_sleep_nothing,
             reraise=True,
         )
         @functools.wraps(func)
@@ -87,31 +93,43 @@ def request_with_retries(
     tries: int = 8,
     delay: float = 1,
     backoff: float = 2,
+    log_request_data: bool = False,
 ) -> requests.Response:
     # jitter=0 + max_delay=None preserves the exact wait curve this function
     # had on the legacy `retry` package: delay * backoff**n, uncapped
-    @retry_builder(tries=tries, delay=delay, max_delay=None, backoff=backoff, jitter=0)
+    @retry_builder(
+        tries=tries,
+        delay=delay,
+        max_delay=None,
+        backoff=backoff,
+        jitter=0,
+        log_errors=False,
+    )
     def _make_request() -> requests.Response:
-        response = requests.request(
-            method=method,
-            url=url,
-            data=data,
-            headers=headers,
-            params=params,
-            timeout=timeout,
-            stream=stream,
-        )
         try:
+            response = requests.request(
+                method=method,
+                url=url,
+                data=data,
+                headers=headers,
+                params=params,
+                timeout=timeout,
+                stream=stream,
+            )
             response.raise_for_status()
-        except requests.exceptions.HTTPError:
-            logger.exception(
+        except requests.exceptions.RequestException as exc:
+            logger.error(
                 "Request failed:\n%s",
                 {
                     "method": method,
-                    "url": url,
-                    "data": data,
-                    "headers": headers,
-                    "params": params,
+                    "exception_type": type(exc).__name__,
+                    "status_code": exc.response.status_code
+                    if exc.response is not None
+                    else None,
+                    "data": data if log_request_data else _REDACTED_REQUEST_DATA,
+                    "headers": dict.fromkeys(headers, _REDACTED_REQUEST_DATA)
+                    if headers is not None
+                    else None,
                     "timeout": timeout,
                     "stream": stream,
                 },

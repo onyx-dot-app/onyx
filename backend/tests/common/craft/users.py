@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import httpx
 
-from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.managers.user import build_email
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import (
+    DEFAULT_PASSWORD,
+    UserManager,
+    build_email,
+)
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -47,10 +48,10 @@ def create_or_login_admin(name: str) -> DATestUser:
                 email=build_email(name),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS.copy(),
-                role=UserRole.ADMIN,
+                is_admin=True,
                 is_active=True,
             )
         )
-    if user.role != UserRole.ADMIN:
-        raise AssertionError(f"Expected {name} to be an admin, got {user.role.value}")
+    if not UserManager.is_admin(user):
+        raise AssertionError(f"Expected {name} to hold admin panel access")
     return user

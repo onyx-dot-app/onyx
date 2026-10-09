@@ -7,13 +7,17 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_PASSWORD
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_USER
-from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SYNC_DB_API
+from onyx.configs.app_configs import (
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+)
+from onyx.db.engine.sql_engine import (
+    SYNC_DB_API,
+    build_connection_string,
+    get_session_with_current_tenant,
+)
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.file_store.file_store import get_default_file_store
 from onyx.setup import setup_postgres
@@ -292,9 +296,7 @@ def reset_postgres(
             _seed_dev_license_if_set(db_session)
             # Promote the FUTURE search-settings row (danswer_chunk_<model>) to
             # PRESENT so secondary_search_settings is None and the api_server
-            # doesn't have to perform the swap mid-request. Previously this
-            # lived in reset_vespa(); when Vespa was deprecated the swap call
-            # needs to stay.
+            # doesn't have to perform the swap mid-request.
             check_and_perform_index_swap(db_session)
 
 

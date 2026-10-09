@@ -204,10 +204,11 @@ class RedliningValidator:
         author_attr = f"{{{self.namespaces['w']}}}author"
 
         for parent in root.iter():
-            to_remove = []
-            for child in parent:
-                if child.tag == ins_tag and child.get(author_attr) == self.author:
-                    to_remove.append(child)
+            to_remove = [
+                child
+                for child in parent
+                if child.tag == ins_tag and child.get(author_attr) == self.author
+            ]
             for elem in to_remove:
                 parent.remove(elem)
 
@@ -215,10 +216,11 @@ class RedliningValidator:
         t_tag = f"{{{self.namespaces['w']}}}t"
 
         for parent in root.iter():
-            to_process = []
-            for child in parent:
-                if child.tag == del_tag and child.get(author_attr) == self.author:
-                    to_process.append((child, list(parent).index(child)))
+            to_process = [
+                (child, list(parent).index(child))
+                for child in parent
+                if child.tag == del_tag and child.get(author_attr) == self.author
+            ]
 
             for del_elem, del_index in reversed(to_process):
                 for elem in del_elem.iter():
@@ -235,10 +237,9 @@ class RedliningValidator:
 
         paragraphs = []
         for p_elem in root.findall(f".//{p_tag}"):
-            text_parts = []
-            for t_elem in p_elem.findall(f".//{t_tag}"):
-                if t_elem.text:
-                    text_parts.append(t_elem.text)
+            text_parts = [
+                t_elem.text for t_elem in p_elem.findall(f".//{t_tag}") if t_elem.text
+            ]
             paragraph_text = "".join(text_parts)
             if paragraph_text:
                 paragraphs.append(paragraph_text)

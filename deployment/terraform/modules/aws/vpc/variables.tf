@@ -27,3 +27,27 @@ variable "tags" {
   description = "Tags to apply to all VPC-related resources"
   default     = {}
 }
+
+variable "create_s3_vpc_endpoint" {
+  type        = bool
+  description = "Whether to create a gateway VPC endpoint for S3"
+  default     = true
+}
+
+variable "single_nat_gateway" {
+  type        = bool
+  description = "Route all private subnets through one NAT gateway. Cheaper, but the NAT becomes a single-AZ dependency. False provisions one per AZ."
+  default     = false
+}
+
+variable "iam_role_permissions_boundary" {
+  type        = string
+  description = "ARN of a permissions boundary to attach to every IAM role this module creates. Null attaches none. Needed when the caller may only create bounded roles."
+  default     = null
+}
+
+variable "iam_role_path" {
+  type        = string
+  description = "IAM path for every role this module creates. Null keeps the default path (/). Changing it on an existing stack replaces the roles."
+  default     = null
+}

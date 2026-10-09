@@ -1,16 +1,22 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   FederatedConnectorDetail,
   FederatedConnectorConfig,
-  federatedSourceToRegularSource,
 } from "@/lib/types";
+import { federatedSourceToRegularSource } from "@/lib/connectors/types/source";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Label } from "@opal/layouts";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import {
+  Button,
+  Dropdown,
+  InputTypeIn,
+  type DropdownMenuItem,
+} from "@opal/components";
 import { SvgX } from "@opal/icons";
-import { Button } from "@opal/components";
+import { cn } from "@opal/utils";
 
 interface FederatedConnectorSelectorProps {
   name: string;
@@ -30,13 +36,12 @@ export const FederatedConnectorSelector = ({
   selectedConfigs,
   onChange,
   disabled = false,
-  placeholder = "Search federated connectors...",
+  placeholder,
   showError = false,
 }: FederatedConnectorSelectorProps) => {
+  const t = useTranslations("common.federatedConnectorSelector");
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedConnectorIds = selectedConfigs.map(
     (config) => config.federated_connector_id
@@ -52,21 +57,6 @@ export const FederatedConnectorSelector = ({
 
   const allConnectorsSelected = unselectedConnectors.length === 0;
 
-  const filteredUnselectedConnectors = unselectedConnectors.filter(
-    (connector) => {
-      const connectorName = connector.name;
-      return connectorName.toLowerCase().includes(searchQuery.toLowerCase());
-    }
-  );
-
-  useEffect(() => {
-    if (allConnectorsSelected && open) {
-      setOpen(false);
-      inputRef.current?.blur();
-      setSearchQuery("");
-    }
-  }, [allConnectorsSelected, open]);
-
   const selectConnector = (connectorId: number) => {
     // Add connector with empty entities configuration
     const newConfig: FederatedConnectorConfig = {
@@ -74,18 +64,8 @@ export const FederatedConnectorSelector = ({
       entities: {},
     };
 
-    const newSelectedConfigs = [...selectedConfigs, newConfig];
-    onChange(newSelectedConfigs);
+    onChange([...selectedConfigs, newConfig]);
     setSearchQuery("");
-
-    const willAllBeSelected =
-      federatedConnectors.length === newSelectedConfigs.length;
-
-    if (!willAllBeSelected) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 0);
-    }
   };
 
   const removeConnector = (connectorId: number) => {
@@ -96,35 +76,58 @@ export const FederatedConnectorSelector = ({
     );
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        inputRef.current !== event.target &&
-        !inputRef.current?.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      setOpen(false);
-    }
-  };
-
   const effectivePlaceholder = allConnectorsSelected
-    ? "All federated connectors selected"
-    : placeholder;
+    ? t("allSelected.placeholder")
+    : (placeholder ?? t("search.placeholder"));
 
   const isInputDisabled = disabled || allConnectorsSelected;
+
+  // The unpicked connectors, each a custom row since its title carries an
+  // icon; one message row when there is nothing left to pick.
+  const items: DropdownMenuItem[] =
+    unselectedConnectors.length === 0
+      ? [
+          {
+            kind: "custom",
+            id: "message",
+            disabled: true,
+            pinned: true,
+            render: ({ props }) => (
+              <div {...props} className="py-4 text-center text-xs text-text-03">
+                {t("noMoreConnectors.text")}
+              </div>
+            ),
+          },
+        ]
+      : unselectedConnectors.map((connector) => ({
+          kind: "custom",
+          id: String(connector.id),
+          keywords: [connector.name],
+          onActivate: () => selectConnector(connector.id),
+          keepOpen: true,
+          render: ({ highlighted, props }) => (
+            <div
+              {...props}
+              aria-label={connector.name}
+              className={cn(
+                "w-full flex items-center justify-between py-2 px-3 cursor-pointer rounded-08 text-xs",
+                highlighted && "bg-background-neutral-01"
+              )}
+            >
+              <div className="flex items-center truncate me-2">
+                <div className="me-2">
+                  <SourceIcon
+                    sourceType={federatedSourceToRegularSource(
+                      connector.source
+                    )}
+                    iconSize={16}
+                  />
+                </div>
+                <span className="font-medium">{connector.name}</span>
+              </div>
+            </div>
+          ),
+        }));
 
   return (
     <div className="flex flex-col w-full space-y-2 mb-4">
@@ -135,65 +138,29 @@ export const FederatedConnectorSelector = ({
       )}
 
       <Text as="p" mainUiMuted text03>
-        Documents from selected federated connectors will be searched in
-        real-time during queries.
+        {t("realtimeSearchHint.description")}
       </Text>
-      <div className="relative">
-        <InputTypeIn
-          ref={inputRef}
-          searchIcon
-          placeholder={effectivePlaceholder}
-          value={searchQuery}
-          variant={isInputDisabled ? "disabled" : undefined}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setOpen(true);
-          }}
-          onKeyDown={handleKeyDown}
-          onFocus={() => {
-            if (!allConnectorsSelected) {
+      <Dropdown open={open} onOpenChange={setOpen}>
+        <Dropdown.Trigger asChild typeIn behavior="open">
+          <InputTypeIn
+            searchIcon
+            placeholder={effectivePlaceholder}
+            value={searchQuery}
+            variant={isInputDisabled ? "disabled" : undefined}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              // Typing opens the list, as a type-in does.
               setOpen(true);
-            }
-          }}
+            }}
+          />
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={effectivePlaceholder}
+          query={searchQuery}
+          items={items}
+          noMatchText={t("noMatches.text")}
         />
-
-        {open && !allConnectorsSelected && (
-          <div
-            ref={dropdownRef}
-            className="absolute z-50 w-full mt-1 rounded-12 border border-border-02 bg-background-neutral-00 shadow-md default-scrollbar max-h-[300px] overflow-auto"
-          >
-            {filteredUnselectedConnectors.length === 0 ? (
-              <div className="py-4 text-center text-xs text-text-03">
-                {searchQuery
-                  ? "No matching federated connectors found"
-                  : "No more federated connectors available"}
-              </div>
-            ) : (
-              <div>
-                {filteredUnselectedConnectors.map((connector) => (
-                  <div
-                    key={connector.id}
-                    className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-background-neutral-01 text-xs"
-                    onClick={() => selectConnector(connector.id)}
-                  >
-                    <div className="flex items-center truncate mr-2">
-                      <div className="mr-2">
-                        <SourceIcon
-                          sourceType={federatedSourceToRegularSource(
-                            connector.source
-                          )}
-                          iconSize={16}
-                        />
-                      </div>
-                      <span className="font-medium">{connector.name}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      </Dropdown>
 
       {selectedConnectors.length > 0 ? (
         <div className="mt-3">
@@ -211,7 +178,7 @@ export const FederatedConnectorSelector = ({
                   className="flex items-center bg-background-neutral-00 rounded-12 border border-border-02 transition-all px-2 py-1 max-w-full group text-xs"
                 >
                   <div className="flex items-center overflow-hidden">
-                    <div className="mr-1 shrink-0">
+                    <div className="me-1 shrink-0">
                       <SourceIcon
                         sourceType={federatedSourceToRegularSource(
                           connector.source
@@ -224,18 +191,18 @@ export const FederatedConnectorSelector = ({
                     </span>
                     {hasEntitiesConfigured && (
                       <div
-                        className="ml-1 w-2 h-2 bg-green-500 rounded-full shrink-0"
-                        title="Entities configured"
+                        className="ms-1 w-2 h-2 bg-green-500 rounded-full shrink-0"
+                        title={t("entitiesConfigured.tooltip")}
                       />
                     )}
                   </div>
-                  <div className="flex items-center ml-2 gap-1">
+                  <div className="flex items-center ms-2 gap-1">
                     <Button
                       prominence="tertiary"
                       size="sm"
                       type="button"
-                      aria-label="Remove connector"
-                      tooltip="Remove connector"
+                      aria-label={t("removeConnector.tooltip")}
+                      tooltip={t("removeConnector.tooltip")}
                       onClick={() => removeConnector(connector.id)}
                       icon={SvgX}
                     />
@@ -247,7 +214,7 @@ export const FederatedConnectorSelector = ({
         </div>
       ) : (
         <div className="mt-3 p-3 border border-dashed border-border-02 rounded-12 bg-background-neutral-01 text-text-03 text-xs">
-          No federated connectors selected. Search and select connectors above.
+          {t("noneSelected.text")}
         </div>
       )}
 

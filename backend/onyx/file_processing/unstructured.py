@@ -1,7 +1,4 @@
-from typing import Any
-from typing import cast
-from typing import IO
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any, cast
 
 from onyx.configs.constants import KV_UNSTRUCTURED_API_KEY
 from onyx.key_value_store.factory import get_kv_store
@@ -36,8 +33,7 @@ def delete_unstructured_api_key() -> None:
 def _sdk_partition_request(
     file: IO[Any], file_name: str, **kwargs: Any
 ) -> "operations.PartitionRequest":
-    from unstructured_client.models import operations
-    from unstructured_client.models import shared
+    from unstructured_client.models import operations, shared
 
     file.seek(0, 0)
     try:
@@ -56,7 +52,6 @@ def _sdk_partition_request(
 
 
 def unstructured_to_text(file: IO[Any], file_name: str) -> str:
-    from unstructured.staging.base import dict_to_elements
     from unstructured_client import UnstructuredClient
 
     logger.debug("Starting to read file: %s", file_name)
@@ -71,5 +66,5 @@ def unstructured_to_text(file: IO[Any], file_name: str) -> str:
         logger.error(err)
         raise ValueError(err)
 
-    elements = dict_to_elements(response.elements or [])
-    return "\n\n".join(str(el) for el in elements)
+    # The API returns one dict per document element; only its text is needed.
+    return "\n\n".join(el.get("text", "") for el in response.elements or [])

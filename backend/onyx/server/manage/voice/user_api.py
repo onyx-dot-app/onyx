@@ -1,32 +1,36 @@
+import asyncio
 import json
 import secrets
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.voice import fetch_default_stt_provider
-from onyx.db.voice import fetch_default_tts_provider
-from onyx.db.voice import update_user_voice_settings
+from onyx.db.voice import (
+    fetch_default_stt_provider,
+    fetch_default_tts_provider,
+    update_user_voice_settings,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import store_ws_token
-from onyx.redis.redis_pool import WsTokenRateLimitExceeded
+from onyx.redis.redis_pool import (
+    VoiceSessionLimitExceeded,
+    WsTokenRateLimitExceeded,
+    acquire_voice_session,
+    release_voice_session,
+    store_ws_token,
+)
 from onyx.server.manage.models import VoiceSettingsUpdateRequest
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
+from onyx.voice.interface import VoiceProviderInterface
 
 logger = setup_logger()
 
@@ -57,10 +61,43 @@ def get_voice_status(
     )
 
 
+async def _transcribe_with_provider(
+    provider: VoiceProviderInterface,
+    user_id: str,
+    audio_data: bytes,
+    audio_format: str,
+) -> str:
+    """Transcribe one upload under the provider's session policy, if it has one.
+
+    A constrained provider opens a live session for every call, so a REST
+    upload uses the same admission and duration limits as a WebSocket session.
+    """
+    policy = provider.session_policy()
+    if policy is None:
+        return await provider.transcribe(audio_data, audio_format)
+
+    try:
+        session_member_id = await acquire_voice_session(policy=policy, user_id=user_id)
+    except VoiceSessionLimitExceeded as e:
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, str(e))
+    try:
+        # A cancelled transcribe still tears down its session, so the handler
+        # budget is the cap minus the provider's teardown budget.
+        async with asyncio.timeout(policy.handler_seconds):
+            return await provider.transcribe(audio_data, audio_format)
+    finally:
+        try:
+            await release_voice_session(
+                policy=policy, user_id=user_id, session_member_id=session_member_id
+            )
+        except Exception:
+            logger.warning("Transcribe: failed to release session slot", exc_info=True)
+
+
 @router.post("/transcribe")
 async def transcribe_audio(
     audio: UploadFile = File(...),
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """Transcribe audio to text using the default STT provider."""
@@ -100,8 +137,18 @@ async def transcribe_audio(
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(exc)) from exc
 
     try:
-        text = await provider.transcribe(audio_data, audio_format)
+        text = await _transcribe_with_provider(
+            provider=provider,
+            user_id=str(user.id),
+            audio_data=audio_data,
+            audio_format=audio_format,
+        )
         return {"text": text}
+    except OnyxError:
+        raise
+    except ValueError as exc:
+        # Providers reject audio formats they cannot transcribe.
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
     except NotImplementedError as exc:
         raise OnyxError(
             OnyxErrorCode.NOT_IMPLEMENTED,

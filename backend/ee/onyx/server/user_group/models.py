@@ -1,29 +1,57 @@
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.auth.permissions import Permission
+from onyx.db.enums import ConnectorManageRole
 from onyx.db.models import UserGroup as UserGroupModel
-from onyx.server.documents.models import ConnectorCredentialPairDescriptor
-from onyx.server.documents.models import ConnectorSnapshot
-from onyx.server.documents.models import CredentialSnapshot
+from onyx.server.documents.models import (
+    ConnectorCredentialPairDescriptor,
+    ConnectorSnapshot,
+    CredentialSnapshot,
+)
 from onyx.server.features.document_set.models import DocumentSet
 from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.manage.models import UserInfo
-from onyx.server.manage.models import UserPreferences
+from onyx.server.manage.models import UserInfo, UserPreferences
+
+
+class ManagedCCPairEntry(BaseModel):
+    cc_pair_id: int
+    role: ConnectorManageRole = ConnectorManageRole.EDITOR
+
+
+class GroupManagedCCPairsUpdateRequest(BaseModel):
+    cc_pairs: list[ManagedCCPairEntry]
+
+    @field_validator("cc_pairs")
+    @classmethod
+    def _unique_cc_pairs(
+        cls, cc_pairs: list[ManagedCCPairEntry]
+    ) -> list[ManagedCCPairEntry]:
+        if len({entry.cc_pair_id for entry in cc_pairs}) != len(cc_pairs):
+            raise ValueError("Each connector may appear only once in cc_pairs")
+        return cc_pairs
 
 
 class UserGroup(BaseModel):
     id: int
     name: str
     users: list[UserInfo]
-    curator_ids: list[UUID]
+    manager_ids: list[str]
     cc_pairs: list[ConnectorCredentialPairDescriptor]
+    # The group's role on each pair in cc_pairs.
+    managed_cc_pairs: list[ManagedCCPairEntry]
     document_sets: list[DocumentSet]
     personas: list[PersonaSnapshot]
     is_up_to_date: bool
     is_up_for_deletion: bool
     is_default: bool
+    # Members may start incognito chats when availability is groups-only.
+    incognito_enabled: bool
+    # Per-action affordance map ({"manage": true, ...}) the client reads to show/hide
+    # controls. Empty default = every action denied (missing key is false), so it fails
+    # closed. Only the list-groups endpoint fills it in; the mutation routes leave it empty.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
     @classmethod
     def from_model(
@@ -31,10 +59,17 @@ class UserGroup(BaseModel):
         user_group_model: UserGroupModel,
         *,
         mask_credential_prefix: bool,
+        permissions: dict[str, bool] | None = None,
     ) -> "UserGroup":
         return cls(
+            permissions=permissions or {},
             id=user_group_model.id,
             name=user_group_model.name,
+            manager_ids=[
+                str(relationship.user_id)
+                for relationship in user_group_model.user_group_relationships
+                if relationship.is_manager and relationship.user_id is not None
+            ],
             users=[
                 UserInfo(
                     id=str(user.id),
@@ -42,18 +77,13 @@ class UserGroup(BaseModel):
                     is_active=user.is_active,
                     is_superuser=user.is_superuser,
                     is_verified=user.is_verified,
-                    role=user.role,
+                    account_type=user.account_type,
                     preferences=UserPreferences(
                         default_model=user.default_model,
                         chosen_assistants=user.chosen_assistants,
                     ),
                 )
                 for user in user_group_model.users
-            ],
-            curator_ids=[
-                user.user_id
-                for user in user_group_model.user_group_relationships
-                if user.is_curator and user.user_id is not None
             ],
             cc_pairs=[
                 ConnectorCredentialPairDescriptor(
@@ -72,6 +102,14 @@ class UserGroup(BaseModel):
                 for cc_pair_relationship in user_group_model.cc_pair_relationships
                 if cc_pair_relationship.is_current
             ],
+            managed_cc_pairs=[
+                ManagedCCPairEntry(
+                    cc_pair_id=cc_pair_relationship.cc_pair_id,
+                    role=cc_pair_relationship.role,
+                )
+                for cc_pair_relationship in user_group_model.cc_pair_relationships
+                if cc_pair_relationship.is_current
+            ],
             document_sets=[
                 DocumentSet.from_model(
                     ds, mask_credential_prefix=mask_credential_prefix
@@ -86,6 +124,7 @@ class UserGroup(BaseModel):
             is_up_to_date=user_group_model.is_up_to_date,
             is_up_for_deletion=user_group_model.is_up_for_deletion,
             is_default=user_group_model.is_default,
+            incognito_enabled=user_group_model.incognito_enabled,
         )
 
 
@@ -111,7 +150,16 @@ class UserGroupCreate(BaseModel):
 
 class UserGroupUpdate(BaseModel):
     user_ids: list[UUID]
-    cc_pair_ids: list[int]
+    # None leaves the connector links alone. Without it, changing a roster meant
+    # reading every linked cc-pair back and resending it, so a link added in
+    # between was reverted. add_users_to_user_group already preserves them.
+    # Legacy combined field: a newly attached pair gets an EDITOR manage row
+    # and, when PRIVATE, data access. /managed-cc-pairs sets roles only.
+    cc_pair_ids: list[int] | None = None
+
+
+class UserGroupIncognitoUpdate(BaseModel):
+    enabled: bool
 
 
 class AddUsersToUserGroupRequest(BaseModel):
@@ -123,21 +171,24 @@ class UserGroupRename(BaseModel):
     name: str
 
 
-class SetCuratorRequest(BaseModel):
-    user_id: UUID
-    is_curator: bool
-
-
 class UpdateGroupAgentsRequest(BaseModel):
     added_agent_ids: list[int]
     removed_agent_ids: list[int]
 
 
-class SetPermissionRequest(BaseModel):
-    permission: Permission
-    enabled: bool
+class UpdateGroupDocumentSetsRequest(BaseModel):
+    added_document_set_ids: list[int]
+    removed_document_set_ids: list[int]
 
 
-class SetPermissionResponse(BaseModel):
-    permission: Permission
-    enabled: bool
+class SetGroupManagerRequest(BaseModel):
+    user_id: UUID
+    is_manager: bool
+
+
+class BulkSetPermissionsRequest(BaseModel):
+    permissions: list[Permission]
+
+
+class UserGroupDataAccessCCPairs(BaseModel):
+    cc_pair_ids: list[int]

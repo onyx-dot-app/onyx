@@ -24,9 +24,7 @@ from pathlib import Path
 
 import defusedxml.minidom
 from office.soffice import get_soffice_env
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 THUMBNAIL_WIDTH = 300
 CONVERSION_DPI = 100

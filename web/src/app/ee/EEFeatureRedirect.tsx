@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 export default function EEFeatureRedirect() {
   const router = useRouter();

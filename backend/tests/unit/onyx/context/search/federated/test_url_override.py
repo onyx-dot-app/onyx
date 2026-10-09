@@ -1,7 +1,6 @@
 """Tests for Slack URL parsing and direct thread fetch via URL override."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.context.search.federated.models import DirectThreadFetch
 from onyx.context.search.federated.slack_search import _fetch_thread_from_url

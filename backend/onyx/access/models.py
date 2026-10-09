@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
-from onyx.access.utils import prefix_external_group
-from onyx.access.utils import prefix_user_email
-from onyx.access.utils import prefix_user_group
+from onyx.access.utils import (
+    prefix_external_group,
+    prefix_user_email,
+    prefix_user_group,
+)
 from onyx.configs.constants import PUBLIC_DOC_PAT
 
 
@@ -68,7 +70,7 @@ class ExternalAccess:
 class DocExternalAccess:
     """
     This is just a class to wrap the external access and the document ID
-    together. It's used for syncing document permissions to Vespa.
+    together. It's used for syncing document permissions to the document index.
     """
 
     external_access: ExternalAccess
@@ -215,12 +217,12 @@ class DocumentAccess(ExternalAccess):
         object.__setattr__(
             obj,
             "external_user_emails",
-            {external_email for external_email in external_user_emails},
+            set(external_user_emails),
         )
         object.__setattr__(
             obj,
             "external_user_group_ids",
-            {external_group_id for external_group_id in external_user_group_ids},
+            set(external_user_group_ids),
         )
         object.__setattr__(obj, "is_public", is_public)
 

@@ -21,9 +21,7 @@ import threading
 import time
 
 from celery import Task
-from prometheus_client import Counter
-from prometheus_client import Gauge
-from prometheus_client import Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 from onyx.utils.logger import setup_logger
 
@@ -161,7 +159,7 @@ def on_celery_task_prerun(
             _evict_stale_start_times()
             _task_start_times[task_id] = (time.monotonic(), labels)
 
-        headers = getattr(task.request, "headers", None) or {}
+        headers = getattr(task.request, "headers", None) or {}  # ods: ignore[getattr]
         enqueued_at = headers.get("enqueued_at")
         if isinstance(enqueued_at, (int, float)):
             TASK_QUEUE_WAIT.labels(**labels).observe(

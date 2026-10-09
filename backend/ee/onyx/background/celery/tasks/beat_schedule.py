@@ -3,19 +3,19 @@ from typing import Any
 
 from ee.onyx.configs.app_configs import CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS
 from onyx.background.celery.tasks.beat_schedule import (
+    BEAT_EXPIRES_DEFAULT,
+    generate_cloud_tasks,
+)
+from onyx.background.celery.tasks.beat_schedule import (
     beat_cloud_tasks as base_beat_system_tasks,
 )
-from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.beat_schedule import (
     beat_task_templates as base_beat_task_templates,
 )
-from onyx.background.celery.tasks.beat_schedule import generate_cloud_tasks
 from onyx.background.celery.tasks.beat_schedule import (
     get_tasks_to_schedule as base_get_tasks_to_schedule,
 )
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from shared_configs.configs import MULTI_TENANT
 
 ee_beat_system_tasks: list[dict] = []
@@ -47,6 +47,18 @@ ee_beat_task_templates: list[dict] = [
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
             "queue": OnyxCeleryQueues.CSV_GENERATION,
+        },
+    },
+    {
+        "name": "revalidate-sso-domains",
+        "task": OnyxCeleryTask.REVALIDATE_SSO_DOMAINS_TASK,
+        "schedule": timedelta(hours=6),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Revoking stale routing is a security cleanup, so it must reach
+            # gated workspaces too, not just active ones.
+            "skip_gated": False,
         },
     },
 ]
@@ -98,6 +110,21 @@ if not MULTI_TENANT:
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
+                "queue": OnyxCeleryQueues.CSV_GENERATION,
+            },
+        },
+        # Log export is rejected in multi-tenant deployments, so its cleanup
+        # only needs to run here.
+        {
+            "name": "export-logs-cleanup-task",
+            "task": OnyxCeleryTask.EXPORT_LOGS_CLEANUP_TASK,
+            "schedule": timedelta(hours=1),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+                # Cleanup belongs on the heavy worker; it shares the queue the
+                # query-history cleanup uses rather than minting a new one,
+                # which would require deployment changes.
                 "queue": OnyxCeleryQueues.CSV_GENERATION,
             },
         },

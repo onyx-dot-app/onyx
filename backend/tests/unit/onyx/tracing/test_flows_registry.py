@@ -1,7 +1,10 @@
 """Unit tests for ``onyx.tracing.flows`` and ``traced_llm_call``."""
 
-from onyx.tracing.flows import LLMFlow
+import pytest
+
+from onyx.tracing.flows import IMAGE_FLOWS, LLMFlow
 from onyx.tracing.framework.create import trace
+from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.llm_utils import traced_llm_call
 
 
@@ -23,6 +26,11 @@ def test_untagged_sentinels_present() -> None:
     assert LLMFlow.UNTAGGED_STREAM.value == "untagged_stream"
 
 
+def test_image_flows_match_serialized_span_values() -> None:
+    assert LLMFlow.IMAGE_GENERATION.value in IMAGE_FLOWS
+    assert LLMFlow.IMAGE_EDIT.value in IMAGE_FLOWS
+
+
 def test_traced_llm_call_records_flow_and_provider_on_span() -> None:
     with trace("test_traced_llm_call"):
         with traced_llm_call(
@@ -30,12 +38,20 @@ def test_traced_llm_call_records_flow_and_provider_on_span() -> None:
             model="gpt-image-1",
             provider="openai",
             extra_config={"size": "1024x1024"},
+            image_count=2,
         ) as span:
             assert span.span_data.model == "gpt-image-1"
+            assert span.span_data.image_count == 2
             assert span.span_data.model_config is not None
             assert span.span_data.model_config["flow"] == "image_generation"
             assert span.span_data.model_config["model_provider"] == "openai"
             assert span.span_data.model_config["size"] == "1024x1024"
+            assert "image_count" not in span.span_data.model_config
+
+
+def test_generation_span_rejects_nonpositive_image_count() -> None:
+    with pytest.raises(ValueError, match="image_count must be positive"):
+        GenerationSpanData(image_count=0)
 
 
 def test_traced_llm_call_records_input_messages() -> None:

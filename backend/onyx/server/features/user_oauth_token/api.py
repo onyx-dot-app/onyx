@@ -1,7 +1,6 @@
 """API endpoints for user OAuth token management."""
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 

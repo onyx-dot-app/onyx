@@ -15,11 +15,13 @@ import pytest
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.redis import redis_tenant_work_gating as twg
 from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_tenant_work_gating import _SET_KEY
-from onyx.redis.redis_tenant_work_gating import cleanup_expired
-from onyx.redis.redis_tenant_work_gating import get_active_tenants
-from onyx.redis.redis_tenant_work_gating import mark_tenant_active
-from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.redis_tenant_work_gating import (
+    _SET_KEY,
+    cleanup_expired,
+    get_active_tenants,
+    mark_tenant_active,
+    maybe_mark_tenant_active,
+)
 
 
 @pytest.fixture(autouse=True)

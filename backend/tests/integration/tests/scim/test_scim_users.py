@@ -20,30 +20,24 @@ are accepted and round-tripped correctly.
 Auth, revoked-token, and service-discovery tests live in test_scim_tokens.py.
 """
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
 import redis
 
-from ee.onyx.server.license.models import LicenseMetadata
-from ee.onyx.server.license.models import LicenseSource
-from ee.onyx.server.license.models import PlanType
-from onyx.auth.schemas import UserRole
-from onyx.configs.app_configs import REDIS_DB_NUMBER
-from onyx.configs.app_configs import REDIS_HOST
-from onyx.configs.app_configs import REDIS_PORT
+from ee.onyx.server.license.models import LicenseMetadata, LicenseSource, PlanType
+from onyx.configs.app_configs import REDIS_DB_NUMBER, REDIS_HOST, REDIS_PORT
 from onyx.db.enums import AccountType
 from onyx.server.settings.models import ApplicationStatus
-from tests.integration.common_utils.constants import ADMIN_USER_NAME
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import ADMIN_USER_NAME, GENERAL_HEADERS
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
-from tests.integration.common_utils.managers.user import build_email
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import (
+    DEFAULT_PASSWORD,
+    UserManager,
+    build_email,
+)
 from tests.integration.common_utils.test_models import DATestUser
 
 SCIM_USER_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:User"
@@ -69,11 +63,15 @@ def scim_token(idp_style: str) -> str:
     per IdP-style run and reuse. Uses UserManager directly to avoid
     fixture-scope conflicts with the function-scoped admin_user fixture.
     """
-    from tests.integration.common_utils.constants import ADMIN_USER_NAME
-    from tests.integration.common_utils.constants import GENERAL_HEADERS
-    from tests.integration.common_utils.managers.user import build_email
-    from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-    from tests.integration.common_utils.managers.user import UserManager
+    from tests.integration.common_utils.constants import (
+        ADMIN_USER_NAME,
+        GENERAL_HEADERS,
+    )
+    from tests.integration.common_utils.managers.user import (
+        DEFAULT_PASSWORD,
+        UserManager,
+        build_email,
+    )
     from tests.integration.common_utils.test_models import DATestUser
 
     try:
@@ -85,7 +83,7 @@ def scim_token(idp_style: str) -> str:
                 email=build_email(ADMIN_USER_NAME),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.ADMIN,
+                is_admin=True,
                 is_active=True,
             )
         )
@@ -242,7 +240,7 @@ def test_create_user_default_group_and_account_type(
             email=build_email(ADMIN_USER_NAME),
             password=DEFAULT_PASSWORD,
             headers=GENERAL_HEADERS,
-            role=UserRole.ADMIN,
+            is_admin=True,
             is_active=True,
         )
     )

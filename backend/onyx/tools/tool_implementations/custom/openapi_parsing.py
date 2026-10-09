@@ -1,8 +1,9 @@
-from typing import Any
-from typing import cast
+from typing import Any, cast
+from urllib.parse import quote, urlencode
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
+from onyx.llm.models import ToolDefinition
 from onyx.tools.tool_name import sanitize_tool_name
 
 REQUEST_BODY = "requestBody"
@@ -52,46 +53,29 @@ class MethodSpec(BaseModel):
     def build_url(
         self, base_url: str, path_params: dict[str, str], query_params: dict[str, str]
     ) -> str:
+        encoded_path_params = {
+            name: quote(str(value), safe="") for name, value in path_params.items()
+        }
         url = f"{base_url}{self.path}"
         try:
-            url = url.format(**path_params)
+            url = url.format(**encoded_path_params)
         except KeyError as e:
             raise ValueError(f"Missing path parameter: {e}")
         if query_params:
-            url += "?"
-            for param, value in query_params.items():
-                url += f"{param}={value}&"
-            url = url[:-1]
+            url += f"?{urlencode(query_params)}"
         return url
 
-    def to_tool_definition(self) -> dict[str, Any]:
-        tool_definition: Any = {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.summary,
-                "parameters": {"type": "object", "properties": {}},
-            },
-        }
-
-        request_body_schema = self.get_request_body_schema()
-        if request_body_schema:
-            tool_definition["function"]["parameters"]["properties"][REQUEST_BODY] = (
-                request_body_schema
-            )
-
-        query_param_schemas = self.get_query_param_schemas()
-        if query_param_schemas:
-            tool_definition["function"]["parameters"]["properties"].update(
-                {param["name"]: param["schema"] for param in query_param_schemas}
-            )
-
-        path_param_schemas = self.get_path_param_schemas()
-        if path_param_schemas:
-            tool_definition["function"]["parameters"]["properties"].update(
-                {param["name"]: param["schema"] for param in path_param_schemas}
-            )
-        return tool_definition
+    def to_tool_definition(self) -> ToolDefinition:
+        properties: dict[str, JsonValue] = {}
+        if request_body_schema := self.get_request_body_schema():
+            properties[REQUEST_BODY] = request_body_schema
+        for param in self.get_query_param_schemas() + self.get_path_param_schemas():
+            properties[param["name"]] = param["schema"]
+        return ToolDefinition(
+            name=self.name,
+            description=self.summary,
+            parameters={"type": "object", "properties": properties},
+        )
 
     def validate_spec(self) -> None:
         # Validate url construction

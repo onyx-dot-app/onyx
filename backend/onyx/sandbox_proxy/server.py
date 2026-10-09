@@ -3,12 +3,12 @@
 import asyncio
 import os
 import signal
+import socket
 import sys
 import threading
 import uuid
 from collections.abc import Callable
-from http.server import BaseHTTPRequestHandler
-from http.server import HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
@@ -17,23 +17,45 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.sandbox_proxy.addons.gate import GateAddon
-from onyx.sandbox_proxy.backend import build_ca_store
-from onyx.sandbox_proxy.backend import build_ip_lookup
-from onyx.sandbox_proxy.ca import CABootstrap
-from onyx.sandbox_proxy.ca import MaterializedCA
-from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.identity import IdentityResolver
-from onyx.sandbox_proxy.identity import SandboxIPLookup
-from onyx.sandbox_proxy.request_evaluator import ExternalAppRequestEvaluator
+from onyx.sandbox_proxy.certificate_authority.bootstrap import (
+    CABootstrap,
+    MaterializedCA,
+    build_ca_store,
+)
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialInjectionDispatcher,
+    CredentialResolver,
+)
+from onyx.sandbox_proxy.destination_policy import (
+    UpstreamEventLoop,
+    parse_destination_policy,
+)
+from onyx.sandbox_proxy.models import DestinationPolicyConfig
+from onyx.sandbox_proxy.request_evaluator import (
+    CompositeRequestEvaluator,
+    ExternalAppRequestEvaluator,
+    McpRequestEvaluator,
+)
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
-from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
+from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
-from onyx.server.features.build.configs import SANDBOX_PROXY_LISTEN_PORT
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    IdentityResolver,
+    SandboxIPLookup,
+    build_ip_lookup,
+)
+from onyx.server.features.build.configs import (
+    ONYX_SERVER_URL,
+    SANDBOX_NAMESPACE,
+    SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS,
+    SANDBOX_PROXY_HEALTHZ_PORT,
+    SANDBOX_PROXY_INTERNAL_CIDRS,
+    SANDBOX_PROXY_LISTEN_HOST,
+    SANDBOX_PROXY_LISTEN_PORT,
+    SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+from onyx.utils.variable_functionality import set_is_ee_if_available
 
 _DB_POOL_SIZE = 4
 _DB_MAX_OVERFLOW = 4
@@ -102,10 +124,22 @@ def _build_healthz_handler(
     return _HealthzHandler
 
 
+class _IPv6HTTPServer(HTTPServer):
+    address_family = socket.AF_INET6
+
+    def server_bind(self) -> None:
+        # Match mitmproxy: an explicit IPv6 host serves IPv6 clients only.
+        self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+        super().server_bind()
+
+
 def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTTPServer:
     handler = _build_healthz_handler(readiness, lookup)
-    server = HTTPServer(
-        ("0.0.0.0", SANDBOX_PROXY_HEALTHZ_PORT),  # noqa: S104 — container scope
+    server_class: type[HTTPServer] = (
+        _IPv6HTTPServer if ":" in SANDBOX_PROXY_LISTEN_HOST else HTTPServer
+    )
+    server = server_class(
+        (SANDBOX_PROXY_LISTEN_HOST, SANDBOX_PROXY_HEALTHZ_PORT),
         handler,
     )
     thread = threading.Thread(
@@ -114,7 +148,11 @@ def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTT
         daemon=True,
     )
     thread.start()
-    logger.info("healthz listening on 0.0.0.0:%d", SANDBOX_PROXY_HEALTHZ_PORT)
+    logger.info(
+        "healthz listening on [%s]:%d",
+        SANDBOX_PROXY_LISTEN_HOST,
+        SANDBOX_PROXY_HEALTHZ_PORT,
+    )
     return server
 
 
@@ -141,14 +179,22 @@ def _build_cache_factory() -> Callable[[str], CacheBackend]:
     return _factory
 
 
-def _build_mitm_options() -> Options:
-    return Options(
-        listen_host="0.0.0.0",  # noqa: S104 — container scope; pod network only
-        listen_port=SANDBOX_PROXY_LISTEN_PORT,
-        confdir=_MITM_CONFDIR,
-        mode=["regular"],
-        ssl_insecure=False,
+def _build_mitm_master() -> DumpMaster:
+    master: DumpMaster = DumpMaster(
+        options=Options(
+            listen_host=SANDBOX_PROXY_LISTEN_HOST,
+            listen_port=SANDBOX_PROXY_LISTEN_PORT,
+            confdir=_MITM_CONFDIR,
+            mode=["regular"],
+            ssl_insecure=False,
+            ssl_verify_upstream_trusted_ca=SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
+        ),
+        with_termlog=False,
+        with_dumper=False,
     )
+    # DumpMaster registers block_global; gate still requires pod identity.
+    master.options.update(block_global=not SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS)
+    return master
 
 
 async def _run_master(master: DumpMaster) -> None:
@@ -163,7 +209,11 @@ def build_resolvers() -> list[CredentialResolver]:
     canonical hosts). Order is a safety net against accidental overlap, not a
     designed-in priority.
     """
-    return [OnyxPatResolver(), LLMProviderKeyResolver(), ExternalAppResolver()]
+    return [
+        OnyxPatResolver(),
+        MCPServerResolver(),
+        ExternalAppResolver(),
+    ]
 
 
 def _install_signal_handlers(
@@ -197,11 +247,26 @@ def _install_signal_handlers(
         loop.add_signal_handler(sig, _on_signal)
 
 
+def _build_destination_policy() -> DestinationPolicyConfig:
+    cidrs: list[str] = (
+        SANDBOX_PROXY_INTERNAL_CIDRS.split(",") if SANDBOX_PROXY_INTERNAL_CIDRS else []
+    )
+    if (
+        SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS or ":" in SANDBOX_PROXY_LISTEN_HOST
+    ) and not cidrs:
+        raise ValueError(
+            "SANDBOX_PROXY_INTERNAL_CIDRS is required for IPv6 sandbox networking"
+        )
+    return parse_destination_policy(ONYX_SERVER_URL, cidrs)
+
+
 def main() -> int:
-    set_is_ee_based_on_env_variable()
+    destination_policy = _build_destination_policy()
+    set_is_ee_if_available()
 
     logger.info(
-        "Starting sandbox proxy listen=%d healthz=%d namespace=%s",
+        "Starting sandbox proxy host=%s listen=%d healthz=%d namespace=%s",
+        SANDBOX_PROXY_LISTEN_HOST,
         SANDBOX_PROXY_LISTEN_PORT,
         SANDBOX_PROXY_HEALTHZ_PORT,
         SANDBOX_NAMESPACE,
@@ -247,8 +312,11 @@ def main() -> int:
             [type(r).__name__ for r in resolvers],
         )
         gate = GateAddon(
+            destination_policy=destination_policy,
             identity=identity,
-            request_evaluator=ExternalAppRequestEvaluator(),
+            request_evaluator=CompositeRequestEvaluator(
+                [ExternalAppRequestEvaluator(), McpRequestEvaluator()]
+            ),
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),
@@ -256,8 +324,7 @@ def main() -> int:
 
         # DumpMaster binds to the running event loop in its constructor.
         async def _async_main() -> None:
-            options = _build_mitm_options()
-            master = DumpMaster(options=options, with_termlog=False, with_dumper=False)
+            master: DumpMaster = _build_mitm_master()
             master.addons.add(gate)
             _install_signal_handlers(
                 asyncio.get_running_loop(),
@@ -268,7 +335,7 @@ def main() -> int:
             )
             await _run_master(master)
 
-        asyncio.run(_async_main())
+        asyncio.run(_async_main(), loop_factory=UpstreamEventLoop)
     finally:
         lookup.stop()
         if healthz_server is not None:

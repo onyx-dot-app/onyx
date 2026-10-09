@@ -1,10 +1,20 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Button, Card, Divider, MessageCard } from "@opal/components";
+import {
+  Button,
+  Card,
+  Divider,
+  Dropdown,
+  InputTypeInTag,
+  MessageCard,
+  Tooltip,
+  useCreateModal,
+} from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
@@ -12,19 +22,21 @@ import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import InsertUserVariableMenu from "@/sections/agents/InsertUserVariableMenu";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
-import {
-  Card as CardLayout,
-  Content,
-  ContentAction,
-  InputHorizontal,
-  InputVertical,
-} from "@opal/layouts";
+import { Content, InputHorizontal, InputVertical } from "@opal/layouts";
 import { useFormikContext } from "formik";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
 import {
-  STARTER_MESSAGES_EXAMPLES,
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
+import {
+  filterModelConfigurations,
+  findDefaultModelDisplayName,
+} from "@/lib/languageModels/options";
+import {
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
 } from "@/lib/constants";
@@ -35,53 +47,43 @@ import {
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
   CODING_AGENT_TOOL_ID,
-} from "@/app/app/components/tools/constants";
+} from "@/lib/tools/constants";
 import Text from "@/refresh-components/texts/Text";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import { Tooltip } from "@opal/components";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
-import { useProjectsContext } from "@/providers/ProjectsContext";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
+import { useProjectsContext } from "@/lib/projects/providers";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { Popover, PopoverMenu } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import { ChatFileType } from "@/app/app/interfaces";
 import {
   SvgActions,
-  SvgExpand,
   SvgEye,
   SvgEyeOff,
-  SvgFold,
   SvgImage,
   SvgLock,
   SvgOnyxOctagon,
   SvgOrganization,
-  SvgSliders,
   SvgTag,
   SvgUsers,
   SvgTrash,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
 } from "@/refresh-components/avatars/CustomAgentAvatar";
-import InputAvatar from "@/refresh-components/inputs/InputAvatar";
+import { InputAvatar } from "@opal/components";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
-import { useAgents, useLabels } from "@/lib/agents/hooks";
+import { useAgents, useAgentLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
-import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
-import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
+import { useMcpServersForAgent } from "@/lib/mcp/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
-import { useAvailableTools } from "@/hooks/useAvailableTools";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
-import { InputTypeIn } from "@opal/components";
-import useFilter from "@/hooks/useFilter";
-import EnabledCount from "@/refresh-components/EnabledCount";
-import { useAppRouter } from "@/hooks/appNavigation";
+import { useAvailableTools } from "@/lib/tools/hooks";
+import { getActionIcon } from "@/lib/tools/utils";
+import { ToolSnapshot } from "@/lib/tools/types";
+import { MCPTool } from "@/lib/mcp/types";
+import { MCPServerCard } from "@/lib/mcp/components";
+import { useAppPosition } from "@/lib/position/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,
@@ -91,21 +93,28 @@ import {
 } from "@/lib/agents/svc";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import ShareAgentModal, {
-  ShareDraftState,
-} from "@/sections/modals/ShareAgentModal";
+import { ConfirmationModalLayout } from "@opal/layouts";
+import { ShareAgentModal, type ShareDraftState } from "@/lib/agents/components";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
-import { ValidSources } from "@/lib/types";
+import { Permission } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
+import type { Agent } from "@/lib/agents/types";
+
+// Length of the translated starterExamples array, which is local to
+// AgentStarterMessages, shared here so the editor can size against it.
+const STARTER_MESSAGES_COUNT = 4;
 
 interface AgentIconEditorProps {
   existingAgent?: FullAgent | null;
 }
 
 function FormWarningsEffect() {
+  const t = useTranslations("agents");
   const { values, setStatus } = useFormikContext<{
     web_search: boolean;
     open_url: boolean;
@@ -114,16 +123,16 @@ function FormWarningsEffect() {
   useEffect(() => {
     const warnings: Record<string, string> = {};
     if (values.web_search && !values.open_url) {
-      warnings.open_url =
-        "Web Search without the ability to open URLs can lead to significantly worse web based results.";
+      warnings.open_url = t("editor.warnings.openUrl");
     }
     setStatus({ warnings });
-  }, [values.web_search, values.open_url, setStatus]);
+  }, [values.web_search, values.open_url, setStatus, t]);
 
   return null;
 }
 
 function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
+  const t = useTranslations("agents");
   const { values, setFieldValue } = useFormikContext<{
     name: string;
     icon_name: string | null;
@@ -134,6 +143,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
     string | null
   >(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const iconGridRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -169,7 +179,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         return;
       }
 
-      const { file_id } = await response.json();
+      const { file_id }: { file_id: string } = await response.json();
       setFieldValue("uploaded_image_id", file_id);
       setPopoverOpen(false);
     } catch (error) {
@@ -213,8 +223,8 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         className="hidden"
       />
 
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <Popover.Trigger asChild>
+      <Dropdown open={popoverOpen} onOpenChange={setPopoverOpen}>
+        <Dropdown.Trigger asChild>
           <Hoverable.Root group="inputAvatar" width="fit">
             <InputAvatar className="relative flex flex-col items-center justify-center h-30 w-30">
               {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
@@ -228,49 +238,74 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 mb-2">
                 <Hoverable.Item group="inputAvatar" variant="appear-on-hover">
                   <Button prominence="secondary" size="md">
-                    Edit
+                    {t("editor.avatar.edit.label")}
                   </Button>
                 </Hoverable.Item>
               </div>
             </InputAvatar>
           </Hoverable.Root>
-        </Popover.Trigger>
-        <Popover.Content>
-          <PopoverMenu>
-            {[
-              <LineItem
-                key="upload-image"
-                icon={SvgImage}
-                onClick={() => fileInputRef.current?.click()}
-                emphasized
-              >
-                Upload Image
-              </LineItem>,
-              null,
-              <div key="icon-grid" className="grid grid-cols-4 gap-1">
-                <SquareButton
-                  key="default-icon"
-                  icon={() => (
-                    <CustomAgentAvatar name={values.name} size={30} />
-                  )}
-                  onClick={() => handleIconClick(null)}
-                  transient={!imageSrc && values.icon_name === null}
-                />
-                {Object.keys(agentAvatarIconMap).map((iconName) => (
-                  <SquareButton
-                    key={iconName}
-                    onClick={() => handleIconClick(iconName)}
-                    icon={() => (
-                      <CustomAgentAvatar iconName={iconName} size={30} />
-                    )}
-                    transient={values.icon_name === iconName}
-                  />
-                ))}
-              </div>,
-            ]}
-          </PopoverMenu>
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={t("editor.avatar.edit.label")}
+          items={[
+            {
+              kind: "action",
+              id: "upload-image",
+              icon: SvgImage,
+              title: t("editor.avatar.uploadImage.label"),
+              onSelect: () => fileInputRef.current?.click(),
+            },
+            {
+              kind: "group",
+              items: [
+                // The icon grid is one row with its own controls; a pick
+                // closes the list itself.
+                {
+                  kind: "custom",
+                  id: "icon-grid",
+                  keepOpen: true,
+                  // ArrowRight steps into the grid; its buttons take the
+                  // keyboard from there.
+                  onSecondary: () =>
+                    iconGridRef.current?.querySelector("button")?.focus(),
+                  render: ({ props }) => (
+                    <div
+                      {...props}
+                      role="menuitem"
+                      tabIndex={-1}
+                      ref={iconGridRef}
+                      className="grid grid-cols-4 gap-1"
+                      // Escape from a focused icon closes the list.
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setPopoverOpen(false);
+                      }}
+                    >
+                      <SquareButton
+                        key="default-icon"
+                        icon={() => (
+                          <CustomAgentAvatar name={values.name} size={30} />
+                        )}
+                        onClick={() => handleIconClick(null)}
+                        transient={!imageSrc && values.icon_name === null}
+                      />
+                      {Object.keys(agentAvatarIconMap).map((iconName) => (
+                        <SquareButton
+                          key={iconName}
+                          onClick={() => handleIconClick(iconName)}
+                          icon={() => (
+                            <CustomAgentAvatar iconName={iconName} size={30} />
+                          )}
+                          transient={values.icon_name === iconName}
+                        />
+                      ))}
+                    </div>
+                  ),
+                },
+              ],
+            },
+          ]}
+        />
+      </Dropdown>
     </>
   );
 }
@@ -283,7 +318,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <Card border="solid" rounding="lg">
+    <Card border="solid" rounding={4}>
       <InputHorizontal
         icon={SvgActions}
         title={tool.display_name || tool.name}
@@ -296,149 +331,15 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   );
 }
 
-interface MCPServerCardProps {
-  server: MCPServer;
-  tools: MCPTool[];
-  isLoading: boolean;
-}
-
-function MCPServerCard({
-  server,
-  tools: enabledTools,
-  isLoading,
-}: MCPServerCardProps) {
-  const [isFolded, setIsFolded] = useState(false);
-  const { values, setFieldValue, getFieldMeta } = useFormikContext<any>();
-  const serverFieldName = `mcp_server_${server.id}`;
-  const isServerEnabled = values[serverFieldName]?.enabled ?? false;
-  const {
-    query,
-    setQuery,
-    filtered: filteredTools,
-  } = useFilter(enabledTools, (tool) => `${tool.name} ${tool.description}`);
-
-  // Calculate enabled and total tool counts
-  const enabledCount = enabledTools.filter((tool) => {
-    const toolFieldValue = values[serverFieldName]?.[`tool_${tool.id}`];
-    return toolFieldValue === true;
-  }).length;
-
-  const hasTools = enabledTools.length > 0 && filteredTools.length > 0;
-
-  let cardContent: React.ReactNode | undefined;
-  if (isLoading) {
-    cardContent = (
-      <div className="flex flex-col gap-2 p-2">
-        <GeneralLayouts.Section padding={1}>
-          <SvgSimpleLoader />
-        </GeneralLayouts.Section>
-      </div>
-    );
-  } else if (hasTools) {
-    cardContent = (
-      <GeneralLayouts.Section gap={0.5} padding={0.5} alignItems="stretch">
-        {filteredTools.map((tool) => {
-          const toolDisabled =
-            !tool.isAvailable ||
-            !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
-          return (
-            <Disabled key={tool.id} disabled={toolDisabled}>
-              <Card border="solid" rounding="md" padding="sm">
-                <ContentAction
-                  icon={tool.icon ?? SvgSliders}
-                  title={tool.name}
-                  description={tool.description}
-                  sizePreset="main-ui"
-                  variant="section"
-                  padding="fit"
-                  rightChildren={
-                    <SwitchField
-                      name={`${serverFieldName}.tool_${tool.id}`}
-                      disabled={!isServerEnabled}
-                    />
-                  }
-                />
-              </Card>
-            </Disabled>
-          );
-        })}
-      </GeneralLayouts.Section>
-    );
-  }
-
-  return (
-    <Card
-      expandable
-      expanded={!isFolded}
-      border="solid"
-      rounding="lg"
-      padding="sm"
-      expandedContent={cardContent}
-    >
-      <CardLayout.Header
-        bottomChildren={
-          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              searchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {enabledTools.length > 0 && (
-              <Button
-                prominence="internal"
-                rightIcon={isFolded ? SvgExpand : SvgFold}
-                onClick={() => setIsFolded((prev) => !prev)}
-              >
-                {isFolded ? "Expand" : "Fold"}
-              </Button>
-            )}
-          </GeneralLayouts.Section>
-        }
-      >
-        <div className="p-2">
-          <ContentAction
-            icon={getActionIcon(server.server_url, server.name)}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-            rightChildren={
-              <GeneralLayouts.Section
-                flexDirection="row"
-                gap={0.5}
-                alignItems="start"
-              >
-                <EnabledCount
-                  enabledCount={enabledCount}
-                  totalCount={enabledTools.length}
-                />
-                <SwitchField
-                  name={`${serverFieldName}.enabled`}
-                  onCheckedChange={(checked) => {
-                    enabledTools.forEach((tool) => {
-                      setFieldValue(
-                        `${serverFieldName}.tool_${tool.id}`,
-                        checked
-                      );
-                    });
-                    if (!checked) return;
-                    setIsFolded(false);
-                  }}
-                />
-              </GeneralLayouts.Section>
-            }
-          />
-        </div>
-      </CardLayout.Header>
-    </Card>
-  );
-}
-
 function AgentStarterMessages() {
-  const max_starters = STARTER_MESSAGES_EXAMPLES.length;
+  const t = useTranslations("agents");
+  const starterExamples = [
+    t("editor.starters.examples.overview"),
+    t("editor.starters.examples.salesReport"),
+    t("editor.starters.examples.engineeringGoals"),
+    t("editor.starters.examples.todayGoals"),
+  ];
+  const max_starters = starterExamples.length;
 
   const { values } = useFormikContext<{
     starter_messages: string[];
@@ -462,14 +363,13 @@ function AgentStarterMessages() {
   return (
     <FieldArray name="starter_messages">
       {(arrayHelpers) => (
-        <GeneralLayouts.Section gap={0.5}>
+        <GeneralLayouts.Section gap={2}>
           {Array.from({ length: visibleCount }, (_, i) => (
             <InputTypeInElementField
               key={`starter_messages.${i}`}
               name={`starter_messages.${i}`}
               placeholder={
-                STARTER_MESSAGES_EXAMPLES[i] ||
-                "Enter a conversation starter..."
+                starterExamples[i] || t("editor.starters.placeholder")
               }
               onRemove={() => arrayHelpers.remove(i)}
             />
@@ -538,23 +438,42 @@ export default function AgentEditorPage({
   agent: existingAgent,
   refreshAgent,
 }: AgentEditorPageProps) {
+  const t = useTranslations("agents");
+  const appPosition = useAppPosition();
   const router = useRouter();
-  const appRouter = useAppRouter();
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
-  const { isAdmin } = useUser();
-  // Feature/unlist are admin-only surfaces — never shown to non-admin
-  // owners or editors (ENG-4179)
-  const canUpdateFeaturedStatus = isAdmin;
-  const { vectorDbEnabled } = useSettings();
+  const { permissions } = useUser();
+  // Prefer the server's per-agent answer; a new agent has none yet, so fall back to the
+  // global token — which is exactly what the projection stamps for `feature`.
+  const canShare = !existingAgent || can(existingAgent, "share");
+  const canDelete = can(existingAgent, "delete");
+  const canUpdateFeaturedStatus = existingAgent
+    ? can(existingAgent, "feature")
+    : hasPermission(permissions, Permission.MANAGE_AGENTS);
+  const {
+    vectorDbEnabled,
+    appName,
+    hide_provider_grouping: hideProviderGrouping,
+  } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+  // The providers this agent may use; a new agent gets the unscoped list.
+  const { llmProviders: agentLlmProviders } = useLanguageModelsForAgent(
+    existingAgent?.id
+  );
+  // The Global Default row names the workspace default, which only the
+  // unscoped list is sure to carry.
+  const { llmProviders: globalLlmProviders, defaultText } = useLanguageModels();
 
   const agentDraftStorageKey = draftKey("agent-editor", "new");
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
+  // Tracks the latest user_file_ids so async upload callbacks reconcile against
+  // current form state rather than a stale snapshot from when the upload began.
+  const userFileIdsRef = useRef<string[]>([]);
 
   // Labels are edited in the Share Agent section and saved with the form
-  const { labels: allLabels, createLabel } = useLabels();
+  const { labels: allLabels, createLabel } = useAgentLabels();
   const [labelInputValue, setLabelInputValue] = useState("");
   const addAgentLabel = useCallback(
     async (
@@ -592,12 +511,14 @@ export default function AgentEditorPage({
       await refreshAgents();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to toggle visibility"
+        error instanceof Error
+          ? error.message
+          : t("editor.toasts.toggleListedFailed")
       );
     } finally {
       setIsTogglingListed(false);
     }
-  }, [existingAgent, refreshAgent, refreshAgents]);
+  }, [existingAgent, refreshAgent, refreshAgents, t]);
 
   // Hooks for Knowledge section
   const { allRecentFiles, beginUpload } = useProjectsContext();
@@ -608,11 +529,12 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
+  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForAgent(
+    existingAgent?.id
+  );
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
 
-  const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
 
   // Check if the *BUILT-IN* tools are available.
@@ -643,23 +565,32 @@ export default function AgentEditorPage({
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
     ? undefined
-    : "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.";
+    : t("editor.actions.imageGeneration.unavailable.tooltip");
 
-  // Group MCP server tools from availableTools by server ID
+  // Include inaccessible attached tools so edits preserve them.
   const mcpServersWithTools = mcpServers.map((server) => {
-    const serverTools: MCPTool[] = (availableTools || [])
+    const candidateTools = server.can_attach
+      ? availableTools
+      : (existingAgent?.tools ?? []);
+    const serverTools: MCPTool[] = candidateTools
       .filter((tool) => tool.mcp_server_id === server.id)
       .map((tool) => ({
         id: tool.id.toString(),
         icon: getActionIcon(server.server_url, server.name),
         name: tool.display_name || tool.name,
         description: tool.description,
-        isAvailable: true,
+        isAvailable: server.can_attach,
         isEnabled: tool.enabled,
       }));
 
     return { server, tools: serverTools, isLoading: false };
   });
+
+  // Render-only filter. Form state registers every server through
+  // mcpServersWithTools.
+  const mcpServersWithVisibleTools = mcpServersWithTools.filter(
+    ({ tools }) => tools.length > 0
+  );
 
   const initialValues = {
     // General
@@ -672,7 +603,7 @@ export default function AgentEditorPage({
     // Prompts
     instructions: existingAgent?.system_prompt ?? "",
     starter_messages: Array.from(
-      { length: STARTER_MESSAGES_EXAMPLES.length },
+      { length: STARTER_MESSAGES_COUNT },
       (_, i) => existingAgent?.starter_messages?.[i]?.message ?? ""
     ),
 
@@ -791,11 +722,13 @@ export default function AgentEditorPage({
     icon_name: Yup.string().nullable(),
     remove_image: Yup.boolean().optional(),
     uploaded_image_id: Yup.string().nullable(),
-    name: Yup.string().required("Agent name is required."),
+    name: Yup.string().required(t("editor.validation.nameRequired")),
     description: Yup.string()
       .max(
         MAX_CHARACTERS_AGENT_DESCRIPTION,
-        `Description must be ${MAX_CHARACTERS_AGENT_DESCRIPTION} characters or less`
+        t("editor.validation.descriptionMax", {
+          max: MAX_CHARACTERS_AGENT_DESCRIPTION,
+        })
       )
       .optional(),
 
@@ -804,7 +737,9 @@ export default function AgentEditorPage({
     starter_messages: Yup.array().of(
       Yup.string().max(
         MAX_CHARACTERS_STARTER_MESSAGE,
-        `Conversation starter must be ${MAX_CHARACTERS_STARTER_MESSAGE} characters or less`
+        t("editor.validation.starterMax", {
+          max: MAX_CHARACTERS_STARTER_MESSAGE,
+        })
       )
     ),
 
@@ -823,7 +758,7 @@ export default function AgentEditorPage({
       .optional()
       .test(
         "knowledge-cutoff-date-not-in-future",
-        "Knowledge cutoff date must be today or earlier.",
+        t("editor.validation.cutoffInFuture"),
         (value) => !value || !isDateInFuture(value)
       ),
     replace_base_system_prompt: Yup.boolean(),
@@ -925,15 +860,11 @@ export default function AgentEditorPage({
         // Sharing on saved agents is managed by the share dialog — omitting
         // the fields here keeps form saves from clobbering it. Creates carry
         // the draft share state captured before the agent existed.
-        ...(existingAgent
-          ? {}
-          : {
-              is_public: values.is_public,
-              users: values.shared_user_ids,
-              groups: values.shared_group_ids,
-            }),
+        is_public: existingAgent ? undefined : values.is_public,
+        users: existingAgent ? undefined : values.shared_user_ids,
+        groups: existingAgent ? undefined : values.shared_group_ids,
         default_model_configuration_id:
-          (values as any).default_model_configuration_id ?? null,
+          values.default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
         tool_ids: toolIds,
         // uploaded_image: null, // Already uploaded separately
@@ -967,16 +898,26 @@ export default function AgentEditorPage({
 
       // Handle response
       if (!personaResponse || !personaResponse.ok) {
-        const prefix = `Failed to ${existingAgent ? "update" : "create"} agent`;
         const detail = personaResponse
-          ? await parseErrorDetail(personaResponse, "unknown error")
-          : "no response received";
-        toast.error(`${prefix} - ${detail}`);
+          ? await parseErrorDetail(
+              personaResponse,
+              t("editor.toasts.unknownDetail")
+            )
+          : t("editor.toasts.noResponse");
+        toast.error(
+          t(
+            existingAgent
+              ? "editor.toasts.updateFailed"
+              : "editor.toasts.createFailed",
+            { detail }
+          )
+        );
         return;
       }
 
       // Success
-      const agent = await personaResponse.json();
+      const agent: Omit<Agent, "user_permission"> =
+        await personaResponse.json();
 
       // clear() (not clearDraft) so an in-flight debounced write is cancelled too.
       clearAgentDraftRef.current?.();
@@ -1002,13 +943,13 @@ export default function AgentEditorPage({
           businessTier
         );
         if (shareError) {
-          toast.error(`Agent created, but sharing failed: ${shareError}`);
+          toast.error(t("editor.toasts.sharingFailed", { error: shareError }));
         }
       }
       toast.success(
-        `Agent "${agent.name}" ${
-          existingAgent ? "updated" : "created"
-        } successfully`
+        t(existingAgent ? "editor.toasts.updated" : "editor.toasts.created", {
+          name: agent.name,
+        })
       );
 
       // Refresh agents list and the specific agent
@@ -1018,10 +959,10 @@ export default function AgentEditorPage({
       }
 
       // Immediately start a chat with this agent.
-      appRouter({ agentId: agent.id });
+      appPosition.openAgent(agent.id);
     } catch (error) {
       console.error("Submit error:", error);
-      toast.error(`An error occurred: ${error}`);
+      toast.error(t("editor.toasts.genericError", { error: String(error) }));
     }
   }
 
@@ -1031,16 +972,17 @@ export default function AgentEditorPage({
 
     try {
       await deleteAgent(existingAgent.id);
-      toast.success("Agent deleted successfully");
+      toast.success(t("editor.toasts.deleted"));
       deleteAgentModal.toggle(false);
       await refreshAgents();
       router.push("/app/agents");
     } catch (e) {
       console.error("Delete agent error:", e);
       toast.error(
-        `Failed to delete agent: ${
-          e instanceof Error ? e.message : "Unknown error"
-        }`
+        t("editor.toasts.deleteFailed", {
+          error:
+            e instanceof Error ? e.message : t("editor.toasts.unknownError"),
+        })
       );
     }
   }
@@ -1049,7 +991,7 @@ export default function AgentEditorPage({
   function handlePickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     if (!currentFileIds.includes(file.id)) {
       setFieldValue("user_file_ids", [...currentFileIds, file.id]);
@@ -1059,7 +1001,7 @@ export default function AgentEditorPage({
   function handleUnpickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     setFieldValue(
       "user_file_ids",
@@ -1077,12 +1019,20 @@ export default function AgentEditorPage({
   async function handleUploadChange(
     e: React.ChangeEvent<HTMLInputElement>,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     try {
-      let selectedIds = [...(currentFileIds || [])];
+      // Seed lazily from the latest form state on the first async callback so
+      // selections the user changed while the upload was in flight are kept.
+      // onFailure and onSuccess share this variable and both run in the same
+      // resolution, so their edits stay consistent with each other.
+      let workingIds: string[] | null = null;
+      const seed = () => {
+        if (workingIds === null) workingIds = [...userFileIdsRef.current];
+        return workingIds;
+      };
       const optimistic = await beginUpload(
         Array.from(files),
         null,
@@ -1094,17 +1044,23 @@ export default function AgentEditorPage({
               .filter((f) => f.temp_id)
               .map((f) => [f.temp_id as string, f.id])
           );
-          const replaced = (selectedIds || []).map(
-            (id: string) => tempToFinal.get(id) ?? id
-          );
-          selectedIds = replaced;
-          setFieldValue("user_file_ids", replaced);
+          workingIds = seed().map((id) => tempToFinal.get(id) ?? id);
+          setFieldValue("user_file_ids", workingIds);
+        },
+        (failedTempIds) => {
+          // Drop optimistic ids for rejected files (e.g. size/token limit) so
+          // they don't linger as "uploading" and keep the submit button disabled.
+          const failed = new Set(failedTempIds);
+          workingIds = seed().filter((id) => !failed.has(id));
+          setFieldValue("user_file_ids", workingIds);
         }
       );
       if (optimistic) {
         const optimisticIds = optimistic.map((f) => f.id);
-        selectedIds = [...selectedIds, ...optimisticIds];
-        setFieldValue("user_file_ids", selectedIds);
+        setFieldValue("user_file_ids", [
+          ...(currentFileIds || []),
+          ...optimisticIds,
+        ]);
       }
     } catch (error) {
       console.error("Upload error:", error);
@@ -1123,7 +1079,7 @@ export default function AgentEditorPage({
     <>
       <div
         data-testid="AgentsEditorPage/container"
-        aria-label="Agents Editor Page"
+        aria-label={t("editor.page.ariaLabel")}
         className="h-full w-full"
       >
         <Formik
@@ -1137,6 +1093,10 @@ export default function AgentEditorPage({
             description:
               initialValues.description.length >
               MAX_CHARACTERS_AGENT_DESCRIPTION,
+            // SAFETY: Formik collapses `FormikTouched` for an array of
+            // primitives to a single `boolean`, but it reads a `boolean[]` at
+            // runtime — one entry per element. The value below is that array.
+            // oxlint-disable-next-line anti-slop/no-chained-type-assertions
             starter_messages: initialValues.starter_messages.map(
               (msg) => msg.length > MAX_CHARACTERS_STARTER_MESSAGE
             ) as unknown as boolean,
@@ -1144,6 +1104,9 @@ export default function AgentEditorPage({
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
+            // Keep the ref in sync so async upload callbacks read current ids.
+            userFileIdsRef.current = values.user_file_ids;
+
             const fileStatusMap = new Map(
               allRecentFiles.map((f) => [f.id, f.status])
             );
@@ -1159,8 +1122,13 @@ export default function AgentEditorPage({
             );
 
             const hasProcessingFiles = values.user_file_ids.some(
-              (fileId: string) =>
-                fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
+              (fileId: string) => {
+                const status = fileStatusMap.get(fileId);
+                return (
+                  status === UserFileStatus.PROCESSING ||
+                  status === UserFileStatus.INDEXING
+                );
+              }
             );
             // Saved agents report their status (group ownership counts as
             // shared); unsaved ones derive it from the draft form state.
@@ -1185,17 +1153,22 @@ export default function AgentEditorPage({
 
                 <userFilesModal.Provider>
                   <UserFilesModal
-                    title="User Files"
-                    description="All files selected for this agent"
-                    recentFiles={values.user_file_ids
-                      .map((userFileId: string) => {
+                    title={t("editor.filesModal.title")}
+                    description={t("editor.filesModal.description")}
+                    recentFiles={values.user_file_ids.map(
+                      (userFileId: string) => {
                         const rf = allRecentFiles.find(
                           (f) => f.id === userFileId
                         );
                         if (rf) return rf;
-                        return {
+                        // Placeholder for a selected file that is not in the
+                        // recent-files list. Mirrors the optimistic upload
+                        // placeholder built in `ProjectsContext`.
+                        const placeholder: ProjectFile = {
                           id: userFileId,
-                          name: `File ${userFileId.slice(0, 8)}`,
+                          name: t("editor.filesModal.placeholderName", {
+                            id: userFileId.slice(0, 8),
+                          }),
                           status: UserFileStatus.COMPLETED,
                           file_id: userFileId,
                           created_at: new Date().toISOString(),
@@ -1203,10 +1176,13 @@ export default function AgentEditorPage({
                           user_id: null,
                           file_type: "",
                           last_accessed_at: new Date().toISOString(),
-                          chat_file_type: "file" as const,
-                        } as unknown as ProjectFile;
-                      })
-                      .filter((f): f is ProjectFile => f !== null)}
+                          chat_file_type: ChatFileType.DOCUMENT,
+                          token_count: null,
+                          chunk_count: null,
+                        };
+                        return placeholder;
+                      }
+                    )}
                     selectedFileIds={values.user_file_ids}
                     onPickRecent={(file: ProjectFile) => {
                       if (!values.user_file_ids.includes(file.id)) {
@@ -1257,20 +1233,17 @@ export default function AgentEditorPage({
                   {deleteAgentModal.isOpen && (
                     <ConfirmationModalLayout
                       icon={SvgTrash}
-                      title="Delete Agent"
+                      title={t("editor.deleteModal.title")}
                       submit={
                         <Button variant="danger" onClick={handleDeleteAgent}>
-                          Delete Agent
+                          {t("editor.delete.button.label")}
                         </Button>
                       }
                       onClose={() => deleteAgentModal.toggle(false)}
                     >
-                      <GeneralLayouts.Section alignItems="start" gap={0.5}>
-                        <Text>
-                          Anyone using this agent will no longer be able to
-                          access it. Deletion cannot be undone.
-                        </Text>
-                        <Text>Are you sure you want to delete this agent?</Text>
+                      <GeneralLayouts.Section alignItems="start" gap={2}>
+                        <Text>{t("editor.deleteModal.body.warning")}</Text>
+                        <Text>{t("editor.deleteModal.body.confirm")}</Text>
                       </GeneralLayouts.Section>
                     </ConfirmationModalLayout>
                   )}
@@ -1280,45 +1253,43 @@ export default function AgentEditorPage({
                   <SettingsLayouts.Root>
                     <SettingsLayouts.Header
                       icon={SvgOnyxOctagon}
-                      title={existingAgent ? "Edit Agent" : "Create Agent"}
-                      rightChildren={
-                        <div className="flex gap-2">
-                          <Button
-                            prominence="secondary"
-                            type="button"
-                            onClick={() => router.back()}
-                          >
-                            Cancel
-                          </Button>
-                          <Tooltip
-                            tooltip={
-                              isSubmitting
-                                ? "Saving changes..."
-                                : !isValid
-                                  ? "Please fix the errors in the form before saving."
-                                  : !dirty
-                                    ? "No changes have been made."
-                                    : hasUploadingFiles
-                                      ? "Please wait for files to finish uploading."
-                                      : undefined
-                            }
-                            side="bottom"
-                          >
-                            <Button
-                              disabled={
-                                isSubmitting ||
-                                !isValid ||
-                                !dirty ||
-                                hasUploadingFiles
-                              }
-                              type="submit"
-                            >
-                              {existingAgent ? "Save" : "Create"}
-                            </Button>
-                          </Tooltip>
-                        </div>
+                      title={
+                        existingAgent
+                          ? t("editor.header.editTitle")
+                          : t("editor.header.createTitle")
                       }
-                      backButton
+                      cancel
+                      actions={[
+                        <Tooltip
+                          key="save"
+                          tooltip={
+                            isSubmitting
+                              ? t("editor.saveTooltip.saving")
+                              : !isValid
+                                ? t("editor.saveTooltip.fixErrors")
+                                : !dirty
+                                  ? t("editor.saveTooltip.noChanges")
+                                  : hasUploadingFiles
+                                    ? t("editor.saveTooltip.uploading")
+                                    : undefined
+                          }
+                          side="bottom"
+                        >
+                          <Button
+                            disabled={
+                              isSubmitting ||
+                              !isValid ||
+                              !dirty ||
+                              hasUploadingFiles
+                            }
+                            type="submit"
+                          >
+                            {existingAgent
+                              ? t("editor.header.save.label")
+                              : t("editor.header.create.label")}
+                          </Button>
+                        </Tooltip>,
+                      ]}
                       divider
                     />
 
@@ -1334,25 +1305,30 @@ export default function AgentEditorPage({
 
                       <GeneralLayouts.Section
                         flexDirection="row"
-                        gap={2.5}
+                        gap={10}
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
-                          <InputVertical withLabel="name" title="Name">
+                          <InputVertical
+                            withLabel="name"
+                            title={t("editor.general.name.title")}
+                          >
                             <InputTypeInField
                               name="name"
-                              placeholder="Name your agent"
+                              placeholder={t("editor.general.name.placeholder")}
                             />
                           </InputVertical>
 
                           <InputVertical
                             withLabel="description"
-                            title="Description"
-                            suffix="optional"
+                            title={t("editor.general.descriptionField.title")}
+                            suffix={t("editor.suffix.optional")}
                           >
                             <InputTextAreaField
                               name="description"
-                              placeholder="What does this agent do?"
+                              placeholder={t(
+                                "editor.general.descriptionField.placeholder"
+                              )}
                             />
                           </InputVertical>
                         </GeneralLayouts.Section>
@@ -1360,45 +1336,46 @@ export default function AgentEditorPage({
                         <GeneralLayouts.Section width="fit">
                           <InputVertical
                             withLabel="agent_avatar"
-                            title="Agent Avatar"
+                            title={t("editor.general.avatar.title")}
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
                           </InputVertical>
                         </GeneralLayouts.Section>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <GeneralLayouts.Section>
                         <InputVertical
                           withLabel="instructions"
-                          title="Instructions"
-                          suffix="optional"
-                          description="Add instructions to tailor the response for this agent."
+                          title={t("editor.prompts.instructions.title")}
+                          suffix={t("editor.suffix.optional")}
+                          description={t(
+                            "editor.prompts.instructions.description"
+                          )}
                         >
                           <InputTextAreaField
                             name="instructions"
-                            placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
+                            placeholder={t(
+                              "editor.prompts.instructions.placeholder"
+                            )}
+                            rightSection={
+                              <InsertUserVariableMenu fieldName="instructions" />
+                            }
                           />
                         </InputVertical>
 
                         <InputVertical
                           withLabel="starter_messages"
-                          title="Conversation Starters"
-                          description="Example messages that help users understand what this agent can do and how to interact with it effectively."
-                          suffix="optional"
+                          title={t("editor.prompts.starters.title")}
+                          description={t("editor.prompts.starters.description")}
+                          suffix={t("editor.suffix.optional")}
                         >
                           <AgentStarterMessages />
                         </InputVertical>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <AgentKnowledgePane
                         enableKnowledge={values.enable_knowledge}
@@ -1443,65 +1420,74 @@ export default function AgentEditorPage({
                         vectorDbEnabled={vectorDbEnabled}
                       />
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <GeneralLayouts.Section
-                        gap={0.5}
+                        gap={2}
                         alignItems="stretch"
                         height="auto"
                       >
                         <Content
-                          title="Share Agent"
+                          title={t("editor.share.title")}
                           sizePreset="main-content"
                           variant="section"
                         />
-                        <Card border="solid" rounding="lg">
+                        <Card border="solid" rounding={4}>
                           <GeneralLayouts.Section>
-                            <InputHorizontal
-                              title="Share This Agent"
-                              description="with other users, groups, or everyone in your organization."
-                              center
-                            >
-                              <Button
-                                prominence="secondary"
-                                icon={shareStatusIcon}
-                                onClick={() => shareAgentModal.toggle(true)}
+                            {canShare && (
+                              <InputHorizontal
+                                title={t("editor.share.share.title")}
+                                description={t(
+                                  "editor.share.share.description"
+                                )}
+                                center
                               >
-                                Share
-                              </Button>
-                            </InputHorizontal>
+                                <Button
+                                  prominence="secondary"
+                                  icon={shareStatusIcon}
+                                  onClick={() => shareAgentModal.toggle(true)}
+                                >
+                                  {t("editor.share.share.button.label")}
+                                </Button>
+                              </InputHorizontal>
+                            )}
                             {canUpdateFeaturedStatus && (
                               <>
                                 <InputHorizontal
                                   withLabel="is_featured"
-                                  title="Feature This Agent"
-                                  description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                                  title={t("editor.share.feature.title")}
+                                  description={t(
+                                    "editor.share.feature.description"
+                                  )}
                                 >
                                   <SwitchField name="is_featured" />
                                 </InputHorizontal>
                                 {values.is_featured &&
                                   sharingStatus === "PRIVATE" && (
-                                    <MessageCard title="This agent is private to you and will only be featured for yourself." />
+                                    <MessageCard
+                                      title={t(
+                                        "editor.share.feature.privateNotice.title"
+                                      )}
+                                    />
                                   )}
                                 {values.is_featured &&
                                   existingAgent &&
                                   !existingAgent.is_listed && (
                                     <MessageCard
                                       variant="warning"
-                                      title="This agent is unlisted and won't be shown in the featured list."
+                                      title={t(
+                                        "editor.share.feature.unlistedWarning.title"
+                                      )}
                                     />
                                   )}
                               </>
                             )}
                             <GeneralLayouts.Section
-                              gap={0.25}
+                              gap={1}
                               alignItems="stretch"
                             >
-                              <InputChipField
-                                chips={(allLabels ?? [])
+                              <InputTypeInTag
+                                tags={(allLabels ?? [])
                                   .filter((label) =>
                                     values.label_ids.includes(label.id)
                                   )
@@ -1509,7 +1495,7 @@ export default function AgentEditorPage({
                                     id: String(label.id),
                                     label: label.name,
                                   }))}
-                                onRemoveChip={(id) =>
+                                onRemoveTag={(id) =>
                                   setFieldValue(
                                     "label_ids",
                                     values.label_ids.filter(
@@ -1526,258 +1512,290 @@ export default function AgentEditorPage({
                                 }
                                 value={labelInputValue}
                                 onChange={setLabelInputValue}
-                                placeholder="Add labels..."
+                                placeholder={t(
+                                  "editor.share.labels.placeholder"
+                                )}
                                 icon={SvgTag}
                               />
                               <Text text03 secondaryBody>
-                                Add labels and categories to help people better
-                                discover this agent.
+                                {t("editor.share.labels.description")}
                               </Text>
                             </GeneralLayouts.Section>
                           </GeneralLayouts.Section>
                         </Card>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                      <SimpleCollapsible>
-                        <SimpleCollapsible.Header
-                          title="Actions"
-                          description="Tools and capabilities available for this agent to use."
-                        />
-                        <SimpleCollapsible.Content>
-                          <GeneralLayouts.Section
-                            gap={0.5}
-                            alignItems="stretch"
+                      <Collapsible
+                        title={t("editor.actions.title")}
+                        description={t("editor.actions.description")}
+                      >
+                        <GeneralLayouts.Section gap={2} alignItems="stretch">
+                          <Disabled
+                            disabled={!isImageGenerationAvailable}
+                            tooltip={imageGenerationDisabledTooltip}
                           >
-                            <Disabled
-                              disabled={!isImageGenerationAvailable}
-                              tooltip={imageGenerationDisabledTooltip}
-                            >
-                              <Card border="solid" rounding="lg">
-                                <InputHorizontal
-                                  withLabel="image_generation"
-                                  title="Image Generation"
-                                  description="Generate and manipulate images using AI-powered tools."
-                                  disabled={!isImageGenerationAvailable}
-                                >
-                                  <SwitchField
-                                    name="image_generation"
-                                    disabled={!isImageGenerationAvailable}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            <Disabled disabled={!webSearchTool}>
-                              <Card border="solid" rounding="lg">
-                                <InputHorizontal
-                                  withLabel="web_search"
-                                  title="Web Search"
-                                  description="Search the web for real-time information and up-to-date results."
-                                  disabled={!webSearchTool}
-                                >
-                                  <SwitchField
-                                    name="web_search"
-                                    disabled={!webSearchTool}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            <Disabled disabled={!openURLTool}>
-                              <Card border="solid" rounding="lg">
-                                <InputHorizontal
-                                  withLabel="open_url"
-                                  title="Open URL"
-                                  description="Fetch and read content from web URLs."
-                                  disabled={!openURLTool}
-                                >
-                                  <SwitchField
-                                    name="open_url"
-                                    disabled={!openURLTool}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            <Disabled disabled={!codeInterpreterTool}>
-                              <Card border="solid" rounding="lg">
-                                <InputHorizontal
-                                  withLabel="code_interpreter"
-                                  title="Code Interpreter"
-                                  description="Generate and run code."
-                                  disabled={!codeInterpreterTool}
-                                >
-                                  <SwitchField
-                                    name="code_interpreter"
-                                    disabled={!codeInterpreterTool}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            <Disabled disabled={!codingAgentTool}>
-                              <Card border="solid" rounding="lg">
-                                <InputHorizontal
-                                  withLabel="coding_agent"
-                                  title="Coding Agent"
-                                  description="Investigate a GitHub repository and answer questions about its code."
-                                  disabled={!codingAgentTool}
-                                >
-                                  <SwitchField
-                                    name="coding_agent"
-                                    disabled={!codingAgentTool}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            {/* Tools */}
-                            <>
-                              {/* render the divider if there is at least one mcp-server or open-api-tool */}
-                              {(mcpServers.length > 0 ||
-                                openApiTools.length > 0) && (
-                                <Divider
-                                  paddingPerpendicular="xs"
-                                  paddingParallel="fit"
-                                />
-                              )}
-
-                              {/* MCP tools */}
-                              {mcpServersWithTools.length > 0 && (
-                                <GeneralLayouts.Section gap={0.5}>
-                                  {mcpServersWithTools.map(
-                                    ({ server, tools, isLoading }) => (
-                                      <MCPServerCard
-                                        key={server.id}
-                                        server={server}
-                                        tools={tools}
-                                        isLoading={isLoading}
-                                      />
-                                    )
-                                  )}
-                                </GeneralLayouts.Section>
-                              )}
-
-                              {/* OpenAPI tools */}
-                              {openApiTools.length > 0 && (
-                                <GeneralLayouts.Section gap={0.5}>
-                                  {openApiTools.map((tool) => (
-                                    <OpenApiToolCard
-                                      key={tool.id}
-                                      tool={tool}
-                                    />
-                                  ))}
-                                </GeneralLayouts.Section>
-                              )}
-                            </>
-                          </GeneralLayouts.Section>
-                        </SimpleCollapsible.Content>
-                      </SimpleCollapsible>
-
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
-
-                      <SimpleCollapsible>
-                        <SimpleCollapsible.Header
-                          title="Advanced Options"
-                          description="Fine-tune agent prompts and knowledge."
-                        />
-                        <SimpleCollapsible.Content>
-                          <GeneralLayouts.Section>
-                            <Card border="solid" rounding="lg">
-                              <GeneralLayouts.Section>
-                                <InputHorizontal
-                                  withLabel="llm_model"
-                                  title="Default Model"
-                                  description="This model will be used by Onyx by default in your chats."
-                                >
-                                  <ModelSelector
-                                    value={
-                                      (values.default_model_configuration_id as
-                                        | number
-                                        | null) ?? null
-                                    }
-                                    onChange={(opt) =>
-                                      setFieldValue(
-                                        "default_model_configuration_id",
-                                        opt.modelConfigurationId ?? null
-                                      )
-                                    }
-                                    includeGlobalDefault
-                                  />
-                                </InputHorizontal>
-                                <InputHorizontal
-                                  withLabel="knowledge_cutoff_date"
-                                  title="Knowledge Cutoff Date"
-                                  suffix="optional"
-                                  description="Documents with a last-updated date prior to this will be ignored."
-                                >
-                                  <InputDatePickerField
-                                    name="knowledge_cutoff_date"
-                                    maxDate={new Date()}
-                                  />
-                                </InputHorizontal>
-                                <InputHorizontal
-                                  withLabel="replace_base_system_prompt"
-                                  title="Overwrite System Prompt"
-                                  suffix="(Not Recommended)"
-                                  description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
-                                >
-                                  <SwitchField name="replace_base_system_prompt" />
-                                </InputHorizontal>
-                              </GeneralLayouts.Section>
-                            </Card>
-
-                            <GeneralLayouts.Section gap={0.25}>
-                              <InputVertical
-                                withLabel="reminders"
-                                title="Reminders"
-                                suffix="optional"
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="image_generation"
+                                title={t(
+                                  "editor.actions.imageGeneration.title"
+                                )}
+                                description={t(
+                                  "editor.actions.imageGeneration.description"
+                                )}
+                                disabled={!isImageGenerationAvailable}
                               >
-                                <InputTextAreaField
-                                  name="reminders"
-                                  placeholder="Remember, I want you to always format your response as a numbered list."
+                                <SwitchField
+                                  name="image_generation"
+                                  disabled={!isImageGenerationAvailable}
                                 />
-                              </InputVertical>
-                              <Text text03 secondaryBody>
-                                Append a brief reminder to the prompt messages.
-                                Use this to remind the agent if you find that it
-                                tends to forget certain instructions as the chat
-                                progresses. This should be brief and not
-                                interfere with the user messages.
-                              </Text>
-                            </GeneralLayouts.Section>
-                          </GeneralLayouts.Section>
-                        </SimpleCollapsible.Content>
-                      </SimpleCollapsible>
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
 
-                      {existingAgent && (
+                          <Disabled disabled={!webSearchTool}>
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="web_search"
+                                title={t("editor.actions.webSearch.title")}
+                                description={t(
+                                  "editor.actions.webSearch.description"
+                                )}
+                                disabled={!webSearchTool}
+                              >
+                                <SwitchField
+                                  name="web_search"
+                                  disabled={!webSearchTool}
+                                />
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
+
+                          <Disabled disabled={!openURLTool}>
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="open_url"
+                                title={t("editor.actions.openUrl.title")}
+                                description={t(
+                                  "editor.actions.openUrl.description"
+                                )}
+                                disabled={!openURLTool}
+                              >
+                                <SwitchField
+                                  name="open_url"
+                                  disabled={!openURLTool}
+                                />
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
+
+                          <Disabled disabled={!codeInterpreterTool}>
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="code_interpreter"
+                                title={t(
+                                  "editor.actions.codeInterpreter.title"
+                                )}
+                                description={t(
+                                  "editor.actions.codeInterpreter.description"
+                                )}
+                                disabled={!codeInterpreterTool}
+                              >
+                                <SwitchField
+                                  name="code_interpreter"
+                                  disabled={!codeInterpreterTool}
+                                />
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
+
+                          <Disabled disabled={!codingAgentTool}>
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="coding_agent"
+                                title={t("editor.actions.codingAgent.title")}
+                                description={t(
+                                  "editor.actions.codingAgent.description"
+                                )}
+                                disabled={!codingAgentTool}
+                              >
+                                <SwitchField
+                                  name="coding_agent"
+                                  disabled={!codingAgentTool}
+                                />
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
+
+                          {/* Tools */}
+                          <>
+                            {/* render the divider if there is at least one mcp-server with tools or open-api-tool */}
+                            {(mcpServersWithVisibleTools.length > 0 ||
+                              openApiTools.length > 0) && (
+                              <Divider
+                                paddingPerpendicular={1}
+                                paddingParallel={0}
+                              />
+                            )}
+
+                            {/* MCP tools */}
+                            {mcpServersWithVisibleTools.length > 0 && (
+                              <GeneralLayouts.Section
+                                gap={2}
+                                alignItems="stretch"
+                              >
+                                {mcpServersWithVisibleTools.map(
+                                  ({ server, tools, isLoading }) => (
+                                    <MCPServerCard
+                                      key={server.id}
+                                      server={server}
+                                      tools={tools}
+                                      isLoading={isLoading}
+                                    />
+                                  )
+                                )}
+                              </GeneralLayouts.Section>
+                            )}
+
+                            {/* OpenAPI tools */}
+                            {openApiTools.length > 0 && (
+                              <GeneralLayouts.Section gap={2}>
+                                {openApiTools.map((tool) => (
+                                  <OpenApiToolCard key={tool.id} tool={tool} />
+                                ))}
+                              </GeneralLayouts.Section>
+                            )}
+                          </>
+                        </GeneralLayouts.Section>
+                      </Collapsible>
+
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+                      <Collapsible
+                        title={t("editor.advanced.title")}
+                        description={t("editor.advanced.description")}
+                      >
+                        <GeneralLayouts.Section>
+                          <Card border="solid" rounding={4}>
+                            <GeneralLayouts.Section>
+                              <InputHorizontal
+                                withLabel="llm_model"
+                                title={t("modals.viewer.defaultModel.title")}
+                                description={t(
+                                  "modals.viewer.defaultModel.description",
+                                  { appName }
+                                )}
+                              >
+                                <SimpleModelSelector
+                                  nullable
+                                  globalDefault={{
+                                    description: findDefaultModelDisplayName(
+                                      globalLlmProviders,
+                                      defaultText
+                                    ),
+                                  }}
+                                  providers={filterModelConfigurations(
+                                    agentLlmProviders ?? [],
+                                    {
+                                      keep:
+                                        (values.default_model_configuration_id as
+                                          | number
+                                          | null) ?? null,
+                                    }
+                                  )}
+                                  value={
+                                    (values.default_model_configuration_id as
+                                      | number
+                                      | null) ?? null
+                                  }
+                                  grouped={!hideProviderGrouping}
+                                  onChange={(modelConfigurationId) =>
+                                    setFieldValue(
+                                      "default_model_configuration_id",
+                                      modelConfigurationId
+                                    )
+                                  }
+                                />
+                              </InputHorizontal>
+                              <InputHorizontal
+                                withLabel="knowledge_cutoff_date"
+                                title={t("modals.viewer.knowledgeCutoff.title")}
+                                suffix={t("editor.suffix.optional")}
+                                description={t(
+                                  "modals.viewer.knowledgeCutoff.description"
+                                )}
+                              >
+                                <InputDatePickerField
+                                  name="knowledge_cutoff_date"
+                                  maxDate={new Date()}
+                                />
+                              </InputHorizontal>
+                              <InputHorizontal
+                                withLabel="replace_base_system_prompt"
+                                title={t(
+                                  "editor.advanced.overwritePrompt.title"
+                                )}
+                                suffix={t(
+                                  "editor.advanced.overwritePrompt.suffix"
+                                )}
+                                description={t(
+                                  "modals.viewer.overwritePrompts.description"
+                                )}
+                              >
+                                <SwitchField name="replace_base_system_prompt" />
+                              </InputHorizontal>
+                            </GeneralLayouts.Section>
+                          </Card>
+
+                          <GeneralLayouts.Section gap={1}>
+                            <InputVertical
+                              withLabel="reminders"
+                              title={t("editor.advanced.reminders.title")}
+                              suffix={t("editor.suffix.optional")}
+                            >
+                              <InputTextAreaField
+                                name="reminders"
+                                placeholder={t(
+                                  "editor.advanced.reminders.placeholder"
+                                )}
+                                rightSection={
+                                  <InsertUserVariableMenu fieldName="reminders" />
+                                }
+                              />
+                            </InputVertical>
+                            <Text text03 secondaryBody>
+                              {t("editor.advanced.reminders.description")}
+                            </Text>
+                          </GeneralLayouts.Section>
+                        </GeneralLayouts.Section>
+                      </Collapsible>
+
+                      {existingAgent && canDelete && (
                         <>
                           <Divider
-                            paddingParallel="fit"
-                            paddingPerpendicular="fit"
+                            paddingParallel={0}
+                            paddingPerpendicular={0}
                           />
 
-                          <Card border="solid" rounding="lg">
+                          <Card border="solid" rounding={4}>
                             <GeneralLayouts.Section>
                               {canUpdateFeaturedStatus && (
                                 <InputHorizontal
                                   title={
                                     existingAgent.is_listed
-                                      ? "Unlist This Agent"
-                                      : "Relist This Agent"
+                                      ? t("editor.visibility.unlist.title")
+                                      : t("editor.visibility.relist.title")
                                   }
                                   description={
                                     existingAgent.is_listed
-                                      ? "Unlisted agents don't appear in the explore agents list but remain accessible."
-                                      : "Relisted agents appear in the explore agents list again."
+                                      ? t(
+                                          "editor.visibility.unlist.description"
+                                        )
+                                      : t(
+                                          "editor.visibility.relist.description"
+                                        )
                                   }
                                   center
                                 >
@@ -1792,14 +1810,18 @@ export default function AgentEditorPage({
                                     onClick={handleToggleListed}
                                   >
                                     {existingAgent.is_listed
-                                      ? "Unlist Agent"
-                                      : "Relist Agent"}
+                                      ? t(
+                                          "editor.visibility.unlist.button.label"
+                                        )
+                                      : t(
+                                          "editor.visibility.relist.button.label"
+                                        )}
                                   </Button>
                                 </InputHorizontal>
                               )}
                               <InputHorizontal
-                                title="Delete This Agent"
-                                description="Anyone using this agent will no longer be able to access it."
+                                title={t("editor.delete.title")}
+                                description={t("editor.delete.description")}
                                 center
                               >
                                 <Button
@@ -1807,7 +1829,7 @@ export default function AgentEditorPage({
                                   prominence="secondary"
                                   onClick={() => deleteAgentModal.toggle(true)}
                                 >
-                                  Delete Agent
+                                  {t("editor.delete.button.label")}
                                 </Button>
                               </InputHorizontal>
                             </GeneralLayouts.Section>

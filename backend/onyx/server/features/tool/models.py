@@ -1,9 +1,27 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from onyx.db.models import Tool
 from onyx.server.features.tool.tool_visibility import get_tool_visibility_config
+from onyx.utils.encryption import mask_string
+
+
+def mask_custom_headers(headers: list[Any] | None) -> list[Any] | None:
+    """Mask header values for read paths. Header values commonly carry bearer
+    tokens, so they are masked like every other secret the API returns. Tool
+    execution reads the unmasked values from the db model, not from a snapshot.
+    """
+    if not headers:
+        return headers
+
+    masked: list[Any] = []
+    for header in headers:
+        if isinstance(header, dict) and isinstance(header.get("value"), str):
+            masked.append({**header, "value": mask_string(header["value"])})
+        else:
+            masked.append(header)
+    return masked
 
 
 class ToolSnapshot(BaseModel):
@@ -21,24 +39,30 @@ class ToolSnapshot(BaseModel):
     oauth_config_name: str | None = None
     enabled: bool = True
 
+    # Server-stamped affordance map; fail-closed empty (only the admin actions list stamps it).
+    permissions: dict[str, bool] = Field(default_factory=dict)
+
     # Visibility settings computed from TOOL_VISIBILITY_CONFIG
     chat_selectable: bool = True
     agent_creation_selectable: bool = True
     default_enabled: bool = False
 
     @classmethod
-    def from_model(cls, tool: Tool) -> "ToolSnapshot":
+    def from_model(
+        cls, tool: Tool, *, permissions: dict[str, bool] | None = None
+    ) -> "ToolSnapshot":
         # Get visibility config for this tool
         config = get_tool_visibility_config(tool)
 
         return cls(
+            permissions=permissions or {},
             id=tool.id,
             name=tool.name,
             description=tool.description or "",
             definition=tool.openapi_schema,
             display_name=tool.display_name or tool.name,
             in_code_tool_id=tool.in_code_tool_id,
-            custom_headers=tool.custom_headers,
+            custom_headers=mask_custom_headers(tool.custom_headers),
             passthrough_auth=tool.passthrough_auth,
             mcp_server_id=tool.mcp_server_id,
             user_id=str(tool.user_id) if tool.user_id else None,

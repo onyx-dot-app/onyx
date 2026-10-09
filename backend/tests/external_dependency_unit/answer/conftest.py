@@ -1,18 +1,17 @@
 import os
-from collections.abc import Iterator
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import update_default_provider, upsert_llm_provider
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 
 # Counter for generating unique file IDs in mock file store
 _mock_file_id_counter = 0
@@ -85,15 +84,6 @@ def mock_gpu_status() -> Iterator[None]:
 
 
 @pytest.fixture
-def mock_vespa_query() -> Iterator[None]:
-    """Stub Vespa query to a safe empty response to avoid CI flakiness."""
-    with patch(
-        "onyx.document_index.vespa.vespa_document_index.query_vespa", return_value=[]
-    ):
-        yield
-
-
-@pytest.fixture
 def mock_file_store() -> Iterator[None]:
     """Mock the file store to avoid S3/storage dependencies in tests."""
     global _mock_file_id_counter
@@ -119,7 +109,6 @@ def mock_file_store() -> Iterator[None]:
 def mock_external_deps(
     mock_nlp_embeddings_post: None,  # noqa: ARG001
     mock_gpu_status: None,  # noqa: ARG001
-    mock_vespa_query: None,  # noqa: ARG001
     mock_file_store: None,  # noqa: ARG001
 ) -> Iterator[None]:
     """Convenience fixture to enable all common external dependency mocks."""

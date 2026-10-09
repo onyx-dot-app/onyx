@@ -1,6 +1,6 @@
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -16,18 +16,18 @@ from tests.integration.common_utils.managers.document_search import (
 )
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestConnector
-from tests.integration.common_utils.test_models import DATestCredential
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
+from tests.integration.common_utils.test_models import (
+    DATestCCPair,
+    DATestConnector,
+    DATestCredential,
+    DATestUser,
+)
 from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
 
 
 @pytest.mark.xfail(reason="flaky - see DAN-986 for details", strict=False)
 def test_slack_prune(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,  # noqa: ARG001
     slack_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     public_channel, private_channel = slack_test_setup
@@ -89,9 +89,12 @@ def test_slack_prune(
         user_ids=[email_id_map[user.email] for user in desired_channel_members],
     )
 
-    public_message = "Steve's favorite number is 809752"
-    private_message = "Sara's favorite number is 346794"
-    message_to_delete = "Rebecca's favorite number is 753468"
+    # Unique per run: the index is not reset between runs, and a retry must not
+    # match chunks an earlier run left behind.
+    run_tag = uuid4().hex[:8]
+    public_message = f"Steve's favorite number is 809752 ({run_tag})"
+    private_message = f"Sara's favorite number is 346794 ({run_tag})"
+    message_to_delete = f"Rebecca's favorite number is 753468 ({run_tag})"
 
     SlackManager.add_message_to_channel(
         slack_client=slack_client,

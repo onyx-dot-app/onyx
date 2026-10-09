@@ -2,9 +2,7 @@ import re
 from typing import Any
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import BasicExpertInfo, Document, HierarchyNode
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

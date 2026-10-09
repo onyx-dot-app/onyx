@@ -14,29 +14,22 @@ Auth levels by endpoint:
 - /create-checkout-session: No auth (new customer) or expired license OK (renewal)
 - /claim-license: Session ID based (one-time after Stripe payment)
 - /create-customer-portal-session: Expired license OK (need portal to fix payment)
-- /billing-information: Valid license required
-- /license/{tenant_id}: Valid license required
+- /billing-information: Valid signature required, expired OK
+- /license/{tenant_id}: Valid signature required, expired OK, path tenant_id must match license tenant_id
 - /seats/update: Valid license required
 """
 
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Header
-from fastapi import HTTPException
-from pydantic import BaseModel
-from pydantic import ValidationError
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel, ValidationError
 from redis.exceptions import RedisError
 
-from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
-from ee.onyx.server.billing.models import SeatUpdateRequest
-from ee.onyx.server.billing.models import SeatUpdateResponse
+from ee.onyx.server.billing.models import SeatUpdateRequest, SeatUpdateResponse
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.tenants.access import generate_data_plane_token
-from ee.onyx.utils.license import is_license_valid
-from ee.onyx.utils.license import verify_license_signature
+from ee.onyx.utils.license import is_license_valid, verify_license_signature
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -50,12 +43,19 @@ logger = setup_logger()
 router = APIRouter(prefix="/proxy")
 
 
-def _check_license_enforcement_enabled() -> None:
-    """Ensure LICENSE_ENFORCEMENT_ENABLED is true (proxy endpoints only work on cloud DP)."""
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        raise HTTPException(
-            status_code=501,
-            detail="Proxy endpoints are only available on cloud data plane",
+def _drop_billing_snapshot(tenant_id: str) -> None:
+    """Drop this tenant's cached billing snapshot. Best-effort.
+
+    Stripe-driven changes arrive at the control plane by webhook, which this
+    proxy never sees, so callers that know the subscription moved must say so.
+    """
+    try:
+        get_redis_client(tenant_id=tenant_id).delete(BILLING_INFO_CACHE_KEY)
+    except RedisError as exc:
+        logger.warning(
+            "Billing info cache invalidation failed for tenant %s: %s",
+            tenant_id,
+            exc,
         )
 
 
@@ -102,18 +102,14 @@ def verify_license_auth(
 ) -> LicensePayload:
     """Verify license signature and optionally check expiry.
 
-    Args:
-        license_data: Base64-encoded signed license blob
-        allow_expired: If True, accept expired licenses (for renewal flows)
+    allow_expired carries no age bound. The routes that set it are the ones a
+    lapsed customer needs to become un-lapsed, so refusing an old license there
+    leaves a paying customer with no self-serve way back in. Ownership is still
+    enforced per route.
 
-    Returns:
-        LicensePayload if valid
-
-    Raises:
-        HTTPException: If license is invalid or expired (when not allowed)
+    Raises HTTPException on an invalid signature, or on expiry where the route
+    requires a live license.
     """
-    _check_license_enforcement_enabled()
-
     try:
         payload = verify_license_signature(license_data)
     except ValueError as e:
@@ -141,9 +137,9 @@ async def get_license_payload(
 async def get_license_payload_allow_expired(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> LicensePayload:
-    """Dependency: Require license with valid signature, expired OK.
+    """Dependency: signature must verify, expiry is not checked.
 
-    Used for endpoints needed to fix payment issues (portal, renewal checkout).
+    A lapsed instance still has to reach the endpoints that get it un-lapsed.
     """
     license_data = _extract_license_from_header(authorization, required=True)
     # license_data is guaranteed non-None when required=True
@@ -159,8 +155,6 @@ async def get_optional_license_payload(
     Returns None if no license provided, otherwise validates and returns payload.
     Expired licenses are allowed for renewal flows.
     """
-    _check_license_enforcement_enabled()
-
     license_data = _extract_license_from_header(authorization, required=False)
     if license_data is None:
         return None
@@ -288,8 +282,6 @@ async def proxy_claim_license(
     Returns the license to the caller. For self-hosted instances, they will
     store the license locally. The cloud DP doesn't need to store it.
     """
-    _check_license_enforcement_enabled()
-
     result = await forward_to_control_plane(
         "POST",
         "/claim-license",
@@ -365,11 +357,12 @@ class BillingInformationResponse(BaseModel):
 
 @router.get("/billing-information")
 async def proxy_billing_information(
-    license_payload: LicensePayload = Depends(get_license_payload),
+    license_payload: LicensePayload = Depends(get_license_payload_allow_expired),
 ) -> BillingInformationResponse:
     """Proxy billing information request to control plane.
 
-    Auth: Valid (non-expired) license required.
+    Auth: Valid signature required, expired OK. A lapsed instance still needs
+    subscription state to know whether a renewal already happened.
 
     Caches the response in Redis per tenant for BILLING_INFO_CACHE_TTL_SEC.
     The frontend polls this endpoint on a tight loop, but Stripe-backed
@@ -436,13 +429,9 @@ class LicenseFetchResponse(BaseModel):
 @router.get("/license/{tenant_id}")
 async def proxy_license_fetch(
     tenant_id: str,
-    license_payload: LicensePayload = Depends(get_license_payload),
+    license_payload: LicensePayload = Depends(get_license_payload_allow_expired),
 ) -> LicenseFetchResponse:
-    """Proxy license fetch to control plane.
-
-    Auth: Valid license required.
-    The tenant_id in path must match the authenticated tenant.
-    """
+    """Proxy license fetch to control plane."""
     # tenant_id is a required field in LicensePayload (Pydantic validates this),
     # but we check explicitly for defense in depth
     if not license_payload.tenant_id:
@@ -463,6 +452,10 @@ async def proxy_license_fetch(
             status_code=502,
             detail="Control plane returned incomplete license data",
         )
+
+    # This proxy never sees the Stripe webhook, so a fetch that may carry a new
+    # plan invalidates rather than leaving a snapshot beside it.
+    _drop_billing_snapshot(tenant_id)
 
     # Return license to caller - self-hosted instance stores it via /api/license/claim
     return LicenseFetchResponse(license=license_data, tenant_id=tenant_id)
@@ -492,15 +485,7 @@ async def proxy_seat_update(
             "new_seat_count": request_body.new_seat_count,
         },
     )
-    try:
-        redis_client = get_redis_client(tenant_id=tenant_id)
-        redis_client.delete(BILLING_INFO_CACHE_KEY)
-    except RedisError as exc:
-        logger.warning(
-            "Billing info cache invalidation failed for tenant %s: %s",
-            tenant_id,
-            exc,
-        )
+    _drop_billing_snapshot(tenant_id)
 
     # Return license in response - self-hosted instance stores it via /api/license/claim
     return SeatUpdateResponse(

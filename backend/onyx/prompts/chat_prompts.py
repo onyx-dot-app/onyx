@@ -37,6 +37,16 @@ Organization description: {company_description}
 """
 
 # This is added to the system prompt prior to the tools section and is applied only if search tools have been run
+# Added to the system prompt alongside the citation guidance, so it applies only
+# to turns that ran a search. Complements ANSWER_COMPLETENESS_REMINDER: that one
+# asks for every part of the question and the exact values; this one covers how
+# the answer is laid out and which passage it is drawn from.
+ANSWER_COVERAGE_GUIDANCE = """
+
+When the answer has several components, lay them out as a list rather than compressing them into one sentence. Include the secondary elements the question asks for, not only its main point. Check that the passage you rely on matches the full context of the question - a near-miss document will not contain the details it asks for.
+"""
+
+
 REQUIRE_CITATION_GUIDANCE = """
 
 CRITICAL: If referencing knowledge from searches, cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the "document" field. \
@@ -44,9 +54,10 @@ DO NOT provide any links following the citations. Cite inline as opposed to leav
 """
 
 
-# Reminder message if any search tool has been run anytime in the chat turn
-CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [2], [3], etc. based on the "document" field of the documents.
+# Pushes answers to cover every part of the question with the exact values the
+# sources state. Validated on EnterpriseRAG-Bench (500 questions, paired runs).
+ANSWER_COMPLETENESS_REMINDER = """
+Address every part of the question explicitly. When the source documents state specific values, limits, dates, names, commands, or steps relevant to the question, include them exactly rather than summarizing them away. Before finishing, check the question for sub-parts you have not answered. If the documents do not contain the requested information, say so directly rather than answering with adjacent information that does not address the question.
 """.strip()
 
 LAST_CYCLE_CITATION_REMINDER = """
@@ -81,9 +92,6 @@ IMAGE_DROP_REMINDER = """
 """.strip()
 
 
-# Specifically for OpenAI models, this prefix needs to be in place for the model to output markdown and correct styling
-CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
-
 # This is just for Slack context today
 ADDITIONAL_CONTEXT_PROMPT = """
 Here is some additional context which may be relevant to the user query:
@@ -95,6 +103,13 @@ Here is some additional context which may be relevant to the user query:
 TOOL_CALL_RESPONSE_CROSS_MESSAGE = """
 This tool call completed but the results are no longer accessible.
 """.strip()
+
+# Replayed in place of an image when the current model does not accept image
+# input (e.g. after a mid-session model switch).
+NON_VISION_IMAGE_MARKER = (
+    "[attached image — file_id: {file_id} — not shown: the current model does "
+    "not support image input]"
+)
 
 # This is used to add the current date and time to the prompt in the case where the Agent should be aware of the current
 # date and time but the replacement pattern is not present in the prompt.

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import OverflowDiv from "./OverflowDiv";
 
 const meta: Meta<typeof OverflowDiv> = {

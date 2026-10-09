@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Interactive, Disabled } from "@opal/core";
 
 // ---------------------------------------------------------------------------
@@ -12,7 +12,7 @@ const VARIANT_PROMINENCE_MAP: Record<string, string[]> = {
 };
 
 const SIZE_VARIANTS = ["lg", "md", "sm", "xs", "2xs", "fit"] as const;
-const ROUNDING_VARIANTS = ["default", "compact", "mini"] as const;
+const ROUNDING_VARIANTS = [3, 2, 1] as const;
 
 // ---------------------------------------------------------------------------
 // Meta

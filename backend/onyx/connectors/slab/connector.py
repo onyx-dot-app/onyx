@@ -1,8 +1,6 @@
 import json
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin
 
@@ -11,18 +9,23 @@ from dateutil import parser
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -34,6 +37,16 @@ SLAB_GRAPHQL_MAX_TRIES = 10
 SLAB_API_URL = "https://api.slab.com/v1/graphql"
 
 _SLIM_BATCH_SIZE = 1000
+
+
+def _parse_slab_created_at(value: str | None) -> datetime | None:
+    """Parse a Slab `insertedAt` timestamp into a tz-aware UTC datetime, or None."""
+    if not value:
+        return None
+    try:
+        return time_str_to_utc(value)
+    except ValueError:
+        return None
 
 
 def run_graphql_request(
@@ -86,6 +99,27 @@ def get_all_post_ids(bot_token: str) -> list[str]:
     return [post["id"] for post in posts]
 
 
+def get_all_posts_with_created_at(bot_token: str) -> list[dict[str, str]]:
+    """Return `id` + `insertedAt` for every post in one listing query.
+
+    Lets the slim path backfill doc_created_at without a per-post fetch.
+    """
+    query = """
+        query GetAllPostsWithCreatedAt {
+            organization {
+                posts {
+                    id
+                    insertedAt
+                }
+            }
+        }
+        """
+
+    graphql_query = {"query": query}
+    results = json.loads(run_graphql_request(graphql_query, bot_token))
+    return results["data"]["organization"]["posts"]
+
+
 def get_post_by_id(post_id: str, bot_token: str) -> dict[str, str]:
     query = """
         query GetPostById($postId: ID!) {
@@ -94,6 +128,7 @@ def get_post_by_id(post_id: str, bot_token: str) -> dict[str, str]:
                 content
                 linkAccess
                 updatedAt
+                insertedAt
             }
         }
         """
@@ -217,6 +252,7 @@ class SlabConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
                     source=DocumentSource.SLAB,
                     semantic_identifier=post["title"],
                     metadata={},
+                    doc_created_at=_parse_slab_created_at(post["insertedAt"]),
                 )
             )
 
@@ -247,10 +283,11 @@ class SlabConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
         callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
     ) -> GenerateSlimDocumentOutput:
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
-        for post_id in get_all_post_ids(self.slab_bot_token):
+        for post in get_all_posts_with_created_at(self.slab_bot_token):
             slim_doc_batch.append(
                 SlimDocument(
-                    id=post_id,
+                    id=post["id"],
+                    doc_created_at=_parse_slab_created_at(post["insertedAt"]),
                 )
             )
             if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:

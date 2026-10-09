@@ -6,15 +6,14 @@ import {
   CitationInfo,
   SearchToolDocumentsDelta,
   FetchToolDocuments,
-  TopLevelBranching,
   Stop,
   ImageGenerationToolDelta,
   MessageStart,
   ToolCallArgumentDelta,
-  CODE_INTERPRETER_TOOL_TYPES,
+  isCodeInterpreterToolType,
 } from "@/app/app/services/streamingModels";
 import { CitationMap } from "@/app/app/interfaces";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import {
   isActualToolCallPacket,
   isToolPacket,
@@ -45,7 +44,6 @@ export interface ProcessorState {
   groupedPacketsMap: Map<string, Packet[]>;
   seenGroupKeys: Set<string>;
   groupKeysWithSectionEnd: Set<string>;
-  expectedBranches: Map<number, number>;
 
   // Pre-categorized groups (populated during packet processing)
   toolGroupKeys: Set<string>;
@@ -89,7 +87,6 @@ export function createInitialState(nodeId: number): ProcessorState {
     groupedPacketsMap: new Map(),
     seenGroupKeys: new Set(),
     groupKeysWithSectionEnd: new Set(),
-    expectedBranches: new Map(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
     isGeneratingImage: false,
@@ -156,9 +153,8 @@ function hasContentPackets(packets: Packet[]): boolean {
   return packets.some((packet) => {
     const type = packet.obj.type as PacketType;
     if (type === PacketType.TOOL_CALL_ARGUMENT_DELTA) {
-      return (
-        (packet.obj as ToolCallArgumentDelta).tool_type ===
-        CODE_INTERPRETER_TOOL_TYPES.PYTHON
+      return isCodeInterpreterToolType(
+        (packet.obj as ToolCallArgumentDelta).tool_type
       );
     }
     return CONTENT_PACKET_TYPES_SET.has(type);
@@ -178,14 +174,6 @@ const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
 // ============================================================================
 // Packet Handlers
 // ============================================================================
-
-function handleTopLevelBranching(state: ProcessorState, packet: Packet): void {
-  const branchingPacket = packet.obj as TopLevelBranching;
-  state.expectedBranches.set(
-    packet.placement.turn_index,
-    branchingPacket.num_parallel_branches
-  );
-}
 
 function handleTurnTransition(state: ProcessorState, packet: Packet): void {
   const currentTurnIndex = packet.placement.turn_index;
@@ -322,13 +310,6 @@ function addPacketToGroup(
 
 function processPacket(state: ProcessorState, packet: Packet): void {
   if (!packet) return;
-
-  // Handle TopLevelBranching packets - these tell us how many parallel branches to expect
-  if (packet.obj.type === PacketType.TOP_LEVEL_BRANCHING) {
-    handleTopLevelBranching(state, packet);
-    // Don't add this packet to any group, it's just metadata
-    return;
-  }
 
   // Handle turn transitions (inject SECTION_END for previous groups)
   handleTurnTransition(state, packet);

@@ -16,8 +16,7 @@ from tests.integration.common_utils.managers.image_generation import (
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 
 @pytest.fixture(scope="module")

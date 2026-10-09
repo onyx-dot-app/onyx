@@ -1,0 +1,23 @@
+{
+  "packageDirectories": [
+    {
+      "versionName": "Beta 3",
+      "versionNumber": "0.1.0.NEXT",
+      "ancestorVersion": "HIGHEST",
+      "path": "force-app",
+      "default": true,
+      "package": "Onyx Salesforce OAuth",
+      "versionDescription": ""
+    }
+  ],
+  "name": "onyx-salesforce-eca",
+  "namespace": "OnyxAI",
+  "sfdcLoginUrl": "https://login.salesforce.com",
+  "sourceApiVersion": "67.0",
+  "packageAliases": {
+    "Onyx Salesforce OAuth": "0Hobm0000006Ts9CAE",
+    "Onyx Salesforce OAuth@0.1.0-1": "04tbm000000jFsXAAU",
+    "Onyx Salesforce OAuth@0.1.0-2": "04tbm000000jGNBAA2",
+    "Onyx Salesforce OAuth@0.1.0-4": "04tbm000000jYfxAAE"
+  }
+}

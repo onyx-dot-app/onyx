@@ -13,16 +13,18 @@ from collections.abc import Generator
 
 import pytest
 
+import onyx.utils.logger as logger_module
 from onyx.background.celery.apps import app_base
+from onyx.utils.logger import THIRD_PARTY_CAPPED_LOGGER_NAMES
 
 
 @pytest.fixture
 def _snapshot_loggers() -> Generator[None, None, None]:
-    """on_setup_logging mutates the root logger and the Celery task logger.
-
-    Snapshot and restore both so tests don't bleed into each other or the rest
-    of the suite.
-    """
+    """on_setup_logging mutates the root logger, the Celery task logger, and
+    (via cap_third_party_log_levels) the third-party logger levels plus the
+    logger module's cap bookkeeping. Snapshot and restore all of it; leaking
+    _cap_applied_levels makes later tests' externally raised levels look like
+    cap-owned values that the cap is free to lower."""
     root = logging.getLogger()
     task = app_base.task_logger
 
@@ -31,6 +33,11 @@ def _snapshot_loggers() -> Generator[None, None, None]:
     task_handlers_before = list(task.handlers)
     task_level_before = task.level
     task_propagate_before = task.propagate
+    third_party_levels_before = {
+        name: logging.getLogger(name).level for name in THIRD_PARTY_CAPPED_LOGGER_NAMES
+    }
+    capped_flag_before = logger_module._third_party_log_levels_capped
+    cap_applied_before = dict(logger_module._cap_applied_levels)
 
     yield
 
@@ -39,6 +46,11 @@ def _snapshot_loggers() -> Generator[None, None, None]:
     task.handlers = task_handlers_before
     task.setLevel(task_level_before)
     task.propagate = task_propagate_before
+    for name, level in third_party_levels_before.items():
+        logging.getLogger(name).setLevel(level)
+    logger_module._third_party_log_levels_capped = capped_flag_before
+    logger_module._cap_applied_levels.clear()
+    logger_module._cap_applied_levels.update(cap_applied_before)
 
 
 def _clean_argv(monkeypatch: pytest.MonkeyPatch, *extra: str) -> None:

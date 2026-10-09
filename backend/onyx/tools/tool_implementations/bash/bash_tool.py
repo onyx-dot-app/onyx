@@ -1,22 +1,25 @@
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
-from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
-from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
+from onyx.configs.app_configs import (
+    CODE_INTERPRETER_BASE_URL,
+    CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
+    CODE_INTERPRETER_MAX_OUTPUT_LENGTH,
+)
 from onyx.db.code_interpreter import fetch_code_interpreter_server
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import BashToolDelta
-from onyx.server.query_and_chat.streaming_models import BashToolStart
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    BashToolDelta,
+    BashToolStart,
+    Packet,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ToolCallException, ToolResponse
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
@@ -100,24 +103,21 @@ class BashTool(Tool[BashToolOverrideKwargs]):
                 CodeInterpreterClient.delete_session,
             )
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        CMD_FIELD: {
-                            "type": "string",
-                            "description": "Bash command to execute in the session.",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    CMD_FIELD: {
+                        "type": "string",
+                        "description": "Bash command to execute in the session.",
                     },
-                    "required": [CMD_FIELD],
                 },
+                "required": [CMD_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         """Emit start packet for this tool. Code will be emitted in run() method."""

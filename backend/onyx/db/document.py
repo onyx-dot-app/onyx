@@ -1,58 +1,63 @@
 import contextlib
 import time
-from collections.abc import Generator
-from collections.abc import Iterable
-from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
+from collections import defaultdict
+from collections.abc import Collection, Generator, Iterable, Sequence
+from datetime import datetime, timezone
+from typing import Any, NamedTuple
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import tuple_
-from sqlalchemy import update
+from sqlalchemy import (
+    CompoundSelect,
+    Integer,
+    Select,
+    String,
+    and_,
+    case,
+    column,
+    delete,
+    distinct,
+    exists,
+    func,
+    literal,
+    or_,
+    select,
+    true,
+    tuple_,
+    update,
+    values,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
-from onyx.configs.constants import DEFAULT_BOOST
-from onyx.configs.constants import DocumentSource
-from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
+from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document_access import apply_document_access_filter
-from onyx.db.entities import delete_from_kg_entities__no_commit
-from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_commit
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.entities import (
+    delete_from_kg_entities__no_commit,
+    delete_from_kg_entities_extraction_staging__no_commit,
+)
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
 from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    DocumentByConnectorCredentialPair,
+    User,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import KGEntity
-from onyx.db.models import KGRelationship
-from onyx.db.models import User
-from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import (
+    delete_from_kg_relationships__no_commit,
     delete_from_kg_relationships_extraction_staging__no_commit,
 )
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
-from onyx.db.utils import DocumentRow
-from onyx.db.utils import model_to_dict
-from onyx.db.utils import SortOrder
+from onyx.db.utils import DocumentRow, SortOrder, model_to_dict
 from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
@@ -94,20 +99,120 @@ def count_documents_by_needs_sync(session: Session) -> int:
     )
 
 
-def construct_document_id_select_by_needs_sync() -> Select:
-    """Get all document IDs that need syncing across all connector credential pairs.
+def count_secondary_only_sync_pending_documents(db_session: Session) -> int:
+    """Global count of docs whose deferred FUTURE metadata sync hasn't drained (via
+    ix_document_secondary_only_sync_pending). The swap gate must use the
+    *_for_cc_pairs variant — an INVALID/DELETING-only doc's flag never clears."""
+    return db_session.execute(
+        select(func.count()).where(DbDocument.secondary_only_sync_pending.is_(True))
+    ).scalar_one()
 
-    Returns a Select statement for documents where:
-    1. last_modified is newer than last_synced
-    2. last_synced is null (meaning we've never synced)
-    AND the document has a relationship with a connector/credential pair
-    """
-    return select(DbDocument.id).where(
-        or_(
-            DbDocument.last_modified > DbDocument.last_synced,
-            DbDocument.last_synced.is_(None),
-        )
+
+def document_has_indexable_cc_pair(db_session: Session, document_id: str) -> bool:
+    """True if some owning cc_pair is indexable (the doc can still be ported to
+    FUTURE). The sync task uses this to skip deferring an un-portable doc's FUTURE
+    write — an INVALID/DELETING-only doc's deferred flag would never clear."""
+    return (
+        db_session.execute(
+            select(literal(1))
+            .select_from(DocumentByConnectorCredentialPair)
+            .join(
+                ConnectorCredentialPair,
+                and_(
+                    DocumentByConnectorCredentialPair.connector_id
+                    == ConnectorCredentialPair.connector_id,
+                    DocumentByConnectorCredentialPair.credential_id
+                    == ConnectorCredentialPair.credential_id,
+                ),
+            )
+            .where(
+                DocumentByConnectorCredentialPair.id == document_id,
+                ConnectorCredentialPair.status.in_(
+                    ConnectorCredentialPairStatus.indexable_statuses()
+                ),
+            )
+            .limit(1)
+        ).first()
+        is not None
     )
+
+
+def count_secondary_only_sync_pending_documents_for_cc_pairs(
+    db_session: Session, cc_pair_ids: list[int]
+) -> int:
+    """Deferred-FUTURE-sync count scoped to docs owned by one of the given cc_pairs
+    (DISTINCT; counts if ANY owner is in the set). The swap gate passes its required
+    (ported) set so INVALID/DELETING-only deferred flags can't block the swap."""
+    if not cc_pair_ids:
+        return 0
+    return db_session.execute(
+        select(func.count(distinct(DbDocument.id)))
+        .select_from(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DbDocument.secondary_only_sync_pending.is_(True),
+            ConnectorCredentialPair.id.in_(cc_pair_ids),
+        )
+    ).scalar_one()
+
+
+def count_documents_by_needs_sync_or_secondary_pending(session: Session) -> int:
+    """count_documents_by_needs_sync plus docs whose FUTURE sync was deferred.
+
+    The document index sync producer gates on this so a deferred-only backlog still
+    generates drain tasks — a deferred doc has its needs_sync already cleared, so
+    count_documents_by_needs_sync alone would miss it.
+    """
+    return session.execute(
+        select(func.count())
+        .select_from(DbDocument)
+        .where(
+            or_(
+                DbDocument.last_modified > DbDocument.last_synced,
+                DbDocument.last_synced.is_(None),
+                DbDocument.secondary_only_sync_pending.is_(True),
+            )
+        )
+    ).scalar_one()
+
+
+def construct_document_id_select_by_needs_sync_or_secondary_pending() -> CompoundSelect:
+    """Document ids that need a metadata sync, each tagged whether it is a *purely
+    deferred* FUTURE sync (so the producer can drop it to LOW while a port runs).
+
+    Two SQL-disjoint legs, unioned:
+      - needs_sync rows -> tag False. These have real work and drain at normal
+        priority even if also flagged deferred.
+      - deferred-only rows (flagged and NOT needs_sync) -> tag True.
+    A doc that is both needs_sync and deferred falls in the first leg (tag False),
+    so it is never under-prioritized to LOW.
+    """
+    needs_sync_predicate = or_(
+        DbDocument.last_modified > DbDocument.last_synced,
+        DbDocument.last_synced.is_(None),
+    )
+    needs_sync = select(
+        DbDocument.id, literal(False).label("secondary_only_sync_pending")
+    ).where(needs_sync_predicate)
+    deferred_only = select(
+        DbDocument.id, literal(True).label("secondary_only_sync_pending")
+    ).where(
+        DbDocument.secondary_only_sync_pending.is_(True),
+        ~needs_sync_predicate,
+    )
+    return needs_sync.union_all(deferred_only)
 
 
 def construct_document_id_select_for_connector_credential_pair(
@@ -166,6 +271,135 @@ def get_document_ids_for_connector_credential_pair(
     return list(db_session.execute(doc_ids_stmt).scalars().all())
 
 
+def get_document_ids_for_cc_pair_batch(
+    db_session: Session,
+    cc_pair_id: int,
+    after_doc_id: str | None,
+    limit: int,
+    up_to_doc_id: str | None = None,
+) -> list[str]:
+    """An ordered page of a cc_pair's document ids, for a cursor scan.
+
+    Returns ids `> after_doc_id` ascending, capped at `limit`. Pass the last id
+    of a page back as `after_doc_id` to resume past it — the reindex port stores
+    that cursor on the PortAttempt so a fresh attempt continues deterministically
+    rather than restarting.
+    """
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if not cc_pair:
+        raise ValueError(f"No CC pair found with ID: {cc_pair_id}")
+
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        )
+        .distinct()
+        .order_by(DocumentByConnectorCredentialPair.id)
+        .limit(limit)
+    )
+    if after_doc_id is not None:
+        stmt = stmt.where(DocumentByConnectorCredentialPair.id > after_doc_id)
+    if up_to_doc_id is not None:
+        stmt = stmt.where(DocumentByConnectorCredentialPair.id <= up_to_doc_id)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+class PortedScope(NamedTuple):
+    connector_id: int
+    credential_id: int
+    up_to_doc_id: str | None
+
+
+def sample_ported_document_ids(
+    db_session: Session,
+    cc_pair_scopes: Sequence[PortedScope],
+    per_scope_limit: int,
+) -> list[str]:
+    """Gets up to `per_scope_limit` document IDs per cc_pair that its port copied.
+
+    A scope with a None `up_to_doc_id` is skipped: that port found no documents when it
+    started, so it copied nothing. Documents with a NULL chunk_count are included; the
+    column was added without a backfill and the port copies them too.
+
+    The result is the same for the same scopes on every call. A fresh random sample on
+    each retry would eventually miss the gap in a partly-missing index and pass.
+    """
+    scope_rows = [
+        (scope.connector_id, scope.credential_id, scope.up_to_doc_id)
+        for scope in cc_pair_scopes
+        if scope.up_to_doc_id is not None
+    ]
+    if per_scope_limit <= 0 or not scope_rows:
+        return []
+
+    scopes = values(
+        column("connector_id", Integer),
+        column("credential_id", Integer),
+        column("up_to_id", String),
+        name="cc_pair_scope",
+    ).data(scope_rows)
+
+    per_cc_pair = (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == scopes.c.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == scopes.c.credential_id,
+            or_(DbDocument.chunk_count.is_(None), DbDocument.chunk_count > 0),
+            DocumentByConnectorCredentialPair.id <= scopes.c.up_to_id,
+        )
+        .order_by(DocumentByConnectorCredentialPair.id)
+        .limit(per_scope_limit)
+        .lateral("sampled_document")
+    )
+    stmt = select(per_cc_pair.c.id).select_from(scopes.join(per_cc_pair, true()))
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def get_max_document_id_for_cc_pair(db_session: Session, cc_pair_id: int) -> str | None:
+    """The lexicographically-max Document.id linked to this cc_pair, or None if it
+    has none. The reindex port snapshots this at start as its upper bound so it
+    covers the backlog as of start, not docs added during the run."""
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if not cc_pair:
+        return None
+    return db_session.execute(
+        select(func.max(DocumentByConnectorCredentialPair.id)).where(
+            DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        )
+    ).scalar()
+
+
+def filter_existing_cc_pair_document_ids(
+    db_session: Session,
+    cc_pair_id: int,
+    document_ids: list[str],
+) -> set[str]:
+    """Of `document_ids`, the subset still linked to this cc_pair. The reindex port
+    calls this before writing a batch so a doc deleted mid-batch is dropped, not
+    resurrected into FUTURE."""
+    if not document_ids:
+        return set()
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if not cc_pair:
+        return set()
+    stmt = select(DocumentByConnectorCredentialPair.id).where(
+        DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+        DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        DocumentByConnectorCredentialPair.id.in_(document_ids),
+    )
+    return set(db_session.execute(stmt).scalars().all())
+
+
 def get_documents_for_connector_credential_pair_limited_columns(
     db_session: Session,
     connector_id: int,
@@ -183,7 +417,10 @@ def get_documents_for_connector_credential_pair_limited_columns(
     )
 
     stmt = select(
-        DbDocument.id, DbDocument.doc_metadata, DbDocument.external_user_group_ids
+        DbDocument.id,
+        DbDocument.doc_metadata,
+        DbDocument.external_user_group_ids,
+        DbDocument.external_user_emails,
     )
 
     stmt = stmt.where(DbDocument.id.in_(doc_ids_subquery))
@@ -201,6 +438,7 @@ def get_documents_for_connector_credential_pair_limited_columns(
             id=row.id,
             doc_metadata=row.doc_metadata,
             external_user_group_ids=row.external_user_group_ids or [],
+            external_user_emails=row.external_user_emails or [],
         )
         doc_rows.append(doc_row)
     return doc_rows
@@ -387,6 +625,7 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     parent_hierarchy_node_id: int,
     user_email: str | None,
     external_group_ids: list[str],
+    user_id: UUID | None,
     limit: int,
     # Sort options
     sort_by_name: bool = False,
@@ -402,7 +641,9 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     stmt = select(DbDocument).where(
         DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
     )
-    stmt = apply_document_access_filter(stmt, user_email, external_group_ids)
+    stmt = apply_document_access_filter(
+        db_session, stmt, user_email, external_group_ids, user_id=user_id
+    )
 
     # Apply cursor filter based on sort type and direction
     if sort_by_name:
@@ -477,6 +718,57 @@ def fetch_document_ids_by_links(
     stmt = select(DbDocument.link, DbDocument.id).where(DbDocument.link.in_(links))
     rows = db_session.execute(stmt).all()
     return {link: doc_id for link, doc_id in rows if link}
+
+
+def get_document_source_types(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, tuple[DocumentSource, ...]]:
+    if not document_ids:
+        return {}
+
+    rows = db_session.execute(
+        select(DocumentByConnectorCredentialPair.id, Connector.source)
+        .join(
+            Connector,
+            DocumentByConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .distinct()
+    ).all()
+
+    sources_by_document: dict[str, set[DocumentSource]] = {}
+    for document_id, source in rows:
+        sources_by_document.setdefault(document_id, set()).add(source)
+    return {
+        document_id: tuple(sorted(sources, key=lambda source: source.value))
+        for document_id, sources in sources_by_document.items()
+    }
+
+
+def get_document_source_types_after_cc_pair_removal(
+    db_session: Session,
+    document_id: str,
+    connector_id: int,
+    credential_id: int,
+) -> tuple[DocumentSource, ...]:
+    sources = db_session.execute(
+        select(Connector.source)
+        .select_from(DocumentByConnectorCredentialPair)
+        .join(
+            Connector,
+            DocumentByConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.id == document_id,
+            ~and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            ),
+        )
+        .distinct()
+    ).scalars()
+    return tuple(sorted(set(sources), key=lambda source: source.value))
 
 
 def get_document_connector_count(
@@ -637,7 +929,9 @@ def get_access_info_for_documents(
             User,
             and_(
                 Credential.user_id == User.id,
-                ConnectorCredentialPair.access_type != AccessType.SYNC,
+                ConnectorCredentialPair.access_type.notin_(
+                    AccessType.perm_synced_types()
+                ),
             ),
         )
         # don't include CC pairs that are being deleted
@@ -648,10 +942,62 @@ def get_access_info_for_documents(
     return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
 
 
+def get_cc_pair_ids_for_documents(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, list[int]]:
+    """Maps each document to the sorted IDs of the cc-pairs it belongs to.
+
+    Uses the same DocumentByConnectorCredentialPair rows that document access is
+    built from (get_access_info_for_documents, fetch_user_groups_for_documents):
+    rows with has_been_indexed=False count, rows whose cc-pair is DELETING do
+    not. DELETING SYNC_RESTRICTED pairs stay, so their documents stay hidden
+    until they are deleted. Documents with no such row are left out.
+    """
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id, ConnectorCredentialPair.id)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .where(
+            or_(
+                ConnectorCredentialPair.status
+                != ConnectorCredentialPairStatus.DELETING,
+                ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
+            )
+        )
+    )
+    doc_id_to_cc_pair_ids: dict[str, list[int]] = defaultdict(list)
+    for document_id, cc_pair_id in db_session.execute(stmt):
+        doc_id_to_cc_pair_ids[document_id].append(cc_pair_id)
+    return {
+        document_id: sorted(cc_pair_ids)
+        for document_id, cc_pair_ids in doc_id_to_cc_pair_ids.items()
+    }
+
+
+def get_last_modified_for_documents(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, datetime | None]:
+    stmt = select(DbDocument.id, DbDocument.last_modified).where(
+        DbDocument.id.in_(document_ids)
+    )
+    return dict(db_session.execute(stmt).tuples().all())
+
+
 def upsert_documents(
     db_session: Session,
     document_metadata_batch: list[DocumentMetadata],
     initial_boost: int = DEFAULT_BOOST,
+    source: DocumentSource | None = None,
 ) -> None:
     """NOTE: this function is Postgres specific. Not all DBs support the ON CONFLICT clause.
     Also note, this function should not be used for updating documents, only creating and
@@ -676,6 +1022,9 @@ def upsert_documents(
                     from_ingestion_api=doc.from_ingestion_api,
                     boost=initial_boost,
                     hidden=False,
+                    # set explicitly: model_to_dict reads the unflushed object, so a
+                    # Python-side default isn't applied yet and would insert NULL.
+                    secondary_only_sync_pending=False,
                     semantic_id=doc.semantic_identifier,
                     link=doc.first_link,
                     doc_updated_at=None,  # this is intentional
@@ -718,23 +1067,63 @@ def upsert_documents(
         "file_id": insert_stmt.excluded.file_id,
     }
     if includes_permissions:
+        preserve_onedrive_permissions = exists(
+            select(DocumentByConnectorCredentialPair.id)
+            .join(
+                Connector,
+                Connector.id == DocumentByConnectorCredentialPair.connector_id,
+            )
+            .join(
+                ConnectorCredentialPair,
+                and_(
+                    ConnectorCredentialPair.connector_id
+                    == DocumentByConnectorCredentialPair.connector_id,
+                    ConnectorCredentialPair.credential_id
+                    == DocumentByConnectorCredentialPair.credential_id,
+                ),
+            )
+            .where(
+                DocumentByConnectorCredentialPair.id == DbDocument.id,
+                DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+                Connector.source == DocumentSource.ONEDRIVE,
+                ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
+            )
+            .correlate(DbDocument)
+        )
+
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
-        update_set.update(  # ty: ignore[no-matching-overload]
+        external_user_emails = func.coalesce(
+            insert_stmt.excluded.external_user_emails,
+            DbDocument.external_user_emails,
+        )
+        external_user_group_ids = func.coalesce(
+            insert_stmt.excluded.external_user_group_ids,
+            DbDocument.external_user_group_ids,
+        )
+        is_public = func.coalesce(
+            insert_stmt.excluded.is_public,
+            DbDocument.is_public,
+        )
+        if source == DocumentSource.SHAREPOINT:
+            external_user_emails = case(
+                (preserve_onedrive_permissions, DbDocument.external_user_emails),
+                else_=external_user_emails,
+            )
+            external_user_group_ids = case(
+                (preserve_onedrive_permissions, DbDocument.external_user_group_ids),
+                else_=external_user_group_ids,
+            )
+            is_public = case(
+                (preserve_onedrive_permissions, DbDocument.is_public),
+                else_=is_public,
+            )
+        update_set.update(
             {
-                "external_user_emails": func.coalesce(
-                    insert_stmt.excluded.external_user_emails,
-                    DbDocument.external_user_emails,
-                ),
-                "external_user_group_ids": func.coalesce(
-                    insert_stmt.excluded.external_user_group_ids,
-                    DbDocument.external_user_group_ids,
-                ),
-                "is_public": func.coalesce(
-                    insert_stmt.excluded.is_public,
-                    DbDocument.is_public,
-                ),
+                "external_user_emails": external_user_emails,
+                "external_user_group_ids": external_user_group_ids,
+                "is_public": is_public,
             }
         )
     on_conflict_stmt = insert_stmt.on_conflict_do_update(
@@ -769,8 +1158,20 @@ def upsert_document_by_connector_credential_pair(
     # this must be `on_conflict_do_nothing` rather than `on_conflict_do_update`
     # since we don't want to update the `has_been_indexed` field for documents
     # that already exist
-    on_conflict_stmt = insert_stmt.on_conflict_do_nothing()
-    db_session.execute(on_conflict_stmt)
+    on_conflict_stmt = insert_stmt.on_conflict_do_nothing().returning(
+        DocumentByConnectorCredentialPair.id
+    )
+    inserted_document_ids = list(db_session.scalars(on_conflict_stmt))
+    if inserted_document_ids:
+        # Relationship changes use metadata sync for chunks that already exist.
+        db_session.execute(
+            update(DbDocument)
+            .where(
+                DbDocument.id.in_(inserted_document_ids),
+                DbDocument.chunk_count.is_not(None),
+            )
+            .values(last_modified=datetime.now(timezone.utc))
+        )
     db_session.commit()
 
 
@@ -807,6 +1208,48 @@ def update_docs_updated_at__no_commit(
         document.doc_updated_at = ids_to_new_updated_at[document.id]
 
 
+def update_docs_created_at__no_commit(
+    ids_to_new_created_at: dict[str, datetime],
+    db_session: Session,
+) -> None:
+    doc_ids = list(ids_to_new_created_at.keys())
+    documents_to_update = (
+        db_session.query(DbDocument).filter(DbDocument.id.in_(doc_ids)).all()
+    )
+
+    for document in documents_to_update:
+        document.doc_created_at = ids_to_new_created_at[document.id]
+
+
+def backfill_docs_created_at__no_commit(
+    ids_to_created_at: dict[str, datetime],
+    db_session: Session,
+) -> None:
+    """Set ``doc_created_at`` for docs whose value is newly available or changed,
+    bumping ``last_modified`` so the metadata sync task propagates it to the index.
+
+    Only touches rows that actually change, so a repeated sweep doesn't needlessly
+    re-dirty every document.
+    """
+    if not ids_to_created_at:
+        return
+
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(list(ids_to_created_at.keys())))
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    for document in documents_to_update:
+        if document.chunk_count is None:
+            continue
+        new_created_at = ids_to_created_at[document.id]
+        if document.doc_created_at == new_created_at:
+            continue
+        document.doc_created_at = new_created_at
+        document.last_modified = now
+
+
 def update_docs_last_modified__no_commit(
     document_ids: list[str],
     db_session: Session,
@@ -818,6 +1261,36 @@ def update_docs_last_modified__no_commit(
     now = datetime.now(timezone.utc)
     for doc in documents_to_update:
         doc.last_modified = now
+
+
+def mark_cc_pair_documents_for_sync__no_commit(
+    db_session: Session, cc_pair_ids: Collection[int]
+) -> None:
+    """Marks the indexed documents of these pairs as modified, so metadata sync
+    rewrites their chunk access."""
+    if not cc_pair_ids:
+        return
+    cc_pair_document_ids = (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+    )
+    db_session.execute(
+        update(DbDocument)
+        .where(
+            DbDocument.id.in_(cc_pair_document_ids),
+            DbDocument.chunk_count.is_not(None),
+        )
+        .values(last_modified=datetime.now(timezone.utc))
+    )
 
 
 def update_docs_chunk_count__no_commit(
@@ -845,28 +1318,69 @@ def update_docs_content_hash__no_commit(
         doc.content_hash = ids_to_new_hash[doc.id]
 
 
+def mark_document_as_modified__no_commit(
+    document_id: str,
+    db_session: Session,
+) -> datetime:
+    stmt = select(DbDocument).where(DbDocument.id == document_id)
+    doc = db_session.scalar(stmt)
+    if doc is None:
+        raise ValueError(f"No document with ID: {document_id}")
+
+    modified_at = datetime.now(timezone.utc)
+    doc.last_modified = modified_at
+    return modified_at
+
+
 def mark_document_as_modified(
     document_id: str,
     db_session: Session,
 ) -> None:
-    stmt = select(DbDocument).where(DbDocument.id == document_id)
-    doc = db_session.scalar(stmt)
-    if doc is None:
-        raise ValueError(f"No document with ID: {document_id}")
-
-    # update last_synced
-    doc.last_modified = datetime.now(timezone.utc)
+    mark_document_as_modified__no_commit(document_id, db_session)
     db_session.commit()
 
 
-def mark_document_as_synced(document_id: str, db_session: Session) -> None:
+def mark_document_as_synced(
+    document_id: str,
+    db_session: Session,
+    synced_as_of: datetime | None = None,
+) -> None:
+    """``synced_as_of``: the doc's ``last_modified`` captured when the synced
+    state was read. Stamping that watermark (not now()) keeps a doc that was
+    modified during the index write stale, so the newer state re-syncs."""
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc = db_session.scalar(stmt)
     if doc is None:
         raise ValueError(f"No document with ID: {document_id}")
 
     # update last_synced
-    doc.last_synced = datetime.now(timezone.utc)
+    doc.last_synced = (
+        synced_as_of if synced_as_of is not None else datetime.now(timezone.utc)
+    )
+    # reaching here means every index synced, so clear any deferred FUTURE write
+    doc.secondary_only_sync_pending = False
+    db_session.commit()
+
+
+def mark_document_synced_secondary_pending(
+    document_id: str,
+    db_session: Session,
+    synced_as_of: datetime | None = None,
+) -> None:
+    """Reindex-port: PRESENT synced but the doc wasn't in FUTURE yet. Clear
+    needs-sync and flag the deferred FUTURE write, in one commit. Cleared later by
+    mark_document_as_synced once a sync reaches FUTURE.
+
+    ``synced_as_of``: see mark_document_as_synced."""
+    stmt = select(DbDocument).where(DbDocument.id == document_id)
+    doc = db_session.scalar(stmt)
+    if doc is None:
+        raise ValueError(f"No document with ID: {document_id}")
+
+    doc.last_synced = (
+        synced_as_of if synced_as_of is not None else datetime.now(timezone.utc)
+    )
+    doc.secondary_only_sync_pending = True
     db_session.commit()
 
 
@@ -971,7 +1485,7 @@ def get_document_id_to_file_id_map(
         .filter(DbDocument.file_id.isnot(None))
         .all()
     )
-    return {doc_id: file_id for doc_id, file_id in rows}
+    return {doc_id: file_id for doc_id, file_id in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def delete_documents_complete__no_commit(
@@ -1115,7 +1629,7 @@ def prepare_to_modify_documents(
 ) -> Generator[TransactionalContext, None, None]:
     """Try and acquire locks for the documents to prevent other jobs from
     modifying them at the same time (e.g. avoid race conditions). This should be
-    called ahead of any modification to Vespa. Locks should be released by the
+    called ahead of any modification to the document index. Locks should be released by the
     caller as soon as updates are complete by finishing the transaction.
 
     NOTE: only one commit is allowed within the context manager returned by this function.
@@ -1212,6 +1726,14 @@ def get_document(
     return doc
 
 
+def get_document_for_update(
+    document_id: str,
+    db_session: Session,
+) -> DbDocument | None:
+    stmt = select(DbDocument).where(DbDocument.id == document_id).with_for_update()
+    return db_session.scalar(stmt)
+
+
 def get_cc_pairs_for_document(
     db_session: Session,
     document_id: str,
@@ -1263,7 +1785,7 @@ def get_document_sources(
     )
 
     results = db_session.execute(stmt).all()
-    return {doc_id: source for doc_id, source in results}
+    return {doc_id: source for doc_id, source in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def fetch_chunk_counts_for_documents(
@@ -1289,161 +1811,24 @@ def fetch_chunk_counts_for_documents(
     return [(doc_id, chunk_counts.get(doc_id, 0)) for doc_id in document_ids]
 
 
+def fetch_known_chunk_counts_for_documents(
+    document_ids: list[str],
+    db_session: Session,
+) -> list[tuple[str, int | None]]:
+    """(document_id, chunk_count) in the order given. The count is None when the
+    document is missing or its chunk count is not known."""
+    stmt = select(DbDocument.id, DbDocument.chunk_count).where(
+        DbDocument.id.in_(document_ids)
+    )
+    chunk_counts = {str(row.id): row.chunk_count for row in db_session.execute(stmt)}
+    return [(doc_id, chunk_counts.get(doc_id)) for doc_id in document_ids]
+
+
 def fetch_chunk_count_for_document(
     document_id: str,
     db_session: Session,
 ) -> int | None:
     stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
-    return db_session.execute(stmt).scalar_one_or_none()
-
-
-def get_unprocessed_kg_document_batch_for_connector(
-    db_session: Session,
-    connector_id: int,
-    kg_coverage_start: datetime,
-    kg_max_coverage_days: int,
-    batch_size: int = 100,
-) -> list[DbDocument]:
-    """
-    Retrieves a batch of documents that have not been processed for knowledge graph extraction.
-    Args:
-        db_session (Session): The database session to use
-        connector_id (int): The ID of the connector to get documents for
-        batch_size (int): The maximum number of documents to retrieve
-    Returns:
-        list[DbDocument]: List of documents that need KG processing
-    """
-
-    stmt = (
-        select(DbDocument)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .where(
-            and_(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DbDocument.doc_updated_at
-                >= max(
-                    kg_coverage_start,
-                    datetime.now() - timedelta(days=kg_max_coverage_days),
-                ),
-                or_(
-                    DbDocument.kg_stage.is_(None),
-                    DbDocument.kg_stage == KGStage.NOT_STARTED,
-                    DbDocument.doc_updated_at > DbDocument.kg_processing_time,
-                ),
-            )
-        )
-        .distinct()
-        .limit(batch_size)
-    )
-
-    documents = db_session.scalars(stmt).all()
-    db_session.flush()
-
-    return list(documents)
-
-
-def get_kg_extracted_document_ids(db_session: Session) -> list[str]:
-    """
-    Retrieves all document IDs where kg_stage is EXTRACTED.
-    Args:
-        db_session (Session): The database session to use
-    Returns:
-        list[str]: List of document IDs that have been KG processed
-    """
-    stmt = select(DbDocument.id).where(DbDocument.kg_stage == KGStage.EXTRACTED)
-
-    return list(db_session.scalars(stmt).all())
-
-
-def update_document_kg_info(
-    db_session: Session, document_id: str, kg_stage: KGStage
-) -> None:
-    """Updates the knowledge graph related information for a document.
-    Args:
-        db_session (Session): The database session to use
-        document_id (str): The ID of the document to update
-        kg_stage (KGStage): The stage of the knowledge graph processing for the document
-    Raises:
-        ValueError: If the document with the given ID is not found
-    """
-    stmt = (
-        update(DbDocument)
-        .where(DbDocument.id == document_id)
-        .values(
-            kg_stage=kg_stage,
-            kg_processing_time=datetime.now(timezone.utc),
-        )
-    )
-    db_session.execute(stmt)
-
-
-def update_document_kg_stage(
-    db_session: Session,
-    document_id: str,
-    kg_stage: KGStage,
-) -> None:
-    stmt = (
-        update(DbDocument).where(DbDocument.id == document_id).values(kg_stage=kg_stage)
-    )
-    db_session.execute(stmt)
-    db_session.flush()
-
-
-def get_all_kg_extracted_documents_info(
-    db_session: Session,
-) -> list[str]:
-    """Retrieves the knowledge graph data for all documents that have been processed.
-    Args:
-        db_session (Session): The database session to use
-    Returns:
-        List[Tuple[str, dict]]: A list of tuples containing:
-            - str: The document ID
-            - dict: The KG data containing 'entities', 'relationships', and 'terms'
-        Only returns documents where kg_stage is EXTRACTED
-    """
-    stmt = (
-        select(DbDocument.id)
-        .where(DbDocument.kg_stage == KGStage.EXTRACTED)
-        .order_by(DbDocument.id)
-    )
-
-    results = db_session.execute(stmt).all()
-    return [str(doc_id) for doc_id in results]
-
-
-def get_base_llm_doc_information(
-    db_session: Session, document_ids: list[str]
-) -> list[str]:
-    stmt = select(DbDocument).where(DbDocument.id.in_(document_ids))
-    results = db_session.execute(stmt).all()
-
-    documents = []
-
-    for doc_nr, doc in enumerate(results):
-        bare_doc = doc[0]
-        documents.append(
-            f"""* [{bare_doc.semantic_id}]({bare_doc.link}) ({bare_doc.doc_updated_at})"""
-        )
-
-    return documents[:KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES]
-
-
-def get_document_updated_at(
-    document_id: str,
-    db_session: Session,
-) -> datetime | None:
-    """Retrieves the doc_updated_at timestamp for a given document ID.
-    Args:
-        document_id (str): The ID of the document to query
-        db_session (Session): The database session to use
-    Returns:
-        Optional[datetime]: The doc_updated_at timestamp if found, None if document doesn't exist
-    """
-
-    stmt = select(DbDocument.doc_updated_at).where(DbDocument.id == document_id)
     return db_session.execute(stmt).scalar_one_or_none()
 
 
@@ -1470,211 +1855,6 @@ def reset_all_document_kg_stages(db_session: Session) -> int:
         if hasattr(result, "rowcount")
         else 0
     )
-
-
-def update_document_kg_stages(
-    db_session: Session, source_stage: KGStage, target_stage: KGStage
-) -> int:
-    """Reset the KG stage only of documents back to NOT_STARTED.
-    Part of reset flow for documents that have been extracted but not clustered.
-
-    Args:
-        db_session (Session): The database session to use
-
-    Returns:
-        int: Number of documents that were reset
-    """
-    stmt = (
-        update(DbDocument)
-        .where(DbDocument.kg_stage == source_stage)
-        .values(kg_stage=target_stage)
-    )
-    result = db_session.execute(stmt)
-    # The hasattr check is needed for type checking, even though rowcount
-    # is guaranteed to exist at runtime for UPDATE operations
-    return (
-        result.rowcount  # ty: ignore[invalid-return-type]
-        if hasattr(result, "rowcount")
-        else 0
-    )
-
-
-def get_skipped_kg_documents(db_session: Session) -> list[str]:
-    """
-    Retrieves all document IDs where kg_stage is SKIPPED.
-    Args:
-        db_session (Session): The database session to use
-    Returns:
-        list[str]: List of document IDs that have been skipped in KG processing
-    """
-    stmt = select(DbDocument.id).where(DbDocument.kg_stage == KGStage.SKIPPED)
-
-    return list(db_session.scalars(stmt).all())
-
-
-# def get_kg_doc_info_for_entity_name(
-#     db_session: Session, document_id: str, entity_type: str
-# ) -> KGEntityDocInfo:
-#     """
-#     Get the semantic ID and the link for an entity name.
-#     """
-
-#     result = (
-#         db_session.query(Document.semantic_id, Document.link)
-#         .filter(Document.id == document_id)
-#         .first()
-#     )
-
-#     if result is None:
-#         return KGEntityDocInfo(
-#             doc_id=None,
-#             doc_semantic_id=None,
-#             doc_link=None,
-#             semantic_entity_name=f"{entity_type}:{document_id}",
-#             semantic_linked_entity_name=f"{entity_type}:{document_id}",
-#         )
-
-#     return KGEntityDocInfo(
-#         doc_id=document_id,
-#         doc_semantic_id=result[0],
-#         doc_link=result[1],
-#         semantic_entity_name=f"{entity_type.upper()}:{result[0]}",
-#         semantic_linked_entity_name=f"[{entity_type.upper()}:{result[0]}]({result[1]})",
-#     )
-
-
-def check_for_documents_needing_kg_processing(
-    db_session: Session, kg_coverage_start: datetime, kg_max_coverage_days: int
-) -> bool:
-    """Check if there are any documents that need KG processing.
-
-    A document needs KG processing if:
-    1. It is associated with a connector that has kg_processing_enabled = true
-    2. AND either:
-       - Its kg_stage is NOT_STARTED or NULL
-       - OR its last_updated timestamp is greater than its kg_processing_time
-
-    Args:
-        db_session (Session): The database session to use
-
-    Returns:
-        bool: True if there are any documents needing KG processing, False otherwise
-    """
-
-    stmt = (
-        select(1)
-        .select_from(DbDocument)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .join(
-            Connector,
-            DocumentByConnectorCredentialPair.connector_id == Connector.id,
-        )
-        .where(
-            and_(
-                Connector.kg_processing_enabled.is_(True),
-                DbDocument.doc_updated_at
-                >= max(
-                    kg_coverage_start,
-                    datetime.now() - timedelta(days=kg_max_coverage_days),
-                ),
-                or_(
-                    DbDocument.kg_stage.is_(None),
-                    DbDocument.kg_stage == KGStage.NOT_STARTED,
-                    DbDocument.doc_updated_at > DbDocument.kg_processing_time,
-                ),
-            )
-        )
-        .exists()
-    )
-
-    return db_session.execute(select(stmt)).scalar() or False
-
-
-def check_for_documents_needing_kg_clustering(db_session: Session) -> bool:
-    """Check if there are any documents that need KG clustering.
-
-    A document needs KG clustering if:
-    1. It is associated with a connector that has kg_processing_enabled = true
-    2. AND either:
-       - Its kg_stage is EXTRACTED
-       - OR its last_updated timestamp is greater than its kg_processing_time
-
-    Args:
-        db_session (Session): The database session to use
-
-    Returns:
-        bool: True if there are any documents needing KG clustering, False otherwise
-    """
-    stmt = (
-        select(1)
-        .select_from(DbDocument)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .join(
-            ConnectorCredentialPair,
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                == ConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == ConnectorCredentialPair.credential_id,
-            ),
-        )
-        .join(
-            Connector,
-            ConnectorCredentialPair.connector_id == Connector.id,
-        )
-        .where(
-            and_(
-                Connector.kg_processing_enabled.is_(True),
-                ConnectorCredentialPair.status
-                != ConnectorCredentialPairStatus.DELETING,
-                or_(
-                    DbDocument.kg_stage == KGStage.EXTRACTED,
-                    DbDocument.last_modified > DbDocument.kg_processing_time,
-                ),
-            )
-        )
-        .exists()
-    )
-
-    return db_session.execute(select(stmt)).scalar() or False
-
-
-def get_document_kg_entities_and_relationships(
-    db_session: Session, document_id: str
-) -> tuple[list[KGEntity], list[KGRelationship]]:
-    """
-    Get the KG entities and relationships that references the document.
-    """
-    entities = (
-        db_session.query(KGEntity).filter(KGEntity.document_id == document_id).all()
-    )
-    if not entities:
-        return [], []
-    entity_id_names = [entity.id_name for entity in entities]
-
-    relationships = (
-        db_session.query(KGRelationship)
-        .filter(
-            or_(
-                KGRelationship.source_node.in_(entity_id_names),
-                KGRelationship.target_node.in_(entity_id_names),
-                KGRelationship.source_document == document_id,
-            )
-        )
-        .all()
-    )
-    return entities, relationships
-
-
-def get_num_chunks_for_document(db_session: Session, document_id: str) -> int:
-    stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
-    return db_session.execute(stmt).scalar_one_or_none() or 0
 
 
 def update_document_metadata__no_commit(

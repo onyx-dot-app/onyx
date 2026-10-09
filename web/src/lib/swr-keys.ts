@@ -12,6 +12,7 @@ export const SWR_KEYS = {
 
   // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
+  opensearchResourceHealth: "/api/manage/admin/opensearch-health",
   version: "/api/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────
@@ -20,27 +21,47 @@ export const SWR_KEYS = {
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
   adminSecuritySettings: "/api/admin/security",
+  adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
+  incognitoAvailability: "/api/chat/incognito-availability",
+  adminSsoProviders: "/api/admin/sso/provider",
+  adminSsoProviderTypes: "/api/admin/sso/provider-type",
+  adminSsoDomains: "/api/admin/sso/domain",
+  // Cache key for the POST /records lookup, keyed by the domains being configured.
+  adminSsoDomainRecords: (domains: string[]) => [
+    "sso-domain-records",
+    ...domains,
+  ],
 
-  // ── Agents / Personas ─────────────────────────────────────────────────────
-  personas: "/api/persona",
-  persona: (id: number) => `/api/persona/${id}`,
-  agentPreferences: "/api/user/assistant/preferences",
+  // ── Agents ────────────────────────────────────────────────────────────────
+  agents: "/api/persona",
+  agent: (agentId: number) => `/api/persona/${agentId}`,
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
-  personaLabels: "/api/persona/labels",
+  agentLabels: "/api/persona/labels",
+  adminAgentLabel: (labelId: number) => `/api/admin/persona/label/${labelId}`,
   adminAgents: "/api/admin/agents",
   adminPersona: "/api/admin/persona",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",
-  llmProvidersForPersona: (personaId: number) =>
-    `/api/llm/persona/${personaId}/providers`,
+  llmProvidersForAgent: (agentId: number) =>
+    `/api/llm/persona/${agentId}/providers`,
+  llmProviderModels: (providerId: number) =>
+    `/api/llm/provider/${providerId}/models`,
   adminLlmProviders: "/api/admin/llm/provider",
+  adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
+  adminLlmProvider: (providerId: number) =>
+    `/api/admin/llm/provider/${providerId}`,
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
   llmContextualCost: "/api/admin/llm/provider-contextual-cost",
+  userUsage: "/api/user/usage",
+  costOverrides: "/api/admin/cost-overrides",
+  adminUsageExport: "/api/admin/usage/export",
+  adminSystemUsage: "/api/admin/usage/system",
+  adminUsageReset: "/api/admin/usage/reset",
 
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",
@@ -56,12 +77,24 @@ export const SWR_KEYS = {
   indexingStatus: "/api/manage/admin/connector/indexing-status",
   adminConnectorStatus: "/api/manage/admin/connector/status",
   federatedConnectors: "/api/federated",
+  connectorGroupRestrictions: "/api/manage/connector-group-restrictions",
+  // The add-connector form's check session, client state shared by the
+  // checks card, the configuration lock and the Connect button.
+  connectorCheckSession: (source: string) => [
+    "connector-check-session",
+    source,
+  ],
+  // The checks a run would hold for an unsaved connector form (a POST).
+  connectorCheckPlan: (
+    source: string,
+    accessType: string | null,
+    form: string
+  ) => ["connector-check-plan", source, accessType, form],
+  // One capability-check run for an unsaved connector form.
+  connectorCheckRun: (runId: string) =>
+    `/api/manage/admin/connector-checks/runs/${runId}`,
 
   // ── Google Connectors ─────────────────────────────────────────────────────
-  googleConnectorAppCredential: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/app-credential`,
-  googleConnectorServiceAccountKey: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/service-account-key`,
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
     `/api/manage/admin/connector/${service}/credentials`,
   googleConnectorPublicCredential: (service: "gmail" | "google-drive") =>
@@ -73,6 +106,8 @@ export const SWR_KEYS = {
   // ── Search Settings ───────────────────────────────────────────────────────
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
+  reindexProgress: "/api/search-settings/reindex-progress",
+  reindexErrors: "/api/search-settings/reindex-errors",
   embeddingProviders: "/api/admin/embedding/embedding-provider",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
@@ -83,6 +118,9 @@ export const SWR_KEYS = {
   userProjects: "/api/user/projects",
   recentFiles: "/api/user/files/recent",
   userPats: "/api/user/pats",
+  oauthProviderGrants: "/api/oauth-provider/grants",
+  oauthProviderConsent: (requestId: string): string =>
+    `/api/oauth-provider/consent?request=${encodeURIComponent(requestId)}`,
   userPatScopes: "/api/user/pats/scopes",
   notifications: "/api/notifications",
   notificationsSummary: "/api/notifications/summary",
@@ -93,9 +131,9 @@ export const SWR_KEYS = {
     });
     return `/api/notifications?${params.toString()}`;
   },
-  notificationsByType: (notifType: string, pageSize: number) => {
+  notificationsBySeverity: (minSeverity: string, pageSize: number) => {
     const params = new URLSearchParams({
-      notif_type: notifType,
+      min_severity: minSeverity,
       page_size: pageSize.toString(),
     });
     return `/api/notifications?${params.toString()}`;
@@ -117,24 +155,32 @@ export const SWR_KEYS = {
 
   // ── Groups ────────────────────────────────────────────────────────────────
   adminUserGroups: "/api/manage/admin/user-group",
+  adminUserGroupsWithDefault:
+    "/api/manage/admin/user-group?include_default=true",
   shareableGroups: "/api/manage/user-groups/minimal",
+  userGroupPermissions: (groupId: number) =>
+    `/api/manage/admin/user-group/${groupId}/permissions`,
+  permissionRegistry: "/api/manage/admin/permissions/registry",
   scimToken: "/api/admin/enterprise-settings/scim/token",
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
   adminMcpServers: "/api/admin/mcp/servers",
+  adminMcpServerToolSnapshots: (serverId: number) =>
+    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
   mcpServers: "/api/mcp/servers",
+  mcpServersCraft: "/api/mcp/servers/craft",
+  agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
 
   // ── Skills ────────────────────────────────────────────────────────────────
-  adminSkills: "/api/admin/skills",
   userSkills: "/api/skills",
-  adminSkillPreview: (skillId: string) =>
-    `/api/admin/skills/${skillId}/preview`,
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",
   oauthTokenStatus: "/api/user-oauth-token/status",
+  adminOAuthTestClaims: "/api/admin/oauth-test/claims",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   voiceProviders: "/api/admin/voice/providers",
@@ -144,8 +190,6 @@ export const SWR_KEYS = {
   buildUserLibraryTree: "/api/build/user-library/tree",
   buildSessionFiles: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/files?path=`,
-  buildSessionOutputFiles: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/files?path=outputs`,
   buildSessionWebappInfo: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/webapp-info`,
   buildSessionArtifacts: (sessionId: string) =>
@@ -157,6 +201,7 @@ export const SWR_KEYS = {
   buildExternalApps: "/api/build/apps",
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
+  buildBaseInstructions: "/api/build/admin/base-instructions",
   buildSessionLiveApprovals: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}/live`,
 
@@ -180,6 +225,9 @@ export const SWR_KEYS = {
   // ── Prompt shortcuts ──────────────────────────────────────────────────────
   promptShortcuts: "/api/input_prompt",
 
+  // ── Admin Banner ──────────────────────────────────────────────────────────
+  adminBanner: "/api/admin/banner",
+
   // ── License & Billing ─────────────────────────────────────────────────────
   license: "/api/license",
   billingInformationCloud: "/api/tenants/billing-information",
@@ -188,6 +236,7 @@ export const SWR_KEYS = {
   // ── Admin ─────────────────────────────────────────────────────────────────
   hooks: "/api/admin/hooks",
   hookSpecs: "/api/admin/hooks/specs",
+  logExportStatus: (exportId: string) => `/api/admin/log-export/${exportId}`,
 
   // ── Slack Bots ────────────────────────────────────────────────────────────
   slackChannels: "/api/manage/admin/slack-app/channel",
@@ -212,6 +261,15 @@ export const SWR_KEYS = {
 
   // ── Connectors ────────────────────────────────────────────────────────────
   connector: "/api/manage/connector",
+  connectorOAuthDetails: (source: string) =>
+    `/api/connector/oauth/details/${source}`,
+  // Credentials of one source the caller may attach.
+  similarCredentials: (source: string) =>
+    `/api/manage/admin/similar-credentials/${source}`,
+
+  // ── CC-Pairs ──────────────────────────────────────────────────────────────
+  ccPair: (ccPairId: string | number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}`,
 
   // ── Index Attempts ────────────────────────────────────────────────────────
   indexAttemptStageMetrics: (indexAttemptId: number) =>

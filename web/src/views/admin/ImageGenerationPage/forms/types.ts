@@ -5,7 +5,7 @@ import {
   ImageGenerationConfigView,
   ImageGenerationCredentials,
 } from "@/views/admin/ImageGenerationPage/svc";
-import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
+import type { ModalCreationInterface } from "@opal/components";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 
 // Base props for all image generation forms
@@ -50,7 +50,7 @@ export interface ImageGenFormChildProps<T extends FormValues> {
   disabled: boolean;
   isEditMode: boolean;
   isLoadingCredentials: boolean;
-  apiKeyOptions: { value: string; label: string }[];
+  apiKeyOptions: { value: string; title: string }[];
   resetApiState: () => void;
   imageProvider: ImageProvider;
 }

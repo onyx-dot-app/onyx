@@ -1,12 +1,10 @@
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.constants import RETURN_SEPARATOR
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import InferenceChunk, InferenceChunkUncleaned
 from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import DocMetadataAwareIndexChunk
 
 
-def generate_enriched_content_for_chunk_text(chunk: DocMetadataAwareIndexChunk) -> str:
+def generate_enriched_content_for_chunk_text(chunk: DocAwareChunk) -> str:
     return f"{chunk.title_prefix}{chunk.doc_summary}{chunk.content}{chunk.chunk_context}{chunk.metadata_suffix_keyword}"
 
 
@@ -52,9 +50,8 @@ def cleanup_content_for_chunks(
     """
 
     def _remove_title(chunk: InferenceChunkUncleaned) -> str:
-        # TODO(andrei): This was ported over from
-        # backend/onyx/document_index/vespa/vespa_document_index.py but I don't
-        # think this logic is correct. In Vespa at least we set the title field
+        # TODO(andrei): This was ported over from the former Vespa document
+        # index but I don't think this logic is correct. We set the title field
         # from the output of get_title_for_document_index, which is not
         # necessarily the same data that is prepended to the content; that comes
         # from title_prefix.

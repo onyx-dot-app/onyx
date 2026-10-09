@@ -22,6 +22,7 @@ reviews:
     Reference these files for additional context:
     - `contributing_guides/best_practices.md` — Best practices for contributing to the codebase
     - `CLAUDE.md` — Project instructions and coding standards
+    - `.agents/feature-map/PATHS.md`: maps code paths to the feature-map component documents
     - `backend/alembic/README.md` — Migration guidance, including multi-tenant migration behavior
     - `deployment/helm/charts/onyx/values-lite.yaml` — Lite deployment Helm values and service assumptions
     - `deployment/docker_compose/docker-compose.onyx-lite.yml` — Lite deployment Docker Compose overlay and disabled service behavior
@@ -30,6 +31,9 @@ reviews:
     files:
       - greptile.json
       - cubic.yaml
+      # Verbatim vendor of github.com/dmmulroy/anti-slop. We do not edit these
+      # files, so review findings here belong upstream, not on our PRs.
+      - web/tools/oxlint/anti-slop/**
 
   custom_rules:
     - name: TODO format
@@ -49,6 +53,16 @@ reviews:
       description: >
         Remove temporary debugging code before merging to production,
         especially tenant-specific debugging logs.
+
+    - name: Feature map stays true
+      description: >
+        Onyx keeps a feature map in .agents/feature-map/. When a PR changes
+        behaviour, find the touched code paths in .agents/feature-map/PATHS.md
+        and read the matching component documents. If the PR changes something
+        a component document states (an endpoint, permission, env var, default,
+        data model field, documented behaviour, or a contract in section 5) and
+        does not update that document, flag it and name the stale section. Do
+        not flag changes that leave every documented statement true.
 
     - name: No hardcoded booleans
       description: >

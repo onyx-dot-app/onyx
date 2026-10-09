@@ -6,19 +6,19 @@ Covers:
 - Search filter / search_usage determination in the caller
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from uuid import UUID
-from uuid import uuid4
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
-from onyx.chat.models import ExtractedContextFiles
-from onyx.chat.process_message import determine_search_params
-from onyx.chat.process_message import extract_context_files
-from onyx.chat.process_message import resolve_context_user_files
+from onyx.chat.models import ExtractedContextFiles, FileToolMetadata
+from onyx.chat.process_message import (
+    determine_search_params,
+    extract_context_files,
+    resolve_context_user_files,
+)
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.models import UserFile
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
+from onyx.db.user_file import capture_user_file_metadata
+from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
 from onyx.tools.models import SearchToolUsage
 
 # ---------------------------------------------------------------------------
@@ -37,6 +37,7 @@ def _make_user_file(
         file_id=str(file_uuid),
         name=name,
         token_count=token_count,
+        file_type="text/plain",
     )
 
 
@@ -159,12 +160,10 @@ class TestExtractContextFiles:
     """All-or-nothing context window fit check."""
 
     def test_empty_user_files_returns_empty(self) -> None:
-        db_session = MagicMock()
         result = extract_context_files(
-            user_files=[],
+            user_files=capture_user_file_metadata([]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=db_session,
         )
         assert result.file_texts == []
         assert result.image_files == []
@@ -180,10 +179,9 @@ class TestExtractContextFiles:
         ]
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=capture_user_file_metadata([uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.file_texts == ["file content"]
@@ -197,10 +195,9 @@ class TestExtractContextFiles:
         uf = _make_user_file(token_count=7000)
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=capture_user_file_metadata([uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.file_texts == []
@@ -215,10 +212,9 @@ class TestExtractContextFiles:
         uf = _make_user_file(token_count=6000)
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=capture_user_file_metadata([uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is True
@@ -231,10 +227,9 @@ class TestExtractContextFiles:
         mock_load.return_value = [_make_in_memory_file(file_id=file_id, content="data")]
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=capture_user_file_metadata([uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is False
@@ -247,10 +242,9 @@ class TestExtractContextFiles:
         # 3 * 2500 = 7500 > 6000 threshold
 
         result = extract_context_files(
-            user_files=files,
+            user_files=capture_user_file_metadata(files),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is True
@@ -265,10 +259,9 @@ class TestExtractContextFiles:
         # Available = (10000 - 5000) * 0.6 = 3000. Tokens = 3000 → overflow.
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=capture_user_file_metadata([uf]),
             llm_max_context_window=10000,
             reserved_token_count=5000,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is True
@@ -288,10 +281,9 @@ class TestExtractContextFiles:
         ]
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=capture_user_file_metadata([uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert len(result.image_files) == 1
@@ -335,10 +327,9 @@ class TestExtractContextFiles:
 
         # Pathway 1: extract_context_files (project/persona context)
         result = extract_context_files(
-            user_files=[uf],
+            user_files=capture_user_file_metadata([uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
         assert len(result.file_metadata_for_tool) == 1
         tool_metadata_file_id = result.file_metadata_for_tool[0].file_id
@@ -365,10 +356,9 @@ class TestExtractContextFiles:
         uf = _make_user_file(token_count=7000, name="bigfile.txt")
 
         result = extract_context_files(
-            user_files=[uf],
+            user_files=capture_user_file_metadata([uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is False
@@ -401,10 +391,9 @@ class TestExtractContextFiles:
         ]
 
         result = extract_context_files(
-            user_files=[text_uf, tabular_uf],
+            user_files=capture_user_file_metadata([text_uf, tabular_uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         # Text file fits (100 < 6000), so files should be loaded
@@ -437,10 +426,9 @@ class TestExtractContextFiles:
         ]
 
         result = extract_context_files(
-            user_files=[text_uf, tabular_uf],
+            user_files=capture_user_file_metadata([text_uf, tabular_uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.file_texts == ["hello"]
@@ -462,10 +450,9 @@ class TestExtractContextFiles:
         )
 
         result = extract_context_files(
-            user_files=[text_uf, tabular_uf],
+            user_files=capture_user_file_metadata([text_uf, tabular_uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         # Text files overflow → search filter enabled
@@ -486,10 +473,9 @@ class TestExtractContextFiles:
         )
 
         result = extract_context_files(
-            user_files=[text_uf, tabular_uf],
+            user_files=capture_user_file_metadata([text_uf, tabular_uf]),
             llm_max_context_window=10000,
             reserved_token_count=0,
-            db_session=MagicMock(),
         )
 
         assert result.use_as_search_filter is False
@@ -643,3 +629,37 @@ class TestSearchFilterDetermination:
                 f"{result.persona_id_filter}, project_id_filter="
                 f"{result.project_id_filter}"
             )
+
+
+class TestContextFileStagingFlag:
+    """`staged_for_tools` must mirror what actually reaches PythonTool.
+
+    `_load_context_user_files_for_tools` loads only metadata-only files into
+    `chat_files_for_tools`, so everything else is listed for the LLM but never
+    staged. The out-of-context file notice reads this flag to decide whether it
+    may name the python tool; getting it wrong sends the model after bytes the
+    tool was never handed.
+    """
+
+    def _metadata_for(self, name: str, file_type: str) -> FileToolMetadata:
+        from onyx.chat.process_message import _build_tool_metadata
+
+        return _build_tool_metadata(
+            UserFileMetadata(
+                id=uuid4(),
+                file_id=f"user_files/{uuid4()}/{name}",
+                name=name,
+                token_count=100,
+                file_type=file_type,
+            )
+        )
+
+    def test_tabular_file_is_staged(self) -> None:
+        """CSV/XLSX are metadata-only, so they are handed to PythonTool."""
+        meta = self._metadata_for("data.csv", "text/csv")
+        assert meta.staged_for_tools is True
+
+    def test_non_metadata_only_file_is_not_staged(self) -> None:
+        """A PDF is listed for the LLM but never loaded into chat_files_for_tools."""
+        meta = self._metadata_for("report.pdf", "application/pdf")
+        assert meta.staged_for_tools is False

@@ -11,27 +11,41 @@ const mockedApi = api as jest.Mocked<typeof api>;
 const SESSION_ID = "11111111-1111-1111-1111-111111111111";
 
 // Minimal DetailedSessionResponse shapes — loadSession only reads status,
-// session_loaded_in_sandbox, and sandbox.{status,nextjs_port}.
-function sleepingSession(): unknown {
+// session_loaded_in_sandbox, nextjs_port, and sandbox.status.
+function sleepingSession(): Record<string, unknown> {
   return {
     id: SESSION_ID,
     status: "idle",
+    skills_stale: false,
+    nextjs_port: null,
     session_loaded_in_sandbox: false,
-    sandbox: { id: "sb1", status: "sleeping", nextjs_port: null },
+    sandbox: { id: "sb1", status: "sleeping" },
   };
 }
 
-function runningSession(): unknown {
+function runningSession(
+  nextjsPort: number | null = null
+): Record<string, unknown> {
   return {
     id: SESSION_ID,
     status: "active",
+    skills_stale: false,
+    nextjs_port: nextjsPort,
     session_loaded_in_sandbox: true,
-    sandbox: { id: "sb1", status: "running", nextjs_port: null },
+    sandbox: { id: "sb1", status: "running" },
   };
 }
 
-function webappInfo(has_webapp: boolean, ready: boolean): unknown {
+function webappInfo(has_webapp: boolean | null, ready: boolean): unknown {
   return { has_webapp, webapp_url: null, status: "running", ready };
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 describe("loadSession restore status", () => {
@@ -44,10 +58,33 @@ describe("loadSession restore status", () => {
     mockedApi.fetchMessages.mockResolvedValue([] as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
     mockedApi.fetchArtifacts.mockResolvedValue([] as never);
+    mockedApi.fetchOutputInventory.mockResolvedValue({
+      files: [],
+      complete: true,
+    });
     // Default: webapp already serving, so the readiness gate is a no-op.
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, true) as never
     );
+  });
+
+  it("loads the session while its inventory is still pending", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    const inventory =
+      deferred<Awaited<ReturnType<typeof api.fetchOutputInventory>>>();
+    mockedApi.fetchOutputInventory.mockReturnValueOnce(inventory.promise);
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      isLoaded: true,
+      outputInventory: null,
+    });
+    inventory.resolve({ files: [], complete: true });
+    // Wait for the serialized queue to settle before resetting the store.
+    await useBuildSessionStore
+      .getState()
+      .refreshOutputInventory(SESSION_ID, { silent: true });
   });
 
   it("keeps the sandbox running when the post-restore artifact fetch fails", async () => {
@@ -63,6 +100,17 @@ describe("loadSession restore status", () => {
     expect(session?.sandbox?.status).toBe("running");
   });
 
+  it("builds the webapp URL from the session port", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession(3210) as never);
+    mockedApi.fetchArtifacts.mockResolvedValue([{ type: "web_app" }] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.webappUrl
+    ).toBe("http://localhost:3210");
+  });
+
   it("marks the sandbox failed when restore itself fails", async () => {
     mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
     mockedApi.restoreSession.mockRejectedValue(new Error("restore boom"));
@@ -71,6 +119,23 @@ describe("loadSession restore status", () => {
 
     const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
     expect(session?.sandbox?.status).toBe("failed");
+  });
+
+  it("clears stale skills after a successful session restore", async () => {
+    mockedApi.fetchSession.mockResolvedValue({
+      ...sleepingSession(),
+      skills_stale: true,
+    } as never);
+    mockedApi.restoreSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: false,
+    } as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(false);
   });
 
   it("waits for the webapp before flipping to running, then shows running", async () => {
@@ -87,6 +152,121 @@ describe("loadSession restore status", () => {
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalled();
     const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
     expect(session?.sandbox?.status).toBe("running");
+  });
+
+  it("remounts the preview on restore, while edits only refresh (HMR handles them)", async () => {
+    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+    mockedApi.restoreSession.mockResolvedValue(runningSession() as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    let session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.webappNeedsRefresh).toBe(1);
+    expect(session?.webappNeedsRemount).toBe(1);
+
+    // A web/ file edit mid-turn must not remount the iframe.
+    useBuildSessionStore.getState().triggerWebappRefresh(SESSION_ID);
+    session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.webappNeedsRefresh).toBe(2);
+    expect(session?.webappNeedsRemount).toBe(1);
+  });
+
+  it("renders a persisted turn-error row when it is the latest activity", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Do a thing",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Do a thing" },
+        },
+      },
+      {
+        id: "error-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "error",
+          message: "This turn was stopped after reaching its time limit.",
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    const assistant = session?.messages.find((message) => {
+      return message.type === "assistant";
+    });
+    expect(assistant?.message_metadata?.streamItems).toEqual([
+      {
+        type: "error",
+        id: "error-1",
+        content: "This turn was stopped after reaching its time limit.",
+      },
+    ]);
+  });
+
+  it("drops a persisted turn-error row once later activity exists", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Do a thing",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Do a thing" },
+        },
+      },
+      {
+        id: "error-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "error",
+          message: "This turn was stopped after reaching its time limit.",
+        },
+      },
+      {
+        id: "user-2",
+        type: "user",
+        content: "Continue",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Continue" },
+        },
+      },
+      {
+        id: "answer-2",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_message",
+          content: { type: "text", text: "Continued and finished." },
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    const allItems = (session?.messages ?? [])
+      .filter((message) => message.type === "assistant")
+      .flatMap(
+        (message) =>
+          (message.message_metadata?.streamItems ?? []) as { type: string }[]
+      );
+    expect(allItems.some((item) => item.type === "error")).toBe(false);
+    expect(allItems.some((item) => item.type === "text")).toBe(true);
   });
 
   it("restores persisted agent thought packets as collapsed transcript stream items", async () => {
@@ -341,6 +521,59 @@ describe("loadSession restore status", () => {
     expect(session?.activeTurnLocalOwner).toBe(false);
   });
 
+  it("retains fetched stale-skill state during a pre-provisioned turn", async () => {
+    mockedApi.fetchSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: true,
+    } as never);
+    useBuildSessionStore.getState().createSession(SESSION_ID, {
+      status: "running",
+      messages: [
+        {
+          id: "local-user",
+          type: "user",
+          content: "hello",
+          timestamp: new Date(),
+        },
+      ],
+      skillsStale: false,
+      isLoaded: false,
+    });
+
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(true);
+  });
+
+  it("rejects a load fetched before a newer stale-skill update", async () => {
+    const messages = deferred<unknown[]>();
+    mockedApi.fetchSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: true,
+    } as never);
+    mockedApi.fetchMessages.mockReturnValue(messages.promise as never);
+
+    const load = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    await Promise.resolve();
+    expect(mockedApi.fetchMessages).toHaveBeenCalled();
+
+    useBuildSessionStore
+      .getState()
+      .updateSessionData(SESSION_ID, { skillsStale: false });
+    messages.resolve([]);
+    await load;
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(false);
+  });
+
   it("clears stale turn metadata when active turn lookup says no turn is running", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
@@ -371,6 +604,10 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
     } as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
     mockedApi.fetchArtifacts.mockResolvedValue([] as never);
+    mockedApi.fetchOutputInventory.mockResolvedValue({
+      files: [],
+      complete: true,
+    });
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, true) as never
     );
@@ -440,6 +677,22 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
     expect(session?.activeTurnLocalOwner).toBe(false);
   });
 
+  it("reconciles stale skills when an interrupted turn settles", async () => {
+    seedInterruptedSession();
+    mockedApi.fetchSession.mockResolvedValue({
+      ...runningSession(),
+      skills_stale: true,
+    } as never);
+
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true, preferPersisted: true });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(true);
+  });
+
   it("keeps the stale local transcript without preferPersisted (the bug)", async () => {
     seedInterruptedSession();
 
@@ -455,14 +708,22 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
 });
 
 describe("waitForWebappReady", () => {
-  beforeEach(() => jest.clearAllMocks());
-  afterEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.useRealTimers();
+  });
 
   it("returns immediately when the session has no webapp", async () => {
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(false, false) as never
     );
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(1);
   });
 
@@ -470,7 +731,9 @@ describe("waitForWebappReady", () => {
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, true) as never
     );
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(1);
   });
 
@@ -479,23 +742,39 @@ describe("waitForWebappReady", () => {
       .mockResolvedValueOnce(webappInfo(true, false) as never)
       .mockResolvedValueOnce(webappInfo(true, false) as never)
       .mockResolvedValue(webappInfo(true, true) as never);
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(3);
   });
 
-  it("gives up after maxAttempts when the webapp never comes up", async () => {
+  it("stops at the deadline when the webapp never comes up", async () => {
     mockedApi.fetchWebappInfo.mockResolvedValue(
       webappInfo(true, false) as never
     );
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0, maxAttempts: 3 });
-    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(3);
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await expect(pending).resolves.toBe(false);
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(20);
   });
 
   it("keeps polling through transient fetch errors", async () => {
     mockedApi.fetchWebappInfo
       .mockRejectedValueOnce(new Error("sandbox not reachable"))
       .mockResolvedValue(webappInfo(true, true) as never);
-    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps polling while webapp existence is unknown", async () => {
+    mockedApi.fetchWebappInfo
+      .mockResolvedValueOnce(webappInfo(null, false) as never)
+      .mockResolvedValue(webappInfo(false, false) as never);
+    const pending = waitForWebappReady(SESSION_ID);
+    await jest.advanceTimersByTimeAsync(30000);
+    await pending;
     expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
   });
 });

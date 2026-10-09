@@ -12,39 +12,32 @@ import {
 import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./admin/connectors/types";
-import { StringOrNumberOption } from "@/components/Dropdown";
-import {
-  Select,
-  SelectItem,
-  SelectContent,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { InputSingleSelect } from "@opal/components";
 import { FiInfo, FiX } from "react-icons/fi";
+import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import { Button, Checkbox } from "@opal/components";
+import {
+  Button,
+  InputCheckbox,
+  InputDatePicker,
+  InputTextArea,
+  type InputTextAreaProps,
+  Tooltip,
+} from "@opal/components";
 
 import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
+import FileDropzoneField from "@/refresh-components/form/FileDropzoneField";
 import { RichTextSubtext } from "./RichTextSubtext";
-import {
-  TypedFile,
-  createTypedFile,
-  getFileTypeDefinitionForField,
-  FILE_TYPE_DEFINITIONS,
-} from "@/lib/connectors/fileTypes";
+import { TypedFile, FILE_TYPE_DEFINITIONS } from "@/lib/connectors/fileTypes";
+import { createTypedFile } from "@/lib/connectors/utils";
+import { getCredentialFileType } from "@/lib/credentials/utils";
 import Text from "@/refresh-components/texts/Text";
 
-import { Tooltip } from "@opal/components";
-import InputTextArea, {
-  InputTextAreaProps,
-} from "@/refresh-components/inputs/InputTextArea";
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
 
 export function SectionHeader({
@@ -174,37 +167,40 @@ export const FieldLabel = ({
   label: string;
   removeLabel?: boolean;
   vertical?: boolean;
-}) => (
-  <>
-    <div
-      className={`flex ${
-        vertical ? "flex-col" : "flex-row"
-      } gap-x-2 items-start`}
-    >
-      <div className="flex gap-x-2 items-center">
-        {!removeLabel && (
-          <Label small={false} htmlFor={name}>
-            {label}
-          </Label>
+}) => {
+  const t = useTranslations("common.field");
+  return (
+    <>
+      <div
+        className={`flex ${
+          vertical ? "flex-col" : "flex-row"
+        } gap-x-2 items-start`}
+      >
+        <div className="flex gap-x-2 items-center">
+          {!removeLabel && (
+            <Label small={false} htmlFor={name}>
+              {label}
+            </Label>
+          )}
+          {optional ? <span>{t("optionalIndicator.text")} </span> : ""}
+          {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+        </div>
+        {error ? (
+          <ManualErrorMessage>{error}</ManualErrorMessage>
+        ) : (
+          !hideError && (
+            <ErrorMessage
+              name={name}
+              component="div"
+              className="text-action-danger-05 my-auto text-sm"
+            />
+          )
         )}
-        {optional ? <span>(optional) </span> : ""}
-        {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
       </div>
-      {error ? (
-        <ManualErrorMessage>{error}</ManualErrorMessage>
-      ) : (
-        !hideError && (
-          <ErrorMessage
-            name={name}
-            component="div"
-            className="text-action-danger-05 my-auto text-sm"
-          />
-        )
-      )}
-    </div>
-    {subtext && <SubLabel>{subtext}</SubLabel>}
-  </>
-);
+      {subtext && <SubLabel>{subtext}</SubLabel>}
+    </>
+  );
+};
 
 export function TextFormField({
   name,
@@ -263,6 +259,7 @@ export function TextFormField({
   className?: string;
   showPasswordToggle?: boolean;
 }) {
+  const t = useTranslations("common.field");
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
     heightString = "h-28";
@@ -362,7 +359,7 @@ export function TextFormField({
             ${isCode ? "font-mono" : ""}
             ${className}
             bg-background-neutral-00
-            ${isPasswordField && showPasswordToggle ? "pr-10" : ""}
+            ${isPasswordField && showPasswordToggle ? "pe-10" : ""}
           `}
           disabled={disabled}
           placeholder={placeholder}
@@ -371,8 +368,12 @@ export function TextFormField({
         {!isTextArea && isPasswordField && showPasswordToggle && (
           <button
             type="button"
-            aria-label={isPasswordVisible ? "Hide password" : "Show password"}
-            className="absolute right-3 top-1/2 -translate-y-1/2 stroke-text-02 hover:stroke-text-03 mt-0.5"
+            aria-label={
+              isPasswordVisible
+                ? t("passwordToggle.hideAriaLabel")
+                : t("passwordToggle.showAriaLabel")
+            }
+            className="absolute end-3 top-1/2 -translate-y-1/2 stroke-text-02 hover:stroke-text-03 mt-0.5"
             onClick={() => setIsPasswordVisible((v) => !v)}
             tabIndex={0}
           >
@@ -420,7 +421,7 @@ export function FileUploadFormField({
   return (
     <div className="w-full">
       <FieldLabel name={name} label={label} subtext={subtext} />
-      <FileInput name={fileName} multiple={false} hideError />
+      <FileDropzoneField name={fileName} multiple={false} />
     </div>
   );
 }
@@ -434,13 +435,14 @@ export function TypedFileUploadFormField({
   label: string;
   subtext?: string | JSX.Element;
 }) {
+  const t = useTranslations("common.field");
   const [field, , helpers] = useField<TypedFile | null>(name);
   const [customError, setCustomError] = useState<string>("");
   const [isValidating, setIsValidating] = useState(false);
   const [description, setDescription] = useState<string>("");
 
   useEffect(() => {
-    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    const typeDefinitionKey = getCredentialFileType(name);
     if (typeDefinitionKey) {
       setDescription(
         FILE_TYPE_DEFINITIONS[typeDefinitionKey].description || ""
@@ -462,12 +464,16 @@ export function TypedFileUploadFormField({
         if (validation?.isValid) {
           setCustomError("");
         } else {
-          setCustomError(validation?.errors.join(", ") || "Unknown error");
+          setCustomError(
+            validation?.errors.join(", ") || t("fileValidation.unknownError")
+          );
           helpers.setValue(null);
         }
       } catch (error) {
         setCustomError(
-          error instanceof Error ? error.message : "Validation error"
+          error instanceof Error
+            ? error.message
+            : t("fileValidation.validationError")
         );
         helpers.setValue(null);
       } finally {
@@ -476,7 +482,7 @@ export function TypedFileUploadFormField({
     };
 
     validateFile();
-  }, [field.value, helpers]);
+  }, [field.value, helpers, t]);
 
   const handleFileSelection = async (files: File[]) => {
     if (files.length === 0) {
@@ -487,14 +493,14 @@ export function TypedFileUploadFormField({
 
     const file = files[0];
     if (!file) {
-      setCustomError("File selection error");
+      setCustomError(t("fileValidation.selectionError"));
       return;
     }
 
-    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    const typeDefinitionKey = getCredentialFileType(name);
 
     if (!typeDefinitionKey) {
-      setCustomError(`No file type definition found for field: ${name}`);
+      setCustomError(t("fileValidation.noTypeDefinition", { name }));
       return;
     }
 
@@ -503,7 +509,11 @@ export function TypedFileUploadFormField({
       helpers.setValue(typedFile);
       setCustomError("");
     } catch (error) {
-      setCustomError(error instanceof Error ? error.message : "Unknown error");
+      setCustomError(
+        error instanceof Error
+          ? error.message
+          : t("fileValidation.unknownError")
+      );
       helpers.setValue(null);
     } finally {
       setIsValidating(false);
@@ -524,7 +534,7 @@ export function TypedFileUploadFormField({
       {/* Validation feedback */}
       {isValidating && (
         <div className="text-status-info-05 text-sm mt-1">
-          Validating file...
+          {t("fileValidation.validating")}
         </div>
       )}
 
@@ -603,7 +613,7 @@ export function MultiSelectField({
               value={option.value}
               checked={selectedOptions.includes(option.value)}
               onChange={() => handleCheckboxChange(option.value)}
-              className="mr-2"
+              className="me-2"
             />
             {option.label}
           </label>
@@ -623,8 +633,9 @@ export const MarkdownFormField = ({
   name,
   label,
   error,
-  placeholder = "Enter your markdown here...",
+  placeholder,
 }: MarkdownPreviewProps) => {
+  const t = useTranslations("common.field");
   const [field] = useField(name);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
@@ -639,14 +650,16 @@ export const MarkdownFormField = ({
         <div className="flex items-center justify-between px-4 py-2 bg-background-neutral-02 rounded-t-md">
           <div className="flex items-center space-x-2">
             <FaMarkdown className="text-text-03" />
-            <span className="text-sm font-semibold text-text-04">Markdown</span>
+            <span className="text-sm font-semibold text-text-04">
+              {t("markdown.editorLabel")}
+            </span>
           </div>
           <button
             type="button"
             onClick={togglePreview}
             className="text-sm font-semibold text-text-04 hover:text-text-05 focus:outline-hidden"
           >
-            {isPreviewOpen ? "Write" : "Preview"}
+            {isPreviewOpen ? t("markdown.writeTab") : t("markdown.previewTab")}
           </button>
         </div>
         {isPreviewOpen ? (
@@ -664,7 +677,7 @@ export const MarkdownFormField = ({
             <textarea
               {...field}
               rows={2}
-              placeholder={placeholder}
+              placeholder={placeholder ?? t("markdown.placeholder")}
               className={`w-full p-2 border border-border-02 rounded-md`}
             />
           </div>
@@ -712,6 +725,7 @@ export const BooleanFormField = memo(function BooleanFormField({
   disabledTooltipSide,
   onChange,
 }: BooleanFormFieldProps) {
+  const t = useTranslations("common.field");
   // Generate a stable, valid id from the field name for label association
   const checkboxId = `checkbox-${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
@@ -744,10 +758,10 @@ export const BooleanFormField = memo(function BooleanFormField({
                 <div
                   className={cn(
                     disabled && "opacity-50",
-                    removeIndent ? "mr-2" : "mx-3"
+                    removeIndent ? "me-2" : "mx-3"
                   )}
                 >
-                  <Checkbox
+                  <InputCheckbox
                     aria-label={`${label
                       .toLowerCase()
                       .replace(" ", "-")}-checkbox`}
@@ -762,14 +776,19 @@ export const BooleanFormField = memo(function BooleanFormField({
                   />
                 </div>
                 {!noLabel && (
+                  // Pointer convenience only — the checkbox itself is
+                  // keyboard reachable.
                   <div
+                    role="presentation"
                     className={disabled ? "" : "cursor-pointer"}
                     onClick={toggle}
                   >
                     <div className="flex items-center gap-x-2">
-                      <Label small={small}>{`${label}${
-                        optional ? " (Optional)" : ""
-                      }`}</Label>
+                      <Label small={small}>
+                        {optional
+                          ? t("booleanField.optionalLabel", { label })
+                          : label}
+                      </Label>
                       {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
                     </div>
                     {subtext && <SubLabel>{subtext}</SubLabel>}
@@ -813,6 +832,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
   placeholder = "",
   disabled = false,
 }: TextArrayFieldProps<T>) {
+  const t = useTranslations("common.field");
   return (
     <div className="mb-4">
       <div className="flex gap-x-2 items-center">
@@ -842,7 +862,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
                       w-full
                       py-2
                       px-3
-                      mr-4
+                      me-4
                       disabled:cursor-not-allowed
                       `}
                       // Disable autocomplete since the browser doesn't know how to handle an array of text fields
@@ -884,7 +904,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
               type="button"
               disabled={disabled}
             >
-              Add New
+              {t("arrayField.addButton")}
             </Button>
           </div>
         )}
@@ -910,14 +930,23 @@ export function TextArrayFieldBuilder<T extends Yup.AnyObject>(
   return _TextArrayField;
 }
 
+export interface Option<T> {
+  name: string;
+  value: T;
+  description?: string;
+  icon?: (props: { size?: number; className?: string }) => JSX.Element;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
+export type StringOrNumberOption = Option<string | number>;
+
 interface SelectorFormFieldProps {
   name: string;
   label?: string;
   options: StringOrNumberOption[];
   subtext?: string | JSX.Element;
   includeDefault?: boolean;
-  side?: "top" | "right" | "bottom" | "left";
-  maxHeight?: string;
   onSelect?: (selected: string | number | null) => void;
   defaultValue?: string;
   tooltip?: string;
@@ -927,13 +956,13 @@ interface SelectorFormFieldProps {
   disabled?: boolean;
 }
 
+const NONE_VALUE = "__none__";
+
 export function SelectorFormField({
   name,
   label,
   options,
   subtext,
-  side = "bottom",
-  maxHeight,
   onSelect,
   defaultValue,
   tooltip,
@@ -942,13 +971,9 @@ export function SelectorFormField({
   small = false,
   disabled = false,
 }: SelectorFormFieldProps) {
+  const t = useTranslations("common.field");
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
-  const [container, setContainer] = useState<HTMLDivElement | null>(null);
-
-  const currentlySelected = options.find(
-    (option) => option.value?.toString() === field.value?.toString()
-  );
 
   const textSizeClasses = {
     sm: {
@@ -981,61 +1006,33 @@ export function SelectorFormField({
         </div>
       )}
       {subtext && <SubLabel>{subtext}</SubLabel>}
-      <div className="mt-2" ref={setContainer}>
-        <Select
-          value={field.value || defaultValue}
-          onValueChange={
-            onSelect ||
-            ((selected) =>
-              selected == "__none__"
-                ? setFieldValue(name, null)
-                : setFieldValue(name, selected))
-          }
-          defaultValue={defaultValue}
+      <div className="mt-2">
+        <InputSingleSelect
+          value={field.value?.toString() ?? defaultValue ?? ""}
+          onValueChange={(selected) => {
+            // A re-pick emits "": the pick stands. Clearing is the reset row.
+            if (selected === "") return;
+            const value = selected === NONE_VALUE ? null : selected;
+            if (onSelect) onSelect(value);
+            else setFieldValue(name, value);
+          }}
+          placeholder={t("selector.placeholder")}
           disabled={disabled}
-        >
-          <SelectTrigger className={sizeClass.input} disabled={disabled}>
-            <SelectValue placeholder="Select...">
-              {currentlySelected?.name || defaultValue || ""}
-            </SelectValue>
-          </SelectTrigger>
-
-          {container && (
-            <SelectContent
-              side={side}
-              className={`
-               ${maxHeight ? `${maxHeight}` : "max-h-72"}
-               overflow-y-scroll
-               ${sizeClass.input}
-              `}
-              container={container}
-            >
-              {options.length === 0 ? (
-                <SelectItem value="default">Select...</SelectItem>
-              ) : (
-                options.map((option) => (
-                  <SelectItem
-                    hideCheck
-                    icon={option.icon}
-                    key={option.value}
-                    value={String(option.value)}
-                    selected={field.value === option.value}
-                  >
-                    {option.name}
-                  </SelectItem>
-                ))
-              )}
-              {includeReset && (
-                <SelectItem
-                  value={"__none__"}
-                  onSelect={() => setFieldValue(name, null)}
-                >
-                  None
-                </SelectItem>
-              )}
-            </SelectContent>
-          )}
-        </Select>
+          options={[
+            {
+              options: [
+                ...options.map((option) => ({
+                  value: String(option.value),
+                  title: option.name,
+                  ...(option.icon && { icon: option.icon }),
+                })),
+                ...(includeReset
+                  ? [{ value: NONE_VALUE, title: t("selector.noneOption") }]
+                  : []),
+              ],
+            },
+          ]}
+        />
       </div>
 
       <ErrorMessage
@@ -1068,9 +1065,10 @@ export function DatePickerField({
     <div>
       <FieldLabel label={label} name={name} subtext={subtext} />
       <InputDatePicker
-        selectedDate={field.value}
-        setSelectedDate={helper.setValue}
-        startYear={startYear}
+        id={name}
+        value={field.value}
+        onChange={helper.setValue}
+        minDate={new Date(startYear, 0, 1)}
         disabled={disabled}
       />
     </div>

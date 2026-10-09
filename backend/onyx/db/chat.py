@@ -1,47 +1,57 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
 
-from fastapi import HTTPException
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import nullsfirst
-from sqlalchemy import or_
-from sqlalchemy import Row
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import (
+    Integer,
+    Row,
+    any_,
+    bindparam,
+    delete,
+    desc,
+    func,
+    nullsfirst,
+    or_,
+    select,
+    update,
+)
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.sql.expression import ColumnElement
 
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import MessageType
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SavedSearchDoc
+from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
+from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatMessage__SearchDoc
-from onyx.db.models import ChatSession
-from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Persona
+from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
+from onyx.db.models import (
+    ChatMessage,
+    ChatMessage__SearchDoc,
+    ChatSession,
+    ChatSessionSharedStatus,
+    Persona,
+    ToolCall,
+    User,
+)
 from onyx.db.models import SearchDoc as DBSearchDoc
-from onyx.db.models import ToolCall
-from onyx.db.models import User
 from onyx.db.persona import get_best_persona_id_for_user
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
+from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
 logger = setup_logger()
+
+
+def visible_chat_messages_filter() -> ColumnElement[bool]:
+    """Exclude context summaries from public chat history."""
+    return ChatMessage.message_type != MessageType.SUMMARY
 
 
 # Note: search/streaming packet helpers moved to streaming_utils.py
@@ -70,7 +80,12 @@ def get_chat_session_by_id(
         )
 
     if is_shared:
-        stmt = stmt.where(ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC)
+        # Deleting does not unshare, so a shared reader must never see a tombstone.
+        # `include_deleted` is for the owner/admin path only.
+        stmt = stmt.where(
+            ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+            ChatSession.deleted.is_(False),
+        )
     else:
         # if user_id is None, assume this is an admin who should be able
         # to view all chat sessions
@@ -104,25 +119,57 @@ def get_chat_sessions_by_slack_thread_id(
     return db_session.scalars(stmt).all()
 
 
+def get_incognito_session_ids_for_user(
+    user_id: UUID, db_session: Session
+) -> list[UUID]:
+    return list(
+        db_session.scalars(
+            select(ChatSession.id).where(
+                ChatSession.user_id == user_id,
+                ChatSession.incognito_record_mode.is_not(None),
+            )
+        )
+    )
+
+
+def content_persisting_sessions_filter() -> ColumnElement[bool]:
+    """Ordinary chats plus incognito modes that persist content. Content-free
+    sessions have no message content to show on any history surface."""
+    persisting = [m for m in IncognitoRecordMode if m.persists_content]
+    return ChatSession.incognito_record_mode.is_(
+        None
+    ) | ChatSession.incognito_record_mode.in_(persisting)
+
+
 # Retrieves chat sessions by user
 # Chat sessions do not include onyxbot flows
 def get_chat_sessions_by_user(
     user_id: UUID | None,
     deleted: bool | None,
     db_session: Session,
-    include_onyxbot_flows: bool = False,
     limit: int = 50,
     before: datetime | None = None,
     project_id: int | None = None,
     only_non_project_chats: bool = False,
     include_failed_chats: bool = False,
+    exclude_incognito: bool = False,
+    exclude_content_free: bool = False,
 ) -> list[ChatSession]:
-    stmt = select(ChatSession).where(ChatSession.user_id == user_id)
+    stmt = (
+        select(ChatSession)
+        .where(ChatSession.user_id == user_id)
+        .where(ChatSession.onyxbot_flow.is_(False))
+        .order_by(desc(ChatSession.time_updated))
+    )
 
-    if not include_onyxbot_flows:
-        stmt = stmt.where(ChatSession.onyxbot_flow.is_(False))
+    # The two exclusions are independent because the surfaces differ: the owner
+    # sees none of their incognito sessions, while a workspace surface keeps the
+    # full-history ones and drops only those with no content to show.
+    if exclude_incognito:
+        stmt = stmt.where(ChatSession.incognito_record_mode.is_(None))
 
-    stmt = stmt.order_by(desc(ChatSession.time_updated))
+    if exclude_content_free:
+        stmt = stmt.where(content_persisting_sessions_filter())
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)
@@ -227,8 +274,13 @@ def create_chat_session(
     onyxbot_flow: bool = False,
     slack_thread_id: str | None = None,
     project_id: int | None = None,
+    incognito_record_mode: IncognitoRecordMode | None = None,
+    session_id: UUID | None = None,
 ) -> ChatSession:
     chat_session = ChatSession(
+        # Caller-supplied only for incognito, where uploads name the session
+        # before it exists so the server can verify them.
+        **({"id": session_id} if session_id is not None else {}),
         user_id=user_id,
         persona_id=persona_id,
         description=description,
@@ -237,6 +289,7 @@ def create_chat_session(
         onyxbot_flow=onyxbot_flow,
         slack_thread_id=slack_thread_id,
         project_id=project_id,
+        incognito_record_mode=incognito_record_mode,
     )
 
     db_session.add(chat_session)
@@ -257,13 +310,26 @@ def duplicate_chat_session_for_user_from_slack(
         (if it is available to the user clicking the button)
     - Sets the user to the given user (if provided)
     """
-    chat_session = get_chat_session_by_id(
-        chat_session_id=chat_session_id,
-        user_id=None,  # Ignore user permissions for this
-        db_session=db_session,
-    )
-    if not chat_session:
-        raise HTTPException(status_code=400, detail="Invalid Chat Session ID provided")
+    try:
+        chat_session = get_chat_session_by_id(
+            chat_session_id=chat_session_id,
+            user_id=None,
+            db_session=db_session,
+        )
+    except ValueError:
+        chat_session = None
+    # Slack answers are owned by the mapped user (DMs, ephemeral replies) or by
+    # the anonymous user (public channel replies). Any other owner is private.
+    if chat_session is None or chat_session.user_id not in (
+        None,
+        user.id,
+        UUID(ANONYMOUS_USER_UUID),
+    ):
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND, "Invalid Chat Session ID provided"
+        )
+    if chat_session.incognito_record_mode is not None:
+        raise ValueError("Incognito chat sessions cannot be duplicated")
 
     # This enforces permissions and sets a default
     new_persona_id = get_best_persona_id_for_user(
@@ -301,7 +367,12 @@ def update_chat_session(
     if chat_session.deleted:
         raise ValueError("Trying to rename a deleted chat session")
 
-    if description is not None:
+    # A title is conversation-derived, so a content-free session never stores
+    # one. Enforced here rather than at each caller: auto-naming, manual
+    # rename, and the patch endpoint all write through this.
+    if description is not None and record_mode_persists_content(
+        chat_session.incognito_record_mode
+    ):
         chat_session.description = description
     if sharing_status is not None:
         chat_session.shared_status = sharing_status
@@ -370,7 +441,7 @@ def delete_chat_session(
 
 
 def get_chat_sessions_older_than(
-    days_old: int, db_session: Session
+    days_old: float, db_session: Session, limit: int | None = None
 ) -> list[tuple[UUID | None, UUID]]:
     """
     Retrieves chat sessions whose last activity is older than a specified number of days.
@@ -382,6 +453,9 @@ def get_chat_sessions_older_than(
     Args:
         days_old: The number of days to consider as "old".
         db_session: The database session.
+        limit: Optional cap on the number of sessions returned. When set, the
+            oldest sessions are returned first so callers can drain the backlog
+            in bounded batches without loading every matching row at once.
 
     Returns:
         A list of tuples, where each tuple contains the user_id (can be None) and the chat_session_id of an old chat session.
@@ -391,11 +465,16 @@ def get_chat_sessions_older_than(
     last_activity = func.coalesce(
         func.max(ChatMessage.time_sent), ChatSession.time_created
     )
-    old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
+    stmt = (
         select(ChatSession.user_id, ChatSession.id)
         .outerjoin(ChatMessage, ChatMessage.chat_session_id == ChatSession.id)
         .group_by(ChatSession.id, ChatSession.user_id)
         .having(last_activity < cutoff_time)
+    )
+    if limit is not None:
+        stmt = stmt.order_by(last_activity.asc()).limit(limit)
+    old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
+        stmt
     ).fetchall()
 
     # convert old_sessions to a conventional list of tuples
@@ -411,7 +490,9 @@ def get_chat_message(
     user_id: UUID | None,
     db_session: Session,
 ) -> ChatMessage:
-    stmt = select(ChatMessage).where(ChatMessage.id == chat_message_id)
+    stmt = select(ChatMessage).where(
+        ChatMessage.id == chat_message_id, visible_chat_messages_filter()
+    )
 
     result = db_session.execute(stmt)
     chat_message = result.scalar_one_or_none()
@@ -441,7 +522,9 @@ def get_chat_session_by_message_id(
     Get the chat session associated with a specific message ID
     Note: this ignores permission checks.
     """
-    stmt = select(ChatMessage).where(ChatMessage.id == message_id)
+    stmt = select(ChatMessage).where(
+        ChatMessage.id == message_id, visible_chat_messages_filter()
+    )
 
     result = db_session.execute(stmt)
     chat_message = result.scalar_one_or_none()
@@ -467,6 +550,7 @@ def get_chat_messages_by_sessions(
             )
     stmt = (
         select(ChatMessage)
+        .where(visible_chat_messages_filter())
         .where(ChatMessage.chat_session_id.in_(chat_session_ids))
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
@@ -478,6 +562,9 @@ def add_chats_to_session_from_slack_thread(
     slack_chat_session_id: UUID,
     new_chat_session_id: UUID,
 ) -> None:
+    source_session = db_session.get(ChatSession, slack_chat_session_id)
+    if source_session and source_session.incognito_record_mode is not None:
+        raise ValueError("Incognito chat sessions cannot be duplicated")
     new_root_message = get_or_create_root_message(
         chat_session_id=new_chat_session_id,
         db_session=db_session,
@@ -559,6 +646,7 @@ def get_chat_messages_by_session(
 
     stmt = (
         select(ChatMessage)
+        .where(visible_chat_messages_filter())
         .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
@@ -954,6 +1042,7 @@ def translate_db_message_to_chat_message_detail(
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
         reasoning_tokens=chat_message.reasoning_tokens,
+        request_params=chat_message.request_params,
         message_type=chat_message.message_type,
         context_docs=top_documents,
         citations=converted_citations,
@@ -1110,3 +1199,112 @@ def update_db_session_with_messages(
         db_session.flush()
 
     return chat_message
+
+
+# =============================================================================
+# CHAT HISTORY
+# Reads the linear message chain of a chat session.
+# =============================================================================
+
+
+def create_chat_history_chain(
+    chat_session_id: UUID,
+    db_session: Session,
+    prefetch_top_two_level_tool_calls: bool = True,
+    prefetch_message_details: bool = False,
+    # Optional id at which we finish processing
+    stop_at_message_id: int | None = None,
+) -> list[ChatMessage]:
+    """Build the linear chain of messages without including the root message"""
+    mainline_messages: list[ChatMessage] = []
+
+    all_chat_messages = get_chat_messages_by_session(
+        chat_session_id=chat_session_id,
+        user_id=None,
+        db_session=db_session,
+        skip_permission_check=True,
+        prefetch_top_two_level_tool_calls=prefetch_top_two_level_tool_calls,
+        prefetch_message_details=prefetch_message_details,
+    )
+
+    if not all_chat_messages:
+        root_message = get_or_create_root_message(
+            chat_session_id=chat_session_id, db_session=db_session
+        )
+    else:
+        root_message = all_chat_messages[0]
+        if root_message.parent_message is not None:
+            raise RuntimeError(
+                "Invalid root message, unable to fetch valid chat message sequence"
+            )
+
+    current_message: ChatMessage | None = root_message
+    previous_message: ChatMessage | None = None
+    while current_message is not None:
+        child_msg = current_message.latest_child_message
+
+        # Break if at the end of the chain
+        # or have reached the `final_id` of the submitted message
+        if not child_msg or (
+            stop_at_message_id and current_message.id == stop_at_message_id
+        ):
+            break
+        current_message = child_msg
+
+        if (
+            current_message.message_type == MessageType.ASSISTANT
+            and previous_message is not None
+            and previous_message.message_type == MessageType.ASSISTANT
+            and mainline_messages
+        ):
+            # Note that 2 user messages in a row is fine since this is often used for
+            # adding custom prompts and reminders
+            raise RuntimeError(
+                "Invalid message chain, cannot have two assistant messages in a row"
+            )
+        else:
+            mainline_messages.append(current_message)
+
+        previous_message = current_message
+
+    return mainline_messages
+
+
+def find_summary_for_ancestry(
+    db_session: Session,
+    session_id: UUID,
+    message_ids: list[int],
+) -> ChatMessage | None:
+    """Find a summary on selected ancestry; IDs must run from newest to oldest."""
+    if not message_ids:
+        return None
+    # One array parameter keeps the query the same size however long the history is.
+    ancestry = bindparam("ancestry", message_ids, type_=postgresql.ARRAY(Integer))
+    return db_session.scalar(
+        select(ChatMessage)
+        .where(
+            ChatMessage.chat_session_id == session_id,
+            ChatMessage.message_type == MessageType.SUMMARY,
+            ChatMessage.parent_message_id == any_(ancestry),
+        )
+        # Nearest ancestor first, then the newest summary on that ancestor.
+        .order_by(
+            func.array_position(ancestry, ChatMessage.parent_message_id),
+            ChatMessage.id.desc(),
+        )
+        .limit(1)
+    )
+
+
+def find_summary_for_branch(
+    db_session: Session,
+    chat_history: list[ChatMessage],
+) -> ChatMessage | None:
+    """Find the summary on the nearest selected ancestor, regardless of save time."""
+    if not chat_history:
+        return None
+    return find_summary_for_ancestry(
+        db_session,
+        chat_history[0].chat_session_id,
+        [message.id for message in reversed(chat_history)],
+    )

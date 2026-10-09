@@ -32,7 +32,7 @@ export async function* handleSSEStream<T extends PacketType>(
         if (line.trim() === "") continue;
 
         try {
-          const data = JSON.parse(line) as T;
+          const data: T = JSON.parse(line);
           yield data;
         } catch (error) {
           console.error("Error parsing SSE data:", error);
@@ -42,7 +42,7 @@ export async function* handleSSEStream<T extends PacketType>(
           if (jsonObjects) {
             for (const jsonObj of jsonObjects) {
               try {
-                const data = JSON.parse(jsonObj) as T;
+                const data: T = JSON.parse(jsonObj);
                 yield data;
               } catch (innerError) {
                 console.error("Error parsing extracted JSON:", innerError);
@@ -56,7 +56,7 @@ export async function* handleSSEStream<T extends PacketType>(
     // Process any remaining data in the buffer
     if (buffer.trim() !== "") {
       try {
-        const data = JSON.parse(buffer) as T;
+        const data: T = JSON.parse(buffer);
         yield data;
       } catch (error) {
         console.error("Error parsing remaining buffer:", error);

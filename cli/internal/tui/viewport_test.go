@@ -106,7 +106,7 @@ func TestFinishAgentMultiline(t *testing.T) {
 
 	e := v.entries[1]
 	plain := stripANSI(e.rendered)
-	// Glamour may merge or reformat lines; just check content is present
+	// The markdown renderer may reformat blank lines; just check content is present
 	if !strings.Contains(plain, "Line one") {
 		t.Errorf("expected 'Line one' in rendered, got %q", plain)
 	}
@@ -351,5 +351,22 @@ func TestStreamMarkdownResetOnStart(t *testing.T) {
 	}
 	if v.lastRenderLen != 0 {
 		t.Error("expected lastRenderLen reset on startAgent")
+	}
+}
+
+func TestAgentMessageStripsControlSequences(t *testing.T) {
+	v := newViewport(80, true)
+	v.startAgent()
+	v.appendToken("safe \x1b]52;c;cm0gLXJm")
+	v.appendToken("\x07answer\x1b[2J")
+	v.finishAgent()
+
+	for _, e := range v.entries {
+		if strings.Contains(e.content, "\x1b") || strings.Contains(e.content, "\x07") {
+			t.Errorf("entry content keeps control bytes: %q", e.content)
+		}
+		if strings.Contains(e.rendered, "\x1b]") || strings.Contains(e.rendered, "\x07") {
+			t.Errorf("rendered entry keeps an OSC sequence: %q", e.rendered)
+		}
 	}
 }

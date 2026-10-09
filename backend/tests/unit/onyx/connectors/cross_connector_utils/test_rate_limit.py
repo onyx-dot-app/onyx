@@ -1,12 +1,11 @@
 import time
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 import requests
 
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    rate_limit_builder,
     wrap_request_to_handle_ratelimiting,
 )
 

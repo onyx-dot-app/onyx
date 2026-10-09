@@ -17,27 +17,19 @@ Coverage:
 """
 
 import asyncio
-from typing import Any
-from typing import cast
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import parse_qs, urlparse
 
 import httpx
-from fastapi import FastAPI
-from fastapi import Response
+from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
-from fastapi_users.authentication import AuthenticationBackend
-from fastapi_users.authentication import CookieTransport
+from fastapi_users.authentication import AuthenticationBackend, CookieTransport
 from fastapi_users.jwt import decode_jwt
 from httpx_oauth.oauth2 import BaseOAuth2
 
 from onyx.auth.mobile_sso.code_store import consume_sso_code
-from onyx.auth.users import generate_pkce_pair
-from onyx.auth.users import get_oauth_router
-from onyx.auth.users import STATE_TOKEN_AUDIENCE
+from onyx.auth.users import STATE_TOKEN_AUDIENCE, generate_pkce_pair, get_oauth_router
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 
 _STATE_SECRET = "test-secret"
@@ -111,7 +103,7 @@ def _build_test_client(
     login_response.headers["location"] = "/app"
     login_response.set_cookie("testsession", "session-token")
     login_mock = AsyncMock(return_value=login_response)
-    backend.login = login_mock  # ty: ignore[invalid-assignment]
+    backend.login = login_mock
 
     user = MagicMock()
     user.is_active = True
@@ -153,7 +145,9 @@ def _callback(client: TestClient, state: str) -> httpx.Response:
     # Every callback test resolves the tenant the same way; centralize the patch.
     with patch(
         "onyx.auth.users.fetch_ee_implementation_or_noop",
-        return_value=lambda _email: "tenant_1",
+        # Dispatch arity varies by target. This test guards the mobile bridge,
+        # not the resolver signature.
+        return_value=lambda *_args: "tenant_1",
     ):
         return client.get(
             "/auth/oauth/callback",

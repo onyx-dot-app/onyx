@@ -1,8 +1,15 @@
 import types
 from unittest.mock import patch
 
-from onyx.connectors.confluence.onyx_confluence import ConfluenceUser
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+import pytest
+
+from onyx.connectors.confluence import source_operations
+from onyx.connectors.confluence.models import ConfluenceUser
+from onyx.connectors.confluence.source_operations import (
+    ConfluenceSourceOperations,
+    ConfluenceUserListVariant,
+    _OnyxConfluence,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
 
@@ -17,7 +24,10 @@ class MockCredentialsProvider(CredentialsProviderInterface):
         return False
 
     def get_credentials(self) -> dict[str, str]:
-        return {"confluence_access_token": "test_token"}
+        return {
+            "confluence_username": "test_user",
+            "confluence_access_token": "test_token",
+        }
 
     def set_credentials(  # ty: ignore[invalid-method-override]
         self, credentials: dict[str, str]
@@ -36,12 +46,21 @@ class MockCredentialsProvider(CredentialsProviderInterface):
         pass
 
 
-def test_paginated_cql_user_retrieval_with_overrides() -> None:
+def _gateway(is_cloud: bool) -> ConfluenceSourceOperations:
+    return ConfluenceSourceOperations(
+        credentials_provider=MockCredentialsProvider(),
+        connector_specific_config={
+            "wiki_base": "http://dummy-confluence.com",
+            "is_cloud": is_cloud,
+        },
+    )
+
+
+def test_list_users_with_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Tests that paginated_cql_user_retrieval yields users from the overrides
-    when provided and is_cloud is False.
+    Tests that list_users yields users from the overrides when
+    CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE is set and is_cloud is False.
     """
-    mock_provider = MockCredentialsProvider()
     overrides = [
         {
             "user_id": "override_user_1",
@@ -59,15 +78,16 @@ def test_paginated_cql_user_retrieval_with_overrides() -> None:
         },
     ]
     expected_users = [ConfluenceUser(**user_data) for user_data in overrides]
-
-    confluence_client = OnyxConfluence(
-        is_cloud=False,  # Overrides are primarily for Server/DC
-        url="http://dummy-confluence.com",
-        credentials_provider=mock_provider,
-        confluence_user_profiles_override=overrides,
+    monkeypatch.setattr(
+        source_operations, "CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE", overrides
     )
 
-    retrieved_users = list(confluence_client.paginated_cql_user_retrieval())
+    # Overrides are primarily for Server/DC
+    with patch.object(_OnyxConfluence, "_paginate_url") as mock_paginate:
+        retrieved_users = list(
+            _gateway(is_cloud=False).list_users(variant=ConfluenceUserListVariant.DC)
+        )
+        mock_paginate.assert_not_called()
 
     assert len(retrieved_users) == len(expected_users)
     # Sort lists by user_id for order-independent comparison
@@ -76,46 +96,38 @@ def test_paginated_cql_user_retrieval_with_overrides() -> None:
     assert retrieved_users == expected_users
 
 
-def test_paginated_cql_user_retrieval_no_overrides_server() -> None:
+def test_list_users_no_overrides_server(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Tests that paginated_cql_user_retrieval attempts to call the actual
-    API pagination when no overrides are provided for Server/DC.
+    Tests that list_users calls the DC user list when no overrides are set.
     """
-    mock_provider = MockCredentialsProvider()
-    confluence_client = OnyxConfluence(
-        is_cloud=False,
-        url="http://dummy-confluence.com",
-        credentials_provider=mock_provider,
-        confluence_user_profiles_override=None,
+    monkeypatch.setattr(
+        source_operations, "CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE", None
     )
 
     # Mock the internal pagination method to check if it's called
-    with patch.object(confluence_client, "_paginate_url") as mock_paginate:
+    with patch.object(_OnyxConfluence, "_paginate_url") as mock_paginate:
         mock_paginate.return_value = iter([])  # Return an empty iterator
 
-        list(confluence_client.paginated_cql_user_retrieval())
+        list(_gateway(is_cloud=False).list_users(variant=ConfluenceUserListVariant.DC))
 
         mock_paginate.assert_called_once_with("rest/api/user/list", None)
 
 
-def test_paginated_cql_user_retrieval_no_overrides_cloud() -> None:
+def test_list_users_no_overrides_cloud(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Tests that paginated_cql_user_retrieval attempts to call the actual
-    API pagination when no overrides are provided for Cloud.
+    Tests that list_users calls the Cloud user search when no overrides are set.
     """
-    mock_provider = MockCredentialsProvider()
-    confluence_client = OnyxConfluence(
-        is_cloud=True,
-        url="http://dummy-confluence.com",  # URL doesn't matter much here due to mocking
-        credentials_provider=mock_provider,
-        confluence_user_profiles_override=None,
+    monkeypatch.setattr(
+        source_operations, "CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE", None
     )
 
     # Mock the internal pagination method to check if it's called
-    with patch.object(confluence_client, "_paginate_url") as mock_paginate:
+    with patch.object(_OnyxConfluence, "_paginate_url") as mock_paginate:
         mock_paginate.return_value = iter([])  # Return an empty iterator
 
-        list(confluence_client.paginated_cql_user_retrieval())
+        list(
+            _gateway(is_cloud=True).list_users(variant=ConfluenceUserListVariant.CLOUD)
+        )
 
         # Check that the cloud-specific user search URL is called
         mock_paginate.assert_called_once_with(

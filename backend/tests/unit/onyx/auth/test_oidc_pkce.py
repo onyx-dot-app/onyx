@@ -1,26 +1,21 @@
-from typing import Any
-from typing import cast
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import parse_qs, urlparse
 
-from fastapi import FastAPI
-from fastapi import Response
+from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
-from fastapi_users.authentication import AuthenticationBackend
-from fastapi_users.authentication import CookieTransport
+from fastapi_users.authentication import AuthenticationBackend, CookieTransport
 from fastapi_users.jwt import generate_jwt
-from httpx_oauth.oauth2 import BaseOAuth2
-from httpx_oauth.oauth2 import GetAccessTokenError
+from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 
-from onyx.auth.users import CSRF_TOKEN_COOKIE_NAME
-from onyx.auth.users import CSRF_TOKEN_KEY
-from onyx.auth.users import get_oauth_router
-from onyx.auth.users import get_pkce_cookie_name
-from onyx.auth.users import PKCE_COOKIE_NAME_PREFIX
-from onyx.auth.users import STATE_TOKEN_AUDIENCE
+from onyx.auth.users import (
+    CSRF_TOKEN_COOKIE_NAME,
+    CSRF_TOKEN_KEY,
+    PKCE_COOKIE_NAME_PREFIX,
+    STATE_TOKEN_AUDIENCE,
+    get_oauth_router,
+    get_pkce_cookie_name,
+)
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 
 
@@ -89,9 +84,7 @@ def _build_test_client(
     if login_status_code in {301, 302, 303, 307, 308}:
         login_response.headers["location"] = "/app"
     login_response.set_cookie("testsession", "session-token")
-    backend.login = AsyncMock(  # ty: ignore[invalid-assignment]
-        return_value=login_response
-    )
+    backend.login = AsyncMock(return_value=login_response)
 
     user = MagicMock()
     user.is_active = True
@@ -320,7 +313,7 @@ def test_oidc_callback_uses_code_verifier_when_pkce_enabled() -> None:
 
     with patch(
         "onyx.auth.users.fetch_ee_implementation_or_noop",
-        return_value=lambda _email: "tenant_1",
+        return_value=lambda *_identity: "tenant_1",
     ):
         response = client.get(
             "/auth/oidc/callback",
@@ -342,7 +335,7 @@ def test_oidc_callback_works_without_pkce_when_flag_disabled() -> None:
 
     with patch(
         "onyx.auth.users.fetch_ee_implementation_or_noop",
-        return_value=lambda _email: "tenant_1",
+        return_value=lambda *_identity: "tenant_1",
     ):
         response = client.get(
             "/auth/oidc/callback",
@@ -367,7 +360,7 @@ def test_oidc_callback_pkce_preserves_redirect_when_backend_login_is_non_redirec
 
     with patch(
         "onyx.auth.users.fetch_ee_implementation_or_noop",
-        return_value=lambda _email: "tenant_1",
+        return_value=lambda *_identity: "tenant_1",
     ):
         response = client.get(
             "/auth/oidc/callback",

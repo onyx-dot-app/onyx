@@ -17,7 +17,11 @@ def _app(
     patterns: list[str],
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
 ) -> ExternalApp:
-    return ExternalApp(app_type=app_type, upstream_url_patterns=patterns)
+    return ExternalApp(
+        name=app_type.value,
+        app_type=app_type,
+        upstream_url_patterns=patterns,
+    )
 
 
 def test_custom_glob_matches_deep_path() -> None:

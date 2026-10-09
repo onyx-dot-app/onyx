@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 
 import { Button, Text } from "@opal/components";
@@ -10,6 +11,7 @@ import {
   ConnectAppDecision,
   postConnectAppDecision,
   startExternalAppOAuth,
+  upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
 import CometEdge from "@/app/craft/components/CometEdge";
 import {
@@ -26,8 +28,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 interface SetupCardProps {
   // Correlation id for the parked `connect_app` request (from the packet).
   requestId: string;
-  // App slug the agent asked to connect; used as the label fallback.
-  appSlug: string;
+  // Stable app ID the agent asked to connect.
+  externalAppId: number;
   // The agent's one-line justification, when provided.
   reason: string | null;
   // The user-facing app row, when resolved — drives popup-vs-form + fields.
@@ -45,10 +47,11 @@ const POPUP_POLL_MS = 600;
  */
 export default function SetupCard({
   requestId,
-  appSlug,
+  externalAppId,
   reason,
   userApp,
 }: SetupCardProps) {
+  const t = useTranslations("craft.setupCard");
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,8 +68,8 @@ export default function SetupCard({
     };
   }, []);
 
-  const appName = userApp?.name ?? appSlug;
-  const externalAppId = userApp?.id ?? null;
+  const appName =
+    userApp?.name ?? t("appFallback.label", { id: externalAppId });
   const supportsOauth = userApp?.supports_oauth ?? false;
   const appLoading = userApp === undefined;
 
@@ -78,14 +81,14 @@ export default function SetupCard({
       // POST failed (network error, or already resolved on another device).
       // Keep the card actionable so the user can retry.
       console.error("Failed to resolve connect-app request:", e);
-      if (mountedRef.current)
-        setError("Something went wrong. Please try again.");
+      if (mountedRef.current) setError(t("error.generic"));
       return;
     }
     if (!mountedRef.current) return;
     setDecision(result);
     if (result === "connected") {
       void mutate(SWR_KEYS.buildExternalApps);
+      void mutate(SWR_KEYS.userSkills);
     }
   }
 
@@ -147,8 +150,8 @@ export default function SetupCard({
     setError(null);
     // Capabilities are unknown until the app row loads (the button is disabled).
     if (appLoading) return;
-    if (externalAppId === null) {
-      setError("This app can't be set up from here.");
+    if (!userApp) {
+      setError(t("error.notConfigurable"));
       return;
     }
     if (!supportsOauth) {
@@ -164,15 +167,13 @@ export default function SetupCard({
       const popup = window.open(authorize_url, "_blank", POPUP_FEATURES);
       if (!popup) {
         setBusy(false);
-        setError(
-          "Couldn't open the setup window — allow popups and try again."
-        );
+        setError(t("error.popupBlocked"));
         return;
       }
       awaitOAuthCompletion(popup);
     } catch (e) {
       setBusy(false);
-      setError(e instanceof Error ? e.message : "Failed to start setup");
+      setError(e instanceof Error ? e.message : t("error.startFailed"));
     }
   }
 
@@ -203,8 +204,8 @@ export default function SetupCard({
             color={connected ? "muted" : "danger"}
             title={
               connected
-                ? `${appName} connected.`
-                : `Skipped connecting ${appName}.`
+                ? t("connected.title", { app: appName })
+                : t("skipped.title", { app: appName })
             }
           />
         </div>
@@ -222,10 +223,8 @@ export default function SetupCard({
           sizePreset="main-ui"
           variant="section"
           icon={Logo}
-          title={`Connect ${appName}`}
-          description={
-            reason ?? `The agent needs ${appName} to continue this task.`
-          }
+          title={t("connect.title", { app: appName })}
+          description={reason ?? t("reason.fallback", { app: appName })}
         />
         {error && (
           <Text font="secondary-body" color="text-03">
@@ -239,7 +238,7 @@ export default function SetupCard({
             disabled={busy}
             onClick={() => void resolve("declined")}
           >
-            Not now
+            {t("notNow.button")}
           </Button>
           <Button
             prominence="primary"
@@ -247,7 +246,11 @@ export default function SetupCard({
             disabled={busy || appLoading}
             onClick={() => void connect()}
           >
-            {busy ? "Waiting…" : appLoading ? "Loading…" : `Connect ${appName}`}
+            {busy
+              ? t("waiting.button")
+              : appLoading
+                ? t("loading.button")
+                : t("connect.title", { app: appName })}
           </Button>
         </div>
         {userApp && (
@@ -258,7 +261,11 @@ export default function SetupCard({
               setBusy(false);
             }}
             onSaved={() => void resolve("connected")}
-            userApp={userApp}
+            name={userApp.name}
+            logo={getAppTypeLogo(userApp.app_type)}
+            credentialKeys={userApp.credential_keys}
+            credentialValues={userApp.credential_values}
+            save={(values) => upsertUserCredentials(userApp.id, values)}
           />
         )}
       </div>

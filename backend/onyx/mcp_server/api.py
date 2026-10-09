@@ -3,37 +3,39 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastmcp import FastMCP
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import RequestResponseEndpoint
-from starlette.types import Receive
-from starlette.types import Scope
-from starlette.types import Send
+from starlette.routing import Route
+from starlette.types import Receive, Scope, Send
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
-from onyx.mcp_server.auth import OnyxTokenVerifier
+from onyx.error_handling.exceptions import register_onyx_exception_handlers
+from onyx.mcp_server.auth import MCPAuthErrorMiddleware, build_mcp_server_auth
 from onyx.mcp_server.utils import shutdown_http_client
+from onyx.server.metrics.prometheus_setup import (
+    create_prometheus_instrumentator,
+    expose_prometheus_metrics,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+from onyx.utils.variable_functionality import set_is_ee_if_available
 from shared_configs.configs import cors_allow_credentials
 
 logger = setup_logger()
 
 # Initialize EE flag at module import so it's set regardless of the entry point
 # (python -m onyx.mcp_server_main, uvicorn onyx.mcp_server.api:mcp_app, etc.).
-set_is_ee_based_on_env_variable()
+set_is_ee_if_available()
 
 logger.info("Creating Onyx MCP Server...")
 
 mcp_server = FastMCP(
     name="Onyx MCP Server",
     version="1.0.0",
-    auth=OnyxTokenVerifier(),
+    auth=build_mcp_server_auth(),
 )
 
 # Import tools and resources AFTER mcp_server is created to avoid circular imports
@@ -47,6 +49,21 @@ logger.info("MCP server instance created")
 def create_mcp_fastapi_app() -> FastAPI:
     """Create FastAPI app wrapping MCP server with auth and shared client lifecycle."""
     mcp_asgi_app = mcp_server.http_app(path="/")
+    mcp_asgi_app.add_middleware(MCPAuthErrorMiddleware)
+    for route in list(mcp_asgi_app.routes):
+        if isinstance(route, Route) and route.path.startswith(
+            "/.well-known/oauth-protected-resource/"
+        ):
+            alias = (
+                route.path.rstrip("/") if route.path.endswith("/") else route.path + "/"
+            )
+            mcp_asgi_app.router.routes.append(
+                Route(
+                    alias,
+                    endpoint=route.endpoint,
+                    methods=list(route.methods or []),
+                )
+            )
 
     async def _ensure_streamable_accept_header(
         scope: Scope, receive: Receive, send: Send
@@ -85,6 +102,7 @@ def create_mcp_fastapi_app() -> FastAPI:
         version="1.0.0",
         lifespan=combined_lifespan,
     )
+    register_onyx_exception_handlers(app)
 
     # Public health check endpoint (bypasses MCP auth)
     @app.middleware("http")
@@ -105,7 +123,10 @@ def create_mcp_fastapi_app() -> FastAPI:
             allow_credentials=cors_allow_credentials(MCP_SERVER_CORS_ORIGINS),
             allow_methods=["*"],
             allow_headers=["*"],
+            expose_headers=["WWW-Authenticate", "Mcp-Session-Id"],
         )
+
+    expose_prometheus_metrics(app, create_prometheus_instrumentator())
 
     app.mount("/", _ensure_streamable_accept_header)
 

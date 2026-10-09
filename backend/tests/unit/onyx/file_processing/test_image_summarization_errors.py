@@ -7,13 +7,14 @@ Verifies that:
 3. The ValueError raised on LLM failure preserves the original exception
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.file_processing.image_summarization import _summarize_image
-from onyx.file_processing.image_summarization import summarize_image_with_error_handling
+from onyx.file_processing.image_summarization import (
+    _summarize_image,
+    summarize_image_with_error_handling,
+)
 
 
 class TestSummarizeImageErrorMessage:

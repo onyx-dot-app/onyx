@@ -11,19 +11,18 @@ Tests cover:
 """
 
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    DocumentSource,
+    TextSection,
+)
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.indexing_pipeline import _embed_chunks_to_store
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import IndexChunk
+from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 
 
 def _make_doc(doc_id: str) -> Document:
@@ -78,7 +77,6 @@ def _make_index_chunk(doc_id: str, chunk_id: int) -> IndexChunk:
             full_embedding=[0.1] * 10,
             mini_chunk_embeddings=[],
         ),
-        title_embedding=None,
     )
 
 
@@ -263,8 +261,7 @@ class TestEmbedChunksInBatches:
         def _embed(
             chunks: list[DocAwareChunk], **_kwargs: object
         ) -> tuple[list[IndexChunk], list[ConnectorFailure]]:
-            for c in chunks:
-                embedded_doc_ids.append(c.source_document.id)
+            embedded_doc_ids.extend(c.source_document.id for c in chunks)
             return _mock_embed_fail_doc("docA")(chunks)
 
         mock_embed.side_effect = _embed

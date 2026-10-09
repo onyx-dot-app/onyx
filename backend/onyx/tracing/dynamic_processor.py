@@ -16,10 +16,12 @@ from onyx.configs.app_configs import TRACING_CONFIG_CACHE_TTL_SECONDS
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
-from onyx.tracing.provider_config import BraintrustConfig
-from onyx.tracing.provider_config import EffectiveTracingConfig
-from onyx.tracing.provider_config import LangfuseConfig
-from onyx.tracing.provider_config import resolve_effective_tracing_config
+from onyx.tracing.provider_config import (
+    BraintrustConfig,
+    EffectiveTracingConfig,
+    LangfuseConfig,
+    resolve_effective_tracing_config,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,17 +60,19 @@ def _build_langfuse_processor(config: LangfuseConfig) -> TracingProcessor:
     from onyx import __version__
     from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
 
-    # The Langfuse SDK reads LANGFUSE_HOST from the env in some paths; keep it in
-    # sync (and cleared when no host is configured) to avoid a stale value.
-    if config.host:
-        os.environ["LANGFUSE_HOST"] = config.host
-    else:
-        os.environ.pop("LANGFUSE_HOST", None)
+    # The SDK resolves the URL as base_url -> LANGFUSE_BASE_URL -> host ->
+    # LANGFUSE_HOST. Pass base_url and keep both env names in sync (cleared when
+    # no host is configured) so a stale env value cannot override the config.
+    for env_name in ("LANGFUSE_BASE_URL", "LANGFUSE_HOST"):
+        if config.host:
+            os.environ[env_name] = config.host
+        else:
+            os.environ.pop(env_name, None)
 
     client = Langfuse(
         public_key=config.public_key,
         secret_key=config.secret_key,
-        host=config.host or None,
+        base_url=config.host or None,
         release=__version__,
     )
     return LangfuseTracingProcessor(client=client)
@@ -92,7 +96,7 @@ def build_delegates(config: EffectiveTracingConfig) -> list[TracingProcessor]:
 def _forward(delegates: list[TracingProcessor], method: str, *args: Any) -> None:
     for processor in delegates:
         try:
-            getattr(processor, method)(*args)
+            getattr(processor, method)(*args)  # ods: ignore[getattr]
         except Exception as e:
             logger.error(
                 "Error in trace processor %s during %s: %s", processor, method, e

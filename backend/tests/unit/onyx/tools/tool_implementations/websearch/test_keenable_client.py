@@ -1,13 +1,15 @@
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.tools.tool_implementations.web_search.clients.keenable_client import (
     KEENABLE_MAX_SNIPPET_CHARS,
-)
-from onyx.tools.tool_implementations.web_search.clients.keenable_client import (
     KeenableClient,
 )
+from onyx.tools.tool_implementations.web_search.providers import (
+    build_search_provider_from_config,
+    provider_requires_api_key,
+)
+from shared_configs.enums import WebSearchProviderType
 
 
 def _response(results: list[dict[str, Any]]) -> MagicMock:
@@ -95,3 +97,18 @@ def test_search_skips_results_without_a_link(mock_post: MagicMock) -> None:
     results = KeenableClient().search("test query")
 
     assert [result.link for result in results] == ["https://example.com/one"]
+
+
+def test_keenable_does_not_require_an_api_key() -> None:
+    assert provider_requires_api_key(WebSearchProviderType.KEENABLE) is False
+
+
+def test_build_keenable_provider_without_api_key() -> None:
+    """With no key and no config, Keenable builds against the public endpoint."""
+    provider = build_search_provider_from_config(
+        provider_type=WebSearchProviderType.KEENABLE,
+        api_key=None,
+        config={},
+    )
+
+    assert isinstance(provider, KeenableClient)

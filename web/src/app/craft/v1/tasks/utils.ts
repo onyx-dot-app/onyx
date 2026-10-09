@@ -58,21 +58,28 @@ export function formatRunDuration(
  * A row is clickable once there is a session to open. Queued rows have not
  * created one yet; skipped rows deliberately never create one.
  */
-export function getNonClickableReason(run: ScheduledRunSummary): string | null {
+export type RunReasonTranslate = (
+  key: "noSession" | "queued" | "skipped"
+) => string;
+
+export function getNonClickableReason(
+  run: ScheduledRunSummary,
+  t: RunReasonTranslate
+): string | null {
   if (
     run.status === "RUNNING" ||
     run.status === "AWAITING_APPROVAL" ||
     run.status === "SUCCEEDED" ||
     run.status === "FAILED"
   ) {
-    return run.session_id ? null : "This run has not created a session yet.";
+    return run.session_id ? null : t("noSession");
   }
 
   switch (run.status) {
     case "QUEUED":
-      return "This run hasn't started yet — no session to open.";
+      return t("queued");
     case "SKIPPED":
-      return "This run was skipped because a prior run was still in flight — no session was created.";
+      return t("skipped");
   }
   return null;
 }

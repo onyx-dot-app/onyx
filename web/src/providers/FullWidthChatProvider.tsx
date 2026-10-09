@@ -44,16 +44,14 @@ export function FullWidthChatProvider({
   }, []);
 
   const toggleFullWidthChat = useCallback(() => {
-    setFullWidthChat((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(STORAGE_KEY, String(next));
-      } catch {
-        // Persisting is best-effort; the toggle still flips for this session.
-      }
-      return next;
-    });
-  }, []);
+    const next = !fullWidthChat;
+    setFullWidthChat(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, String(next));
+    } catch {
+      // Persisting is best-effort. The toggle still flips for this session.
+    }
+  }, [fullWidthChat]);
 
   return (
     <FullWidthChatContext.Provider

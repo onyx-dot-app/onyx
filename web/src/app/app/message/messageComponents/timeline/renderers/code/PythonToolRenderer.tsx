@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import {
   PacketType,
   PythonToolPacket,
@@ -6,7 +7,7 @@ import {
   PythonToolDelta,
   ToolCallArgumentDelta,
   SectionEnd,
-  CODE_INTERPRETER_TOOL_TYPES,
+  isCodeInterpreterToolType,
 } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -46,8 +47,9 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
     .filter(
       (packet) =>
         packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-        (packet.obj as ToolCallArgumentDelta).tool_type ===
-          CODE_INTERPRETER_TOOL_TYPES.PYTHON
+        isCodeInterpreterToolType(
+          (packet.obj as ToolCallArgumentDelta).tool_type
+        )
     )
     .map((packet) =>
       String((packet.obj as ToolCallArgumentDelta).argument_deltas.code ?? "")
@@ -99,6 +101,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   renderType,
   children,
 }) => {
+  const t = useTranslations("chat.messages.timeline");
   const {
     code,
     stdout,
@@ -118,19 +121,19 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   const status = useMemo(() => {
     if (isStreaming) {
-      return "Writing code...";
+      return t("python.writingCode.status");
     }
     if (isExecuting) {
-      return "Executing Python code...";
+      return t("python.executing.status");
     }
     if (hasError) {
-      return "Python execution failed";
+      return t("python.failed.status");
     }
     if (isComplete) {
-      return "Python execution completed";
+      return t("python.completed.status");
     }
-    return "Python execution";
-  }, [isStreaming, isComplete, isExecuting, hasError]);
+    return t("python.default.status");
+  }, [isStreaming, isComplete, isExecuting, hasError, t]);
 
   // Shared content for all states - used by both FULL and compact modes
   const content = (
@@ -149,7 +152,11 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
               style={{ animationDelay: "0.2s" }}
             ></div>
           </div>
-          <span>{isStreaming ? "Writing code..." : "Running code..."}</span>
+          <span>
+            {isStreaming
+              ? t("python.writingCode.status")
+              : t("python.runningCode.label")}
+          </span>
         </div>
       )}
 
@@ -165,7 +172,9 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       {/* Output */}
       {stdout && (
         <div className="rounded-md bg-background-neutral-02 p-3">
-          <div className="text-xs font-semibold mb-1 text-text-03">Output:</div>
+          <div className="text-xs font-semibold mb-1 text-text-03">
+            {t("python.output.label")}
+          </div>
           <pre className="text-sm whitespace-pre-wrap font-mono text-text-01 overflow-x-auto">
             {stdout}
           </pre>
@@ -176,7 +185,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       {stderr && (
         <div className="rounded-md bg-status-error-01 p-3 border border-status-error-02">
           <div className="text-xs font-semibold mb-1 text-status-error-05">
-            Error:
+            {t("python.error.label")}
           </div>
           <pre className="text-sm whitespace-pre-wrap font-mono text-status-error-05 overflow-x-auto">
             {stderr}
@@ -187,7 +196,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       {/* File count */}
       {fileIds.length > 0 && (
         <div className="text-sm text-text-03">
-          Generated {fileIds.length} file{fileIds.length !== 1 ? "s" : ""}
+          {t("python.generatedFiles.label", { count: fileIds.length })}
         </div>
       )}
 
@@ -195,7 +204,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       {isComplete && !stdout && !stderr && (
         <div className="py-2 text-center text-text-04">
           <SvgTerminal className="w-4 h-4 mx-auto mb-1 opacity-50" />
-          <p className="text-xs">No output</p>
+          <p className="text-xs">{t("python.noOutput.text")}</p>
         </div>
       )}
     </div>

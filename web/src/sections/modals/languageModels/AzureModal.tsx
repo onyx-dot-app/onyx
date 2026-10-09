@@ -1,19 +1,20 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
-  LLMProviderView,
 } from "@/lib/languageModels/types";
 import * as Yup from "yup";
 import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
+  LlmModalsTranslator,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -25,10 +26,10 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import {
+  buildTargetUri,
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface AzureModalValues extends BaseLLMFormValues {
@@ -66,17 +67,10 @@ function AzureModelSelection() {
   );
 }
 
-function buildTargetUri(existingLlmProvider?: LLMProviderView): string {
-  if (!existingLlmProvider?.api_base || !existingLlmProvider?.api_version) {
-    return "";
-  }
-
-  const deploymentName =
-    existingLlmProvider.deployment_name || "your-deployment";
-  return `${existingLlmProvider.api_base}/openai/deployments/${deploymentName}/chat/completions?api-version=${existingLlmProvider.api_version}`;
-}
-
-const processValues = (values: AzureModalValues): AzureModalValues => {
+const processValues = (
+  values: AzureModalValues,
+  t: LlmModalsTranslator
+): AzureModalValues => {
   let processedValues = { ...values };
   if (values.target_uri) {
     try {
@@ -90,7 +84,7 @@ const processValues = (values: AzureModalValues): AzureModalValues => {
         deployment_name: deploymentName || processedValues.deployment_name,
       };
     } catch {
-      toast.warning("Failed to parse target URI — using original values.");
+      toast.warning(t("azure.toasts.targetUriParseFailed"));
     }
   }
   return processedValues;
@@ -102,7 +96,9 @@ export default function AzureModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -117,14 +113,14 @@ export default function AzureModal({
     target_uri: buildTargetUri(existingLlmProvider),
   } as AzureModalValues;
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiKey: true,
     extra: {
       target_uri: Yup.string()
-        .required("Target URI is required")
+        .required(t("azure.validation.targetUriRequired"))
         .test(
           "valid-target-uri",
-          "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+          t("azure.validation.targetUriInvalid"),
           (value) => (value ? isValidAzureTargetUri(value) : false)
         ),
     },
@@ -138,12 +134,15 @@ export default function AzureModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
-        const processedValues = processValues(values);
+        const processedValues = processValues(values, t);
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          t,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.AZURE,
           values: processedValues,
           initialValues,
@@ -159,8 +158,8 @@ export default function AzureModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },
@@ -170,8 +169,8 @@ export default function AzureModal({
       <InputPadder>
         <InputVertical
           withLabel="target_uri"
-          title="Target URI"
-          subDescription="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
+          title={t("azure.targetUriField.title")}
+          subDescription={t("azure.targetUriField.description")}
         >
           <InputTypeInField
             name="target_uri"

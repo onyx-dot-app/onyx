@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MessageCard, Button } from "@opal/components";
 
 const meta: Meta<typeof MessageCard> = {

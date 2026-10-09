@@ -4,8 +4,8 @@
 
 The Onyx MCP server allows LLMs to connect to your Onyx instance and access its knowledge base and search capabilities through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
-With the Onyx MCP Server, you can search your knowledgebase,
-give your LLMs web search, and upload and manage documents in Onyx.
+With the Onyx MCP Server, you can search your knowledgebase and
+give your LLMs web search.
 
 All access controls are managed within the main Onyx application.
 
@@ -14,7 +14,50 @@ All access controls are managed within the main Onyx application.
 Provide an Onyx Personal Access Token or API Key in the `Authorization` header as a Bearer token.
 The MCP server quickly validates and passes through the token on every request.
 
-Depending on usage, the MCP Server may support OAuth and stdio in the future.
+A token scoped to `read:search` covers the document-search tool, including the listings of indexed
+sources and document sets that a search may be filtered by. Add
+`read:chat` or `write:chat` only if the client needs the chat surfaces. An unscoped token carries
+the user's full access, so prefer a scoped one.
+
+OAuth-capable MCP clients can connect through the public web URL when `WEB_DOMAIN` is HTTPS (or HTTP on a loopback host). PAT and API-key authentication remain available.
+
+### OAuth
+
+Connect your OAuth-capable MCP client to `https://onyx.example.com/mcp/`. Onyx advertises the authorization server through the MCP authentication challenge. Sign in to Onyx, check the app and workspace, then approve access. The client handles token exchange and refresh.
+
+Use HTTPS for `WEB_DOMAIN`. HTTP is allowed only for loopback development addresses. With an unsupported `WEB_DOMAIN`, the API server logs a warning and starts with OAuth off.
+
+Apply the database migrations first. Cloud deployments need both the catalog and tenant migrations. Restart the API server, MCP server, primary worker, and Celery beat scheduler after deploying these changes.
+
+Onyx supports public clients using authorization codes with S256 PKCE. Clients can register dynamically or use an HTTPS client metadata document. Client-secret and private-key authentication are not supported. Redirect URLs must match the registered URL exactly. HTTPS and loopback HTTP callbacks are accepted. Wildcards are not accepted.
+
+Approval requires `read:search` and `create:user_api_keys` permissions. The granted scope is `read:search`. The app can search documents the user can access, use web search, and open web pages. Existing document permissions and workspace policy still apply. The token cannot create API keys, approve other apps, or call unrelated Onyx APIs.
+
+Consent requires a signed-in standard user, not a service account, PAT, or API key. Cloud users must remain active members of the approving workspace.
+
+Access tokens expire after 15 minutes. Refresh grants expire after 30 days, even when refreshed. Reusing a consumed refresh token revokes the whole grant. Normal refresh leaves earlier access tokens valid until they expire.
+
+Use **Connected apps** in user settings to disconnect an app. Disconnect revokes all tokens for that grant. Signing out of Onyx does not disconnect apps.
+
+The MCP resource URL is always `WEB_DOMAIN/mcp/`. Set the same `WEB_DOMAIN` on the API server and MCP server.
+
+The reverse proxy must expose these discovery URLs without requiring a session:
+
+- `/.well-known/oauth-authorization-server/api/oauth-provider`
+- `/.well-known/oauth-protected-resource/mcp/`
+
+The provided nginx and Helm routes handle these paths. Authorization metadata is also available at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-authorization-server/mcp` for older clients. These aliases return the same canonical issuer. Strict clients should use the issuer-specific discovery URL. The built Next.js server does not proxy discovery.
+
+PostgreSQL stores hashed credentials and grants. The cache backend (Redis, or PostgreSQL with `CACHE_BACKEND=postgres`) stores short-lived consent requests and authorization codes. All API replicas must use the same database and cache.
+
+Each refresh deletes the grant's expired access tokens. The primary worker deletes expired grants, with their tokens, once a day. The default cloud multiplier makes it eight days. Catalog cleanup removes client registrations idle for 90 days. Lite deployments run both cleanups from the API server. Authentication enforces expiry immediately and does not wait for cleanup. Refresh history remains until the grant expires.
+
+#### Troubleshooting
+
+- A 503 means an authorization dependency or client metadata fetch is unavailable. Do not treat it as successful authentication. Some clients may ask you to connect again after a failed refresh.
+- Check that the discovery document's resource URL matches the MCP endpoint. Set the same issuer and resource configuration on every API and MCP replica.
+- Blocked private destinations and invalid client metadata are rejected as invalid clients. Network fetch failures return unavailable. Check that the metadata URL is public and reachable when troubleshooting a 503.
+- In local development, `DEV_MODE=true` forces MCP backend calls to port 8080. To use `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` with a different local port, run the MCP process with `DEV_MODE=false`.
 
 ### Default Configuration
 - **Transport**: HTTP POST (MCP over HTTP)
@@ -47,7 +90,7 @@ The MCP server is built on [FastMCP](https://github.com/jlowin/fastmcp) and runs
 ┌─────────────────┐
 │  API Server     │
 │  Port 8080      │
-│  ├─ /me (auth)  │
+│  ├─ Token auth  │
 │  ├─ Search APIs │
 │  └─ ACL checks  │
 └─────────────────┘
@@ -86,6 +129,12 @@ The server provides three tools for searching and retrieving information:
 1. `search_indexed_documents`
 Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content snippets, scores, and metadata.
 
+Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
+
+`agent` and `document_set_names` are mutually exclusive. Explicit document sets replace an agent's knowledge scope rather than narrowing it, so passing both is rejected instead of silently returning out-of-scope results.
+
+Filter values resolve on the search call, so clients do not need a lookup call first. `agent`, `source_types` and `document_set_names` are all validated: a value that does not resolve returns an error naming close matches, or the available values when there are few of them, rather than being dropped. A dropped filter would return a wider result set that looks correctly scoped, so these fail instead.
+
 2. `search_web`
 Search the public internet for current events and general knowledge. Returns web search results with titles, URLs, and snippets.
 
@@ -96,6 +145,12 @@ Retrieve the complete text content from specific web URLs. Useful for fetching f
 
 1. `indexed_sources`
 Lists all document sources currently indexed in the tenant (e.g., `"confluence"`, `"github"`). Use these values to filter results when calling `search_indexed_documents`.
+
+2. `document_sets`
+Lists the Document Sets accessible to the user. Use the returned `name` values with the `document_set_names` filter of `search_indexed_documents`.
+
+3. `agents`
+Lists the Onyx agents accessible to the user (`id`, `name`, `description`). Use a returned `name` with the `agent` filter of `search_indexed_documents`.
 
 ## Local Development
 
@@ -115,17 +170,37 @@ npx @modelcontextprotocol/inspector http://localhost:8090/
 
 **Setup in Inspector:**
 
-1. Ignore the OAuth configuration menus
+For PAT or API-key authentication:
+
+1. Leave OAuth disabled in the client
 2. Open the **Authentication** tab
 3. Select **Bearer Token** authentication
 4. Paste your Onyx bearer token
 5. Click **Connect**
+
+For OAuth, use the public frontend MCP URL, such as `http://localhost:3000/mcp/`. Start the frontend too, since it hosts the login and consent pages. Use the client's OAuth flow instead of pasting a bearer token.
+
+`next dev` proxies discovery to `INTERNAL_URL` (default `http://localhost:8080`) and `MCP_INTERNAL_URL` (default `http://127.0.0.1:8090`). Set `WEB_DOMAIN=http://localhost:3000` for local OAuth. Production builds omit these discovery rewrites; nginx or Helm must route discovery.
 
 Once connected, you can:
 - Browse available tools
 - Test tool calls with different parameters
 - View request/response payloads
 - Debug authentication issues
+
+### Local Compose compatibility canary
+
+The scheduled and manual workflow builds an isolated API/MCP stack with PostgreSQL, Redis, and shipped nginx routing. It probes only loopback URLs, not a shared deployment.
+
+Run the same stack locally:
+
+```bash
+docker compose -p onyx-mcp-ci -f deployment/docker_compose/docker-compose.mcp-ci.yml up --build -d --wait --wait-timeout 300
+python3 .github/scripts/check-mcp-compatibility.py --base-url http://localhost:18080
+docker compose -p onyx-mcp-ci -f deployment/docker_compose/docker-compose.mcp-ci.yml down --volumes --remove-orphans
+```
+
+`MCP_CANARY_PORT` changes the loopback port. This canary checks discovery and auth challenges. It does not exercise the Next.js consent UI; its web placeholder returns 503.
 
 ### Health Check
 

@@ -119,21 +119,25 @@ script is idempotent and refuses to run unless your kubectl context is
 per cluster. New clusters use the `kindest/node:v1.33.1` node image so Craft's
 native init sidecar pod shape is supported. Existing clusters are not recreated;
 set `KIND_NODE_IMAGE` to override the default for a newly created cluster.
+The script removes Kindnet's CPU limit so network-policy processing can use available CPU.
+It keeps the CPU request and memory settings, then waits for the rollout.
+This applies to existing clusters too, including runs with `--skip-helm`.
 
-Watch pods (vespa and CNPG-postgres take a minute or two on first boot):
+Watch pods (opensearch and CNPG-postgres take a minute or two on first boot):
 
 ```bash
 kubectl -n onyx get pods -w
 ```
 
 The chart pins images to the `:edge` tag in
-[`values-localdev.yaml`](/deployment/helm/charts/onyx/values-localdev.yaml)
+[`values-localdev.yaml`](/deployment/helm/dev/values-localdev.yaml)
 with `pullPolicy: Always`, so in-cluster pods track nightly builds off `main`
 rather than the released `:latest`.
 
-**2. Bootstrap `.vscode/.env.k8s`.** Copies `.vscode/.env.k8s.template` to
-`.vscode/.env.k8s` if absent. Existing files are never overwritten — your
-secrets stay intact across `craft-up` runs.
+**2. Bootstrap the vscode env files.** Copies `.vscode/.env.k8s.template` to
+`.vscode/.env.k8s`, and `.vscode/env.web_template.txt` to `.vscode/.env.web`
+(read by the `Web Server` launch). Only absent files are created — existing
+ones are never overwritten, so your secrets stay intact across `craft-up` runs.
 
 **3. Build and load the sandbox image.** The chart points sandbox pods at
 `onyxdotapp/sandbox:dev`, which is local-only. Skipping this is the most
@@ -267,6 +271,12 @@ Each `(k8s)` config has `telepresence intercept onyx-api-server` as its
 connects + (re)creates the intercept idempotently. No manual telepresence
 invocation needed.
 
+The task checks for an unregistered traffic-agent with a recent stale-session
+error. It restarts only `onyx-api-server`, waits up to 120 seconds for the
+rollout, and creates the intercept. If the session becomes stale during intercept
+creation, it checks again and retries after recovery. Recovery runs at most once
+per launch. Other failures stop the task and show the original error.
+
 The intercept points cluster ingress to your local api_server using the same
 labels, secrets, and service account as the real pod — NetworkPolicies and
 pod-selector auth work transparently.
@@ -310,7 +320,7 @@ kind load docker-image onyxdotapp/onyx-backend:dev --name onyx-dev
 # so the nightly :edge tag refreshes.
 helm upgrade onyx deployment/helm/charts/onyx \
   -n onyx \
-  -f deployment/helm/charts/onyx/values-localdev.yaml \
+  -f deployment/helm/dev/values-localdev.yaml \
   --set global.pullPolicy=IfNotPresent \
   --set api.image.tag=dev \
   --set celery_shared.image.tag=dev
@@ -331,7 +341,7 @@ external-dependency-unit tests against a temp dir. See
 
 Run **`k8s: pause cluster`** (or `docker stop onyx-dev-control-plane`) to stop
 the kind node container. PVC data lives inside that container, so postgres,
-redis, opensearch, vespa, and minio state all survive. Resume with
+redis, opensearch, and minio state all survive. Resume with
 **`k8s: resume cluster`** — the kubelet reconciles pods automatically.
 
 Reach for **`k8s: cluster down (full teardown)`** only when you want a clean
@@ -371,7 +381,7 @@ For Craft development, the required vars (already in the template) are:
 ENABLE_CRAFT=true
 SANDBOX_BACKEND=kubernetes
 SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev
-SANDBOX_API_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080
+ONYX_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080
 ONYX_SANDBOX_PUSH_PRIVATE_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 ```
 
@@ -380,6 +390,66 @@ and load it per [step 3 of One-time setup](#3-build-and-load-the-sandbox-image)
 before launching the api_server.
 
 ## Troubleshooting
+
+### Sandbox egress stalls with Kindnet CPU throttling
+
+Kindnet processes network-policy packets. Its default `100m` CPU limit can delay
+connections to the sandbox proxy and Kubernetes resource watches. OpenCode startup
+can then time out while installing plugins, before sending an LLM request.
+
+Apply the local networking configuration without reinstalling Onyx:
+
+```bash
+deployment/helm/dev/k8s-up.sh --skip-cluster-create --skip-helm
+```
+
+Check the active CPU quota and throttling counters:
+
+```bash
+kubectl --context kind-onyx-dev -n kube-system exec daemonset/kindnet -- \
+  cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpu.stat
+```
+
+`cpu.max` starts with `max` when the container has no CPU limit.
+
+### VPN or proxy certificate errors
+
+For `x509: certificate signed by unknown authority` or `CERTIFICATE_VERIFY_FAILED`,
+obtain your proxy's root CA from IT. Save it as a PEM `.crt` outside the repository.
+Setup scripts do not install certificates. Keep TLS verification enabled.
+
+If `docker pull` fails, follow [Docker's CA setup](https://docs.docker.com/engine/network/ca-certs/).
+If only kind image pulls fail, run this in Bash with your CA path:
+
+```bash
+set -euo pipefail
+onyx_local_ca="/absolute/path/to/company-root.crt"
+deployment/helm/dev/k8s-up.sh --skip-helm
+onyx_local_nodes="$(kind get nodes --name onyx-dev)"
+for onyx_local_node in $onyx_local_nodes; do
+  docker cp "$onyx_local_ca" "$onyx_local_node:/usr/local/share/ca-certificates/onyx-local-proxy.crt"
+  docker exec "$onyx_local_node" update-ca-certificates
+  docker exec "$onyx_local_node" systemctl restart containerd
+done
+make craft-up
+```
+
+For local client errors, build a bundle from the repository root:
+
+```bash
+set -euo pipefail
+onyx_local_ca="/absolute/path/to/company-root.crt"
+mkdir -p "$HOME/.onyx-dev"
+onyx_public_ca="$(.venv/bin/python -m certifi)"
+cat "$onyx_public_ca" "$onyx_local_ca" > "$HOME/.onyx-dev/manual-ca-bundle.crt"
+```
+
+Set `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` to the bundle's absolute path in `.vscode/.env.k8s`.
+Set `NODE_EXTRA_CA_CERTS` to the root CA's absolute path in `.vscode/.env.web`. Restart the services.
+
+After CA rotation or removal, replace or remove the node certificate, run `update-ca-certificates --fresh`, and restart containerd.
+Rebuild the local bundle and update client settings. Repeat node setup after cluster recreation.
+Node trust does not configure certificates inside application pods.
 
 ### Sandbox pods stuck in `ImagePullBackOff`
 

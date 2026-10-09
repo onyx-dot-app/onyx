@@ -1,13 +1,15 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { Formik, Form } from "formik";
+import { useTranslations } from "next-intl";
 import * as Yup from "yup";
-import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
-import { useModalClose } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
+import { Modal } from "@opal/components";
+import { useModalClose } from "@opal/components";
+import { toast } from "@opal/layouts";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import {
   buildSearchProviderConfig,
@@ -54,6 +56,7 @@ export interface WebSearchSetupModalProps {
 }
 
 export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
+  const t = useTranslations("admin.webSearch");
   const onClose = useModalClose();
   const { category, providerType, provider } = state;
   const {
@@ -100,8 +103,8 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
 
   const configField =
     category === "search"
-      ? getSearchConfigField(providerType)
-      : getContentConfigField(providerType);
+      ? getSearchConfigField(providerType, t)
+      : getContentConfigField(providerType, t);
 
   const providerLabel =
     category === "search"
@@ -141,20 +144,27 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
   const validationSchema = Yup.object().shape({
     api_key:
       requiresApiKey && !hasStoredKey
-        ? Yup.string().required("API key is required")
+        ? Yup.string().required(t("setupModal.apiKey.required"))
         : Yup.string(),
     config: configField
-      ? Yup.string().required(`${configField.title} is required`)
+      ? Yup.string().required(
+          t("setupModal.config.required", { title: configField.title })
+        )
       : Yup.string(),
   });
 
   async function mutate() {
+    // Providers whose key the backend syncs to the other side need both lists
+    // refreshed so the sibling card leaves the disconnected state.
+    const syncsSiblingSide = ["exa", "tavily", "firecrawl"].includes(
+      providerType
+    );
     if (category === "search") {
       await mutateSearchProviders();
-      if (providerType === "exa") await mutateContentProviders();
+      if (syncsSiblingSide) await mutateContentProviders();
     } else {
       await mutateContentProviders();
-      if (providerType === "exa") await mutateSearchProviders();
+      if (syncsSiblingSide) await mutateSearchProviders();
     }
   }
 
@@ -190,7 +200,7 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
         onSaving: () => {},
         onError: (message) => toast.error(message),
         onClose: () => {
-          toast.success("Provider connected");
+          toast.success(t("setupModal.connectSuccess.message"));
           onClose?.();
         },
         mutate,
@@ -218,8 +228,12 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
                 moreIcon2={SvgOnyxLogo}
                 title={
                   isEditing
-                    ? `Configure ${providerLabel}`
-                    : `Set up ${providerLabel}`
+                    ? t("setupModal.editHeader.title", {
+                        provider: providerLabel,
+                      })
+                    : t("setupModal.createHeader.title", {
+                        provider: providerLabel,
+                      })
                 }
                 onClose={onClose}
               />
@@ -242,16 +256,18 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
               )}
               <Modal.Footer>
                 <Button prominence="secondary" type="button" onClick={onClose}>
-                  Cancel
+                  {t("setupModal.cancelButton.label")}
                 </Button>
                 <Button
                   type="submit"
                   disabled={
                     (!hasNoFields && (!dirty || !isValid)) || isSubmitting
                   }
-                  icon={isSubmitting ? SvgSimpleLoader : undefined}
+                  icon={isSubmitting ? IconLoader : undefined}
                 >
-                  {isEditing ? "Update" : "Connect"}
+                  {isEditing
+                    ? t("setupModal.updateButton.label")
+                    : t("setupModal.connectButton.label")}
                 </Button>
               </Modal.Footer>
             </Form>

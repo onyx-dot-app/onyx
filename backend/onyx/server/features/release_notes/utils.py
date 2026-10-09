@@ -1,8 +1,7 @@
 """Utility functions for release notes parsing and caching."""
 
 import re
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy.orm import Session
@@ -12,14 +11,18 @@ from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.app_configs import INSTANCE_TYPE
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.release_notes import create_release_notifications_for_versions
-from onyx.server.features.release_notes.constants import AUTO_REFRESH_THRESHOLD_SECONDS
-from onyx.server.features.release_notes.constants import FETCH_TIMEOUT
-from onyx.server.features.release_notes.constants import GITHUB_CHANGELOG_RAW_URL
-from onyx.server.features.release_notes.constants import REDIS_CACHE_TTL
-from onyx.server.features.release_notes.constants import REDIS_KEY_ETAG
-from onyx.server.features.release_notes.constants import REDIS_KEY_FETCHED_AT
+from onyx.server.features.release_notes.constants import (
+    AUTO_REFRESH_THRESHOLD_SECONDS,
+    FETCH_TIMEOUT,
+    GITHUB_CHANGELOG_RAW_URL,
+    REDIS_CACHE_TTL,
+    REDIS_KEY_ETAG,
+    REDIS_KEY_FETCHED_AT,
+)
 from onyx.server.features.release_notes.models import ReleaseNoteEntry
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import ONYX_AIRGAPPED
 
 logger = setup_logger()
 
@@ -131,11 +134,7 @@ def get_last_fetch_time() -> datetime | None:
         if not raw:
             return None
 
-        last_fetch = datetime.fromisoformat(raw.decode("utf-8"))
-        if last_fetch.tzinfo is None:
-            last_fetch = last_fetch.replace(tzinfo=timezone.utc)
-        else:
-            last_fetch = last_fetch.astimezone(timezone.utc)
+        last_fetch = datetime_to_utc(datetime.fromisoformat(raw.decode("utf-8")))
 
         return last_fetch
     except Exception as e:
@@ -179,7 +178,7 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
     Since all users will trigger this via notification fetch,
     uses Redis lock to prevent concurrent GitHub requests when cache is stale.
     """
-    if not is_cache_stale():
+    if ONYX_AIRGAPPED or not is_cache_stale():
         return
 
     cache = get_shared_cache_backend()

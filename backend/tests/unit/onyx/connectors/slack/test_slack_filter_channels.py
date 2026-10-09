@@ -2,14 +2,12 @@
 after includes, support exact-name and full-match regex modes, and never fail
 on names absent from the workspace."""
 
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.slack.connector import _validate_channel_regexes
-from onyx.connectors.slack.connector import filter_channels
+from onyx.connectors.slack.connector import filter_channels, validate_channel_regexes
 from onyx.connectors.slack.models import ChannelType
 
 
@@ -124,13 +122,13 @@ def test_include_validation_still_raises_for_unknown_channel() -> None:
 
 
 def test_validate_channel_regexes_accepts_valid_patterns() -> None:
-    _validate_channel_regexes([".*-alerts$", "general"], "channel")
+    validate_channel_regexes([".*-alerts$", "general"], "channel")
 
 
 def test_validate_channel_regexes_rejects_invalid_pattern() -> None:
     with pytest.raises(ConnectorValidationError, match="Invalid channel regex"):
-        _validate_channel_regexes(["[unclosed"], "channel")
+        validate_channel_regexes(["[unclosed"], "channel")
 
 
 def test_validate_channel_regexes_handles_none() -> None:
-    _validate_channel_regexes(None, "channel")
+    validate_channel_regexes(None, "channel")

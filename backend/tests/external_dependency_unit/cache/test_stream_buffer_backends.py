@@ -5,14 +5,12 @@ the Postgres (lite) backend."""
 from uuid import uuid4
 
 from onyx.cache.interface import CacheBackend
-from onyx.chat.stream_buffer import _chunk_key
-from onyx.chat.stream_buffer import read_stream_chunks
-from onyx.chat.stream_buffer import StreamBufferWriter
+from onyx.chat.stream_buffer import StreamBufferWriter, _chunk_key, read_stream_chunks
 
 
 def test_roundtrip_and_done(cache: CacheBackend) -> None:
     session_id = uuid4()
-    writer = StreamBufferWriter(cache=cache, chat_session_id=session_id, run_id=7)
+    writer = StreamBufferWriter(cache=cache, chat_session_id=session_id, stream_id=7)
     writer.append_line('{"a": 1}\n')
     writer.flush()
     writer.append_line('{"b": 2}\n')
@@ -32,7 +30,7 @@ def test_roundtrip_and_done(cache: CacheBackend) -> None:
 
 def test_missing_chunk_is_gap(cache: CacheBackend) -> None:
     session_id = uuid4()
-    writer = StreamBufferWriter(cache=cache, chat_session_id=session_id, run_id=8)
+    writer = StreamBufferWriter(cache=cache, chat_session_id=session_id, stream_id=8)
     writer.append_line('{"a": 1}\n')
     writer.flush()
     writer.append_line('{"b": 2}\n')

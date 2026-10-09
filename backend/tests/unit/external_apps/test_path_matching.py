@@ -3,8 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from onyx.external_apps.providers.actions import path_matches
-from onyx.external_apps.providers.actions import RestRoute
+from onyx.external_apps.providers.actions import RestRoute, path_matches
 
 
 def test_non_trailing_wildcard_rejected_at_construction() -> None:

@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import uuid
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import IO
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any, cast
 
 import puremagic
 from sqlalchemy.orm import Session
@@ -16,15 +14,19 @@ if TYPE_CHECKING:
     from google.cloud.storage import Client as GCSClient
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.file_record import delete_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.file_record import get_filerecord_by_prefix
-from onyx.db.file_record import upsert_filerecord
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_current_tenant_if_none,
+)
+from onyx.db.file_record import (
+    delete_filerecord_by_file_id,
+    get_filerecord_by_file_id,
+    get_filerecord_by_file_id_optional,
+    get_filerecord_by_prefix,
+    upsert_filerecord,
+)
 from onyx.db.models import FileRecord
-from onyx.file_store.file_store import FileStore
+from onyx.file_store.file_store import FileStore, content_byte_size
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
@@ -45,6 +47,8 @@ class GCSBackedFileStore(FileStore):
         service_account_key_json: str | None = None,
     ) -> None:
         self._gcs_client: GCSClient | None = None
+        # Shared across threads, so the first operations build one client.
+        self._client_lock = threading.Lock()
         self._bucket_name = bucket_name
         self._gcs_prefix = gcs_prefix or "onyx-files"
         self._project_id = project_id
@@ -60,7 +64,9 @@ class GCSBackedFileStore(FileStore):
         3. Application Default Credentials (Workload Identity, metadata server,
            gcloud CLI). Project ID is auto-resolved from the environment.
         """
-        if self._gcs_client is None:
+        with self._client_lock:
+            if self._gcs_client is not None:
+                return self._gcs_client
             try:
                 from google.cloud import storage
 
@@ -104,7 +110,7 @@ class GCSBackedFileStore(FileStore):
                 logger.error("Failed to initialize GCS client: %s", e)
                 raise RuntimeError(f"Failed to initialize GCS client: {e}") from e
 
-        return self._gcs_client
+            return self._gcs_client
 
     def _get_object_key(self, file_name: str) -> str:
         """Generate object key from file name with tenant ID prefix.
@@ -124,8 +130,7 @@ class GCSBackedFileStore(FileStore):
 
     def initialize(self) -> None:
         """Initialize the GCS file store by ensuring the bucket exists."""
-        from google.api_core.exceptions import Forbidden
-        from google.api_core.exceptions import NotFound
+        from google.api_core.exceptions import Forbidden, NotFound
 
         client = self._get_gcs_client()
         try:
@@ -199,11 +204,28 @@ class GCSBackedFileStore(FileStore):
                     object_key=object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=content_byte_size(file_content),
                 )
                 db_session.commit()
         except Exception:
+            # Clean up the uploaded blob unless a committed record still
+            # references this exact object — on a failed overwrite the record
+            # survives the rollback, so deleting the blob it points at would
+            # turn the failed save into data loss. A record pointing at a
+            # different bucket/key does not reference this upload, so the
+            # blob is safe (and necessary) to remove.
             try:
-                blob.delete()
+                with get_session_with_current_tenant() as cleanup_session:
+                    existing_record = get_filerecord_by_file_id_optional(
+                        file_id=file_id, db_session=cleanup_session
+                    )
+                record_references_upload = (
+                    existing_record is not None
+                    and existing_record.bucket_name == self._bucket_name
+                    and existing_record.object_key == object_key
+                )
+                if not record_references_upload:
+                    blob.delete()
             except Exception:
                 logger.warning(
                     "Failed to clean up orphaned GCS blob %s/%s "
@@ -261,11 +283,20 @@ class GCSBackedFileStore(FileStore):
                     file_id=file_id, db_session=db_session
                 )
 
+            from google.api_core.exceptions import NotFound
+
             client = self._get_gcs_client()
             bucket = client.bucket(file_record.bucket_name)
             blob = bucket.blob(file_record.object_key)
-            blob.reload()
+            try:
+                blob.reload()
+            except NotFound as e:
+                raise FileNotFoundError(
+                    f"Object for file {file_id} does not exist"
+                ) from e
             return blob.size
+        except FileNotFoundError:
+            raise
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
@@ -354,6 +385,7 @@ class GCSBackedFileStore(FileStore):
                     object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
+                    file_size=old_file_record.file_size,
                 )
 
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)

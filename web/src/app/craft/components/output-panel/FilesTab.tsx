@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import useSWR from "swr";
+import { useTranslations } from "next-intl";
+import useSWR, { SWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useBuildSessionStore,
   useFilesTabState,
-  useFilesNeedsRefresh,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { fetchDirectoryListing } from "@/app/craft/services/apiServices";
-import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
-import { getFileIcon } from "@/lib/utils";
+import type { DirectoryListing } from "@/app/craft/types/streamingTypes";
+import { getFileIcon, formatBytes } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import {
   SvgHardDrive,
   SvgFolder,
@@ -21,263 +21,162 @@ import {
   SvgArrowLeft,
   SvgImage,
   SvgFileText,
+  SvgLoader,
+  SvgAlertCircle,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { InlineFilePreview } from "@/app/craft/components/output-panel/FilePreviewContent";
+import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
 
 interface FilesTabProps {
   sessionId: string | null;
   onFileClick?: (path: string, fileName: string) => void;
-  /** True when showing pre-provisioned sandbox (read-only, no file clicks) */
+  onRefreshingChange?: (isRefreshing: boolean) => void;
+  /** Explicit toolbar reloads also refresh welcome-page inline previews. */
+  refreshKey?: number;
+  /** Welcome sessions use an inline preview until the first message starts. */
   isPreProvisioned?: boolean;
-  /** True when sandbox is still being provisioned */
   isProvisioning?: boolean;
+  isActive?: boolean;
 }
 
-export default function FilesTab({
+export default function FilesTab(props: FilesTabProps) {
+  // Directory data lives only as long as this retained workspace browser.
+  return (
+    <SWRConfig key={props.sessionId} value={{ provider: () => new Map() }}>
+      <WorkspaceBrowser {...props} />
+    </SWRConfig>
+  );
+}
+
+function WorkspaceBrowser({
   sessionId,
   onFileClick,
+  onRefreshingChange,
+  refreshKey = 0,
   isPreProvisioned = false,
   isProvisioning = false,
+  isActive = true,
 }: FilesTabProps) {
-  // Get persisted state from store (only used when not pre-provisioned)
-  const filesTabState = useFilesTabState();
+  const t = useTranslations("craft.filesTab");
+  const filesTabState = useFilesTabState(sessionId);
+  const refreshGeneration = useBuildSessionStore((state) =>
+    sessionId ? (state.sessions.get(sessionId)?.filesNeedsRefresh ?? 0) : 0
+  );
   const updateFilesTabState = useBuildSessionStore(
     (state) => state.updateFilesTabState
   );
-
-  // Local state for pre-provisioned mode (no persistence needed)
-  const [localExpandedPaths, setLocalExpandedPaths] = useState<Set<string>>(
-    new Set()
-  );
-  const [localDirectoryCache, setLocalDirectoryCache] = useState<
-    Map<string, FileSystemEntry[]>
-  >(new Map());
   const [previewingFile, setPreviewingFile] = useState<{
     path: string;
     fileName: string;
     mimeType: string | null;
   } | null>(null);
-
-  // Use local state for pre-provisioned, store state otherwise
+  const previewRefreshKey = useBuildSessionStore((state) =>
+    sessionId && previewingFile
+      ? (state.sessions.get(sessionId)?.filePreviewRefreshKeys[
+          previewingFile.path
+        ] ?? 0)
+      : 0
+  );
+  const previewRevision = useBuildSessionStore((state) =>
+    sessionId && previewingFile
+      ? state.sessions.get(sessionId)?.outputInventory?.[previewingFile.path]
+          ?.revision
+      : undefined
+  );
   const expandedPaths = useMemo(
-    () =>
-      isPreProvisioned
-        ? localExpandedPaths
-        : new Set(filesTabState.expandedPaths),
-    [isPreProvisioned, localExpandedPaths, filesTabState.expandedPaths]
+    () => new Set(filesTabState.expandedPaths),
+    [filesTabState.expandedPaths]
   );
-
-  const directoryCache = useMemo(
-    () =>
-      isPreProvisioned
-        ? localDirectoryCache
-        : (new Map(Object.entries(filesTabState.directoryCache)) as Map<
-            string,
-            FileSystemEntry[]
-          >),
-    [isPreProvisioned, localDirectoryCache, filesTabState.directoryCache]
+  const [directoryStatuses, setDirectoryStatuses] = useState<
+    Map<string, DirectoryStatus>
+  >(() => new Map());
+  const onStatusChange = useCallback(
+    (path: string, status: DirectoryStatus | undefined) => {
+      setDirectoryStatuses((statuses) => {
+        if (statuses.get(path) === status) return statuses;
+        const next = new Map(statuses);
+        if (status) next.set(path, status);
+        else next.delete(path);
+        return next;
+      });
+    },
+    []
   );
-
-  // Scroll container ref for position tracking
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  // Fetch root directory
-  const {
-    data: rootListing,
-    error,
-    mutate,
-  } = useSWR(
-    sessionId ? SWR_KEYS.buildSessionFiles(sessionId) : null,
-    () => (sessionId ? fetchDirectoryListing(sessionId, "") : null),
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 2000,
-    }
-  );
-
-  // Refresh files list when outputs/ directory changes
-  const filesNeedsRefresh = useFilesNeedsRefresh();
-
-  // Snapshot of currently expanded paths — avoids putting both local and store
-  // versions in the dependency array (only one is used per mode).
-  const currentExpandedPaths = isPreProvisioned
-    ? Array.from(localExpandedPaths)
-    : filesTabState.expandedPaths;
-
+  const isLoading = [...directoryStatuses.values()].includes("loading");
   useEffect(() => {
-    if (filesNeedsRefresh > 0 && sessionId && mutate) {
-      // Clear directory cache to ensure all directories are refreshed
-      if (isPreProvisioned) {
-        setLocalDirectoryCache(new Map());
-      } else {
-        updateFilesTabState(sessionId, { directoryCache: {} });
-      }
-      // Refresh root directory listing
-      mutate();
-
-      // Re-fetch all currently expanded subdirectories so they don't get
-      // stuck on "Loading..." after the cache was cleared
-      if (currentExpandedPaths.length > 0) {
-        Promise.allSettled(
-          currentExpandedPaths.map((p) => fetchDirectoryListing(sessionId, p))
-        ).then((settled) => {
-          // Collect only the successful fetches into a path → entries map
-          const fetched = new Map<string, FileSystemEntry[]>();
-          settled.forEach((r, i) => {
-            const p = currentExpandedPaths[i];
-            if (p && r.status === "fulfilled" && r.value) {
-              fetched.set(p, r.value.entries);
-            }
-          });
-
-          if (isPreProvisioned) {
-            setLocalDirectoryCache((prev) => {
-              const next = new Map(prev);
-              fetched.forEach((entries, p) => next.set(p, entries));
-              return next;
-            });
-          } else {
-            const obj: Record<string, FileSystemEntry[]> = {};
-            fetched.forEach((entries, p) => {
-              obj[p] = entries;
-            });
-            updateFilesTabState(sessionId, { directoryCache: obj });
-          }
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    filesNeedsRefresh,
-    sessionId,
-    mutate,
-    isPreProvisioned,
-    updateFilesTabState,
-  ]);
-
-  // Update cache when root listing changes
+    onRefreshingChange?.(isActive && isLoading);
+  }, [onRefreshingChange, isActive, isLoading]);
+  useEffect(() => () => onRefreshingChange?.(false), [onRefreshingChange]);
   useEffect(() => {
-    if (rootListing && sessionId) {
-      if (isPreProvisioned) {
-        setLocalDirectoryCache((prev) => {
-          const newCache = new Map(prev);
-          newCache.set("", rootListing.entries);
-          return newCache;
-        });
-      } else {
-        const newCache = {
-          ...filesTabState.directoryCache,
-          "": rootListing.entries,
-        };
-        updateFilesTabState(sessionId, { directoryCache: newCache });
-      }
-    }
-  }, [rootListing, sessionId, isPreProvisioned]);
+    // Inline previews show their own loading state instead of directory progress.
+    if (previewingFile) onRefreshingChange?.(false);
+  }, [previewingFile, refreshKey, onRefreshingChange]);
 
   const toggleFolder = useCallback(
-    async (path: string) => {
+    (path: string) => {
       if (!sessionId) return;
-
-      if (isPreProvisioned) {
-        // Use local state for pre-provisioned mode
-        const newExpanded = new Set(localExpandedPaths);
-        if (newExpanded.has(path)) {
-          newExpanded.delete(path);
-          setLocalExpandedPaths(newExpanded);
-        } else {
-          newExpanded.add(path);
-          if (!localDirectoryCache.has(path)) {
-            const listing = await fetchDirectoryListing(sessionId, path);
-            if (listing) {
-              setLocalDirectoryCache((prev) => {
-                const newCache = new Map(prev);
-                newCache.set(path, listing.entries);
-                return newCache;
-              });
-            }
-          }
-          setLocalExpandedPaths(newExpanded);
-        }
-      } else {
-        // Use store state for active sessions
-        const newExpanded = new Set(expandedPaths);
-        if (newExpanded.has(path)) {
-          newExpanded.delete(path);
-          updateFilesTabState(sessionId, {
-            expandedPaths: Array.from(newExpanded),
-          });
-        } else {
-          newExpanded.add(path);
-          if (!directoryCache.has(path)) {
-            const listing = await fetchDirectoryListing(sessionId, path);
-            if (listing) {
-              const newCache = {
-                ...filesTabState.directoryCache,
-                [path]: listing.entries,
-              };
-              updateFilesTabState(sessionId, {
-                expandedPaths: Array.from(newExpanded),
-                directoryCache: newCache,
-              });
-              return;
-            }
-          }
-          updateFilesTabState(sessionId, {
-            expandedPaths: Array.from(newExpanded),
-          });
-        }
-      }
+      const paths = new Set(
+        useBuildSessionStore.getState().sessions.get(sessionId)?.filesTabState
+          .expandedPaths
+      );
+      if (paths.has(path)) paths.delete(path);
+      else paths.add(path);
+      updateFilesTabState(sessionId, { expandedPaths: [...paths] });
     },
-    [
-      sessionId,
-      isPreProvisioned,
-      localExpandedPaths,
-      localDirectoryCache,
-      expandedPaths,
-      directoryCache,
-      filesTabState.directoryCache,
-      updateFilesTabState,
-    ]
+    [sessionId, updateFilesTabState]
   );
 
-  // Handle file click for pre-provisioned mode (inline preview)
-  const handleLocalFileClick = useCallback(
-    (path: string, fileName: string, mimeType: string | null) => {
-      if (isPreProvisioned) {
-        setPreviewingFile({ path, fileName, mimeType });
-      } else if (onFileClick) {
-        onFileClick(path, fileName);
-      }
-    },
-    [isPreProvisioned, onFileClick]
-  );
-
-  // Restore scroll position when component mounts or tab becomes active
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const listingReadyRef = useRef(false);
+  const scrollTopRef = useRef(filesTabState.scrollTop);
+  const saveScroll = useCallback(() => {
+    if (sessionId && scrollContainerRef.current && listingReadyRef.current) {
+      updateFilesTabState(sessionId, {
+        scrollTop: scrollTopRef.current,
+      });
+    }
+  }, [sessionId, updateFilesTabState]);
+  const [listingMount, setListingMount] = useState(0);
+  const restoredListingRef = useRef(0);
+  const onListingReady = useCallback(() => {
+    listingReadyRef.current = true;
+    if (scrollContainerRef.current && sessionId) {
+      scrollTopRef.current =
+        useBuildSessionStore.getState().sessions.get(sessionId)?.filesTabState
+          .scrollTop ?? 0;
+      scrollContainerRef.current.scrollTop = scrollTopRef.current;
+    }
+    setListingMount((mount) => mount + 1);
+  }, [sessionId]);
   useEffect(() => {
-    if (
-      scrollContainerRef.current &&
-      filesTabState.scrollTop > 0 &&
-      !isPreProvisioned
-    ) {
-      scrollContainerRef.current.scrollTop = filesTabState.scrollTop;
+    if (isLoading || restoredListingRef.current === listingMount) return;
+    if (scrollContainerRef.current && sessionId) {
+      scrollTopRef.current =
+        useBuildSessionStore.getState().sessions.get(sessionId)?.filesTabState
+          .scrollTop ?? 0;
+      scrollContainerRef.current.scrollTop = scrollTopRef.current;
+      restoredListingRef.current = listingMount;
     }
-  }, []); // Only on mount
+  }, [listingMount, isLoading, sessionId]);
+  const setScrollContainer = useCallback(
+    (container: HTMLDivElement | null) => {
+      if (!container) saveScroll();
+      scrollContainerRef.current = container;
+    },
+    [saveScroll]
+  );
+  useEffect(() => {
+    if (!isActive) saveScroll();
+  }, [isActive, saveScroll]);
 
-  // Save scroll position on scroll (debounced via passive listener)
-  const handleScroll = useCallback(() => {
-    if (scrollContainerRef.current && sessionId && !isPreProvisioned) {
-      const scrollTop = scrollContainerRef.current.scrollTop;
-      updateFilesTabState(sessionId, { scrollTop });
-    }
-  }, [sessionId, isPreProvisioned, updateFilesTabState]);
-
-  const formatFileSize = (bytes: number | null): string => {
-    if (bytes === null) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
+  const handleFileClick = useCallback(
+    (path: string, fileName: string, mimeType: string | null) => {
+      saveScroll();
+      if (isPreProvisioned) setPreviewingFile({ path, fileName, mimeType });
+      else onFileClick?.(path, fileName);
+    },
+    [isPreProvisioned, onFileClick, saveScroll]
+  );
 
   if (!sessionId) {
     return (
@@ -285,69 +184,29 @@ export default function FilesTab({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">
-          {isProvisioning ? "Preparing sandbox..." : "No files yet"}
+          {isProvisioning ? t("preparing.title") : t("empty.title")}
         </Text>
         <Text font="secondary-body" color="text-02">
-          {isProvisioning
-            ? "Setting up your development environment"
-            : "Files created during the build will appear here"}
+          {isProvisioning ? t("preparing.description") : t("empty.description")}
         </Text>
       </Section>
     );
   }
-
-  if (error) {
-    return (
-      <Section
-        height="full"
-        alignItems="center"
-        justifyContent="center"
-        padding={2}
-      >
-        <SvgHardDrive size={48} className="stroke-text-02" />
-        <Text font="heading-h3" color="text-03">
-          Error loading files
-        </Text>
-        <Text font="secondary-body" color="text-02">
-          {error.message}
-        </Text>
-      </Section>
-    );
-  }
-
-  if (!rootListing) {
-    return (
-      <Section
-        height="full"
-        alignItems="center"
-        justifyContent="center"
-        padding={2}
-      >
-        <Text font="secondary-body" color="text-03">
-          Loading files...
-        </Text>
-      </Section>
-    );
-  }
-
-  // Show inline file preview for pre-provisioned mode
-  if (isPreProvisioned && previewingFile && sessionId) {
+  if (previewingFile) {
     const isImage = previewingFile.mimeType?.startsWith("image/");
-
     return (
       <div className="flex flex-col h-full">
-        {/* Header with back button */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border-01">
-          <button
+          <Button
+            icon={SvgArrowLeft}
+            prominence="tertiary"
+            size="sm"
             onClick={() => setPreviewingFile(null)}
-            className="p-1 rounded-sm hover:bg-background-tint-02 transition-colors"
-          >
-            <SvgArrowLeft size={16} className="stroke-text-03" />
-          </button>
+          />
           {isImage ? (
             <SvgImage size={16} className="stroke-text-03" />
           ) : (
@@ -357,82 +216,164 @@ export default function FilesTab({
             {previewingFile.fileName}
           </Text>
         </div>
-        {/* File content */}
         <div className="flex-1 overflow-auto">
-          <InlineFilePreview
+          <FilePreviewContent
+            isActive={isActive}
+            fullHeight={false}
             sessionId={sessionId}
             filePath={previewingFile.path}
+            revision={previewRevision}
+            refreshKey={previewRefreshKey + refreshKey}
           />
         </div>
       </div>
     );
   }
-
   return (
-    <div className="flex flex-col h-full">
-      <div
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-auto px-2 pb-2 relative"
-      >
-        {/* Background to prevent content showing through sticky gap */}
-        <div className="sticky top-0 left-0 right-0 h-2 bg-background-neutral-00 -mx-2 z-101" />
-        {rootListing.entries.length === 0 ? (
-          <Section
-            height="full"
-            alignItems="center"
-            justifyContent="center"
-            padding={2}
-          >
-            <Text font="secondary-body" color="text-03">
-              No files in this directory
-            </Text>
-          </Section>
-        ) : (
-          <div className="font-mono text-sm">
-            <FileTreeNode
-              entries={rootListing.entries}
-              depth={0}
-              expandedPaths={expandedPaths}
-              directoryCache={directoryCache}
-              onToggleFolder={toggleFolder}
-              onFileClick={handleLocalFileClick}
-              formatFileSize={formatFileSize}
-            />
-          </div>
-        )}
+    <div
+      ref={setScrollContainer}
+      onScroll={(event) => {
+        scrollTopRef.current = event.currentTarget.scrollTop;
+        restoredListingRef.current = listingMount;
+      }}
+      className="flex-1 h-full overflow-auto px-2 pb-2 relative"
+    >
+      <div className="sticky top-0 start-0 end-0 h-2 bg-background-neutral-00 -mx-2 z-101" />
+      <div className="font-mono text-sm">
+        <DirectoryTree
+          sessionId={sessionId}
+          path=""
+          onReady={onListingReady}
+          depth={0}
+          isActive={isActive}
+          refreshGeneration={refreshGeneration}
+          onStatusChange={onStatusChange}
+          directoryStatuses={directoryStatuses}
+          expandedPaths={expandedPaths}
+          onToggleFolder={toggleFolder}
+          onFileClick={handleFileClick}
+        />
       </div>
     </div>
   );
 }
 
-// ── FileTreeNode (internal) ──────────────────────────────────────────────
+type DirectoryStatus = "loading" | "error";
+const MIN_LOADING_ICON_MS = 150;
 
-interface FileTreeNodeProps {
-  entries: FileSystemEntry[];
+interface DirectoryTreeProps {
+  sessionId: string;
+  path: string;
   depth: number;
+  isActive: boolean;
+  refreshGeneration: number;
+  onStatusChange: (path: string, status: DirectoryStatus | undefined) => void;
+  directoryStatuses: Map<string, DirectoryStatus>;
   expandedPaths: Set<string>;
-  directoryCache: Map<string, FileSystemEntry[]>;
   onToggleFolder: (path: string) => void;
-  onFileClick?: (
+  onFileClick: (
     path: string,
     fileName: string,
     mimeType: string | null
   ) => void;
-  formatFileSize: (bytes: number | null) => string;
   parentIsLast?: boolean[];
+  onReady?: () => void;
 }
 
-function FileTreeNode({
-  entries,
+function DirectoryTree({
+  sessionId,
+  path,
+  isActive,
+  refreshGeneration,
+  onStatusChange,
+  directoryStatuses,
   depth,
   expandedPaths,
-  directoryCache,
   onToggleFolder,
   onFileClick,
-  formatFileSize,
   parentIsLast = [],
-}: FileTreeNodeProps) {
+  onReady,
+}: DirectoryTreeProps) {
+  const t = useTranslations("craft.filesTab");
+  const requestRef = useRef<AbortController | null>(null);
+  const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const { data, error, mutate } = useSWR<DirectoryListing, Error>(
+    [SWR_KEYS.buildSessionFiles(sessionId), path],
+    async () => {
+      requestRef.current?.abort();
+      clearTimeout(loadingTimerRef.current);
+      const controller = new AbortController();
+      requestRef.current = controller;
+      const startedAt = Date.now();
+      setIsLoading(true);
+      try {
+        return await fetchDirectoryListing(sessionId, path, controller.signal);
+      } finally {
+        if (requestRef.current === controller) {
+          // Keep the icon steady without delaying the directory contents.
+          const remaining = MIN_LOADING_ICON_MS - (Date.now() - startedAt);
+          if (remaining > 0) {
+            loadingTimerRef.current = setTimeout(
+              () => setIsLoading(false),
+              remaining
+            );
+          } else {
+            setIsLoading(false);
+          }
+        }
+      }
+    },
+    {
+      revalidateOnMount: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      shouldRetryOnError: false,
+      isPaused: () => !isActive,
+    }
+  );
+
+  // Each visible directory owns its request. SWR rejects superseded results.
+  useEffect(() => {
+    if (isActive) void mutate().catch(() => undefined);
+    return () => {
+      requestRef.current?.abort();
+      requestRef.current = null;
+      clearTimeout(loadingTimerRef.current);
+    };
+  }, [isActive, refreshGeneration, mutate]);
+
+  const failed = error && error.name !== "AbortError" && !isLoading;
+  const status = !isActive
+    ? undefined
+    : isLoading
+      ? "loading"
+      : failed
+        ? "error"
+        : undefined;
+  useEffect(() => {
+    onStatusChange(path, status);
+    return () => onStatusChange(path, undefined);
+  }, [path, status, onStatusChange]);
+
+  const hasData = data !== undefined;
+  useEffect(() => {
+    if (hasData) onReady?.();
+  }, [hasData, onReady]);
+
+  if (!data) {
+    if (path) return null;
+    return (
+      <div className="px-3 py-2" role={failed ? "alert" : "status"}>
+        <Text font="secondary-body" color="text-03">
+          {failed ? t("error.title") : t("loading.label")}
+        </Text>
+      </div>
+    );
+  }
+  const entries = data.entries;
   // Sort entries: directories first, then alphabetically
   const sortedEntries = [...entries].sort((a, b) => {
     if (a.is_directory && !b.is_directory) return -1;
@@ -442,11 +383,20 @@ function FileTreeNode({
 
   return (
     <>
+      {!path && failed && <Text color="text-03">{t("error.title")}</Text>}
       {sortedEntries.map((entry, index) => {
         const isExpanded = expandedPaths.has(entry.path);
         const isLast = index === sortedEntries.length - 1;
-        const childEntries = directoryCache.get(entry.path) || [];
         const FileIcon = getFileIcon(entry.name);
+        const folderStatus = directoryStatuses.get(entry.path);
+        const FolderIcon =
+          folderStatus === "loading"
+            ? SvgLoader
+            : folderStatus === "error"
+              ? SvgAlertCircle
+              : isExpanded
+                ? SvgFolderOpen
+                : SvgFolder;
 
         // Row height for sticky offset calculation
         const rowHeight = 28;
@@ -457,17 +407,19 @@ function FileTreeNode({
           <div key={entry.path} className="relative">
             {/* Tree item row */}
             <button
+              aria-expanded={entry.is_directory ? isExpanded : undefined}
+              aria-busy={folderStatus === "loading" || undefined}
+              title={folderStatus === "error" ? t("error.title") : undefined}
               onClick={() => {
                 if (entry.is_directory) {
                   onToggleFolder(entry.path);
-                } else if (onFileClick) {
+                } else {
                   onFileClick(entry.path, entry.name, entry.mime_type);
                 }
               }}
               className={cn(
                 "w-full flex items-center py-1.5 hover:bg-background-tint-02 rounded-sm transition-colors relative",
-                !entry.is_directory && onFileClick && "cursor-pointer",
-                !entry.is_directory && !onFileClick && "cursor-default",
+                !entry.is_directory && "cursor-pointer",
                 // Make expanded folders sticky
                 entry.is_directory &&
                   isExpanded &&
@@ -524,25 +476,20 @@ function FileTreeNode({
                 <span className="w-4 shrink-0" />
               )}
 
-              {/* Icon */}
               {entry.is_directory ? (
-                isExpanded ? (
-                  <SvgFolderOpen
-                    size={16}
-                    className="stroke-text-03 shrink-0 mx-1"
-                  />
-                ) : (
-                  <SvgFolder
-                    size={16}
-                    className="stroke-text-03 shrink-0 mx-1"
-                  />
-                )
+                <FolderIcon
+                  size={16}
+                  className={cn(
+                    "text-text-03 shrink-0 mx-1",
+                    folderStatus === "loading" && "animate-spin"
+                  )}
+                />
               ) : (
-                <FileIcon size={16} className="stroke-text-03 shrink-0 mx-1" />
+                <FileIcon size={16} className="text-text-03 shrink-0 mx-1" />
               )}
 
               {/* Name */}
-              <span className="flex-1 text-left ml-1 min-w-0">
+              <span className="flex-1 text-start ms-1 min-w-0">
                 <Text font="secondary-body" color="text-04" maxLines={1}>
                   {entry.name}
                 </Text>
@@ -550,39 +497,27 @@ function FileTreeNode({
 
               {/* File size */}
               {!entry.is_directory && entry.size !== null && (
-                <span className="ml-2 mr-2 shrink-0">
-                  <Text color="text-02">{formatFileSize(entry.size)}</Text>
+                <span className="ms-2 me-2 shrink-0">
+                  <Text color="text-02">{formatBytes(entry.size, 1)}</Text>
                 </span>
               )}
             </button>
 
-            {/* Render children if expanded */}
-            {entry.is_directory && isExpanded && childEntries.length > 0 && (
-              <FileTreeNode
-                entries={childEntries}
+            {entry.is_directory && isExpanded && (
+              <DirectoryTree
+                sessionId={sessionId}
+                path={entry.path}
                 depth={depth + 1}
+                isActive={isActive}
+                refreshGeneration={refreshGeneration}
+                onStatusChange={onStatusChange}
+                directoryStatuses={directoryStatuses}
                 expandedPaths={expandedPaths}
-                directoryCache={directoryCache}
                 onToggleFolder={onToggleFolder}
                 onFileClick={onFileClick}
-                formatFileSize={formatFileSize}
                 parentIsLast={[...parentIsLast, isLast]}
               />
             )}
-
-            {/* Loading indicator for expanded but not-yet-loaded directories */}
-            {entry.is_directory &&
-              isExpanded &&
-              !directoryCache.has(entry.path) && (
-                <div
-                  className="flex items-center py-1"
-                  style={{ paddingLeft: `${(depth + 1) * 20 + 24}px` }}
-                >
-                  <Text font="secondary-body" color="text-02">
-                    Loading...
-                  </Text>
-                </div>
-              )}
           </div>
         );
       })}

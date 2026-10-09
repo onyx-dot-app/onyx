@@ -19,8 +19,7 @@ from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.project import ProjectManager
 from tests.integration.common_utils.managers.tool import ToolManager
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 FILE_READER_TOOL_ID = "FileReaderTool"
 

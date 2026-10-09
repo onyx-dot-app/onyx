@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { useTranslations } from "next-intl";
+import { InputSingleComboBox } from "@opal/components";
 import { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
-import { FullAgent } from "@/lib/agents/types";
+import { PersonaOwnerGroup } from "@/lib/agents/types";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { Tag, Text } from "@opal/components";
 import { SvgUser, SvgUsers } from "@opal/icons";
@@ -22,7 +23,10 @@ export type TransferOwnershipTarget =
   | null;
 
 export interface TransferOwnershipViewProps {
-  agent: FullAgent | null;
+  agent: {
+    owner: MinimalUserSnapshot | null;
+    owner_group?: PersonaOwnerGroup | null;
+  } | null;
   groups: MinimalUserGroupSnapshot[];
   onSelectedTargetChange: (target: TransferOwnershipTarget) => void;
   selectedTarget: TransferOwnershipTarget;
@@ -36,6 +40,7 @@ export function TransferOwnershipView({
   selectedTarget,
   users,
 }: TransferOwnershipViewProps) {
+  const t = useTranslations("chat.modals.share");
   const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
@@ -49,23 +54,24 @@ export function TransferOwnershipView({
   const options = useMemo(() => {
     const ownerUserId = agent?.owner?.id;
     const ownerGroupId = agent?.owner_group?.id;
+    const currentOwnerLabel = t("transferOwnership.currentOwner.label");
 
     const userOptions = users.map((user) => ({
       value: `user-${user.id}`,
-      label: user.email,
-      description: ownerUserId === user.id ? "Current Owner" : undefined,
+      title: user.email,
+      description: ownerUserId === user.id ? currentOwnerLabel : undefined,
       disabled: ownerUserId === user.id,
     }));
 
     const groupOptions = groups.map((group) => ({
       value: `group-${group.id}`,
-      label: group.name,
-      description: ownerGroupId === group.id ? "Current Owner" : undefined,
+      title: group.name,
+      description: ownerGroupId === group.id ? currentOwnerLabel : undefined,
       disabled: ownerGroupId === group.id,
     }));
 
     return [...userOptions, ...groupOptions];
-  }, [agent?.owner?.id, agent?.owner_group?.id, groups, users]);
+  }, [agent?.owner?.id, agent?.owner_group?.id, groups, t, users]);
 
   function handleValueChange(value: string) {
     const selectedOption = options.find((option) => option.value === value);
@@ -76,7 +82,7 @@ export function TransferOwnershipView({
 
     if (value.startsWith("user-")) {
       onSelectedTargetChange({
-        label: selectedOption.label,
+        label: selectedOption.title,
         type: "user",
         value: value as `user-${string}`,
       });
@@ -84,7 +90,7 @@ export function TransferOwnershipView({
     }
 
     onSelectedTargetChange({
-      label: selectedOption.label,
+      label: selectedOption.title,
       type: "group",
       value: value as `group-${number}`,
     });
@@ -94,18 +100,17 @@ export function TransferOwnershipView({
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-col gap-1">
         <Text color="text-03" font="secondary-body">
-          Transfer Ownership To
+          {t("transferOwnership.targetInput.label")}
         </Text>
 
-        <InputComboBox
+        <InputSingleComboBox
           onChange={(event) => {
             setInputValue(event.target.value);
             onSelectedTargetChange(null);
           }}
           onValueChange={handleValueChange}
           options={options}
-          placeholder="Add a user or group"
-          strict
+          placeholder={t("transferOwnership.targetInput.placeholder")}
           value={inputValue}
         />
       </div>
@@ -125,7 +130,7 @@ export function TransferOwnershipView({
           </div>
 
           {selectedTarget.type === "group" ? (
-            <Tag color="gray" title="Group" />
+            <Tag color="gray" title={t("transferOwnership.groupTag.label")} />
           ) : null}
         </div>
       ) : null}

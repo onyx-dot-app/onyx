@@ -139,9 +139,9 @@ The app defaults to `https://cloud.onyx.app` but supports any Onyx instance.
 
 **Config file location:**
 
-- macOS: `~/Library/Application Support/app.onyx.desktop/config.json`
-- Linux: `~/.config/app.onyx.desktop/config.json`
-- Windows: `%APPDATA%/app.onyx.desktop/config.json`
+- macOS: `~/Library/Application Support/app.onyx.onyx-desktop/config.json`
+- Linux: `~/.config/onyx-desktop/config.json` (or `$XDG_CONFIG_HOME/onyx-desktop/config.json`)
+- Windows: `%APPDATA%\onyx\onyx-desktop\config\config.json`
 
 **To use a self-hosted instance:**
 
@@ -162,10 +162,10 @@ The app defaults to `https://cloud.onyx.app` but supports any Onyx instance.
 
 ```bash
 # macOS
-open -t ~/Library/Application\ Support/app.onyx.desktop/config.json
+open -t ~/Library/Application\ Support/app.onyx.onyx-desktop/config.json
 
 # Or use any editor
-code ~/Library/Application\ Support/app.onyx.desktop/config.json
+code ~/Library/Application\ Support/app.onyx.onyx-desktop/config.json
 ```
 
 ### Change the default URL in build

@@ -64,12 +64,12 @@ _SAMPLE = {
 }
 
 
-def _fetch() -> dict:
+def _fetch(sample: dict | None = None) -> dict:
     with (
         patch("onyx.server.manage.llm.api._resolve_api_key", return_value="k"),
         patch(
             "onyx.server.manage.llm.api._get_nebius_tokenfactory_models_response",
-            return_value=_SAMPLE,
+            return_value=sample if sample is not None else _SAMPLE,
         ),
     ):
         results = get_nebius_tokenfactory_available_models(
@@ -106,6 +106,42 @@ def test_vision_from_modality() -> None:
 def test_reasoning_from_features() -> None:
     by_name = _fetch()
     assert by_name["Qwen/Qwen3-32B"].supports_reasoning is True
+    assert by_name["meta-llama/Llama-3.3-70B-Instruct"].supports_reasoning is False
+
+
+def test_reasoning_fallback_when_features_missing() -> None:
+    """Without supported_features, reasoning falls back to the LiteLLM cost
+    map, then the name-substring heuristic."""
+    sample = {
+        "object": "list",
+        "data": [
+            {
+                # cost map knows this is a reasoning model; the substring
+                # heuristic doesn't
+                "id": "Qwen/Qwen3-32B",
+                "name": "Qwen3-32B",
+                "context_length": 40960,
+                "architecture": {"modality": "text->text"},
+            },
+            {
+                # cost-map miss, but reasoning-named
+                "id": "deepseek-ai/DeepSeek-R1",
+                "name": "DeepSeek-R1",
+                "context_length": 163840,
+                "architecture": {"modality": "text->text"},
+            },
+            {
+                # neither source reports reasoning
+                "id": "meta-llama/Llama-3.3-70B-Instruct",
+                "name": "Llama-3.3-70B-Instruct",
+                "context_length": 131072,
+                "architecture": {"modality": "text->text"},
+            },
+        ],
+    }
+    by_name = _fetch(sample)
+    assert by_name["Qwen/Qwen3-32B"].supports_reasoning is True
+    assert by_name["deepseek-ai/DeepSeek-R1"].supports_reasoning is True
     assert by_name["meta-llama/Llama-3.3-70B-Instruct"].supports_reasoning is False
 
 

@@ -1,8 +1,7 @@
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from logging import Logger
-from logging import LoggerAdapter
+from logging import Logger, LoggerAdapter
 
 from redis.lock import Lock
 

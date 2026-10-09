@@ -7,15 +7,16 @@ Tests cover:
 - ChatMessageDetail new fields
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from onyx.llm.override_models import LLMOverride
-from onyx.server.query_and_chat.models import ChatMessageDetail
-from onyx.server.query_and_chat.models import ModelResponseSlot
-from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    ChatMessageDetail,
+    ModelResponseSlot,
+    MultiModelMessageResponseIDInfo,
+    SendMessageRequest,
+)
 from onyx.server.query_and_chat.placement import Placement
 
 

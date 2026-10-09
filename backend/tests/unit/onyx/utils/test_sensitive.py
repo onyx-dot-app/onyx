@@ -6,8 +6,7 @@ from typing import Any
 import pytest
 
 from onyx.utils.encryption import mask_env_value_for_logging
-from onyx.utils.sensitive import SensitiveAccessError
-from onyx.utils.sensitive import SensitiveValue
+from onyx.utils.sensitive import SensitiveAccessError, SensitiveValue
 
 
 def _encrypt_string(value: str) -> bytes:

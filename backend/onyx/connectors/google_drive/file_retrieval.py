@@ -1,12 +1,8 @@
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
-from typing import cast
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from typing import Any, cast
+from urllib.parse import parse_qs, urlparse
 
 from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import Resource
@@ -14,25 +10,29 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import BatchHttpRequest
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.models import RetrievedDriveFile
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_SHORTCUT_TYPE,
+)
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveFileType,
+    RetrievedDriveFile,
+)
 from onyx.connectors.google_utils.google_utils import (
+    ORDER_BY_KEY,
+    PAGE_TOKEN_KEY,
+    GoogleFields,
+    execute_paginated_retrieval,
     execute_paginated_retrieval_with_max_pages,
 )
-from onyx.connectors.google_utils.google_utils import GoogleFields
-from onyx.connectors.google_utils.google_utils import ORDER_BY_KEY
-from onyx.connectors.google_utils.google_utils import PAGE_TOKEN_KEY
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
 
@@ -48,20 +48,23 @@ class DriveFileFieldType(Enum):
     WITH_PERMISSIONS = "with_permissions"  # Full fields including permissions
 
 
+# `role` is needed to pick a shared drive organizer, who is the one principal
+# guaranteed to see every item in that drive.
 PERMISSION_FULL_DESCRIPTION = (
-    "permissions(id, emailAddress, type, domain, allowFileDiscovery, permissionDetails)"
+    "permissions(id, emailAddress, type, domain, allowFileDiscovery, role, "
+    "permissionDetails)"
 )
 FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, driveId, parents, "
-    "modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
+    "createdTime, modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
 )
 FILE_FIELDS_WITH_PERMISSIONS = (
     f"nextPageToken, files(mimeType, id, name, driveId, parents, {PERMISSION_FULL_DESCRIPTION}, permissionIds, "
-    "modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
+    "createdTime, modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
     f"nextPageToken, files(mimeType, driveId, id, name, parents, {PERMISSION_FULL_DESCRIPTION}, "
-    "permissionIds, webViewLink, owners(emailAddress), modifiedTime)"
+    "permissionIds, webViewLink, owners(emailAddress), createdTime, modifiedTime)"
 )
 FOLDER_FIELDS = (
     "nextPageToken, files(id, name, mimeType, permissions, modifiedTime, webViewLink, "
@@ -303,6 +306,10 @@ def _get_file_by_id(
         return None
 
 
+# Set on a shortcut's resolved target, holding the shortcut's id.
+RESOLVED_FROM_SHORTCUT_KEY = "onyxResolvedFromShortcutId"
+
+
 def _is_drive_shortcut(file: GoogleDriveFileType) -> bool:
     return file.get("mimeType") == DRIVE_SHORTCUT_TYPE
 
@@ -368,6 +375,16 @@ def _resolve_file_or_shortcut(
     logger.debug(
         "Resolved Drive shortcut %s to target %s", file.get("id"), target.get("id")
     )
+    # Use the shortcut's own modifiedTime: listings are filtered and ordered by
+    # it, so this preserves the invariant that a retrieved item's modifiedTime
+    # lies within the requested time range — the target's can sit far outside
+    # it, which would corrupt the checkpoint frontier and re-poll windows.
+    listing_modified_time = file.get(GoogleFields.MODIFIED_TIME.value)
+    if listing_modified_time is not None:
+        target[GoogleFields.MODIFIED_TIME.value] = listing_modified_time
+    # The target now looks like any listed file; record where it came from so
+    # partitioned retrieval does not count it as part of the listing's scope.
+    target[RESOLVED_FROM_SHORTCUT_KEY] = file.get("id")
     return target
 
 

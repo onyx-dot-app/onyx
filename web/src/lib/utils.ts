@@ -1,5 +1,4 @@
-import type { ComponentType } from "react";
-import type { IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import {
   SvgImage,
   SvgFileChartPie,
@@ -7,6 +6,7 @@ import {
   SvgFileText,
 } from "@opal/icons";
 import { ALLOWED_URL_PROTOCOLS } from "./constants";
+import { DEFAULT_LOCALE } from "@/i18n/config";
 
 const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 const BARE_EMAIL_REGEX = /^[^\s@/]+@[^\s@/:]+\.[^\s@/:]+$/;
@@ -251,10 +251,10 @@ export function isCodeFile(fileName: string | null | undefined): boolean {
  */
 export function getFileIcon(
   fileName: string | null | undefined
-): ComponentType<IconProps> {
+): IconFunctionComponent {
   if (!fileName) return SvgFileText;
   if (isImageFile(fileName)) return SvgImage;
-  if (/\.pptx$/i.test(fileName)) return SvgFileChartPie;
+  if (/\.pptx?$/i.test(fileName)) return SvgFileChartPie;
   if (/\.pdf$/i.test(fileName)) return SvgFileText;
   if (isCodeFile(fileName)) return SvgFileBraces;
   return SvgFileText;
@@ -286,4 +286,21 @@ export function mergeRefs<T>(
       }
     });
   };
+}
+
+export function formatCost(
+  cents: number,
+  locale: string = DEFAULT_LOCALE
+): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
+}
+
+export function formatTokens(
+  value: number,
+  locale: string = DEFAULT_LOCALE
+): string {
+  return value.toLocaleString(locale);
 }

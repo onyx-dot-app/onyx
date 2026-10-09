@@ -55,7 +55,7 @@ def _wait_for_ready_file(path: str, timeout: float = 5.0) -> None:
 
 
 @pytest.fixture()
-def ready_file(tmp_path) -> str:  # type: ignore[no-untyped-def]
+def ready_file(tmp_path) -> str:
     return str(tmp_path / "child_ready.txt")
 
 

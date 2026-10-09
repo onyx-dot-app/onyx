@@ -1,6 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

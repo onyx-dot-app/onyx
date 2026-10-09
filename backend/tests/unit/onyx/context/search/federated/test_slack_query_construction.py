@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock
 
-from onyx.context.search.federated.slack_search_utils import build_channel_query_filter
-from onyx.context.search.federated.slack_search_utils import matches_exclude_pattern
+from onyx.context.search.federated.slack_search_utils import (
+    build_channel_query_filter,
+    matches_exclude_pattern,
+)
 from onyx.onyxbot.slack.models import ChannelType
 
 
@@ -192,7 +194,7 @@ class TestDateExtraction:
 
         # Mock LLM response for "last 7 days"
         mock_llm.invoke.return_value = MagicMock()
-        mock_llm.invoke.return_value.content = '{"days_back": 7}'
+        mock_llm.invoke.return_value.text = '{"days_back": 7}'
 
         days = extract_date_range_from_query(
             "show me results from last 7 days", mock_llm, 30
@@ -210,7 +212,7 @@ class TestDateExtraction:
 
         # Mock LLM response for "last 90 days" but limit is 30
         mock_llm.invoke.return_value = MagicMock()
-        mock_llm.invoke.return_value.content = '{"days_back": 90}'
+        mock_llm.invoke.return_value.text = '{"days_back": 90}'
 
         days = extract_date_range_from_query(
             "show me results from last 90 days", mock_llm, 30
@@ -229,7 +231,7 @@ class TestDateExtraction:
 
         # Mock LLM response for no date
         mock_llm.invoke.return_value = MagicMock()
-        mock_llm.invoke.return_value.content = '{"days_back": null}'
+        mock_llm.invoke.return_value.text = '{"days_back": null}'
 
         days = extract_date_range_from_query("show me budget reports", mock_llm, 30)
 

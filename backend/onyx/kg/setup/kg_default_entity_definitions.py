@@ -4,15 +4,16 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.entity_type import KGEntityType
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import validate_kg_settings
-from onyx.kg.models import KGAttributeEntityOption
-from onyx.kg.models import KGAttributeImplicationProperty
-from onyx.kg.models import KGAttributeProperty
-from onyx.kg.models import KGEntityTypeAttributes
-from onyx.kg.models import KGEntityTypeClassificationInfo
-from onyx.kg.models import KGEntityTypeDefinition
-from onyx.kg.models import KGGroundingType
+from onyx.db.kg_config import get_kg_config_settings, validate_kg_settings
+from onyx.kg.models import (
+    KGAttributeEntityOption,
+    KGAttributeImplicationProperty,
+    KGAttributeProperty,
+    KGEntityTypeAttributes,
+    KGEntityTypeClassificationInfo,
+    KGEntityTypeDefinition,
+    KGGroundingType,
+)
 
 
 def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefinition]:

@@ -5,30 +5,9 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import { AccountType, UserStatus, type UserRole } from "@/lib/types";
-import type {
-  UserGroupInfo,
-  UserRow,
-} from "@/views/admin/UsersPage/interfaces";
+import { AccountType, UserStatus } from "@/lib/types";
+import type { FullUserSnapshot } from "@/views/admin/UsersPage/types";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
-
-// Backend response shape for `/api/manage/users?include_api_keys=true`. The
-// existing `AllUsersResponse` in `lib/types.ts` types `accepted` as `User[]`,
-// which is missing fields the table needs (`personal_name`, `account_type`,
-// `groups`, etc.), so we declare an accurate local type here.
-interface FullUserSnapshot {
-  id: string;
-  email: string;
-  role: UserRole;
-  account_type: AccountType;
-  is_active: boolean;
-  password_configured: boolean;
-  personal_name: string | null;
-  created_at: string;
-  updated_at: string;
-  groups: UserGroupInfo[];
-  is_scim_synced: boolean;
-}
 
 interface ManageUsersResponse {
   accepted: FullUserSnapshot[];
@@ -43,13 +22,16 @@ function snapshotToMemberRow(snapshot: FullUserSnapshot): MemberRow {
   return {
     id: snapshot.id,
     email: snapshot.email,
-    role: snapshot.role,
+    account_type: snapshot.account_type,
+    is_admin: snapshot.is_admin,
     status: snapshot.is_active ? UserStatus.ACTIVE : UserStatus.INACTIVE,
     is_active: snapshot.is_active,
     is_scim_synced: snapshot.is_scim_synced,
+    craft_enabled: snapshot.craft_enabled,
     personal_name: snapshot.personal_name,
     created_at: snapshot.created_at,
     updated_at: snapshot.updated_at,
+    last_active: snapshot.last_active,
     groups: snapshot.groups,
   };
 }
@@ -61,14 +43,17 @@ function serviceAccountToMemberRow(
   return {
     id: snapshot.id,
     email: "Service Account",
-    role: apiKey?.api_key_role ?? snapshot.role,
+    account_type: AccountType.SERVICE_ACCOUNT,
+    is_admin: false,
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,
+    craft_enabled: snapshot.craft_enabled,
     personal_name:
       apiKey?.api_key_name ?? snapshot.personal_name ?? "Unnamed Key",
     created_at: null,
     updated_at: null,
+    last_active: null,
     groups: [],
     api_key_display: apiKey?.api_key_display,
   };
@@ -86,11 +71,10 @@ interface UseGroupMemberCandidatesResult {
 /**
  * Returns the candidate list for the group create/edit member pickers.
  *
- * Hits `/api/manage/users?include_api_keys=true`, which is gated by
- * `current_curator_or_admin_user` on the backend, so this works for both
- * admins and global curators (the admin-only `/accepted/all` and `/invited`
- * endpoints used to be called here, which 403'd for global curators and broke
- * the Edit Group page entirely).
+ * Hits `/api/manage/users?include_api_keys=true`, which is gated by scoped
+ * READ_USERS permission on the backend. This works for admins and group
+ * managers. The admin-only `/accepted/all` and `/invited` endpoints used to be
+ * called here, which 403'd for group managers and broke the Edit Group page.
  *
  * For admins, we additionally fetch `/admin/api-key` to enrich service-account
  * rows with the masked api-key display string. That call is admin-only and is

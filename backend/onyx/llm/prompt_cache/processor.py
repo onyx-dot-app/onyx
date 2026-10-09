@@ -1,11 +1,12 @@
 """Main processor for prompt caching."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import LanguageModelInput
+from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_request import UserMessage as ProviderUserMessage
+from onyx.llm.models import TextContentPart, UserMessage
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
@@ -18,10 +19,11 @@ logger = setup_logger()
 # TODO: test with a history containing images
 def process_with_prompt_cache(
     llm_config: LLMConfig,
-    cacheable_prefix: LanguageModelInput | None,
-    suffix: LanguageModelInput,
+    cacheable_prefix: list[ChatCompletionMessage] | None,
+    suffix: list[ChatCompletionMessage],
     continuation: bool = False,
-) -> tuple[LanguageModelInput, CacheMetadata | None]:
+    with_metadata: bool = True,
+) -> tuple[list[ChatCompletionMessage], CacheMetadata | None]:
     """Process prompt with caching support.
 
     This function takes a cacheable prefix and suffix, processes them according to
@@ -34,13 +36,16 @@ def process_with_prompt_cache(
         suffix: The non-cacheable suffix to append
         continuation: If True, suffix should be appended to the last message
             of cacheable_prefix rather than being separate messages
+        with_metadata: When False, skip building CacheMetadata — which requires
+            SHA256-hashing the entire cacheable prefix, real CPU on large agent
+            prompts.
 
     Returns:
         Tuple of (processed_prompt, cache_metadata_to_store)
         - processed_prompt: Combined and transformed messages ready for LLM API call
         - cache_metadata_to_store: Optional cache metadata for post-processing
             (currently None for implicit caching, will be populated in future PR
-            for explicit caching)
+            for explicit caching); always None when ``with_metadata`` is False
     """
     # Check if prompt caching is enabled
     if not ENABLE_PROMPT_CACHING:
@@ -83,15 +88,6 @@ def process_with_prompt_cache(
         )
         return combined, None
 
-    # Generate cache key for cacheable prefix
-    tenant_id = get_current_tenant_id()
-    cache_key_hash = generate_cache_key_hash(
-        cacheable_prefix=cacheable_prefix,
-        provider=llm_config.model_provider,
-        model_name=llm_config.model_name,
-        tenant_id=tenant_id,
-    )
-
     # For implicit caching: Skip cache lookup (providers handle caching automatically)
     # TODO (explicit caching - future PR): Look up cache metadata in CacheManager
     cache_metadata: CacheMetadata | None = None
@@ -103,6 +99,18 @@ def process_with_prompt_cache(
             suffix=suffix,
             continuation=continuation,
             cache_metadata=cache_metadata,
+        )
+
+        if not with_metadata:
+            return processed_prompt, None
+
+        # Generate cache key for cacheable prefix
+        tenant_id = get_current_tenant_id()
+        cache_key_hash = generate_cache_key_hash(
+            cacheable_prefix=cacheable_prefix,
+            provider=llm_config.model_provider,
+            model_name=llm_config.model_name,
+            tenant_id=tenant_id,
         )
 
         logger.debug(
@@ -144,3 +152,27 @@ def process_with_prompt_cache(
             cache_metadata=None,
         )
         return combined, None
+
+
+def cached_user_message(llm_config: LLMConfig, prefix: str, suffix: str) -> UserMessage:
+    """Prepare one continued user prompt with provider-specific cache metadata."""
+    prepared, _ = process_with_prompt_cache(
+        llm_config,
+        cacheable_prefix=[ProviderUserMessage(content=prefix)],
+        suffix=[ProviderUserMessage(content=suffix)],
+        continuation=True,
+        with_metadata=False,
+    )
+    message = prepared[0]
+    if not isinstance(message, ProviderUserMessage):
+        raise TypeError("User prompt caching must preserve the message role")
+    if message.cache_control:
+        content = (
+            [TextContentPart(text=message.content)]
+            if isinstance(message.content, str)
+            else [part.model_copy(deep=True) for part in message.content]
+        )
+        if content and isinstance(content[-1], TextContentPart):
+            content[-1].cache_control = message.cache_control
+        return UserMessage(content=content)
+    return UserMessage(content=message.content)

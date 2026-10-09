@@ -1,59 +1,63 @@
 from __future__ import annotations
 
 import json
-from typing import Any
-from typing import cast
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
-from onyx.coding_agent.mock_tools import CODING_AGENT_QUERY_KEY
-from onyx.coding_agent.mock_tools import CODING_AGENT_REPO_KEY
+from onyx.coding_agent.tool_definitions import (
+    CODING_AGENT_QUERY_KEY,
+    CODING_AGENT_REPO_KEY,
+)
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
-from onyx.db.chat import get_db_search_doc_by_id
-from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
+from onyx.context.search.models import SavedSearchDoc, SearchDoc
+from onyx.db.chat import (
+    get_db_search_doc_by_id,
+    translate_db_search_doc_to_saved_search_doc,
+)
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
-from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_IN_CODE_ID
-from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
+from onyx.deep_research.tool_definitions import (
+    RESEARCH_AGENT_IN_CODE_ID,
+    RESEARCH_AGENT_TASK_KEY,
+)
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CodingAgentFinal
-from onyx.server.query_and_chat.streaming_models import CodingAgentStart
-from onyx.server.query_and_chat.streaming_models import CustomToolArgs
-from onyx.server.query_and_chat.streaming_models import CustomToolDelta
-from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import FileReaderResult
-from onyx.server.query_and_chat.streaming_models import FileReaderStart
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
-from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
-from onyx.server.query_and_chat.streaming_models import MemoryToolDelta
-from onyx.server.query_and_chat.streaming_models import MemoryToolStart
-from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
-from onyx.server.query_and_chat.streaming_models import OpenUrlStart
-from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PythonToolDelta
-from onyx.server.query_and_chat.streaming_models import PythonToolStart
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
-from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.server.query_and_chat.streaming_models import TopLevelBranching
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    CitationInfo,
+    CodingAgentFinal,
+    CodingAgentStart,
+    CustomToolArgs,
+    CustomToolDelta,
+    CustomToolErrorInfo,
+    CustomToolStart,
+    FileReaderResult,
+    FileReaderStart,
+    GeneratedImage,
+    ImageGenerationFinal,
+    ImageGenerationToolStart,
+    IntermediateReportDelta,
+    IntermediateReportStart,
+    MemoryToolDelta,
+    MemoryToolStart,
+    OpenUrlDocuments,
+    OpenUrlStart,
+    OpenUrlUrls,
+    OverallStop,
+    Packet,
+    PythonToolDelta,
+    PythonToolStart,
+    ReasoningDelta,
+    ReasoningStart,
+    ResearchAgentStart,
+    SearchToolDocumentsDelta,
+    SearchToolQueriesDelta,
+    SearchToolStart,
+    SectionEnd,
+)
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
@@ -118,16 +122,14 @@ def create_message_packets(
 def create_citation_packets(
     citation_info_list: list[CitationInfo], turn_index: int
 ) -> list[Packet]:
-    packets: list[Packet] = []
-
     # Emit each citation as a separate CitationInfo packet
-    for citation_info in citation_info_list:
-        packets.append(
-            Packet(
-                placement=Placement(turn_index=turn_index),
-                obj=citation_info,
-            )
+    packets: list[Packet] = [
+        Packet(
+            placement=Placement(turn_index=turn_index),
+            obj=citation_info,
         )
+        for citation_info in citation_info_list
+    ]
 
     packets.append(Packet(placement=Placement(turn_index=turn_index), obj=SectionEnd()))
 
@@ -575,17 +577,10 @@ def translate_assistant_message_to_packets(
                     )
                 )
 
-            # Process each tool call in this turn (single pass).
-            # We buffer packets for the turn so we can conditionally prepend a TopLevelBranching
-            # packet (which must appear before any tool output in the turn).
-            research_agent_count = 0
-            turn_tool_packets: list[Packet] = []
             for tool_call in tool_calls_in_turn:
                 # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
                     tool = get_tool_by_id(tool_call.tool_id, db_session)
-                    if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
-                        research_agent_count += 1
 
                     # Handle different tool types
                     if tool.in_code_tool_id in [
@@ -599,7 +594,7 @@ def translate_assistant_message_to_packets(
                             translate_db_search_doc_to_saved_search_doc(doc)
                             for doc in tool_call.search_docs
                         ]
-                        turn_tool_packets.extend(
+                        packet_list.extend(
                             create_search_packets(
                                 search_queries=queries,
                                 search_docs=search_docs,
@@ -619,7 +614,7 @@ def translate_assistant_message_to_packets(
                         urls = cast(
                             list[str], tool_call.tool_call_arguments.get("urls", [])
                         )
-                        turn_tool_packets.extend(
+                        packet_list.extend(
                             create_fetch_packets(
                                 fetch_docs,
                                 urls,
@@ -634,14 +629,14 @@ def translate_assistant_message_to_packets(
                                 GeneratedImage(**img)
                                 for img in tool_call.generated_images
                             ]
-                            turn_tool_packets.extend(
+                            packet_list.extend(
                                 create_image_generation_packets(
                                     images, turn_num, tab_index=tool_call.tab_index
                                 )
                             )
 
                     elif tool.in_code_tool_id == FileReaderTool.__name__:
-                        turn_tool_packets.extend(
+                        packet_list.extend(
                             create_file_reader_packets(
                                 summary_json=tool_call.tool_call_response or "",
                                 turn_index=turn_num,
@@ -656,7 +651,7 @@ def translate_assistant_message_to_packets(
                             tool_call.tool_call_arguments.get(RESEARCH_AGENT_TASK_KEY)
                             or "Could not fetch saved research task.",
                         )
-                        turn_tool_packets.extend(
+                        packet_list.extend(
                             create_research_agent_packets(
                                 research_task=research_task,
                                 report_content=tool_call.tool_call_response,
@@ -676,7 +671,7 @@ def translate_assistant_message_to_packets(
                             tool_call.tool_call_arguments.get(CODING_AGENT_REPO_KEY)
                             or "",
                         )
-                        turn_tool_packets.extend(
+                        packet_list.extend(
                             create_coding_agent_packets(
                                 query=coding_query,
                                 repo=coding_repo,
@@ -689,7 +684,7 @@ def translate_assistant_message_to_packets(
                     elif tool.in_code_tool_id == MemoryTool.__name__:
                         if tool_call.tool_call_response:
                             memory_data = json.loads(tool_call.tool_call_response)
-                            turn_tool_packets.extend(
+                            packet_list.extend(
                                 create_memory_packets(
                                     memory_text=memory_data["memory_text"],
                                     operation=cast(
@@ -727,7 +722,7 @@ def translate_assistant_message_to_packets(
                             except (json.JSONDecodeError, KeyError):
                                 # Fall back to raw response as stdout
                                 stdout = tool_call.tool_call_response
-                        turn_tool_packets.extend(
+                        packet_list.extend(
                             create_python_tool_packets(
                                 code=code,
                                 stdout=stdout,
@@ -778,7 +773,7 @@ def translate_assistant_message_to_packets(
                             for k, v in (tool_call.tool_call_arguments or {}).items()
                             if k != "requestBody"
                         }
-                        turn_tool_packets.extend(
+                        packet_list.extend(
                             create_custom_tool_packets(
                                 tool_name=tool.display_name or tool.name,
                                 response_type=custom_response_type,
@@ -787,7 +782,7 @@ def translate_assistant_message_to_packets(
                                 data=custom_data,
                                 file_ids=custom_file_ids,
                                 error=custom_error,
-                                tool_args=custom_args if custom_args else None,
+                                tool_args=custom_args or None,
                                 tool_id=tool_call.tool_id,
                             )
                         )
@@ -795,18 +790,6 @@ def translate_assistant_message_to_packets(
                 except Exception as e:
                     logger.warning("Error processing tool call %s: %s", tool_call.id, e)
                     continue
-
-            if research_agent_count > 1:
-                # Emit TopLevelBranching before processing any tool output in the turn.
-                packet_list.append(
-                    Packet(
-                        placement=Placement(turn_index=turn_num),
-                        obj=TopLevelBranching(
-                            num_parallel_branches=research_agent_count
-                        ),
-                    )
-                )
-            packet_list.extend(turn_tool_packets)
 
     # Determine the next turn_index for the final message
     # It should come after all tool calls

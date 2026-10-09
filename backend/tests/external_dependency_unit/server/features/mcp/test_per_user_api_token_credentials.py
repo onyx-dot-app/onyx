@@ -11,19 +11,24 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPTransport
-from onyx.db.mcp import extract_connection_data
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPTransport,
+)
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import User
-from onyx.server.features.mcp.api import _upsert_mcp_server
-from onyx.server.features.mcp.api import HEADER_SUBSTITUTIONS
-from onyx.server.features.mcp.api import save_user_credentials
-from onyx.server.features.mcp.models import MCPAuthTemplate
-from onyx.server.features.mcp.models import MCPToolCreateRequest
-from onyx.server.features.mcp.models import MCPUserCredentialsRequest
+from onyx.server.features.mcp.api import (
+    HEADER_SUBSTITUTIONS,
+    _upsert_mcp_server,
+    save_user_credentials,
+)
+from onyx.server.features.mcp.credentials import extract_connection_data
+from onyx.server.features.mcp.models import (
+    MCPAuthTemplate,
+    MCPToolCreateRequest,
+    MCPUserCredentialsRequest,
+)
 from onyx.utils.encryption import mask_string
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -69,9 +74,7 @@ class TestSaveUserCredentialsSubstitutesUserEmail:
     def test_user_email_in_template_resolves_at_save_time(
         self, db_session: Session
     ) -> None:
-        admin = create_test_user(
-            db_session, "admin_user_email_sub", role=UserRole.ADMIN
-        )
+        admin = create_test_user(db_session, "admin_user_email_sub", is_admin=True)
         basic_user = create_test_user(db_session, "basic_user_email_sub")
 
         server_name = f"user-email-sub-{uuid4().hex[:8]}"
@@ -152,7 +155,7 @@ class TestAdminEditPreservesAdminReauth:
     def test_unchanged_resubmit_preserves_admins_reauthed_key(
         self, db_session: Session
     ) -> None:
-        admin = create_test_user(db_session, "admin_unchanged", role=UserRole.ADMIN)
+        admin = create_test_user(db_session, "admin_unchanged", is_admin=True)
         server_id, server_name, template = self._create_server(db_session, admin)
 
         self._admin_reauth(db_session, admin, server_id, "key_B")
@@ -179,7 +182,7 @@ class TestAdminEditPreservesAdminReauth:
         assert cfg["headers"]["Authorization"] == f"PlainBasic {admin.email}:key_B"
 
     def test_changed_resubmit_applies_new_key(self, db_session: Session) -> None:
-        admin = create_test_user(db_session, "admin_changed", role=UserRole.ADMIN)
+        admin = create_test_user(db_session, "admin_changed", is_admin=True)
         server_id, server_name, template = self._create_server(db_session, admin)
 
         self._admin_reauth(db_session, admin, server_id, "key_B")
@@ -206,9 +209,7 @@ class TestAdminEditPreservesAdminReauth:
         self, db_session: Session
     ) -> None:
         # Admin-panel cleanup must stay scoped to the editing admin.
-        admin = create_test_user(
-            db_session, "admin_other_unaffected", role=UserRole.ADMIN
-        )
+        admin = create_test_user(db_session, "admin_other_unaffected", is_admin=True)
         basic_user = create_test_user(db_session, "basic_other_unaffected")
         server_id, server_name, template = self._create_server(db_session, admin)
 

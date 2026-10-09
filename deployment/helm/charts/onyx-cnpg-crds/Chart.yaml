@@ -1,0 +1,12 @@
+apiVersion: v2
+name: onyx-cnpg-crds
+description: |
+  CloudNativePG CRDs for the Onyx chart, isolated in a CRDs-only subchart so
+  they can be toggled via the parent's postgresql.installCRDs value. Helm still
+  gives crds/ its special pre-install treatment (applied before the main
+  manifest is built), so the CNPG Cluster CR in the parent chart passes
+  build-phase validation on a fresh install. Keep crds/cnpg-crds.yaml in
+  byte-for-byte sync with the cloudnative-pg subchart pinned in the parent
+  Chart.yaml (verified by onyx/scripts/check-cnpg-crds.sh).
+type: application
+version: 0.1.0

@@ -1,16 +1,15 @@
-from collections.abc import Callable
-from collections.abc import Generator
-from typing import Optional
-from typing import Protocol
+from collections.abc import Callable, Generator
+from typing import Optional, Protocol
 
 from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
-from onyx.access.models import DocExternalAccess  # noqa
-from onyx.access.models import ElementExternalAccess  # noqa
-from onyx.access.models import NodeExternalAccess  # noqa
+from onyx.access.models import (
+    DocExternalAccess,  # noqa
+    ElementExternalAccess,  # noqa
+    NodeExternalAccess,  # noqa
+)
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import ConnectorCredentialPair  # noqa
-from onyx.db.utils import DocumentRow
-from onyx.db.utils import SortOrder
+from onyx.db.utils import DocumentRow, SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface  # noqa
 
 

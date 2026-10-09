@@ -9,30 +9,34 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.server.query_and_chat.streaming_models import (
+    Packet,
+    SearchToolDocumentsDelta,
+    SearchToolQueriesDelta,
+    SearchToolStart,
+)
+from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
-from onyx.tools.models import WebSearchToolOverrideKwargs
+from onyx.tools.models import (
+    ToolCallException,
+    ToolResponse,
+    WebSearchToolOverrideKwargs,
+)
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
-from onyx.tools.tool_implementations.web_search.models import DEFAULT_MAX_RESULTS
-from onyx.tools.tool_implementations.web_search.models import WebSearchResult
-from onyx.tools.tool_implementations.web_search.providers import (
-    build_search_provider_from_config,
+from onyx.tools.tool_implementations.web_search.models import (
+    DEFAULT_MAX_RESULTS,
+    WebSearchResult,
 )
 from onyx.tools.tool_implementations.web_search.providers import (
+    build_search_provider_from_config,
     provider_requires_api_key,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
     filter_web_search_results_with_no_title_or_snippet,
-)
-from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_search_result,
 )
 from onyx.utils.logger import setup_logger
@@ -81,7 +85,7 @@ def _normalize_queries_input(raw: Any) -> list[str]:
 
 
 class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
-    NAME = "web_search"
+    NAME = WEB_SEARCH_TOOL_NAME
     DESCRIPTION = "Search the web for information."
     DISPLAY_NAME = "Web Search"
 
@@ -142,27 +146,22 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             provider = fetch_active_web_search_provider(session)
             return provider is not None
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": (
-                    "Search the web for information. Returns a list of search results with titles, metadata, and snippets."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        QUERIES_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "One or more queries to look up on the web. Must contain only printable characters",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description="Search the web for information. Returns a list of search results with titles, metadata, and snippets.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    QUERIES_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "One or more queries to look up on the web. Must contain only printable characters",
                     },
-                    "required": [QUERIES_FIELD],
                 },
+                "required": [QUERIES_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
@@ -247,7 +246,9 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         valid_results: list[list[WebSearchResult]] = []
         failed_queries: dict[str, str] = {}
 
-        for query, (results, error) in zip(queries, search_results_with_errors):
+        for query, (results, error) in zip(
+            queries, search_results_with_errors, strict=True
+        ):
             if error is not None:
                 failed_queries[query] = error
             elif results is not None:

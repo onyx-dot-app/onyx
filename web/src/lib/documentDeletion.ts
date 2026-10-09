@@ -1,10 +1,10 @@
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { DeletionAttemptSnapshot } from "./types";
 
 export async function scheduleDeletionJobForConnector(
   connectorId: number,
   credentialId: number
-) {
+): Promise<string | null> {
   // Will schedule a background job which will:
   // 1. Remove all documents indexed by the connector / credential pair
   // 2. Remove the connector (if this is the only pair using the connector)

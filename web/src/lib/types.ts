@@ -1,16 +1,13 @@
 import { Agent } from "@/lib/agents/types";
-import { Credential } from "./connectors/credentials";
-import { Connector } from "./connectors/connectors";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
-
-export interface UserSpecificAgentPreference {
-  disabled_tool_ids?: number[];
-}
-
-export type UserSpecificAgentPreferences = Record<
-  number,
-  UserSpecificAgentPreference
->;
+import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
+import type { Locale } from "@/i18n/config";
+import type { Credential } from "@/lib/credentials/types";
+import type { Connector } from "@/lib/connectors/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
+import type { PermissionsOf } from "@/lib/permissions/resource-actions";
+// Imported from the module itself, not the barrel: the barrel re-exports
+// shapes that import from here, and the enum is a runtime value.
+import { ValidSources } from "@/lib/connectors/types/source";
 
 export enum ThemePreference {
   LIGHT = "light",
@@ -29,7 +26,11 @@ interface UserPreferences {
   auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
+  temperature_default?: number | null;
+  reasoning_effort_default?: ReasoningEffortOverride | null;
   theme_preference: ThemePreference | null;
+  // UI language, mirrors the backend SupportedLanguage enum
+  language: Locale | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
   // Input preferences
@@ -62,24 +63,35 @@ export enum AccountType {
   ANONYMOUS = "ANONYMOUS",
 }
 
-export enum UserRole {
-  LIMITED = "limited",
-  BASIC = "basic",
-  ADMIN = "admin",
-  CURATOR = "curator",
-  GLOBAL_CURATOR = "global_curator",
-  EXT_PERM_USER = "ext_perm_user",
-  SLACK_USER = "slack_user",
+export enum Permission {
+  BASIC_ACCESS = "basic",
+  READ_CONNECTORS = "read:connectors",
+  READ_DOCUMENT_SETS = "read:document_sets",
+  READ_AGENTS = "read:agents",
+  READ_USERS = "read:users",
+  READ_USER_GROUPS = "read:user_groups",
+  ADD_AGENTS = "add:agents",
+  MANAGE_AGENTS = "manage:agents",
+  MANAGE_DOCUMENT_SETS = "manage:document_sets",
+  MANAGE_CONNECTORS = "manage:connectors",
+  MANAGE_LLMS = "manage:llms",
+  READ_AGENT_ANALYTICS = "read:agent_analytics",
+  MANAGE_ACTIONS = "manage:actions",
+  READ_QUERY_HISTORY = "read:query_history",
+  MANAGE_USER_GROUPS = "manage:user_groups",
+  MANAGE_SKILLS = "manage:skills",
+  CREATE_USER_API_KEYS = "create:user_api_keys",
+  MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
+  MANAGE_BOTS = "manage:bots",
+  FULL_ADMIN_PANEL_ACCESS = "admin",
 }
 
-export const USER_ROLE_LABELS: Record<UserRole, string> = {
-  [UserRole.BASIC]: "Basic",
-  [UserRole.ADMIN]: "Admin",
-  [UserRole.GLOBAL_CURATOR]: "Global Curator",
-  [UserRole.CURATOR]: "Curator",
-  [UserRole.LIMITED]: "Limited",
-  [UserRole.EXT_PERM_USER]: "External Permissioned User",
-  [UserRole.SLACK_USER]: "Slack User",
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  [AccountType.STANDARD]: "Standard",
+  [AccountType.BOT]: "Slack Bot",
+  [AccountType.EXT_PERM_USER]: "External User",
+  [AccountType.SERVICE_ACCOUNT]: "Service Account",
+  [AccountType.ANONYMOUS]: "Anonymous",
 };
 
 export enum UserStatus {
@@ -96,27 +108,15 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
   [UserStatus.REQUESTED]: "Request to Join",
 };
 
-export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
-  [UserRole.BASIC]: "Basic users can't perform any admin actions",
-  [UserRole.ADMIN]: "Admin users can perform all admin actions",
-  [UserRole.GLOBAL_CURATOR]:
-    "Global Curator users can perform admin actions for all groups they are a member of",
-  [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
-  [UserRole.SLACK_USER]:
-    "This role is automatically assigned to users who only use Onyx via Slack",
-};
-
 export interface User {
   id: string;
   email: string;
   is_active: boolean;
   is_superuser: boolean;
   is_verified: boolean;
-  role: UserRole;
+  account_type: AccountType;
   preferences: UserPreferences;
-  current_token_created_at?: Date;
-  current_token_expiry_length?: number;
-  oidc_expiry?: Date;
+  token_expires_at?: string;
   is_cloud_superuser?: boolean;
   team_name: string | null;
   is_anonymous_user?: boolean;
@@ -128,6 +128,13 @@ export interface User {
   password_configured?: boolean;
   tenant_info?: TenantInfo | null;
   personalization?: UserPersonalization;
+  effective_permissions?: string[];
+  is_admin?: boolean;
+  // True if the user manages any group (drives manager nav visibility).
+  is_group_manager?: boolean;
+  // effective tokens plus the scoped manager bundle; source for coarse admin-reach
+  // checks (nav, page access). Server-computed so the client never re-derives policy.
+  admin_capabilities?: string[];
 }
 
 export interface TenantInfo {
@@ -152,7 +159,6 @@ export interface AllUsersResponse {
 export interface AcceptedUserSnapshot {
   id: string;
   email: string;
-  role: UserRole;
   is_active: boolean;
 }
 
@@ -175,12 +181,13 @@ export type ValidStatuses =
   | "success"
   | "completed_with_errors"
   | "canceled"
+  | "interrupted"
   | "failed"
   | "in_progress"
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
-export type AccessType = "public" | "private" | "sync";
+export type AccessType = "public" | "private" | "sync" | "sync_restricted";
 export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
@@ -303,6 +310,8 @@ export interface ConnectorIndexingStatusLite {
   last_status: ValidStatuses | null;
   last_success: string | null;
   is_editable: boolean;
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: PermissionsOf<"CCPair">;
   docs_indexed: number;
   in_repeated_error_state: boolean;
   latest_index_attempt_docs_indexed: number | null;
@@ -449,6 +458,8 @@ export interface DocumentSetSummary {
   is_public: boolean;
   users: string[];
   groups: number[];
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: PermissionsOf<"DocumentSet">;
   federated_connector_summaries: FederatedConnectorSummary[];
 }
 
@@ -537,130 +548,61 @@ export interface UserGroup {
   id: number;
   name: string;
   users: User[];
-  curator_ids: string[];
+  // ids of members who manage this group (drives the Make/Revoke Manager toggle)
+  manager_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
   document_sets: DocumentSetSummary[];
   personas: Agent[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
   is_default: boolean;
+  // Members may start incognito chats while the workspace availability
+  // setting is groups-only.
+  incognito_enabled: boolean;
+  // Server-stamped affordance map; fail-closed (absent = denied).
+  permissions?: PermissionsOf<"UserGroup">;
 }
 
-export enum ValidSources {
-  Web = "web",
-  GitHub = "github",
-  GitLab = "gitlab",
-  Slack = "slack",
-  GoogleDrive = "google_drive",
-  Gmail = "gmail",
-  Bookstack = "bookstack",
-  Outline = "outline",
-  Confluence = "confluence",
-  Jira = "jira",
-  Productboard = "productboard",
-  Slab = "slab",
-  Coda = "coda",
-  Notion = "notion",
-  Guru = "guru",
-  Gong = "gong",
-  Zulip = "zulip",
-  Linear = "linear",
-  Hubspot = "hubspot",
-  Document360 = "document360",
-  File = "file",
-  UserFile = "user_file",
-  GoogleSites = "google_sites",
-  Loopio = "loopio",
-  Dropbox = "dropbox",
-  Discord = "discord",
-  Salesforce = "salesforce",
-  Sharepoint = "sharepoint",
-  Teams = "teams",
-  Zendesk = "zendesk",
-  Discourse = "discourse",
-  Axero = "axero",
-  Clickup = "clickup",
-  Wikipedia = "wikipedia",
-  Mediawiki = "mediawiki",
-  Asana = "asana",
-  S3 = "s3",
-  R2 = "r2",
-  GoogleCloudStorage = "google_cloud_storage",
-  Xenforo = "xenforo",
-  OciStorage = "oci_storage",
-  NotApplicable = "not_applicable",
-  IngestionApi = "ingestion_api",
-  Freshdesk = "freshdesk",
-  Fireflies = "fireflies",
-  Egnyte = "egnyte",
-  Airtable = "airtable",
-  Gitbook = "gitbook",
-  Highspot = "highspot",
-  DrupalWiki = "drupal_wiki",
-  Imap = "imap",
-  Bitbucket = "bitbucket",
-  TestRail = "testrail",
-  Braintrust = "braintrust",
+// Mirrors `IncognitoAvailability` in backend/onyx/server/security/models.py.
+export type IncognitoAvailability = "off" | "everyone" | "groups";
 
-  // Craft-specific sources
-  CraftFile = "craft_file",
+// Mirrors `IncognitoRecordMode` in backend/onyx/db/enums.py.
+export type IncognitoRecordMode = "full_history" | "usage_only";
 
-  // Federated Connectors
-  FederatedSlack = "federated_slack",
+// Mirrors `SSRFProtectionLevel` in backend/onyx/server/security/models.py.
+export type SSRFProtectionLevel =
+  | "validate_all"
+  | "validate_llm"
+  | "allow_private_network"
+  | "disabled";
+
+// Read shape of GET /admin/security: effective, env-merged settings (see
+// `SecuritySettings` in backend/onyx/server/security/models.py). Only the
+// jwt_* fields are nullable, null meaning that check is off.
+export interface SecuritySettings {
+  user_directory_admin_only: boolean;
+  incognito_availability: IncognitoAvailability;
+  incognito_record_mode: IncognitoRecordMode;
+  allow_connector_group_restrictions: boolean;
+  track_external_idp_expiry: boolean;
+  allow_same_provider_subject_relink: boolean;
+  ssrf_protection_level: SSRFProtectionLevel;
+  mask_credential_prefix: boolean;
+  llm_custom_config_env_injection: boolean;
+  valid_email_domains: string[];
+  password_min_length: number;
+  password_max_length: number;
+  password_require_uppercase: boolean;
+  password_require_lowercase: boolean;
+  password_require_digit: boolean;
+  password_require_special_char: boolean;
+  password_auth_enabled: boolean;
+  jwt_public_key_url: string | null;
+  jwt_expected_audience: string | null;
+  jwt_expected_issuer: string | null;
 }
-
-export const federatedSourceToRegularSource = (
-  maybeFederatedSource: ValidSources
-): ValidSources => {
-  if (maybeFederatedSource === ValidSources.FederatedSlack) {
-    return ValidSources.Slack;
-  }
-  return maybeFederatedSource;
-};
-
-export const validAutoSyncSources = [
-  ValidSources.Confluence,
-  ValidSources.Jira,
-  ValidSources.GoogleDrive,
-  ValidSources.Gmail,
-  ValidSources.Slack,
-  ValidSources.Salesforce,
-  ValidSources.GitHub,
-  ValidSources.Sharepoint,
-  ValidSources.Teams,
-] as const;
-
-// Create a type from the array elements
-export type ValidAutoSyncSource = (typeof validAutoSyncSources)[number];
-
-export type ConfigurableSources = Exclude<
-  ValidSources,
-  | ValidSources.NotApplicable
-  | ValidSources.IngestionApi
-  | ValidSources.FederatedSlack // is part of ValiedSources.Slack
-  | ValidSources.UserFile
-  | ValidSources.CraftFile // User Library - managed through dedicated UI
->;
-
-export const oauthSupportedSources: ConfigurableSources[] = [
-  ValidSources.Slack,
-  // NOTE: temporarily disabled until our GDrive App is approved
-  // ValidSources.GoogleDrive,
-  ValidSources.Confluence,
-];
-
-export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
 
 // Federated Connector Types
-export interface CredentialFieldSpec {
-  type: string;
-  description: string;
-  required: boolean;
-  default?: any;
-  example?: any;
-  secret: boolean;
-}
-
 export interface ConfigurationFieldSpec {
   type: string;
   description: string;
@@ -669,10 +611,6 @@ export interface ConfigurationFieldSpec {
   example?: any;
   secret: boolean;
   hidden_when?: Record<string, any>;
-}
-
-export interface CredentialSchemaResponse {
-  credentials: Record<string, CredentialFieldSpec>;
 }
 
 export interface ConfigurationSchemaResponse {

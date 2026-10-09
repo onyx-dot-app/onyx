@@ -5,9 +5,11 @@ from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
 from pptx.util import Inches
 
-from onyx.file_processing.extract_file_text import extract_pptx_images
-from onyx.file_processing.extract_file_text import pptx_to_text
-from onyx.file_processing.extract_file_text import read_pptx_file
+from onyx.file_processing.extract_file_text import (
+    extract_pptx_images,
+    pptx_to_text,
+    read_pptx_file,
+)
 
 
 def _make_1x1_png() -> bytes:

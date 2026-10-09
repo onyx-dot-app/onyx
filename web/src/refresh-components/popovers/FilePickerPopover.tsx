@@ -1,16 +1,24 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Popover, PopoverMenu } from "@opal/components";
+import { useTranslations } from "next-intl";
+import {
+  Button,
+  Dropdown,
+  LineItemButton,
+  useCreateModal,
+  type DropdownMenuItem,
+  type DropdownMenuRow,
+  type DropdownRowProps,
+} from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { toast } from "@/hooks/useToast";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { isFilePending } from "@/lib/projects/utils";
+import { Hoverable } from "@opal/core";
+import { toast } from "@opal/layouts";
+import { useProjectsContext } from "@/lib/projects/providers";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 import { isImageFile } from "@/lib/utils";
@@ -32,20 +40,24 @@ const getFileExtension = (fileName: string): string => {
 
 interface FileLineItemProps {
   projectFile: ProjectFile;
-  onPickRecent: (file: ProjectFile) => void;
+  highlighted: boolean;
+  /** The row props from the list: the id, role, stop and click handling. */
+  rowProps: DropdownRowProps;
   onFileClick: (file: ProjectFile) => void;
 }
 
+/** A recent file: a presentational row whose end control views the file. */
 function FileLineItem({
   projectFile,
-  onPickRecent,
+  highlighted,
+  rowProps,
   onFileClick,
 }: FileLineItemProps) {
+  const t = useTranslations("common.filePicker");
   const showLoader = useMemo(
     () =>
-      String(projectFile.status) === UserFileStatus.PROCESSING ||
-      String(projectFile.status) === UserFileStatus.UPLOADING ||
-      String(projectFile.status) === UserFileStatus.DELETING,
+      isFilePending(projectFile.status) ||
+      projectFile.status === UserFileStatus.DELETING,
     [projectFile.status]
   );
 
@@ -57,46 +69,52 @@ function FileLineItem({
   );
 
   return (
-    <LineItem
-      key={projectFile.id}
-      onClick={noProp(() => onPickRecent(projectFile))}
-      icon={
-        showLoader
-          ? ({ className }) => (
-              <SvgLoader className={cn(className, "animate-spin")} />
-            )
-          : isImageFile(projectFile.name)
-            ? SvgImage
-            : SvgFileText
-      }
-      rightChildren={
-        <div className="h-4 flex flex-col justify-center">
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <IconButton
-            icon={SvgExternalLink}
-            onClick={noProp(() => onFileClick(projectFile))}
-            tooltip="View File"
-            disabled={disableActionButton}
-            internal
-            className="hidden group-hover/LineItem:flex"
-          />
-          <Text
-            as="p"
-            className="flex group-hover/LineItem:hidden"
-            secondaryBody
-            text03
-          >
-            {getFileExtension(projectFile.name)}
-          </Text>
-        </div>
-      }
-    >
-      {projectFile.name}
-    </LineItem>
+    <Hoverable.Root group="FileLineItem">
+      <LineItemButton
+        presentational
+        selectVariant="select-heavy"
+        interaction={highlighted ? "hover" : "rest"}
+        sizePreset="main-ui"
+        rounding={2}
+        icon={
+          showLoader
+            ? ({ className }) => (
+                <SvgLoader className={cn(className, "animate-spin")} />
+              )
+            : isImageFile(projectFile.name)
+              ? SvgImage
+              : SvgFileText
+        }
+        rightChildren={
+          <div className="h-4 flex flex-col justify-center">
+            <Hoverable.Item
+              group="FileLineItem"
+              variant="replace-on-hover"
+              resting={
+                <Text as="p" secondaryBody text03>
+                  {getFileExtension(projectFile.name)}
+                </Text>
+              }
+            >
+              <Button
+                icon={SvgExternalLink}
+                onClick={noProp(() => onFileClick(projectFile))}
+                tooltip={t("viewFileButton.tooltip")}
+                disabled={disableActionButton}
+                prominence="internal"
+                size="sm"
+              />
+            </Hoverable.Item>
+          </div>
+        }
+        title={projectFile.name}
+        {...rowProps}
+      />
+    </Hoverable.Root>
   );
 }
 
-interface FilePickerPopoverContentsProps {
+interface FilePickerItemsProps {
   recentFiles: ProjectFile[];
   onPickRecent: (file: ProjectFile) => void;
   onFileClick: (file: ProjectFile) => void;
@@ -104,67 +122,73 @@ interface FilePickerPopoverContentsProps {
   openRecentFilesModal: () => void;
 }
 
-function FilePickerPopoverContents({
+/**
+ * The rows: upload, then the "quick" recent files (speed dial, for files)
+ * under a title, and a row to the rest when there are more.
+ */
+function useFilePickerItems({
   recentFiles,
   onPickRecent,
   onFileClick,
   triggerUploadPicker,
   openRecentFilesModal,
-}: FilePickerPopoverContentsProps) {
-  // These are the "quick" files that we show. Essentially "speed dial", but for files.
-  // The rest of the files will be hidden behind the "All Recent Files" button, should there be more files left to show!
+}: FilePickerItemsProps): DropdownMenuItem[] {
+  const t = useTranslations("common.filePicker");
   const hasFiles = recentFiles.length > 0;
   const shouldShowMoreFilesButton = recentFiles.length > MAX_FILES_TO_SHOW;
   const quickAccessFiles = recentFiles.slice(0, MAX_FILES_TO_SHOW);
 
-  return (
-    <PopoverMenu>
-      {[
-        // Action button to upload more files
-        <LineItem
-          key="upload-files"
-          icon={SvgUploadSquare}
-          description="Upload a file from your device"
-          onClick={triggerUploadPicker}
-        >
-          Upload Files
-        </LineItem>,
-
-        // Separator
-        null,
-
-        // Title
-        hasFiles && (
-          <div key="recent-files" className="pt-1">
-            <Text as="p" text02 secondaryBody className="py-1 px-3">
-              Recent Files
-            </Text>
-          </div>
-        ),
-
-        // Quick access files
-        ...quickAccessFiles.map((projectFile) => (
+  const fileRows: DropdownMenuRow[] = [
+    ...quickAccessFiles.map(
+      (projectFile): DropdownMenuRow => ({
+        kind: "custom",
+        id: `file-${projectFile.id}`,
+        keywords: [projectFile.name],
+        onActivate: () => onPickRecent(projectFile),
+        // ArrowRight reaches the row's view control.
+        onSecondary: () => onFileClick(projectFile),
+        render: ({ highlighted, props }) => (
           <FileLineItem
-            key={projectFile.id}
             projectFile={projectFile}
-            onPickRecent={onPickRecent}
+            highlighted={highlighted}
+            rowProps={props}
             onFileClick={onFileClick}
           />
-        )),
-
-        // Rest of the files
-        shouldShowMoreFilesButton && (
-          <LineItem
-            key="more-files"
-            icon={SvgMoreHorizontal}
-            onClick={openRecentFilesModal}
-          >
-            All Recent Files
-          </LineItem>
         ),
-      ]}
-    </PopoverMenu>
-  );
+      })
+    ),
+    ...(shouldShowMoreFilesButton
+      ? [
+          {
+            kind: "action" as const,
+            id: "more-files",
+            icon: SvgMoreHorizontal,
+            title: t("allRecentFilesButton.title"),
+            onSelect: openRecentFilesModal,
+          },
+        ]
+      : []),
+  ];
+
+  return [
+    {
+      kind: "action",
+      id: "upload-files",
+      icon: SvgUploadSquare,
+      title: t("uploadFiles.title"),
+      description: t("uploadFiles.description"),
+      onSelect: triggerUploadPicker,
+    },
+    ...(hasFiles
+      ? [
+          {
+            kind: "group" as const,
+            title: t("recentFiles.title"),
+            items: fileRows,
+          },
+        ]
+      : []),
+  ];
 }
 
 export interface FilePickerPopoverProps {
@@ -184,6 +208,7 @@ export default function FilePickerPopover({
   trigger,
   selectedFileIds,
 }: FilePickerPopoverProps) {
+  const t = useTranslations("common.filePicker");
   const { allRecentFiles } = useProjectsContext();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recentFilesModal = useCreateModal();
@@ -196,6 +221,17 @@ export default function FilePickerPopover({
   const [deletedFileIds, setDeletedFileIds] = useState<string[]>([]);
 
   const triggerUploadPicker = () => fileInputRef.current?.click();
+  // Every pick closes the list; the view control closes it too.
+  const items = useFilePickerItems({
+    recentFiles: recentFilesSnapshot,
+    onPickRecent: (file) => onPickRecent?.(file),
+    onFileClick: (file) => {
+      onFileClick?.(file);
+      setOpen(false);
+    },
+    triggerUploadPicker,
+    openRecentFilesModal: () => recentFilesModal.toggle(true),
+  });
 
   useEffect(() => {
     setRecentFilesSnapshot(
@@ -213,7 +249,7 @@ export default function FilePickerPopover({
     deleteUserFile(file.id)
       .then((result) => {
         if (!result.has_associations) {
-          toast.success("File deleted successfully");
+          toast.success(t("toasts.deleteSuccess"));
           setCurrentMessageFiles((prev) =>
             prev.filter((f) => f.id !== file.id)
           );
@@ -225,18 +261,14 @@ export default function FilePickerPopover({
               f.id === file.id ? { ...f, status: lastStatus } : f
             )
           );
-          let projects = result.project_names.join(", ");
-          let assistants = result.assistant_names.join(", ");
-          let message = "Cannot delete file. It is associated with";
-          if (projects) {
-            message += ` projects: ${projects}`;
-          }
-          if (projects && assistants) {
-            message += " and ";
-          }
-          if (assistants) {
-            message += `assistants: ${assistants}`;
-          }
+          const projects = result.project_names.join(", ");
+          const assistants = result.assistant_names.join(", ");
+          const message =
+            projects && assistants
+              ? t("toasts.associatedBoth", { projects, assistants })
+              : projects
+                ? t("toasts.associatedProjects", { projects })
+                : t("toasts.associatedAssistants", { assistants });
 
           toast.error(message);
         }
@@ -246,7 +278,7 @@ export default function FilePickerPopover({
         setRecentFilesSnapshot((prev) =>
           prev.map((f) => (f.id === file.id ? { ...f, status: lastStatus } : f))
         );
-        toast.error("Failed to delete file. Please try again.");
+        toast.error(t("toasts.deleteFailed"));
         // Useful for debugging; safe in client components
         console.error("Failed to delete file", error);
       });
@@ -265,8 +297,8 @@ export default function FilePickerPopover({
 
       <recentFilesModal.Provider>
         <UserFilesModal
-          title="Recent Files"
-          description="Upload files or pick from your recent files."
+          title={t("recentFiles.title")}
+          description={t("recentFilesModal.description")}
           recentFiles={recentFilesSnapshot}
           onPickRecent={(file) => {
             onPickRecent?.(file);
@@ -281,33 +313,12 @@ export default function FilePickerPopover({
         />
       </recentFilesModal.Provider>
 
-      <Popover open={open} onOpenChange={setOpen}>
-        <Popover.Trigger asChild>
+      <Dropdown width={60} open={open} onOpenChange={setOpen}>
+        <Dropdown.Trigger asChild>
           {typeof trigger === "function" ? trigger(open) : trigger}
-        </Popover.Trigger>
-        <Popover.Content align="start" side="bottom" width="lg">
-          <FilePickerPopoverContents
-            recentFiles={recentFilesSnapshot}
-            onPickRecent={(file) => {
-              onPickRecent?.(file);
-              setOpen(false);
-            }}
-            onFileClick={(file) => {
-              onFileClick?.(file);
-              setOpen(false);
-            }}
-            triggerUploadPicker={() => {
-              triggerUploadPicker();
-              setOpen(false);
-            }}
-            openRecentFilesModal={() => {
-              recentFilesModal.toggle(true);
-              // Close the small popover when opening the dialog
-              setOpen(false);
-            }}
-          />
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data label={t("uploadFiles.title")} items={items} />
+      </Dropdown>
     </>
   );
 }

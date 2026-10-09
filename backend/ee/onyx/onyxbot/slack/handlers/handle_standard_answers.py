@@ -1,29 +1,28 @@
 from slack_sdk import WebClient
-from slack_sdk.models.blocks import ActionsBlock
-from slack_sdk.models.blocks import Block
-from slack_sdk.models.blocks import ButtonElement
-from slack_sdk.models.blocks import SectionBlock
+from slack_sdk.models.blocks import ActionsBlock, Block, ButtonElement, SectionBlock
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.standard_answer import fetch_standard_answer_categories_by_names
-from ee.onyx.db.standard_answer import find_matching_standard_answers
+from ee.onyx.db.standard_answer import (
+    fetch_standard_answer_categories_by_names,
+    find_matching_standard_answers,
+)
 from onyx.configs.constants import MessageType
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_chat_messages_by_sessions
-from onyx.db.chat import get_chat_sessions_by_slack_thread_id
-from onyx.db.chat import get_or_create_root_message
+from onyx.db.chat import (
+    create_chat_session,
+    create_new_chat_message,
+    get_chat_messages_by_sessions,
+    get_chat_sessions_by_slack_thread_id,
+    get_or_create_root_message,
+)
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.onyxbot.slack.blocks import get_restate_blocks
 from onyx.onyxbot.slack.constants import GENERATE_ANSWER_BUTTON_ACTION_ID
 from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
-from onyx.onyxbot.slack.utils import update_emote_react
+from onyx.onyxbot.slack.utils import respond_in_thread_or_channel, update_emote_react
 from onyx.server.manage.models import StandardAnswer as PydanticStandardAnswer
-from onyx.utils.logger import OnyxLoggingAdapter
-from onyx.utils.logger import setup_logger
+from onyx.utils.logger import OnyxLoggingAdapter, setup_logger
 
 logger = setup_logger()
 
@@ -96,17 +95,15 @@ def _handle_standard_answers(
     configured_standard_answer_categories = (
         slack_channel_config.standard_answer_categories
     )
-    configured_standard_answers = set(
-        [
-            standard_answer
-            for standard_answer_category in configured_standard_answer_categories
-            for standard_answer in standard_answer_category.standard_answers
-        ]
-    )
+    configured_standard_answers = {
+        standard_answer
+        for standard_answer_category in configured_standard_answer_categories
+        for standard_answer in standard_answer_category.standard_answers
+    }
     query_msg = message_info.thread_messages[-1]
 
     if slack_thread_id is None:
-        used_standard_answer_ids = set([])
+        used_standard_answer_ids = set()
     else:
         chat_sessions = get_chat_sessions_by_slack_thread_id(
             slack_thread_id=slack_thread_id,
@@ -119,13 +116,11 @@ def _handle_standard_answers(
             db_session=db_session,
             skip_permission_check=True,
         )
-        used_standard_answer_ids = set(
-            [
-                standard_answer.id
-                for chat_message in chat_messages
-                for standard_answer in chat_message.standard_answers
-            ]
-        )
+        used_standard_answer_ids = {
+            standard_answer.id
+            for chat_message in chat_messages
+            for standard_answer in chat_message.standard_answers
+        }
 
     usable_standard_answers = configured_standard_answers.difference(
         used_standard_answer_ids

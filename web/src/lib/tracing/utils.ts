@@ -1,21 +1,30 @@
+import type { useTranslations } from "next-intl";
 import { SvgBraintrust, SvgLangfuse } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import type { TracingProviderType } from "@/lib/tracing/types";
+
+export type TracingTranslate = ReturnType<
+  typeof useTranslations<"admin.tracing">
+>;
+export type TracingMessageKey = Parameters<TracingTranslate>[0];
 
 export interface TracingFieldSpec {
   // Form field name. The secret field is always sent as the provider `api_key`;
   // config field names map to keys in the provider `config` object.
   name: string;
-  label: string;
+  // The user-facing text lives in the "admin.tracing" catalog namespace.
+  labelKey: TracingMessageKey;
+  descriptionKey?: TracingMessageKey;
+  placeholderKey?: TracingMessageKey;
+  // URLs and default values are not translated.
   placeholder?: string;
-  help?: string;
   optional?: boolean;
   defaultValue?: string;
 }
 
 export interface TracingProviderDetail {
   label: string;
-  description: string;
+  descriptionKey: TracingMessageKey;
   logo: IconFunctionComponent;
   secretField: TracingFieldSpec;
   configFields: TracingFieldSpec[];
@@ -27,54 +36,52 @@ export const TRACING_PROVIDER_DETAILS: Record<
 > = {
   braintrust: {
     label: "Braintrust",
-    description: "LLM evaluation and monitoring",
+    descriptionKey: "providers.braintrust.description",
     logo: SvgBraintrust,
     secretField: {
       name: "api_key",
-      label: "API Key",
-      placeholder: "API Key",
-      help: "Paste your [API key](https://www.braintrust.dev/app) from Braintrust.",
+      labelKey: "providers.braintrust.fields.apiKey.label",
+      descriptionKey: "providers.braintrust.fields.apiKey.description",
     },
     configFields: [
       {
         name: "project",
-        label: "Project Name",
+        labelKey: "providers.braintrust.fields.project.label",
         placeholder: "Onyx",
         optional: true,
         defaultValue: "Onyx",
-        help: "Braintrust project name traces are logged to.",
+        descriptionKey: "providers.braintrust.fields.project.description",
       },
       {
         name: "api_url",
-        label: "API URL",
+        labelKey: "providers.braintrust.fields.apiUrl.label",
         placeholder: "https://api.braintrust.dev",
         optional: true,
-        help: "Default to the US region. Paste your Braintrust API URL for other regions or self-hosting.",
+        descriptionKey: "providers.braintrust.fields.apiUrl.description",
       },
     ],
   },
   langfuse: {
     label: "Langfuse",
-    description: "Cloud or self-hosted open-source observability platform",
+    descriptionKey: "providers.langfuse.description",
     logo: SvgLangfuse,
     secretField: {
       name: "api_key",
-      label: "Secret Key",
-      placeholder: "Secret Key",
-      help: "Paste your [API key](https://cloud.langfuse.com) from Langfuse.",
+      labelKey: "providers.langfuse.fields.secretKey.label",
+      descriptionKey: "providers.langfuse.fields.secretKey.description",
     },
     configFields: [
       {
         name: "public_key",
-        label: "Public Key",
-        placeholder: "Public Key",
+        labelKey: "providers.langfuse.fields.publicKey.label",
+        placeholderKey: "providers.langfuse.fields.publicKey.placeholder",
       },
       {
         name: "host",
-        label: "API Base URL",
+        labelKey: "providers.langfuse.fields.host.label",
         placeholder: "https://cloud.langfuse.com",
         optional: true,
-        help: "Default to EU region. Paste your Langfuse base URL for other regions or self-hosting.",
+        descriptionKey: "providers.langfuse.fields.host.description",
       },
     ],
   },

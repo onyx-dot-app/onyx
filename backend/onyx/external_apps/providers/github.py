@@ -2,23 +2,28 @@ from typing import Any
 
 import requests
 
-from onyx.configs.app_configs import EXT_APP_GITHUB_CLIENT_ID
-from onyx.configs.app_configs import EXT_APP_GITHUB_CLIENT_SECRET
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.configs.app_configs import (
+    EXT_APP_GITHUB_CLIENT_ID,
+    EXT_APP_GITHUB_CLIENT_SECRET,
+)
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.actions import ExternalAppAction
-from onyx.external_apps.providers.actions import GraphQLOp
-from onyx.external_apps.providers.actions import RestRoute
-from onyx.external_apps.providers.base import AdminDescriptorSpec
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.base import OAuthFlowSpec
-from onyx.external_apps.providers.base import OAuthProviderSpec
-from onyx.external_apps.providers.base import OnyxManagedExtApp
-from onyx.external_apps.providers.base import OrgCredentialField
-from onyx.external_apps.providers.base import token_response_error
+from onyx.external_apps.providers.actions import (
+    EndpointSpec,
+    ExternalAppAction,
+    GraphQLOp,
+    RestRoute,
+)
+from onyx.external_apps.providers.base import (
+    AdminDescriptorSpec,
+    OAuthExternalAppProvider,
+    OAuthFlowSpec,
+    OAuthProviderSpec,
+    OnyxManagedExtApp,
+    OrgCredentialField,
+    token_response_error,
+)
 
 
 class GitHubAction(ExternalAppAction):
@@ -230,10 +235,6 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             scope_param="scope",
         ),
         descriptor=AdminDescriptorSpec(
-            description=(
-                "Read repositories, issues, and pull requests, open new issues, "
-                "and add comments in GitHub on the user's behalf."
-            ),
             upstream_url_patterns=["https://api\\.github\\.com/.*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[

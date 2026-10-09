@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { EndOfList } from "@opal/components";
 import { markdown } from "@opal/utils";
 

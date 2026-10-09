@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FilterButton } from "@opal/components";
 import { Disabled as DisabledProvider } from "@opal/core";
 import { SvgUser, SvgActions, SvgTag } from "@opal/icons";

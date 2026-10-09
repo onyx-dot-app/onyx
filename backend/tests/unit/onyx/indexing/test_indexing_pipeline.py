@@ -1,38 +1,54 @@
 import random
 import threading
 import time
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import List
-from unittest.mock import MagicMock
-from unittest.mock import Mock
-from unittest.mock import patch
+from collections.abc import Callable
+from contextlib import nullcontext
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from typing import Any, List, cast
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
-from onyx.hooks.executor import HookSkipped
-from onyx.hooks.executor import HookSoftFailed
-from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
-from onyx.hooks.points.document_ingestion import DocumentIngestionSection
+from onyx.access.models import ExternalAccess
+from onyx.connectors.models import (
+    Document,
+    DocumentSource,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.hooks.executor import HookSkipped, HookSoftFailed
+from onyx.hooks.points.document_ingestion import (
+    DocumentIngestionResponse,
+    DocumentIngestionSection,
+)
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
-from onyx.indexing.indexing_pipeline import add_contextual_summaries
-from onyx.indexing.indexing_pipeline import filter_documents
-from onyx.indexing.indexing_pipeline import get_docs_to_update
-from onyx.indexing.indexing_pipeline import process_image_sections
+from onyx.indexing.indexing_pipeline import (
+    INDEXING_PIPELINE_TRACE_NAME,
+    DocumentBatchPrepareContext,
+    DocumentPushFailure,
+    IndexingPipelineResult,
+    _apply_document_ingestion_hook,
+    _partition_documents_blocked_by_llm_spend_limit,
+    _system_llm_enrichment_is_allowed,
+    add_contextual_summaries,
+    filter_documents,
+    get_docs_to_update,
+    index_doc_batch,
+    index_doc_batch_with_handler,
+    process_image_sections,
+    run_indexing_pipeline,
+)
+from onyx.indexing.models import DocAwareChunk
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.model_response import Choice
-from onyx.llm.model_response import Message
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.llm.models import AssistantMessage, TextContent
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.traces import TraceContentMode
 
 
 def create_test_document(
@@ -165,7 +181,7 @@ def test_filter_documents_empty_batch() -> None:
     assert len(failures) == 0
 
 
-@patch("onyx.llm.utils.GEN_AI_MAX_TOKENS", 4096)
+@patch("onyx.llm.model_capabilities.GEN_AI_MAX_TOKENS", 4096)
 @pytest.mark.parametrize("enable_contextual_rag", [True, False])
 def test_contextual_rag(
     embedder: DefaultIndexingEmbedder, enable_contextual_rag: bool
@@ -201,14 +217,12 @@ def test_contextual_rag(
     def mock_llm_invoke(
         *args: Any,  # noqa: ARG001
         **kwargs: Any,  # noqa: ARG001
-    ) -> ModelResponse:
+    ) -> AssistantMessage:
         nonlocal mock_llm_invoke_count
         with counter_lock:
             mock_llm_invoke_count += 1
-        return ModelResponse(
-            id=f"test-{mock_llm_invoke_count}",
-            created="2024-01-01T00:00:00Z",
-            choice=Choice(message=Message(content=f"Test{mock_llm_invoke_count}")),
+        return AssistantMessage(
+            content=[TextContent(text=f"Test{mock_llm_invoke_count}")]
         )
 
     llm_tokenizer = embedder.embedding_model.tokenizer
@@ -253,6 +267,252 @@ def test_contextual_rag(
     else:
         assert all(chunk.doc_summary == "" for chunk in chunks)
         assert all(chunk.chunk_context == "" for chunk in chunks)
+
+
+def _contextual_chunks(
+    embedder: DefaultIndexingEmbedder,
+    llm_invoke: Callable[..., AssistantMessage],
+    text: str,
+) -> list[DocAwareChunk]:
+    """Chunks of one document after contextual RAG ran with the given LLM."""
+    document = Document(
+        id="test_doc",
+        source=DocumentSource.WEB,
+        semantic_identifier="Test Document",
+        metadata={},
+        doc_updated_at=None,
+        sections=[TextSection(text=text, link="link")],
+    )
+    tokenizer = embedder.embedding_model.tokenizer
+    llm = Mock()
+    llm.config.max_input_tokens = get_max_input_tokens(
+        model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
+    )
+    llm.invoke = llm_invoke
+    chunker = Chunker(
+        tokenizer=tokenizer, enable_multipass=False, enable_contextual_rag=True
+    )
+    return add_contextual_summaries(
+        chunks=chunker.chunk(process_image_sections([document])),
+        llm=llm,
+        tokenizer=tokenizer,
+        chunk_token_limit=chunker.chunk_token_limit * 2,
+    )
+
+
+def _invoke_failing_for(flow: LLMFlow) -> Callable[..., AssistantMessage]:
+    def invoke(*_args: Any, **kwargs: Any) -> AssistantMessage:
+        if kwargs["context"].flow == flow:
+            raise RuntimeError(f"{flow.value} call failed")
+        return AssistantMessage(content=[TextContent(text="llm text")])
+
+    return invoke
+
+
+@pytest.mark.parametrize(
+    "flow", [LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY, LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT]
+)
+@patch("onyx.llm.model_capabilities.GEN_AI_MAX_TOKENS", 4096)
+def test_contextual_rag_raises_when_a_call_fails(
+    embedder: DefaultIndexingEmbedder, flow: LLMFlow
+) -> None:
+    """A failed summary or chunk-context call fails the document instead of
+    indexing it without context, so the batch handler reports it per document."""
+    with pytest.raises(RuntimeError, match="call failed"):
+        _contextual_chunks(
+            embedder,
+            _invoke_failing_for(flow),
+            "A sentence to fill the document. " * 2000,
+        )
+
+
+def _failed_ids(result: IndexingPipelineResult) -> list[str]:
+    ids: list[str] = []
+    for failure in result.failures:
+        assert failure.failed_document is not None
+        ids.append(failure.failed_document.document_id)
+    return ids
+
+
+def _index_batch_with_handler(
+    index_doc_batch_mock: Any, doc_ids: list[str]
+) -> IndexingPipelineResult:
+    documents = [_make_doc(doc_id) for doc_id in doc_ids]
+    with (
+        patch(f"{_PATCH_PREFIX}.index_doc_batch", index_doc_batch_mock),
+        patch(f"{_PATCH_PREFIX}.sentry_sdk"),
+    ):
+        return index_doc_batch_with_handler(
+            chunker=MagicMock(),
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            document_batch=documents,
+            request_id=None,
+            tenant_id="tenant",
+            adapter=MagicMock(),
+        )
+
+
+def _raise_for_bad_doc(**kwargs: Any) -> IndexingPipelineResult:
+    documents = kwargs["document_batch"]
+    # "a" is up to date, so prepare() selects only the other two.
+    kwargs["on_prepared"]({doc.id for doc in documents if doc.id != "a"})
+    if any(doc.id == "bad" for doc in documents):
+        raise RuntimeError("cannot index bad")
+    return IndexingPipelineResult(
+        new_docs=len(documents),
+        total_docs=len(documents),
+        total_chunks=2 * len(documents),
+        failures=[],
+    )
+
+
+def test_batch_handler_fails_only_the_document_that_raises() -> None:
+    index_doc_batch_mock = MagicMock(side_effect=_raise_for_bad_doc)
+
+    result = _index_batch_with_handler(index_doc_batch_mock, ["a", "bad", "b"])
+
+    assert result.new_docs == 2
+    assert result.total_docs == 3
+    assert result.total_chunks == 4
+    assert _failed_ids(result) == ["bad"]
+    assert result.failures[0].failure_message == "cannot index bad"
+    # The batch once, then each document on its own. Only the documents the
+    # batch had prepared skip the change gates, "a" was up to date.
+    assert [
+        call.kwargs["force_update"] for call in index_doc_batch_mock.call_args_list
+    ] == [False, False, True, True]
+
+
+def test_batch_handler_does_not_retry_a_failed_document_push() -> None:
+    """The documents are already written when the push fails, so a retry per
+    document would find them unchanged and drop the failure."""
+    index_doc_batch_mock = MagicMock(side_effect=DocumentPushFailure("sink down"))
+
+    result = _index_batch_with_handler(index_doc_batch_mock, ["a", "b"])
+
+    assert _failed_ids(result) == ["a", "b"]
+    assert index_doc_batch_mock.call_count == 1
+
+
+def test_index_batch_wraps_a_failed_document_push() -> None:
+    """A push that raises after the documents are written surfaces as a
+    DocumentPushFailure, so the handler does not retry per document."""
+    document = _make_doc("doc")
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[document],
+        id_to_boost_map={},
+    )
+    adapter.lock_context.return_value = _make_ctx()
+    adapter.prepare_enrichment.return_value = MagicMock(
+        doc_id_to_previous_chunk_cnt={}, doc_id_to_new_chunk_cnt={}
+    )
+    chunker = MagicMock()
+    chunker.chunk.return_value = []
+    embedding_result = MagicMock(successful_chunk_ids=[], connector_failures=[])
+    chunk_store = MagicMock()
+    chunk_store.stream.return_value = iter([])
+    embed_ctx = _make_ctx()
+    embed_ctx.__enter__ = MagicMock(return_value=(embedding_result, chunk_store))
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.embed_and_stream", return_value=embed_ctx),
+        patch(
+            f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
+            return_value=([MagicMock(document_id="doc", already_existed=False)], []),
+        ),
+        patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit"),
+        patch(
+            f"{_PATCH_PREFIX}._maybe_push_documents",
+            side_effect=RuntimeError("sink down"),
+        ),
+        pytest.raises(DocumentPushFailure, match="sink down"),
+    ):
+        index_doc_batch(
+            document_batch=[document],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+        )
+
+
+def test_batch_handler_forces_only_the_documents_the_batch_prepared() -> None:
+    """Through the real index_doc_batch: prepare() selects one of two documents,
+    the batch raises after that, and only the selected document is retried
+    with the change gates off."""
+    prepared = _make_doc("prepared")
+    unchanged = _make_doc("unchanged")
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    # The batch prepares one document. Each retry then finds nothing to do.
+    adapter.prepare.side_effect = [
+        DocumentBatchPrepareContext(updatable_docs=[prepared], id_to_boost_map={}),
+        None,
+        None,
+    ]
+    adapter.lock_context.return_value = _make_ctx()
+    chunker = MagicMock()
+    chunker.chunk.side_effect = RuntimeError("chunker down")
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.sentry_sdk"),
+    ):
+        result = index_doc_batch_with_handler(
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            document_batch=[prepared, unchanged],
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+        )
+
+    assert result.failures == []
+    # (documents, ignore_time_skip, index_to_secondary, force_update) per call.
+    assert [
+        ([doc.id for doc in call.args[0]], call.args[3])
+        for call in adapter.prepare.call_args_list
+    ] == [
+        (["prepared", "unchanged"], False),
+        (["prepared"], True),
+        (["unchanged"], False),
+    ]
+
+
+def test_batch_handler_does_not_retry_a_single_document_batch() -> None:
+    index_doc_batch_mock = MagicMock(side_effect=_raise_for_bad_doc)
+
+    result = _index_batch_with_handler(index_doc_batch_mock, ["bad"])
+
+    assert _failed_ids(result) == ["bad"]
+    assert index_doc_batch_mock.call_count == 1
+
+
+def test_batch_handler_passes_a_clean_batch_through() -> None:
+    index_doc_batch_mock = MagicMock(side_effect=_raise_for_bad_doc)
+
+    result = _index_batch_with_handler(index_doc_batch_mock, ["a", "b"])
+
+    assert result.new_docs == 2
+    assert result.failures == []
+    assert index_doc_batch_mock.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +567,7 @@ def _make_cc_pair(is_public: bool) -> MagicMock:
 
 
 def _make_insertion_records(doc_ids: list[str]) -> list[Any]:
-    from onyx.document_index.interfaces_new import DocumentInsertionRecord
+    from onyx.document_index.interfaces import DocumentInsertionRecord
 
     return [
         DocumentInsertionRecord(document_id=d, already_existed=False) for d in doc_ids
@@ -344,9 +604,40 @@ def test_document_push_skipped_in_multi_tenant_mode() -> None:
     doc = _make_doc(doc_id="doc1")
     with (
         patch(_PATCH_MULTI_TENANT, True),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
         patch(_PATCH_EXECUTE_HOOK) as mock_hook,
     ):
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+    mock_hook.assert_not_called()
+
+
+def test_document_push_config_sink_skipped_in_multi_tenant_mode() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+    from onyx.utils.external_endpoint import ExternalEndpointConfig
+
+    config = ExternalEndpointConfig(
+        endpoint_url="https://push.example.com/docs",
+        timeout_seconds=30.0,
+    )
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, True),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=config,
+        ),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+        patch(
+            "onyx.indexing.indexing_pipeline.push_document_via_config"
+        ) as mock_config_push,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    # Multi-tenant skips both sinks — even with the env config set.
+    mock_config_push.assert_not_called()
     mock_hook.assert_not_called()
 
 
@@ -378,7 +669,7 @@ def test_document_push_skipped_for_non_public_connector() -> None:
 
 def test_document_push_fires_execute_hook_for_public_doc() -> None:
     from onyx.db.enums import HookPoint
-    from onyx.hooks.points.document_push import DocumentPushResponse
+    from onyx.indexing.document_push import DocumentPushResponse
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 
     doc = _make_doc(doc_id="doc1")
@@ -386,6 +677,10 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
         patch(_PATCH_EXECUTE_HOOK) as mock_hook,
     ):
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
@@ -399,6 +694,59 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
     assert payload["content"] == "Hello"
 
 
+def test_document_push_config_wins_and_skips_hook() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+    from onyx.utils.external_endpoint import ExternalEndpointConfig
+
+    config = ExternalEndpointConfig(
+        endpoint_url="https://push.example.com/docs",
+        timeout_seconds=30.0,
+    )
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=config,
+        ),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+        patch(
+            "onyx.indexing.indexing_pipeline.push_document_via_config"
+        ) as mock_config_push,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    # Either/or: the config-driven sink wins and the hook DB lookup is skipped.
+    mock_config_push.assert_called_once()
+    assert mock_config_push.call_args.args[0].document_id == "doc1"
+    mock_hook.assert_not_called()
+
+
+def test_document_push_falls_back_to_hook_when_config_unset() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+        patch(
+            "onyx.indexing.indexing_pipeline.push_document_via_config"
+        ) as mock_config_push,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    mock_hook.assert_called_once()
+    mock_config_push.assert_not_called()
+
+
 def test_document_push_hook_exception_propagates() -> None:
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 
@@ -407,6 +755,10 @@ def test_document_push_hook_exception_propagates() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
         patch(_PATCH_EXECUTE_HOOK, side_effect=RuntimeError("hard fail")),
         pytest.raises(RuntimeError, match="hard fail"),
     ):
@@ -566,6 +918,64 @@ def test_document_ingestion_hook_mixed_batch() -> None:
 _PATCH_PREFIX = "onyx.indexing.indexing_pipeline"
 
 
+def test_run_pipeline_owns_llm_enrichment_trace() -> None:
+    search_settings = SimpleNamespace(enable_contextual_rag=False)
+    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
+    expected_result = MagicMock()
+    vision_llm = MagicMock()
+    document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}.get_active_search_settings",
+            return_value=all_search_settings,
+        ),
+        patch(f"{_PATCH_PREFIX}.get_multipass_config"),
+        patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=True,
+        ),
+        patch(
+            f"{_PATCH_PREFIX}.get_default_llm_with_vision",
+            return_value=vision_llm,
+        ),
+        patch(f"{_PATCH_PREFIX}._system_llm_enrichment_is_allowed", return_value=True),
+        patch(
+            f"{_PATCH_PREFIX}.index_doc_batch_with_handler",
+            return_value=expected_result,
+        ) as index_doc_batch_with_handler,
+        patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()) as ensure,
+    ):
+        result = run_indexing_pipeline(
+            document_batch=[document],
+            request_id=None,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            db_session=MagicMock(),
+            tenant_id="tenant",
+            adapter=MagicMock(),
+            chunker=MagicMock(),
+        )
+
+    assert result is expected_result
+    ensure.assert_called_once_with(
+        INDEXING_PIPELINE_TRACE_NAME,
+        content_mode=TraceContentMode.METADATA_ONLY,
+    )
+    assert (
+        index_doc_batch_with_handler.call_args.kwargs["image_summarization_llm"]
+        is vision_llm
+    )
+
+
+def test_system_llm_enrichment_stops_at_global_limit() -> None:
+    with patch(
+        f"{_PATCH_PREFIX}.check_global_token_rate_limits",
+        side_effect=OnyxError(OnyxErrorCode.RATE_LIMITED),
+    ):
+        assert not _system_llm_enrichment_is_allowed()
+
+
 def _mock_file_store(image_map: dict[str, bytes]) -> MagicMock:
     """Build a fake file store that serves images from a dict."""
     store = MagicMock()
@@ -599,6 +1009,149 @@ def _make_image_doc(
         source=DocumentSource.FILE,
         metadata={},
     )
+
+
+def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
+    search_settings = SimpleNamespace(enable_contextual_rag=False)
+    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
+    expected_result = MagicMock()
+    document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}.get_active_search_settings",
+            return_value=all_search_settings,
+        ),
+        patch(f"{_PATCH_PREFIX}.get_multipass_config"),
+        patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=True,
+        ),
+        patch(f"{_PATCH_PREFIX}.get_default_llm_with_vision", return_value=None),
+        patch(
+            f"{_PATCH_PREFIX}._system_llm_enrichment_is_allowed"
+        ) as enrichment_allowed,
+        patch(
+            f"{_PATCH_PREFIX}.index_doc_batch_with_handler",
+            return_value=expected_result,
+        ) as index_doc_batch_with_handler,
+        patch(f"{_PATCH_PREFIX}.ensure_trace") as ensure,
+    ):
+        result = run_indexing_pipeline(
+            document_batch=[document],
+            request_id=None,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            db_session=MagicMock(),
+            tenant_id="tenant",
+            adapter=MagicMock(),
+            chunker=MagicMock(),
+        )
+
+    assert result is expected_result
+    enrichment_allowed.assert_not_called()
+    ensure.assert_not_called()
+    assert (
+        index_doc_batch_with_handler.call_args.kwargs["image_summarization_llm"] is None
+    )
+    assert index_doc_batch_with_handler.call_args.kwargs["llm_enrichment_allowed"]
+
+
+def test_spend_limit_blocks_only_documents_with_images() -> None:
+    image_doc = _make_image_doc(
+        "image-doc",
+        [TextSection(text="text", link="image-link"), ImageSection(image_file_id="1")],
+    )
+    text_doc = _make_image_doc("text-doc", [TextSection(text="text", link="text-link")])
+
+    result = _partition_documents_blocked_by_llm_spend_limit(
+        [image_doc, text_doc],
+        enable_contextual_rag=False,
+        enable_image_summarization=True,
+        llm_enrichment_allowed=False,
+    )
+
+    assert result.documents == [text_doc]
+    assert len(result.failures) == 1
+    failure = result.failures[0]
+    assert failure.failed_document is not None
+    assert failure.failed_document.document_id == "image-doc"
+    assert failure.failed_document.document_link == "image-link"
+    assert "image summarization" in failure.failure_message
+
+
+def test_spend_limit_blocks_all_contextual_rag_documents() -> None:
+    image_doc = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
+    text_doc = _make_image_doc("text-doc", [TextSection(text="text", link=None)])
+
+    result = _partition_documents_blocked_by_llm_spend_limit(
+        [image_doc, text_doc],
+        enable_contextual_rag=True,
+        enable_image_summarization=True,
+        llm_enrichment_allowed=False,
+    )
+
+    assert result.documents == []
+    assert {
+        failure.failed_document.document_id
+        for failure in result.failures
+        if failure.failed_document is not None
+    } == {"image-doc", "text-doc"}
+    assert (
+        "contextual RAG and image summarization" in result.failures[0].failure_message
+    )
+    assert "contextual RAG" in result.failures[1].failure_message
+
+
+def test_spend_limit_partition_preserves_documents_when_allowed() -> None:
+    document = _make_image_doc("doc", [ImageSection(image_file_id="1")])
+
+    result = _partition_documents_blocked_by_llm_spend_limit(
+        [document],
+        enable_contextual_rag=True,
+        enable_image_summarization=True,
+        llm_enrichment_allowed=True,
+    )
+
+    assert result.documents == [document]
+    assert result.failures == []
+
+
+def test_index_batch_returns_spend_limit_failures_before_contextual_rag() -> None:
+    document = _make_image_doc("doc", [TextSection(text="text", link="link")])
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[document],
+        id_to_boost_map={},
+    )
+    chunker = MagicMock()
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+    ):
+        result = index_doc_batch(
+            document_batch=[document],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+            enable_contextual_rag=True,
+            llm_enrichment_allowed=False,
+        )
+
+    assert result.total_docs == 1
+    assert len(result.failures) == 1
+    assert result.failures[0].failed_document is not None
+    assert result.failures[0].failed_document.document_id == "doc"
+    chunker.chunk.assert_not_called()
 
 
 def _make_tabular_doc(doc_id: str, section: TabularSection) -> Document:
@@ -961,6 +1514,9 @@ def _make_db_doc(
     db_doc.id = doc_id
     db_doc.content_hash = content_hash
     db_doc.doc_updated_at = doc_updated_at
+    db_doc.external_user_emails = []
+    db_doc.external_user_group_ids = []
+    db_doc.is_public = False
     return db_doc
 
 
@@ -1037,6 +1593,30 @@ def test_get_docs_to_update_time_skip_still_works() -> None:
     assert hashes == {}
 
 
+def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:
+    updated_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = updated_at
+    doc.external_access = ExternalAccess(
+        external_user_emails={"latest@example.com"},
+        external_user_group_ids={"onedrive_latest-group"},
+        is_public=False,
+    )
+    db_doc = _make_db_doc(
+        "doc1",
+        content_hash=doc.content_hash(),
+        doc_updated_at=updated_at,
+    )
+    db_doc.external_user_emails = ["former@example.com"]
+    db_doc.external_user_group_ids = ["onedrive_former-group"]
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == [doc]
+    assert hashes == {"doc1": doc.content_hash()}
+
+
 def test_get_docs_to_update_mixed_batch() -> None:
     """Unchanged doc is skipped; changed doc is included."""
     doc_unchanged = _doc_with_text("T", "same")
@@ -1054,3 +1634,31 @@ def test_get_docs_to_update_mixed_batch() -> None:
     assert docs[0].id == "changed"
     assert "changed" in hashes
     assert "unchanged" not in hashes
+
+
+def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
+    """FUTURE/secondary build (ignore_content_hash_gate=True) must NOT hash-skip.
+
+    content_hash is a single column shared by both indices but tracks only the
+    PRESENT/live index. A matching hash means PRESENT already has the doc — it
+    says nothing about the FUTURE index being built. Honoring the gate here is
+    the #11159 regression: the secondary write gets suppressed and FUTURE never
+    receives the doc (swap deadlock / stale promotion). The gate must be bypassed.
+    """
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = None
+    stored_hash = doc.content_hash()  # PRESENT already indexed this exact content
+    db_doc = _make_db_doc("doc1", content_hash=stored_hash)
+
+    # Default (PRESENT write): hash matches → skipped, as before.
+    present_docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+    assert present_docs == []
+
+    # Secondary/FUTURE write: gate bypassed → doc still indexed into FUTURE.
+    future_docs, future_hashes = get_docs_to_update(
+        [doc], db_docs=[db_doc], ignore_content_hash_gate=True
+    )
+    assert len(future_docs) == 1
+    assert future_docs[0].id == "doc1"
+    assert "doc1" in future_hashes

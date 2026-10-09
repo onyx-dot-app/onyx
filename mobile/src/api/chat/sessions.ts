@@ -4,14 +4,12 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/api/client";
 import { QUERY_KEYS } from "@/api/query-keys";
 import { useSession } from "@/state/session";
+import { DEFAULT_AGENT_ID } from "@/chat/agents";
 import { BackendChatSession } from "@/chat/interfaces";
 
-// default agent; selection lands in PR 5
-const DEFAULT_PERSONA_ID = 0;
-
-// Pre-creates a session so the first message can send with a real chat_session_id.
+// Pre-creates a session so the first message sends with a real chat_session_id.
 export async function createChatSession(
-  personaId: number = DEFAULT_PERSONA_ID,
+  personaId: number = DEFAULT_AGENT_ID,
   projectId: number | null = null,
 ): Promise<string> {
   const { chat_session_id } = await apiFetch<{ chat_session_id: string }>(
@@ -32,8 +30,13 @@ export async function getChatSession(
 }
 
 // client abort alone leaves the backend generating
-export async function stopChatSession(sessionId: string): Promise<void> {
-  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}`, {
+// streamId scopes Stop to one response; omitted, the backend stops whichever is in flight.
+export async function stopChatSession(
+  sessionId: string,
+  streamId?: number,
+): Promise<void> {
+  const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
+  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}${query}`, {
     method: "POST",
   });
 }
@@ -97,6 +100,7 @@ export function useChatSessions() {
       // Matches web; the compound-cursor fix stays out of scope to keep the port backend-free.
       return lastPage.sessions[lastPage.sessions.length - 1]!.time_updated;
     },
+    refetchInterval: 60_000,
   });
 
   const sessions = useMemo(

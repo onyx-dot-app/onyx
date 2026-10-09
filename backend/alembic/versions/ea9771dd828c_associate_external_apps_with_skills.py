@@ -1,0 +1,137 @@
+"""Associate external apps with skills.
+
+Revision ID: ea9771dd828c
+Revises: f0ff4d3e69ac
+Create Date: 2026-07-22 11:47:14.521933
+
+"""
+
+import uuid
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+
+# revision identifiers, used by Alembic.
+revision = "ea9771dd828c"
+down_revision = "f0ff4d3e69ac"
+branch_labels = None
+depends_on = None
+
+_EMPTY_BUNDLE_SHA256 = (
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+)
+_PLACEHOLDER_BUNDLE_PREFIX = "downgrade-placeholder-"
+
+
+def upgrade() -> None:
+    op.create_table(
+        "external_app__skill",
+        sa.Column("external_app_id", sa.Integer(), nullable=False),
+        sa.Column("skill_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["external_app_id"], ["external_app.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(["skill_id"], ["skill.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("external_app_id", "skill_id"),
+        sa.UniqueConstraint("skill_id", name="uq_external_app__skill_skill_id"),
+    )
+    op.execute(
+        """
+        INSERT INTO external_app__skill (external_app_id, skill_id)
+        SELECT id, skill_id
+        FROM external_app
+        """
+    )
+    op.drop_column("external_app", "skill_id")
+
+
+def downgrade() -> None:
+    bind = op.get_bind()
+    # The previous schema requires every app to point to a skill. Create an
+    # invalid custom placeholder wherever no association exists. Non-null bundle
+    # metadata lets it survive the older migration that restores those columns'
+    # NOT NULL constraints, without creating or deleting a FileStore object.
+    apps_without_skills = bind.execute(
+        sa.text(
+            """
+            SELECT external_app.id, external_app.app_type
+            FROM external_app
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM external_app__skill
+                WHERE external_app__skill.external_app_id = external_app.id
+            )
+            """
+        )
+    ).all()
+
+    insert_skill = sa.text(
+        """
+        INSERT INTO skill (
+            id, name, description, bundle_file_id, bundle_sha256, is_valid,
+            public_permission
+        )
+        VALUES (
+            :skill_id, :name, '', :bundle_file_id, :bundle_sha256, false, 'VIEWER'
+        )
+        """
+    ).bindparams(sa.bindparam("skill_id", type_=postgresql.UUID(as_uuid=True)))
+    insert_association = sa.text(
+        """
+        INSERT INTO external_app__skill (external_app_id, skill_id)
+        VALUES (:external_app_id, :skill_id)
+        """
+    ).bindparams(
+        sa.bindparam("skill_id", type_=postgresql.UUID(as_uuid=True)),
+    )
+
+    for external_app_id, app_type in apps_without_skills:
+        skill_id = uuid.uuid4()
+        skill_name = app_type.lower().replace("_", "-")
+        bind.execute(
+            insert_skill,
+            {
+                "skill_id": skill_id,
+                "name": skill_name,
+                "bundle_file_id": f"{_PLACEHOLDER_BUNDLE_PREFIX}{skill_id}",
+                "bundle_sha256": _EMPTY_BUNDLE_SHA256,
+            },
+        )
+        bind.execute(
+            insert_association,
+            {"external_app_id": external_app_id, "skill_id": skill_id},
+        )
+
+    op.add_column(
+        "external_app",
+        sa.Column("skill_id", postgresql.UUID(as_uuid=True), nullable=True),
+    )
+    # Keep every skill and its FileStore bundle reference. The legacy schema can
+    # point to only one skill, so choose the first without deleting the others.
+    op.execute(
+        """
+        UPDATE external_app
+        SET skill_id = association.skill_id
+        FROM (
+            SELECT DISTINCT ON (external_app_id) external_app_id, skill_id
+            FROM external_app__skill
+            ORDER BY external_app_id, skill_id
+        ) AS association
+        WHERE external_app.id = association.external_app_id
+        """
+    )
+    op.alter_column("external_app", "skill_id", nullable=False)
+    op.create_foreign_key(
+        "external_app_skill_id_fkey",
+        "external_app",
+        "skill",
+        ["skill_id"],
+        ["id"],
+        ondelete="CASCADE",
+    )
+    op.create_unique_constraint(
+        "uq_external_app_skill_id", "external_app", ["skill_id"]
+    )
+    op.drop_table("external_app__skill")

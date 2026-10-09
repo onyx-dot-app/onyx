@@ -20,12 +20,14 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import get_doc_row
-from tests.external_dependency_unit.indexing_helpers import get_filerecord
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_doc
-from tests.external_dependency_unit.indexing_helpers import stage_file
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    get_doc_row,
+    get_filerecord,
+    make_cc_pair,
+    make_doc,
+    stage_file,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -1,20 +1,25 @@
 from onyx.configs.constants import MessageType
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import SystemMessage
-from onyx.llm.models import UserMessage
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationOptions,
+    GenerationRequest,
+    Message,
+    ReasoningEffort,
+    SystemMessage,
+    TextContent,
+    UserMessage,
+)
 from onyx.prompts.prompt_utils import get_current_llm_day_time
-from onyx.prompts.search_prompts import KEYWORD_REPHRASE_SYSTEM_PROMPT
-from onyx.prompts.search_prompts import KEYWORD_REPHRASE_USER_PROMPT
-from onyx.prompts.search_prompts import REPHRASE_CONTEXT_PROMPT
-from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT
-from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_USER_PROMPT
+from onyx.prompts.search_prompts import (
+    KEYWORD_REPHRASE_SYSTEM_PROMPT,
+    KEYWORD_REPHRASE_USER_PROMPT,
+    REPHRASE_CONTEXT_PROMPT,
+    SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT,
+    SEMANTIC_QUERY_REPHRASE_USER_PROMPT,
+)
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -50,16 +55,16 @@ def _build_additional_context(
 
 def _build_message_history(
     history: list[ChatMinimalTextMessage],
-) -> list[ChatCompletionMessage]:
-    """Convert ChatMinimalTextMessage list to ChatCompletionMessage list."""
-    messages: list[ChatCompletionMessage] = []
+) -> list[Message]:
+    """Convert stored chat text to canonical model messages."""
+    messages: list[Message] = []
 
     for msg in history:
         if msg.message_type == MessageType.USER:
             user_msg = UserMessage(content=msg.message)
             messages.append(user_msg)
         elif msg.message_type == MessageType.ASSISTANT:
-            assistant_msg = AssistantMessage(content=msg.message)
+            assistant_msg = AssistantMessage(content=[TextContent(text=msg.message)])
             messages.append(assistant_msg)
 
     return messages
@@ -120,7 +125,7 @@ def semantic_query_rephrase(
     )
 
     # Convert chat history to message format (excluding the last user message and everything after it)
-    messages: list[ChatCompletionMessage] = [system_msg]
+    messages: list[Message] = [system_msg]
     messages.extend(_build_message_history(history[:last_user_message_idx]))
 
     # Add the last message as the user prompt with instructions
@@ -131,13 +136,14 @@ def semantic_query_rephrase(
     )
     messages.append(final_user_msg)
 
-    # Call LLM and return result with Braintrust tracing
-    with llm_generation_span(
-        llm=llm, flow=LLMFlow.SEMANTIC_QUERY_REPHRASE, input_messages=messages
-    ) as span_generation:
-        response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-        record_llm_response(span_generation, response)
-        final_query = response.choice.message.content
+    response = llm.invoke(
+        GenerationRequest(
+            messages=messages,
+            options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+        ),
+        context=GenerationContext(flow=LLMFlow.SEMANTIC_QUERY_REPHRASE),
+    )
+    final_query = response.text
 
     if not final_query:
         # It's ok if some other queries fail, this one is likely the best one
@@ -200,7 +206,7 @@ def keyword_query_expansion(
     )
 
     # Convert chat history to message format (excluding the last user message and everything after it)
-    messages: list[ChatCompletionMessage] = [system_msg]
+    messages: list[Message] = [system_msg]
     messages.extend(_build_message_history(history[:last_user_message_idx]))
 
     # Add the last message as the user prompt with instructions
@@ -211,13 +217,14 @@ def keyword_query_expansion(
     )
     messages.append(final_user_msg)
 
-    # Call LLM and return result with Braintrust tracing
-    with llm_generation_span(
-        llm=llm, flow=LLMFlow.KEYWORD_QUERY_EXPANSION, input_messages=messages
-    ) as span_generation:
-        response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-        record_llm_response(span_generation, response)
-        content = response.choice.message.content
+    response = llm.invoke(
+        GenerationRequest(
+            messages=messages,
+            options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+        ),
+        context=GenerationContext(flow=LLMFlow.KEYWORD_QUERY_EXPANSION),
+    )
+    content = response.text
 
     # Parse the response - each line is a separate keyword query
     if not content:

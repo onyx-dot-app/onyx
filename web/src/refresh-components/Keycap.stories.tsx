@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import Keycap from "@/refresh-components/Keycap";
 
 const meta: Meta<typeof Keycap> = {

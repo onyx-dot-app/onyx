@@ -59,7 +59,6 @@ runs:
       run: |
         cat <<EOF2 > deployment/docker_compose/.env
         COMPOSE_PROFILES=s3-filestore
-        ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
         AUTH_TYPE=basic
         POSTGRES_POOL_PRE_PING=true
         POSTGRES_USE_NULL_POOL=true
@@ -82,11 +81,11 @@ runs:
           relational_db \
           opensearch \
           cache \
-          minio \
+          object-store \
           inference_model_server
 
-    - name: Install Python deps and generate OpenAPI client
-      uses: ./.github/actions/install-deps-and-generate-openapi-client
+    - name: Install Python deps
+      uses: ./.github/actions/install-python-deps
       with:
         devcontainer-image: ${{ inputs.runs-on-ecr-cache }}:nightly-llm-it-devcontainer-${{ inputs.run-id }}
 
@@ -127,7 +126,7 @@ runs:
             -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
             -e TEST_WEB_HOSTNAME=test-runner \
             -e AWS_REGION_NAME=us-west-2 \
-            -e S3_ENDPOINT_URL=http://minio:9000 \
+            -e S3_ENDPOINT_URL=http://object-store:8333 \
             -e S3_AWS_ACCESS_KEY_ID=minioadmin \
             -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
             -e NIGHTLY_LLM_PROVIDER="${NIGHTLY_LLM_PROVIDER}" \

@@ -4,7 +4,7 @@ import {
   SvgFirecrawl,
   SvgGoogle,
   SvgKeenable,
-  SvgSearxng,
+  SvgSearXNG,
   SvgSerper,
   SvgTavily,
 } from "@opal/logos";
@@ -19,6 +19,7 @@ import type {
   SearchProviderDetail,
   ContentProviderDetail,
   ConfigFieldSpec,
+  WebSearchTranslate,
 } from "@/lib/webSearch/types";
 
 // ── Search provider registry ──────────────────────────────────────────────────
@@ -30,21 +31,18 @@ export const SEARCH_PROVIDER_DETAILS: Record<
   exa: {
     label: "Exa",
     subtitle: "Exa.ai",
-    helper: "Connect to Exa to set up web search.",
     logo: SvgExa,
     apiKeyUrl: "https://dashboard.exa.ai/api-keys",
   },
   serper: {
     label: "Serper",
     subtitle: "Serper.dev",
-    helper: "Connect to Serper to set up web search.",
     logo: SvgSerper,
     apiKeyUrl: "https://serper.dev/api-key",
   },
   brave: {
     label: "Brave",
     subtitle: "Brave Search API",
-    helper: "Connect to Brave Search API to set up web search.",
     logo: SvgBrave,
     apiKeyUrl:
       "https://api-dashboard.search.brave.com/app/documentation/web-search/get-started",
@@ -52,30 +50,31 @@ export const SEARCH_PROVIDER_DETAILS: Record<
   google_pse: {
     label: "Google PSE",
     subtitle: "Google",
-    helper: "Connect to Google PSE to set up web search.",
     logo: SvgGoogle,
     apiKeyUrl: "https://programmablesearchengine.google.com/controlpanel/all",
   },
   searxng: {
     label: "SearXNG",
     subtitle: "SearXNG",
-    helper: "Connect to SearXNG to set up web search.",
-    logo: SvgSearxng,
+    logo: SvgSearXNG,
   },
   tavily: {
     label: "Tavily",
     subtitle: "Tavily AI",
-    helper: "Connect to Tavily to set up web search.",
     apiKeyUrl: "https://app.tavily.com/home",
     logo: SvgTavily,
+  },
+  firecrawl: {
+    label: "Firecrawl",
+    subtitle: "Firecrawl Search",
+    apiKeyUrl: "https://www.firecrawl.dev/app/api-keys",
+    logo: SvgFirecrawl,
   },
   keenable: {
     label: "Keenable",
     subtitle: "Keenable Search API",
-    helper:
-      "Connect to Keenable to set up web search. Works without an API key (keyless free tier); add a key to lift rate limits.",
     logo: SvgKeenable,
-    apiKeyUrl: "https://keenable.ai/console",
+    apiKeyUrl: "https://app.keenable.ai/console",
   },
 };
 
@@ -134,6 +133,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
   tavily: {
     requiresApiKey: true,
     requiredConfigKeys: [],
+  },
+  firecrawl: {
+    requiresApiKey: true,
+    requiredConfigKeys: ["base_url"],
   },
   keenable: {
     requiresApiKey: false,
@@ -239,29 +242,21 @@ export function getSingleConfigFieldValueForForm(
 export const CONTENT_PROVIDER_DETAILS: Record<string, ContentProviderDetail> = {
   onyx_web_crawler: {
     label: "Onyx Web Crawler",
-    subtitle:
-      "Built-in web crawler. Works for most pages but less performant in edge cases.",
-    description:
-      "Onyx's built-in crawler processes URLs returned by your search engine.",
+    subtitleKey: "contentProviders.onyxWebCrawler.subtitle",
   },
   firecrawl: {
     label: "Firecrawl",
-    subtitle: "Leading open-source crawler.",
-    description:
-      "Connect Firecrawl to fetch and summarize page content from search results.",
+    subtitleKey: "contentProviders.firecrawl.subtitle",
     logo: SvgFirecrawl,
   },
   exa: {
     label: "Exa",
-    subtitle: "Exa.ai",
-    description:
-      "Use Exa to fetch and summarize page content from search results.",
+    subtitleKey: "contentProviders.exa.subtitle",
     logo: SvgExa,
   },
   tavily: {
     label: "Tavily",
-    subtitle: "Tavily AI",
-    description: "Use Tavily to extract page content from URLs.",
+    subtitleKey: "contentProviders.tavily.subtitle",
     logo: SvgTavily,
   },
 };
@@ -392,38 +387,44 @@ export function getSingleContentConfigFieldValueForForm(
 // ── Config field specs ────────────────────────────────────────────────────────
 
 export function getSearchConfigField(
-  providerType: string
+  providerType: string,
+  t: WebSearchTranslate
 ): ConfigFieldSpec | undefined {
   if (providerType === "google_pse") {
     return {
-      title: "Search Engine ID",
-      placeholder: "Enter your search engine ID",
-      subDescription: markdown(
-        "Paste your [search engine ID](https://programmablesearchengine.google.com/controlpanel/all) to use for web search."
-      ),
+      title: t("configFields.searchEngineId.label"),
+      placeholder: t("configFields.searchEngineId.placeholder"),
+      subDescription: markdown(t("configFields.searchEngineId.description")),
     };
   }
   if (providerType === "searxng") {
     return {
-      title: "SearXNG Base URL",
+      title: t("configFields.searxngBaseUrl.label"),
       placeholder: "https://your-searxng-instance.com",
-      subDescription: markdown(
-        "Paste the base URL of your [SearXNG instance](https://docs.searxng.org/admin/installation.html)."
-      ),
+      subDescription: markdown(t("configFields.searxngBaseUrl.description")),
+    };
+  }
+  if (providerType === "firecrawl") {
+    return {
+      title: t("configFields.firecrawlBaseUrl.label"),
+      placeholder: "https://api.firecrawl.dev/v2/search",
+      defaultValue: "https://api.firecrawl.dev/v2/search",
+      subDescription: t("configFields.firecrawlBaseUrl.description"),
     };
   }
   return undefined;
 }
 
 export function getContentConfigField(
-  providerType: string
+  providerType: string,
+  t: WebSearchTranslate
 ): ConfigFieldSpec | undefined {
   if (providerType === "firecrawl") {
     return {
-      title: "API Base URL",
+      title: t("configFields.firecrawlBaseUrl.label"),
       placeholder: "https://api.firecrawl.dev/v2/scrape",
       defaultValue: "https://api.firecrawl.dev/v2/scrape",
-      subDescription: "Your Firecrawl API base URL.",
+      subDescription: t("configFields.firecrawlBaseUrl.description"),
     };
   }
   return undefined;

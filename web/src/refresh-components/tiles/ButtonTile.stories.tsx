@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import ButtonTile from "./ButtonTile";
 import { SvgArrowRight, SvgPlus, SvgSettings, SvgSearch } from "@opal/icons";
 

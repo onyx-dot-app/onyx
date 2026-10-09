@@ -1,10 +1,13 @@
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
+
+import httpx
+import pytest
 
 from onyx.connectors.models import InputType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
+from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -131,3 +134,40 @@ def test_connector_pause_while_indexing(reset: None) -> None:  # noqa: ARG001
         cc_pair_1, timeout=60, user_performing_action=admin_user
     )
     return
+
+
+def test_connector_update_rejects_invalid_config(reset: None) -> None:  # noqa: ARG001
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+    connector = ConnectorManager.create(
+        user_performing_action=admin_user,
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config={
+            "mock_server_host": "localhost",
+            "mock_server_port": 9,
+        },
+        # The update request needs a list; the manager returns None by default.
+        groups=[],
+    )
+    connector.connector_specific_config = {"mock_server_host": "localhost"}
+
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        ConnectorManager.edit(connector, user_performing_action=admin_user)
+
+    assert exc_info.value.response.status_code == 400
+    assert "mock_server_port" in exc_info.value.response.text
+
+
+def test_connector_creation_rejects_invalid_config(reset: None) -> None:  # noqa: ARG001
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        ConnectorManager.create(
+            user_performing_action=admin_user,
+            source=DocumentSource.MOCK_CONNECTOR,
+            input_type=InputType.POLL,
+            connector_specific_config={"mock_server_host": "localhost"},
+        )
+
+    assert exc_info.value.response.status_code == 400
+    assert "mock_server_port" in exc_info.value.response.text

@@ -11,11 +11,10 @@ catalog is re-created (disabled) with credentials sourced from the populated
 ``EXT_APP_<APP_TYPE>_<FIELD>`` env vars. Re-seeding this way also clears any
 admin enabled-state and per-action policy overrides on the built-in apps.
 
-Self-contained by design: the app catalog, env parsing, and credential
-encryption are inlined rather than imported from application code, so the
-migration stays reproducible and independent of code that may change later. The
-catalog below is a frozen 2026-06 snapshot of ``onyx/external_apps/providers/*``;
-the encryption mirrors ``onyx.utils.encryption._encrypt_string``.
+The app catalog and env parsing are inlined rather than imported from
+application code, so the migration stays reproducible and independent of code
+that may change later. The catalog below is a frozen 2026-06 snapshot of
+``onyx/external_apps/providers/*``.
 
 Revision ID: f3a9c1d4b7e2
 Revises: 8f2c4a1d9e3b
@@ -27,15 +26,12 @@ import json
 import logging
 import os
 import uuid
-from os import urandom
 
 import sqlalchemy as sa
 from alembic import op
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives.ciphers import algorithms
-from cryptography.hazmat.primitives.ciphers import Cipher
-from cryptography.hazmat.primitives.ciphers import modes
 from sqlalchemy.dialects import postgresql
+
+from onyx.utils.encryption import encrypt_string_to_bytes
 
 # revision identifiers, used by Alembic.
 revision = "f3a9c1d4b7e2"
@@ -126,29 +122,6 @@ _BUILT_IN_APPS: list[dict] = [
 ]
 
 
-def _trimmed_key(key: str) -> bytes:
-    encoded = key.encode()
-    for size in (32, 24, 16):
-        if len(encoded) >= size:
-            return encoded[:size]
-    raise RuntimeError("Invalid ENCRYPTION_KEY_SECRET - too short")
-
-
-def _encrypt(raw: str) -> bytes:
-    """AES-CBC (PKCS7, random IV prepended), matching the EE encryption used by
-    the EncryptedJson column. Falls back to plaintext bytes when no key is set,
-    matching the MIT path — though in practice this only runs in the cloud."""
-    key = os.environ.get("ENCRYPTION_KEY_SECRET") or ""
-    if not key:
-        return raw.encode()
-    iv = urandom(16)
-    padder = padding.PKCS7(algorithms.AES.block_size).padder()
-    padded = padder.update(raw.encode()) + padder.finalize()
-    cipher = Cipher(algorithms.AES(_trimmed_key(key)), modes.CBC(iv))
-    encryptor = cipher.encryptor()
-    return iv + encryptor.update(padded) + encryptor.finalize()
-
-
 def _org_credentials(app_type: str) -> dict[str, str]:
     """Credentials from EXT_APP_<APP_TYPE>_<FIELD> env vars. All-or-nothing:
     partial config is treated as unconfigured (stored as an empty mapping)."""
@@ -231,7 +204,9 @@ def upgrade() -> None:
                 "app_type": app_type,
                 "patterns": app["upstream_url_patterns"],
                 "auth": _AUTH_TEMPLATE,
-                "creds": _encrypt(json.dumps(_org_credentials(app_type))),
+                "creds": encrypt_string_to_bytes(
+                    json.dumps(_org_credentials(app_type))
+                ),
             },
         )
         created += 1

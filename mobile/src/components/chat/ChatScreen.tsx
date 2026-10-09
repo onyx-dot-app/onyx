@@ -7,23 +7,23 @@ import { ChatHeader } from "@/components/chat/ChatHeader";
 
 interface ChatScreenProps {
   title?: string;
+  // region above the composer; caller owns its flex (flex-1 MessageList, or capped project panel)
   children: ReactNode;
-  // input bar, omitted for read-only chrome
   input?: ReactNode;
+  below?: ReactNode;
 }
 
-// Chat chrome: top-only safe area + header + keyboard-aware input (KeyboardStickyView).
-export function ChatScreen({ title, children, input }: ChatScreenProps) {
+export function ChatScreen({ title, children, input, below }: ChatScreenProps) {
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-background-neutral-00">
       <ChatHeader title={title} />
-      <View className="flex-1">{children}</View>
+      {children}
       {input ? <KeyboardStickyView>{input}</KeyboardStickyView> : null}
+      {below}
     </SafeAreaView>
   );
 }
 
-// Centered content with the standard screen gutter (defined once here).
 export function CenteredContent({ children }: { children: ReactNode }) {
   return (
     <View className="flex-1 items-center justify-center px-24">{children}</View>

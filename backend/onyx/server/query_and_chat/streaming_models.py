@@ -1,11 +1,8 @@
+from datetime import datetime
 from enum import Enum
-from typing import Annotated
-from typing import Any
-from typing import Literal
-from typing import Union
+from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.placement import Placement
@@ -16,7 +13,6 @@ class StreamingType(Enum):
 
     SECTION_END = "section_end"
     STOP = "stop"
-    TOP_LEVEL_BRANCHING = "top_level_branching"
     ERROR = "error"
     CHAT_HEARTBEAT = "chat_heartbeat"
 
@@ -80,14 +76,6 @@ class SectionEnd(BaseObj):
 class OverallStop(BaseObj):
     type: Literal["stop"] = StreamingType.STOP.value
     stop_reason: str | None = None
-
-
-class TopLevelBranching(BaseObj):
-    # This class is used to give advanced heads up to the frontend that the top level flow is branching
-    # This is used to avoid having the frontend render the first call then rerendering the other parallel branches
-    type: Literal["top_level_branching"] = StreamingType.TOP_LEVEL_BRANCHING.value
-
-    num_parallel_branches: int
 
 
 class PacketException(BaseObj):
@@ -179,14 +167,16 @@ class SearchToolQueriesDelta(BaseObj):
     queries: list[str]
 
 
-# The connector/source filter applied to this internal search (which sources are
-# being searched). Absent == no filter applied (searched everything).
+# Filters applied to this internal search. Empty `sources` == scope not narrowed
+# (searched everything); either time bound may be absent (open-ended).
 class SearchToolFilterDelta(BaseObj):
     type: Literal["search_tool_filter_delta"] = (
         StreamingType.SEARCH_TOOL_FILTER_DELTA.value
     )
 
-    sources: list[str]
+    sources: list[str] = []
+    time_filter_start: datetime | None = None
+    time_filter_end: datetime | None = None
 
 
 # Documents coming through as the system knows what to add to the context
@@ -436,7 +426,6 @@ PacketObj = Union[
     # Control Packets
     OverallStop,
     SectionEnd,
-    TopLevelBranching,
     PacketException,
     ChatHeartbeat,
     # Agent Response Packets

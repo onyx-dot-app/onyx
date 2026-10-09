@@ -5,8 +5,9 @@ calls `delete_all_documents_for_connector_credential_pair` for each cc_pair.
 This test exercises that full workflow end-to-end and asserts that the
 attached `Document.file_id`s are also reaped — not just the document rows.
 
-Mocks Vespa (`get_all_document_indices`) since this is testing the postgres +
-file_store side effects of the swap, not the document index integration.
+Mocks the document index (`get_default_document_index`) since this is testing
+the postgres + file_store side effects of the swap, not the document index
+integration.
 """
 
 from collections.abc import Generator
@@ -18,19 +19,19 @@ from sqlalchemy.orm import Session
 
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.enums import EmbeddingPrecision
 from onyx.db.enums import SwitchoverType
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexModelStatus
+from onyx.db.models import ConnectorCredentialPair, IndexModelStatus
 from onyx.db.search_settings import create_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import get_doc_row
-from tests.external_dependency_unit.indexing_helpers import get_filerecord
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_doc
-from tests.external_dependency_unit.indexing_helpers import stage_file
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    get_doc_row,
+    get_filerecord,
+    make_cc_pair,
+    make_doc,
+    stage_file,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers (file-local)
@@ -50,7 +51,6 @@ def _make_saved_search_settings(
         provider_type=None,
         index_name=f"test_index_{uuid4().hex[:8]}",
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=False,
         contextual_rag_llm_name=None,
@@ -133,12 +133,9 @@ class TestInstantIndexSwap:
             status=IndexModelStatus.FUTURE,
         )
 
-        # Vespa is patched out — we're testing the postgres + file_store
-        # side effects, not the document-index integration.
-        with patch(
-            "onyx.db.swap_index.get_all_document_indices",
-            return_value=[],
-        ):
+        # The document index is patched out — we're testing the postgres +
+        # file_store side effects, not the document-index integration.
+        with patch("onyx.db.swap_index.get_default_document_index"):
             old_settings = check_and_perform_index_swap(db_session)
 
         assert old_settings is not None, "INSTANT swap should have executed"
@@ -179,10 +176,7 @@ class TestInstantIndexSwap:
             status=IndexModelStatus.FUTURE,
         )
 
-        with patch(
-            "onyx.db.swap_index.get_all_document_indices",
-            return_value=[],
-        ):
+        with patch("onyx.db.swap_index.get_default_document_index"):
             old_settings = check_and_perform_index_swap(db_session)
 
         assert old_settings is not None

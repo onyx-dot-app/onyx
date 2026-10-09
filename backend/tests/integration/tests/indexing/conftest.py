@@ -1,8 +1,10 @@
 import httpx
 import pytest
 
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
+from tests.integration.common_utils.constants import (
+    MOCK_CONNECTOR_SERVER_HOST,
+    MOCK_CONNECTOR_SERVER_PORT,
+)
 
 
 @pytest.fixture

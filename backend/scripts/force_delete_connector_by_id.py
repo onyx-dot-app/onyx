@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from onyx.db.document import delete_documents_complete__no_commit
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.search_settings import get_active_search_settings
-from onyx.db.tag import delete_orphan_tags__no_commit
+from onyx.db.tag import delete_orphan_tags_batched
 
 # Modify sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -21,23 +21,27 @@ sys.path.append(parent_dir)
 # Now import Onyx modules
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair,
+    get_connector_credential_pair_from_id,
+)
 from onyx.db.document import get_documents_for_connector_credential_pair
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
-from onyx.db.index_attempt import delete_index_attempts
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocumentSet__ConnectorCredentialPair
-from onyx.db.models import UserGroup__ConnectorCredentialPair
+from onyx.db.index_attempt import (
+    cancel_indexing_attempts_for_ccpair,
+    delete_index_attempts,
+)
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    DocumentSet__ConnectorCredentialPair,
+    UserGroup__ConnectorCredentialPair,
+)
 from onyx.db.permission_sync_attempt import (
     delete_doc_permission_sync_attempts__no_commit,
-)
-from onyx.db.permission_sync_attempt import (
     delete_external_group_permission_sync_attempts__no_commit,
 )
-from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -52,7 +56,7 @@ _DELETION_BATCH_SIZE = 1000
 
 def _unsafe_deletion(
     db_session: Session,
-    document_indices: list[DocumentIndex],
+    document_index: DocumentIndex,
     cc_pair: ConnectorCredentialPair,
     pair_id: int,
 ) -> int:
@@ -73,17 +77,15 @@ def _unsafe_deletion(
             break
 
         for document in documents:
-            for document_index in document_indices:
-                document_index.delete(
-                    document.id,
-                    chunk_count=document.chunk_count,
-                )
+            document_index.delete(
+                document.id,
+                chunk_count=document.chunk_count,
+            )
 
         delete_documents_complete__no_commit(
             db_session=db_session,
             document_ids=[document.id for document in documents],
         )
-        delete_orphan_tags__no_commit(db_session=db_session)
 
         num_docs_deleted += len(documents)
 
@@ -134,6 +136,9 @@ def _unsafe_deletion(
         logger.debug("Found no credentials left for connector, deleting connector")
         db_session.delete(connector)
     db_session.commit()
+
+    # runs after the commit above since it commits per batch
+    delete_orphan_tags_batched(db_session)
 
     logger.notice(
         "Successfully deleted connector_credential_pair with connector_id: '%s' and credential_id: '%s'. Deleted %s docs.",
@@ -206,18 +211,16 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
         else []
     )
     try:
-        logger.notice("Deleting information from Vespa and Postgres")
+        logger.notice("Deleting information from the document index and Postgres")
         active_search_settings = get_active_search_settings(db_session)
-        # This flow is for deletion so we get all indices.
-        document_indices = get_all_document_indices(
+        document_index = get_default_document_index(
             active_search_settings.primary,
             active_search_settings.secondary,
-            None,
         )
 
         files_deleted_count = _unsafe_deletion(
             db_session=db_session,
-            document_indices=document_indices,
+            document_index=document_index,
             cc_pair=cc_pair,
             pair_id=cc_pair_id,
         )

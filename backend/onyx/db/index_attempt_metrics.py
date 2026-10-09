@@ -20,11 +20,7 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from sqlalchemy import case
-from sqlalchemy import cast
-from sqlalchemy import Float
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import Float, case, cast, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -121,18 +117,18 @@ def record_stage_aggregate(
 
     upsert_stmt = insert_stmt.on_conflict_do_update(
         index_elements=["index_attempt_id", "stage"],
-        set_=dict(
-            m2_duration_ms=new_m2,
-            event_count=new_count,
-            total_duration_ms=metric.total_duration_ms + excluded.total_duration_ms,
-            min_duration_ms=func.least(
+        set_={
+            "m2_duration_ms": new_m2,
+            "event_count": new_count,
+            "total_duration_ms": metric.total_duration_ms + excluded.total_duration_ms,
+            "min_duration_ms": func.least(
                 metric.min_duration_ms, excluded.min_duration_ms
             ),
-            max_duration_ms=func.greatest(
+            "max_duration_ms": func.greatest(
                 metric.max_duration_ms, excluded.max_duration_ms
             ),
-            time_last_event=excluded.time_last_event,
-        ),
+            "time_last_event": excluded.time_last_event,
+        },
     )
 
     db_session.execute(upsert_stmt)

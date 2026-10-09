@@ -1,3 +1,6 @@
+/* oxlint-disable react-doctor/no-ref-current-in-render -- render-phase
+   incremental processing is the core design: the packet cursor makes
+   replays idempotent and consumers need the state in the same commit. */
 import { useRef, useState, useMemo, useCallback } from "react";
 import {
   Packet,
@@ -5,7 +8,7 @@ import {
   StopReason,
 } from "@/app/app/services/streamingModels";
 import { CitationMap } from "@/app/app/interfaces";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import {
   ProcessorState,
   GroupedPacket,
@@ -31,7 +34,6 @@ export interface UsePacketProcessorResult {
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
   hasSteps: boolean;
-  expectedBranchesPerTurn: Map<number, number>;
   isGeneratingImage: boolean;
   generatedImageCount: number;
   // Whether final answer is coming (MESSAGE_START seen)
@@ -145,7 +147,6 @@ export function usePacketProcessor(
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
     hasSteps: toolTurnGroups.length > 0,
-    expectedBranchesPerTurn: state.expectedBranches,
     isGeneratingImage: state.isGeneratingImage,
     generatedImageCount: state.generatedImageCount,
     finalAnswerComing: state.finalAnswerComing,

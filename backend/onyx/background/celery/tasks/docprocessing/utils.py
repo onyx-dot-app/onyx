@@ -1,22 +1,23 @@
 import time
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 from redis.exceptions import LockError
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT, DocumentSource
 from onyx.db.engine.time_utils import get_db_current_time
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.index_attempt import get_last_attempt_for_cc_pair
-from onyx.db.index_attempt import get_recent_attempts_for_cc_pair
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import SearchSettings
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+    IndexModelStatus,
+)
+from onyx.db.index_attempt import (
+    get_last_attempt_for_cc_pair,
+    get_recent_attempts_for_cc_pair,
+)
+from onyx.db.models import ConnectorCredentialPair, SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import redis_lock_dump
@@ -221,8 +222,14 @@ def should_index(
             # )
             return False
 
-    # When switching over models, always index at least once
-    if search_settings_instance.status == IndexModelStatus.FUTURE:
+    # Legacy FUTURE reindex indexes once, then stops so the swap can fire. A
+    # port-flow FUTURE polls continuously like PRESENT (its synthetic seed primes
+    # the cursor), so skip this block and fall through.
+    # TODO(subash): drop this branch once all FUTUREs use the port flow.
+    if (
+        search_settings_instance.status == IndexModelStatus.FUTURE
+        and not search_settings_instance.use_port_flow
+    ):
         if last_index_attempt:
             # No new index if the last index attempt succeeded
             # Once is enough. The model will never be able to swap otherwise.

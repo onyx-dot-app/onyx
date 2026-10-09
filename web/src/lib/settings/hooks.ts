@@ -2,9 +2,11 @@
 
 import useSWR from "swr";
 import { useMemo } from "react";
+import { usePathname } from "next/navigation";
 import useCCPairs from "@/hooks/useCCPairs";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, isNotFoundError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { isAuthPath } from "@/lib/auth/paths";
 import {
   ApplicationStatus,
   AppSettings,
@@ -28,8 +30,13 @@ const DEFAULT_SETTINGS: Settings = {
   deep_research_enabled: true,
   multi_model_chat_enabled: true,
   temperature_override_enabled: true,
+  reasoning_override_enabled: true,
   query_history_type: QueryHistoryType.NORMAL,
 };
+
+// A CE backend never registers the enterprise-settings route, so its 404
+// means no enterprise settings, not an outage: no error and no retry.
+const isEnterpriseSettingsMissing = isNotFoundError;
 
 /**
  * The single settings hook. Returns a fully-derived `AppSettings` object that
@@ -39,21 +46,32 @@ const DEFAULT_SETTINGS: Settings = {
  * never have to re-derive them or fetch enterprise settings separately.
  */
 export function useSettings(): AppSettings {
+  // Skip core settings on /auth/* routes: unauthenticated callers 403 there, and
+  // the login shell only needs enterprise-derived `appName` (fetched below).
+  const onAuthPath = isAuthPath(usePathname());
+
   const {
     data: rawSettings,
     error: settingsError,
     isLoading: settingsLoading,
-  } = useSWR<Settings>(SWR_KEYS.settings, errorHandlingFetcher, {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false,
-    revalidateIfStale: false,
-    dedupingInterval: 30_000,
-    errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
-  });
+  } = useSWR<Settings>(
+    onAuthPath ? null : SWR_KEYS.settings,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 30_000,
+      errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
+    }
+  );
 
   const core = rawSettings ?? DEFAULT_SETTINGS;
+  // Auth pages need branding pre-sign-in but standard web images lack the EE
+  // flag, so probe the endpoint.
   const shouldFetchEnterprise =
     EE_ENABLED ||
+    onAuthPath ||
     (!settingsLoading && !settingsError && core.ee_features_enabled !== false);
 
   const {
@@ -69,6 +87,7 @@ export function useSettings(): AppSettings {
       revalidateIfStale: false,
       dedupingInterval: 30_000,
       errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
+      shouldRetryOnError: (err) => !isEnterpriseSettingsMissing(err),
       // Referential equality — logo can change without JSON changing, so
       // mutate() must propagate a new reference for cache-busters.
       compare: (a, b) => a === b,
@@ -94,7 +113,11 @@ export function useSettings(): AppSettings {
       !settingsLoading && !settingsError && core.vector_db_enabled !== false,
     isLoading:
       settingsLoading || (shouldFetchEnterprise ? enterpriseLoading : false),
-    error: settingsError ?? enterpriseError,
+    error:
+      settingsError ??
+      (isEnterpriseSettingsMissing(enterpriseError)
+        ? undefined
+        : enterpriseError),
   };
 }
 

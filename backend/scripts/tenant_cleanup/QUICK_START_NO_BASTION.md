@@ -7,30 +7,36 @@
 cd onyx/backend
 
 # Step 1: Generate CSV of tenants to clean (5-10 min)
-PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py
+# Cutoff defaults to 60 days of no chat and no Craft activity; --inactive-days changes it.
+PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py \
+  --data-plane-context <data_plane_context> \
+  --control-plane-context <control_plane_context>
 
 # Step 2: Mark connectors for deletion (1-2 min)
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py \
-  --csv gated_tenants_no_query_3mo_*.csv \
+  --csv gated_tenants_inactive_<N>d_*.csv \
+  --data-plane-context <data_plane_context> \
+  --control-plane-context <control_plane_context> \
   --force \
-  --concurrency 16
+  --concurrency 8
 
 # ⏰ WAIT 6+ hours for background deletion to complete
 
 # Step 3: Final cleanup (1-2 min)
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py \
-  --csv gated_tenants_no_query_3mo_*.csv \
+  --csv gated_tenants_inactive_<N>d_*.csv \
+  --inactive-days <N> \
+  --data-plane-context <data_plane_context> \
+  --control-plane-context <control_plane_context> \
   --force
 ```
 
-## What Changed?
+## How It Connects
 
-Instead of the original scripts that require bastion access:
-- `analyze_current_tenants.py` → `no_bastion_analyze_tenants.py`
-- `mark_connectors_for_deletion.py` → `no_bastion_mark_connectors.py`
-- `cleanup_tenants.py` → `no_bastion_cleanup_tenants.py`
+Every query runs from a pod through `kubectl exec`. There is no bastion host any more, so the
+scripts that tunnelled through one have been removed.
 
-**No environment variables needed!** All queries run directly from pods.
+**No environment variables needed.** The pods already hold their own database credentials.
 
 ## What You Need
 
@@ -54,14 +60,64 @@ kubectl get po | grep celery-worker-user-file-processing | grep Running
 ## Important Notes
 
 1. **Step 2 triggers background deletion** - the actual document deletion happens asynchronously via Celery workers
-2. **You MUST wait** between Step 2 and Step 3 for deletion to complete (can take 6+ hours)
+2. **You MUST wait** between Step 2 and Step 3 for deletion to complete (can take 6+ hours).
+   Tenants with no documents drain within minutes, since there is nothing to delete.
 3. **Monitor deletion progress** with: `kubectl logs -f <celery-worker-pod>`
 4. **All scripts verify tenant status** - they'll refuse to process active (non-GATED_ACCESS) tenants
+5. **Pods are resolved once per run.** If that pod restarts mid-run, every remaining tenant fails.
+   Prefer batches of ~1000 over one enormous run.
+6. **Set the namespace on your kubectl contexts.** Pod discovery runs `kubectl get po` with no
+   `-n`, so it only sees the context's default namespace.
+7. **Verify against the database afterwards, not against the summary.** A tenant counted as
+   successful can still leave rows behind if a later step failed. Check `pg_namespace`,
+   `public.user_tenant_mapping`, and the control plane `tenant` table.
+8. **Search indices are not cleaned up.** In multi-tenant deployments all tenants share indices
+   and are separated by a `tenant_id` field, so dropping a schema leaves that tenant's chunks
+   behind. They can be swept later by selecting on `tenant_id` - keep `cleaned_tenants.csv`.
+9. **The database writer is the real limit. Do not tune for throughput.**
+   Dropping a tenant schema deletes on the order of 500 relations, so cleanup is a sustained
+   burst of catalog writes against the cluster writer. On a live cluster this is the constraint
+   that matters, well before pod CPU is.
+
+   Measured on a real cleanup, and the reason this note exists:
+
+   | rate | writer `DiskQueueDepth` | failures |
+   |---|---|---|
+   | ~34 tenants/min | low, occasional spikes | 0 in 500 tenants |
+   | ~67 tenants/min | **50-64 sustained, tripped a >25 alarm** | 39 (`TLS handshake timeout`, `EOF`, failed execs) |
+
+   The faster run paged an on-call engineer and started failing on infrastructure timeouts.
+   `WriteLatency` stayed healthy throughout (2-5 ms), so `DiskQueueDepth` is the signal to watch -
+   by the time latency moves you have gone much too far. **Watch it while running and back off if
+   it approaches the alarm threshold. Prefer off-peak hours.** Roughly 30 tenants/min is a
+   reasonable ceiling; there is no prize for finishing sooner.
+
+10. **`--data-plane-pod` / `--control-plane-pod` are for spreading load, not for going faster.**
+    Every operation is a `kubectl exec` against the one pod a run picked. Two runs without pinning
+    usually land on the *same* pod - selection is random over a small set - saturating one live
+    worker (~2 cores) while its replica idles. Pinning distinct pods per run fixes that
+    distribution problem:
+
+    ```bash
+    # terminal 1
+    ... --csv batch_a.csv --concurrency 8 \
+        --data-plane-pod <worker-pod-1> --control-plane-pod <control-pod-1>
+    # terminal 2
+    ... --csv batch_b.csv --concurrency 8 \
+        --data-plane-pod <worker-pod-2> --control-plane-pod <control-pod-2>
+    ```
+
+    Use this to keep any single worker from being pinned, and keep the *combined* rate under the
+    ceiling in note 9. Running both at full tilt is what produced the failure row above.
 
 ## Files Generated
 
-- `gated_tenants_no_query_3mo_YYYYMMDD_HHMMSS.csv` - List of tenants to clean
-- `cleaned_tenants.csv` - Successfully cleaned tenants with timestamps
+- `tenant_data_YYYYMMDD_HHMMSS.json` - Raw per-tenant data. **Contains real user chat message
+  text** (`last_query_text`); keep it out of the repo and off shared storage.
+- `gated_tenants_inactive_<N>d_YYYYMMDD_HHMMSS.csv` - List of tenants with no chat or Craft
+  activity for N days. N is the `--inactive-days` value, 60 by default.
+- `cleaned_tenants.csv` - Successfully cleaned tenants with timestamps. Appended across runs, and
+  the only record of what was deleted - needed for any later search-index sweep.
 
 ## Safety First
 
@@ -73,8 +129,4 @@ The scripts include multiple safety checks:
 
 ## Need More Details?
 
-See [NO_BASTION_README.md](./NO_BASTION_README.md) for:
-- Detailed explanations of each step
-- Troubleshooting guide
-- How it works under the hood
-- Performance characteristics
+See [README.md](./README.md) for what each step does and how to verify the result.

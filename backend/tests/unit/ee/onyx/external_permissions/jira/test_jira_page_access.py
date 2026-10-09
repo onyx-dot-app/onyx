@@ -5,8 +5,7 @@ from unittest.mock import MagicMock
 from pytest import LogCaptureFixture
 
 from ee.onyx.external_permissions.jira.page_access import get_project_permissions
-from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
-from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
+from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION, JIRA_SERVER_API_VERSION
 
 PROJECT_KEY = "PROJ"
 

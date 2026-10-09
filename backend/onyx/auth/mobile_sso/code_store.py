@@ -23,8 +23,7 @@ import json
 import secrets
 
 from onyx.auth.pkce import compute_s256_challenge
-from onyx.configs.app_configs import MOBILE_SSO_CODE_PREFIX
-from onyx.configs.app_configs import MOBILE_SSO_CODE_TTL_SECONDS
+from onyx.configs.app_configs import MOBILE_SSO_CODE_PREFIX, MOBILE_SSO_CODE_TTL_SECONDS
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.logger import setup_logger
 

@@ -1,5 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -7,33 +6,43 @@ from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.kg_configs import KG_BETA_ASSISTANT_DESCRIPTION
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.entities import get_entity_stats_by_grounded_source_name
-from onyx.db.entity_type import get_configured_entity_types
-from onyx.db.entity_type import update_entity_types_and_related_connectors__commit
+from onyx.db.entity_type import (
+    get_configured_entity_types,
+    update_entity_types_and_related_connectors__commit,
+)
 from onyx.db.enums import Permission
-from onyx.db.kg_config import disable_kg
-from onyx.db.kg_config import enable_kg
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import set_kg_config_settings
+from onyx.db.kg_config import (
+    disable_kg,
+    enable_kg,
+    get_kg_config_settings,
+    set_kg_config_settings,
+)
 from onyx.db.models import User
-from onyx.db.persona import create_update_persona
-from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import mark_persona_as_deleted
-from onyx.db.persona import mark_persona_as_not_deleted
+from onyx.db.persona import (
+    create_update_persona,
+    get_persona_by_id,
+    mark_persona_as_deleted,
+    mark_persona_as_not_deleted,
+)
 from onyx.db.tools import get_builtin_tool
 from onyx.kg.resets.reset_index import reset_full_kg_index__commit
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
 )
-from onyx.prompts.kg_prompts import KG_BETA_ASSISTANT_SYSTEM_PROMPT
-from onyx.prompts.kg_prompts import KG_BETA_ASSISTANT_TASK_PROMPT
+from onyx.prompts.kg_prompts import (
+    KG_BETA_ASSISTANT_SYSTEM_PROMPT,
+    KG_BETA_ASSISTANT_TASK_PROMPT,
+)
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.kg.models import DisableKGConfigRequest
-from onyx.server.kg.models import EnableKGConfigRequest
-from onyx.server.kg.models import EntityType
-from onyx.server.kg.models import KGConfig
+from onyx.server.kg.models import (
+    DisableKGConfigRequest,
+    EnableKGConfigRequest,
+    EntityType,
+    KGConfig,
+    SourceAndEntityTypeView,
+    SourceStatistics,
+)
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
-from onyx.server.kg.models import SourceAndEntityTypeView
-from onyx.server.kg.models import SourceStatistics
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )

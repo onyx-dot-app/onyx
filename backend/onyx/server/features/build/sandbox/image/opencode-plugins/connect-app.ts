@@ -35,14 +35,15 @@ export const ConnectApp: Plugin = async () => {
       connect_app: tool({
         description:
           "Ask the user to connect an org app you aren't set up to use yet. " +
-          "Pass the app's slug (as listed under 'Connectable apps' in AGENTS.md). " +
+          "Pass the app's numeric ID (as listed under 'Connectable apps' in AGENTS.md). " +
           "This pauses for the user to connect it. If this returns normally the " +
           "app is connected and you can use it; if it is denied, do not retry — " +
           "offer an alternative.",
         args: {
-          app: tool.schema
-            .string()
-            .describe("Slug of the connectable app, e.g. 'google_calendar'"),
+          external_app_id: tool.schema
+            .number()
+            .int()
+            .describe("Numeric ID of the connectable app, e.g. 42"),
           reason: tool.schema
             .string()
             .optional()
@@ -54,19 +55,23 @@ export const ConnectApp: Plugin = async () => {
           try {
             await context.ask({
               permission: "connect_app",
-              patterns: [args.app],
+              patterns: [String(args.external_app_id)],
               always: [],
-              metadata: { app: args.app, reason: args.reason ?? "" },
+              metadata: {
+                external_app_id: args.external_app_id,
+                reason: args.reason ?? "",
+              },
             });
           } catch {
             // Return a normal result so the agent keeps control and picks an
             // alternative, rather than letting the rejection abort the turn.
             return (
-              `The user declined to connect '${args.app}'. Do not retry connecting ` +
+              `The user declined to connect external app ${args.external_app_id}. ` +
+              `Do not retry connecting ` +
               `it; offer an alternative or proceed without it.`
             );
           }
-          return `'${args.app}' is connected. You can use it now.`;
+          return `External app ${args.external_app_id} is connected. You can use it now.`;
         },
       }),
     },

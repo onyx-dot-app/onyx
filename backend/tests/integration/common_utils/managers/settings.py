@@ -1,11 +1,8 @@
-from typing import Any
-from typing import Dict
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestSettings
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestSettings, DATestUser
 
 
 class SettingsManager:
@@ -38,7 +35,7 @@ class SettingsManager:
         headers.pop("Content-Type", None)
 
         payload = settings.model_dump()
-        response = client.put(
+        response = client.patch(
             f"{API_SERVER_URL}/admin/settings",
             json=payload,
             headers=headers,

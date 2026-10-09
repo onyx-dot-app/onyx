@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import SourceTagDetailsCard, {
   SourceInfo,
 } from "@/refresh-components/buttons/source-tag/SourceTagDetailsCard";
@@ -463,7 +463,7 @@ const SourceTagInner = ({
       <div
         className={cn(
           "flex items-baseline",
-          !inlineCitation && "pr-0.5",
+          !inlineCitation && "pe-0.5",
           isQuery && expanded && "w-fit"
         )}
       >

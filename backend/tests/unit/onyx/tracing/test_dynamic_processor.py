@@ -1,15 +1,13 @@
 """Unit tests for the live-reload behavior of DynamicTracingProcessor."""
 
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from onyx.tracing.dynamic_processor import DynamicTracingProcessor
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
-from onyx.tracing.provider_config import BraintrustConfig
-from onyx.tracing.provider_config import EffectiveTracingConfig
+from onyx.tracing.provider_config import BraintrustConfig, EffectiveTracingConfig
 
 RESOLVE = "onyx.tracing.dynamic_processor.resolve_effective_tracing_config"
 BUILD = "onyx.tracing.dynamic_processor.build_delegates"

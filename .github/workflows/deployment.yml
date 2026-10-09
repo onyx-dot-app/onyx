@@ -39,17 +39,20 @@ jobs:
       short-sha: ${{ steps.check.outputs.short-sha }}
     steps:
       - name: Checkout (for git tags)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           version: "0.11.25"
           enable-cache: false
+
+      - name: Install ods from uv.lock
+        run: uv sync --frozen --no-install-project --only-group ods
 
       - name: Check which components to build and version info
         id: check
@@ -57,97 +60,13 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -eo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          # Sanitize tag name by replacing slashes with hyphens (for Docker tag compatibility)
-          SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
-          SHORT_SHA="${GITHUB_SHA::7}"
-
-          # Initialize all flags to false
-          IS_CLOUD=false
-          IS_NIGHTLY=false
-          IS_VERSION_TAG=false
-          IS_STABLE=false
-          IS_BETA=false
-          IS_BETA_STANDALONE=false
-          IS_LATEST=false
-          IS_PROD_TAG=false
-          IS_TEST_RUN=false
-          BUILD_DESKTOP=false
-          BUILD_WEB=false
-          BUILD_WEB_CLOUD=false
-          BUILD_BACKEND=true
-          BUILD_MODEL_SERVER=true
-
-          # Determine tag type based on pattern matching (do regex checks once)
-          if [[ "$TAG" == *cloud* ]]; then
-            IS_CLOUD=true
-          fi
-          if [[ "$TAG" == nightly* ]]; then
-            IS_NIGHTLY=true
-          fi
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            IS_VERSION_TAG=true
-          fi
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            IS_STABLE=true
-          fi
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta(\.[0-9]+)?$ ]]; then
-            IS_BETA=true
-          fi
-
-          # Determine what to build based on tag type
-          if [[ "$IS_CLOUD" == "true" ]]; then
-            BUILD_WEB_CLOUD=true
-          else
-            BUILD_WEB=true
-            # Only build desktop for semver tags (excluding beta)
-            if [[ "$IS_VERSION_TAG" == "true" ]] && [[ "$IS_BETA" != "true" ]]; then
-              BUILD_DESKTOP=true
-            fi
-          fi
-
-          # Standalone version checks (for backend/model-server - version excluding cloud tags)
-          if [[ "$IS_BETA" == "true" ]] && [[ "$IS_CLOUD" != "true" ]]; then
-            IS_BETA_STANDALONE=true
-          fi
-
-          # Determine if this tag should get the "latest" Docker tag.
-          # Only the highest semver stable tag (vX.Y.Z exactly) gets "latest".
-          if [[ "$IS_STABLE" == "true" ]]; then
-            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools ods latest-stable-tag) || {
-              echo "::error::Failed to determine highest stable tag via 'ods latest-stable-tag'"
-              exit 1
-            }
-            if [[ "$TAG" == "$HIGHEST_STABLE" ]]; then
-              IS_LATEST=true
-            fi
-          fi
-
-          # Determine if this is a production tag
-          # Production tags are: version tags (v1.2.3*) or nightly tags
-          if [[ "$IS_VERSION_TAG" == "true" ]] || [[ "$IS_NIGHTLY" == "true" ]]; then
-            IS_PROD_TAG=true
-          fi
-
-          # Determine if this is a test run (workflow_dispatch on non-production ref)
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]] && [[ "$IS_PROD_TAG" != "true" ]]; then
-            IS_TEST_RUN=true
-          fi
-          {
-            echo "build-desktop=$BUILD_DESKTOP"
-            echo "build-web=$BUILD_WEB"
-            echo "build-web-cloud=$BUILD_WEB_CLOUD"
-            echo "build-backend=$BUILD_BACKEND"
-            echo "build-model-server=$BUILD_MODEL_SERVER"
-            echo "is-cloud-tag=$IS_CLOUD"
-            echo "is-beta=$IS_BETA"
-            echo "is-beta-standalone=$IS_BETA_STANDALONE"
-            echo "is-stable=$IS_STABLE"
-            echo "is-latest=$IS_LATEST"
-            echo "is-test-run=$IS_TEST_RUN"
-            echo "sanitized-tag=$SANITIZED_TAG"
-            echo "short-sha=$SHORT_SHA"
-          } >> "$GITHUB_OUTPUT"
+          # `ods release classify` owns the routing rules; see
+          # tools/ods/internal/release/classify.go. The checkout above fetches
+          # all tags, which the "latest" decision needs.
+          uv run --no-sync ods release classify \
+            --ref "${GITHUB_REF_NAME}" \
+            --sha "${GITHUB_SHA}" \
+            --event "${EVENT_NAME}" >> "$GITHUB_OUTPUT"
 
   # Block the release when dependencies carry unignored critical vulnerabilities.
   # Runs the same `ods audit` gate used on PRs and nightly. Always runs (no skip
@@ -160,23 +79,27 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read # checkout + read lockfiles
-      id-token: write # OIDC for fetching the S3 allowlist
-      security-events: read # read Dependabot alerts
+      id-token: write # OIDC for fetching the S3 allowlist and the registry credentials
+      vulnerability-alerts: read # read Dependabot alerts
+      security-events: write # SARIF uploads of the image audits
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           version: "0.11.25"
           enable-cache: false
 
+      - name: Install ods from uv.lock
+        run: uv sync --frozen --no-install-project --only-group ods
+
       - name: Configure AWS credentials
         continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # ratchet:aws-actions/configure-aws-credentials@v6.2.0
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6.2.3
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -184,29 +107,173 @@ jobs:
       - name: Run dependency audit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-sync --with onyx-devtools ods audit --fail-on=critical
+        run: uv run --no-sync ods audit --fail-on=critical
 
+      # The same registry credentials the builds use, fetched the same way, so
+      # the bases scanned are the bases shipped. Missing credentials fail the
+      # gate, since the builds would ship hardened bases the gate never saw.
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Login to the hardened base images
+        uses: ./.github/actions/dhi-base-images
+        with:
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
+
+      # Everything a shipped image holds outside its lockfiles: the pinned
+      # runtime base for web and model-server, the backend's and the sandbox's
+      # os stage built here. All four are scanned before the step fails, so one run shows
+      # every blocker, and --strict keeps an empty scan from passing.
+      - name: Run base image audit
+        run: |
+          status=0
+          for component in web model-server backend sandbox; do
+            image="$(.github/scripts/base-image-ref.sh "${component}")"
+            uv run --no-sync ods audit image "${image}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || status=1
+            if [ ! -s "image-audit-${component}.sarif" ]; then
+              # $schema is a literal SARIF key, not a shell variable.
+              # shellcheck disable=SC2016
+              echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > "image-audit-${component}.sarif"
+            fi
+            # A stage built here is named "name:tag" with no registry path, which
+            # the Security tab reads as a URI scheme and rejects; point its
+            # findings at the Dockerfile the stage comes from.
+            case "${component}" in
+              backend) dockerfile=backend/Dockerfile ;;
+              sandbox) dockerfile=backend/onyx/server/features/build/sandbox/image/Dockerfile ;;
+              *) dockerfile="" ;;
+            esac
+            if [ -n "${dockerfile}" ]; then
+              jq --arg uri "${dockerfile}" '(.runs[]?.results[]?.locations[]?.physicalLocation.artifactLocation.uri) |= $uri' \
+                "image-audit-${component}.sarif" > "image-audit-${component}.sarif.tmp"
+              mv "image-audit-${component}.sarif.tmp" "image-audit-${component}.sarif"
+            fi
+          done
+          exit "${status}"
+
+      # Rolling main-HEAD builds map to refs/heads/main so the Security tab stays
+      # authoritative for main; test runs upload against their own ref. Release
+      # tags sit on older commits, so they gate without uploading.
+      - name: Upload the web image audit to the GitHub Security tab
+        id: upload-web
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-web.sarif
+          category: image-audit-web
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      - name: Upload the model-server image audit to the GitHub Security tab
+        id: upload-model-server
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-model-server.sarif
+          category: image-audit-model-server
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      - name: Upload the backend image audit to the GitHub Security tab
+        id: upload-backend
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-backend.sarif
+          category: image-audit-backend
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      - name: Upload the sandbox image audit to the GitHub Security tab
+        id: upload-sandbox
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-sandbox.sarif
+          category: image-audit-sandbox
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      # A rejected upload leaves the Security tab stale without failing the
+      # job, so it is called out where the run is read.
+      - name: Report failed uploads
+        if: always() && (steps.upload-web.outcome == 'failure' || steps.upload-model-server.outcome == 'failure' || steps.upload-backend.outcome == 'failure' || steps.upload-sandbox.outcome == 'failure')
+        env:
+          WEB: ${{ steps.upload-web.outcome }}
+          MODEL_SERVER: ${{ steps.upload-model-server.outcome }}
+          BACKEND: ${{ steps.upload-backend.outcome }}
+          SANDBOX: ${{ steps.upload-sandbox.outcome }}
+        run: |
+          failed=""
+          [ "${WEB}" = failure ] && failed="${failed} web"
+          [ "${MODEL_SERVER}" = failure ] && failed="${failed} model-server"
+          [ "${BACKEND}" = failure ] && failed="${failed} backend"
+          [ "${SANDBOX}" = failure ] && failed="${failed} sandbox"
+          echo "::warning::The Security tab upload failed for:${failed}. The tab is stale until the next nightly upload succeeds."
+          echo "Security tab upload failed for:${failed}" >> "${GITHUB_STEP_SUMMARY}"
+
+  # Validate that a pushed release tag is versioned correctly, via
+  # `ods release --check`. A cloud tag must be the tag `ods release cloud`
+  # would have cut: its commit on origin/main, its base matching the release
+  # branches, its counter in sequence. Stable (vX.Y.Z) and beta
+  # (vX.Y.Z-beta.N) tags must sit on their release/vX.Y branch with the
+  # patch or counter in sequence; a beta must precede its stable release.
+  #
+  # Deliberately gated on the raw ref name, not on computed tag-type outputs:
+  # a tag that is neither a valid cloud nor stable tag fails loudly here
+  # instead of being skipped by a wrongly computed output.
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
     if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           version: "0.11.25"
           # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
           enable-cache: false
 
-      - name: Validate tag is versioned correctly
+      - name: Install ods from uv.lock
+        run: uv sync --frozen --no-install-project --only-group ods
+
+      - name: Validate the tag is versioned correctly
         run: |
-          uv run --no-sync --with release-tag tag --check
+          uv run --no-sync ods release --check --ref "$GITHUB_REF_NAME"
 
   notify-slack-on-tag-check-failure:
     needs:
@@ -217,7 +284,7 @@ jobs:
     environment: release
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -245,7 +312,7 @@ jobs:
       release-id: ${{ steps.create-release.outputs.id }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -310,32 +377,38 @@ jobs:
         include:
           - platform: "macos-latest" # Build a universal image for macOS.
             args: "--target universal-apple-darwin"
+            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
           - platform: "ubuntu-24.04"
             args: "--bundles deb,rpm"
           - platform: "ubuntu-24.04-arm" # Only available in public repos.
             args: "--bundles deb,rpm"
           - platform: "windows-latest"
             args: ""
+          # Cross-compiled Windows ARM64 build. Only the NSIS bundle supports
+          # ARM64 (WiX/MSI does not), hence --bundles nsis.
+          - platform: "windows-latest"
+            args: "--target aarch64-pc-windows-msvc --bundles nsis"
+            rust-targets: "aarch64-pc-windows-msvc"
 
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 90
     environment: release
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
         with:
           # NOTE: persist-credentials is needed for tauri-action to upload assets to GitHub releases.
           persist-credentials: true # zizmor: ignore[artipacked]
 
       - name: Configure AWS credentials
         if: startsWith(matrix.platform, 'macos-')
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
         if: startsWith(matrix.platform, 'macos-')
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             APPLE_ID, deploy/apple-id
@@ -371,8 +444,9 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # zizmor: ignore[impostor-commit]
         with:
-          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          # Extra targets for jobs that cross-compile (macOS universal, Windows ARM64).
+          # Jobs building only for the host architecture leave this empty.
+          targets: ${{ matrix.rust-targets || '' }}
 
       - name: install frontend dependencies
         run: bun install --frozen-lockfile
@@ -458,7 +532,7 @@ jobs:
           echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
           echo "Certificate imported."
 
-      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # ratchet:tauri-apps/tauri-action@action-v0.6.2
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # ratchet:tauri-apps/tauri-action@action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ env.APPLE_ID }}
@@ -470,7 +544,7 @@ jobs:
           # Use the release created by the create-release job to avoid race conditions
           # when multiple matrix jobs try to create/update the same release simultaneously
           releaseId: ${{ needs.create-release.outputs.release-id }}
-          assetNamePattern: "[name]_[arch][ext]"
+          releaseAssetNamePattern: "[name]_[arch][ext]"
           args: ${{ matrix.args }}
 
   build-web-amd64:
@@ -490,21 +564,21 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -513,33 +587,32 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -547,6 +620,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -572,21 +646,21 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -595,33 +669,32 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -629,6 +702,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -642,8 +716,7 @@ jobs:
       - determine-builds
       - build-web-amd64
       - build-web-arm64
-      - image-audit
-    if: always() && needs.build-web-amd64.result == 'success' && needs.build-web-arm64.result == 'success' && needs.image-audit.result == 'success'
+    if: always() && needs.build-web-amd64.result == 'success' && needs.build-web-arm64.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -654,16 +727,16 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -671,17 +744,17 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -695,16 +768,38 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
             type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
+      # Same tag set with a -dev suffix. Only the backend has a genuinely different dev image
+      # (runtime + debugging tools); the web -dev tags point at the same manifest as their
+      # plain counterparts so that one version string (IMAGE_TAG / helm global.version) selects
+      # a whole deployment. The suffix is spelled out per tag rather than via flavor `suffix=`
+      # so that disabled (empty) raw tags stay empty instead of degenerating to a bare "-dev".
+      - name: Docker meta (dev)
+        id: meta-dev
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('web-{0}-dev', needs.determine-builds.outputs.sanitized-tag) || format('{0}-dev', github.ref_name) }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta == 'true' && 'beta-dev' || '' }}
+            type=semver,pattern={{version}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+
       - name: Create and push manifest
         env:
           IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           AMD64_DIGEST: ${{ needs.build-web-amd64.outputs.digest }}
           ARM64_DIGEST: ${{ needs.build-web-arm64.outputs.digest }}
           META_TAGS: ${{ steps.meta.outputs.tags }}
+          META_DEV_TAGS: ${{ steps.meta-dev.outputs.tags }}
         run: |
           IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n%s\n' "${META_TAGS}" "${META_DEV_TAGS}" | sed '/^$/d' | xargs -I {} echo -t {}) \
             $IMAGES
 
   build-web-cloud-amd64:
@@ -722,23 +817,23 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
+      REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -747,33 +842,32 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -781,12 +875,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
             NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${{ vars.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
             NEXT_PUBLIC_GTM_ENABLED=true
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
@@ -815,23 +909,23 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
+      REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -840,33 +934,32 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -874,12 +967,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
             NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${{ vars.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
             NEXT_PUBLIC_GTM_ENABLED=true
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
@@ -898,8 +991,7 @@ jobs:
       - determine-builds
       - build-web-cloud-amd64
       - build-web-cloud-arm64
-      - image-audit
-    if: always() && needs.build-web-cloud-amd64.result == 'success' && needs.build-web-cloud-arm64.result == 'success' && needs.image-audit.result == 'success'
+    if: always() && needs.build-web-cloud-amd64.result == 'success' && needs.build-web-cloud-arm64.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -908,18 +1000,18 @@ jobs:
     timeout-minutes: 90
     environment: release
     env:
-      REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
+      REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -927,17 +1019,17 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -945,16 +1037,30 @@ jobs:
           tags: |
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('web-cloud-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
 
+      # -dev twin of the tag above, pointing at the same manifest — see the merge-web dev note.
+      # Cloud tags build the web image here rather than in merge-web, so without this a cloud
+      # deployment couldn't set a single -dev version across all of its images.
+      - name: Docker meta (dev)
+        id: meta-dev
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('web-cloud-{0}-dev', needs.determine-builds.outputs.sanitized-tag) || format('{0}-dev', github.ref_name) }}
+
       - name: Create and push manifest
         env:
           IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           AMD64_DIGEST: ${{ needs.build-web-cloud-amd64.outputs.digest }}
           ARM64_DIGEST: ${{ needs.build-web-cloud-arm64.outputs.digest }}
           META_TAGS: ${{ steps.meta.outputs.tags }}
+          META_DEV_TAGS: ${{ steps.meta-dev.outputs.tags }}
         run: |
           IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n%s\n' "${META_TAGS}" "${META_DEV_TAGS}" | sed '/^$/d' | xargs -I {} echo -t {}) \
             $IMAGES
 
   build-backend-amd64:
@@ -971,24 +1077,25 @@ jobs:
     environment: release
     outputs:
       digest: ${{ steps.build.outputs.digest }}
+      digest-dev: ${{ steps.build-dev.outputs.digest }}
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -997,32 +1104,55 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          target: runtime
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
+          outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+      # Dev variant: runtime + interactive debugging tools, published with a -dev tag suffix by
+      # merge-backend. Reuses the runtime stage from the build above via the local BuildKit
+      # cache, so this only builds and pushes the extra apt layer.
+      - name: Build and push AMD64 dev
+        id: build-dev
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: dev
+          platforms: linux/amd64
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ONYX_VERSION=${{ github.ref_name }}
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: type=inline
@@ -1043,24 +1173,25 @@ jobs:
     environment: release
     outputs:
       digest: ${{ steps.build.outputs.digest }}
+      digest-dev: ${{ steps.build-dev.outputs.digest }}
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -1069,27 +1200,28 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          target: runtime
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -1101,13 +1233,34 @@ jobs:
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
+      # Dev variant: runtime + interactive debugging tools, published with a -dev tag suffix by
+      # merge-backend. Reuses the runtime stage from the build above via the local BuildKit
+      # cache, so this only builds and pushes the extra apt layer.
+      - name: Build and push ARM64 dev
+        id: build-dev
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: dev
+          platforms: linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ONYX_VERSION=${{ github.ref_name }}
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
+          outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
   merge-backend:
     needs:
       - determine-builds
       - build-backend-amd64
       - build-backend-arm64
-      - image-audit
-    if: always() && needs.build-backend-amd64.result == 'success' && needs.build-backend-arm64.result == 'success' && needs.image-audit.result == 'success'
+    if: always() && needs.build-backend-amd64.result == 'success' && needs.build-backend-arm64.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1116,18 +1269,18 @@ jobs:
     timeout-minutes: 90
     environment: release
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -1135,17 +1288,17 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -1159,12 +1312,43 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
             type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
+      # Same tag set with a -dev suffix, for the dev image variant (runtime + debugging tools).
+      # The suffix is spelled out per tag rather than via flavor `suffix=` so that disabled
+      # (empty) raw tags stay empty instead of degenerating to a bare "-dev" tag.
+      - name: Docker meta (dev)
+        id: meta-dev
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('backend-{0}-dev', needs.determine-builds.outputs.sanitized-tag) || format('{0}-dev', github.ref_name) }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta-dev' || '' }}
+            type=semver,pattern={{version}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+
       - name: Create and push manifest
         env:
           IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           AMD64_DIGEST: ${{ needs.build-backend-amd64.outputs.digest }}
           ARM64_DIGEST: ${{ needs.build-backend-arm64.outputs.digest }}
           META_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
+          docker buildx imagetools create \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
+            $IMAGES
+
+      - name: Create and push dev manifest
+        env:
+          IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-backend-amd64.outputs.digest-dev }}
+          ARM64_DIGEST: ${{ needs.build-backend-arm64.outputs.digest-dev }}
+          META_TAGS: ${{ steps.meta-dev.outputs.tags }}
         run: |
           IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
@@ -1180,30 +1364,32 @@ jobs:
       - runs-on
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-model-server-amd64
-      - volume=40gb
+      # Spot can place this job on an instance with no local NVMe, which leaves docker on the
+      # root volume. The ~7gb amd64 venv, copied again by the final stage, needs the headroom.
+      - volume=60gb
       - extras=ecr-cache
     timeout-minutes: 90
     environment: release
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-model-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -1212,26 +1398,34 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
         with:
           buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
+      # Dockerfile.model_server defaults to the public Python bases. Release builds ship
+      # on the hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
+        with:
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
+
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         env:
           DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
         with:
@@ -1241,6 +1435,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1257,30 +1452,30 @@ jobs:
       - runs-on
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-model-server-arm64
-      - volume=40gb
+      - volume=60gb
       - extras=ecr-cache
     timeout-minutes: 90
     environment: release
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-model-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -1289,26 +1484,34 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
         with:
           buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
+      # Dockerfile.model_server defaults to the public Python bases. Release builds ship
+      # on the hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
+        with:
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
+
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         env:
           DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
         with:
@@ -1318,6 +1521,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1330,8 +1534,7 @@ jobs:
       - determine-builds
       - build-model-server-amd64
       - build-model-server-arm64
-      - image-audit
-    if: always() && needs.build-model-server-amd64.result == 'success' && needs.build-model-server-arm64.result == 'success' && needs.image-audit.result == 'success'
+    if: always() && needs.build-model-server-amd64.result == 'success' && needs.build-model-server-arm64.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1340,18 +1543,18 @@ jobs:
     timeout-minutes: 90
     environment: release
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-model-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -1359,17 +1562,17 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -1383,16 +1586,34 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
             type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
+      # -dev twins of the tags above, pointing at the same manifest — see the merge-web dev note.
+      - name: Docker meta (dev)
+        id: meta-dev
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('model-server-{0}-dev', needs.determine-builds.outputs.sanitized-tag) || format('{0}-dev', github.ref_name) }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta-dev' || '' }}
+            type=semver,pattern={{version}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+
       - name: Create and push manifest
         env:
           IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           AMD64_DIGEST: ${{ needs.build-model-server-amd64.outputs.digest }}
           ARM64_DIGEST: ${{ needs.build-model-server-arm64.outputs.digest }}
           META_TAGS: ${{ steps.meta.outputs.tags }}
+          META_DEV_TAGS: ${{ steps.meta-dev.outputs.tags }}
         run: |
           IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n%s\n' "${META_TAGS}" "${META_DEV_TAGS}" | sed '/^$/d' | xargs -I {} echo -t {}) \
             $IMAGES
 
   prepare-sandbox:
@@ -1414,7 +1635,7 @@ jobs:
       SANDBOX_CONTEXT: backend/onyx/server/features/build/sandbox/image
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -1427,14 +1648,14 @@ jobs:
 
       - name: Configure AWS credentials
         if: needs.determine-builds.outputs.is-test-run != 'true' && vars.DOCKER_NO_CACHE != 'true'
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
         if: needs.determine-builds.outputs.is-test-run != 'true' && vars.DOCKER_NO_CACHE != 'true'
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -1443,7 +1664,7 @@ jobs:
 
       - name: Login to Docker Hub
         if: needs.determine-builds.outputs.is-test-run != 'true' && vars.DOCKER_NO_CACHE != 'true'
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1485,21 +1706,21 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -1508,24 +1729,24 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend/onyx/server/features/build/sandbox/image
           file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
@@ -1558,21 +1779,21 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -1581,24 +1802,24 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend/onyx/server/features/build/sandbox/image
           file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
@@ -1617,8 +1838,7 @@ jobs:
       - prepare-sandbox
       - build-sandbox-amd64
       - build-sandbox-arm64
-      - image-audit
-    if: always() && needs.prepare-sandbox.result == 'success' && needs.image-audit.result == 'success' && (needs.prepare-sandbox.outputs.context-exists == 'true' || (needs.build-sandbox-amd64.result == 'success' && needs.build-sandbox-arm64.result == 'success'))
+    if: always() && needs.prepare-sandbox.result == 'success' && (needs.prepare-sandbox.outputs.context-exists == 'true' || (needs.build-sandbox-amd64.result == 'success' && needs.build-sandbox-arm64.result == 'success'))
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1631,16 +1851,16 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -1648,17 +1868,17 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
         with:
           images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -1672,6 +1892,25 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
             type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
+      # -dev twins of the tags above, pointing at the same manifest — see the merge-web dev note.
+      # The sandbox image resolves off the same version knob as the rest of the deployment
+      # (IMAGE_TAG in compose, global.version in the helm chart), so it needs the twins too.
+      - name: Docker meta (dev)
+        id: meta-dev
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('sandbox-{0}-dev', needs.determine-builds.outputs.sanitized-tag) || format('{0}-dev', github.ref_name) }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta-dev' || '' }}
+            type=semver,pattern={{version}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+
       - name: Create and push manifest
         env:
           IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
@@ -1679,10 +1918,11 @@ jobs:
           AMD64_DIGEST: ${{ needs.build-sandbox-amd64.outputs.digest }}
           ARM64_DIGEST: ${{ needs.build-sandbox-arm64.outputs.digest }}
           META_TAGS: ${{ steps.meta.outputs.tags }}
+          META_DEV_TAGS: ${{ steps.meta-dev.outputs.tags }}
           DOCKER_NO_CACHE: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
           IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
         run: |
-          mapfile -t tags < <(printf '%s\n' "${META_TAGS}" | sed '/^$/d')
+          mapfile -t tags < <(printf '%s\n%s\n' "${META_TAGS}" "${META_DEV_TAGS}" | sed '/^$/d')
           tag_args=()
           for tag in "${tags[@]}"; do
             tag_args+=("-t" "$tag")
@@ -1766,171 +2006,36 @@ jobs:
             -f event_type=new-cloud-image \
             -F "client_payload[version]=${VERSION}"
 
-  # Scan each freshly built image (amd64 digest) via `ods audit image`, reusing
-  # osv-scanner and the shared S3 allowlist from the dependency `audit-gate`.
-  # Runs before merge-* and every merge-* depends on it, so an unsuppressed
-  # CRITICAL blocks the public tags. SARIF goes to the Security tab regardless.
-  image-audit:
-    needs:
-      - determine-builds
-      - build-web-amd64
-      - build-web-cloud-amd64
-      - build-backend-amd64
-      - build-model-server-amd64
-      - build-sandbox-amd64
+  # A failed audit usually means a new advisory, so the CVE Alerts run opens
+  # its tracking issue, fix PR, and Slack post. Every release tag also gets a
+  # run once its images are published, since a release branch has no schedule
+  # and that run is what closes the branch's issues after a fix ships.
+  dispatch-cve-alerts:
+    needs: [determine-builds, audit-gate, merge-web, merge-backend, merge-model-server]
     if: >-
-      always() && !cancelled() &&
-      (needs.build-web-amd64.result == 'success' ||
-       needs.build-web-cloud-amd64.result == 'success' ||
-       needs.build-backend-amd64.result == 'success' ||
-       needs.build-model-server-amd64.result == 'success' ||
-       needs.build-sandbox-amd64.result == 'success')
-    runs-on:
-      - runs-on
-      # amd64 to match the images scanned: `ods audit image` uses the docker CLI,
-      # which won't pull an amd64 image onto an arm64 host.
-      - runner=2cpu-linux-x64
-      # osv-scanner pulls the image and writes a full `docker save` tar (~2x its
-      # size); size the root volume up so large images don't fill the disk.
-      - volume=60gb
-      - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
-      - extras=ecr-cache
+      always() && !cancelled() && needs.determine-builds.outputs.is-test-run != 'true' &&
+      (needs.audit-gate.result == 'failure' || startsWith(github.ref_name, 'v'))
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
     permissions:
-      contents: read # checkout + uv project context
-      id-token: write # OIDC for fetching the S3 allowlist
-      security-events: write # SARIF uploads
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - component: web
-            registry-image: onyxdotapp/onyx-web-server
-          - component: web-cloud
-            registry-image: onyxdotapp/onyx-web-server-cloud
-          - component: backend
-            registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
-          - component: model-server
-            registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
-          - component: sandbox
-            registry-image: onyxdotapp/sandbox
+      actions: write # dispatch cve-alerts.yml
+      contents: read # look up the release branch
     steps:
-      - name: Check if this scan should run
-        id: should-run
-        run: |
-          case "$COMPONENT" in
-            web) RESULT="$BUILD_WEB" ;;
-            web-cloud) RESULT="$BUILD_WEB_CLOUD" ;;
-            backend) RESULT="$BUILD_BACKEND" ;;
-            model-server) RESULT="$BUILD_MODEL_SERVER" ;;
-            sandbox) RESULT="$BUILD_SANDBOX" ;;
-          esac
-          if [ "$RESULT" == "success" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+      # A release tag's findings live on its release branch, so the run scans
+      # that branch. Anything else, such as the nightly tag, scans main.
+      - name: Dispatch CVE Alerts
         env:
-          COMPONENT: ${{ matrix.component }}
-          BUILD_WEB: ${{ needs.build-web-amd64.result }}
-          BUILD_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.result }}
-          BUILD_BACKEND: ${{ needs.build-backend-amd64.result }}
-          BUILD_MODEL_SERVER: ${{ needs.build-model-server-amd64.result }}
-          BUILD_SANDBOX: ${{ needs.build-sandbox-amd64.result }}
-
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
-        if: steps.should-run.outputs.run == 'true'
-
-      - name: Checkout
-        if: steps.should-run.outputs.run == 'true'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Setup uv
-        if: steps.should-run.outputs.run == 'true'
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
-        with:
-          version: "0.11.25"
-          enable-cache: false
-
-      - name: Configure AWS credentials
-        if: steps.should-run.outputs.run == 'true'
-        continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # ratchet:aws-actions/configure-aws-credentials@v6.2.0
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
-
-      - name: Login to Docker Hub
-        if: steps.should-run.outputs.run == 'true'
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      # Scan the by-digest image the build pushed, before merge-* tags it (same
-      # content in the ECR cache for test runs).
-      - name: Determine scan image
-        if: steps.should-run.outputs.run == 'true'
-        id: scan-image
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
         run: |
-          case "$COMPONENT" in
-            web) DIGEST="$DIGEST_WEB" ;;
-            web-cloud) DIGEST="$DIGEST_WEB_CLOUD" ;;
-            backend) DIGEST="$DIGEST_BACKEND" ;;
-            model-server) DIGEST="$DIGEST_MODEL_SERVER" ;;
-            sandbox) DIGEST="$DIGEST_SANDBOX" ;;
-          esac
-          if [ "$IS_TEST_RUN" == "true" ]; then
-            echo "image=${RUNS_ON_ECR_CACHE}@${DIGEST}" >> "$GITHUB_OUTPUT"
-          else
-            echo "image=docker.io/${REGISTRY_IMAGE}@${DIGEST}" >> "$GITHUB_OUTPUT"
+          ref=main
+          if [[ "${TAG}" =~ ^v([0-9]+\.[0-9]+)\. ]] && gh api "repos/${REPO}/branches/release/v${BASH_REMATCH[1]}" > /dev/null 2>&1; then
+            ref="release/v${BASH_REMATCH[1]}"
           fi
-        env:
-          COMPONENT: ${{ matrix.component }}
-          IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
-          REGISTRY_IMAGE: ${{ matrix.registry-image }}
-          DIGEST_WEB: ${{ needs.build-web-amd64.outputs.digest }}
-          DIGEST_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.outputs.digest }}
-          DIGEST_BACKEND: ${{ needs.build-backend-amd64.outputs.digest }}
-          DIGEST_MODEL_SERVER: ${{ needs.build-model-server-amd64.outputs.digest }}
-          DIGEST_SANDBOX: ${{ needs.build-sandbox-amd64.outputs.digest }}
-
-      - name: Run image vulnerability audit
-        if: steps.should-run.outputs.run == 'true'
-        # Exits non-zero on unsuppressed CRITICAL (gates the release). On a hard
-        # scan failure nothing is written, so seed a valid empty SARIF to keep the
-        # always() upload below from choking; either way it reaches the Security tab.
-        run: |
-          uv run --no-sync --with onyx-devtools ods audit image "$IMAGE" \
-            --fail-on=critical --format=sarif > image-audit.sarif || status=$?
-          if [ ! -s image-audit.sarif ]; then
-            # $schema is a literal SARIF key, not a shell variable.
-            # shellcheck disable=SC2016
-            echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > image-audit.sarif
-          fi
-          exit "${status:-0}"
-        env:
-          IMAGE: ${{ steps.scan-image.outputs.image }}
-
-      # Rolling main-HEAD builds (nightly-latest / edge) map to refs/heads/main so
-      # the Security tab stays authoritative for main and alerts auto-resolve on
-      # later main builds. Test runs (manual workflow_dispatch) upload against their
-      # own ref/sha instead, so the scan + upload can be verified without polluting
-      # main's alerts. Release/beta tags sit on older commits — they still gate, they
-      # just don't upload.
-      - name: Upload audit results to GitHub Security tab
-        if: >-
-          always() && steps.should-run.outputs.run == 'true' &&
-          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
-           needs.determine-builds.outputs.is-test-run == 'true')
-        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
-        with:
-          sarif_file: image-audit.sarif
-          category: image-audit-${{ matrix.component }}
-          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
-          sha: ${{ github.sha }}
+          gh workflow run cve-alerts.yml --repo "${REPO}" --ref "${ref}" -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
 
   notify-slack-on-failure:
     needs:
@@ -1954,15 +2059,14 @@ jobs:
       - build-sandbox-amd64
       - build-sandbox-arm64
       - merge-sandbox
-      - image-audit
-    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure' || needs.image-audit.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
     environment: release
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 

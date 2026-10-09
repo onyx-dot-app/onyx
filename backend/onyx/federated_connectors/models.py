@@ -1,10 +1,7 @@
 from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 
 class FieldSpec(BaseModel):

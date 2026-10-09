@@ -1,5 +1,9 @@
 LABEL_SANDBOX_ID = "onyx.app/sandbox-id"
 LABEL_TENANT_ID = "onyx.app/tenant-id"
+# Provisioning attempt that created the resource. Operator-facing orphan
+# attribution only (kubectl/docker inspect) — never read programmatically;
+# correctness comes from the attempt-number condition on sandbox status writes.
+LABEL_PROVISIONING_ATTEMPT = "onyx.app/provisioning-attempt"
 LABEL_K8S_COMPONENT = "app.kubernetes.io/component"
 LABEL_K8S_COMPONENT_SANDBOX = "sandbox"
 LABEL_K8S_MANAGED_BY = "app.kubernetes.io/managed-by"

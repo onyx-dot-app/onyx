@@ -15,42 +15,50 @@ import asyncio
 import base64
 import json
 import logging
-from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import AbstractSet
-from typing import Any
+from typing import AbstractSet, Any
 from unittest.mock import MagicMock
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from mitmproxy import connection
-from mitmproxy import http
+from mitmproxy import connection, http
 from mitmproxy.proxy import server_hooks
 from redis.exceptions import RedisError
+from sqlalchemy.orm import Session
 
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.external_apps.matching.engine import MatchedAction
+from onyx.cache.interface import CacheBackend
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    EndpointPolicy,
+    GatedAppKind,
+)
+from onyx.external_apps.matching.engine import (
+    AllMatchedActions,
+    GatedTarget,
+    MatchedAction,
+)
+from onyx.sandbox_proxy import destination_policy
 from onyx.sandbox_proxy.addons import gate
-from onyx.sandbox_proxy.addons.gate import GateAddon
-from onyx.sandbox_proxy.addons.gate import ParkedApprovals
-from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionOutcome
+from onyx.sandbox_proxy.addons.gate import GateAddon, ParkedApprovals
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialInjectionDispatcher,
+    CredentialResolver,
+    CredentialUnavailableError,
+)
+from onyx.sandbox_proxy.destination_policy import parse_destination_policy
 from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.models import DestinationPolicyConfig, InjectionOutcome
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from tests.unit.sandbox_proxy.conftest import make_flow
-from tests.unit.sandbox_proxy.conftest import make_matched_actions
-from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
-from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
-from tests.unit.sandbox_proxy.conftest import StubResolver
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
+from tests.unit.sandbox_proxy.conftest import (
+    RecordingCredentialResolver,
+    StubResolver,
+    make_flow,
+    make_matched_actions,
+    make_resolved_sandbox,
+)
 
 # ---------------------------------------------------------------------------
 # Stubs
@@ -103,13 +111,25 @@ def _ctx(
 @pytest.fixture(autouse=True)
 def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """The gate opens tenant sessions via `gate.get_session_with_tenant`.
-    Default it to a dummy MagicMock-yielding session; tests asserting on
-    session-open ordering re-patch it with `_recorder_db_factory(ops)`."""
-    monkeypatch.setattr(gate, "get_session_with_tenant", _recorder_db_factory([]))
+    Unit tests treat the session as an opaque collaborator; persistence and
+    transaction behavior are covered by external-dependency tests."""
+    monkeypatch.setattr(
+        gate,
+        "get_session_with_tenant",
+        lambda **_kwargs: nullcontext(MagicMock(spec=Session)),
+    )
+    monkeypatch.setattr(
+        destination_policy.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: _addrinfo("93.184.216.34"),
+    )
+    monkeypatch.setattr(gate, "pin_destination", lambda _host, _port, _address: None)
+    # The stub sessions can't answer the target → gated_app_id lookup.
+    monkeypatch.setattr(gate, "get_gated_app_id", lambda _db, _kind, _target_id: 1)
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, external_app_id: [],  # noqa: ARG005
+        lambda _db, *, session_id, gated_app_id: [],  # noqa: ARG005
     )
 
 
@@ -119,10 +139,14 @@ def _build(
     matcher: _StubMatcher,
     cache_factory: Any = _noop_cache_factory,
     credential_resolvers: list[CredentialResolver] | None = None,
+    policy: DestinationPolicyConfig | None = None,
 ) -> GateAddon:
     return GateAddon(
         identity=resolver,
         request_evaluator=matcher,
+        destination_policy=policy
+        if policy is not None
+        else parse_destination_policy(""),
         cache_factory=cache_factory,
         proxy_instance_id="proxy-test",
         credential_dispatcher=CredentialInjectionDispatcher(
@@ -142,6 +166,15 @@ def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
 
 
 _MATCH = make_matched_actions(payload={"text": "hi"})
+_MATCH_MCP = AllMatchedActions(
+    actions=_MATCH.actions,
+    target=GatedTarget(
+        kind=GatedAppKind.MCP_SERVER,
+        id=73,
+        app_name="Linear MCP",
+    ),
+    payload=_MATCH.payload,
+)
 _MATCH_MULTI_ASK = AllMatchedActions(
     actions=(
         MatchedAction(
@@ -157,8 +190,7 @@ _MATCH_MULTI_ASK = AllMatchedActions(
             policy=EndpointPolicy.ASK,
         ),
     ),
-    app_name="Slack",
-    external_app_id=42,
+    target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=42, app_name="Slack"),
     payload={"text": "hi"},
 )
 _MATCH_ALWAYS = make_matched_actions(
@@ -550,20 +582,33 @@ async def test_ask_denied_blocks(
 _RUN_ID = UUID("55555555-5555-5555-5555-555555555555")
 # make_matched_actions defaults external_app_id=42.
 _GRANTED_APP_ID = 42
+_GRANTED_MCP_SERVER_ID = 73
 
 
 def _stub_grants(
     monkeypatch: pytest.MonkeyPatch,
     result: tuple[UUID, list[int]] | None | Exception,
+    *,
+    kind: GatedAppKind = GatedAppKind.EXTERNAL_APP,
 ) -> list[UUID]:
-    """Stub the gate's grant lookup; returns the recorded session_ids."""
+    """Stub the gate's grant lookup; returns the recorded session_ids.
+
+    The stub wraps target ids as the ``(kind, id)`` keys returned by the real
+    lookup."""
     calls: list[UUID] = []
 
-    def _lookup(*, db_session: Any, session_id: UUID) -> tuple[UUID, list[int]] | None:  # noqa: ARG001
+    def _lookup(
+        *,
+        db_session: Any,  # noqa: ARG001
+        session_id: UUID,
+    ) -> tuple[UUID, set[tuple[GatedAppKind, int]]] | None:
         calls.append(session_id)
         if isinstance(result, Exception):
             raise result
-        return result
+        if result is None:
+            return None
+        run_id, target_ids = result
+        return run_id, {(kind, target_id) for target_id in target_ids}
 
     monkeypatch.setattr(gate, "get_live_scheduled_run_grants", _lookup)
     return calls
@@ -622,17 +667,27 @@ class _SessionGrantCache:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("matched_actions", "target_kind", "target_id"),
+    [
+        (_MATCH, GatedAppKind.EXTERNAL_APP, _GRANTED_APP_ID),
+        (_MATCH_MCP, GatedAppKind.MCP_SERVER, _GRANTED_MCP_SERVER_ID),
+    ],
+    ids=["external-app", "mcp-server"],
+)
 async def test_pre_approved_scheduled_run_skips_park(
     monkeypatch: pytest.MonkeyPatch,
+    matched_actions: AllMatchedActions,
+    target_kind: GatedAppKind,
+    target_id: int,
 ) -> None:
-    """Granted app on a RUNNING scheduled run: forwarded immediately with a
-    pre-decided APPROVED row — the park pipeline never runs."""
+    """A granted target skips the approval park during a scheduled run."""
     user_id = uuid4()
     sandbox = make_resolved_sandbox(user_id=user_id)
     resolver = StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=matched_actions))
     spy = _spy_pipeline(addon, monkeypatch)
-    _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    _stub_grants(monkeypatch, (_RUN_ID, [target_id]), kind=target_kind)
     inserted = _spy_pre_approve_insert(monkeypatch)
     notified: list[dict[str, Any]] = []
     monkeypatch.setattr(gate, "create_notification", lambda **kw: notified.append(kw))
@@ -643,16 +698,17 @@ async def test_pre_approved_scheduled_run_skips_park(
     assert flow.response is None  # forwarded
     assert not spy.approval_ran  # park pipeline skipped
     assert spy.awaited == []
-    assert spy.dispatched == [(_MATCH, user_id, sandbox.tenant_id)]
+    assert spy.dispatched == [(matched_actions, user_id, sandbox.tenant_id)]
     assert len(inserted) == 1
     assert inserted[0]["decision"] == ApprovalDecision.APPROVED
     assert inserted[0]["decided_via"] == ApprovalDecidedVia.PRE_APPROVAL
-    assert inserted[0]["external_app_id"] == _GRANTED_APP_ID
-    # Dedup contract: additional_data is exactly the stable (run, app) pair.
+    assert inserted[0]["target"] == (target_kind, target_id)
+    # Dedup contract: additional_data is exactly the stable run and target.
     assert len(notified) == 1
     assert notified[0]["additional_data"] == {
         "run_id": str(_RUN_ID),
-        "external_app_id": _GRANTED_APP_ID,
+        "target_kind": target_kind.value,
+        "target_id": target_id,
     }
 
 
@@ -714,7 +770,7 @@ async def test_session_grant_db_fallback_hydrates_cache(
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, external_app_id: [grant_source],  # noqa: ARG005
+        lambda _db, *, session_id, gated_app_id: [grant_source],  # noqa: ARG005
     )
     flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
 
@@ -1003,8 +1059,12 @@ def test_parse_proxy_auth_username(header: str | None, expected: str | None) -> 
 async def test_http_connect_caches_tag_and_client_disconnected_evicts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
-    addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
+    monkeypatch.setattr(
+        gate, "is_destination_blocked", lambda _config, _host, _port: False
+    )
+    addon = _build(
+        resolver=StubResolver(sandbox=make_resolved_sandbox()), matcher=_StubMatcher()
+    )
     flow = make_flow(conn_id="conn-xyz", proxy_auth=_basic_auth(_TAG_UUID))
 
     await addon.http_connect(flow)
@@ -1018,85 +1078,79 @@ async def test_http_connect_caches_tag_and_client_disconnected_evicts(
 async def test_http_connect_ignores_missing_or_garbled_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
-    addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
+    monkeypatch.setattr(
+        gate, "is_destination_blocked", lambda _config, _host, _port: False
+    )
+    addon = _build(
+        resolver=StubResolver(sandbox=make_resolved_sandbox()), matcher=_StubMatcher()
+    )
     await addon.http_connect(make_flow(conn_id="c1"))  # no Proxy-Authorization
     await addon.http_connect(make_flow(conn_id="c2", proxy_auth="Bearer nope"))
     assert addon._conn_session_tags == {}
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("peer_ip", ["10.0.0.99", "2600:ffff:ffff::99"])
+async def test_http_connect_rejects_unknown_peer(
+    monkeypatch: pytest.MonkeyPatch, peer_ip: str
+) -> None:
+    monkeypatch.setattr(
+        gate, "is_destination_blocked", lambda _config, _host, _port: False
+    )
+    addon: GateAddon = _build(resolver=StubResolver(), matcher=_StubMatcher())
+    flow: http.HTTPFlow = make_flow(
+        method="CONNECT", peername=(peer_ip, 12345), proxy_auth=_basic_auth(_TAG_UUID)
+    )
+
+    await addon.http_connect(flow)
+
+    _assert_403(flow, SandboxProxyError.UNIDENTIFIED_SANDBOX)
+    assert addon._conn_session_tags == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("peer", [None, ("not-an-ip", 12345)])
+async def test_http_connect_rejects_missing_peer(
+    monkeypatch: pytest.MonkeyPatch, peer: tuple[str, int] | None
+) -> None:
+    monkeypatch.setattr(
+        gate, "is_destination_blocked", lambda _config, _host, _port: False
+    )
+    resolver: StubResolver = StubResolver(sandbox=make_resolved_sandbox())
+    addon: GateAddon = _build(resolver=resolver, matcher=_StubMatcher())
+    flow: http.HTTPFlow = make_flow(method="CONNECT", peername=peer)
+
+    await addon.http_connect(flow)
+
+    _assert_403(flow, SandboxProxyError.UNIDENTIFIED_SANDBOX)
+    assert resolver.resolve_sandbox_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_http_connect_rejects_identity_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        gate, "is_destination_blocked", lambda _config, _host, _port: False
+    )
+    addon: GateAddon = _build(
+        resolver=StubResolver(sandbox_exc=RuntimeError("database unavailable")),
+        matcher=_StubMatcher(),
+    )
+    flow: http.HTTPFlow = make_flow(method="CONNECT")
+
+    await addon.http_connect(flow)
+
+    _assert_403(flow, SandboxProxyError.UNIDENTIFIED_SANDBOX)
+
+
 # ---------------------------------------------------------------------------
-# destination_is_blocked — internal-egress guard
+# Destination policy integration — internal-egress guard
 # ---------------------------------------------------------------------------
 
 
 def _addrinfo(*ips: str) -> list[Any]:
     return [(2, 1, 6, "", (ip, 0)) for ip in ips]
-
-
-def test_destination_is_blocked_literal_ips() -> None:
-    assert gate.destination_is_blocked("10.0.0.1", 443) is True
-    assert gate.destination_is_blocked("169.254.169.254", 80) is True  # IMDS
-    assert gate.destination_is_blocked("::ffff:10.0.0.1", 443) is True  # mapped v4
-    assert gate.destination_is_blocked("8.8.8.8", 443) is False
-    assert gate.destination_is_blocked("", 443) is False
-
-
-def test_destination_is_blocked_resolves_to_internal(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("10.1.2.3")
-    )
-    assert gate.destination_is_blocked("intra.svc.cluster.local", 443) is True
-
-
-def test_destination_is_blocked_resolves_to_public(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("93.184.216.34")
-    )
-    assert gate.destination_is_blocked("example.com", 443) is False
-
-
-def test_destination_is_blocked_fails_closed_on_resolution_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A resolver failure must deny (fail closed), not allow relay."""
-
-    def _boom(*_args: Any, **_kwargs: Any) -> Any:
-        raise OSError("temporary DNS failure")
-
-    monkeypatch.setattr(gate.socket, "getaddrinfo", _boom)
-    assert gate.destination_is_blocked("flaky-host.example", 443) is True
-
-
-def test_api_server_exception_is_port_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The api-server bypass must match host AND port; other ports on the same
-    internal host (Redis/Postgres) stay blocked."""
-    monkeypatch.setattr(gate, "_API_SERVER_HOST", "api.internal")
-    monkeypatch.setattr(gate, "_API_SERVER_PORT", 443)
-    # api host resolves to an internal IP, like a real in-cluster service name.
-    monkeypatch.setattr(
-        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("10.5.5.5")
-    )
-    assert gate.destination_is_blocked("api.internal", 443) is False  # allowed
-    assert gate.destination_is_blocked("api.internal", 6379) is True  # Redis: blocked
-    assert gate.destination_is_blocked("api.internal", 5432) is True  # PG: blocked
-
-
-def test_destination_is_blocked_blocks_if_any_resolved_ip_internal(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """If a name resolves to a mix of public and internal IPs, deny — an attacker
-    can otherwise steer mitmproxy to the internal one."""
-    monkeypatch.setattr(
-        gate.socket,
-        "getaddrinfo",
-        lambda *_a, **_k: _addrinfo("93.184.216.34", "10.0.0.9"),
-    )
-    assert gate.destination_is_blocked("rebind.example", 443) is True
 
 
 def _server_hook_data(host: str, port: int) -> server_hooks.ServerConnectionHookData:
@@ -1108,39 +1162,85 @@ def _server_hook_data(host: str, port: int) -> server_hooks.ServerConnectionHook
 
 
 @pytest.mark.asyncio
-async def test_server_connect_allows_public_without_pinning(
+@pytest.mark.parametrize("sni", ["example.com", "tls.example.com", None])
+async def test_server_connect_pins_public_address_and_preserves_sni(
+    sni: str | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Public host: allowed through untouched. We must NOT pin the IP or alter
-    sni — pinning breaks eager-mode TLS interception and credential injection."""
-    monkeypatch.setattr(
-        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("93.184.216.34")
-    )
-    addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
-    data = _server_hook_data("example.com", 443)
+    pin = MagicMock()
+    monkeypatch.setattr(gate, "pin_destination", pin)
+    addon: GateAddon = _build(resolver=StubResolver(), matcher=_StubMatcher())
+    data: server_hooks.ServerConnectionHookData = _server_hook_data("example.com", 443)
+    data.server.sni = sni
 
     await addon.server_connect(data)
 
     assert data.server.error is None
-    assert data.server.address == ("example.com", 443)  # hostname left intact
-    assert data.server.sni == "example.com"
+    assert data.server.address == ("example.com", 443)
+    pin.assert_called_once_with("example.com", 443, ("93.184.216.34",))
+    assert data.server.sni == (sni if sni is not None else "example.com")
 
 
 @pytest.mark.asyncio
-async def test_server_connect_blocks_rebind_to_internal(
+async def test_server_connect_fails_closed_without_upstream_resolver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Backstop: a name that resolves to internal at connect-time is killed."""
-    monkeypatch.setattr(
-        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("10.1.2.3")
-    )
-    addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
-    data = _server_hook_data("rebind.example", 443)
+    def unavailable(_host: str, _port: int, _addresses: tuple[str, ...]) -> None:
+        raise RuntimeError("Missing upstream loop")
 
+    monkeypatch.setattr(gate, "pin_destination", unavailable)
+    addon: GateAddon = _build(resolver=StubResolver(), matcher=_StubMatcher())
+    data: server_hooks.ServerConnectionHookData = _server_hook_data("example.com", 443)
+    await addon.server_connect(data)
+    assert data.server.error == "destination_blocked: upstream resolver unavailable"
+
+
+@pytest.mark.asyncio
+async def test_server_connect_blocks_dns_rebind_after_connect_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver: StubResolver = StubResolver(sandbox=make_resolved_sandbox())
+    addon: GateAddon = _build(resolver=resolver, matcher=_StubMatcher())
+    flow: http.HTTPFlow = make_flow(host="rebind.example", method="CONNECT")
+    await addon.http_connect(flow)
+    assert flow.response is None
+
+    monkeypatch.setattr(
+        destination_policy.socket,
+        "getaddrinfo",
+        lambda *_a, **_k: _addrinfo("10.1.2.3"),
+    )
+    data: server_hooks.ServerConnectionHookData = _server_hook_data(
+        "rebind.example", 443
+    )
     await addon.server_connect(data)
 
     assert data.server.error is not None
     assert data.server.address == ("rebind.example", 443)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["GET", "CONNECT"])
+async def test_configured_global_internal_cidr_denied_before_identity(
+    method: str,
+) -> None:
+    resolver: StubResolver = StubResolver(sandbox=make_resolved_sandbox())
+    matcher: _StubMatcher = _StubMatcher()
+    addon: GateAddon = _build(
+        resolver=resolver,
+        matcher=matcher,
+        policy=parse_destination_policy("", ["2600:ffff:ffff::/64"]),
+    )
+    flow: http.HTTPFlow = make_flow(host="2600:ffff:ffff::2", method=method)
+
+    if method == "CONNECT":
+        await addon.http_connect(flow)
+    else:
+        await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.DESTINATION_BLOCKED)
+    assert resolver.resolve_sandbox_calls == 0
+    assert matcher.calls == 0
 
 
 # ---------------------------------------------------------------------------
@@ -1175,7 +1275,9 @@ async def test_resolve_and_match_exact_tag_on_https_connect(
 ) -> None:
     """HTTPS: the tag rode on the CONNECT (captured via http_connect)
     and is read back off the connection, not the MITM'd request."""
-    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
+    monkeypatch.setattr(
+        gate, "is_destination_blocked", lambda _config, _host, _port: False
+    )
     user_id = uuid4()
     tagged_id = UUID(_TAG_UUID)
     sandbox = make_resolved_sandbox(user_id=user_id)
@@ -1419,173 +1521,6 @@ def test_parked_approvals_remove_last_cleans_tenant_entry() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _persist_approval_row
-# ---------------------------------------------------------------------------
-
-
-class _RecorderSession:
-    """Records the ordered DB ops so a test can pin commit-before-announce."""
-
-    def __init__(self, ops: list[str]) -> None:
-        self._ops = ops
-
-    def add(self, obj: Any) -> None:  # noqa: ARG002
-        self._ops.append("add")
-
-    def flush(self) -> None:
-        self._ops.append("flush")
-
-    def commit(self) -> None:
-        self._ops.append("commit")
-
-    # Chained query for create_notification's idempotency check; first()
-    # returns None to force the create-new-row path.
-    def query(self, *_args: Any, **_kwargs: Any) -> "_RecorderSession":
-        return self
-
-    def filter_by(self, *_args: Any, **_kwargs: Any) -> "_RecorderSession":
-        return self
-
-    def filter(self, *_args: Any, **_kwargs: Any) -> "_RecorderSession":
-        return self
-
-    def first(self) -> None:
-        return None
-
-
-def _recorder_db_factory(ops: list[str]) -> Any:
-    @contextmanager
-    def factory(tenant_id: str) -> Iterator[_RecorderSession]:  # noqa: ARG001
-        yield _RecorderSession(ops)
-
-    return factory
-
-
-class _RecorderCache:
-    """Stub `CacheBackend` recording the rpush/expire that announce uses."""
-
-    def __init__(self, ops: list[str], rpush_raises: Exception | None = None) -> None:
-        self._ops = ops
-        self._rpush_raises = rpush_raises
-        self.rpush_calls: list[tuple[str, Any]] = []
-        self.expire_calls: list[tuple[str, int]] = []
-
-    def rpush(self, key: str, value: Any) -> None:
-        if self._rpush_raises is not None:
-            raise self._rpush_raises
-        self._ops.append(f"rpush:{key}")
-        self.rpush_calls.append((key, value))
-
-    def expire(self, key: str, ttl: int) -> None:
-        self._ops.append(f"expire:{key}")
-        self.expire_calls.append((key, ttl))
-
-
-def test_persist_approval_row_commits_announces_notifies(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Pin the commit path: row committed before announce, announce
-    RPUSHed onto `approval:announce:{session_id}`, and the id registered
-    with the parked-approvals drain."""
-    ops: list[str] = []
-    approval_id = UUID("22222222-2222-2222-2222-222222222222")
-
-    # Stub insert to return a fixed id so the side effects can be pinned.
-    inserted_payload: dict[str, Any] = {}
-
-    def _fake_insert(
-        db: Any,  # noqa: ARG001
-        **kwargs: Any,
-    ) -> Any:
-        inserted_payload.update(kwargs)
-        ops.append("insert")
-        return MagicMock(approval_id=approval_id)
-
-    monkeypatch.setattr(gate.action_approval, "insert_action_approval", _fake_insert)
-
-    cache = _RecorderCache(ops)
-    monkeypatch.setattr(gate, "get_session_with_tenant", _recorder_db_factory(ops))
-    addon = _build(
-        resolver=StubResolver(),
-        matcher=_StubMatcher(),
-        cache_factory=lambda tenant_id: cache,  # noqa: ARG005
-    )
-
-    ctx = _ctx(tenant_id="tenant-1")
-    returned = addon._persist_approval_row(ctx, _MATCH)
-
-    assert returned == approval_id
-    assert inserted_payload == {
-        "session_id": ctx.session_id,
-        "actions": [a.model_dump(mode="json") for a in _MATCH.actions],
-        "app_name": _MATCH.app_name,
-        "payload": _MATCH.payload,
-        "external_app_id": _MATCH.external_app_id,
-    }
-
-    # insert -> commit -> rpush: announce must not precede the commit,
-    # or the FE could read the row before it's persisted.
-    insert_at = ops.index("insert")
-    commit_at = ops.index("commit")
-    rpush_at = next(i for i, op in enumerate(ops) if op.startswith("rpush:"))
-    assert insert_at < commit_at < rpush_at, ops
-
-    # Announce key is the session-specific list the merger BLPOPs on.
-    assert cache.rpush_calls == [
-        (f"approval:announce:{ctx.session_id}", str(approval_id))
-    ]
-    # Registered for the SIGTERM drain.
-    assert dict(addon._parked.snapshot()) == {"tenant-1": {approval_id}}
-
-
-def test_persist_approval_row_announce_failure_is_swallowed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A Redis blip on announce must not roll back the row or skip the
-    notify dispatch; the sub-steps run independently."""
-    approval_id = UUID("33333333-3333-3333-3333-333333333333")
-    ops: list[str] = []
-
-    def _fake_insert(
-        db: Any,  # noqa: ARG001
-        **kwargs: Any,  # noqa: ARG001
-    ) -> Any:
-        ops.append("insert")
-        return MagicMock(approval_id=approval_id)
-
-    monkeypatch.setattr(gate.action_approval, "insert_action_approval", _fake_insert)
-
-    cache = _RecorderCache(ops, rpush_raises=RedisError("connection refused"))
-    monkeypatch.setattr(gate, "get_session_with_tenant", _recorder_db_factory(ops))
-    addon = _build(
-        resolver=StubResolver(),
-        matcher=_StubMatcher(),
-        cache_factory=lambda tenant_id: cache,  # noqa: ARG005
-    )
-
-    notify_calls: list[tuple[UUID, SessionContext, AllMatchedActions]] = []
-
-    def _fake_notify(
-        _self: Any, aid: UUID, ctx_arg: SessionContext, match_arg: AllMatchedActions
-    ) -> None:
-        notify_calls.append((aid, ctx_arg, match_arg))
-
-    monkeypatch.setattr(GateAddon, "_notify_approval_requested", _fake_notify)
-
-    ctx = _ctx(tenant_id="tenant-1")
-    # Must not propagate the RedisError.
-    returned = addon._persist_approval_row(ctx, _MATCH)
-    assert returned == approval_id
-    assert dict(addon._parked.snapshot()) == {"tenant-1": {approval_id}}
-
-    # Failed announce must not short-circuit the notify dispatch.
-    assert notify_calls == [(approval_id, ctx, _MATCH)]
-    assert ops.index("insert") < ops.index("commit")
-    # rpush raised before recording, so no rpush op is present.
-    assert not any(op.startswith("rpush:") for op in ops)
-
-
-# ---------------------------------------------------------------------------
 # _await_decision
 # ---------------------------------------------------------------------------
 
@@ -1606,7 +1541,7 @@ async def test_await_decision_wake_received_returns_decision(
 
     monkeypatch.setattr(gate.approval_cache, "wait_for_wake", _fake_wait_for_wake)
 
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1635,7 +1570,7 @@ async def test_await_decision_timeout_claims_expired(
 
     monkeypatch.setattr(gate.approval_cache, "wait_for_wake", _fake_wait_for_wake)
 
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1674,7 +1609,7 @@ async def test_await_decision_cancelled_claims_expired_and_reraises(
 
     monkeypatch.setattr(gate.approval_cache, "wait_for_wake", _fake_wait_for_wake)
 
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1709,9 +1644,9 @@ async def test_drain_inflight_walks_parked_per_tenant(
     """Drain wakes every parked approval on its own tenant's cache, never
     cross-tenant, and leaves `_parked` untouched (removal is owned by
     `_await_decision.finally`)."""
-    cache_t1 = _RecorderCache([])
-    cache_t2 = _RecorderCache([])
-    per_tenant_caches: dict[str, _RecorderCache] = {
+    cache_t1 = MagicMock(spec=CacheBackend)
+    cache_t2 = MagicMock(spec=CacheBackend)
+    per_tenant_caches: dict[str, CacheBackend] = {
         "tenant-1": cache_t1,
         "tenant-2": cache_t2,
     }
@@ -1737,7 +1672,7 @@ async def test_drain_inflight_walks_parked_per_tenant(
         lambda _aid, _tid: ApprovalDecision.EXPIRED,
     )
 
-    send_wake_calls: list[tuple[UUID, ApprovalDecision, _RecorderCache]] = []
+    send_wake_calls: list[tuple[UUID, ApprovalDecision, CacheBackend]] = []
 
     def _fake_send_wake(aid: UUID, decision: ApprovalDecision, cache: Any) -> None:
         send_wake_calls.append((aid, decision, cache))
@@ -1765,9 +1700,9 @@ async def test_drain_inflight_completes_when_inflight_set_empty() -> None:
     """Nothing parked or inflight: drain returns immediately."""
     cache_factory_calls: list[str] = []
 
-    def _tracking_cache_factory(tenant_id: str) -> _RecorderCache:
+    def _tracking_cache_factory(tenant_id: str) -> CacheBackend:
         cache_factory_calls.append(tenant_id)
-        return _RecorderCache([])
+        return MagicMock(spec=CacheBackend)
 
     addon = _build(
         resolver=StubResolver(),
@@ -1799,7 +1734,7 @@ def test_terminalize_happy_path_writes_wake(
     The wake carries the arbiter's decision (APPROVED here if the API
     won the race), not unconditionally EXPIRED."""
     approval_id = uuid4()
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1830,7 +1765,7 @@ def test_terminalize_db_failure_skips_wake(
     """If the claim raises, there's no decision to forward, so send_wake
     must not be called; the exception is swallowed."""
     approval_id = uuid4()
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1862,7 +1797,7 @@ def test_terminalize_wake_failure_swallowed(
     """send_wake raising must not propagate; the parked BLPOP times out
     and re-reads the already-terminal row from Postgres."""
     approval_id = uuid4()
-    cache = _RecorderCache([])
+    cache = MagicMock(spec=CacheBackend)
     addon = _build(
         resolver=StubResolver(),
         matcher=_StubMatcher(),
@@ -1882,3 +1817,18 @@ def test_terminalize_wake_failure_swallowed(
 
     # Should not raise.
     addon._terminalize_after_unhandled_error(approval_id, "tenant-1")
+
+
+@pytest.mark.parametrize(
+    "address, expected",
+    [
+        ("10.0.0.1", "10.0.0.1"),
+        ("::ffff:10.0.0.1", "10.0.0.1"),
+        ("2001:db8::1", "2001:db8::1"),
+        ("2001:0db8:0:0:0:0:0:1", "2001:db8::1"),
+        ("invalid", None),
+    ],
+)
+def test_extract_src_ip_normalizes_peer(address: str, expected: str | None) -> None:
+    addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
+    assert addon._extract_src_ip(make_flow(peername=(address, 12345))) == expected

@@ -1,12 +1,16 @@
-from onyx.configs.app_configs import EXT_APP_GOOGLE_CALENDAR_CLIENT_ID
-from onyx.configs.app_configs import EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.actions import ExternalAppAction
-from onyx.external_apps.providers.actions import RestRoute
+from onyx.configs.app_configs import (
+    EXT_APP_GOOGLE_CALENDAR_CLIENT_ID,
+    EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET,
+)
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.external_apps.providers.actions import (
+    EndpointSpec,
+    ExternalAppAction,
+    RestRoute,
+)
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
+from shared_configs.configs import MULTI_TENANT
 
 
 # Google Calendar REST v3 (https://www.googleapis.com/calendar/v3/...); the
@@ -76,15 +80,22 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
+_SELF_HOSTED_SCOPE = "https://www.googleapis.com/auth/calendar"
+# No Calendar scope is restricted, so this is just the least-privilege spelling
+# of the above — the whole catalog survives.
+_CLOUD_SCOPE = (
+    "https://www.googleapis.com/auth/calendar.events "
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly "
+    "https://www.googleapis.com/auth/calendar.freebusy"
+)
+
+
 class GoogleCalendarProvider(GoogleOAuthProvider, OnyxManagedExtApp):
     spec = GoogleOAuthProvider.build_spec(
         app_type=ExternalAppType.GOOGLE_CALENDAR,
         app_name="Google Calendar",
-        scope="https://www.googleapis.com/auth/calendar",
+        scope=_CLOUD_SCOPE if MULTI_TENANT else _SELF_HOSTED_SCOPE,
         upstream_url_patterns=["https://www\\.googleapis\\.com/calendar/.*"],
-        description=(
-            "Read and create events on your Google Calendar from inside Onyx Craft."
-        ),
         google_api_name="Google Calendar API",
         endpoint_catalog=_ENDPOINTS,
     )

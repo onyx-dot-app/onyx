@@ -1,38 +1,40 @@
 """Discord bot admin API endpoints."""
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISCORD_BOT_TOKEN
-from onyx.configs.constants import AuthType
-from onyx.db.discord_bot import create_discord_bot_config
-from onyx.db.discord_bot import create_guild_config
-from onyx.db.discord_bot import delete_discord_bot_config
-from onyx.db.discord_bot import delete_discord_service_api_key
-from onyx.db.discord_bot import delete_guild_config
-from onyx.db.discord_bot import get_channel_config_by_internal_ids
-from onyx.db.discord_bot import get_channel_configs
-from onyx.db.discord_bot import get_discord_bot_config
-from onyx.db.discord_bot import get_guild_config_by_internal_id
-from onyx.db.discord_bot import get_guild_configs
-from onyx.db.discord_bot import update_discord_channel_config
-from onyx.db.discord_bot import update_guild_config
+from onyx.db.discord_bot import (
+    create_discord_bot_config,
+    create_guild_config,
+    delete_discord_bot_config,
+    delete_discord_service_api_key,
+    delete_guild_config,
+    get_channel_config_by_internal_ids,
+    get_channel_configs,
+    get_discord_bot_config,
+    get_guild_config_by_internal_id,
+    get_guild_configs,
+    update_discord_channel_config,
+    update_guild_config,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.server.manage.discord_bot.models import DiscordBotConfigCreateRequest
-from onyx.server.manage.discord_bot.models import DiscordBotConfigResponse
-from onyx.server.manage.discord_bot.models import DiscordChannelConfigResponse
-from onyx.server.manage.discord_bot.models import DiscordChannelConfigUpdateRequest
-from onyx.server.manage.discord_bot.models import DiscordGuildConfigCreateResponse
-from onyx.server.manage.discord_bot.models import DiscordGuildConfigResponse
-from onyx.server.manage.discord_bot.models import DiscordGuildConfigUpdateRequest
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.discord_bot.models import (
+    DiscordBotConfigCreateRequest,
+    DiscordBotConfigResponse,
+    DiscordChannelConfigResponse,
+    DiscordChannelConfigUpdateRequest,
+    DiscordGuildConfigCreateResponse,
+    DiscordGuildConfigResponse,
+    DiscordGuildConfigUpdateRequest,
+)
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/manage/admin/discord-bot")
@@ -45,15 +47,15 @@ def _check_bot_config_api_access() -> None:
     - On Cloud (managed by Onyx)
     - When DISCORD_BOT_TOKEN env var is set (managed via env)
     """
-    if AUTH_TYPE == AuthType.CLOUD:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Discord bot configuration is managed by Onyx on Cloud.",
+    if MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Discord bot configuration is managed by Onyx on Cloud.",
         )
     if DISCORD_BOT_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Discord bot is configured via environment variables. API access disabled.",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Discord bot is configured via environment variables. API access disabled.",
         )
 
 
@@ -63,7 +65,7 @@ def _check_bot_config_api_access() -> None:
 @router.get("/config", response_model=DiscordBotConfigResponse)
 def get_bot_config(
     _: None = Depends(_check_bot_config_api_access),
-    __: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    __: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> DiscordBotConfigResponse:
     """Get Discord bot config. Returns 403 on Cloud or if env vars set."""
@@ -81,7 +83,7 @@ def get_bot_config(
 def create_bot_request(
     request: DiscordBotConfigCreateRequest,
     _: None = Depends(_check_bot_config_api_access),
-    __: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    __: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> DiscordBotConfigResponse:
     """Create Discord bot config. Returns 403 on Cloud or if env vars set."""
@@ -91,9 +93,9 @@ def create_bot_request(
             bot_token=request.bot_token,
         )
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Discord bot config already exists. Delete it first to create a new one.",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Discord bot config already exists. Delete it first to create a new one.",
         )
 
     db_session.commit()
@@ -107,7 +109,7 @@ def create_bot_request(
 @router.delete("/config")
 def delete_bot_config_endpoint(
     _: None = Depends(_check_bot_config_api_access),
-    __: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    __: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> dict:
     """Delete Discord bot config.
@@ -116,7 +118,7 @@ def delete_bot_config_endpoint(
     """
     deleted = delete_discord_bot_config(db_session)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Bot config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Bot config not found")
 
     # Also delete the service API key used by the Discord bot
     delete_discord_service_api_key(db_session)
@@ -130,7 +132,7 @@ def delete_bot_config_endpoint(
 
 @router.delete("/service-api-key")
 def delete_service_api_key_endpoint(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> dict:
     """Delete the Discord service API key.
@@ -143,7 +145,7 @@ def delete_service_api_key_endpoint(
     """
     deleted = delete_discord_service_api_key(db_session)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Service API key not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Service API key not found")
     db_session.commit()
     return {"deleted": True}
 
@@ -153,7 +155,7 @@ def delete_service_api_key_endpoint(
 
 @router.get("/guilds", response_model=list[DiscordGuildConfigResponse])
 def list_guild_configs(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> list[DiscordGuildConfigResponse]:
     """List all guild configs (pending and registered)."""
@@ -163,7 +165,7 @@ def list_guild_configs(
 
 @router.post("/guilds", response_model=DiscordGuildConfigCreateResponse)
 def create_guild_request(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> DiscordGuildConfigCreateResponse:
     """Create new guild config with registration key. Key shown once."""
@@ -182,13 +184,13 @@ def create_guild_request(
 @router.get("/guilds/{config_id}", response_model=DiscordGuildConfigResponse)
 def get_guild_config(
     config_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> DiscordGuildConfigResponse:
     """Get specific guild config."""
     config = get_guild_config_by_internal_id(db_session, internal_id=config_id)
     if not config:
-        raise HTTPException(status_code=404, detail="Guild config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Guild config not found")
     return DiscordGuildConfigResponse.model_validate(config)
 
 
@@ -196,13 +198,13 @@ def get_guild_config(
 def update_guild_request(
     config_id: int,
     request: DiscordGuildConfigUpdateRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> DiscordGuildConfigResponse:
     """Update guild config."""
     config = get_guild_config_by_internal_id(db_session, internal_id=config_id)
     if not config:
-        raise HTTPException(status_code=404, detail="Guild config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Guild config not found")
 
     config = update_guild_config(
         db_session,
@@ -218,7 +220,7 @@ def update_guild_request(
 @router.delete("/guilds/{config_id}")
 def delete_guild_request(
     config_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> dict:
     """Delete guild config (invalidates registration key).
@@ -227,10 +229,10 @@ def delete_guild_request(
     """
     deleted = delete_guild_config(db_session, config_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Guild config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Guild config not found")
 
     # On Cloud, delete service API key when all guilds are removed
-    if AUTH_TYPE == AuthType.CLOUD:
+    if MULTI_TENANT:
         remaining_guilds = get_guild_configs(db_session)
         if not remaining_guilds:
             delete_discord_service_api_key(db_session)
@@ -247,15 +249,15 @@ def delete_guild_request(
 )
 def list_channel_configs(
     config_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> list[DiscordChannelConfigResponse]:
     """List whitelisted channels for a guild."""
     guild_config = get_guild_config_by_internal_id(db_session, internal_id=config_id)
     if not guild_config:
-        raise HTTPException(status_code=404, detail="Guild config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Guild config not found")
     if not guild_config.guild_id:
-        raise HTTPException(status_code=400, detail="Guild not yet registered")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Guild not yet registered")
 
     configs = get_channel_configs(db_session, config_id)
     return [DiscordChannelConfigResponse.model_validate(c) for c in configs]
@@ -269,7 +271,7 @@ def update_channel_request(
     guild_config_id: int,
     channel_config_id: int,
     request: DiscordChannelConfigUpdateRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
 ) -> DiscordChannelConfigResponse:
     """Update channel config."""
@@ -277,7 +279,7 @@ def update_channel_request(
         db_session, guild_config_id, channel_config_id
     )
     if not config:
-        raise HTTPException(status_code=404, detail="Channel config not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Channel config not found")
 
     config = update_discord_channel_config(
         db_session,

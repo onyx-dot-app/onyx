@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgArrowExchange } from "@opal/icons";
 import { Content } from "@opal/layouts";
@@ -35,13 +36,15 @@ export interface TransferTrailingButtonProps {
 export function TransferTrailingButton({
   onTransfer,
 }: TransferTrailingButtonProps) {
+  const t = useTranslations("chat.modals.share");
+
   return (
     <Button
       icon={SvgArrowExchange}
       onClick={onTransfer}
       prominence="tertiary"
       size="sm"
-      tooltip="Transfer Ownership"
+      tooltip={t("transferOwnership.trailingButton.tooltip")}
     />
   );
 }

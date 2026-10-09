@@ -286,9 +286,9 @@ test.describe("Focus Management", () => {
     await chatPage.inputBar.focus();
     await chatPage.inputBar.expectFocused();
 
-    const button = chatPage.page
-      .locator("[data-main-container] button")
-      .first();
+    // The model selector's add button: takes focus and opens a popover,
+    // which the Escape below dismisses. Named rather than positional.
+    const button = chatPage.page.getByRole("button", { name: "Add Model" });
     await button.waitFor({ state: "visible", timeout: 5000 });
     await button.click();
     await expect(chatPage.inputBar.textbox).not.toBeFocused();

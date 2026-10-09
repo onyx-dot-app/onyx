@@ -28,6 +28,7 @@ class WebSearchProviderType(str, Enum):
     SEARXNG = "searxng"
     BRAVE = "brave"
     TAVILY = "tavily"
+    FIRECRAWL = "firecrawl"
     KEENABLE = "keenable"
 
 
@@ -41,3 +42,15 @@ class WebContentProviderType(str, Enum):
 class TracingProviderType(str, Enum):
     BRAINTRUST = "braintrust"
     LANGFUSE = "langfuse"
+
+
+class UsageCredentialType(str, Enum):
+    """CRAFT_PAT is separate from PAT because Craft sandbox tokens are
+    agent-driven yet carry the owning human's user_id."""
+
+    SESSION = "session"
+    JWT = "jwt"
+    PAT = "pat"
+    CRAFT_PAT = "craft_pat"
+    OAUTH_PROVIDER = "oauth_provider"
+    API_KEY = "api_key"

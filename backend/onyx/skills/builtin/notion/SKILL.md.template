@@ -1,0 +1,135 @@
+---
+name: notion
+description: Search, read, and write Notion pages, databases, blocks, and comments on the connected user's behalf via a light REST wrapper.
+---
+
+# Notion
+
+Call the Notion REST API as the connected user via the bundled helper.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/notion/notion_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. The writes are
+`create-page`, `append`, `comment`, `update-page`, `update-block`, and
+`delete-block`. Use `--raw` to skip empty-field pruning;
+`python notion_api.py <command> -h` shows its flags.
+
+### The connected user
+
+```
+python notion_api.py me
+```
+
+### Users
+
+```
+python notion_api.py users [--limit N]
+```
+
+### Search pages and data sources
+
+```
+python notion_api.py search "roadmap" [--filter page|data_source] [--limit N]
+```
+
+The query is optional — omit it to list everything the integration can access.
+
+### Read a page
+
+```
+python notion_api.py page PAGE_ID
+```
+
+### Read a page/block's child blocks (its content)
+
+```
+python notion_api.py blocks BLOCK_ID [--limit N]
+```
+
+### List a database's data sources
+
+```
+python notion_api.py database DATABASE_ID
+```
+
+A database contains one or more data sources; this returns each with its `id`
+and `name`. Use a data source id with `data-source` and `query` below.
+
+### Read a data source's schema
+
+```
+python notion_api.py data-source DATA_SOURCE_ID
+```
+
+### Query a data source's rows
+
+```
+python notion_api.py query DATA_SOURCE_ID [--limit N]
+```
+
+### Create a page (write)
+
+```
+python notion_api.py create-page (--parent-page PAGE_ID | --parent-data-source DATA_SOURCE_ID) \
+  --title "Title" [--text "First paragraph"]
+```
+
+### Append content to a page/block (write)
+
+```
+python notion_api.py append BLOCK_ID --text "A new paragraph"
+```
+
+### Comment on a page (write)
+
+```
+python notion_api.py comment PAGE_ID "Looking into this"
+```
+
+### Update a page's title/icon, or archive it (write)
+
+```
+python notion_api.py update-page PAGE_ID [--title "New title"] [--icon 📌] [--archive | --restore]
+```
+
+At least one of `--title`, `--icon`, `--archive`, or `--restore` is required.
+`--archive` moves the page to trash; `--restore` brings it back.
+
+### Update or archive a block (write)
+
+```
+python notion_api.py update-block BLOCK_ID [--text "Replacement text"] [--archive | --restore]
+```
+
+`--text` replaces a paragraph block's content (the block must be a paragraph).
+At least one of `--text`, `--archive`, or `--restore` is required.
+
+### Delete a block (write)
+
+```
+python notion_api.py delete-block BLOCK_ID
+```
+
+Moves the block to trash. To archive/restore a whole page use `update-page`.
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "<key>": [...], "count": N,
+"truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures return `{"ok": false, "status": <code>, "error": "<message>"}` and exit
+non-zero — surface the error rather than retrying blindly.
+
+## Notes
+
+- IDs are Notion object ids (UUIDs), with or without dashes. Get them from
+  `search`, `blocks`, `database`, or `query` output.
+- The connected user's token is injected by the egress gateway — send no
+  credentials yourself.
+- The integration's capabilities (read / write / comment) are set by the admin
+  on the Notion integration. A 401 / 403 usually means the integration lacks the
+  needed capability or hasn't been shared with the page — tell the user rather
+  than retrying.

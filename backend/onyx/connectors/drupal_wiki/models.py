@@ -1,8 +1,5 @@
 from enum import Enum
-from typing import Generic
-from typing import List
-from typing import Optional
-from typing import TypeVar
+from typing import Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel
 

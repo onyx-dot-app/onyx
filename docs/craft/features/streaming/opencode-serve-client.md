@@ -36,8 +36,8 @@ class OpencodeServeClient:
 
     def __init__(
         self,
-        base_url: str,                     # "http://10.0.0.42:4096"
-        password: str | None,              # None in dev; required in cluster
+        base_url: str,  # "http://10.0.0.42:4096"
+        password: str | None,  # None in dev; required in cluster
         *,
         client_info: dict[str, Any] | None = None,
         timeouts: ClientTimeouts | None = None,
@@ -121,10 +121,16 @@ class OpencodeServeClient:
         produces the same accumulator as the live stream."""
 ```
 
-`ClientTimeouts` is a small dataclass with three named timeouts:
+`ClientTimeouts` is a small dataclass with four named timeouts:
 - `connect_timeout` (default 5s) — TCP/TLS handshake to serve
 - `request_timeout` (default 30s) — per-request HTTP for non-streaming endpoints
 - `event_read_timeout` (default 60s) — `/event` SSE idle timeout; client reconnects after this
+- `session_init_timeout` (default 90s) — HTTP read/write timeout for session lookup and creation in `ensure_session`
+
+Session lookup and creation can initialize a cold directory-scoped OpenCode Instance.
+They use a per-request timeout override. Message submission and other requests keep
+`request_timeout`; TCP connection and pool waits keep `connect_timeout`.
+The initialization timeout is not an overall provisioning deadline.
 
 ## Internal architecture
 
@@ -228,20 +234,27 @@ The frontend's `parsePacket.ts` reads diff data from `content[].type==="diff"` a
 
 **For `edit` tool** (`state.status` reaches `completed`):
 ```python
-content = [{
-    "type": "diff",
-    "path": state.input["filePath"],
-    "oldText": state.input["oldString"],
-    "newText": state.input["newString"],
-}]
+content = [
+    {
+        "type": "diff",
+        "path": state.input["filePath"],
+        "oldText": state.input["oldString"],
+        "newText": state.input["newString"],
+    }
+]
 ```
 
 **For `read` tool** (`state.status` reaches `completed`):
 ```python
-content = [{
-    "type": "content",
-    "content": {"type": "text", "text": state.output},  # opencode returns line-numbered string
-}]
+content = [
+    {
+        "type": "content",
+        "content": {
+            "type": "text",
+            "text": state.output,
+        },  # opencode returns line-numbered string
+    }
+]
 # frontend's extractFileContent strips line numbers via /^\d+\| /gm regex — works as-is.
 ```
 
@@ -364,11 +377,11 @@ The unit tests are the load-bearing wire-contract lock. The external-dependency-
 ```python
 # backend/onyx/server/features/build/sandbox/opencode/serve_client.py
 class OpencodeServeClient:
-    def __init__(self, base_url, password, *, event_bus, client_info=None, timeouts=None):
+    def __init__(
+        self, base_url, password, *, event_bus, client_info=None, timeouts=None
+    ):
         self._base_url = base_url.rstrip("/")
-        self._auth = (
-            httpx.BasicAuth("onyx", password) if password else None
-        )
+        self._auth = httpx.BasicAuth("onyx", password) if password else None
         self._timeouts = timeouts or ClientTimeouts()
         # Unary-only client. ``request_timeout`` bounds GET/POST against /session,
         # /prompt_async, /abort, etc. The long-lived ``/event`` SSE stream lives on
@@ -386,13 +399,16 @@ class OpencodeServeClient:
             ),
         )
 
-    def send_message(self, opencode_session_id, message, *, timeout=ACP_MESSAGE_TIMEOUT):
+    def send_message(
+        self, opencode_session_id, message, *, timeout=ACP_MESSAGE_TIMEOUT
+    ):
         q: queue.Queue[ACPEvent | _ReaderError | _ReaderEnded] = queue.Queue()
         stop = threading.Event()
         state = _TurnState(session_id=opencode_session_id)
 
         reader = threading.Thread(
-            target=self._reader_loop, args=(opencode_session_id, q, stop, state),
+            target=self._reader_loop,
+            args=(opencode_session_id, q, stop, state),
             daemon=True,
         )
         reader.start()

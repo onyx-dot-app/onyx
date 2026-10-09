@@ -5,9 +5,7 @@ must still have the text they retain per file bounded."""
 from unittest.mock import patch
 
 from onyx.connectors.cross_connector_utils.section_utils import cap_sections_text
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import ImageSection, TabularSection, TextSection
 
 _CAP_PATH = (
     "onyx.connectors.cross_connector_utils.section_utils."

@@ -42,7 +42,7 @@ async function createFreshAdmin(
   await page.context().clearCookies();
   await loginAs(page, "admin");
   const adminClient = new OnyxApiClient(page.request);
-  await adminClient.setUserRole(email, "admin");
+  await adminClient.addUserToAdminGroup(email);
 
   // Log back in as the new admin
   await page.context().clearCookies();
@@ -107,8 +107,10 @@ test.describe("Onboarding Flow @exclusive", () => {
 
       const chatInput = page.locator("#onyx-chat-input");
       await expect(chatInput).toBeVisible();
-      // Disabled wrapper is the parent div with data-opal-disabled
-      const disabledWrapper = chatInput.locator("..");
+      // The Disabled region that contains the input, however deep it sits.
+      const disabledWrapper = page
+        .locator("[data-opal-disabled]")
+        .filter({ has: chatInput });
       await expect(disabledWrapper).toHaveAttribute(
         "data-opal-disabled",
         "true"
@@ -195,11 +197,10 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      const chatInputParent = chatInput.locator("..");
-      await expect(chatInputParent).not.toHaveAttribute(
-        "aria-disabled",
-        "true"
-      );
+      // No disabled region contains the input.
+      await expect(
+        page.locator('[aria-disabled="true"]').filter({ has: chatInput })
+      ).toHaveCount(0);
     });
   });
 
@@ -251,8 +252,10 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      // Disabled wrapper is the parent div with data-opal-disabled
-      const disabledWrapper = chatInput.locator("..");
+      // The Disabled region that contains the input, however deep it sits.
+      const disabledWrapper = page
+        .locator("[data-opal-disabled]")
+        .filter({ has: chatInput });
       await expect(disabledWrapper).toHaveAttribute(
         "data-opal-disabled",
         "true"
@@ -301,11 +304,10 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      const chatInputParent = chatInput.locator("..");
-      await expect(chatInputParent).not.toHaveAttribute(
-        "aria-disabled",
-        "true"
-      );
+      // No disabled region contains the input.
+      await expect(
+        page.locator('[aria-disabled="true"]').filter({ has: chatInput })
+      ).toHaveCount(0);
     });
 
     test("after setting name, shows confirmation then no onboarding UI", async ({

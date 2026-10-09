@@ -314,7 +314,7 @@ function Show-OnyxHelp {
     $help += "`nUsage: .\install.ps1 [OPTIONS]`n"
     $help += "`nOptions:"
     $help += "`n  -IncludeCraft  Enable Onyx Craft (AI-powered web app building)"
-    $help += "`n  -Lite          Deploy Onyx Lite (no Vespa, Redis, or model servers)"
+    $help += "`n  -Lite          Deploy Onyx Lite (no OpenSearch, Redis, or model servers)"
     $help += "`n  -Local         Use existing config files instead of downloading from GitHub"
     $help += "`n  -Shutdown      Stop (pause) Onyx containers"
     $help += "`n  -DeleteData    Remove all Onyx data (containers, volumes, and files)"
@@ -996,8 +996,6 @@ function Main {
         Set-EnvFileValue -Path $envFile -Key "IMAGE_TAG" -Value $version
         Print-Success "IMAGE_TAG set to $version"
         if ($script:LiteMode) { Set-EnvFileValue -Path $envFile -Key "COMPOSE_PROFILES" -Value "" }
-        Set-EnvFileValue -Path $envFile -Key "AUTH_TYPE" -Value "basic"
-        Print-Success "Basic authentication enabled"
         Set-EnvFileValue -Path $envFile -Key "USER_AUTH_SECRET" -Value "`"$(New-SecureSecret)`""
         Print-Success "Generated secure USER_AUTH_SECRET"
         if ($script:IncludeCraftMode) {
@@ -1007,7 +1005,7 @@ function Main {
             Print-Info "Onyx Craft disabled (use -IncludeCraft to enable)"
         }
         Print-Success ".env file created"
-        Print-Info "You can customize .env later for OAuth/SAML, AI models, domain settings, and Craft."
+        Print-Info "You can customize .env later for AI models, domain settings, and Craft."
     }
 
     # Clean up stale lite overlay if standard mode was selected
@@ -1112,7 +1110,7 @@ function Main {
     Print-Info "The first user created will automatically have admin privileges"
 
     if ($script:LiteMode) {
-        Print-Info "Running in Lite mode - Vespa, Redis, model servers, and background workers are NOT started."
+        Print-Info "Running in Lite mode - OpenSearch, Redis, model servers, and background workers are NOT started."
         Print-Info "Connectors and RAG search are disabled. LLM chat, tools, Projects still work."
     }
 

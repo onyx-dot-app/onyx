@@ -8,8 +8,7 @@ from psycopg2.extensions import connection
 from sqlalchemy import text  # NEW: for SQL large-object helpers
 from sqlalchemy.orm import Session
 
-from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
-from onyx.file_store.constants import STANDARD_CHUNK_SIZE
+from onyx.file_store.constants import MAX_IN_MEMORY_SIZE, STANDARD_CHUNK_SIZE
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

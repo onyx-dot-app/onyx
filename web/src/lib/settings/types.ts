@@ -32,6 +32,9 @@ export interface Settings {
   application_status: ApplicationStatus;
   auto_scroll: boolean;
   temperature_override_enabled: boolean;
+  reasoning_override_enabled?: boolean;
+  // Model selector shows one flat list instead of per-provider groups.
+  hide_provider_grouping?: boolean;
   query_history_type: QueryHistoryType;
 
   // Visibility-only: hides the sidebar page; query-history APIs + recording stay on.
@@ -40,6 +43,7 @@ export interface Settings {
   deep_research_enabled?: boolean;
   multi_model_chat_enabled?: boolean;
   search_ui_enabled?: boolean;
+  auto_detect_search_filters?: boolean;
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
@@ -59,6 +63,23 @@ export interface Settings {
   // Onyx Craft (Build Mode) feature flag
   onyx_craft_enabled?: boolean;
 
+  // Deployment-level Craft availability, ignoring workspace/per-user policy.
+  // Gates visibility of the admin Craft-access controls.
+  onyx_craft_available?: boolean;
+
+  // Workspace default for Craft access; per-user overrides win.
+  craft_default_enabled?: boolean;
+
+  // Workspace-wide switch for the LLM gateway (direct model API access via
+  // /api/gateway). When false, all gateway routes reject requests.
+  llm_gateway_enabled?: boolean;
+
+  oauth_provider_enabled?: boolean;
+
+  // Workspace-wide instructions injected into every Craft agent's system
+  // prompt (AGENTS.md).
+  craft_instructions?: string | null;
+
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
   // button that streams the user's sandbox pod logs in real time. Backed
   // by the ENABLE_OPENCODE_DEBUGGING env var on the server. Never set in
@@ -74,15 +95,15 @@ export interface Settings {
   seat_count?: number | null;
   used_seats?: number | null;
 
-  // OpenSearch migration
-  opensearch_indexing_enabled?: boolean;
-
   // Vector DB availability flag - false when DISABLE_VECTOR_DB is set.
   // When false, connectors, RAG search, document sets, and related features
   // are unavailable.
   vector_db_enabled?: boolean;
 
-  // True when hooks are available: single-tenant deployment with HOOK_ENABLED=true.
+  // HIDE_ONYX_BRANDING env var, honored only on the Enterprise tier.
+  hide_onyx_branding?: boolean;
+
+  // True when hooks are available: single-tenant deployments only.
   hooks_enabled?: boolean;
 
   // Application version from the ONYX_VERSION env var on the server.
@@ -130,13 +151,11 @@ export interface EnterpriseSettings {
   consent_screen_prompt: string | null;
   show_first_visit_notice: boolean | null;
   custom_greeting_message: string | null;
+  custom_login_subtitle: string | null;
 
   // Custom help link surfaced in the profile dropdown alongside "Help & FAQ".
   custom_help_link_url: string | null;
   custom_help_link_label: string | null;
-
-  // Hide the "Powered by Onyx" tagline under the sidebar logo.
-  hide_onyx_branding: boolean | null;
 }
 
 /**

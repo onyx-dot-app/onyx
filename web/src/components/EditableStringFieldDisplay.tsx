@@ -1,8 +1,9 @@
 import { SvgEdit } from "@opal/icons";
+import { Button } from "@opal/components";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@opal/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheck, SvgX } from "@opal/icons";
 interface EditableStringFieldDisplayProps {
   value: string;
@@ -19,6 +20,7 @@ export function EditableStringFieldDisplay({
   textClassName,
   scale = 1,
 }: EditableStringFieldDisplayProps) {
+  const t = useTranslations("common.editable");
   const [isEditing, setIsEditing] = useState(false);
   const [editableValue, setEditableValue] = useState(value);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -69,6 +71,13 @@ export function EditableStringFieldDisplay({
     }
   };
 
+  const displayClassName = cn(
+    textClassName,
+    "text-3xl font-bold text-text-800",
+    "user-text",
+    isEditable && "cursor-pointer"
+  );
+
   return (
     <div ref={containerRef} className={"flex items-center"}>
       <Input
@@ -85,48 +94,53 @@ export function EditableStringFieldDisplay({
         )}
         style={{ fontSize: `${scale}rem` }}
       />
-      {!isEditing && (
-        <span
-          onClick={() => isEditable && setIsEditing(true)}
-          className={cn(
-            textClassName,
-            "text-3xl font-bold text-text-800",
-            "cursor-pointer user-text"
-          )}
-          style={{ fontSize: `${scale}rem` }}
-        >
-          {value}
-        </span>
-      )}
+      {!isEditing &&
+        (isEditable ? (
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className={displayClassName}
+            style={{ fontSize: `${scale}rem` }}
+          >
+            {value}
+          </button>
+        ) : (
+          <span
+            className={displayClassName}
+            style={{ fontSize: `${scale}rem` }}
+          >
+            {value}
+          </span>
+        ))}
       {isEditing && isEditable ? (
         <>
-          <div className={cn("flex", "flex-row")}>
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <IconButton
+          <div className={cn("flex", "flex-row", "gap-2", "ps-2")}>
+            <Button
               onClick={handleUpdate}
-              internal
-              className="ml-2"
+              prominence="internal"
+              size="sm"
               icon={SvgCheck}
             />
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <IconButton
+            <Button
               onClick={resetEditing}
-              internal
-              className="ml-2"
+              prominence="internal"
+              size="sm"
               icon={SvgX}
             />
           </div>
         </>
       ) : (
-        <h1
-          onClick={() => isEditable && setIsEditing(true)}
-          className={`group flex ${isEditable ? "cursor-pointer" : ""} ${""}`}
-          style={{ fontSize: `${scale}rem` }}
-        >
-          {isEditable && (
-            <SvgEdit className={`visible ml-2`} size={12 * scale} />
-          )}
-        </h1>
+        isEditable && (
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            aria-label={t("rename.ariaLabel")}
+            className="group flex cursor-pointer"
+            style={{ fontSize: `${scale}rem` }}
+          >
+            <SvgEdit className="visible ms-2" size={12 * scale} />
+          </button>
+        )
       )}
     </div>
   );

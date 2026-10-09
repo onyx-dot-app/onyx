@@ -1,76 +1,93 @@
 import queue
 import time
 from collections.abc import Callable
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
-from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.citation_processor import CitationMode
-from onyx.chat.citation_processor import DynamicCitationProcessor
-from onyx.chat.citation_utils import collapse_citations
-from onyx.chat.citation_utils import update_citation_processor_from_tool_response
+from onyx.chat.citation_processor import (
+    CitationMapping,
+    DynamicCitationProcessor,
+)
+from onyx.chat.citation_utils import (
+    collapse_citations,
+    update_citation_processor_from_tool_response,
+)
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
-from onyx.chat.llm_step import run_llm_step
-from onyx.chat.llm_step import run_llm_step_pkt_generator
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ToolCallSimple
+from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
+from onyx.chat.models import (
+    ChatMessageSimple,
+    CitationMode,
+    LlmStepResult,
+    ToolCallSimple,
+)
+from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.models import (
+    CombinedResearchAgentCallResult,
+    ResearchAgentCallFailure,
+    ResearchAgentCallResult,
+)
+from onyx.deep_research.tool_definitions import (
+    RESEARCH_AGENT_TASK_KEY,
+    THINK_TOOL_RESPONSE_MESSAGE,
+    THINK_TOOL_RESPONSE_TOKEN_COUNT,
     get_research_agent_additional_tool_definitions,
 )
-from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
-from onyx.deep_research.models import CombinedResearchAgentCallResult
-from onyx.deep_research.models import ResearchAgentCallResult
-from onyx.deep_research.utils import check_special_tool_calls
-from onyx.deep_research.utils import create_think_tool_token_processor
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import ToolChoiceOptions
-from onyx.prompts.deep_research.dr_tool_prompts import OPEN_URLS_TOOL_DESCRIPTION
-from onyx.prompts.deep_research.dr_tool_prompts import (
-    OPEN_URLS_TOOL_DESCRIPTION_REASONING,
+from onyx.deep_research.utils import (
+    check_special_tool_calls,
+    create_think_tool_token_processor,
 )
-from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
-from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
-from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_RESEARCH_AGENT
-from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT
-from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT_REASONING
-from onyx.prompts.deep_research.research_agent import RESEARCH_REPORT_PROMPT
-from onyx.prompts.deep_research.research_agent import USER_REPORT_QUERY
+from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.model_request import serialize_tools
+from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
+from onyx.prompts.deep_research.dr_tool_prompts import (
+    OPEN_URLS_TOOL_DESCRIPTION,
+    OPEN_URLS_TOOL_DESCRIPTION_REASONING,
+    WEB_SEARCH_TOOL_DESCRIPTION,
+)
+from onyx.prompts.deep_research.research_agent import (
+    MAX_RESEARCH_CYCLES,
+    OPEN_URL_REMINDER_RESEARCH_AGENT,
+    RESEARCH_AGENT_PROMPT,
+    RESEARCH_AGENT_PROMPT_REASONING,
+    RESEARCH_REPORT_PROMPT,
+    USER_REPORT_QUERY,
+)
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import IntermediateReportCitedDocs
-from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
-from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PacketException
-from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.server.query_and_chat.streaming_models import StreamingType
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    IntermediateReportCitedDocs,
+    IntermediateReportDelta,
+    IntermediateReportStart,
+    Packet,
+    PacketException,
+    ResearchAgentStart,
+    SectionEnd,
+    StreamingType,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallInfo
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ToolCallInfo, ToolCallKickoff, ToolResponse
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
-from onyx.tools.utils import compute_all_tool_tokens
-from onyx.tools.utils import compute_tool_definition_tokens
-from onyx.tools.utils import generate_tools_description
+from onyx.tools.utils import (
+    compute_all_tool_tokens,
+    compute_tool_definition_tokens,
+    generate_tools_description,
+)
 from onyx.tracing.framework.create import function_span
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -80,7 +97,14 @@ logger = setup_logger()
 
 # 30 minute timeout per research agent
 RESEARCH_AGENT_TIMEOUT_SECONDS = 30 * 60
-RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 30 minutes"
+RESEARCH_AGENT_TIMEOUT_MESSAGE = (
+    "Research agent timed out after 30 minutes. "
+    "Try a different approach or continue without this result."
+)
+RESEARCH_AGENT_FAILURE_MESSAGE = (
+    "Research agent call failed. "
+    "Try a different approach or continue without this result."
+)
 # 12 minute timeout before forcing intermediate report generation
 RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 # May be good to experiment with this, empirically reports of around 5,000 tokens are pretty good.
@@ -96,6 +120,8 @@ def generate_intermediate_report(
     user_identity: LLMUserIdentity | None,
     emitter: Emitter,
     placement: Placement,
+    language_section: str,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> str:
     # NOTE: This step outputs a lot of tokens and has been observed to run for more than 10 minutes in a nontrivial percentage of
     # research tasks. This is also model / inference provider dependent.
@@ -106,9 +132,11 @@ def generate_intermediate_report(
         # Having the state container here to handle the tokens and not passed through means there is no way to
         # get partial saves of the report. Arguably this is not useful anyway so not going to implement partial saves.
         state_container = ChatStateContainer()
+        # The report streams to the UI, so it carries the reply-language line.
+        report_prompt = with_language_section(RESEARCH_REPORT_PROMPT, language_section)
         system_prompt = ChatMessageSimple(
-            message=RESEARCH_REPORT_PROMPT,
-            token_count=token_counter(RESEARCH_REPORT_PROMPT),
+            message=report_prompt,
+            token_count=token_counter(report_prompt),
             message_type=MessageType.SYSTEM,
         )
 
@@ -136,13 +164,13 @@ def generate_intermediate_report(
             placement=placement,
             citation_processor=citation_processor,
             state_container=state_container,
-            reasoning_effort=ReasoningEffort.LOW,
+            reasoning_effort=reasoning_effort,
             final_documents=None,
             user_identity=user_identity,
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
             use_existing_tab_index=True,
             is_deep_research=True,
-            timeout_override=DR_REPORT_LLM_TIMEOUT_S,
+            stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S,
         )
 
         while True:
@@ -197,7 +225,7 @@ def generate_intermediate_report(
         llm_step_result = cast(LlmStepResult, llm_step_result)
 
         final_report = llm_step_result.answer
-        span.span_data.output = final_report if final_report else None
+        span.span_data.output = final_report or None
         if final_report is None:
             raise ValueError(
                 f"LLM failed to generate a report for research task: {research_topic}"
@@ -208,7 +236,6 @@ def generate_intermediate_report(
 
 def run_research_agent_call(
     research_agent_call: ToolCallKickoff,
-    parent_tool_call_id: str,
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -216,6 +243,8 @@ def run_research_agent_call(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
+    language_section: str,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> ResearchAgentCallResult | None:
     turn_index = research_agent_call.placement.turn_index
     tab_index = research_agent_call.placement.tab_index
@@ -354,8 +383,10 @@ def run_research_agent_call(
                 llm_step_result, has_reasoned = run_llm_step(
                     emitter=emitter,
                     history=constructed_history,
-                    tool_definitions=[tool.tool_definition() for tool in current_tools]
-                    + research_agent_tools,
+                    tool_definitions=serialize_tools(
+                        [tool.tool_definition() for tool in current_tools]
+                        + research_agent_tools
+                    ),
                     tool_choice=ToolChoiceOptions.REQUIRED,
                     llm=llm,
                     placement=Placement(
@@ -365,7 +396,7 @@ def run_research_agent_call(
                     ),
                     citation_processor=None,
                     state_container=None,
-                    reasoning_effort=ReasoningEffort.LOW,
+                    reasoning_effort=reasoning_effort,
                     final_documents=None,
                     user_identity=user_identity,
                     custom_token_processor=custom_processor,
@@ -406,12 +437,14 @@ def run_research_agent_call(
                         citation_processor=citation_processor,
                         user_identity=user_identity,
                         emitter=emitter,
+                        language_section=language_section,
+                        reasoning_effort=reasoning_effort,
                         placement=Placement(
                             turn_index=turn_index,
                             tab_index=tab_index,
                         ),
                     )
-                    span.span_data.output = final_report if final_report else None
+                    span.span_data.output = final_report or None
                     return ResearchAgentCallResult(
                         intermediate_report=final_report,
                         citation_mapping=citation_processor.get_seen_citations(),
@@ -449,7 +482,8 @@ def run_research_agent_call(
                         )
                         msg_history.append(think_tool_response_msg)
                         think_span.span_data.output = THINK_TOOL_RESPONSE_MESSAGE
-                    reasoning_cycles += 1
+                    # The think tool token processor streams the arguments as reasoning,
+                    # so run_llm_step already counted this step in has_reasoned.
                     most_recent_reasoning = llm_step_result.reasoning
                     continue
                 else:
@@ -562,7 +596,7 @@ def run_research_agent_call(
                         # Research Agent is a top level tool call but the tools called by the research
                         # agent are sub-tool calls.
                         tool_call_info = ToolCallInfo(
-                            parent_tool_call_id=parent_tool_call_id,
+                            parent_tool_call_id=research_agent_call.tool_call_id,
                             # At the DB save level, there is only a turn index, no sub-turn etc.
                             # This is implied by the parent tool call's turn index and the depth
                             # of the tree traversal.
@@ -575,7 +609,11 @@ def run_research_agent_call(
                             or most_recent_reasoning,
                             tool_call_arguments=tc.tool_args,
                             tool_call_response=tool_response.llm_facing_response,
-                            search_docs=displayed_docs or search_docs,
+                            search_docs=(
+                                displayed_docs
+                                if displayed_docs is not None
+                                else search_docs
+                            ),
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)
@@ -606,12 +644,14 @@ def run_research_agent_call(
                 citation_processor=citation_processor,
                 user_identity=user_identity,
                 emitter=emitter,
+                language_section=language_section,
+                reasoning_effort=reasoning_effort,
                 placement=Placement(
                     turn_index=turn_index,
                     tab_index=tab_index,
                 ),
             )
-            span.span_data.output = final_report if final_report else None
+            span.span_data.output = final_report or None
             return ResearchAgentCallResult(
                 intermediate_report=final_report,
                 citation_mapping=citation_processor.get_seen_citations(),
@@ -632,12 +672,7 @@ def _on_research_agent_timeout(
     index: int,  # noqa: ARG001
     func: Callable[..., Any],  # noqa: ARG001
     args: tuple[Any, ...],
-) -> ResearchAgentCallResult:
-    """Callback for handling research agent timeouts.
-
-    Returns a ResearchAgentCallResult with the timeout message so the research
-    can continue with other agents.
-    """
+) -> ResearchAgentCallFailure:
     research_agent_call: ToolCallKickoff = args[0]  # First arg
     research_task = research_agent_call.tool_args.get(
         RESEARCH_AGENT_TASK_KEY, "unknown"
@@ -647,15 +682,11 @@ def _on_research_agent_timeout(
         RESEARCH_AGENT_TIMEOUT_SECONDS,
         research_task,
     )
-    return ResearchAgentCallResult(
-        intermediate_report=RESEARCH_AGENT_TIMEOUT_MESSAGE,
-        citation_mapping={},
-    )
+    return ResearchAgentCallFailure(message=RESEARCH_AGENT_TIMEOUT_MESSAGE)
 
 
 def run_research_agent_calls(
     research_agent_calls: list[ToolCallKickoff],
-    parent_tool_call_ids: list[str],
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -663,7 +694,9 @@ def run_research_agent_calls(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     citation_mapping: CitationMapping,
+    language_section: str,
     user_identity: LLMUserIdentity | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> CombinedResearchAgentCallResult:
     # Run all research agent calls in parallel with timeout
     functions_with_args = [
@@ -671,7 +704,6 @@ def run_research_agent_calls(
             run_research_agent_call,
             (
                 research_agent_call,
-                parent_tool_call_id,
                 tools,
                 emitter,
                 state_container,
@@ -679,11 +711,11 @@ def run_research_agent_calls(
                 is_reasoning_model,
                 token_counter,
                 user_identity,
+                language_section,
+                reasoning_effort,
             ),
         )
-        for research_agent_call, parent_tool_call_id in zip(
-            research_agent_calls, parent_tool_call_ids
-        )
+        for research_agent_call in research_agent_calls
     ]
 
     research_agent_call_results = run_functions_tuples_in_parallel(
@@ -697,11 +729,16 @@ def run_research_agent_calls(
     )
 
     updated_citation_mapping = citation_mapping
-    updated_answers: list[str | None] = []
+    updated_answers: list[str | ResearchAgentCallFailure] = []
 
     for result in research_agent_call_results:
         if result is None:
-            updated_answers.append(None)
+            updated_answers.append(
+                ResearchAgentCallFailure(message=RESEARCH_AGENT_FAILURE_MESSAGE)
+            )
+            continue
+        if isinstance(result, ResearchAgentCallFailure):
+            updated_answers.append(result)
             continue
 
         # Use collapse_citations to renumber citations in the text and merge mappings.
@@ -724,13 +761,12 @@ if __name__ == "__main__":
     from uuid import uuid4
 
     from onyx.chat.chat_state import ChatStateContainer
-    from onyx.db.engine.sql_engine import get_session_with_current_tenant
-    from onyx.db.engine.sql_engine import SqlEngine
+    from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
     from onyx.db.models import User
     from onyx.db.persona import get_default_behavior_persona
-    from onyx.llm.factory import get_default_llm
-    from onyx.llm.factory import get_llm_token_counter
-    from onyx.llm.utils import model_is_reasoning_model
+    from onyx.db.tools import capture_persona_tool_configuration
+    from onyx.llm.factory import get_default_llm, get_llm_token_counter
+    from onyx.llm.model_capabilities import model_is_reasoning_model
     from onyx.server.query_and_chat.placement import Placement
     from onyx.tools.models import ToolCallKickoff
     from onyx.tools.tool_constructor import construct_tools
@@ -760,19 +796,22 @@ if __name__ == "__main__":
         emitter = Emitter(merged_queue=emitter_queue)
         state_container = ChatStateContainer()
 
+        # No chat session exists here, so skip the tools that write
+        # session-scoped generated files.
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
             emitter=emitter,
             user=user,
             llm=llm,
+            allowed_tool_ids=[
+                tool.id
+                for tool in persona.tools
+                if tool.in_code_tool_id
+                not in (ImageGenerationTool.__name__, PythonTool.__name__)
+            ],
         )
-        tools = [
-            tool
-            for tool_list in tool_dict.values()
-            for tool in tool_list
-            if tool.name != "generate_image"
-        ]
+        tools = [tool for tool_list in tool_dict.values() for tool in tool_list]
 
         logger.info("Running research agent with prompt: %s", RESEARCH_PROMPT)
         logger.info("LLM: %s/%s", llm.config.model_provider, llm.config.model_name)
@@ -785,7 +824,6 @@ if __name__ == "__main__":
                 tool_call_id=str(uuid4()),
                 placement=Placement(turn_index=0, tab_index=0),
             ),
-            parent_tool_call_id=str(uuid4()),
             tools=tools,
             emitter=emitter,
             state_container=state_container,
@@ -793,6 +831,7 @@ if __name__ == "__main__":
             is_reasoning_model=is_reasoning,
             token_counter=token_counter,
             user_identity=None,
+            language_section=build_language_section(None),
         )
 
         if result is None:

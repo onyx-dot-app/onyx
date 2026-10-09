@@ -1,4 +1,3 @@
-// Globals imported from `@jest/globals` so the app's TS config stays free of ambient test types.
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { Mock } from "jest-mock";
 
@@ -19,7 +18,7 @@ import { apiFetch, type ApiFetchInit } from "@/api/client";
 import { ApiError } from "@/api/errors";
 import { persister, queryClient } from "@/query/client";
 
-// `jest.mock` is hoisted above the imports by babel-jest; mocking whole modules also keeps native deps (MMKV) out.
+// babel-jest hoists `jest.mock` above the imports, so these can sit below the import block.
 jest.mock("@/api/client");
 jest.mock("@/api/auth/tokenStore");
 jest.mock("@/api/auth/browserSso");
@@ -27,8 +26,11 @@ jest.mock("@/query/client", () => ({
   queryClient: { clear: jest.fn() },
   persister: { removeClient: jest.fn() },
 }));
+// `mock`-prefixed and read lazily so the hoisted factory can close over it.
+let mockServerUrl: string | null = "https://a.test";
 jest.mock("@/state/session", () => ({
   useSession: { getState: () => ({ setStatus: jest.fn() }) },
+  getStoredServerUrl: () => mockServerUrl,
 }));
 
 // generic `apiFetch<T>` makes jest.mocked() infer `never`; cast to a concrete Mock signature.
@@ -61,8 +63,8 @@ const token = (access: string): BearerTokenResponse => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // Reset module-level session epoch + single-flight handle so state can't leak across tests.
   __resetSessionStateForTests();
+  mockServerUrl = "https://a.test";
   mockSetToken.mockResolvedValue(undefined);
   mockGetToken.mockResolvedValue(null);
   mockRemoveClient.mockResolvedValue(undefined);
@@ -110,7 +112,6 @@ describe("login (browser SSO)", () => {
     expect(path).toBe("/auth/mobile/sso/exchange");
     expect(init?.method).toBe("POST");
     expect(init?.auth).toBe(false);
-    // snake_case `code_verifier` for the backend.
     expect(init?.body).toEqual({
       code: "one-time-code",
       code_verifier: "the-verifier",
@@ -138,7 +139,6 @@ describe("login (browser SSO)", () => {
 
 describe("register", () => {
   it("creates the account as JSON, then logs in to mint the token", async () => {
-    // register returns no token; the subsequent login does.
     mockApiFetch.mockImplementation((path) =>
       Promise.resolve(path === "/auth/register" ? undefined : token("tok-new")),
     );
@@ -170,7 +170,6 @@ describe("register", () => {
   });
 
   it("flags a post-register login failure distinctly (the account exists)", async () => {
-    // register OK, auto-login fails (e.g. verification required): account created, not signed in.
     mockApiFetch.mockImplementation((path) =>
       path === "/auth/register"
         ? Promise.resolve(undefined)
@@ -227,7 +226,6 @@ describe("refreshToken (single-flight)", () => {
     const p2 = refreshToken();
     const p3 = refreshToken();
 
-    // Only the first issued a request; the others shared the in-flight promise.
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
 
     resolveFetch(token("tok-refresh"));
@@ -238,6 +236,17 @@ describe("refreshToken (single-flight)", () => {
     expect(r3).toBe("tok-refresh");
     expect(mockSetToken).toHaveBeenCalledTimes(1);
     expect(mockSetToken).toHaveBeenCalledWith("tok-refresh");
+  });
+
+  it("sends the refresh with the stored token so it can't await its own promise", async () => {
+    mockApiFetch.mockResolvedValueOnce(token("tok-a"));
+
+    await refreshToken();
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/auth/mobile/refresh",
+      expect.objectContaining({ auth: "stored" }),
+    );
   });
 
   it("starts a fresh request after the previous refresh settles", async () => {
@@ -261,12 +270,63 @@ describe("refreshToken (single-flight)", () => {
   });
 
   it("re-throws a transient error without dropping the token", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     mockApiFetch.mockRejectedValue(new ApiError({ status: 500 }));
 
     await expect(refreshToken()).rejects.toBeInstanceOf(ApiError);
 
     expect(mockSetToken).not.toHaveBeenCalledWith(null);
     expect(mockClear).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it("still answers null when clearing the session fails after a rejected token", async () => {
+    /*
+     * A throw from inside the catch escapes it, so this used to reject instead — reaching the
+     * fire-and-forget refresh loop as an unlogged rejection with the session half-cleared.
+     */
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const clearFailure = new Error("keychain unavailable");
+    mockApiFetch.mockRejectedValue(new ApiError({ status: 401 }));
+    mockSetToken.mockRejectedValue(clearFailure);
+
+    await expect(refreshToken()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), clearFailure);
+
+    warnSpy.mockRestore();
+  });
+
+  it("logs a transient failure once, however many callers were waiting on it", async () => {
+    /*
+     * Every caller swallows this rejection, so this line is the only trace a session that dies
+     * from repeated failed refreshes ever leaves.
+     */
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetToken.mockResolvedValue("stored-tok");
+    const failure = new ApiError({ status: 500 });
+    let rejectFetch!: (reason: unknown) => void;
+    mockApiFetch.mockReturnValue(
+      new Promise<BearerTokenResponse>((_resolve, reject) => {
+        rejectFetch = reject;
+      }),
+    );
+
+    const refreshP = refreshToken();
+    const waiters = [getValidToken(), getValidToken(), getValidToken()];
+    rejectFetch(failure);
+
+    await expect(refreshP).rejects.toBe(failure);
+    await expect(Promise.all(waiters)).resolves.toEqual([
+      "stored-tok",
+      "stored-tok",
+      "stored-tok",
+    ]);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), failure);
+
+    warnSpy.mockRestore();
   });
 
   it("does not resurrect the session when a logout completes mid-refresh", async () => {
@@ -283,12 +343,50 @@ describe("refreshToken (single-flight)", () => {
     const refreshP = refreshToken();
     await logout(); // bumps the session epoch
 
-    resolveRefresh(token("tok-late")); // resolves AFTER logout
+    resolveRefresh(token("tok-late"));
     await expect(refreshP).resolves.toBeNull();
 
-    // Late token must NOT be written back over the logged-out session.
     expect(mockSetToken).not.toHaveBeenCalledWith("tok-late");
     expect(mockSetToken).toHaveBeenLastCalledWith(null);
+  });
+
+  it("discards a refresh that lands after the user switched instances", async () => {
+    let resolveRefresh!: (value: BearerTokenResponse) => void;
+    mockApiFetch.mockReturnValue(
+      new Promise<BearerTokenResponse>((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+
+    const refreshP = refreshToken();
+    // The connect screen swaps instances without touching the session epoch.
+    mockServerUrl = "https://b.test";
+    resolveRefresh(token("tok-instance-a"));
+
+    await expect(refreshP).resolves.toBeNull();
+    /*
+     * `setToken` keys off the *current* URL, so writing here would file instance A's bearer under
+     * instance B's key and hand it to a different server on the next request.
+     */
+    expect(mockSetToken).not.toHaveBeenCalledWith("tok-instance-a");
+  });
+
+  it("leaves the new instance's session alone when the old one's refresh is rejected", async () => {
+    let rejectRefresh!: (reason: unknown) => void;
+    mockApiFetch.mockReturnValue(
+      new Promise<BearerTokenResponse>((_resolve, reject) => {
+        rejectRefresh = reject;
+      }),
+    );
+
+    const refreshP = refreshToken();
+    mockServerUrl = "https://b.test";
+    rejectRefresh(new ApiError({ status: 401 }));
+
+    await expect(refreshP).resolves.toBeNull();
+    // A dead token on instance A says nothing about B; wiping would sign the user out of B.
+    expect(mockClear).not.toHaveBeenCalled();
+    expect(mockSetToken).not.toHaveBeenCalledWith(null);
   });
 });
 
@@ -332,7 +430,6 @@ describe("getValidToken", () => {
 
     rejectFetch(new ApiError({ status: 500 }));
 
-    // refresh propagates the transient error; getValidToken must not.
     await expect(refreshP).rejects.toBeInstanceOf(ApiError);
     await expect(validP).resolves.toBe("stored-tok");
   });

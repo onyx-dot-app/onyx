@@ -3,19 +3,18 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.chat_configs import HYBRID_ALPHA
-from onyx.configs.chat_configs import NUM_RETURNED_HITS
+from onyx.configs.chat_configs import HYBRID_ALPHA, NUM_RETURNED_HITS
 from onyx.context.search.enums import QueryType
-from onyx.context.search.models import ChunkIndexRequest
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.utils import get_query_embedding
-from onyx.context.search.utils import inference_section_from_chunks
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentSectionRequest
-from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
+from onyx.context.search.models import (
+    ChunkIndexRequest,
+    IndexFilters,
+    InferenceChunk,
+    InferenceSection,
+)
+from onyx.context.search.utils import get_query_embedding, inference_section_from_chunks
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.federated_connectors.federated_retrieval import (
+    FederatedRetrievalInfo,
     get_federated_retrieval_functions,
 )
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
@@ -95,8 +94,6 @@ def search_chunks(
     embedding_model: EmbeddingModel | None = None,
     prefetched_federated_retrieval_infos: list[FederatedRetrievalInfo] | None = None,
 ) -> list[InferenceChunk]:
-    run_queries: list[tuple[Callable, tuple]] = []
-
     source_filters = (
         set(query_request.filters.source_type)
         if query_request.filters.source_type
@@ -118,14 +115,14 @@ def search_chunks(
             document_set_names=query_request.filters.document_set,
         )
 
-    federated_sources = set(
+    federated_sources = {
         federated_retrieval_info.source.to_non_federated_source()
         for federated_retrieval_info in federated_retrieval_infos
-    )
-    for federated_retrieval_info in federated_retrieval_infos:
-        run_queries.append(
-            (federated_retrieval_info.retrieval_function, (query_request,))
-        )
+    }
+    run_queries: list[tuple[Callable, tuple]] = [
+        (federated_retrieval_info.retrieval_function, (query_request,))
+        for federated_retrieval_info in federated_retrieval_infos
+    ]
 
     # Don't run normal hybrid search if there are no indexed sources to
     # search over
@@ -136,9 +133,7 @@ def search_chunks(
     if normal_search_enabled:
         if query_request.hybrid_alpha is not None and query_request.hybrid_alpha == 0.0:
             # Hybrid alpha explicitly set to keyword only —> do pure keyword
-            # search without computing an embedding. This branch is currently
-            # only set by OpenSearch-aware producers; Vespa would raise
-            # NotImplementedError on `keyword_retrieval`.
+            # search without computing an embedding.
             run_queries.append(
                 (
                     lambda: _keyword_search(query_request, document_index),
@@ -172,7 +167,7 @@ def inference_sections_from_ids(
     document_index: DocumentIndex,
 ) -> list[InferenceSection]:
     # Currently only fetches whole docs
-    doc_ids_set = set(doc_id for doc_id, _ in doc_identifiers)
+    doc_ids_set = {doc_id for doc_id, _ in doc_identifiers}
 
     chunk_requests: list[DocumentSectionRequest] = [
         DocumentSectionRequest(document_id=doc_id) for doc_id in doc_ids_set
@@ -195,7 +190,7 @@ def inference_sections_from_ids(
         chunks_by_doc_id.setdefault(chunk.document_id, []).append(chunk)
 
     inference_sections = [
-        section  # ty: ignore[possibly-unresolved-reference]
+        section
         for chunks in chunks_by_doc_id.values()
         if chunks
         and (

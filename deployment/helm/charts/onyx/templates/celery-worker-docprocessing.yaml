@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-docprocessing
+  name: {{ include "onyx.resourceName" (list . "celery-worker-docprocessing") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_worker_docprocessing.deploymentLabels }}
@@ -56,7 +56,7 @@ spec:
       containers:
         - name: celery-worker-docprocessing
           securityContext:
-            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
+            {{- include "onyx.containerSecurityContext" .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
@@ -76,7 +76,7 @@ spec:
               {{- end }}
               "--hostname=docprocessing@%n",
               "-Q",
-              "docprocessing",
+              "docprocessing,port",
             ]
           ports:
             - name: metrics

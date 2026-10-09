@@ -1,33 +1,32 @@
 import os
 import uuid
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import httpx
 import pytest
 from sqlalchemy import select
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.mock_connector.connector import EXTERNAL_USER_EMAILS
-from onyx.connectors.mock_connector.connector import EXTERNAL_USER_GROUP_IDS
-from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
-from onyx.connectors.models import Document
-from onyx.connectors.models import InputType
+from onyx.connectors.mock_connector.connector import (
+    EXTERNAL_USER_EMAILS,
+    EXTERNAL_USER_GROUP_IDS,
+    MockConnectorCheckpoint,
+)
+from onyx.connectors.models import Document, InputType
 from onyx.db.document import get_documents_by_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import AccessType, IndexingStatus, PermissionSyncStatus
 from onyx.db.models import DocPermissionSyncAttempt
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
+from tests.integration.common_utils.constants import (
+    MOCK_CONNECTOR_SERVER_HOST,
+    MOCK_CONNECTOR_SERVER_PORT,
+)
+from tests.integration.common_utils.document_index import DocumentIndexClient
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.test_document_utils import create_test_document
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
+from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
 
 
 def _setup_mock_connector(
@@ -85,12 +84,12 @@ def _setup_mock_connector(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync is enterprise only",
 )
 def test_mock_connector_initial_permission_sync(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    document_index_client: DocumentIndexClient,
     admin_user: DATestUser,
 ) -> None:
     """Test that the MockConnector fetches and sets permissions during initial indexing
@@ -102,7 +101,7 @@ def test_mock_connector_initial_permission_sync(
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
-            vespa_client=vespa_client,
+            document_index_client=document_index_client,
         )
     assert len(documents) == 1
     assert documents[0].id == test_doc.id
@@ -141,7 +140,7 @@ def test_mock_connector_initial_permission_sync(
         number_of_updated_docs=1,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     updated_cc_pair_info = CCPairManager.get_single(
@@ -152,12 +151,11 @@ def test_mock_connector_initial_permission_sync(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync attempt tracking is enterprise only",
 )
 def test_permission_sync_attempt_tracking_integration(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test that permission sync attempts are properly tracked during real sync workflows."""
@@ -176,7 +174,7 @@ def test_permission_sync_attempt_tracking_integration(
         number_of_updated_docs=1,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     with get_session_with_current_tenant() as db_session:
@@ -199,12 +197,11 @@ def test_permission_sync_attempt_tracking_integration(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync attempt tracking is enterprise only",
 )
 def test_permission_sync_attempt_status_success(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test that permission sync attempts are marked as SUCCESS when sync completes without errors."""
@@ -223,7 +220,7 @@ def test_permission_sync_attempt_status_success(
         number_of_updated_docs=1,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     with get_session_with_current_tenant() as db_session:

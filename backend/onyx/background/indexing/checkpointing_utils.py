@@ -1,25 +1,27 @@
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from io import BytesIO
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import NUM_DAYS_TO_KEEP_CHECKPOINTS
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.configs.constants import NUM_DAYS_TO_KEEP_CHECKPOINTS, FileOrigin
+from onyx.connectors.interfaces import BaseConnector, CheckpointedConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.engine.time_utils import get_db_current_time
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
+from onyx.db.index_attempt import (
+    get_index_attempt,
+    get_recent_completed_attempts_for_cc_pair,
+)
 from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexingStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 from onyx.utils.object_size_check import deep_getsizeof
 
 logger = setup_logger()
+
+# Connectors should cap per-document checkpoint state well under the warn limit.
+CHECKPOINT_SIZE_WARN_BYTES = 100_000_000
+CHECKPOINT_SIZE_LIMIT_BYTES = 200_000_000
 
 _NUM_RECENT_ATTEMPTS_TO_CONSIDER = 50
 
@@ -111,12 +113,7 @@ def get_latest_valid_checkpoint(
         if (
             candidate.poll_range_start == window_start
             and candidate.poll_range_end == window_end
-            and (
-                candidate.status == IndexingStatus.FAILED
-                # if the background job was killed (and thus the attempt was canceled)
-                # we still want to use the checkpoint so that we can pick up where we left off
-                or candidate.status == IndexingStatus.CANCELED
-            )
+            and candidate.status.should_reuse_checkpoint()
             and candidate.checkpoint_pointer is not None
             # NOTE: There are a couple connectors that may make progress but not have
             # any "total_docs_indexed". E.g. they are going through
@@ -215,9 +212,21 @@ def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
 
 
 def check_checkpoint_size(checkpoint: ConnectorCheckpoint) -> None:
-    """Check if the checkpoint content size exceeds the limit (200MB)"""
+    """Warn above CHECKPOINT_SIZE_WARN_BYTES; raise above CHECKPOINT_SIZE_LIMIT_BYTES.
+
+    The warning flags a connector whose per-document state is unbounded before
+    it reaches the hard limit, which fails the index attempt.
+    """
     content_size = deep_getsizeof(checkpoint.model_dump())
-    if content_size > 200_000_000:  # 200MB in bytes
+    if content_size > CHECKPOINT_SIZE_LIMIT_BYTES:
         raise ValueError(
-            f"Checkpoint content size ({content_size} bytes) exceeds 200MB limit"
+            f"Checkpoint content size ({content_size} bytes) exceeds "
+            f"{CHECKPOINT_SIZE_LIMIT_BYTES} byte limit"
+        )
+    if content_size > CHECKPOINT_SIZE_WARN_BYTES:
+        logger.warning(
+            "Checkpoint content size (%s bytes) exceeds the %s byte warn limit. "
+            "The connector should cap its per-document state.",
+            content_size,
+            CHECKPOINT_SIZE_WARN_BYTES,
         )

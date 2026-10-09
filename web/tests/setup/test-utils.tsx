@@ -3,6 +3,8 @@ import { render, RenderOptions } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { NextIntlClientProvider } from "next-intl";
+import englishMessages from "@/i18n/messages/en.json";
 export { makeProvider } from "./llmProviderTestUtils";
 
 /**
@@ -33,7 +35,10 @@ function AllTheProviders({ children, swrConfig = {} }: AllProvidersProps) {
         ...swrConfig,
       }}
     >
-      <TooltipPrimitive.Provider>{children}</TooltipPrimitive.Provider>
+      {/* Tests always render the English catalog, matching the app default. */}
+      <NextIntlClientProvider locale="en" messages={englishMessages}>
+        <TooltipPrimitive.Provider>{children}</TooltipPrimitive.Provider>
+      </NextIntlClientProvider>
     </SWRConfig>
   );
 }
@@ -81,6 +86,16 @@ export { userEvent };
 
 // Override render with our custom render
 export { customRender as render };
+
+export function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 /**
  * Override jsdom's document visibility (always "visible" by default) so tests

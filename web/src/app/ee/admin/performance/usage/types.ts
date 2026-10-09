@@ -1,23 +1,5 @@
 import { Feedback, SessionType } from "@/lib/types";
 
-export interface QueryAnalytics {
-  total_queries: number;
-  total_likes: number;
-  total_dislikes: number;
-  date: string;
-}
-
-export interface UserAnalytics {
-  total_active_users: number;
-  date: string;
-}
-
-export interface OnyxBotAnalytics {
-  total_queries: number;
-  auto_resolved: number;
-  date: string;
-}
-
 export interface AbridgedSearchDoc {
   document_id: string;
   semantic_identifier: string;

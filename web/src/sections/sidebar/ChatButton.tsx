@@ -1,27 +1,29 @@
 "use client";
 
 import React, { useState, memo, useMemo, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
 import { ChatSession } from "@/app/app/interfaces";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
-import { Popover, PopoverMenu } from "@opal/components";
-import { useAppRouter } from "@/hooks/appNavigation";
+import {
+  Dropdown,
+  type DropdownMenuItem,
+  type DropdownView,
+} from "@opal/components";
 import type { Project } from "@/lib/projects/types";
 import {
   removeChatSessionFromProject,
   createProject as createProjectService,
 } from "@/lib/projects/svc";
-import { useProjectsContext } from "@/providers/ProjectsContext";
-import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
+import { useProjectsContext } from "@/lib/projects/providers";
+import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { Button, LineItemButton, SidebarTab } from "@opal/components";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { InputTypeIn } from "@opal/components";
+import { Button, SidebarTab } from "@opal/components";
+import { Hoverable } from "@opal/core";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
   shouldShowMoveModal,
@@ -29,7 +31,7 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 import {
   SvgChevronLeft,
   SvgEdit,
@@ -41,57 +43,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
-import { useAgents, usePinnedAgents } from "@/lib/agents/hooks";
-
-export interface PopoverSearchInputProps {
-  setShowMoveOptions: (show: boolean) => void;
-  onSearch: (term: string) => void;
-}
-
-export function PopoverSearchInput({
-  setShowMoveOptions,
-  onSearch,
-}: PopoverSearchInputProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    onSearch(value);
-  };
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Escape") {
-      setShowMoveOptions(false);
-    }
-  };
-
-  const handleClickBackButton = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    setShowMoveOptions(false);
-    setSearchTerm("");
-  };
-
-  return (
-    <div className="flex flex-row items-center">
-      <Button
-        icon={SvgChevronLeft}
-        onClick={handleClickBackButton}
-        prominence="tertiary"
-        size="sm"
-      />
-      <InputTypeIn
-        type="text"
-        value={searchTerm}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        placeholder="Search Projects"
-        onClick={noProp()}
-        variant="internal"
-        autoFocus
-      />
-    </div>
-  );
-}
+import { usePinChatAgent } from "@/lib/agents/hooks";
 
 export interface ChatButtonProps {
   chatSession: ChatSession;
@@ -101,12 +53,12 @@ export interface ChatButtonProps {
 
 const ChatButton = memo(
   ({ chatSession, project, draggable = false }: ChatButtonProps) => {
-    const route = useAppRouter();
-    const activeSidebarTab = useAppFocus();
+    const t = useTranslations("sidebar");
+    const appPosition = useAppPosition();
+    const activeSidebarTab = useAppPosition();
     const active = useMemo(
       () =>
-        activeSidebarTab.isChat() &&
-        activeSidebarTab.getId() === chatSession.id,
+        activeSidebarTab.isChat() && activeSidebarTab.chat() === chatSession.id,
       [activeSidebarTab, chatSession.id]
     );
     const mounted = useOnMount();
@@ -116,10 +68,8 @@ const ChatButton = memo(
     const [renaming, setRenaming] = useState(false);
     const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
       useState(false);
-    const [showMoveOptions, setShowMoveOptions] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
-    const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
     const { refreshChatSessions, removeSession } = useChatSessions();
     const {
       refreshCurrentProjectDetails,
@@ -128,9 +78,8 @@ const ChatButton = memo(
       currentProjectId,
       createProject,
     } = useProjectsContext();
-    const { agents } = useAgents();
-    const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
-    const [popoverOpen, setPopoverOpen] = useState(false);
+    const pinChatAgent = usePinChatAgent();
+    const [menuOpen, setMenuOpen] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
     >(null);
@@ -141,16 +90,18 @@ const ChatButton = memo(
 
     // Drag and drop setup for chat sessions
     const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
-    const { attributes, listeners, setNodeRef, transform, isDragging } =
-      useDraggable({
-        id: dragId,
-        data: {
-          type: DRAG_TYPES.CHAT,
-          chatSession,
-          projectId: project?.id,
-        },
-        disabled: !draggable || renaming,
-      });
+    // `attributes` is intentionally dropped: it turns the wrapper into a
+    // focusable role="button", which adds a second tab stop per row and lets
+    // Enter/Space start a keyboard drag that looks like the chat is disabled.
+    const { listeners, setNodeRef, transform, isDragging } = useDraggable({
+      id: dragId,
+      data: {
+        type: DRAG_TYPES.CHAT,
+        chatSession,
+        projectId: project?.id,
+      },
+      disabled: !draggable || renaming,
+    });
 
     // Sync local name state when chatSession.name changes (e.g., after auto-naming)
     useEffect(() => {
@@ -178,124 +129,120 @@ const ChatButton = memo(
     }, [chatSession.name, mounted]);
 
     const filteredProjects = useMemo(() => {
-      if (!searchTerm) return projects;
-      const term = searchTerm.toLowerCase();
+      // Trimmed, as the list's own filter trims it.
+      const term = searchTerm.trim().toLowerCase();
+      if (!term) return projects;
       return projects.filter((project) =>
         project.name.toLowerCase().includes(term)
       );
     }, [projects, searchTerm]);
 
-    useEffect(() => {
-      if (!showMoveOptions) {
-        const popoverItems = [
-          <LineItemButton
-            key="share"
-            sizePreset="main-ui"
-            rounding="sm"
-            icon={SvgShare}
-            title="Share"
-            onClick={noProp(() => setShowShareModal(true))}
-          />,
-          <LineItemButton
-            key="rename"
-            sizePreset="main-ui"
-            rounding="sm"
-            icon={SvgEdit}
-            title="Rename"
-            onClick={noProp(() => setRenaming(true))}
-          />,
-          <LineItemButton
-            key="move"
-            sizePreset="main-ui"
-            rounding="sm"
-            icon={SvgFolderIn}
-            title="Move to Project"
-            onClick={noProp(() => setShowMoveOptions(true))}
-          />,
-          project && (
-            <LineItemButton
-              key="remove"
-              sizePreset="main-ui"
-              rounding="sm"
-              icon={SvgFolder}
-              title={`Remove from ${project.name}`}
-              onClick={noProp(() => handleRemoveFromProject())}
-            />
+    const availableProjects = filteredProjects.filter(
+      (candidateProject) => candidateProject.id !== project?.id
+    );
+    // The move page: the view's own search filters the projects; the way
+    // back and the create row stay pinned above the filter.
+    const moveView: DropdownView = {
+      search: {
+        placeholder: t("chatButton.projectSearchInput.placeholder"),
+        onChange: setSearchTerm,
+      },
+      items: [
+        {
+          kind: "action",
+          id: "back",
+          pinned: true,
+          icon: SvgChevronLeft,
+          title: t("chatButton.moveToProject.label"),
+          onSelect: (views) => views.pop(),
+        },
+        ...projects
+          .filter((candidateProject) => candidateProject.id !== project?.id)
+          .map(
+            (targetProject): DropdownMenuItem => ({
+              kind: "action",
+              id: `project-${targetProject.id}`,
+              icon: SvgFolder,
+              title: targetProject.name,
+              onSelect: () => handleChatMove(targetProject),
+            })
           ),
-          null,
-          <LineItemButton
-            key="delete"
-            sizePreset="main-ui"
-            rounding="sm"
-            color="danger"
-            icon={SvgTrash}
-            title="Delete"
-            onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-          />,
-        ];
-        setPopoverItems(popoverItems);
-      } else {
-        const availableProjects = filteredProjects.filter(
-          (candidateProject) => candidateProject.id !== project?.id
-        );
-
-        const popoverItems = [
-          <PopoverSearchInput
-            key="search"
-            setShowMoveOptions={setShowMoveOptions}
-            onSearch={setSearchTerm}
-          />,
-          ...availableProjects.map((targetProject) => (
-            <LineItemButton
-              key={targetProject.id}
-              sizePreset="main-ui"
-              rounding="sm"
-              icon={SvgFolder}
-              title={targetProject.name}
-              onClick={noProp(() => handleChatMove(targetProject))}
-            />
-          )),
-          // Show "Create New Project" option when no projects match the search
-          ...(availableProjects.length === 0 && searchTerm.trim() !== ""
-            ? [
-                null,
-                <LineItemButton
-                  key="create-new"
-                  sizePreset="main-ui"
-                  rounding="sm"
-                  icon={SvgFolderPlus}
-                  title={`Create ${searchTerm.trim()}`}
-                  onClick={noProp(() =>
-                    handleCreateProjectAndMove(searchTerm.trim())
-                  )}
-                />,
-              ]
-            : []),
-        ];
-        setPopoverItems(popoverItems);
-      }
-    }, [
-      showMoveOptions,
-      filteredProjects,
-      refreshChatSessions,
-      fetchProjects,
-      currentProjectId,
-      refreshCurrentProjectDetails,
-      project,
-      chatSession.id,
-      searchTerm,
-      createProject,
-    ]);
+        // A create row when no project matches the search.
+        ...(availableProjects.length === 0 && searchTerm.trim() !== ""
+          ? [
+              {
+                kind: "group" as const,
+                items: [
+                  {
+                    kind: "action" as const,
+                    id: "create-new",
+                    pinned: true,
+                    icon: SvgFolderPlus,
+                    title: t("chatButton.createProject.label", {
+                      projectName: searchTerm.trim(),
+                    }),
+                    onSelect: () =>
+                      handleCreateProjectAndMove(searchTerm.trim()),
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
+    };
+    const menuItems: DropdownMenuItem[] = [
+      {
+        kind: "action",
+        id: "share",
+        icon: SvgShare,
+        title: t("chatButton.share.label"),
+        onSelect: () => setShowShareModal(true),
+      },
+      {
+        kind: "action",
+        id: "rename",
+        icon: SvgEdit,
+        title: t("chatButton.rename.label"),
+        onSelect: () => setRenaming(true),
+      },
+      {
+        kind: "action",
+        id: "move",
+        icon: SvgFolderIn,
+        title: t("chatButton.moveToProject.label"),
+        onSelect: (views) => views.push("move"),
+      },
+      ...(project
+        ? [
+            {
+              kind: "action" as const,
+              id: "remove",
+              icon: SvgFolder,
+              title: t("chatButton.removeFromProject.label", {
+                projectName: project.name,
+              }),
+              onSelect: () => handleRemoveFromProject(),
+            },
+          ]
+        : []),
+      {
+        kind: "group",
+        items: [
+          {
+            kind: "action",
+            id: "delete",
+            icon: SvgTrash,
+            danger: true,
+            title: t("chatButton.delete.label"),
+            onSelect: () => setDeleteConfirmationModalOpen(true),
+          },
+        ],
+      },
+    ];
 
     // Pin the chat's agent when clicking on the conversation
     async function handleClick() {
-      const agent = agents.find((a) => a.id === chatSession.persona_id);
-      if (agent) {
-        const isAlreadyPinned = pinnedAgents.some((a) => a.id === agent.id);
-        if (!isAlreadyPinned) {
-          await togglePinnedAgent(agent, true);
-        }
-      }
+      await pinChatAgent(chatSession);
     }
 
     async function handleRename(newName: string) {
@@ -315,13 +262,13 @@ const ChatButton = memo(
 
           // Only route if the deleted chat is the currently opened chat session
           if (active) {
-            route({ projectId: project.id });
+            appPosition.openProject(project.id);
           }
         }
         await refreshChatSessions();
       } catch (error) {
         console.error("Failed to delete chat:", error);
-        showErrorNotification("Failed to delete chat. Please try again.");
+        showErrorNotification(t("chatButton.deleteError.message"));
       }
     }
 
@@ -335,7 +282,6 @@ const ChatButton = memo(
           fetchProjects,
           currentProjectId,
         });
-        setShowMoveOptions(false);
         setSearchTerm("");
       } catch (error) {
         // handleMoveOperation already handles error notification
@@ -359,7 +305,6 @@ const ChatButton = memo(
           ? refreshCurrentProjectDetails()
           : fetchProjects();
         await Promise.all([refreshChatSessions(), projectRefreshPromise]);
-        setShowMoveOptions(false);
         setSearchTerm("");
       } catch (error) {
         console.error("Failed to remove chat from project:", error);
@@ -381,7 +326,6 @@ const ChatButton = memo(
         if (shouldShowMoveModal(chatSession)) {
           setPendingMoveProjectId(newProject.id);
           setShowMoveCustomAgentModal(true);
-          setShowMoveOptions(false);
           setSearchTerm("");
           return;
         }
@@ -390,51 +334,62 @@ const ChatButton = memo(
         await performMove(newProject.id);
 
         // Navigate to the new project to see the chat
-        route({ projectId: newProject.id });
+        appPosition.openProject(newProject.id);
         setNavigateAfterMoveProjectId(null);
       } catch (error) {
         console.error("Failed to create project and move chat:", error);
-        showErrorNotification("Failed to create project. Please try again.");
+        showErrorNotification(t("chatButton.createProjectError.message"));
         setNavigateAfterMoveProjectId(null);
       }
     }
 
     const rightMenu = (
       <>
-        <Popover.Trigger asChild onClick={noProp()}>
-          <div>
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <IconButton
-              icon={SvgMoreHorizontal}
-              className={cn(
-                !popoverOpen && "hidden",
-                !renaming && "group-hover/SidebarTab:flex"
-              )}
-              transient={popoverOpen}
-              internal
-            />
-          </div>
-        </Popover.Trigger>
-        <Popover.Content side="right" align="start" width="md">
-          <PopoverMenu>{popoverItems}</PopoverMenu>
-        </Popover.Content>
+        {/* The click stays here: the row underneath opens the chat. */}
+        <div
+          role="presentation"
+          data-testid="ChatButton/options"
+          onClick={noProp()}
+        >
+          {/* While renaming the row is an input, so the menu stays away unless
+              its own list is already open. */}
+          {(!renaming || menuOpen) && (
+            <Hoverable.Item group="ChatButton">
+              <Dropdown.Trigger asChild>
+                <Button
+                  icon={SvgMoreHorizontal}
+                  prominence="internal"
+                  size="sm"
+                  interaction={menuOpen ? "hover" : "rest"}
+                  aria-label={t("chatButton.options.label")}
+                />
+              </Dropdown.Trigger>
+            </Hoverable.Item>
+          )}
+        </div>
+        <Dropdown.Data
+          label={t("chatButton.options.label")}
+          items={menuItems}
+          views={{ move: moveView }}
+        />
       </>
     );
 
     const popover = (
-      <Popover
-        onOpenChange={(state) => {
-          setPopoverOpen(state);
-          if (!state) {
-            setShowMoveOptions(false);
-            setSearchTerm("");
-          }
-        }}
-      >
-        <Popover.Anchor>
+      <Dropdown width={60} side="right" onOpenChange={setMenuOpen}>
+        <Hoverable.Root
+          group="ChatButton"
+          data-testid="ChatButton"
+          interaction={menuOpen ? "hover" : "rest"}
+        >
           <SidebarTab
-            href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
-            onClick={handleClick}
+            /* While renaming, drop the click target so the input stays usable. */
+            href={
+              isDragging || renaming
+                ? undefined
+                : `/app?chatId=${chatSession.id}`
+            }
+            onClick={renaming ? undefined : handleClick}
             selected={active}
             rightChildren={rightMenu}
             nested={!!project}
@@ -449,15 +404,15 @@ const ChatButton = memo(
               displayName
             )}
           </SidebarTab>
-        </Popover.Anchor>
-      </Popover>
+        </Hoverable.Root>
+      </Dropdown>
     );
 
     return (
       <>
         {deleteConfirmationModalOpen && (
           <ConfirmationModalLayout
-            title="Delete Chat"
+            title={t("chatButton.deleteConfirmation.title")}
             icon={SvgTrash}
             onClose={() => setDeleteConfirmationModalOpen(false)}
             submit={
@@ -468,12 +423,11 @@ const ChatButton = memo(
                   handleChatDelete();
                 }}
               >
-                Delete
+                {t("chatButton.deleteConfirmation.confirmButton.label")}
               </Button>
             }
           >
-            Are you sure you want to delete this chat? This action cannot be
-            undone.
+            {t("chatButton.deleteConfirmation.description")}
           </ConfirmationModalLayout>
         )}
 
@@ -499,7 +453,7 @@ const ChatButton = memo(
                 await performMove(target);
                 // Navigate if this was triggered by creating a new project
                 if (shouldNavigate != null) {
-                  route({ projectId: shouldNavigate });
+                  appPosition.openProject(shouldNavigate);
                   setNavigateAfterMoveProjectId(null);
                 }
               }
@@ -523,7 +477,6 @@ const ChatButton = memo(
                 : undefined,
               opacity: isDragging ? 0.5 : 1,
             }}
-            {...(mounted ? attributes : {})}
             {...(mounted ? listeners : {})}
           >
             {popover}

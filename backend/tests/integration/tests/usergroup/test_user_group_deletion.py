@@ -21,22 +21,22 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestCredential
-from tests.integration.common_utils.test_models import DATestDocumentSet
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestPersona
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
-from tests.integration.common_utils.vespa import vespa_fixture
+from tests.integration.common_utils.test_models import (
+    DATestCredential,
+    DATestDocumentSet,
+    DATestLLMProvider,
+    DATestPersona,
+    DATestUser,
+    DATestUserGroup,
+)
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_user_group_deletion(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,  # noqa: ARG001
 ) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

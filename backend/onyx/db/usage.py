@@ -1,7 +1,6 @@
 """Database interactions for tenant usage tracking (cloud usage limits)."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel
@@ -10,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import TenantUsage
+from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
@@ -48,28 +48,8 @@ class UsageLimitExceededError(Exception):
 
 
 def get_current_window_start() -> datetime:
-    """
-    Calculate the start of the current usage window.
-
-    Uses fixed windows aligned to Monday 00:00 UTC for predictability.
-    The window duration is configured via USAGE_LIMIT_WINDOW_SECONDS.
-    """
-    now = datetime.now(timezone.utc)
-    # For weekly windows (default), align to Monday 00:00 UTC
-    if USAGE_LIMIT_WINDOW_SECONDS == 604800:  # 1 week
-        # Get the start of the current week (Monday)
-        days_since_monday = now.weekday()
-        window_start = now.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) - __import__("datetime").timedelta(days=days_since_monday)
-        return window_start
-
-    # For other window sizes, use epoch-aligned windows
-    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
-    seconds_since_epoch = int((now - epoch).total_seconds())
-    window_number = seconds_since_epoch // USAGE_LIMIT_WINDOW_SECONDS
-    window_start_seconds = window_number * USAGE_LIMIT_WINDOW_SECONDS
-    return epoch + __import__("datetime").timedelta(seconds=window_start_seconds)
+    """Start of the current usage window (USAGE_LIMIT_WINDOW_SECONDS grid)."""
+    return get_window_start(datetime.now(timezone.utc), USAGE_LIMIT_WINDOW_SECONDS)
 
 
 def get_or_create_tenant_usage(

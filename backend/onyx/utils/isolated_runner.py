@@ -21,9 +21,7 @@ def main() -> None:
 
     import pickle
 
-    from onyx.utils.process_isolation import STATUS_EXC
-    from onyx.utils.process_isolation import STATUS_OK
-    from onyx.utils.process_isolation import STATUS_UNRELAYABLE
+    from onyx.utils.process_isolation import STATUS_EXC, STATUS_OK, STATUS_UNRELAYABLE
 
     fn, args, kwargs = pickle.loads(sys.stdin.buffer.read())  # noqa: S301
     try:

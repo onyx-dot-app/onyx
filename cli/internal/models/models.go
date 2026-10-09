@@ -74,11 +74,62 @@ type ChatSessionCreationInfo struct {
 	AgentID int `json:"persona_id"`
 }
 
+// LLMOverride selects a specific model for a chat message, overriding the
+// agent's default. ModelConfigurationID routes unambiguously; the name-based
+// fields are a fallback for older servers.
+type LLMOverride struct {
+	ModelConfigurationID *int    `json:"model_configuration_id,omitempty"`
+	ModelProvider        *string `json:"model_provider,omitempty"`
+	ModelVersion         *string `json:"model_version,omitempty"`
+}
+
+// ModelConfiguration is one model offered by an LLM provider.
+type ModelConfiguration struct {
+	ID                *int    `json:"id"`
+	Name              string  `json:"name"`
+	IsVisible         bool    `json:"is_visible"`
+	DisplayName       *string `json:"display_name"`
+	CustomDisplayName *string `json:"custom_display_name"`
+}
+
+// Label returns the human-readable name for the model.
+func (m ModelConfiguration) Label() string {
+	if m.CustomDisplayName != nil && *m.CustomDisplayName != "" {
+		return *m.CustomDisplayName
+	}
+	if m.DisplayName != nil && *m.DisplayName != "" {
+		return *m.DisplayName
+	}
+	return m.Name
+}
+
+// LLMProviderDescriptor is an LLM provider visible to the current user.
+type LLMProviderDescriptor struct {
+	ID                  int                  `json:"id"`
+	Name                *string              `json:"name"`
+	Provider            string               `json:"provider"`
+	ProviderDisplayName string               `json:"provider_display_name"`
+	ModelConfigurations []ModelConfiguration `json:"model_configurations"`
+}
+
+// DefaultModel identifies the workspace default model.
+type DefaultModel struct {
+	ProviderID int    `json:"provider_id"`
+	ModelName  string `json:"model_name"`
+}
+
+// LLMProviderResponse is the response from GET /api/llm/provider.
+type LLMProviderResponse struct {
+	Providers   []LLMProviderDescriptor `json:"providers"`
+	DefaultText *DefaultModel           `json:"default_text"`
+}
+
 // SendMessagePayload is the request body for POST /api/chat/send-chat-message.
 type SendMessagePayload struct {
 	Message          string                   `json:"message"`
 	ChatSessionID    *string                  `json:"chat_session_id,omitempty"`
 	ChatSessionInfo  *ChatSessionCreationInfo `json:"chat_session_info,omitempty"`
+	LLMOverride      *LLMOverride             `json:"llm_override,omitempty"`
 	ParentMessageID  *int                     `json:"parent_message_id"`
 	FileDescriptors  []FileDescriptorPayload `json:"file_descriptors"`
 	Origin           string                   `json:"origin"`

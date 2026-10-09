@@ -10,11 +10,12 @@ from onyx.configs.app_configs import DISCORD_BOT_INVOKE_CHAR
 from onyx.onyxbot.discord.api_client import OnyxAPIClient
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.onyxbot.discord.constants import CACHE_REFRESH_INTERVAL
-from onyx.onyxbot.discord.handle_commands import handle_dm
-from onyx.onyxbot.discord.handle_commands import handle_registration_command
-from onyx.onyxbot.discord.handle_commands import handle_sync_channels_command
-from onyx.onyxbot.discord.handle_message import process_chat_message
-from onyx.onyxbot.discord.handle_message import should_respond
+from onyx.onyxbot.discord.handle_commands import (
+    handle_dm,
+    handle_registration_command,
+    handle_sync_channels_command,
+)
+from onyx.onyxbot.discord.handle_message import process_chat_message, should_respond
 from onyx.onyxbot.discord.utils import get_bot_token
 from onyx.utils.logger import setup_logger
 
@@ -34,7 +35,6 @@ class OnyxDiscordClient(commands.Bot):
     def __init__(self, command_prefix: str = DISCORD_BOT_INVOKE_CHAR) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
-        intents.members = True
 
         super().__init__(command_prefix=command_prefix, intents=intents)
 
@@ -172,7 +172,7 @@ class OnyxDiscordClient(commands.Bot):
             logger.debug(
                 "Processing message: '%s' in #%s (%s), persona_id=%s",
                 message.content[:50],
-                getattr(message.channel, "name", "unknown"),
+                getattr(message.channel, "name", "unknown"),  # ods: ignore[getattr]
                 message.guild.name,
                 should_respond_context.persona_id,
             )
@@ -199,15 +199,14 @@ class OnyxDiscordClient(commands.Bot):
 def main() -> None:
     """Main entry point for Discord bot."""
     from onyx.db.engine.sql_engine import SqlEngine
-    from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+    from onyx.utils.variable_functionality import set_is_ee_if_available
 
     logger.info("Starting Onyx Discord Bot...")
 
     # Initialize the database engine (required before any DB operations)
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
-    # Initialize EE features based on environment
-    set_is_ee_based_on_env_variable()
+    set_is_ee_if_available()
 
     counter = 0
     while True:

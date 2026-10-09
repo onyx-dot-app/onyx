@@ -6,6 +6,9 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      # The shipped image; the Dockerfile's default (last) stage is the dev variant
+      # with debugging tools (published with a -dev tag suffix).
+      target: runtime
     command: >
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
@@ -29,9 +32,6 @@ services:
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
       - ENV_SEED_CONFIGURATION=${ENV_SEED_CONFIGURATION:-}
-      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=True
-      # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
-      - LICENSE_ENFORCEMENT_ENABLED=false
       # MinIO configuration
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
@@ -50,6 +50,9 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      # The shipped image; the Dockerfile's default (last) stage is the dev variant
+      # with debugging tools (published with a -dev tag suffix).
+      target: runtime
     command: /app/scripts/supervisord_entrypoint.sh
     depends_on:
       - relational_db
@@ -68,9 +71,6 @@ services:
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
       - ENV_SEED_CONFIGURATION=${ENV_SEED_CONFIGURATION:-}
-      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=True
-      # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
-      - LICENSE_ENFORCEMENT_ENABLED=false
       # MinIO configuration
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
@@ -96,8 +96,6 @@ services:
 
         # Enterprise Edition only
         - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
-        # DO NOT TURN ON unless you have EXPLICIT PERMISSION from Onyx.
-        - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
     depends_on:
       - api_server
     restart: unless-stopped
@@ -105,21 +103,11 @@ services:
       - INTERNAL_URL=http://api_server:8080
       - WEB_DOMAIN=${WEB_DOMAIN:-}
 
-      # Enterprise Edition only
-      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
-
   inference_model_server:
     image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
-    command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
-        echo 'Skipping service...';
-        exit 0;
-      else
-        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
-      fi"
     restart: on-failure
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
@@ -137,19 +125,11 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
-    command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
-        echo 'Skipping service...';
-        exit 0;
-      else
-        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
-      fi"
     restart: on-failure
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
       - LOG_LEVEL=${LOG_LEVEL:-debug}
-      - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
     volumes:
       - inference_model_cache_huggingface:/app/.cache/huggingface/
     logging:
@@ -223,7 +203,8 @@ services:
       && /tmp/run-nginx.sh app.conf.template"
 
   minio:
-    image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    # Same image as docker-compose.template.yml (see the note there).
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/onyxdotapp/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
     restart: unless-stopped
     # TODO(security): prefix 127.0.0.1: to bind loopback, not 0.0.0.0 (LAN-exposed).
     ports:

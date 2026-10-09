@@ -1,19 +1,22 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.enums import HierarchyNodeType
-from onyx.db.enums import PersonaAccessLevel
-from onyx.db.enums import PersonaSharePermission
-from onyx.db.enums import PersonaSharingStatus
-from onyx.db.models import Document
-from onyx.db.models import HierarchyNode
-from onyx.db.models import Persona
-from onyx.db.models import PersonaLabel
-from onyx.db.models import StarterMessage
+from onyx.db.enums import (
+    HierarchyNodeType,
+    PersonaAccessLevel,
+    PersonaSharePermission,
+    PersonaSharingStatus,
+)
+from onyx.db.models import (
+    Document,
+    HierarchyNode,
+    Persona,
+    PersonaLabel,
+    StarterMessage,
+)
 from onyx.db.persona_sharing import derive_persona_sharing_status
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot
@@ -179,10 +182,13 @@ class PersonaUpsertRequest(BaseModel):
     display_priority: int | None = None
     # Accept string UUIDs from frontend
     user_file_ids: list[str] | None = None
-    # Hierarchy nodes (folders, spaces, channels) attached for scoped search
-    hierarchy_node_ids: list[int] = Field(default_factory=list)
-    # Individual documents attached for scoped search
-    document_ids: list[str] = Field(default_factory=list)
+    # Hierarchy nodes (folders, spaces, channels) attached for scoped search.
+    # None leaves the stored attachments alone; [] clears them. Without this a
+    # client updating any other field had to read both lists back and resend
+    # them, which reverts an attachment added in between.
+    hierarchy_node_ids: list[int] | None = None
+    # Individual documents attached for scoped search; same None semantics
+    document_ids: list[str] | None = None
 
     # prompt fields
     system_prompt: str
@@ -229,6 +235,10 @@ class MinimalPersonaSnapshot(BaseModel):
     owner_group: PersonaOwnerGroupSnapshot | None
     # Computed for the requesting user when the list endpoint provides it
     user_permission: PersonaAccessLevel | None = None
+    # Per-action affordance map for the requesting user; empty on paths that don't
+    # stamp it (fail-closed on the client). List endpoints stamp it so each card
+    # doesn't refetch the full agent just to gate its icons.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
     @classmethod
     def from_model(
@@ -335,6 +345,9 @@ class PersonaSnapshot(BaseModel):
     hierarchy_nodes: list[HierarchyNodeSnapshot] = Field(default_factory=list)
     # Individual documents attached for scoped search
     attached_documents: list[AttachedDocumentSnapshot] = Field(default_factory=list)
+    # Per-action affordance map for the requesting user, stamped by the endpoint. Empty
+    # where unstamped, so the client fails closed. Inherited by FullPersonaSnapshot.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None

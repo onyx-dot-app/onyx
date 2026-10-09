@@ -3,10 +3,29 @@ import { getDomain } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
 
+// A provider-row Google flow round-trips its row name inside the signed
+// state, while the env-credential flow does not. Routing only, the backend
+// still verifies the signature.
+function isProviderRowState(state: string | null): boolean {
+  if (!state) return false;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(state.split(".")[1] ?? "", "base64url").toString("utf8")
+    );
+    return typeof payload.provider_name === "string";
+  } catch {
+    return false;
+  }
+}
+
 export const GET = async (request: NextRequest) => {
-  // Wrapper around the FastAPI endpoint /auth/oauth/callback,
-  // which adds back a redirect to the main app.
-  const url = new URL(buildUrl("/auth/oauth/callback"));
+  // Wrapper around the FastAPI callback, which adds back a redirect to the
+  // main app. Migrated provider rows allowlist this URL at the IdP, so their
+  // flows land here too and are dispatched to the row callback.
+  const rowFlow = isProviderRowState(request.nextUrl.searchParams.get("state"));
+  const url = new URL(
+    buildUrl(rowFlow ? "/auth/oidc/callback" : "/auth/oauth/callback")
+  );
   url.search = request.nextUrl.search;
   const cookieHeader = request.headers.get("cookie") || "";
 
@@ -15,15 +34,24 @@ export const GET = async (request: NextRequest) => {
     redirect: "manual",
     headers: cookieHeader ? { cookie: cookieHeader } : undefined,
   });
-  const setCookieHeader = response.headers.get("set-cookie");
-
   if (response.status === 401) {
     return NextResponse.redirect(
       new URL("/auth/create-account", getDomain(request))
     );
   }
 
-  if (!setCookieHeader) {
+  // A completed login arrives as a 302, so 4xx/5xx is the failure signal here.
+  // Error responses carry the PKCE cleanup cookie, so forward it too.
+  if (response.status >= 400) {
+    const errorRedirect = await authErrorRedirect(request, response);
+    for (const cookie of response.headers.getSetCookie()) {
+      errorRedirect.headers.append("set-cookie", cookie);
+    }
+    return errorRedirect;
+  }
+
+  const setCookieHeaders = response.headers.getSetCookie();
+  if (setCookieHeaders.length === 0) {
     return authErrorRedirect(request, response);
   }
 
@@ -34,6 +62,10 @@ export const GET = async (request: NextRequest) => {
     new URL(redirectUrl, getDomain(request))
   );
 
-  redirectResponse.headers.set("set-cookie", setCookieHeader);
+  // Re-emit each Set-Cookie separately. Comma-joining would let one cookie's
+  // attributes (e.g. the PKCE deletion's Max-Age=0) bleed into the session's.
+  for (const cookie of setCookieHeaders) {
+    redirectResponse.headers.append("set-cookie", cookie);
+  }
   return redirectResponse;
 };

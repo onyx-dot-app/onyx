@@ -7,8 +7,7 @@ import shutil
 import tarfile
 from collections.abc import Callable
 from pathlib import Path
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -17,9 +16,11 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_NAMESPACE,
+    SandboxBackend,
+)
 from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
@@ -30,12 +31,14 @@ from tests.common.craft.payloads import default_llm_config
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.k8s.k8s_fixtures import OwnedLivePod
-from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
-from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
-from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
-from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
-from tests.integration.tests.craft.k8s.k8s_fixtures import wait_until_healthy
+from tests.integration.tests.craft.k8s.k8s_fixtures import (
+    OwnedLivePod,
+    PoolSession,
+    SandboxHandle,
+    pod_exec,
+    wait_for_pod_deletion,
+    wait_until_healthy,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
@@ -242,10 +245,12 @@ def test_restore_re_pushes_skills(
 
     skill = SkillManager.create_custom(
         k8s_admin_user,
-        slug=f"restore-repush-{uuid4().hex[:6]}",
+        name=f"restore-repush-{uuid4().hex[:6]}",
         is_public=True,
     )
     try:
+        SkillManager.set_enabled(skill, handle.api_user, True)
+
         # managed/ is RO in the sandbox container; wipe via the sidecar.
         pod_exec(
             k8s_client,
@@ -273,7 +278,7 @@ def test_restore_re_pushes_skills(
             k8s_client,
             pod_name,
             SANDBOX_NAMESPACE,
-            f"ls -1 /workspace/managed/skills/{skill.slug}/",
+            f"ls -1 /workspace/managed/skills/{skill.name}/",
         )
         assert "SKILL.md" in listing, (
             f"API restore should rehydrate skills after snapshot restore. Got: {listing}"
@@ -283,7 +288,7 @@ def test_restore_re_pushes_skills(
             k8s_client,
             pod_name,
             SANDBOX_NAMESPACE,
-            f"ls -1 /workspace/sessions/{session_id}/.opencode/skills/{skill.slug}/",
+            f"ls -1 /workspace/sessions/{session_id}/.opencode/skills/{skill.name}/",
         )
         assert "SKILL.md" in resolved
     finally:
@@ -305,7 +310,6 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
         session_id=session_id,
         llm_config=default_llm_config(),
         nextjs_port=None,
-        skills_section="No skills available.",
         connectable_apps_section="No connectable apps available.",
     )
 

@@ -12,10 +12,13 @@
  * - /api/license/fetch - Fetch license from control plane after checkout
  * - /api/license/refresh - Refresh cached license data
  * - /api/license/upload - Upload license key manually (air-gapped deployments)
+ * - /api/license/downgrade - Drop the deployment to the Community tier
  */
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
+  CommunityDowngradeResponse,
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
   CreateCustomerPortalSessionRequest,
@@ -24,13 +27,22 @@ import {
   PaymentMethodRequiredError,
   SeatUpdateRequest,
   SeatUpdateResponse,
-} from "@/lib/billing/interfaces";
+} from "@/lib/billing/types";
 
 function getBillingBaseUrl(): string {
   return NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants" : "/api/admin/billing";
 }
 
-async function billingPost<T>(endpoint: string, body?: unknown): Promise<T> {
+/** Every JSON body the billing endpoints below accept. */
+type BillingRequestBody =
+  | CreateCheckoutSessionRequest
+  | CreateCustomerPortalSessionRequest
+  | SeatUpdateRequest;
+
+async function billingPost<T>(
+  endpoint: string,
+  body?: BillingRequestBody
+): Promise<T> {
   const response = await fetch(`${getBillingBaseUrl()}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,7 +50,7 @@ async function billingPost<T>(endpoint: string, body?: unknown): Promise<T> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error: ErrorResponseBody = await response.json().catch(() => ({}));
     throw new Error(error.detail || "Billing request failed");
   }
 
@@ -80,7 +92,7 @@ export async function endTrial(): Promise<EndTrialResponse> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error: ErrorResponseBody = await response.json().catch(() => ({}));
     const detail = error.detail || "Failed to end trial";
     if (response.status === 402) {
       throw new PaymentMethodRequiredError(detail);
@@ -98,18 +110,40 @@ export async function endTrial(): Promise<EndTrialResponse> {
 export const resetStripeConnection = () =>
   billingPost<{ success: boolean; message: string }>("/reset-connection");
 
+// Comfortably past the backend's own 30s timeout on its control-plane call.
+// The cache writes behind these handlers have no socket timeout, so an
+// unreachable cache would pin the spinner.
+const LICENSE_REQUEST_TIMEOUT_MS: number = 60_000;
+
+// The downgrade rewrites every restricted connector's documents in one request.
+// Five minutes is the default read timeout of the Docker Compose nginx, the
+// shortest of the bundled proxies. The Helm nginx waits 900 seconds.
+const DOWNGRADE_REQUEST_TIMEOUT_MS: number = 5 * 60_000;
+
 // Self-hosted only actions
-async function selfHostedPost<T>(endpoint: string): Promise<T> {
+async function selfHostedPost<T>(
+  endpoint: string,
+  timeoutMs: number = LICENSE_REQUEST_TIMEOUT_MS
+): Promise<T> {
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
     throw new Error(`${endpoint} is only available for self-hosted`);
   }
 
-  const response = await fetch(`/api/license${endpoint}`, {
-    method: "POST",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api/license${endpoint}`, {
+      method: "POST",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error("License request timed out. Please try again.");
+    }
+    throw error;
+  }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error: ErrorResponseBody = await response.json().catch(() => ({}));
     throw new Error(error.detail || "License request failed");
   }
 
@@ -135,6 +169,13 @@ export const claimLicense = (sessionId?: string) =>
 export const refreshLicenseCache = () =>
   selfHostedPost<{ success: boolean; message?: string }>("/refresh");
 
+/** Drop this deployment to the Community tier (self-hosted only). */
+export const downgradeToCommunity = () =>
+  selfHostedPost<CommunityDowngradeResponse>(
+    "/downgrade",
+    DOWNGRADE_REQUEST_TIMEOUT_MS
+  );
+
 /**
  * Upload a license key string (self-hosted only).
  * Used for air-gapped deployments where users paste license keys manually.
@@ -157,7 +198,7 @@ export async function uploadLicense(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error: ErrorResponseBody = await response.json().catch(() => ({}));
     throw new Error(error.detail || "License upload failed");
   }
 

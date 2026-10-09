@@ -1,14 +1,9 @@
 from enum import Enum
-from typing import Any
-from typing import Final
-from typing import TypeGuard
-from typing import TypeVar
+from typing import Any, Final, TypeGuard, TypeVar
 
-from psycopg2 import errorcodes
-from psycopg2 import OperationalError
-from psycopg2.errors import ForeignKeyViolation
-from psycopg2.errors import UniqueViolation
-from pydantic import BaseModel
+from psycopg2 import OperationalError, errorcodes
+from psycopg2.errors import ForeignKeyViolation, UniqueViolation
+from pydantic import BaseModel, Field
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 
@@ -58,7 +53,8 @@ def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:
     orig = exc.orig
     return (
         isinstance(orig, UniqueViolation)
-        and getattr(orig.diag, "constraint_name", None) == constraint
+        and getattr(orig.diag, "constraint_name", None)  # ods: ignore[getattr]
+        == constraint
     )
 
 
@@ -68,7 +64,10 @@ def is_fk_violation(exc: IntegrityError) -> bool:
 
 
 def model_to_dict(model: Base) -> dict[str, Any]:
-    return {c.key: getattr(model, c.key) for c in inspect(model).mapper.column_attrs}
+    return {
+        c.key: getattr(model, c.key)  # ods: ignore[getattr]
+        for c in inspect(model).mapper.column_attrs
+    }
 
 
 RETRYABLE_PG_CODES = {
@@ -84,7 +83,11 @@ RETRYABLE_PG_CODES = {
 def is_retryable_sqlalchemy_error(exc: BaseException) -> bool:
     """Helper function for use with tenacity's retry_if_exception as the callback"""
     if isinstance(exc, OperationalError):
-        pgcode = getattr(getattr(exc, "orig", None), "pgcode", None)
+        pgcode = getattr(  # ods: ignore[getattr]
+            getattr(exc, "orig", None),  # ods: ignore[getattr]
+            "pgcode",
+            None,
+        )
         return pgcode in RETRYABLE_PG_CODES
     return False
 
@@ -93,6 +96,7 @@ class DocumentRow(BaseModel):
     id: str
     doc_metadata: dict[str, Any]
     external_user_group_ids: list[str]
+    external_user_emails: list[str] = Field(default_factory=list)
 
 
 class SortOrder(str, Enum):

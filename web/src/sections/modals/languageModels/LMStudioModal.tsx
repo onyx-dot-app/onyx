@@ -1,9 +1,9 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider } from "@opal/layouts";
-import { markdown } from "@opal/utils";
+import { InputDivider, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -13,21 +13,20 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues as BaseLLMModalValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   APIBaseField,
-  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
 import { fetchModels } from "@/lib/languageModels/svc";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -47,8 +46,11 @@ function LMStudioModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: LMStudioModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<LMStudioModalValues>();
-  const settings = useSettings();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    t("lmStudio.apiBaseField.description")
+  );
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -64,32 +66,20 @@ function LMStudioModalInternals({
     if (data.error) {
       throw new Error(data.error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        data.models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(data.models));
   };
 
   return (
     <>
       <APIBaseField
-        subDescription={
-          settings.is_containerized
-            ? markdown(
-                `The base URL for your LM Studio server. ${CONTAINERIZED_HOST_NOTE}`
-              )
-            : "The base URL for your LM Studio server."
-        }
-        placeholder="Your LM Studio API base URL"
+        subDescription={apiBaseSubDescription}
+        placeholder={t("lmStudio.apiBaseField.placeholder")}
       />
 
       <APIKeyField
         name="custom_config.LM_STUDIO_API_KEY"
         optional
-        subDescription="Optional API key if your LM Studio server requires authentication."
+        subDescription={t("lmStudio.apiKeyField.description")}
       />
 
       {!isOnboarding && (
@@ -121,7 +111,9 @@ export default function LMStudioModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const settings = useSettings();
@@ -141,9 +133,9 @@ export default function LMStudioModal({
     custom_config: {
       LM_STUDIO_API_KEY: existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY,
     },
-  } as LMStudioModalValues;
+  };
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
   });
 
@@ -168,9 +160,12 @@ export default function LMStudioModal({
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          t,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.LM_STUDIO,
           values: submitValues,
           initialValues,
@@ -186,8 +181,8 @@ export default function LMStudioModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

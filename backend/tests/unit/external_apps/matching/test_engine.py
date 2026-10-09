@@ -6,13 +6,15 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
 from onyx.db.models import ExternalApp
-from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.external_apps.matching.engine import apply_credential_gate
-from onyx.external_apps.matching.engine import MatchedAction
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.external_apps.matching.engine import (
+    WHOLE_DOMAIN_ACTION_TYPE,
+    AllMatchedActions,
+    GatedTarget,
+    MatchedAction,
+    apply_credential_gate,
+)
 from onyx.external_apps.matching.request import ProxiedRequest
 
 
@@ -20,14 +22,17 @@ def test_rejects_empty_actions() -> None:
     """An AllMatchedActions with no actions is a programmer error — every gate
     consumer reads ``actions[0]``."""
     with pytest.raises(ValidationError, match="actions must be non-empty"):
-        AllMatchedActions(actions=(), app_name="X", external_app_id=1)
+        AllMatchedActions(
+            actions=(),
+            target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=1, app_name="X"),
+        )
 
 
 # ── apply_credential_gate: the pure credential/synthesize fork ─────────
 
 
 def _app(app_type: ExternalAppType = ExternalAppType.SLACK) -> ExternalApp:
-    app = ExternalApp(app_type=app_type)
+    app = ExternalApp(name="Slack", app_type=app_type)
     app.id = 1
     return app
 
@@ -44,8 +49,7 @@ def _matched_actions(*policies: EndpointPolicy) -> AllMatchedActions:
             )
             for i, p in enumerate(policies)
         ),
-        app_name="Slack",
-        external_app_id=1,
+        target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=1, app_name="Slack"),
     )
 
 
@@ -63,7 +67,17 @@ def test_apply_gate_serveable_no_catalog_synthesizes_whole_domain_ask() -> None:
     assert matched_actions.governing_action.action_type == WHOLE_DOMAIN_ACTION_TYPE
     assert matched_actions.governing_action.policy == EndpointPolicy.ASK
     assert matched_actions.app_name == "Slack"
-    assert matched_actions.external_app_id == 1
+    assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, 1)
+
+
+def test_apply_gate_uses_custom_app_display_name() -> None:
+    app = _app(ExternalAppType.CUSTOM)
+    app.name = "Customer CRM"
+
+    matched_actions = apply_credential_gate(app, _request(), None, is_available=True)
+
+    assert matched_actions is not None
+    assert matched_actions.app_name == "Customer CRM"
 
 
 def test_apply_gate_not_serveable_no_catalog_forwards_bare() -> None:

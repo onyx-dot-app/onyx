@@ -1,6 +1,6 @@
 import pytest
 
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.string_filtering import (

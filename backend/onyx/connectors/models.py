@@ -4,21 +4,13 @@ import sys
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
-from typing import Any
-from typing import cast
-from typing import Literal
+from typing import Any, Literal, cast
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
-from pydantic import model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import INDEX_SEPARATOR
-from onyx.configs.constants import RETURN_SEPARATOR
-from onyx.db.enums import HierarchyNodeType
-from onyx.db.enums import IndexModelStatus
+from onyx.configs.constants import INDEX_SEPARATOR, RETURN_SEPARATOR, DocumentSource
+from onyx.db.enums import HierarchyNodeType, IndexModelStatus
 from onyx.utils.text_processing import make_url_compatible
 
 
@@ -222,6 +214,8 @@ class DocumentBase(BaseModel):
 
     # UTC time
     doc_updated_at: datetime | None = None
+    # UTC source creation time.
+    doc_created_at: datetime | None = None
     chunk_count: int | None = None
 
     # Owner, creator, etc.
@@ -420,6 +414,7 @@ class Document(DocumentBase):
             semantic_identifier=base.semantic_identifier,
             metadata=base.metadata,
             doc_updated_at=base.doc_updated_at,
+            doc_created_at=base.doc_created_at,
             primary_owners=base.primary_owners,
             secondary_owners=base.secondary_owners,
             title=base.title,
@@ -463,6 +458,8 @@ class SlimDocument(BaseModel):
     id: str
     external_access: ExternalAccess | None = None
     parent_hierarchy_raw_node_id: str | None = None
+    # UTC source creation time.
+    doc_created_at: datetime | None = None
 
 
 class HierarchyNode(BaseModel):

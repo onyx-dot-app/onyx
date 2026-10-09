@@ -1,8 +1,9 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -13,7 +14,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -25,7 +26,6 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
@@ -44,6 +44,7 @@ function OpenRouterModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: OpenRouterModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<OpenRouterModalValues>();
 
   const isFetchDisabled =
@@ -58,20 +59,14 @@ function OpenRouterModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        fetched,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(fetched));
   };
 
   return (
     <>
       <APIBaseField
-        subDescription="Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly."
-        placeholder="Your OpenRouter base URL"
+        subDescription={t("openRouter.apiBaseField.description")}
+        placeholder={t("openRouter.apiBaseField.placeholder")}
       />
 
       <APIKeyField providerName="OpenRouter" />
@@ -105,7 +100,9 @@ export default function OpenRouterModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -120,7 +117,7 @@ export default function OpenRouterModal({
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
   } as OpenRouterModalValues;
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiKey: true,
     apiBase: true,
   });
@@ -134,9 +131,12 @@ export default function OpenRouterModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          t,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.OPENROUTER,
           values,
           initialValues,
@@ -152,8 +152,8 @@ export default function OpenRouterModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

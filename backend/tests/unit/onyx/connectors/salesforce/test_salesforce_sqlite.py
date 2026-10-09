@@ -5,30 +5,29 @@ import shutil
 import tempfile
 import time
 from collections import defaultdict
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
-from onyx.connectors.salesforce.doc_conversion import _extract_section
-from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
+from onyx.connectors.models import BasicExpertInfo, Document, ImageSection, TextSection
+from onyx.connectors.salesforce.doc_conversion import ID_PREFIX, _extract_section
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
-from onyx.connectors.salesforce.salesforce_calls import _bulk_retrieve_from_salesforce
-from onyx.connectors.salesforce.salesforce_calls import _make_time_filter_for_sf_type
-from onyx.connectors.salesforce.salesforce_calls import _make_time_filtered_query
-from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
+from onyx.connectors.salesforce.salesforce_calls import (
+    _bulk_retrieve_from_salesforce,
+    _make_time_filter_for_sf_type,
+    _make_time_filtered_query,
+    get_object_by_id_queries,
+)
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
-from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import MODIFIED_FIELD
-from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
+from onyx.connectors.salesforce.utils import (
+    ACCOUNT_OBJECT_TYPE,
+    MODIFIED_FIELD,
+    USER_OBJECT_TYPE,
+)
 from onyx.utils.logger import setup_logger
 
 # from onyx.connectors.salesforce.onyx_salesforce_type import OnyxSalesforceType
@@ -167,13 +166,13 @@ def _create_csv_file_and_update_db(
     fields: set[str] = set()
     for record in records:
         fields.update(record.keys())
-    fields = set(sorted(list(fields)))  # Sort for consistent order
+    sorted_fields = sorted(fields)  # Sort for a consistent column order
 
     # Create CSV file
     with tempfile.TemporaryDirectory() as directory:
         csv_path = os.path.join(directory, filename)
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fields)
+            writer = csv.DictWriter(f, fieldnames=sorted_fields)
             writer.writeheader()
             for record in records:
                 writer.writerow(record)
@@ -725,7 +724,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 1: Account directly in updated_ids and parent_types
     updated_ids = [_VALID_SALESFORCE_IDS[1]]  # Parent Account 2
-    parent_types = set([ACCOUNT_OBJECT_TYPE])
+    parent_types = {ACCOUNT_OBJECT_TYPE}
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -740,7 +739,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 2: Account with child in updated_ids
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
-    parent_types = set([ACCOUNT_OBJECT_TYPE])
+    parent_types = {ACCOUNT_OBJECT_TYPE}
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -755,7 +754,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 3: Both direct and indirect affects
     updated_ids = [_VALID_SALESFORCE_IDS[1], _VALID_SALESFORCE_IDS[40]]  # Both cases
-    parent_types = set([ACCOUNT_OBJECT_TYPE])
+    parent_types = {ACCOUNT_OBJECT_TYPE}
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -774,7 +773,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 4: No matches
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
-    parent_types = set(["Opportunity"])  # Wrong type
+    parent_types = {"Opportunity"}  # Wrong type
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -1051,10 +1050,9 @@ def test_salesforce_connector_single() -> None:
     sections: list[TextSection] = []
 
     queryable_fields = sf_client.get_queryable_fields_by_type(parent_type)
-    query = get_object_by_id_query(parent_id, parent_type, queryable_fields)
-    result = sf_client.query(query)
-    records = result["records"]
-    record = records[0]
+    record: dict[str, Any] = {}
+    for query in get_object_by_id_queries(parent_id, parent_type, queryable_fields):
+        record.update(sf_client.query(query)["records"][0])
     assert record["attributes"]["type"] == ACCOUNT_OBJECT_TYPE
     parent_last_modified_date = record.get(MODIFIED_FIELD, "")
     parent_semantic_identifier = record.get("Name", "Unknown Object")
@@ -1183,11 +1181,11 @@ def test_salesforce_connector_single() -> None:
     primary_owner_list = None
     if parent_last_modified_by_id:
         queryable_user_fields = sf_client.get_queryable_fields_by_type(USER_OBJECT_TYPE)
-        query = get_object_by_id_query(
+        user_record: dict[str, Any] = {}
+        for query in get_object_by_id_queries(
             parent_last_modified_by_id, USER_OBJECT_TYPE, queryable_user_fields
-        )
-        result = sf_client.query(query)
-        user_record = result["records"][0]
+        ):
+            user_record.update(sf_client.query(query)["records"][0])
         expert_info = BasicExpertInfo(
             first_name=user_record.get("FirstName"),
             last_name=user_record.get("LastName"),

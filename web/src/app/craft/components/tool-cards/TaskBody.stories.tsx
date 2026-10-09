@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import TaskBody from "@/app/craft/components/tool-cards/TaskBody";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 

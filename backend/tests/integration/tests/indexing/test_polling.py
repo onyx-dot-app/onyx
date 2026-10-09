@@ -1,7 +1,5 @@
 import uuid
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -10,8 +8,10 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import InputType
 from onyx.db.enums import IndexingStatus
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
+from tests.integration.common_utils.constants import (
+    MOCK_CONNECTOR_SERVER_HOST,
+    MOCK_CONNECTOR_SERVER_PORT,
+)
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.test_document_utils import create_test_document

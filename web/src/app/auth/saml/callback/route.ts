@@ -1,5 +1,5 @@
 import { authErrorRedirect } from "@/app/auth/libSS";
-import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
+import { validateInternalRedirect } from "@/lib/auth/utils";
 import { getDomain } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
@@ -50,9 +50,15 @@ async function handleSamlCallback(
   }
 
   const response = await fetch(url.toString(), fetchOptions);
-  const setCookieHeader = response.headers.get("set-cookie");
 
-  if (!setCookieHeader) {
+  // This backend returns 204 with the session cookie rather than a redirect
+  // like the oauth/oidc callbacks, so 2xx is the success signal here.
+  if (!response.ok) {
+    return authErrorRedirect(request, response, SEE_OTHER_REDIRECT_STATUS);
+  }
+
+  const setCookieHeaders = response.headers.getSetCookie();
+  if (setCookieHeaders.length === 0) {
     return authErrorRedirect(request, response, SEE_OTHER_REDIRECT_STATUS);
   }
 
@@ -63,7 +69,11 @@ async function handleSamlCallback(
     new URL(redirectDestination, getDomain(request)),
     SEE_OTHER_REDIRECT_STATUS
   );
-  redirectResponse.headers.set("set-cookie", setCookieHeader);
+  // Re-emit each Set-Cookie separately. Comma-joining would let one cookie's
+  // attributes bleed into another's.
+  for (const cookie of setCookieHeaders) {
+    redirectResponse.headers.append("set-cookie", cookie);
+  }
   return redirectResponse;
 }
 

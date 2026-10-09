@@ -6,6 +6,10 @@
  * sanitization happen here. Consumers never touch Record<string, unknown>.
  */
 
+// Every `unknown` parameter in this file is the decode boundary itself: no
+// caller can hand these functions an already-parsed type.
+/* oxlint-disable anti-slop/no-unknown-parameters */
+
 import { stripSessionPrefix, sanitizePathsInText } from "./pathSanitizer";
 import {
   getRawInput,
@@ -77,13 +81,22 @@ export function parsePacket(raw: unknown): ParsedPacket {
           | null,
       };
 
-    case "connect_app_request":
+    case "connect_app_request": {
+      const externalAppId = p.external_app_id;
+      if (
+        typeof externalAppId !== "number" ||
+        !Number.isSafeInteger(externalAppId) ||
+        externalAppId <= 0
+      ) {
+        return { type: "unknown" };
+      }
       return {
         type: "connect_app_request",
         requestId: (p.request_id ?? "") as string,
-        appSlug: (p.app_slug ?? "") as string,
+        externalAppId,
         reason: (p.reason ?? null) as string | null,
       };
+    }
 
     case "context_usage":
       return {

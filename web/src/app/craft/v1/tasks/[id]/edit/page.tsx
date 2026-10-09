@@ -1,10 +1,12 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SettingsLayouts } from "@opal/layouts";
-import { SvgClock, SvgSimpleLoader } from "@opal/icons";
+import { SvgClock } from "@opal/icons";
 import { Text } from "@opal/components";
 import ScheduleTaskForm, {
   type ScheduleTaskFormInitial,
@@ -16,6 +18,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export default function EditScheduledTaskPage() {
+  const t = useTranslations("craft.tasks.editPage");
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const taskId = params?.id;
@@ -36,13 +39,13 @@ export default function EditScheduledTaskPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgClock}
-          title="Edit scheduled task"
-          backButton={handleBack}
+          title={t("fallbackTitle")}
+          cancel={handleBack}
           divider
         />
         <SettingsLayouts.Body>
           <Text font="main-ui-body" color="text-03">
-            Missing task id.
+            {t("missingTaskId")}
           </Text>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -54,18 +57,18 @@ export default function EditScheduledTaskPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgClock}
-          title={data ? `Edit "${data.name}"` : "Edit scheduled task"}
-          backButton={handleBack}
+          title={data ? t("title", { name: data.name }) : t("fallbackTitle")}
+          cancel={handleBack}
           divider
         />
         <SettingsLayouts.Body>
           {isLoading ? (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           ) : (
             <Text font="main-ui-body" color="text-03">
-              Failed to load scheduled task.
+              {t("loadFailed")}
             </Text>
           )}
         </SettingsLayouts.Body>
@@ -77,7 +80,7 @@ export default function EditScheduledTaskPage() {
     <ScheduleTaskForm
       initial={toFormInitial(data)}
       isEdit
-      title={`Edit "${data.name}"`}
+      title={t("title", { name: data.name })}
       onBack={handleBack}
     />
   );
@@ -100,5 +103,6 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
     mode,
     payload,
     preApprovedAppIds: detail.pre_approved_app_ids,
+    preApprovedMcpServerIds: detail.pre_approved_mcp_server_ids,
   };
 }

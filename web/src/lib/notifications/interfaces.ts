@@ -4,6 +4,7 @@ export enum NotificationType {
   REINDEX = "reindex",
   ASSISTANT_FILES_READY = "assistant_files_ready",
   CONNECTOR_REPEATED_ERRORS = "connector_repeated_errors",
+  CONNECTOR_INVALID = "connector_invalid",
   SCHEDULED_TASK_PRE_APPROVED_ACTION = "scheduled_task_pre_approved_action",
   APPROVAL_REQUESTED = "approval_requested",
 
@@ -16,11 +17,21 @@ export enum NotificationType {
   // SvgBullhorn
   RELEASE_NOTES = "release_notes",
   FEATURE_ANNOUNCEMENT = "feature_announcement",
+  SYSTEM_ANNOUNCEMENT = "system_announcement",
+}
+
+// INFO renders in the bell popover only; WARNING/ERROR also as a banner.
+// Declared in ascending loudness.
+export enum NotificationSeverity {
+  INFO = "info",
+  WARNING = "warning",
+  ERROR = "error",
 }
 
 export interface Notification {
   id: number;
   notif_type: NotificationType;
+  severity: NotificationSeverity;
   title: string;
   description: string | null;
   dismissed: boolean;

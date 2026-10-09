@@ -6,23 +6,25 @@ from echoing API keys back through error messages.
 from collections.abc import Iterable
 from typing import Any
 
-from onyx.llm.interfaces import LLM
+from onyx.llm.exceptions import ClassifiedLLMError, litellm_exception_to_safe_error
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.utils import collect_llm_credential_values
-from onyx.llm.utils import is_sensitive_custom_config_key
-from onyx.llm.utils import scrub_sensitive_values
+from onyx.llm.model_response import Choice, Message, ModelResponse
+from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.utils import collect_credential_values, is_sensitive_custom_config_key
 from onyx.llm.utils import (
     test_llm as run_test_llm,
 )  # aliased to avoid pytest collection
+from onyx.utils.redaction import scrub_sensitive_values
 
 _SECRET_KEY = "sk-anthropic-supersecret-DO-NOT-LEAK-1234567890"
 _SECRET_VERTEX_BLOB = (
     '{"private_key":"-----BEGIN PRIVATE KEY-----abc-----END PRIVATE KEY-----"}'
 )
+_CLASSIFIED_ERROR_CODE = "MODEL_REFUSAL"
 
 
-class _StubLLM(LLM):
-    """Minimal LLM that lets us drive `test_llm` through both success and
+class _StubLLM(LitellmLLM):
+    """Provider fixture that lets us drive `test_llm` through both success and
     failure paths without going anywhere near LiteLLM."""
 
     def __init__(
@@ -32,6 +34,9 @@ class _StubLLM(LLM):
         raise_on_invoke: Exception | None = None,
     ) -> None:
         self._config = config
+        self._api_key = config.api_key
+        self._custom_config = config.custom_config
+        self._model_kwargs: dict[str, Any] = {}
         self._raise_on_invoke = raise_on_invoke
         self.invoke_calls = 0
 
@@ -39,11 +44,13 @@ class _StubLLM(LLM):
     def config(self) -> LLMConfig:
         return self._config
 
-    def invoke(self, *_: Any, **__: Any) -> Any:  # noqa: D401, ANN401
+    def invoke_raw(self, *_: Any, **__: Any) -> ModelResponse:
         self.invoke_calls += 1
         if self._raise_on_invoke is not None:
             raise self._raise_on_invoke
-        return None
+        return ModelResponse(
+            id="test", created="0", choice=Choice(message=Message(content="ok"))
+        )
 
 
 def _make_config(
@@ -110,6 +117,10 @@ def test_scrub_ignores_empty_and_short_secrets() -> None:
     assert scrubbed == msg
 
 
+def test_scrub_replaces_three_character_secrets() -> None:
+    assert scrub_sensitive_values("key=abc", ["abc"]) == "key=[REDACTED]"
+
+
 def test_scrub_replaces_multiple_occurrences_of_same_secret() -> None:
     msg = f"sent {_SECRET_KEY} then retried with {_SECRET_KEY}"
 
@@ -117,6 +128,13 @@ def test_scrub_replaces_multiple_occurrences_of_same_secret() -> None:
 
     assert _SECRET_KEY not in scrubbed
     assert scrubbed.count("[REDACTED]") == 2
+
+
+def test_scrub_replaces_overlapping_values_longest_first() -> None:
+    assert (
+        scrub_sensitive_values("token=secret-token", ["secret", "secret-token"])
+        == "token=[REDACTED]"
+    )
 
 
 def test_scrub_handles_empty_message() -> None:
@@ -139,21 +157,19 @@ def test_scrub_accepts_iterable_secrets() -> None:
 
 
 # ---------------------------------------------------------------------------
-# collect_llm_credential_values
+# collect_credential_values
 # ---------------------------------------------------------------------------
 
 
-def test_collect_llm_credential_values_includes_api_key_and_sensitive_config() -> None:
-    config = _make_config(
-        custom_config={
+def test_collect_credential_values_includes_api_key_and_sensitive_config() -> None:
+    values = collect_credential_values(
+        _SECRET_KEY,
+        {
             "api_base": "https://api.example.com",
             "vertex_credentials": _SECRET_VERTEX_BLOB,
             "aws_secret_access_key": "AWSSECRET123456",
         },
     )
-    llm = _StubLLM(config)
-
-    values = collect_llm_credential_values(llm)
 
     assert _SECRET_KEY in values
     assert _SECRET_VERTEX_BLOB in values
@@ -161,15 +177,42 @@ def test_collect_llm_credential_values_includes_api_key_and_sensitive_config() -
     assert "https://api.example.com" not in values
 
 
-def test_collect_llm_credential_values_returns_empty_for_none() -> None:
-    assert collect_llm_credential_values(None) == []
+def test_collect_credential_values_skips_missing_credentials() -> None:
+    assert collect_credential_values(None, {"region": "us-east-1"}) == []
 
 
-def test_collect_llm_credential_values_skips_missing_api_key() -> None:
-    config = _make_config(api_key=None, custom_config={"region": "us-east-1"})
-    llm = _StubLLM(config)
+def test_safe_error_preserves_classification_and_redacts_fallback() -> None:
+    custom_secret = "custom-config-secret"
+    llm = _StubLLM(_make_config(custom_config={"auth_token": custom_secret}))
+    error = RuntimeError(f"provider rejected {_SECRET_KEY} and {custom_secret}")
 
-    assert collect_llm_credential_values(llm) == []
+    error_info = litellm_exception_to_safe_error(
+        error,
+        llm,
+        fallback_to_error_msg=True,
+    )
+
+    assert error_info.message.count("[REDACTED]") == 2
+    assert _SECRET_KEY not in error_info.message
+    assert custom_secret not in error_info.message
+    assert error_info.error_code == "UNKNOWN_ERROR"
+    assert error_info.is_retryable is True
+
+
+def test_safe_error_redacts_classified_error_without_losing_metadata() -> None:
+    llm = _StubLLM(_make_config())
+    error = ClassifiedLLMError(
+        client_error_msg=f"Provider declined request for key {_SECRET_KEY}",
+        error_code=_CLASSIFIED_ERROR_CODE,
+        is_retryable=False,
+    )
+
+    error_info = litellm_exception_to_safe_error(error, llm)
+
+    assert _SECRET_KEY not in error_info.message
+    assert "[REDACTED]" in error_info.message
+    assert error_info.error_code == _CLASSIFIED_ERROR_CODE
+    assert error_info.is_retryable is False
 
 
 # ---------------------------------------------------------------------------

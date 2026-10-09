@@ -1,12 +1,9 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import BaseFilters, InferenceSection, SearchDoc
 from onyx.server.manage.models import StandardAnswer
 
 
@@ -75,6 +72,7 @@ class SearchDocWithContent(SearchDoc):
                 link=chunk.source_links[0] if chunk.source_links else None,
                 blurb=chunk.blurb,
                 source_type=chunk.source_type,
+                source_types=chunk.source_types,
                 boost=chunk.boost,
                 hidden=chunk.hidden,
                 metadata=chunk.metadata,

@@ -2,12 +2,11 @@
 
 import hashlib
 import json
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 from onyx.configs.model_configs import PROMPT_CACHE_REDIS_TTL_MULTIPLIER
 from onyx.key_value_store.store import PgRedisKVStore
-from onyx.llm.interfaces import LanguageModelInput
+from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -82,7 +81,7 @@ class CacheManager:
             # Note: PgRedisKVStore doesn't support TTL directly, but Redis will
             # handle expiration. For PostgreSQL persistence, we rely on cleanup
             # based on last_accessed timestamp.
-            self._kv_store.store(cache_key, metadata_dict, encrypt=False)
+            self._kv_store.store(cache_key, metadata_dict)
 
             logger.debug(
                 "Stored cache metadata: provider=%s, model=%s, cache_key=%s..., tenant_id=%s",
@@ -193,7 +192,7 @@ def _make_json_serializable(obj: object) -> object:
 
 
 def generate_cache_key_hash(
-    cacheable_prefix: LanguageModelInput,
+    cacheable_prefix: list[ChatCompletionMessage],
     provider: str,
     model_name: str,
     tenant_id: str,
@@ -201,7 +200,7 @@ def generate_cache_key_hash(
     """Generate a deterministic cache key hash from cacheable prefix.
 
     Args:
-        cacheable_prefix: Single message or list of messages to hash
+        cacheable_prefix: List of messages to hash
         provider: LLM provider name
         model_name: Model name
         tenant_id: Tenant ID
@@ -209,11 +208,7 @@ def generate_cache_key_hash(
     Returns:
         SHA256 hash as hex string
     """
-    # Normalize to list for consistent hashing; _make_json_serializable handles Pydantic models
-    messages = (
-        cacheable_prefix if isinstance(cacheable_prefix, list) else [cacheable_prefix]
-    )
-    messages_dict = [_make_json_serializable(msg) for msg in messages]
+    messages_dict = [_make_json_serializable(msg) for msg in cacheable_prefix]
 
     # Serialize messages in a deterministic way
     # Include only content, roles, and order - exclude timestamps or dynamic fields

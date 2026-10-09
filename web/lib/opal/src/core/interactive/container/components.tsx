@@ -3,30 +3,18 @@ import type { Route } from "next";
 import "@opal/core/interactive/shared.css";
 import React from "react";
 import { cn } from "@opal/utils";
-import type { ButtonType, RoundingVariants, WithoutStyles } from "@opal/types";
+import type { ButtonType, Rounding, WithoutStyles } from "@opal/types";
 import {
   containerSizeVariants,
+  roundingToRem,
   type ContainerSizeVariants,
-  widthVariants,
   type ExtremaSizeVariants,
+  widthVariants,
 } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type InteractiveContainerRoundingVariant = Extract<
-  RoundingVariants,
-  "md" | "sm" | "xs"
->;
-const interactiveContainerRoundingVariants: Record<
-  InteractiveContainerRoundingVariant,
-  string
-> = {
-  md: "rounded-12",
-  sm: "rounded-08",
-  xs: "rounded-04",
-} as const;
 
 /**
  * Props for {@link InteractiveContainer}.
@@ -60,11 +48,12 @@ interface InteractiveContainerProps extends WithoutStyles<
   border?: boolean;
 
   /**
-   * Border-radius preset controlling corner rounding.
+   * Corner radius, on the same scale as `Spacing`: `N` is `N / 4` rem, so
+   * `rounding={2}` is the same distance as `padding={2}`. `"full"` is a pill.
    *
-   * @default "default"
+   * @default 3
    */
-  rounding?: InteractiveContainerRoundingVariant;
+  rounding?: Rounding;
 
   /**
    * Size preset controlling the container's height, min-width, and padding.
@@ -97,7 +86,7 @@ function InteractiveContainer({
   ref,
   type,
   border,
-  rounding = "md",
+  rounding = 3,
   size = "lg",
   width = "fit",
   ...props
@@ -121,7 +110,6 @@ function InteractiveContainer({
     ...rest,
     className: cn(
       "interactive-container",
-      interactiveContainerRoundingVariants[rounding],
       height,
       minWidth,
       padding,
@@ -129,7 +117,9 @@ function InteractiveContainer({
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
-    style: slotStyle,
+    // Radius is written straight in rather than looked up as a class, so the
+    // step can come from a runtime value. A Slot-injected radius still wins.
+    style: { borderRadius: roundingToRem(rounding), ...slotStyle },
   };
 
   if (href) {
@@ -160,8 +150,4 @@ function InteractiveContainer({
   return <div ref={ref as React.Ref<HTMLDivElement>} {...sharedProps} />;
 }
 
-export {
-  InteractiveContainer,
-  type InteractiveContainerProps,
-  type InteractiveContainerRoundingVariant,
-};
+export { InteractiveContainer, type InteractiveContainerProps };

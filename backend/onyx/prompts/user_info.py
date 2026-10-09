@@ -12,6 +12,13 @@ USER_ROLE_PROMPT = """
 User role: {user_role}
 """.lstrip()
 
+# Organization profile comes from the company identity provider (directory).
+ORGANIZATION_PROFILE_PROMPT = """
+## Organization Profile
+Directory information about the user from the company identity provider. Rely on it when the answer depends on the user's location or position (e.g. country-specific HR policies, office specifics):
+{organization_profile}
+""".lstrip()
+
 # Team information should be a paragraph style description of the user's team.
 TEAM_INFORMATION_PROMPT = """
 ## Team Information
@@ -22,6 +29,18 @@ TEAM_INFORMATION_PROMPT = """
 USER_PREFERENCES_PROMPT = """
 ## User Preferences
 {user_preferences}
+""".lstrip()
+
+# The backend picks the branch, so the model always gets one definitive line.
+USER_LANGUAGE_PROMPT = """
+## Language
+The user's interface language is {language}. Reply in {language}. If the user explicitly asks for another language, use that one.
+""".lstrip()
+
+# English is the column default, so it is not a choice and follows the message.
+QUERY_LANGUAGE_PROMPT = """
+## Language
+Reply in the language the user writes in.
 """.lstrip()
 
 # User memories should look something like:

@@ -1,19 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { Button } from "@opal/components";
 import { SvgArrowLeft } from "@opal/icons";
 
 export interface BackButtonProps {
   behaviorOverride?: () => void;
-  routerOverride?: string;
+  routerOverride?: Route;
 }
 
 export default function BackButton({
   behaviorOverride,
   routerOverride,
 }: BackButtonProps) {
+  const t = useTranslations("common.backButton");
   const router = useRouter();
 
   return (
@@ -24,13 +26,13 @@ export default function BackButton({
         if (behaviorOverride) {
           behaviorOverride();
         } else if (routerOverride) {
-          router.push(routerOverride as Route);
+          router.push(routerOverride);
         } else {
           router.back();
         }
       }}
     >
-      Back
+      {t("label")}
     </Button>
   );
 }

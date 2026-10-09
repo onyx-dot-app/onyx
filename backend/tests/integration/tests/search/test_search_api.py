@@ -7,8 +7,7 @@ import os
 import httpx
 import pytest
 
-from onyx.db.enums import AccessType
-from onyx.db.enums import Permission
+from onyx.db.enums import AccessType, Permission
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -18,9 +17,11 @@ from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestLLMProvider,
+    DATestUser,
+)
 
 SEARCH_URL = f"{API_SERVER_URL}/search"
 
@@ -94,7 +95,7 @@ def test_document_set_filtering(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group permissions are Enterprise-only",
 )
 def test_acl_enforcement(

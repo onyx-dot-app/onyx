@@ -68,6 +68,32 @@ test.describe("Login flow", () => {
     expect(me.ok()).toBe(false);
   });
 
+  test("Login button is enabled for a password that fails signup constraints", async ({
+    page,
+  }) => {
+    await page.goto("/auth/login");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByTestId("email").fill("test@example.com");
+    await page.getByTestId("password").fill("weak");
+
+    // Login must not enforce password policy — the submit button must remain enabled.
+    await expect(page.getByRole("button", { name: "Sign In" })).toBeEnabled();
+  });
+
+  test("Login button is enabled for a password that meets signup constraints", async ({
+    page,
+  }) => {
+    await page.goto("/auth/login");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByTestId("email").fill("test@example.com");
+    await page.getByTestId("password").fill("ValidPassword123!");
+
+    // Compliant and non-compliant passwords must behave identically on login.
+    await expect(page.getByRole("button", { name: "Sign In" })).toBeEnabled();
+  });
+
   test("Login fails with non-existent user", async ({ page }) => {
     await page.goto("/auth/login");
     await page.waitForLoadState("networkidle");

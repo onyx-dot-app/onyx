@@ -9,12 +9,11 @@ Contract under test (observed through the admin response's ``actions`` view):
   ``default_policy`` (Slack reads default to ``ALWAYS``, the write to ``ASK``);
 - a supplied map merges over the stored set: named actions update, unmentioned
   ones keep their value, and the full action set is unchanged;
-- an omitted map (``None`` — e.g. an enable toggle / rename) preserves choices;
+- an omitted map (``None`` — e.g. a rename) preserves choices;
 - clearing an override means sending that action explicitly as ``ASK``.
 """
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.external_apps.providers.slack import SlackAction
 from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
@@ -31,7 +30,6 @@ def _create_slack(
     return ExternalAppManager.create(
         user_performing_action=admin_user,
         name="Slack",
-        description="Slack",
         upstream_url_patterns=list(_SLACK_URLS),
         auth_template=dict(_SLACK_AUTH),
         organization_credentials={},
@@ -49,7 +47,6 @@ def _update_slack(
         user_performing_action=admin_user,
         app_id=app_id,
         name="Slack",
-        description="Slack",
         upstream_url_patterns=list(_SLACK_URLS),
         auth_template=dict(_SLACK_AUTH),
         organization_credentials={},
@@ -148,7 +145,7 @@ def test_edit_omitting_policies_preserves_existing(
         action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
     )
 
-    # An edit that omits action_policies (e.g. an enable toggle / rename) must
+    # An edit that omits action_policies (e.g. a rename) must
     # not wipe the admin's stored choices.
     _update_slack(admin_user, created.id, action_policies=None)
 
@@ -175,47 +172,20 @@ def test_edit_with_explicit_ask_clears_override(
     assert _states(edited)[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.ASK
 
 
-def test_patch_sets_enablement_and_policies(
+def test_patch_sets_policies(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
-    """The narrow PATCH endpoint (keyed only by id) toggles enablement and
-    merges policies the same way the upsert path does."""
+    """The PATCH endpoint merges policies the same way the upsert path does."""
     created = _create_slack(admin_user)
-    assert created.enabled is True
-
-    patched = ExternalAppManager.set_enablement(
-        user_performing_action=admin_user,
-        app_id=created.id,
-        enabled=False,
+    patched = _update_slack(
+        admin_user,
+        created.id,
         action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
     )
 
-    assert patched.enabled is False
     states = _states(patched)
     assert states[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
     # Unmentioned actions keep their declared default.
     assert states[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
     assert _fetch_states(admin_user, created.id) == states
-
-
-def test_patch_omitting_policies_preserves_existing(
-    reset: None,  # noqa: ARG001
-    admin_user: DATestUser,
-) -> None:
-    """A bare enable/disable PATCH (no action_policies) must not clobber the
-    admin's stored choices."""
-    created = _create_slack(
-        admin_user,
-        action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
-    )
-
-    ExternalAppManager.set_enablement(
-        user_performing_action=admin_user,
-        app_id=created.id,
-        enabled=False,
-        action_policies=None,
-    )
-
-    states = _fetch_states(admin_user, created.id)
-    assert states[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY

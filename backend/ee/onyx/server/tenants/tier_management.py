@@ -6,17 +6,18 @@ Value at TENANT_TIER_KEY is a JSON blob:
 
 import json
 from datetime import datetime
-from typing import cast
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 from ee.onyx.server.license.models import CustomerTier
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.utils.logger import setup_logger
 
 # Per-tenant cached CustomerTier; TTL bounds upgrade-visible delay if push is missed.
 TENANT_TIER_KEY = "customer_tier"
 TENANT_TIER_CACHE_TTL_SECONDS = 86400  # 24h fallback; CP push is the primary refresh
+
+TENANT_TIER_MISS_KEY = "customer_tier_miss"
+TENANT_TIER_MISS_TTL_SECONDS = 60
 
 logger = setup_logger()
 
@@ -38,10 +39,6 @@ def _parse_trial_end(raw: object, tenant_id: str) -> datetime | None:
             raw,
         )
         return None
-    # `datetime.fromisoformat` preserves whatever tzinfo the source string
-    # carried (or None). A naive datetime would `TypeError` against the
-    # tz-aware `datetime.now(timezone.utc)` comparison in `_effective_tier`,
-    # so reject it here rather than poison the cache.
     if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
         logger.warning(
             "Naive trial_end in cache for tenant %s: %r",
@@ -64,7 +61,20 @@ def update_tenant_tier(
             "trial_end": trial_end.isoformat() if trial_end is not None else None,
         }
     )
-    redis_client.set(TENANT_TIER_KEY, payload, ex=TENANT_TIER_CACHE_TTL_SECONDS)
+    pipeline = redis_client.pipeline(transaction=True)
+    pipeline.set(TENANT_TIER_KEY, payload, ex=TENANT_TIER_CACHE_TTL_SECONDS)
+    pipeline.delete(TENANT_TIER_MISS_KEY)
+    pipeline.execute()
+
+
+def mark_tenant_tier_miss(tenant_id: str) -> None:
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    redis_client.set(TENANT_TIER_MISS_KEY, "1", ex=TENANT_TIER_MISS_TTL_SECONDS)
+
+
+def has_recent_tenant_tier_miss(tenant_id: str) -> bool:
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    return bool(redis_client.exists(TENANT_TIER_MISS_KEY))
 
 
 def get_cached_tier(tenant_id: str) -> CachedTier | None:

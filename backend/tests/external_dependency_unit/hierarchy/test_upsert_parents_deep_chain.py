@@ -15,9 +15,11 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.enums import HierarchyNodeType
-from onyx.db.hierarchy import ensure_source_node_exists
-from onyx.db.hierarchy import get_hierarchy_node_by_raw_id
-from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
+from onyx.db.hierarchy import (
+    ensure_source_node_exists,
+    get_hierarchy_node_by_raw_id,
+    upsert_hierarchy_nodes_batch,
+)
 from onyx.db.models import HierarchyNode
 
 # Notion can produce parent chains exceeding Python's default recursion limit
@@ -46,16 +48,15 @@ def test_upsert_parents_handles_deep_chain(
     """A 1500-deep parent chain must upsert without RecursionError."""
     tag = uuid4().hex[:8]
     # Build chain: root -> n1 -> n2 -> ... -> n{DEPTH-1}
-    nodes: list[PydanticHierarchyNode] = []
-    for i in range(DEEP_CHAIN_DEPTH):
-        nodes.append(
-            PydanticHierarchyNode(
-                raw_node_id=f"deep_{tag}_{i}",
-                raw_parent_id=f"deep_{tag}_{i - 1}" if i > 0 else None,
-                display_name=f"Deep {i}",
-                node_type=HierarchyNodeType.PAGE,
-            )
+    nodes: list[PydanticHierarchyNode] = [
+        PydanticHierarchyNode(
+            raw_node_id=f"deep_{tag}_{i}",
+            raw_parent_id=f"deep_{tag}_{i - 1}" if i > 0 else None,
+            display_name=f"Deep {i}",
+            node_type=HierarchyNodeType.PAGE,
         )
+        for i in range(DEEP_CHAIN_DEPTH)
+    ]
 
     # Pass the deepest child first so upsert_parents has to walk the entire
     # chain in one call (this is the worst-case shape that originally blew the

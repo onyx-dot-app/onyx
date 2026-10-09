@@ -1,7 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -14,11 +11,10 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentSectionRequest
+from onyx.document_index.interfaces import DocumentSectionRequest
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.prompt_utils import build_doc_context_str
-from onyx.server.documents.models import ChunkInfo
-from onyx.server.documents.models import DocumentInfo
+from onyx.server.documents.models import ChunkInfo, DocumentInfo
 from onyx.server.utils_vector_db import require_vector_db
 
 router = APIRouter(prefix="/document")
@@ -33,13 +29,15 @@ def get_document_info(
     db_session: Session = Depends(get_session),
 ) -> DocumentInfo:
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
-    user_acl_filters = build_access_filters_for_user(user, db_session)
+    user_access_filters = build_access_filters_for_user(user, db_session)
     inference_chunks = document_index.id_based_retrieval(
         chunk_requests=[DocumentSectionRequest(document_id=document_id)],
-        filters=IndexFilters(access_control_list=user_acl_filters),
+        filters=IndexFilters(
+            access_control_list=user_access_filters.access_control_list,
+            cc_pair_access=user_access_filters.cc_pair_access,
+        ),
     )
 
     if not inference_chunks:
@@ -78,10 +76,9 @@ def get_chunk_info(
     db_session: Session = Depends(get_session),
 ) -> ChunkInfo:
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
-    user_acl_filters = build_access_filters_for_user(user, db_session)
+    user_access_filters = build_access_filters_for_user(user, db_session)
     chunk_request = DocumentSectionRequest(
         document_id=document_id,
         min_chunk_ind=chunk_id,
@@ -90,7 +87,10 @@ def get_chunk_info(
 
     inference_chunks = document_index.id_based_retrieval(
         chunk_requests=[chunk_request],
-        filters=IndexFilters(access_control_list=user_acl_filters),
+        filters=IndexFilters(
+            access_control_list=user_access_filters.access_control_list,
+            cc_pair_access=user_access_filters.cc_pair_access,
+        ),
         batch_retrieval=True,
     )
 

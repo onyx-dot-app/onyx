@@ -20,12 +20,14 @@ the explicit ``POSTGRES_SSL*`` settings only apply when IAM is off.
 import functools
 import ssl
 
-from onyx.configs.app_configs import POSTGRES_SSLCERT
-from onyx.configs.app_configs import POSTGRES_SSLKEY
-from onyx.configs.app_configs import POSTGRES_SSLKEY_PASSWORD
-from onyx.configs.app_configs import POSTGRES_SSLMODE
-from onyx.configs.app_configs import POSTGRES_SSLROOTCERT
-from onyx.configs.app_configs import USE_IAM_AUTH
+from onyx.configs.app_configs import (
+    POSTGRES_SSLCERT,
+    POSTGRES_SSLKEY,
+    POSTGRES_SSLKEY_PASSWORD,
+    POSTGRES_SSLMODE,
+    POSTGRES_SSLROOTCERT,
+    USE_IAM_AUTH,
+)
 from onyx.db.engine.iam_auth import create_ssl_context_if_iam
 from onyx.utils.tls import build_ssl_context
 
@@ -92,7 +94,7 @@ def create_pg_ssl_context() -> ssl.SSLContext | str | None:
         check_hostname = POSTGRES_SSLMODE == "verify-full"
         ca_certs = POSTGRES_SSLROOTCERT
 
-    return build_ssl_context(
+    context = build_ssl_context(
         verify_mode=verify_mode,
         check_hostname=check_hostname,
         ca_certs=ca_certs,
@@ -100,3 +102,9 @@ def create_pg_ssl_context() -> ssl.SSLContext | str | None:
         keyfile=POSTGRES_SSLKEY,
         key_password=POSTGRES_SSLKEY_PASSWORD,
     )
+    # Verify like libpq (the sync engine) does. Python 3.13 turns on
+    # VERIFY_X509_STRICT, which rejects server certificates that libpq accepts,
+    # e.g. Cloud SQL GOOGLE_MANAGED_INTERNAL_CA certs without an Authority Key
+    # Identifier. The chain and CA checks are unchanged.
+    context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return context

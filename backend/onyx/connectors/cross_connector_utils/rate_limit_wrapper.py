@@ -1,9 +1,7 @@
 import time
 from collections.abc import Callable
 from functools import wraps
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
 import requests
 
@@ -59,14 +57,14 @@ class _RateLimitDecorator:
                 sleep_time = self.sleep_time * (self.sleep_backoff**sleep_cnt)
                 logger.notice(
                     "Rate limit exceeded for function %s. Waiting %s seconds before retrying.",
-                    func.__name__,
+                    func.__name__,  # ty: ignore[unresolved-attribute]
                     sleep_time,
                 )
                 time.sleep(sleep_time)
                 sleep_cnt += 1
                 if self.max_num_sleep != 0 and sleep_cnt >= self.max_num_sleep:
                     raise RateLimitTriedTooManyTimesError(
-                        f"Exceeded '{self.max_num_sleep}' retries for function '{func.__name__}'"
+                        f"Exceeded '{self.max_num_sleep}' retries for function '{func.__name__}'"  # ty: ignore[unresolved-attribute]
                     )
 
                 self._cleanup()
