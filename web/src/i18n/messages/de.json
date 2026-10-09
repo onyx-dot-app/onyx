@@ -2749,9 +2749,6 @@
           "rerunFailed": {
             "toast": "Die Prüfungen konnten nicht gestartet werden. Versuchen Sie es erneut."
           }
-        },
-        "realm": {
-          "description": "Fügen Sie Ihre Website-URL oder Subdomain ein. Die REST-API von {source} muss dort erreichbar sein.{hasDefault, select, true { Standardwert: `{value}`.} other {}}"
         }
       },
       "credentialRequired": {

@@ -1,3 +1,4 @@
+import { getIn } from "formik";
 import { ValidSources } from "@/lib/connectors/types/source";
 import type {
   CredentialSpec,
@@ -8,6 +9,7 @@ import {
   createValidationSchema,
   getCredentialSpec,
   initialCredentialValues,
+  realmFields,
 } from "@/lib/credentials/utils";
 import {
   DEFAULT_SHARE_AUDIENCE,
@@ -53,13 +55,26 @@ export function typedAccountSpec(source: ValidSources): CredentialSpec | null {
   return hasFile ? null : spec;
 }
 
+/**
+ * The spec's fields the new account asks for itself. Its realm is a
+ * credential-bound field above the account section, under the same key.
+ */
+function ownFieldsSpec(spec: CredentialSpec): CredentialSpec {
+  return {
+    ...spec,
+    fields: Object.fromEntries(
+      Object.entries(spec.fields).filter(([, field]) => !field.realm)
+    ),
+  };
+}
+
 export function initialNewAccountValues(
   spec: CredentialSpec
 ): NewAccountValues {
   // A spec with auth methods starts on its first one.
   const authMethod = spec.methods?.[0]?.value;
   return {
-    ...initialCredentialValues(spec),
+    ...initialCredentialValues(ownFieldsSpec(spec)),
     ...(authMethod !== undefined && { authentication_method: authMethod }),
     name: "",
     share: DEFAULT_SHARE_AUDIENCE,
@@ -71,29 +86,53 @@ export function newAccountSchema(
   spec: CredentialSpec,
   messages: CredentialValidationMessages
 ): NewAccountSchema {
-  return createValidationSchema(spec, messages);
+  return createValidationSchema(ownFieldsSpec(spec), messages);
 }
 
 /**
- * The typed account, when its values are valid; `null` otherwise. Derived
- * from the form's values on each render, so nothing has to report it.
+ * The typed account, when its values are valid; `null` otherwise. Its realm
+ * comes from the credential-bound field of the same key in `formValues`, as
+ * the connectors read it from the credential. Derived from the form's values
+ * on each render, so nothing has to report it.
  */
 export function typedDraft(
   source: ValidSources,
   schema: NewAccountSchema | null,
-  values: NewAccountValues | undefined
+  formValues: Readonly<Record<string, unknown>>
 ): DraftCredential | null {
-  if (schema === null || values === undefined || !schema.isValidSync(values)) {
+  const values: NewAccountValues | undefined = getIn(
+    formValues,
+    NEW_ACCOUNT_FIELD
+  );
+  const spec = typedAccountSpec(source);
+  if (
+    spec === null ||
+    schema === null ||
+    values === undefined ||
+    !schema.isValidSync(values)
+  ) {
     return null;
+  }
+  const realm: Record<string, string> = {};
+  for (const [key, field] of realmFields(spec)) {
+    const value = formValues[key];
+    if (typeof value === "string" && value.trim() !== "") {
+      realm[key] = value.trim();
+    } else if (!field.optional) {
+      return null;
+    }
   }
   const { share, groups, name, ...fields } = values;
   return {
     source,
-    credential_json: Object.fromEntries(
-      Object.entries(fields).filter(
-        ([, value]) => value !== null && value !== ""
-      )
-    ),
+    credential_json: {
+      ...Object.fromEntries(
+        Object.entries(fields).filter(
+          ([, value]) => value !== null && value !== ""
+        )
+      ),
+      ...realm,
+    },
     sharing: {
       ...shareAccountPayload({ share, groups }),
       // Blank leaves the account untitled.

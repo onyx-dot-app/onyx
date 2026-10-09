@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Formik, getIn } from "formik";
+import { Formik } from "formik";
 import * as Yup from "yup";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -47,11 +47,9 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import {
   getCredentialSpec,
   isDraftCredential,
-  realmFields,
   toCredentialRef,
   toCredentialRequest,
 } from "@/lib/credentials/utils";
-import AccountRealmFields from "@/views/admin/connectors/AddConnectorPage/form/AccountRealmFields";
 import type {
   Credential,
   CredentialRef,
@@ -272,8 +270,6 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
   const tValidation = useTranslations("admin.credentials.validation");
   const fieldCopy = useCredentialFieldCopy(connector);
   const typedSpec = typedAccountSpec(connector);
-  // Where the typed account works, asked for above the account section.
-  const accountRealmFields = typedSpec ? realmFields(typedSpec) : [];
   const accountSchema = typedSpec
     ? newAccountSchema(typedSpec, {
         fieldTitle: (key) => fieldCopy(key).title,
@@ -293,7 +289,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
     currentCredential ||
-    typedDraft(connector, accountSchema, getIn(values, NEW_ACCOUNT_FIELD)) ||
+    typedDraft(connector, accountSchema, values) ||
     liveGDriveCredential ||
     liveGmailCredential ||
     null;
@@ -604,11 +600,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
         const formCredential = accountFor(formikProps.values);
         const canCreate = noCredentials || formCredential !== null;
         const newAccountReady =
-          typedDraft(
-            connector,
-            accountSchema,
-            getIn(formikProps.values, NEW_ACCOUNT_FIELD)
-          ) !== null;
+          typedDraft(connector, accountSchema, formikProps.values) !== null;
         const showAdvancedBoundFields =
           !configuration.advancedValuesVisibleCondition ||
           configuration.advancedValuesVisibleCondition(
@@ -765,19 +757,6 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                                   paddingPerpendicular={0}
                                 />
                               )}
-                            </>
-                          )}
-
-                          {accountRealmFields.length > 0 && (
-                            <>
-                              <AccountRealmFields
-                                source={connector}
-                                fields={accountRealmFields}
-                              />
-                              <Divider
-                                paddingParallel={0}
-                                paddingPerpendicular={0}
-                              />
                             </>
                           )}
 

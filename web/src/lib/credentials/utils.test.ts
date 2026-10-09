@@ -11,8 +11,7 @@ import {
   getEditableCredentialFields,
   shouldRedirectToOAuth,
   bindingCheckCredentialId,
-  credentialMatchesRealm,
-  realmFields,
+  credentialMatchesBoundFields,
   toCredentialRequest,
 } from "@/lib/credentials/utils";
 import {
@@ -298,31 +297,66 @@ describe("naming a credential in a request", () => {
   });
 });
 
-describe("credentialMatchesRealm", () => {
+describe("credentialMatchesBoundFields", () => {
   // GitHub's realm is optional and defaults to github.com.
-  const fields = realmFields(CREDENTIAL_SPECS.github);
+  const github = CREDENTIAL_SPECS.github.fields;
   const at = (url: string) => ({ github_base_url: url });
-
-  it("restricts nothing while the realm is empty", () => {
-    expect(credentialMatchesRealm(fields, at("https://a.com"), {})).toBe(true);
-    expect(credentialMatchesRealm(fields, at("https://a.com"), at(" "))).toBe(
-      true
+  const matches = (
+    credentialJson: Record<string, unknown>,
+    formValues: Record<string, unknown>
+  ) =>
+    credentialMatchesBoundFields(
+      ["github_base_url"],
+      github,
+      credentialJson,
+      formValues
     );
+
+  it("restricts nothing while the field is empty", () => {
+    expect(matches(at("https://a.com"), {})).toBe(true);
+    expect(matches(at("https://a.com"), at(" "))).toBe(true);
   });
 
-  it("matches the same realm without case or a trailing slash", () => {
-    expect(
-      credentialMatchesRealm(fields, at("https://A.com/"), at("https://a.com"))
-    ).toBe(true);
-    expect(
-      credentialMatchesRealm(fields, at("https://b.com"), at("https://a.com"))
-    ).toBe(false);
+  it("matches without case, scheme or a trailing slash", () => {
+    expect(matches(at("https://A.com/"), at("a.com"))).toBe(true);
+    expect(matches(at("https://b.com"), at("https://a.com"))).toBe(false);
   });
 
   it("reads an account without its own realm as the default", () => {
-    expect(credentialMatchesRealm(fields, {}, at("https://github.com"))).toBe(
-      true
-    );
-    expect(credentialMatchesRealm(fields, {}, at("https://a.com"))).toBe(false);
+    expect(matches({}, at("https://github.com"))).toBe(true);
+    expect(matches({}, at("https://a.com"))).toBe(false);
+  });
+
+  it("matches a pasted host to a stored subdomain", () => {
+    expect(
+      credentialMatchesBoundFields(
+        ["zendesk_subdomain"],
+        CREDENTIAL_SPECS.zendesk.fields,
+        { zendesk_subdomain: "acme" },
+        { zendesk_subdomain: "https://acme.zendesk.com" }
+      )
+    ).toBe(true);
+  });
+
+  it("compares a bound field the account stores, like an OAuth site", () => {
+    const site = (url: string) => ({ wiki_base: url });
+    const confluence = CREDENTIAL_SPECS.confluence.fields;
+    expect(
+      credentialMatchesBoundFields(
+        ["wiki_base"],
+        confluence,
+        site("https://a.atlassian.net/wiki"),
+        site("https://b.atlassian.net/wiki")
+      )
+    ).toBe(false);
+    // An API-token account stores no site, so it cannot tell.
+    expect(
+      credentialMatchesBoundFields(
+        ["wiki_base"],
+        confluence,
+        {},
+        site("https://b.atlassian.net/wiki")
+      )
+    ).toBe(true);
   });
 });
