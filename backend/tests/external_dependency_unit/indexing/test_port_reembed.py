@@ -212,7 +212,8 @@ def _vector_ss(
 
 
 def test_select_reembed_strategy_copies_vectors_on_quantization_only_change() -> None:
-    none, one_bit = VectorQuantization.NONE, VectorQuantization.SCALAR_1_BIT
+    none: VectorQuantization = VectorQuantization.NONE
+    one_bit: VectorQuantization = VectorQuantization.SCALAR_1_BIT
     # Only quantization differs -> the stored vector is reused.
     assert (
         select_reembed_strategy(_vector_ss(none), _vector_ss(one_bit))
@@ -244,8 +245,10 @@ def test_select_reembed_strategy_copies_vectors_on_quantization_only_change() ->
 
 
 def test_split_copyable_chunks_reembeds_only_stripped_context() -> None:
-    plain = DocumentChunk(**dict(_stored_chunk("plain")), content_vector=[0.1])
-    with_context = DocumentChunk(
+    plain: DocumentChunk = DocumentChunk(
+        **dict(_stored_chunk("plain")), content_vector=[0.1]
+    )
+    with_context: DocumentChunk = DocumentChunk(
         **dict(_stored_chunk("ctx", chunk_index=1, chunk_context=" more context")),
         content_vector=[0.2],
     )
