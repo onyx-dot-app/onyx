@@ -2643,7 +2643,8 @@
         "projects": {
           "label": "Projects",
           "description": "Linear project names or URLs to index. Leave empty to index every project. With teams set too, an issue must match both."
-        }
+        },
+        "syncNotice": "Connect as a workspace member, not a guest, who belongs to every private team you want to index. Onyx cannot see private teams the connected user is not in. Issues in public teams are searchable by every workspace member, and issues in private or restricted teams by their members."
       },
       "add": {
         "authorizeButton": {

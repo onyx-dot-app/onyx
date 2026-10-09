@@ -137,6 +137,16 @@ def fetch_credential_by_id(
     return credential
 
 
+def fetch_credential_by_id_for_update(
+    credential_id: int,
+    db_session: Session,
+) -> Credential | None:
+    """Row-locked until the session commits, so one caller at a time reads
+    and rewrites a credential whose OAuth refresh token is spent on use."""
+    stmt = select(Credential).where(Credential.id == credential_id).with_for_update()
+    return db_session.execute(stmt).scalar_one_or_none()
+
+
 def fetch_credentials_by_source_for_user(
     db_session: Session,
     user: User,

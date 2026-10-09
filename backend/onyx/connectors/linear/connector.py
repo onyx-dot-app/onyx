@@ -19,22 +19,40 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
     time_str_to_utc,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
     LoadConnector,
     NormalizationResult,
     OAuthConnector,
     PollConnector,
     SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.linear.access import (
+    SharedAccessIndex,
+    issue_access,
+    member_emails,
+)
+from onyx.connectors.linear.models import (
+    IssueShare,
+    LinearTeam,
+    LinearUser,
+    WorkspaceMembers,
 )
 from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
     ImageSection,
+    SlimDocument,
     TextSection,
 )
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
 
@@ -80,13 +98,29 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
     )
 
 
+class LinearGraphQLError(RuntimeError):
+    """Linear answered 200 with an `errors` list."""
+
+    def __init__(self, errors: list[dict[str, Any]]) -> None:
+        super().__init__(f"Linear GraphQL errors: {errors}")
+        self.errors = errors
+
+    @property
+    def is_not_found(self) -> bool:
+        """The queried entity does not exist or the token cannot see it."""
+        return all(
+            str(error.get("message", "")).startswith("Entity not found")
+            for error in self.errors
+        )
+
+
 def _run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str, Any]:
     """The query's data. Linear answers 200 with an `errors` list for a bad
     query, so that is raised here rather than read as an empty result."""
     response = _make_query({"query": query, "variables": variables}, api_key)
     body: dict[str, Any] = response.json()
     if body.get("errors"):
-        raise RuntimeError(f"Linear GraphQL errors: {body['errors']}")
+        raise LinearGraphQLError(body["errors"])
     return body["data"]
 
 
@@ -140,7 +174,92 @@ def _project_scope(entries: list[str] | None) -> tuple[list[str], list[str]]:
     return sorted(names), sorted(slug_ids)
 
 
-class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
+# A page of these access fields fits under the complexity cap at 250 issues.
+_ACCESS_PAGE_SIZE = 250
+# Shared and inheriting issues are held until the walk ends. Sharing is rare,
+# so past this many the workspace is worth a look.
+_DEFERRED_SHARE_WARNING = 50_000
+_USER_FIELDS = "email active guest app"
+
+_ISSUE_ACCESS_QUERY = f"""
+    query IterateIssueAccess($first: Int, $after: String, $filter: IssueFilter) {{
+        organization {{ id }}
+        issues(orderBy: updatedAt, first: $first, after: $after, filter: $filter) {{
+            nodes {{
+                id
+                inheritsSharedAccess
+                parent {{ id }}
+                team {{ id key visibility parent {{ id }} }}
+                sharedAccess {{ sharedWithUsers {{ {_USER_FIELDS} }} }}
+            }}
+            {_PAGE_INFO}
+        }}
+    }}
+"""
+_TEAMS_QUERY = f"""
+    query IterateTeams($first: Int, $after: String) {{
+        teams(first: $first, after: $after) {{
+            nodes {{ id key visibility parent {{ id }} }}
+            {_PAGE_INFO}
+        }}
+    }}
+"""
+_TEAM_MEMBERS_QUERY = f"""
+    query IterateTeamMembers($teamId: String!, $first: Int, $after: String) {{
+        team(id: $teamId) {{
+            memberships(first: $first, after: $after) {{
+                nodes {{ user {{ {_USER_FIELDS} }} }}
+                {_PAGE_INFO}
+            }}
+        }}
+    }}
+"""
+_USERS_QUERY = f"""
+    query IterateUsers($first: Int, $after: String) {{
+        organization {{ id userCount }}
+        users(first: $first, after: $after) {{
+            nodes {{ {_USER_FIELDS} }}
+            {_PAGE_INFO}
+        }}
+    }}
+"""
+_ISSUE_SHARE_QUERY = f"""
+    query IssueShare($id: String!) {{
+        issue(id: $id) {{
+            inheritsSharedAccess
+            parent {{ id }}
+            sharedAccess {{ sharedWithUsers {{ {_USER_FIELDS} }} }}
+        }}
+    }}
+"""
+_VIEWER_QUERY = "query Viewer { viewer { guest } }"
+
+
+def _share(node: dict[str, Any]) -> IssueShare:
+    parent: dict[str, Any] | None = node["parent"]
+    return IssueShare(
+        parent_id=parent["id"] if parent else None,
+        inherits=node["inheritsSharedAccess"],
+        emails=member_emails(
+            LinearUser.model_validate(user)
+            for user in node["sharedAccess"]["sharedWithUsers"]
+        ),
+    )
+
+
+def _team(node: dict[str, Any]) -> LinearTeam:
+    parent: dict[str, Any] | None = node["parent"]
+    return LinearTeam(
+        id=node["id"],
+        key=node["key"],
+        visibility=node["visibility"],
+        parent_id=parent["id"] if parent else None,
+    )
+
+
+class LinearConnector(
+    LoadConnector, PollConnector, OAuthConnector, SlimConnectorWithPermSync
+):
     supports_manual_credentials = True
 
     def __init__(
@@ -261,6 +380,124 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                 raise RuntimeError(f"Linear stopped advancing the {path[-1]} cursor")
             cursor = page_info["endCursor"]
         raise RuntimeError(f"Linear kept paging {path[-1]} past {_MAX_PAGES} pages")
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        """Every issue the token can read, with who may read it. The doc sync
+        makes any indexed issue this does not list private, so the window is
+        ignored. A sub-issue that inherits sharing waits for the walk to end,
+        since its parent can page after it."""
+        shares = SharedAccessIndex(self._issue_share)
+        inheriting: list[tuple[str, LinearTeam]] = []
+        organization_id: str = ""
+        for data in self._pages(
+            _ISSUE_ACCESS_QUERY,
+            {"filter": self._issue_filter()},
+            ("issues",),
+            _ACCESS_PAGE_SIZE,
+        ):
+            organization_id = data["organization"]["id"]
+            docs: list[SlimDocument | HierarchyNode] = []
+            for node in data["issues"]["nodes"]:
+                team: LinearTeam = _team(node["team"])
+                share: IssueShare = _share(node)
+                shares.record(node["id"], share)
+                if share.inherits:
+                    inheriting.append((node["id"], team))
+                    continue
+                docs.append(
+                    SlimDocument(
+                        id=node["id"],
+                        external_access=issue_access(
+                            team, organization_id, share.emails
+                        ),
+                    )
+                )
+            yield docs
+            if len(shares) + len(inheriting) > _DEFERRED_SHARE_WARNING:
+                logger.warning(
+                    "Linear permission sync is holding %s shared or inheriting "
+                    "issues until the walk ends",
+                    len(shares) + len(inheriting),
+                )
+        for start in range(0, len(inheriting), _ACCESS_PAGE_SIZE):
+            yield [
+                SlimDocument(
+                    id=issue_id,
+                    external_access=issue_access(
+                        team, organization_id, shares.emails_for(issue_id)
+                    ),
+                )
+                for issue_id, team in inheriting[start : start + _ACCESS_PAGE_SIZE]
+            ]
+
+    def _issue_share(self, issue_id: str) -> IssueShare:
+        """The shares of an ancestor the scoped walk left out. One the token
+        cannot see grants nothing, which is the safe side for access. Any
+        other failure raises, so an outage never reads as revoked access."""
+        try:
+            data: dict[str, Any] = _run_query(
+                _ISSUE_SHARE_QUERY, {"id": issue_id}, self._api_key()
+            )
+        except LinearGraphQLError as e:
+            if not e.is_not_found:
+                raise
+            logger.warning(
+                "Linear parent issue %s is not visible to the token, so its "
+                "sub-issues inherit no shared readers",
+                issue_id,
+            )
+            return IssueShare(parent_id=None, inherits=False, emails=set())
+        return _share(data["issue"])
+
+    def list_teams(self) -> list[LinearTeam]:
+        return [
+            _team(node)
+            for data in self._pages(_TEAMS_QUERY, {}, ("teams",))
+            for node in data["teams"]["nodes"]
+        ]
+
+    def team_member_emails(self, team_id: str) -> set[str]:
+        return member_emails(
+            LinearUser.model_validate(node["user"])
+            for data in self._pages(
+                _TEAM_MEMBERS_QUERY, {"teamId": team_id}, ("team", "memberships")
+            )
+            for node in data["team"]["memberships"]["nodes"]
+        )
+
+    def workspace_members(self) -> WorkspaceMembers:
+        """Raises on a listing shorter than the workspace's own count: a group
+        filled from part of it would revoke access for everyone left out."""
+        users: list[LinearUser] = []
+        expected: int = 0
+        organization_id: str = ""
+        for data in self._pages(_USERS_QUERY, {}, ("users",)):
+            organization_id = data["organization"]["id"]
+            expected = data["organization"]["userCount"]
+            users.extend(
+                LinearUser.model_validate(node) for node in data["users"]["nodes"]
+            )
+        if len(users) < expected:
+            raise RuntimeError(
+                f"Linear listed {len(users)} of the {expected} users it reported"
+            )
+        return WorkspaceMembers(
+            organization_id=organization_id,
+            emails=member_emails(user for user in users if not user.guest),
+        )
+
+    def probe_perm_sync_access(self) -> None:
+        """Raises for a guest token, which cannot see the workspace's members."""
+        if _run_query(_VIEWER_QUERY, {}, self._api_key())["viewer"]["guest"]:
+            raise InsufficientPermissionsError(
+                "The connected Linear user is a guest. Connect as a workspace "
+                "member who belongs to every private team to index."
+            )
 
     @classmethod
     def oauth_id(cls) -> DocumentSource:
