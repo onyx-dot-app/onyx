@@ -16,6 +16,7 @@ from ee.onyx.external_permissions.sync_params import (
     source_requires_external_group_sync,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.linear.models import LinearTeam, LinearUser, WorkspaceUsers
 from onyx.connectors.linear.source_operations import LinearSourceOperations
 
@@ -78,7 +79,7 @@ def test_groups_are_the_workspace_and_every_visible_team() -> None:
 def test_a_short_users_listing_is_refused() -> None:
     ops = _ops(users=[_user("ann@x")], user_count=5, teams=[], members={})
 
-    with pytest.raises(RuntimeError, match="listed 1 of the 5 users"):
+    with pytest.raises(ConnectorValidationError, match="listed 1 of the 5 users"):
         list(team_groups(ops))
 
 

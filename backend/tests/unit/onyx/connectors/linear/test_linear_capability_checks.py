@@ -30,6 +30,7 @@ from onyx.connectors.linear.models import (
     LinearProject,
     LinearTeam,
     LinearViewer,
+    WorkspaceUsers,
 )
 from onyx.connectors.linear.source_operations import (
     LinearAuthError,
@@ -147,6 +148,17 @@ def test_the_issue_access_check_reads_a_page_and_one_share() -> None:
     check.run(_context(ops, {}))
 
     ops.get_issue_share.assert_called_once_with(issue_id="i1")
+
+
+def test_the_workspace_users_check_fails_a_listing_linear_cut_short() -> None:
+    ops = _ops()
+    ops.list_workspace_users.return_value = WorkspaceUsers(
+        organization_id="o", user_count=5, users=[]
+    )
+    check = _check(build_linear_group_sync_checks(), "linear_workspace_users")
+
+    with pytest.raises(ConnectorValidationError, match="listed 0 of the 5 users"):
+        check.run(_context(ops))
 
 
 def test_the_team_members_check_reads_the_first_teams_members() -> None:

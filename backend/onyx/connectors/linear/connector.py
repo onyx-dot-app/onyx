@@ -85,6 +85,8 @@ class LinearConnector(
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.team_keys = normalize_team_keys(team_keys)
+        # The entries as configured, for the checks that rerun before a sync.
+        self.projects: list[str] = projects or []
         self.project_names, self.project_slug_ids = project_scope(projects)
         self.batch_size = batch_size
         self._ops: LinearSourceOperations | None = None

@@ -38,34 +38,34 @@ from onyx.utils.retry_wrapper import request_with_retries
 
 logger = setup_logger()
 
-_NUM_RETRIES = 5
-_TIMEOUT = 60
-_LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
-_LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token"
-API_KEY = "linear_api_key"
-ACCESS_TOKEN = "access_token"
-EXPIRE_AT = "expire_at"
-REFRESH_TOKEN = "refresh_token"
-EXPIRES_IN = "expires_in"
+_NUM_RETRIES: int = 5
+_TIMEOUT: int = 60
+_LINEAR_GRAPHQL_URL: str = "https://api.linear.app/graphql"
+_LINEAR_TOKEN_URL: str = "https://api.linear.app/oauth/token"
+API_KEY: str = "linear_api_key"
+ACCESS_TOKEN: str = "access_token"
+EXPIRE_AT: str = "expire_at"
+REFRESH_TOKEN: str = "refresh_token"
+EXPIRES_IN: str = "expires_in"
 # An access token this close to expiry is refreshed before use.
-_REFRESH_BUFFER_SECONDS = 300
+_REFRESH_BUFFER_SECONDS: int = 300
 
 # Linear caps a query's complexity at 10,000 points. A listing page fits at
 # 100, a page of issue access fields at 250.
-LISTING_PAGE_SIZE = 100
-ACCESS_PAGE_SIZE = 250
+LISTING_PAGE_SIZE: int = 100
+ACCESS_PAGE_SIZE: int = 250
 # A walk still paging past this is a cursor cycling rather than ending.
-_MAX_PAGES = 100_000
+_MAX_PAGES: int = 100_000
 
-_PAGE_INFO = """
+_PAGE_INFO: str = """
     pageInfo {
         hasNextPage
         endCursor
     }
 """
-_USER_FIELDS = "email active guest app"
-_VIEWER_QUERY = "query Viewer { viewer { guest } }"
-_TEAMS_BY_KEY_QUERY = f"""
+_USER_FIELDS: str = "email active guest app"
+_VIEWER_QUERY: str = "query Viewer { viewer { guest } }"
+_TEAMS_BY_KEY_QUERY: str = f"""
     query TeamsByKey($keys: [String!], $first: Int, $after: String) {{
         teams(first: $first, after: $after, filter: {{ key: {{ in: $keys }} }}) {{
             nodes {{ key }}
@@ -73,7 +73,7 @@ _TEAMS_BY_KEY_QUERY = f"""
         }}
     }}
 """
-_PROJECTS_QUERY = f"""
+_PROJECTS_QUERY: str = f"""
     query ProjectsInScope($filter: ProjectFilter, $first: Int, $after: String) {{
         projects(first: $first, after: $after, filter: $filter) {{
             nodes {{ name slugId }}
@@ -81,7 +81,7 @@ _PROJECTS_QUERY = f"""
         }}
     }}
 """
-_ISSUES_QUERY = f"""
+_ISSUES_QUERY: str = f"""
     query IterateIssueBatches($first: Int, $after: String, $filter: IssueFilter) {{
         issues(orderBy: updatedAt, first: $first, after: $after, filter: $filter) {{
             nodes {{
@@ -108,7 +108,7 @@ _ISSUES_QUERY = f"""
         }}
     }}
 """
-_ISSUE_ACCESS_QUERY = f"""
+_ISSUE_ACCESS_QUERY: str = f"""
     query IterateIssueAccess($first: Int, $after: String, $filter: IssueFilter) {{
         organization {{ id }}
         issues(orderBy: updatedAt, first: $first, after: $after, filter: $filter) {{
@@ -123,7 +123,7 @@ _ISSUE_ACCESS_QUERY = f"""
         }}
     }}
 """
-_ISSUE_SHARE_QUERY = f"""
+_ISSUE_SHARE_QUERY: str = f"""
     query IssueShare($id: String!) {{
         issue(id: $id) {{
             inheritsSharedAccess
@@ -132,7 +132,7 @@ _ISSUE_SHARE_QUERY = f"""
         }}
     }}
 """
-_TEAMS_QUERY = f"""
+_TEAMS_QUERY: str = f"""
     query IterateTeams($first: Int, $after: String) {{
         teams(first: $first, after: $after) {{
             nodes {{ id key visibility parent {{ id }} }}
@@ -140,7 +140,7 @@ _TEAMS_QUERY = f"""
         }}
     }}
 """
-_TEAM_MEMBERS_QUERY = f"""
+_TEAM_MEMBERS_QUERY: str = f"""
     query IterateTeamMembers($teamId: String!, $first: Int, $after: String) {{
         team(id: $teamId) {{
             memberships(first: $first, after: $after) {{
@@ -150,7 +150,7 @@ _TEAM_MEMBERS_QUERY = f"""
         }}
     }}
 """
-_USERS_QUERY = f"""
+_USERS_QUERY: str = f"""
     query IterateUsers($first: Int, $after: String) {{
         organization {{ id userCount }}
         users(first: $first, after: $after) {{
@@ -300,7 +300,7 @@ class LinearSourceOperations(SourceOperations):
     def _api_key(self) -> str:
         """The Authorization header value, refreshing an expiring OAuth token
         under the provider's lock so two syncs never both redeem it."""
-        now = time.time()
+        now: float = time.time()
         if self._authorization_cache is not None and (
             self._authorization_expires_at is None
             or self._authorization_expires_at >= now + _REFRESH_BUFFER_SECONDS

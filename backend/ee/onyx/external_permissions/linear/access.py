@@ -6,16 +6,29 @@ sub-issue tree, so a sub-issue that inherits takes its ancestors' people."""
 from collections.abc import Callable, Iterable, Iterator
 
 from onyx.access.models import ExternalAccess
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.linear.models import (
     IssueShare,
     LinearTeam,
     LinearUser,
     TeamVisibility,
+    WorkspaceUsers,
 )
 
 # Sub-issues nest a few levels, so this only stops a cycle in the data from
 # looping forever.
 _MAX_ANCESTOR_DEPTH = 100
+
+
+def complete_workspace_users(workspace: WorkspaceUsers) -> list[LinearUser]:
+    """Refuses a listing shorter than the workspace's own count: a group
+    filled from part of it would revoke access for everyone left out."""
+    if len(workspace.users) < workspace.user_count:
+        raise ConnectorValidationError(
+            f"Linear listed {len(workspace.users)} of the {workspace.user_count} "
+            "users it reported, so the workspace group would be incomplete."
+        )
+    return workspace.users
 
 
 def workspace_members_group_id(organization_id: str) -> str:
