@@ -7,9 +7,9 @@ from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.linear.connector import linear_connector
-from onyx.connectors.linear.access import workspace_members_group_id
-from onyx.connectors.linear.connector import LinearConnector
-from onyx.connectors.linear.models import WorkspaceMembers
+from onyx.connectors.linear.access import member_emails, workspace_members_group_id
+from onyx.connectors.linear.models import WorkspaceUsers
+from onyx.connectors.linear.source_operations import LinearSourceOperations
 from onyx.db.models import ConnectorCredentialPair
 
 
@@ -17,18 +17,29 @@ def linear_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
-    yield from team_groups(linear_connector(cc_pair))
+    yield from team_groups(linear_connector(cc_pair).ops)
 
 
-def team_groups(connector: LinearConnector) -> Generator[ExternalUserGroup, None, None]:
+def team_groups(
+    ops: LinearSourceOperations,
+) -> Generator[ExternalUserGroup, None, None]:
+    """Raises on a users listing shorter than the workspace's own count: a
+    group filled from part of it would revoke access for everyone left out."""
+    workspace: WorkspaceUsers = ops.list_workspace_users()
+    if len(workspace.users) < workspace.user_count:
+        raise RuntimeError(
+            f"Linear listed {len(workspace.users)} of the "
+            f"{workspace.user_count} users it reported"
+        )
     # Bare ids: the source prefix is added when the groups are stored, which
     # is how they meet the ids the doc sync writes on an issue.
-    workspace: WorkspaceMembers = connector.workspace_members()
     yield ExternalUserGroup(
         id=workspace_members_group_id(workspace.organization_id),
-        user_emails=sorted(workspace.emails),
+        user_emails=sorted(
+            member_emails(user for user in workspace.users if not user.guest)
+        ),
     )
-    for team in connector.list_teams():
-        members: set[str] = connector.team_member_emails(team.id)
+    for team in ops.list_teams():
+        members: set[str] = member_emails(ops.list_team_members(team_id=team.id))
         if members:
             yield ExternalUserGroup(id=team.id, user_emails=sorted(members))
