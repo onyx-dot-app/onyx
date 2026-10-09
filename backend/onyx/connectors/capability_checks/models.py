@@ -69,6 +69,11 @@ class CapabilityCheckContext(BaseModel):
     # The access type the connector is (or will be) created with. None when the
     # caller does not know it; checks limited to some access types then run.
     access_type: AccessType | None = None
+    # The kind of the credential (e.g. a service account or an OAuth token),
+    # for sources whose kinds need different checks. None when the source has
+    # no kinds or the caller does not know it; checks limited to some kinds
+    # then run.
+    credential_kind: str | None = None
     instantiation_error: Exception | None = None
     source_operations: SourceOperations | None = None
 
@@ -113,7 +118,9 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
       None, a check applies to all of them, except a permission-sync check,
       which applies to the permission-synced ones. Pass ``frozenset(AccessType)``
       to make a permission-sync check apply to all of them.
-    - ``applies``: a predicate on the form state, for anything the two
+    - ``credential_kinds``: the credential kinds the check applies to, for a
+      source that tells kinds apart (see ``credential_kinds.py``). None: all.
+    - ``applies``: a predicate on the form state, for anything the
       declarations above cannot express.
 
     ``validates_binding`` marks a check that proves the credential works with
@@ -136,6 +143,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         requires_connector_config: bool = False,
         requires_fields: frozenset[str] = frozenset(),
         access_types: frozenset[AccessType] | None = None,
+        credential_kinds: frozenset[str] | None = None,
         timeout_seconds: float | None = None,
         is_fallback: bool = False,
         remediation: str | None = None,
@@ -173,6 +181,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.remediation = remediation
         self.docs_link = docs_link
         self.validates_binding = validates_binding
+        self.credential_kinds = credential_kinds
 
     @abstractmethod
     def run(self, context: CapabilityCheckContext) -> None:

@@ -458,6 +458,10 @@ class DraftCheckPlanRequest(BaseModel):
     source: DocumentSource
     access_type: AccessType | None = None
     form_state: dict[str, Any] = Field(default_factory=dict)
+    # The kind of the picked credential, for a source whose credential kinds
+    # need different checks (Google Drive: "service_account" or "oauth").
+    # Omitted, checks limited to some kinds stay pending.
+    credential_kind: str | None = None
 
 
 @router.post("/admin/connector-checks/plan")
@@ -472,7 +476,8 @@ def plan_draft_checks(
     exist and which are required before the admin starts them.
 
     Needs no credential: which checks apply depends only on the source, the
-    access type and the form. Does no I/O to the source and starts no run.
+    access type, the form and the credential kind the form reports. Does no
+    I/O to the source and starts no run.
     """
     mapping = CONNECTOR_CLASS_MAP.get(request.source)
     if mapping is None:
@@ -485,6 +490,7 @@ def plan_draft_checks(
         config_class=mapping.config_class,
         access_type=request.access_type,
         form_values=request.form_state,
+        credential_kind=request.credential_kind,
     )
 
 

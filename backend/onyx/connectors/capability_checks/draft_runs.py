@@ -75,7 +75,8 @@ class DraftCheckStateKind(str, Enum):
     SKIPPED = "skipped"
     # A required field is missing or invalid; the check runs once it is valid.
     WAITING = "waiting"
-    # The access type or the check's ``applies`` excludes it.
+    # The access type, the credential kind or the check's ``applies``
+    # excludes it.
     NOT_APPLICABLE = "not_applicable"
 
 
@@ -322,7 +323,11 @@ def cached_check_result(
 def apply_check_result(
     check_state: DraftCheckState, result: CapabilityCheckResult
 ) -> None:
-    check_state.state = _STATE_BY_STATUS[result.status]
+    check_state.state = (
+        _STATE_BY_STATUS[result.status]
+        if result.applicable
+        else DraftCheckStateKind.NOT_APPLICABLE
+    )
     check_state.message = result.message
     check_state.duration_ms = result.duration_ms
 

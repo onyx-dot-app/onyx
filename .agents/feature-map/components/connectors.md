@@ -464,6 +464,12 @@ reuse their result at creation when the form is unchanged. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
 
+A source whose credential kinds need different checks (Google Drive: service
+account or OAuth) registers a resolver in `capability_checks/credential_kinds.py`.
+Checks declare `credential_kinds`; a check of another kind is not applicable. Runs
+read the kind from the keys of the masked credential JSON. The plan endpoint takes
+an optional `credential_kind` from the form.
+
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See

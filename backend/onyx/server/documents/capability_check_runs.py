@@ -17,6 +17,9 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
+from onyx.connectors.capability_checks.credential_kinds import (
+    resolve_credential_kind,
+)
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_RUN_QUEUE_EXPIRY_SECONDS,
     DraftCheckPlan,
@@ -52,6 +55,7 @@ from onyx.connectors.capability_checks.runner import (
     capability_check_run_stale_after,
 )
 from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.credential_capability import (
@@ -176,16 +180,34 @@ class _PlannedDraft:
     checks: list[tuple[CapabilityCheck[Any], DraftCheckState]]
 
 
+def _credential_kind(source: DocumentSource, credential: Credential) -> str | None:
+    """The kind of the credential, from the keys of its masked JSON: the kind
+    never depends on a secret value. None when it cannot be read; checks
+    limited to some kinds then decide at run time."""
+    if credential.credential_json is None:
+        return None
+    try:
+        source_json = to_source_credential_json(
+            source, credential.credential_json.get_value(apply_mask=True)
+        )
+    except ValueError as e:
+        logger.warning("Could not read the kind of credential %s: %s", credential.id, e)
+        return None
+    return resolve_credential_kind(source, source_json)
+
+
 def _plan_draft(
     *,
     source: DocumentSource,
     config_class: type[ConnectorConfig],
     access_type: AccessType | None,
     form_values: dict[str, Any],
+    credential_kind: str | None,
     config_is_complete: bool = False,
 ) -> _PlannedDraft:
     """Decides each check's state before it runs. Reads no credential and does
-    no I/O to the source.
+    no I/O to the source. ``credential_kind`` is None when the caller does
+    not know it.
 
     A create form with no values is config-less, and config-reading checks
     wait, unless the defaults alone make a complete config (a source whose
@@ -205,6 +227,7 @@ def _plan_draft(
         credential_json={},
         connector_specific_config=connector_specific_config,
         access_type=access_type,
+        credential_kind=credential_kind,
     )
     return _PlannedDraft(
         form_state=form_state,
@@ -222,15 +245,18 @@ def plan_draft_capability_checks(
     config_class: type[ConnectorConfig],
     access_type: AccessType | None,
     form_values: dict[str, Any],
+    credential_kind: str | None = None,
 ) -> DraftCheckPlan:
     """The checks a draft run would hold for this form, each in its state
     before anything runs. Needs no credential, does no I/O to the source, and
-    starts no run."""
+    starts no run. A form that knows the kind of its credential passes
+    ``credential_kind``, so checks of other kinds show as not applicable."""
     plan = _plan_draft(
         source=source,
         config_class=config_class,
         access_type=access_type,
         form_values=form_values,
+        credential_kind=credential_kind,
     )
     return DraftCheckPlan(
         source=source,
@@ -274,6 +300,7 @@ def start_draft_capability_check_run(
         config_class=config_class,
         access_type=access_type,
         form_values=form_values,
+        credential_kind=_credential_kind(source, credential),
     )
     form_state = plan.form_state
     connector_specific_config = plan.connector_specific_config

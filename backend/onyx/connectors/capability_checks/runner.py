@@ -7,6 +7,9 @@ from typing import Any
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.credential_kinds import (
+    resolve_credential_kind,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -331,6 +334,15 @@ def decide_check_readiness(
                 f"Does not apply to connectors with {context.access_type.value} access."
             ),
         )
+    if (
+        check.credential_kinds is not None
+        and context.credential_kind is not None
+        and context.credential_kind not in check.credential_kinds
+    ):
+        return CheckReadiness(
+            kind=CheckReadinessKind.NOT_APPLICABLE,
+            message=f"Does not apply to {context.credential_kind} credentials.",
+        )
     if check.requires_connector_config and context.connector_specific_config is None:
         return CheckReadiness(
             kind=CheckReadinessKind.NEEDS_CONFIG, message=_SKIP_NEEDS_CONFIG_MESSAGE
@@ -564,6 +576,7 @@ def generate_capability_report(
         # than probe an empty dict.
         connector_specific_config=connector_specific_config,
         access_type=access_type,
+        credential_kind=resolve_credential_kind(source, credential_json),
         instantiation_error=instantiation_error,
         source_operations=source_operations,
     )
