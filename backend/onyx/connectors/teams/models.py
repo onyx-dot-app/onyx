@@ -3,6 +3,8 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from onyx.connectors.models import ConnectorFailure, Document
+
 
 class Body(BaseModel):
     content_type: str
@@ -80,6 +82,24 @@ class ChannelRef(BaseModel):
     # "standard" is read by the whole team, anything else has a member list of
     # its own. A checkpoint saved without it reads it from Graph before a walk.
     membership_type: str | None = None
+
+
+class ChannelCursor(BaseModel):
+    """A channel the walk is inside, and the page it reads next. No page url
+    means the channel's first page."""
+
+    channel: ChannelRef
+    next_messages_url: str | None = None
+
+
+class ChannelAdvance(BaseModel):
+    """What one worker brings back from a channel's page."""
+
+    cursor: ChannelCursor
+    items: list[Document | ConnectorFailure]
+    done: bool = False
+    files_due: bool = False
+    restarted: bool = False
 
 
 class ChannelLibrary(BaseModel):
