@@ -24,7 +24,10 @@ With a warm download cache, a new directory still took 74 seconds.
 The same configuration with installed dependencies took 0.58 seconds.
 
 The sandbox image installs the matching SDK version during its build.
-It seeds both global configuration directories and keeps a copy in
+Both global configuration directories hardlink the template dependencies within the same image layer.
+Their package manifests remain separate files. This avoids two extra copies of SDK data.
+In-place dependency edits in either global directory also affect the template.
+The image keeps the SDK in
 `/workspace/templates/opencode`. Session workspace setup copies these dependencies
 into a new `.opencode` directory. It preserves existing dependencies and manifests.
 Each session has its own copy, so sessions cannot modify each other's SDK files.

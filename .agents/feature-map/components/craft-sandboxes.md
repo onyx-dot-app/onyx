@@ -238,6 +238,8 @@ Configuration regeneration also calls this script after snapshot restore.
 A session seed lock serializes copies. Dependencies publish by rename after copying.
 Kubernetes verifies a completion sentinel before reporting configuration regeneration success.
 SDK files stay outside snapshots, which contain outputs and attachments.
+Global configuration directories hardlink template dependencies to save image space.
+Their manifests and all session dependency copies remain independent.
 A completion sentinel (`ONYX_WORKSPACE_SETUP_COMPLETE`) is the only reliable
 success signal, because the K8s exec client returns buffered output without
 raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
