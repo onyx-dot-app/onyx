@@ -21,6 +21,7 @@ from tests.utils.fleet_telemetry import (
     Response,
     accept_all,
     make_sender,
+    posted_events,
 )
 
 _DELTA: dict[str, Any] = {
@@ -135,15 +136,52 @@ def test_rejected_batch_is_dropped_and_not_sent_again() -> None:
     assert sender.rejected == sender.dropped == 1
 
 
-def test_reply_totals_settle_the_whole_batch() -> None:
+def _reply(*statuses: str) -> Response:
+    """A fleet service reply with one status for each event of the batch."""
+    return Response(
+        {
+            "results": [
+                {"index": index, "status": status}
+                for index, status in enumerate(statuses)
+            ],
+            "accepted": statuses.count("accepted"),
+            "rejected": statuses.count("rejected"),
+        }
+    )
+
+
+def test_reply_settles_the_batch_and_sends_only_retries_again(
+    clock: list[float],
+) -> None:
     sender = make_sender()
     for index in range(3):
         assert sender.emit("heartbeat", {"dropped_events": index})
-    # One event accepted, one rejected, one deferred. The sender sends none again.
-    reply = Response({"accepted": 1, "rejected": 1})
-    assert sender.flush_once(lambda *_args, **_kwargs: reply)
-    assert (sender.sent, sender.rejected, sender.dropped) == (1, 1, 2)
-    assert not sender._pending
+    first = Mock(return_value=_reply("accepted", "rejected", "retry"))
+    assert not sender.flush_once(first)
+    assert (sender.sent, sender.rejected, sender.dropped) == (1, 1, 1)
+    retry_id: str = posted_events(first.call_args.kwargs)[2]["event_id"]
+    # The sender waits, then sends the same event with the same ID.
+    transport = RecordingTransport()
+    assert not sender.flush_once(transport)
+    clock[0] += 2
+    assert sender.flush_once(transport)
+    assert [event["event_id"] for event in transport.events] == [retry_id]
+    assert (sender.sent, sender.rejected, sender.dropped) == (2, 1, 1)
+    assert not sender._pending and sender.failures == 0
+
+
+def test_an_event_the_service_cannot_store_is_dropped_after_its_retries(
+    clock: list[float],
+) -> None:
+    sender = make_sender()
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+    transport = Mock(side_effect=lambda *_args, **_kwargs: _reply("retry"))
+    for _ in range(fleet._MAX_RETRIES):
+        assert not sender.flush_once(transport)
+        clock[0] += 300
+    assert sender.flush_once(transport)
+    assert transport.call_count == fleet._MAX_RETRIES + 1
+    assert sender.dropped == 1 and not sender._pending
 
 
 def test_emit_latency_and_bounded_memory_under_overload() -> None:
@@ -433,20 +471,44 @@ def test_failed_tool_call_does_not_fail_the_query(query_sink: Mock) -> None:
 
 
 @pytest.mark.parametrize(
-    "code, reported", [("QUERY_REJECTED", False), ("STREAM_WRITER_ERROR", True)]
+    "code, is_retryable, details, category",
+    [
+        # A query-processing hook refused the query.
+        ("QUERY_REJECTED", False, None, None),
+        # Any other 4xx OnyxError, e.g. a persona that the user cannot see.
+        ("PERSONA_NOT_FOUND", False, None, None),
+        # LLM errors carry details, also when an OnyxError has the same code.
+        ("NOT_FOUND", False, {"model": "PRIVATE"}, "internal"),
+        ("AUTH_ERROR", False, {"model": "PRIVATE"}, "auth"),
+        ("RATE_LIMIT", True, {"model": "PRIVATE"}, "rate_limit"),
+        ("STREAM_WRITER_ERROR", True, None, "internal"),
+    ],
 )
-def test_a_chat_that_a_hook_rejects_is_not_a_failed_query(
-    query_sink: Mock, code: str, reported: bool
+def test_a_chat_error_packet_reports_only_its_category(
+    query_sink: Mock,
+    code: str,
+    is_retryable: bool,
+    details: dict[str, str] | None,
+    category: str | None,
 ) -> None:
     from onyx.chat.models import StreamingError
 
-    packets = [StreamingError(error="PRIVATE reason", error_code=code)]
+    packets = [
+        StreamingError(
+            error="PRIVATE reason",
+            error_code=code,
+            is_retryable=is_retryable,
+            details=details,
+        )
+    ]
     assert list(query.observe_chat_packets(iter(packets), channel="web")) == packets
-    assert query_sink.called is reported
-    if reported:
-        record = _query_record(query_sink)
-        assert record["outcome"] == "failure"
-        assert "PRIVATE" not in json.dumps(record)
+    if category is None:
+        # A rejected request is not a query.
+        query_sink.assert_not_called()
+        return
+    record = _query_record(query_sink)
+    assert (record["outcome"], record["error_code"]) == ("failure", category)
+    assert "PRIVATE" not in json.dumps(record)
 
 
 def test_query_failure_and_disconnect_do_not_replace_application_errors(

@@ -5,11 +5,14 @@ import time
 import uuid
 from collections.abc import Callable, Generator, Iterator
 from functools import wraps
-from typing import Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.fleet_telemetry import emit_telemetry, error_category
+
+if TYPE_CHECKING:
+    from onyx.chat.models import StreamingError
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -20,6 +23,22 @@ _ORIGIN_CHANNELS: dict[str, str] = {
 }
 # OverallStop.stop_reason values written by the chat loop.
 _STOP_OUTCOMES: dict[str, str] = {"user_cancelled": "canceled"}
+# The chat stream sends a 4xx OnyxError as an error packet with one of these codes.
+_CLIENT_ERROR_CODES: frozenset[str] = frozenset(
+    code.code for code in OnyxErrorCode if code.status_code < 500
+)
+# Error packet codes as fleet error categories. Other codes report "internal".
+_CHAT_ERROR_CATEGORIES: dict[str, str] = {
+    "AUTH_ERROR": "auth",
+    "PERMISSION_DENIED": "permission",
+    "RATE_LIMIT": "rate_limit",
+    "BUDGET_EXCEEDED": "rate_limit",
+    "CONNECTION_ERROR": "source_unavailable",
+    "SERVICE_UNAVAILABLE": "source_unavailable",
+    "BAD_GATEWAY": "source_unavailable",
+    "LLM_PROVIDER_ERROR": "source_unavailable",
+    "GATEWAY_TIMEOUT": "timeout",
+}
 
 
 def _channel(kwargs: dict[str, Any]) -> str:
@@ -49,13 +68,30 @@ class QueryObservation:
         if self.time_to_results_ms is None:
             self.time_to_results_ms = max(0, (time.monotonic() - self.started) * 1000)
 
-    def failed(self, error: BaseException | None = None) -> None:
+    def failed(self, error: BaseException) -> None:
         if isinstance(error, OnyxError) and error.status_code < 500:
             # Bad input or a missing permission is not a failed query.
             self.outcome = None
             return
         self.outcome = "failure"
-        self.error_code = error_category(error) if error is not None else "unknown"
+        self.error_code = error_category(error)
+
+    def error_packet(self, packet: "StreamingError") -> None:
+        """Classify a chat error packet by its code. The error text never leaves
+        the process."""
+        # As in `failed`, a 4xx OnyxError is not a failed query. LLM errors carry
+        # details, so a provider's NOT_FOUND is still a failure.
+        if (
+            packet.error_code in _CLIENT_ERROR_CODES
+            and not packet.is_retryable
+            and packet.details is None
+        ):
+            self.outcome = None
+            return
+        self.outcome = "failure"
+        self.error_code = _CHAT_ERROR_CATEGORIES.get(
+            packet.error_code or "", "internal"
+        )
 
     def finish(self) -> None:
         if self.outcome is None:
@@ -100,12 +136,7 @@ def observe_chat_packets(packets: Iterator[Any], *, channel: str) -> Iterator[An
                         if stop_outcome is not None:
                             observation.outcome = stop_outcome
                 elif isinstance(packet, StreamingError):
-                    # Only the code is read. The error text never leaves the process.
-                    if packet.error_code == OnyxErrorCode.QUERY_REJECTED.code:
-                        # A query-processing hook refused the query before it ran.
-                        observation.outcome = None
-                    else:
-                        observation.failed()
+                    observation.error_packet(packet)
             except Exception:
                 pass
             yield packet

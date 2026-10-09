@@ -50,8 +50,8 @@ Telemetry needs no extra container, Helm value, or migration.
 Each pass reads the rows that changed since the previous pass, and all work that is still running.
 It reads 5 minutes of the previous window again, for rows that committed late. Event IDs come from
 the row identity and update time, so the fleet service drops the repeated events. Each read returns
-the oldest changes first. When a read reaches its row limit, or the queue is full, the next pass
-starts at the first row that this pass did not send.
+the oldest changes first. When a read reaches its row limit, or the sender cannot take more events,
+the next pass starts at the first row that this pass did not send.
 
 ## Cost and failure behavior
 
@@ -59,7 +59,8 @@ starts at the first row that this pass did not send.
   lock and do no network, disk, or database work. When the queue is full, Onyx drops the event.
 - One daemon thread in each process sends gzip batches of up to 100 events every 2 seconds.
 - During an outage, the sender keeps the current batch and waits up to about 4 minutes between
-  attempts. The reply of the fleet service is final: the sender does not send rejected events again.
+  attempts. The sender does not send rejected events again. When the fleet service cannot store
+  an event yet, the sender sends it again after a backoff, at most 3 times.
 - Each collection pass uses one transaction. Each statement stops after 1.5 seconds and reads at
   most 1000 rows. A failed pass adds a source error to the heartbeat and reads the same window again
   on the next pass. A pass that was stopped early continues on the next pass, so rows are not skipped.

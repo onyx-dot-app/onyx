@@ -17,7 +17,7 @@ from fastapi import Request
 from fastapi.responses import StreamingResponse
 
 from onyx.chat import process_message
-from onyx.chat.models import AnswerStream, ChatFullResponse
+from onyx.chat.models import AnswerStream, ChatFullResponse, StreamingError
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
@@ -159,9 +159,14 @@ def test_non_streaming_emits_query_record(
 def test_stream_failure_still_emits_query_record(
     monkeypatch: pytest.MonkeyPatch, telemetry_sink: Mock
 ) -> None:
+    # ``_stream_chat_turn`` sends each error as a final ``StreamingError``.
     def failing_turn(**_: Any) -> AnswerStream:
         yield _packet()
-        raise RuntimeError("llm exploded")
+        yield StreamingError(
+            error="llm exploded",
+            error_code="RATE_LIMIT",
+            details={"model": "gpt-4o", "provider": "openai"},
+        )
 
     _install_turn(monkeypatch, failing_turn)
 
@@ -170,12 +175,11 @@ def test_stream_failure_still_emits_query_record(
 
     chunks = _drain(response)
 
-    # The endpoint swallows the error into a final JSON line for the client.
     assert len(chunks) == 2
     assert "llm exploded" in chunks[-1]
     assert _query_outcomes(telemetry_sink) == ["failure"]
-    # The record names the error class, never its message.
-    assert telemetry_sink.call_args.args[1]["error_code"] == "internal"
+    # The record names the error category, never its message.
+    assert telemetry_sink.call_args.args[1]["error_code"] == "rate_limit"
     assert "llm exploded" not in str(telemetry_sink.call_args)
 
 

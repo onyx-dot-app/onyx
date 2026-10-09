@@ -389,7 +389,8 @@ that process. A spawned docfetching process starts its own sender in
 the event (`sanitize_data`) and appends it to a bounded in-memory queue. It takes
 no lock and does no I/O. A full queue drops the event. A daemon thread sends gzip
 batches and backs off during an outage. The reply of the fleet service settles each
-batch: the sender does not send rejected events again. Unless `report_process` is
+batch: the sender does not send rejected events again. It sends the events that
+the service could not store yet again, at most `_MAX_RETRIES` times. Unless `report_process` is
 false, the thread also reports `runtime` and `version` events at start, and
 process resources (`utils/fleet_telemetry_resources.py`) and a delivery heartbeat
 every five minutes.
@@ -401,8 +402,10 @@ every five minutes.
   `handle_multi_model_stream`. `telemetry_query` wraps
   `server/features/search/api.py:search` and
   `ee/onyx/search/process_search_query.py:stream_search_query`. A request that
-  fails with a 4xx `OnyxError`, or a chat that a query-processing hook rejects
-  (`QUERY_REJECTED`), sends no event.
+  fails with a 4xx `OnyxError` sends no event. This includes a chat that a
+  query-processing hook rejects (`QUERY_REJECTED`): the chat stream sends the
+  error as a `StreamingError` packet, and `QueryObservation.error_packet` reads
+  only its code.
 - Indexing counters: the fetch, embed, and write steps call `emit_stage_counter`
   ([[indexing-pipeline]] §4.10). The sender thread sums the deltas for one
   attempt and stage over at most 30 seconds.
@@ -416,9 +419,10 @@ five minutes for each tenant. It reads connectors, signup email domains, license
 presence, index attempts, stage summaries, and background jobs through the
 statement-limited queries in `db/fleet_telemetry.py`. It reads only the rows that
 changed since its previous pass, plus work that is still running. Each read
-returns the oldest changes first. When a read reaches `ROW_LIMIT` or the sender
-queue is full, the next pass resumes at the first row that was not sent
-(`_send_in_order`). The inventory (connectors, domains, license) goes out after
+returns the oldest changes first. When the sender refuses a row (a full queue or
+a closed sender), the next pass resumes at that row. When a read reaches
+`ROW_LIMIT`, the next pass resumes at the time of its last row, and always moves
+forward (`_send_in_order`). The inventory (connectors, domains, license) goes out after
 the work, when it changes and at least every six hours. Event IDs come from the
 row identity and update time, so the fleet service drops repeated events. Index attempt and job state reach the fleet only from these
 reads. The intervals are constants in `utils/fleet_telemetry.py`
@@ -644,6 +648,10 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   `new_msg_req` from the call's keywords (`utils/fleet_query_telemetry.py:_channel`).
   If a caller passes it by position, the query event reports the channel `web`.
   Nothing fails.
+- **Discord queries report the channel `api`.** The send-message endpoint sets
+  the origin to `api` for an API key or PAT caller
+  (`server/query_and_chat/chat_backend.py:handle_send_chat_message`), and the
+  Discord bot calls it with an API key.
 
 ---
 

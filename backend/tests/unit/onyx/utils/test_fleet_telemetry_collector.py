@@ -164,6 +164,11 @@ def _event_ids(sender: fleet.BoundedTelemetry) -> dict[str, str]:
     return {event["event_type"]: event["event_id"] for event in sender._take_batch()}
 
 
+def _job_event(sender: fleet.BoundedTelemetry) -> dict[str, Any]:
+    (job,) = [event for event in sender._take_batch() if event["event_type"] == "job"]
+    return job
+
+
 def test_connector_data_keeps_reviewed_settings_and_counts_only() -> None:
     data: dict[str, Any] = collector.connector_data(_connector_row())
     assert data["connector_type"] == "google_drive" and data["state"] == "active"
@@ -201,6 +206,21 @@ def test_attempt_data_reports_an_error_category_but_no_error_text() -> None:
     assert "PRIVATE" not in json.dumps(failed)
     for data in (running, failed):
         assert fleet.sanitize_data("attempt", data) == data
+
+
+def test_an_attempt_without_counts_reports_zero() -> None:
+    # A queued attempt has no counts yet. The fleet service accepts only numbers.
+    queued: dict[str, Any] = collector.attempt_data(
+        _attempt_row(
+            status=IndexingStatus.NOT_STARTED,
+            docs_indexed=None,
+            chunks_indexed=None,
+            total_batches=None,
+            completed_batches=None,
+        )
+    )
+    counts = ("docs_indexed", "chunks_indexed", "total_batches", "completed_batches")
+    assert [queued[key] for key in counts] == [0, 0, 0, 0]
 
 
 def test_job_data_reports_duration_and_failure() -> None:
@@ -319,6 +339,21 @@ def test_repeated_runs_repeat_event_ids_and_skip_unchanged_inventory(
     assert {"connector", "tenant_domain", "license"} <= third.keys()
 
 
+def test_a_finished_job_replaces_its_running_state(
+    source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    collector.collect_snapshots("public")
+    running: dict[str, Any] = _job_event(sender)
+    running_at: datetime = datetime.fromisoformat(running["occurred_at"])
+    # The job ended before that pass started, but its transaction committed late.
+    ended: datetime = running_at - timedelta(seconds=1)
+    source.jobs = [_job_row(state="success", ended_at=ended, revision_at=ended)]
+    collector.collect_snapshots("public")
+    finished: dict[str, Any] = _job_event(sender)
+    assert finished["data"]["state"] == "success"
+    assert datetime.fromisoformat(finished["occurred_at"]) > running_at
+
+
 def test_a_failed_read_counts_a_source_error_and_keeps_the_cursor(
     monkeypatch: pytest.MonkeyPatch, source: _Source, sender: fleet.BoundedTelemetry
 ) -> None:
@@ -348,8 +383,14 @@ def test_a_capped_read_resumes_at_its_last_row(
     collector.collect_snapshots("public")
     # More rows can follow the cap, so the next run starts at the last row read.
     assert _cursor(source) == recent + timedelta(minutes=1)
+    source.attempts = [
+        _attempt_row(attempt_id=index, time_updated=recent + timedelta(minutes=1))
+        for index in (3, 4)
+    ]
     collector.collect_snapshots("public")
     assert source.since[1] == recent + timedelta(minutes=1)
+    # A capped read moves forward, even when all its rows have the time of `since`.
+    assert _cursor(source) == recent + timedelta(minutes=1, microseconds=1)
 
 
 def test_a_full_queue_resumes_at_the_first_unsent_row(
@@ -368,6 +409,28 @@ def test_a_full_queue_resumes_at_the_first_unsent_row(
     assert [event["data"]["attempt_id"] for event in small._take_batch()] == [0, 1]
     assert _cursor(source) == recent + timedelta(minutes=2)
     # The inventory did not fit either, so the next run sends it again.
+    assert collector._INVENTORY_KEY not in source.cache.store
+
+
+@pytest.mark.parametrize("refusal", ["closed", "drained"])
+def test_a_refused_row_is_read_again(
+    monkeypatch: pytest.MonkeyPatch, source: _Source, refusal: str
+) -> None:
+    refusing: fleet.BoundedTelemetry = make_sender()
+    if refusal == "closed":
+        refusing.close()
+    else:
+        # A full queue refused the event, and the sender thread emptied it at once.
+        monkeypatch.setattr(refusing, "emit", Mock(return_value=False))
+    monkeypatch.setattr(collector, "get_sender", lambda: refusing)
+    since: datetime = datetime.now(timezone.utc) - timedelta(minutes=30)
+    source.cache.set(collector._CURSOR_KEY, since.isoformat())
+    source.attempts = [_attempt_row(time_updated=since)]
+    source.stages = []
+    source.jobs = []
+    collector.collect_snapshots("public")
+    # The refused row is the first row of the window. The next run reads it again.
+    assert _cursor(source) == since
     assert collector._INVENTORY_KEY not in source.cache.store
 
 

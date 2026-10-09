@@ -249,6 +249,9 @@ _BATCH_SIZE: int = 100
 _FLUSH_SECONDS: float = 2.0
 _MAX_BATCHES_PER_WAKEUP: int = 5
 _FINAL_FLUSH_SECONDS: float = 5.0
+# The service asks to send an event again when it could not store it yet. The
+# sender sends such an event at most this many more times.
+_MAX_RETRIES: int = 3
 # Short-lived processes wait at most this long at exit for their final delivery.
 EXIT_FLUSH_SECONDS: float = 2.0
 # Indexing counter deltas are summed per attempt and stage for this long.
@@ -349,6 +352,7 @@ class BoundedTelemetry:
         self._blocked_until: float = 0.0
         # The batch in flight. An outage keeps it for the next attempt.
         self._pending: list[dict[str, Any]] = []
+        self._retries: int = 0
         self._session: requests.Session | None = None
         # The sender thread reads the key and enrolls before its first delivery.
         self._key: str | None = None
@@ -420,11 +424,6 @@ class BoundedTelemetry:
         return self._stop.is_set()
 
     @property
-    def full(self) -> bool:
-        """True when the queue has no room, so the next event would be dropped."""
-        return len(self._queue) >= self.capacity
-
-    @property
     def customer_uuid(self) -> str | None:
         """The ID that the fleet service assigned at enrollment. None until then."""
         return self._customer
@@ -490,8 +489,9 @@ class BoundedTelemetry:
     def flush_once(self, transport: Any = None) -> bool:
         """Send one batch. True when it was delivered or nothing was due.
 
-        The service answers with how many events it accepted and rejected. The
-        sender counts the rest as dropped and does not send them again.
+        The service answers with how many events it accepted and rejected, and
+        which events to send again. The sender sends those again after a backoff,
+        at most `_MAX_RETRIES` times. It counts all other events as dropped.
         """
         if time.monotonic() < self._blocked_until:
             return False
@@ -541,20 +541,44 @@ class BoundedTelemetry:
                 result: Any = read_json_body(response, 65536)
         except Exception:
             # An outage keeps the batch and backs off.
-            self.failures = min(self.failures + 1, 8)
-            self._blocked_until = time.monotonic() + min(300, 2**self.failures)
+            self._back_off()
             return False
-        self.failures = 0
         counts: dict[str, Any] = result if isinstance(result, dict) else {}
+        retry: list[dict[str, Any]] = self._retry_events(counts.get("results"))
         sent: Any = counts.get("accepted")
         rejected: Any = counts.get("rejected")
-        sent = sent if type(sent) is int else len(self._pending)
+        sent = sent if type(sent) is int else len(self._pending) - len(retry)
         rejected = rejected if type(rejected) is int else 0
         self.sent += sent
         self.rejected += rejected
+        if retry and self._retries < _MAX_RETRIES:
+            self._retries += 1
+            self.dropped += max(0, len(self._pending) - sent - len(retry))
+            self._pending = retry
+            self._back_off()
+            return False
+        self.failures = 0
+        self._retries = 0
         self.dropped += max(0, len(self._pending) - sent)
         self._pending = []
         return True
+
+    def _back_off(self) -> None:
+        self.failures = min(self.failures + 1, 8)
+        self._blocked_until = time.monotonic() + min(300, 2**self.failures)
+
+    def _retry_events(self, results: Any) -> list[dict[str, Any]]:
+        """The events of the batch that the service asks to send again."""
+        if not isinstance(results, list):
+            return []
+        indexes: set[int] = {
+            row["index"]
+            for row in results
+            if isinstance(row, dict)
+            and row.get("status") == "retry"
+            and type(row.get("index")) is int
+        }
+        return [event for index, event in enumerate(self._pending) if index in indexes]
 
     def _enroll(self, transport: Any) -> None:
         """Register the deployment key. The service answers with this deployment's IDs."""

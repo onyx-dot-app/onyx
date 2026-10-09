@@ -33,6 +33,7 @@ from onyx.utils.fleet_telemetry import (
     BoundedTelemetry,
     fingerprint,
     get_sender,
+    sanitize_data,
 )
 
 # The first run reads one hour back. After a long pause, a run reads one day back.
@@ -47,7 +48,6 @@ _INVENTORY_SECONDS: int = 6 * 3600
 # Where the next run starts reading.
 _CURSOR_KEY: str = "fleet_telemetry_cursor"
 _INVENTORY_KEY: str = "fleet_telemetry_inventory"
-_RUNNING_STATES: frozenset[str] = frozenset({"not_started", "in_progress"})
 # Connector configuration lists that select what to index. Only their sizes leave.
 _SELECTION_LISTS: tuple[str, ...] = (
     "folder_ids",
@@ -176,10 +176,11 @@ def attempt_data(row: dict[str, Any]) -> dict[str, Any]:
         "cc_pair_id": row["cc_pair_id"],
         "connector_type": connector_type,
         "state": row["status"].value.lower(),
-        "docs_indexed": row["docs_indexed"],
-        "chunks_indexed": row["chunks_indexed"],
-        "total_batches": row["total_batches"],
-        "completed_batches": row["completed_batches"],
+        # An attempt that has not started a batch has no counts yet.
+        "docs_indexed": row["docs_indexed"] or 0,
+        "chunks_indexed": row["chunks_indexed"] or 0,
+        "total_batches": row["total_batches"] or 0,
+        "completed_batches": row["completed_batches"] or 0,
         "error_count": row["error_count"] or 0,
         "counter_mode": "snapshot",
         "started_at": _iso(row["started_at"]),
@@ -228,6 +229,29 @@ def job_data(row: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _queue(
+    sender: BoundedTelemetry,
+    event_type: str,
+    data: dict[str, Any],
+    tenant_id: str,
+    event_id: str | None = None,
+    occurred_at: float | None = None,
+) -> bool:
+    """Queue one event. False when the sender cannot take a valid event now (a full
+    queue or a closed sender), so the next run sends it again. An event that can
+    never pass the privacy check counts as handled."""
+    if sender.emit(
+        event_type,
+        data,
+        tenant_id=tenant_id,
+        event_id=event_id,
+        occurred_at=occurred_at,
+    ):
+        return True
+    # Only the data decides this, so the sender thread cannot change the answer.
+    return sanitize_data(event_type, data) is None
+
+
 def _send(
     sender: BoundedTelemetry,
     tenant_id: str,
@@ -237,15 +261,16 @@ def _send(
     revision: datetime,
     occurred_at: datetime | None = None,
 ) -> bool:
-    """Send with an event ID made from the row's identity and revision time."""
+    """Queue with an event ID made from the row's identity and revision time."""
     identity: str = f"{tenant_id}:{entity}:{revision.isoformat()}"
     if occurred_at is not None:
-        # Running work changes its counters without a new revision time.
+        # A running job changes its counters without a new revision time.
         identity += ":" + fingerprint(json.dumps(data, sort_keys=True))
-    return sender.emit(
+    return _queue(
+        sender,
         event_type,
         data,
-        tenant_id=tenant_id,
+        tenant_id,
         event_id=str(uuid.uuid5(uuid.UUID(str(sender.customer_uuid)), identity)),
         occurred_at=(occurred_at or revision).timestamp(),
     )
@@ -263,31 +288,29 @@ def _send_inventory(
     if previous is not None and previous.decode() == signature:
         return
     for event_type, data in inventory:
-        if not sender.emit(event_type, data, tenant_id=tenant_id) and sender.full:
+        if not _queue(sender, event_type, data, tenant_id):
             # The next run sends the whole inventory again.
             return
     cache.set(_INVENTORY_KEY, signature, ex=_INVENTORY_SECONDS)
 
 
 def _send_in_order(
-    sender: BoundedTelemetry,
     since: datetime,
     rows: list[dict[str, Any]],
     changed_at: str,
     send: Callable[[dict[str, Any]], bool],
 ) -> datetime | None:
     """Send rows in read order. Return where the next run must resume: the first
-    row that a full queue refused, or the end of a capped read. Rows from before
+    row that the sender refused, or just after a capped read. Rows from before
     `since` are running work, which every run reads again."""
     for row in rows:
-        if not send(row) and sender.full:
+        if not send(row):
             point: datetime = row[changed_at]
-            break
-    else:
-        if len(rows) < ROW_LIMIT:
-            return None
-        point = rows[-1][changed_at]
-    return point if point >= since else None
+            return point if point >= since else None
+    if len(rows) < ROW_LIMIT or rows[-1][changed_at] < since:
+        return None
+    # A capped read moves forward, even when all its rows have the same time.
+    return max(rows[-1][changed_at], since + timedelta(microseconds=1))
 
 
 def stage_data(row: dict[str, Any], attempt: dict[str, Any]) -> dict[str, Any]:
@@ -365,7 +388,6 @@ def collect_snapshots(tenant_id: str) -> None:
         }
         resume: list[datetime | None] = [
             _send_in_order(
-                sender,
                 since,
                 attempts,
                 "time_updated",
@@ -380,7 +402,6 @@ def collect_snapshots(tenant_id: str) -> None:
             ),
             # The service requires the event time to equal the summary's last update.
             _send_in_order(
-                sender,
                 since,
                 stages,
                 "last_event_at",
@@ -394,11 +415,13 @@ def collect_snapshots(tenant_id: str) -> None:
                 ),
             ),
         ]
-        # Each job table is a separate capped read.
+        # Each job table is a separate capped read. A job event is never older than
+        # its pass, so a finished job replaces the running state that an earlier
+        # pass sent, even when the row time is from another host's clock or its
+        # transaction committed late.
         for _, table in groupby(jobs, key=lambda row: row["job_id"].split(":")[0]):
             resume.append(
                 _send_in_order(
-                    sender,
                     since,
                     list(table),
                     "revision_at",
@@ -409,7 +432,7 @@ def collect_snapshots(tenant_id: str) -> None:
                         job_data(row),
                         row["job_id"],
                         row["revision_at"],
-                        started if row["state"] in _RUNNING_STATES else None,
+                        max(row["revision_at"], started),
                     ),
                 ),
             )
@@ -418,8 +441,6 @@ def collect_snapshots(tenant_id: str) -> None:
         next_since: datetime = min(
             [started - _OVERLAP, *(point for point in resume if point is not None)]
         )
-        # A run always moves forward, even when a capped read ends on `since`.
-        next_since = max(next_since, since + timedelta(microseconds=1))
         cache.set(_CURSOR_KEY, next_since.isoformat(), ex=7 * 24 * 3600)
         sender.health["source_consecutive_errors"] = 0
         sender.health["last_source_success_at"] = started.isoformat()

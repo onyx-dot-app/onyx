@@ -3,6 +3,7 @@
 import gzip
 import io
 import json
+from collections.abc import Mapping
 from typing import Any
 from unittest.mock import patch
 
@@ -43,7 +44,7 @@ def make_sender(*, capacity: int = 16, report_process: bool = True) -> BoundedTe
     return sender
 
 
-def posted_events(request: dict[str, Any]) -> list[dict[str, Any]]:
+def posted_events(request: Mapping[str, Any]) -> list[dict[str, Any]]:
     """The events in the gzip JSON body of one delivery request."""
     return json.loads(gzip.decompress(request["data"]))["events"]
 
