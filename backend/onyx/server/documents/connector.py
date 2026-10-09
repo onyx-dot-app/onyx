@@ -31,7 +31,9 @@ from onyx.auth.permissions import (
     require_permission,
 )
 from onyx.auth.scoped_permissions import assert_within_scope
+from onyx.auth.sealed import DraftCredential
 from onyx.auth.users import current_chat_accessible_user
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import (
@@ -1775,6 +1777,7 @@ def create_connector_with_credential(
 
     # A new credential (typed values or an OAuth draft), saved by this request.
     new_credential: CredentialBase | None = None
+    draft: DraftCredential | None = None
     resolved = resolve_draft_credential(
         credential_json=request.credential_json,
         draft_credential=request.draft_credential,
@@ -1826,7 +1829,11 @@ def create_connector_with_credential(
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, EXACTLY_ONE_CREDENTIAL)
 
         validate_ccpair_for_user(
-            connector_id, credential_id, request.pairing.access_type, db_session
+            connector_id,
+            credential_id,
+            request.pairing.access_type,
+            db_session,
+            saved_from_draft=draft,
         )
         response = add_credential_to_connector(
             db_session=db_session,
@@ -1862,6 +1869,7 @@ def create_connector_with_credential(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         priority=OnyxCeleryPriority.HIGH,
         kwargs={"tenant_id": tenant_id},
+        expires=BEAT_EXPIRES_DEFAULT,
     )
     mt_cloud_telemetry(
         tenant_id=tenant_id,

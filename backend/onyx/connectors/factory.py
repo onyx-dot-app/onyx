@@ -508,7 +508,10 @@ def validate_ccpair_for_user(
     db_session: Session,
     enforce_creation: bool = True,
     trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+    saved_from_draft: DraftCredential | None = None,
 ) -> bool:
+    """``saved_from_draft`` is the draft that the credential was just saved
+    from: the checks that already ran on the draft are not run again."""
     if INTEGRATION_TESTS_MODE:
         return True
 
@@ -539,6 +542,7 @@ def validate_ccpair_for_user(
         access_type=access_type,
         enforce_creation=enforce_creation,
         trigger=trigger,
+        saved_from_draft=saved_from_draft,
     )
 
 
@@ -554,11 +558,13 @@ def validate_and_record_pairing(
     access_type: AccessType,
     enforce_creation: bool,
     trigger: CapabilityCheckTrigger,
+    saved_from_draft: DraftCredential | None = None,
 ) -> bool:
     """Validates a pairing from the given values and records the outcome as
     the pairing's capability report under ``trigger``. ``cc_pair_id`` is the
     edited pair whose fresh dry-run results are reused; None for a new
     pairing. An edit passes its proposed values before it writes them.
+    ``saved_from_draft`` is as for ``validate_ccpair_for_user``.
 
     Raises:
         ValidationError: The binding, the construction or a required check
@@ -627,6 +633,7 @@ def validate_and_record_pairing(
             credential=credential,
             access_type=access_type,
             enforce_creation=enforce_creation,
+            saved_from_draft=saved_from_draft,
         )
 
     _record_outcome(None, perm_sync_validated=access_type.is_perm_synced())

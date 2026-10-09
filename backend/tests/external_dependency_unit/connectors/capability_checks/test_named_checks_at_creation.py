@@ -12,6 +12,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.auth.sealed import (
+    DraftCredential,
+    seal_draft_credential,
+    unseal_draft_credential,
+)
 from onyx.background.celery.tasks.capability_checks import (
     tasks as capability_check_tasks,
 )
@@ -143,6 +148,7 @@ def _validate(
     config: dict[str, Any],
     access_type: AccessType = AccessType.PUBLIC,
     enforce_creation: bool = True,
+    saved_from_draft: DraftCredential | None = None,
 ) -> bool:
     cc_pair.connector.connector_specific_config = config
     db_session.commit()
@@ -152,6 +158,7 @@ def _validate(
         access_type,
         db_session,
         enforce_creation=enforce_creation,
+        saved_from_draft=saved_from_draft,
     )
 
 
@@ -279,6 +286,39 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
     # Another form value changes only the config-reading check's key.
     assert _validate(db_session, slack_pair, {"channels": ["b"]}) is True
     assert harness.runs == [_TOKEN, _CHANNELS, _CHANNELS]
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_results_of_the_draft_a_credential_was_saved_from_are_reused(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    user_id = uuid4()
+    assert slack_pair.credential.credential_json is not None
+    sealed = seal_draft_credential(
+        slack_pair.credential.credential_json.get_value(apply_mask=False),
+        user_id=user_id,
+        source=DocumentSource.SLACK,
+    )
+    draft = unseal_draft_credential(sealed, user_id=user_id)
+    start_draft_capability_check_run(
+        user_id=user_id,
+        credential=draft,
+        source=DocumentSource.SLACK,
+        config_class=SlackConnectorConfig,
+        access_type=AccessType.PUBLIC,
+        draft_key=uuid4().hex,
+        form_values={"channels": ["a"]},
+        sealed_draft_credential=sealed,
+    )
+    run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
+    assert harness.runs == [_TOKEN, _CHANNELS]
+
+    # Create saves the draft as a new credential: its draft results still count.
+    assert (
+        _validate(db_session, slack_pair, {"channels": ["a"]}, saved_from_draft=draft)
+        is True
+    )
+    assert harness.runs == [_TOKEN, _CHANNELS]
 
 
 @pytest.mark.usefixtures("tenant_context")
