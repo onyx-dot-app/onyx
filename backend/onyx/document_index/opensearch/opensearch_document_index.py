@@ -48,7 +48,7 @@ from onyx.document_index.opensearch.client import (
     is_cluster_block_error,
 )
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
-from onyx.document_index.opensearch.constants import OpenSearchSearchType
+from onyx.document_index.opensearch.constants import EF_SEARCH, OpenSearchSearchType
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
     CC_PAIR_IDS_FIELD_NAME,
@@ -82,6 +82,8 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
 logger = setup_logger(__name__)
+
+_EF_SEARCH_SETTING = "index.knn.algo_param.ef_search"
 
 
 VERIFY_INDEX_LOCK_TTL_S = 60
@@ -478,6 +480,31 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         e,
                     )
                     raise
+                self._apply_ef_search()
+
+    def _apply_ef_search(self) -> None:
+        """Sets this index's ef_search to EF_SEARCH. It is a dynamic setting, and
+        an index created while the value was lower keeps it, which lowers
+        semantic recall. A failure only logs: search still works."""
+        try:
+            settings, _ = self._client.get_settings(flat_settings=True)
+            current: str | None = settings.get(_EF_SEARCH_SETTING)
+            if current == str(EF_SEARCH):
+                return
+            logger.info(
+                "Setting ef_search of index %s from %s to %s.",
+                self._index_name,
+                current,
+                EF_SEARCH,
+            )
+            self._client.update_settings({_EF_SEARCH_SETTING: EF_SEARCH})
+        except Exception as e:
+            logger.warning(
+                "Could not set ef_search of index %s to %s: %s",
+                self._index_name,
+                EF_SEARCH,
+                e,
+            )
 
     def _unset_7_bit_confidence_interval_encoder(self) -> dict[str, Any] | None:
         """The index's encoder if this 7-bit index was built before
