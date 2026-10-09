@@ -116,7 +116,10 @@ def source_supports_windowed_runs(source: DocumentSource) -> bool:
     """True if the source's connector fetches only a requested time window.
     ConnectorRunner gives the window to checkpointed and poll connectors; a
     load-state-only connector fetches everything, so a windowed backfill of
-    it is a full run."""
+    it is a full run. A source without a connector class (e.g. the ingestion
+    API) runs nothing."""
+    if source not in CONNECTOR_CLASS_MAP:
+        return False
     connector_class = _load_connector_class(source)
     return issubclass(connector_class, (CheckpointedConnector, PollConnector))
 

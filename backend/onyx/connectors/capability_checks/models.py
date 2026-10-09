@@ -282,6 +282,15 @@ class ProposedPairingValidation(BaseModel):
     check_results: list[CapabilityCheckResult] = []
     unfinished_check_ids: frozenset[str] = frozenset()
 
+    @property
+    def blocks_pairing(self) -> bool:
+        """True when the validation failed or a finished required check
+        failed."""
+        return self.validation_error is not None or any(
+            result.required and result.status == CapabilityCheckStatus.FAILED
+            for result in self.check_results
+        )
+
 
 def aggregate_capability_verdict(
     applicable: bool,
