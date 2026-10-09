@@ -2748,7 +2748,7 @@
           }
         },
         "realm": {
-          "description": "Pega la URL o el subdominio de tu sitio. La API REST de {source} debe estar disponible ahí.{hasDefault, select, true { Si no se indica, se usará {value} en su lugar.} other {}}"
+          "description": "Pega la URL o el subdominio de tu sitio. La API REST de {source} debe estar disponible ahí.{hasDefault, select, true { Si no se indica, se usará `{value}` en su lugar.} other {}}"
         }
       },
       "credentialRequired": {
