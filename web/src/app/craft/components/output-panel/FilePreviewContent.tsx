@@ -156,8 +156,10 @@ function FetchedFilePreview({
       </div>
     );
   }
+  const boundedViewer: boolean =
+    fullHeight || data.isImage || /\.md$/i.test(filePath);
   return (
-    <div className={cn("flex flex-col", fullHeight && "h-full")}>
+    <div className={cn("flex flex-col", boundedViewer && "h-full")}>
       {error && (
         <div
           role="alert"

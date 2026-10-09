@@ -315,6 +315,7 @@ Selecting the current history entry preserves Back and Forward history instead o
 
 Text, image, Markdown, and PDF viewers retain accepted payloads during refreshes and transient failures.
 Retained viewers show refresh progress and failure feedback.
+Welcome inline image and Markdown previews fill a bounded viewer; plain text grows with its content.
 Authorization and not-found responses purge accepted payloads from the viewer cache.
 Later transient failures cannot restore invalidated content without a successful read.
 Hidden viewers defer scheduled retries until activation.

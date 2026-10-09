@@ -310,3 +310,30 @@ it.each(["png", "md"])(
     else expect(screen.getByText("retained markdown")).toBeInTheDocument();
   }
 );
+
+it.each(["md", "png", "txt"])(
+  "keeps inline %s previews at their required height",
+  async (extension) => {
+    const isImage = extension === "png";
+    jest
+      .mocked(fetchFileContent)
+      .mockReset()
+      .mockResolvedValue({
+        content: isImage ? "data:image/png;base64,abc" : "inline document",
+        mimeType: isImage ? "image/png" : "text/plain",
+        isImage,
+      });
+    const { container } = render(
+      <FilePreviewContent
+        fullHeight={false}
+        sessionId={`inline-height-${extension}`}
+        filePath={`outputs/file.${extension}`}
+      />
+    );
+    if (isImage) await screen.findByRole("img");
+    else await screen.findByText("inline document");
+    const viewer = container.firstElementChild;
+    if (extension === "txt") expect(viewer).not.toHaveClass("h-full");
+    else expect(viewer).toHaveClass("h-full");
+  }
+);
