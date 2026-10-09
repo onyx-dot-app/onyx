@@ -1169,6 +1169,39 @@ def test_reindex_stops_listing_once_every_wanted_transcript_is_found() -> None:
     assert len(items) == 1 and isinstance(items[0], Document)
 
 
+def test_reindex_reads_what_it_found_before_a_later_page_is_refused() -> None:
+    first_page = _transcripts_url("user-1", LOOKBACK_WINDOW)
+    second_page = "users/user-1/onlineMeetings/getAllTranscripts?skipToken=p2"
+    routes = _reindex_routes()
+    routes[first_page] = {
+        "value": [_transcript()],
+        "@odata.nextLink": f"{SERVICE_ROOT}/{second_page}",
+    }
+    client = graph_client(
+        routes,
+        refused={second_page: UNNAMED_403},
+        contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT},
+    )
+
+    items = _reindex(
+        connector(client, include_meeting_transcripts=True),
+        transcript_document_id("user-1", "t1"),
+        transcript_document_id("user-1", "t2"),
+    )
+
+    by_id: dict[str, Document | ConnectorFailure | HierarchyNode] = {}
+    for item in items:
+        if isinstance(item, Document):
+            by_id[item.id] = item
+        elif isinstance(item, ConnectorFailure) and item.failed_document:
+            by_id[item.failed_document.document_id] = item
+    found = by_id[transcript_document_id("user-1", "t1")]
+    missing = by_id[transcript_document_id("user-1", "t2")]
+    assert isinstance(found, Document)
+    assert isinstance(missing, ConnectorFailure)
+    assert "Could not list the meeting transcripts" in missing.failure_message
+
+
 def test_reindex_reports_a_transcript_graph_no_longer_lists() -> None:
     items = _reindex(
         connector(

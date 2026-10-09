@@ -549,6 +549,9 @@ class TranscriptSource(OrganizerSource):
                 continue
             wanted_ids: set[str] = {transcript_id for _, transcript_id in wanted}
             listed: dict[str, Transcript] = {}
+            listing_error: requests.RequestException | GraphRetriesExhausted | None = (
+                None
+            )
             try:
                 # Graph pages the listing, so it stops once every wanted
                 # transcript is found rather than holding the whole lookback.
@@ -560,15 +563,19 @@ class TranscriptSource(OrganizerSource):
                     if len(listed) == len(wanted_ids):
                         break
             except (requests.RequestException, GraphRetriesExhausted) as e:
-                for failure, _ in wanted:
-                    yield ConnectorFailure(
-                        failed_document=failure,
-                        failure_message=_listing_failure_message(organizer.email, e),
-                        exception=e,
-                    )
-                continue
+                # Transcripts found before the refused page are still read.
+                listing_error = e
             for failure, transcript_id in wanted:
                 transcript = listed.get(transcript_id)
+                if transcript is None and listing_error is not None:
+                    yield ConnectorFailure(
+                        failed_document=failure,
+                        failure_message=_listing_failure_message(
+                            organizer.email, listing_error
+                        ),
+                        exception=listing_error,
+                    )
+                    continue
                 if transcript is None:
                     yield ConnectorFailure(
                         failed_document=failure, failure_message=_NO_LONGER_LISTED
