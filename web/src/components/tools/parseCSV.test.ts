@@ -1,4 +1,4 @@
-import { parseCSV } from "./CSVContent";
+import { parseCSV } from "@/lib/csv";
 
 describe("parseCSV", () => {
   it("parses simple comma-separated rows", () => {

@@ -1,5 +1,4 @@
 import { parseCSV } from "@/lib/csv";
-export { parseCSV } from "@/lib/csv";
 // CsvContent
 import { IconLoader } from "@opal/loaders";
 import React, { useState, useEffect } from "react";
