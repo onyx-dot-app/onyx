@@ -2748,7 +2748,7 @@
           }
         },
         "realm": {
-          "defaultHint": "Si non renseigné, {value} sera utilisé"
+          "description": "Collez l’URL ou le sous-domaine de votre site. L’API REST de {source} doit y être accessible.{hasDefault, select, true { Si non renseigné, {value} sera utilisé à la place.} other {}}"
         }
       },
       "credentialRequired": {

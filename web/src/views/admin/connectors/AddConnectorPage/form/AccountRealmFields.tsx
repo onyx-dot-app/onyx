@@ -5,6 +5,7 @@ import { InputTypeIn } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
+import { getCredentialSpec } from "@/lib/credentials/utils";
 import type { Credential, CredentialSpecField } from "@/lib/credentials/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import { NEW_ACCOUNT_FIELD } from "@/views/admin/connectors/AddConnectorPage/newAccount";
@@ -34,6 +35,7 @@ export default function AccountRealmFields({
 }: AccountRealmFieldsProps) {
   const t = useTranslations("admin.connectorsList.add.realm");
   const fieldCopy = useCredentialFieldCopy(source);
+  const brandName: string = getCredentialSpec(source)?.brandName ?? source;
 
   return (
     <Section alignItems="stretch" gap={4}>
@@ -47,11 +49,11 @@ export default function AccountRealmFields({
             withLabel={name}
             title={fieldCopy(key).title}
             suffix={field.optional ? "optional" : undefined}
-            subDescription={
-              defaultValue
-                ? t("defaultHint", { value: defaultValue })
-                : undefined
-            }
+            subDescription={t("description", {
+              source: brandName,
+              hasDefault: defaultValue ? "true" : "false",
+              value: defaultValue ?? "",
+            })}
           >
             {savedCredential ? (
               <InputTypeIn
