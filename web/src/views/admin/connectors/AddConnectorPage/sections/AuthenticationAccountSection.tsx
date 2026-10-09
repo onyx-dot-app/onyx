@@ -54,6 +54,7 @@ import {
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import { isEmptyField } from "@/lib/connectors/bindingGate";
 import { credentialBoundFieldNames } from "@/lib/connectors/utils";
 import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage/components/AuthenticationAccountCard";
 import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
@@ -134,15 +135,19 @@ export default function AuthenticationAccountSection({
     accountRealmFields.map(([key]) => key)
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { values, errors, touched, setErrors, setTouched } =
+  const { values, setFieldError, setFieldTouched } =
     useFormikContext<Record<string, unknown>>();
 
   /** Clears the new account's errors and touched marks; its values stay. */
   function clearNewAccountErrors() {
-    const { [NEW_ACCOUNT_FIELD]: _touched, ...restTouched } = touched;
-    const { [NEW_ACCOUNT_FIELD]: _errors, ...restErrors } = errors;
-    void setTouched(restTouched, false);
-    setErrors(restErrors);
+    const accountValues: Record<string, unknown> = newAccountValues ?? {};
+    // A field with a value keeps its error; only an empty one clears.
+    for (const key of Object.keys(accountValues)) {
+      if (!isEmptyField(accountValues, key)) continue;
+      const path = `${NEW_ACCOUNT_FIELD}.${key}`;
+      void setFieldTouched(path, false, false);
+      setFieldError(path, undefined);
+    }
   }
 
   // The new account's errors clear when a saved account is picked, and when
