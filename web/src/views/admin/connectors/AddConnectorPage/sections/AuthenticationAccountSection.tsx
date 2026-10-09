@@ -145,18 +145,17 @@ export default function AuthenticationAccountSection({
     setErrors(restErrors);
   }
 
-  /** Closes the new-account card, so it opens again without errors. */
-  function closeNewAccount() {
-    close();
-    clearNewAccountErrors();
-  }
-
-  // Picking a saved account clears the new account's errors.
+  // The new account's errors clear when a saved account is picked, and when
+  // the new-account card closes. Only those changes clear them, not each
+  // change to the errors.
   const pickedId: number | null = currentCredential?.id ?? null;
   useEffect(() => {
     if (pickedId !== null) clearNewAccountErrors();
-    // Only a new pick clears them, not each change to the errors.
   }, [pickedId]);
+  const newAccountOpen: boolean = openMethod !== null;
+  useEffect(() => {
+    if (!newAccountOpen) clearNewAccountErrors();
+  }, [newAccountOpen]);
   const newAccountValues: NewAccountValues | undefined = getIn(
     values,
     NEW_ACCOUNT_FIELD
@@ -411,9 +410,7 @@ export default function AuthenticationAccountSection({
           )}
         </div>
       }
-      onClick={() =>
-        isCreating ? closeNewAccount() : selectMethod(defaultMethod)
-      }
+      onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
     >
       <Section padding={2} width="full">
         <Content
@@ -461,7 +458,7 @@ export default function AuthenticationAccountSection({
               }
               aria-expanded={accountsExpanded}
               onClick={() => {
-                if (accountsExpanded) closeNewAccount();
+                if (accountsExpanded) close();
                 setAccountsExpanded(!accountsExpanded);
               }}
             />
