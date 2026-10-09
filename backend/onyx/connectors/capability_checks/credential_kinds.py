@@ -12,11 +12,14 @@ from collections.abc import Callable
 from typing import Any
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.google_utils.shared_constants import google_credential_kind
 
 CredentialKindResolver = Callable[[dict[str, Any]], str | None]
 
 # Per-connector work registers resolvers here.
-_CREDENTIAL_KIND_RESOLVERS: dict[DocumentSource, CredentialKindResolver] = {}
+_CREDENTIAL_KIND_RESOLVERS: dict[DocumentSource, CredentialKindResolver] = {
+    DocumentSource.GOOGLE_DRIVE: google_credential_kind,
+}
 
 
 def resolve_credential_kind(
