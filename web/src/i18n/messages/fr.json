@@ -12481,7 +12481,7 @@
         "label": "Aucun contenu"
       },
       "csv": {
-        "truncated": "Aperçu limité à 1 000 lignes, 100 colonnes et 5 000 cellules. Téléchargez le fichier original pour toutes les données.",
+        "truncated": "Aperçu limité à {rows, number} lignes, {columns, number} colonnes et {cells, number} cellules. Téléchargez le fichier original pour toutes les données.",
         "malformed": "Ce CSV contient un champ entre guillemets incomplet. Téléchargez le fichier original pour le vérifier."
       }
     },

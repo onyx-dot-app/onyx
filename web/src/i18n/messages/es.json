@@ -12481,7 +12481,7 @@
         "label": "Sin contenido"
       },
       "csv": {
-        "truncated": "Vista previa limitada a 1000 filas, 100 columnas y 5000 celdas. Descarga el original para ver todos los datos.",
+        "truncated": "Vista previa limitada a {rows, number} filas, {columns, number} columnas y {cells, number} celdas. Descarga el original para ver todos los datos.",
         "malformed": "Este CSV contiene un campo entre comillas incompleto. Descarga el original para revisarlo."
       }
     },

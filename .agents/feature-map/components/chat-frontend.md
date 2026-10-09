@@ -318,6 +318,9 @@ a toast if the active model has no vision support. It then calls `beginUpload`
 [[file-store-and-user-files]]) and appends the results to `currentMessageFiles` via
 `ProjectsProvider`.
 
+Chat CSV and spreadsheet file previews use `web/src/lib/csv.ts` for quoted-field validation.
+Craft uses the same parser with bounded preview limits; chat keeps its complete-file parsing contract.
+
 ### 4.9 Pickers
 
 - **Agent**: `useActiveAgent` (`lib/agents/hooks.ts:useActiveAgent`) resolves the active

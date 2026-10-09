@@ -12481,7 +12481,7 @@
         "label": "无内容"
       },
       "csv": {
-        "truncated": "预览最多显示 1,000 行、100 列和 5,000 个单元格。下载原文件可查看全部数据。",
+        "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
         "malformed": "此 CSV 包含一个未闭合的引号字段。请下载原文件进行检查。"
       }
     },

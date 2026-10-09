@@ -1,3 +1,5 @@
+import { NextIntlClientProvider } from "next-intl";
+import englishMessages from "@/i18n/messages/en.json";
 import { render, screen } from "@tests/setup/test-utils";
 import {
   CsvPreview,
@@ -51,4 +53,28 @@ it("reports malformed CSV instead of rendering a plausible partial table", () =>
     "incomplete quoted field"
   );
   expect(screen.queryByRole("cell")).not.toBeInTheDocument();
+});
+
+it("formats the configured cell limit in the truncation notice", () => {
+  const content = Array.from({ length: 1000 }, () =>
+    Array.from({ length: 100 }, () => "value").join(",")
+  ).join("\n");
+  render(<CsvPreview content={content} />);
+  expect(screen.getByText(/Preview limited/)).toHaveTextContent(
+    "1,000 rows, 100 columns, and 5,000 cells"
+  );
+});
+
+it("uses the selected locale to format numeric preview limits", () => {
+  const content = Array.from({ length: 1000 }, () =>
+    Array.from({ length: 100 }, () => "value").join(",")
+  ).join("\n");
+  render(
+    <NextIntlClientProvider locale="de" messages={englishMessages}>
+      <CsvPreview content={content} />
+    </NextIntlClientProvider>
+  );
+  expect(screen.getByText(/Preview limited/)).toHaveTextContent(
+    "1.000 rows, 100 columns, and 5.000 cells"
+  );
 });

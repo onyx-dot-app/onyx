@@ -11,13 +11,15 @@ import {
 
 import { parseCsv as parseCsvContent } from "@/lib/csv";
 
+const PREVIEW_LIMITS = {
+  maxRows: 1000,
+  maxColumns: 100,
+  maxCharacters: 2_000_000,
+  maxCells: 5000,
+};
+
 export function parseCsv(content: string) {
-  return parseCsvContent(content, {
-    maxRows: 1000,
-    maxColumns: 100,
-    maxCharacters: 2_000_000,
-    maxCells: 5000,
-  });
+  return parseCsvContent(content, PREVIEW_LIMITS);
 }
 
 interface CsvPreviewProps extends FilePreviewScrollPosition {
@@ -56,7 +58,11 @@ export function CsvPreview({
       )}
       {truncated && (
         <Text font="secondary-body" color="text-03">
-          {t("csv.truncated")}
+          {t("csv.truncated", {
+            rows: PREVIEW_LIMITS.maxRows,
+            columns: PREVIEW_LIMITS.maxColumns,
+            cells: PREVIEW_LIMITS.maxCells,
+          })}
         </Text>
       )}
       <CsvTable rows={rows} />

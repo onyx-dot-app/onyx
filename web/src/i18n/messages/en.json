@@ -12481,7 +12481,7 @@
         "label": "No content"
       },
       "csv": {
-        "truncated": "Preview limited to 1,000 rows, 100 columns, and 5,000 cells. Download the original for all data.",
+        "truncated": "Preview limited to {rows, number} rows, {columns, number} columns, and {cells, number} cells. Download the original for all data.",
         "malformed": "This CSV contains an incomplete quoted field. Download the original to inspect it."
       }
     },
