@@ -152,37 +152,37 @@ def _alias_candidates(model_id: str) -> list[str]:
 
 
 def _normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    for field in _SCALAR_FIELDS:
-        if field in entry:
-            out[field] = entry[field]
-    for field in _DICT_FIELDS:
-        if entry.get(field) is not None:
-            out[field] = entry[field]
-    cost: Any = out.get("cost")
+    out = {field: entry[field] for field in _SCALAR_FIELDS if field in entry}
+    out.update(
+        {field: entry[field] for field in _DICT_FIELDS if entry.get(field) is not None}
+    )
+    cost = out.get("cost")
     if isinstance(cost, dict):
         # Negative rates are upstream "unknown price" sentinels, not prices.
-        out["cost"] = _drop_negative_rates(cost)
-        if isinstance(out["cost"].get("context_over_200k"), dict):
-            out["cost"]["context_over_200k"] = _drop_negative_rates(
-                out["cost"]["context_over_200k"]
-            )
-        tiers: Any = out["cost"].get("tiers")
-        if isinstance(tiers, list):
-            out["cost"]["tiers"] = [
-                _drop_negative_rates(t) if isinstance(t, dict) else t for t in tiers
-            ]
-        if not out["cost"]:
+        cost = _drop_negative_rates(cost)
+        if cost:
+            out["cost"] = cost
+        else:
             del out["cost"]
     return out
 
 
-def _drop_negative_rates(block: dict[str, Any]) -> dict[str, Any]:
-    return {
-        k: v
-        for k, v in block.items()
-        if not isinstance(v, (int, float)) or isinstance(v, bool) or v >= 0
-    }
+def _drop_negative_rates(value: Any) -> Any:
+    """Strip negative-rate sentinels at any depth — top-level cost fields
+    and rate blocks nested inside ``tiers``/``context_over_200k``."""
+    if isinstance(value, dict):
+        return {
+            k: _drop_negative_rates(v)
+            for k, v in value.items()
+            if not _is_negative_rate(v)
+        }
+    if isinstance(value, list):
+        return [_drop_negative_rates(item) for item in value]
+    return value
+
+
+def _is_negative_rate(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value < 0
 
 
 # Entry fields models.dev publishes that we deliberately do not vendor. New

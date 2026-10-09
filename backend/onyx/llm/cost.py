@@ -200,14 +200,13 @@ def _catalog_cost_cents(
             rates = tier_rates
 
     def _rate(key: str, fallback: float | None = None) -> float:
-        value = rates.get(key)
         # Negative rates are upstream "unknown price" sentinels, never real —
         # a negative tier rate defers to the base rate like a missing one.
-        if not isinstance(value, (int, float)) or value < 0:
-            value = cost.get(key)
-        if not isinstance(value, (int, float)) or value < 0:
-            value = None
-        return float(value) if value is not None else (fallback or 0.0)
+        for block in (rates, cost):
+            value = block.get(key)
+            if isinstance(value, (int, float)) and value >= 0:
+                return float(value)
+        return fallback or 0.0
 
     input_rate = _rate("input")
     output_rate = _rate("output")

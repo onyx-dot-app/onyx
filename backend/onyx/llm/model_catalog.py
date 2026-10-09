@@ -169,22 +169,31 @@ def provider_names() -> list[str]:
 # chat-model surfaces.
 CHAT_MODES = frozenset({"chat", "responses", "completion"})
 
+# Name heuristic behind resolve_model_mode's fallback — used for catalog
+# entries vendored without a mode and for names outside the catalog. Rerank
+# ids check first: the embed-class pattern matches them too.
+_RERANK_NAME_PATTERN = re.compile(r"rerank", re.IGNORECASE)
+_EMBEDDING_NAME_PATTERN = re.compile(
+    r"embed|e5-|bge-|gte-|jina|voyage|rerank|colbert|uae-|instructor",
+    re.IGNORECASE,
+)
 
-def _catalog_mode(entry: dict[str, Any], model_name: str) -> str:
-    """Entries vendored from sources without a mode concept (models.dev-only
-    providers like vercel_ai_gateway) ship no mode; without one every
-    embedding/rerank entry would resolve as a chat model. Infer the class
-    from the id — the same name heuristic is_embedding_model_name already
-    applies to uncataloged models."""
-    mode: Any = entry.get("mode")
-    if mode:
-        return mode
+
+def _mode_from_name(model_name: str) -> str:
     tail = model_name.split("/")[-1]
     if _RERANK_NAME_PATTERN.search(tail):
         return "rerank"
     if _EMBEDDING_NAME_PATTERN.search(tail):
         return "embedding"
     return "chat"
+
+
+def _catalog_mode(entry: dict[str, Any], model_name: str) -> str:
+    """Entries vendored from sources without a mode concept (models.dev-only
+    providers like vercel_ai_gateway) ship no mode; without one every
+    embedding/rerank entry would resolve as a chat model."""
+    mode: Any = entry.get("mode")
+    return mode or _mode_from_name(model_name)
 
 
 def iter_models(provider: str, mode: str | None = None) -> list[str]:
@@ -488,35 +497,21 @@ def build_model_map() -> dict[str, dict[str, Any]]:
     return model_map
 
 
-# Name-pattern heuristic for models outside the catalog — used to filter
-# model lists fetched from user gateways (LiteLLM proxy, OpenRouter, LM
-# Studio). Catalog-known models use their ``mode`` field instead.
-_EMBEDDING_NAME_PATTERN = re.compile(
-    r"embed|e5-|bge-|gte-|jina|voyage|rerank|colbert|uae-|instructor",
-    re.IGNORECASE,
-)
-
-
-# Rerank ids classify as "rerank", not "embedding" — checked before
-# _EMBEDDING_NAME_PATTERN, which lumps the whole not-chat class together
-# for the uncataloged-name fallback below.
-_RERANK_NAME_PATTERN = re.compile(r"rerank", re.IGNORECASE)
+def resolve_model_mode(model_name: str) -> str:
+    """Resolve a model's type ("chat", "embedding", "rerank", "image", ...)
+    from its name — the codebase's single name-based resolver. A cataloged
+    entry's mode wins; mode-less and uncataloged names fall back to the
+    shared id heuristic."""
+    entry = build_model_map().get(model_name)
+    if entry is not None:
+        return _catalog_mode(entry, model_name)
+    return _mode_from_name(model_name)
 
 
 def is_embedding_model_name(model_name: str) -> bool:
-    """Is this an embedding model? Cataloged entries answer from their mode;
-    uncataloged names fall back to the id pattern."""
-    entry = build_model_map().get(model_name)
-    if entry is not None and entry.get("mode"):
-        return entry["mode"] == "embedding"
-    return bool(_EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1]))
+    return resolve_model_mode(model_name) == "embedding"
 
 
 def is_non_chat_model_name(model_name: str) -> bool:
-    """Should this name stay out of chat-model listings? Cataloged entries
-    answer from their mode (embedding/rerank/image/etc. are all non-chat);
-    uncataloged names fall back to the id pattern."""
-    entry = build_model_map().get(model_name)
-    if entry is not None and entry.get("mode"):
-        return entry["mode"] not in CHAT_MODES
-    return bool(_EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1]))
+    """Should this name stay out of chat-model listings?"""
+    return resolve_model_mode(model_name) not in CHAT_MODES
