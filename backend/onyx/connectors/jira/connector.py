@@ -630,18 +630,9 @@ class JiraConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
-        jql = self._get_jql_query(start, end)
-        try:
-            return self._load_from_checkpoint(
-                jql, checkpoint, include_permissions=False
-            )
-        except Exception as e:
-            if is_atlassian_date_error(e):
-                jql = self._get_jql_query(start - ONE_HOUR, end)
-                return self._load_from_checkpoint(
-                    jql, checkpoint, include_permissions=False
-                )
-            raise e
+        return self._load_with_date_retry(
+            start, end, checkpoint, include_permissions=False
+        )
 
     def load_from_checkpoint_with_perm_sync(
         self,
@@ -650,16 +641,45 @@ class JiraConnector(
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         """Load documents from checkpoint with permission information included."""
-        jql = self._get_jql_query(start, end)
+        return self._load_with_date_retry(
+            start, end, checkpoint, include_permissions=True
+        )
+
+    def _load_with_date_retry(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: JiraConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> CheckpointOutput[JiraConnectorCheckpoint]:
+        """Retries once with the window start one hour earlier when Jira rejects
+        the date of the time filter.
+
+        The load is a generator, so the error comes from iterating it, not from
+        the call. Jira rejects the query at the first search, before any item;
+        an error after the first item is re-raised so no item repeats.
+        """
+        output = self._load_from_checkpoint(
+            self._get_jql_query(start, end),
+            checkpoint,
+            include_permissions=include_permissions,
+        )
         try:
-            return self._load_from_checkpoint(jql, checkpoint, include_permissions=True)
+            first_item = next(output)
+        except StopIteration as stop:
+            return stop.value
         except Exception as e:
-            if is_atlassian_date_error(e):
-                jql = self._get_jql_query(start - ONE_HOUR, end)
-                return self._load_from_checkpoint(
-                    jql, checkpoint, include_permissions=True
+            if not is_atlassian_date_error(e):
+                raise
+            return (
+                yield from self._load_from_checkpoint(
+                    self._get_jql_query(start - ONE_HOUR, end),
+                    checkpoint,
+                    include_permissions=include_permissions,
                 )
-            raise e
+            )
+        yield first_item
+        return (yield from output)
 
     def _load_from_checkpoint(
         self, jql: str, checkpoint: JiraConnectorCheckpoint, include_permissions: bool
