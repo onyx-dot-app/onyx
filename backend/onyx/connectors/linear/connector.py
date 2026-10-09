@@ -460,12 +460,14 @@ class LinearConnector(
         path: tuple[str, ...],
         page_size: int = _LISTING_PAGE_SIZE,
     ) -> Iterator[dict[str, Any]]:
-        """Each page's data, following the connection at `path` to its end."""
-        api_key: str = self._api_key()
+        """Each page's data, following the connection at `path` to its end.
+        The key is read per page so a token expiring mid-walk is refreshed."""
         cursor: str | None = None
         for _ in range(_MAX_PAGES):
             data: dict[str, Any] = _run_query(
-                query, {**variables, "first": page_size, "after": cursor}, api_key
+                query,
+                {**variables, "first": page_size, "after": cursor},
+                self._api_key(),
             )
             yield data
             connection: dict[str, Any] = data

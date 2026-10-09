@@ -218,3 +218,28 @@ def test_a_token_another_sync_refreshed_is_not_refreshed_again(
     mock_request.assert_not_called()
     provider.set_credentials.assert_not_called()
     assert provider.get_credentials.call_count == 2
+
+
+def test_a_walk_reads_the_key_before_every_page() -> None:
+    pages = [MagicMock(), MagicMock()]
+    pages[0].json.return_value = {
+        "data": {
+            "teams": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "c1"}}
+        }
+    }
+    pages[1].json.return_value = {
+        "data": {
+            "teams": {
+                "nodes": [],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            }
+        }
+    }
+    connector = LinearConnector()
+    with (
+        patch.object(LinearConnector, "_api_key", return_value="key") as api_key,
+        patch(f"{OPS}._make_query", side_effect=pages),
+    ):
+        assert connector.list_teams() == []
+
+    assert api_key.call_count == 2
