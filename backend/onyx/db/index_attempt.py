@@ -167,6 +167,22 @@ def get_connector_config_hash_for_cc_pair(
     return compute_connector_config_hash(connector_specific_config)
 
 
+def _get_prune_after_reindex_request(
+    db_session: Session, cc_pair_id: int, search_settings_id: int
+) -> datetime | None:
+    """The pair's pending prune-after-reindex request, when the search
+    settings are current. A re-index of another index does not serve it."""
+    return db_session.scalar(
+        select(ConnectorCredentialPair.prune_after_reindex_requested_at).where(
+            ConnectorCredentialPair.id == cc_pair_id,
+            exists().where(
+                SearchSettings.id == search_settings_id,
+                SearchSettings.status == IndexModelStatus.PRESENT,
+            ),
+        )
+    )
+
+
 def create_index_attempt(
     connector_credential_pair_id: int,
     search_settings_id: int,
@@ -195,6 +211,13 @@ def create_index_attempt(
         connector_config_override=config_override,
         poll_range_start=backfill.window_start if backfill else None,
         poll_range_end=backfill.window_end if backfill else None,
+        prune_after_reindex_requested_at=(
+            _get_prune_after_reindex_request(
+                db_session, connector_credential_pair_id, search_settings_id
+            )
+            if from_beginning
+            else None
+        ),
     )
     db_session.add(new_attempt)
     db_session.commit()

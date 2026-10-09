@@ -1036,6 +1036,17 @@ class ConnectorCredentialPair(Base):
         Enum(IndexingMode, native_enum=False), nullable=True
     )
 
+    # A pending prune the pruning beat runs once, even without prune_freq.
+    # Cleared only by a prune dispatched after this time was set.
+    prune_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # A pending prune to request once a full re-index on the current search
+    # settings succeeds. While set, every new attempt there is a full re-index.
+    prune_after_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Determines how documents are processed after fetching:
     # REGULAR: Full pipeline (chunk → embed → document index)
     # FILE_SYSTEM: Write to file system only (for CLI agent sandbox)
@@ -2542,6 +2553,11 @@ class IndexAttempt(Base):
     # (e.g. a config limited to newly included items). NULL runs the saved config.
     connector_config_override: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
+    )
+    # The pair's prune_after_reindex_requested_at this full re-index serves,
+    # copied at creation. Success turns it into a prune request.
+    prune_after_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)

@@ -175,19 +175,23 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if pruning is due.
 
     Next pruning time is calculated as a delta from the last successful prune, or the
-    last successful indexing if pruning has never succeeded.
+    last successful indexing if pruning has never succeeded. A pending prune
+    request is due at once, without a prune frequency.
 
     TODO(rkuo): consider whether we should allow pruning to be immediately rescheduled
     if pruning fails (which is what it does now). A backoff could be reasonable.
     """
 
+    # skip pruning if not active; a pending request waits, e.g. until resume
+    if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
+        return False
+
+    if cc_pair.prune_requested_at is not None:
+        return True
+
     # skip pruning if no prune frequency is set
     # pruning can still be forced via the API which will run a pruning task directly
     if not cc_pair.connector.prune_freq:
-        return False
-
-    # skip pruning if not active
-    if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
         return False
 
     # skip pruning if the next scheduled prune time hasn't been reached yet
@@ -432,6 +436,9 @@ def try_creating_prune_generator_task(
             submitted=datetime.now(timezone.utc),
             started=None,
             celery_task_id=None,
+            # read after the refresh above, so a prune serves only requests
+            # committed before it was dispatched
+            prune_requested_at=cc_pair.prune_requested_at,
         )
         redis_connector.prune.set_fence(payload)
 
@@ -590,6 +597,7 @@ def connector_pruning_generator_task(
                 submitted=payload.submitted,
                 started=datetime.now(timezone.utc),
                 celery_task_id=payload.celery_task_id,
+                prune_requested_at=payload.prune_requested_at,
             )
             redis_connector.prune.set_fence(new_payload)
 
@@ -826,7 +834,12 @@ def monitor_ccpair_pruning_taskset(
             f"Connector pruning failed after fan-out: cc_pair={cc_pair_id} num_pruned={initial}"
         )
     else:
-        mark_ccpair_as_pruned(int(cc_pair_id), db_session)
+        payload = redis_connector.prune.payload
+        mark_ccpair_as_pruned(
+            cc_pair_id,
+            db_session,
+            served_prune_request_at=payload.prune_requested_at if payload else None,
+        )
         redis_connector.prune.clear_failure_backoff()
         task_logger.info(
             f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
