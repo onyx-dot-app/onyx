@@ -51,6 +51,14 @@ over; the entire agentic loop runs inside the sandbox's `opencode serve`
 process, and the backend's job is to start it, stream its events, persist
 them, and know when to stop.
 
+The welcome panel starts on Files. Sending the first message keeps its selected tab,
+expanded folders, cached listings, and scroll position. Returning from an inline
+preview restores the tree scroll position. Each mounted Files browser owns its listing cache.
+Folder requests run independently and abort when their directory unmounts.
+A claimed welcome sandbox stays available until the URL selects the session.
+Late validity checks cannot reset it. Mounting Files revalidates visible folders.
+Opening a folder fetches its current contents, even when its cached listing is empty.
+
 The composer moves from the welcome position to the conversation footer with
 a shared layout animation. Reduced-motion users get an immediate transition.
 
@@ -64,7 +72,10 @@ permission (per the app policy in `[[craft-admin]]` and `[[craft-external-apps]]
 the turn pauses and the user sees an approval card; the user can approve or
 reject just that request, or approve it for the rest of the session. Files
 the agent produces appear as artifacts the user can browse, download, or
-(for Markdown) export as a `.docx`. The user's own uploaded library files
+(for Markdown) export as a `.docx`. New previewable outputs add tabs; only the first
+eligible discovery in a task selects a file. Manual selection or dismissal suppresses
+automatic selection until the next interactive turn. See [[craft-streaming]] for
+inventory and selection rules. The user's own uploaded library files
 (PDFs, spreadsheets) are available inside every session's sandbox.
 
 ---

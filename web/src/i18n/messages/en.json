@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Toggle {name}"
+      },
+      "status": {
+        "loading": "Loading outputs…",
+        "incomplete": "Some outputs could not be listed. Open Files to browse the workspace.",
+        "error": "Could not refresh outputs. Try again."
       }
     },
     "chatPanel": {
@@ -12624,6 +12629,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Close {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Start building something to see artifacts!"
       },

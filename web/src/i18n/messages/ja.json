@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "{name} を開閉"
+      },
+      "status": {
+        "loading": "出力を読み込み中…",
+        "incomplete": "一部の出力を表示できませんでした。「ファイル」を開いてワークスペースを確認してください。",
+        "error": "出力を更新できませんでした。もう一度お試しください。"
       }
     },
     "chatPanel": {
@@ -12624,6 +12629,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} を閉じる"
+      },
       "artifactsEmpty": {
         "tooltip": "何かを作り始めるとアーティファクトが表示されます！"
       },

@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Alternar {name}"
+      },
+      "status": {
+        "loading": "Cargando resultados…",
+        "incomplete": "No se pudieron listar algunos resultados. Abre Archivos para explorar el espacio de trabajo.",
+        "error": "No se pudieron actualizar los resultados. Inténtalo de nuevo."
       }
     },
     "chatPanel": {
@@ -12624,6 +12629,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Cerrar {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "¡Empieza a construir algo para ver artefactos!"
       },

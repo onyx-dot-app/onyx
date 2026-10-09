@@ -12309,6 +12309,11 @@
       },
       "toggleItem": {
         "ariaLabel": "تبديل {name}"
+      },
+      "status": {
+        "loading": "جارٍ تحميل المخرجات…",
+        "incomplete": "تعذر عرض بعض المخرجات. افتح الملفات لتصفح مساحة العمل.",
+        "error": "تعذر تحديث المخرجات. حاول مرة أخرى."
       }
     },
     "chatPanel": {
@@ -12624,6 +12629,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "إغلاق {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "ابدأ ببناء شيء ما لرؤية المخرجات!"
       },

@@ -28,6 +28,15 @@ agent edits files. The user never runs a command to see this; the dev server
 starts the first time the agent (or the user, via a documented fallback
 script) needs it.
 
+Automatic panel opening waits for `webapp-info` to report a serving webapp.
+A URL or source-file edit alone cannot open Preview or its Files fallback.
+Concurrent opening requests share one readiness check per session with a 30-second deadline.
+The deadline aborts stalled requests and releases the shared check so later tasks can retry.
+Late checks respect dismissal, newer turns, and an already-open artifact.
+The panel retains the last serving URL for the current session through readiness failures.
+It switches to a replacement URL only after that URL is ready. Switching sessions clears this state.
+Readiness polling stops on a successful ready response or after 30 seconds.
+
 Only the session owner can load the Preview tab, because `get_webapp_info`
 verifies ownership. The proxy also admits any authenticated tenant user who
 knows the proxy URL when the sharing scope is `PUBLIC_ORG`. A logged-in viewer
@@ -202,9 +211,11 @@ provisioning entirely, since nothing will view them live.
 
 ### Artifact preview refresh
 
-`FilePreviewContent.tsx` accepts file revisions and explicit reload counters.
-It shares one viewer implementation between full-height and inline previews.
-Inactive viewers defer revision changes until activation.
+`OutputPanel.tsx` reads each file's revision from the session inventory and passes
+it through `FilePreviewContent.tsx` to the selected viewer. Files-tab inline previews
+use the same component and revision source. These production callers make revision-based
+cache reuse active; explicit reload counters change independently of file revisions.
+Idle session entry and focus reconcile metadata without selecting files.
 
 Each mounted file viewer owns a private SWR cache with one current payload.
 `web/src/lib/build/hooks.ts:useFilePreview` owns revision-aware payload replacement.
@@ -215,12 +226,35 @@ only results and errors for their accepted revision and reload counter. Cache mi
 browser cache when fetching artifacts. PDF object URLs are revoked when replaced
 or when their viewer unmounts.
 
+Files owns a private directory cache keyed by session and path. Each expanded
+directory manages its own cancellable request. Requests have a ten-second deadline;
+a stalled directory cannot block another directory. Activation and file-change
+signals revalidate visible directories while retaining their existing rows.
+Hiding or collapsing a directory aborts its request. Cancellations stay silent.
+Loading replaces the folder icon with a spinner for at least 150 ms; file rows appear as soon as they arrive.
+Collapsing or hiding the folder cancels the display timer. Failed folder reads show an icon
+with an error tooltip. Empty, loading, and failed child listings add no text rows.
+The toolbar spinner runs only for an explicit refresh, until visible directory reads finish.
+When Files shows an inline preview, an explicit refresh reloads that file instead.
+The preview shows its own loading state, and the toolbar remains available.
+Automatic directory refreshes do not reload an unchanged inline preview.
+Expansion and saved scroll
+remain in session UI state; directory responses do not. Scroll is saved on
+hiding or unmounting, without store writes on each scroll event.
+
+Artifacts derives its folder tree from the shared output inventory. It does not
+fetch directories or probe for empty folders. Activation reconciles the inventory;
+partial scans retain known files and report incomplete results. Loading, errors,
+and complete empty results have separate states.
+
 PowerPoint previews use LibreOffice and PDF rasterization to produce slide images.
+Each successful conversion response assigns a fresh slide image token.
 A vertical thumbnail column supports click and keyboard navigation, marks the
 selected slide, and scrolls it into view. Thumbnail images load lazily.
 Keyboard navigation only handles events within the slide toolbar.
 Inactive presentations ignore keyboard navigation. Closed output panels are inert,
 so their controls cannot receive focus or keyboard input.
+Updated decks clamp the current slide to their new bounds.
 
 ## 5. Contracts and invariants
 
