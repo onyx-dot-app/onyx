@@ -19,7 +19,7 @@ import {
 } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
+import { SvgExpand, SvgFold, SvgList, SvgPlusCircle } from "@opal/icons";
 import type { Credential, DraftCredential } from "@/lib/credentials/types";
 import {
   useCredentialCheckReports,
@@ -310,7 +310,7 @@ export default function AuthenticationAccountSection({
         rightChildren={
           <Section flexDirection="row" alignItems="center" gap={0} width="fit">
             <Content
-              icon={SvgListTree}
+              icon={SvgList}
               title={t("add.savedAccounts.label", {
                 count: credentials?.length ?? 0,
               })}
