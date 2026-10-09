@@ -46,8 +46,12 @@ from onyx.connectors.jira.source_operations import (
     is_cloud_gateway,
 )
 from onyx.connectors.jira.utils import (
+    ATLASSIAN_GROUP_ROLE_ACTOR_TYPE,
     ATLASSIAN_USER_ROLE_ACTOR_TYPE,
     BROWSE_PROJECTS_PERMISSION,
+    HOLDER_TYPE_ANYONE,
+    HOLDER_TYPE_APPLICATION_ROLE,
+    HOLDER_TYPE_GROUP,
     HOLDER_TYPE_PROJECT_ROLE,
     HOLDER_TYPE_USER,
     SUPPORTED_STATIC_HOLDER_TYPES,
@@ -507,7 +511,7 @@ class _IssueReadCheck(_JiraCheck):
                 "The indexing scope has no issue that this credential can read, "
                 f"so Onyx cannot verify that issues are readable. {hint}"
             )
-        fields: object = issue.get("fields")
+        fields: Any = issue.get("fields")
         if not isinstance(fields, dict) or "summary" not in fields:
             raise InsufficientPermissionsError(
                 "Jira found an issue but did not return its fields, so issues "
@@ -576,8 +580,9 @@ def _probe_project_key(
 ) -> str:
     """The configured project in project mode, the project of the first
     matching issue in JQL mode, else the first visible project. Permission sync
-    reads the scheme of every project with indexed issues."""
-    project_key = _project_key(config)
+    reads the scheme of every project with indexed issues, so a JQL query that
+    matches nothing has no project to probe."""
+    project_key: str = _project_key(config)
     if project_key and not _jql(config):
         return project_key
     if _jql(config):
@@ -588,11 +593,15 @@ def _probe_project_key(
                 "Onyx cannot run the JQL query, so it cannot pick a project to "
                 "probe. jira_jql_query reports why."
             ) from e
-        project = get_issue_field(issue, "project") if issue else None
-        if isinstance(project, dict) and project.get("key"):
-            return str(project["key"])
+        project: Any = get_issue_field(issue, "project") if issue else None
+        if not isinstance(project, dict) or not project.get("key"):
+            raise UnexpectedValidationError(
+                "The JQL query matches no issue, so permission sync reads no "
+                "project yet and Onyx cannot verify it."
+            )
+        return str(project["key"])
     try:
-        projects = _gateway(context).list_projects()
+        projects: list[dict[str, Any]] = _gateway(context).list_projects()
     except JiraApiError as e:
         _raise_for_api_error(e, denied="The credential cannot list Jira projects")
     if not projects:
@@ -614,7 +623,7 @@ def _browse_holders(scheme: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _role_id(holder: dict[str, Any]) -> str | None:
-    role_id = holder.get("value") or holder.get("parameter")
+    role_id: Any = holder.get("value") or holder.get("parameter")
     return str(role_id) if role_id else None
 
 
@@ -622,7 +631,7 @@ def _read_permission_scheme(
     context: CapabilityCheckContext, config: JiraConnectorConfig, project_key: str
 ) -> dict[str, Any]:
     try:
-        scheme = _gateway(context).get_project_permission_scheme(
+        scheme: dict[str, Any] = _gateway(context).get_project_permission_scheme(
             project_key=project_key
         )
     except JiraApiError as e:
@@ -673,7 +682,7 @@ class _PermissionSchemeReadCheck(_JiraCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
+        config: JiraConnectorConfig = self.config(context)
         project_key = _probe_project_key(context, config)
         scheme = _read_permission_scheme(context, config, project_key)
         if not _browse_holders(scheme):
@@ -702,10 +711,12 @@ class _ProjectAccessMappableCheck(_JiraCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
+        config: JiraConnectorConfig = self.config(context)
         project_key, scheme = _read_scheme_for_dependent_check(context, config)
-        holder_types = {str(holder.get("type")) for holder in _browse_holders(scheme)}
-        unsupported = sorted(holder_types - SUPPORTED_STATIC_HOLDER_TYPES)
+        holder_types: set[str] = {
+            str(holder.get("type")) for holder in _browse_holders(scheme)
+        }
+        unsupported: list[str] = sorted(holder_types - SUPPORTED_STATIC_HOLDER_TYPES)
         if unsupported:
             raise ConnectorValidationError(
                 f"The project `{project_key}` grants Browse Projects through "
@@ -717,7 +728,7 @@ class _ProjectAccessMappableCheck(_JiraCheck):
 def _role_actor_user(actor: dict[str, Any]) -> dict[str, Any] | None:
     """The user of a role actor: nested ``actorUser`` on Cloud, the flat actor
     on Data Center."""
-    actor_user = actor.get("actorUser")
+    actor_user: Any = actor.get("actorUser")
     if isinstance(actor_user, dict):
         return actor_user
     if actor.get("type") == ATLASSIAN_USER_ROLE_ACTOR_TYPE:
@@ -726,7 +737,7 @@ def _role_actor_user(actor: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _user_lookup_id(gateway: JiraSourceOperations, user: dict[str, Any]) -> str | None:
-    fields = (
+    fields: tuple[str, ...] = (
         ("accountId", "name", "key")
         if is_cloud_gateway(gateway)
         else (
@@ -736,7 +747,7 @@ def _user_lookup_id(gateway: JiraSourceOperations, user: dict[str, Any]) -> str 
         )
     )
     for field in fields:
-        value = user.get(field)
+        value: Any = user.get(field)
         if isinstance(value, str) and value:
             return value
     return None
@@ -750,7 +761,7 @@ def _read_first_role(
 ) -> dict[str, Any] | None:
     """The first project role that holds Browse Projects, or None when no role
     does. Raises the validation family on a failed read."""
-    role_ids = [
+    role_ids: list[str] = [
         role_id
         for holder in _browse_holders(scheme)
         if holder.get("type") == HOLDER_TYPE_PROJECT_ROLE
@@ -789,9 +800,11 @@ class _ProjectRolesReadCheck(_JiraCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
+        config: JiraConnectorConfig = self.config(context)
         project_key, scheme = _read_scheme_for_dependent_check(context, config)
-        role = _read_first_role(context, config, project_key, scheme)
+        role: dict[str, Any] | None = _read_first_role(
+            context, config, project_key, scheme
+        )
         if role is not None and not isinstance(role.get("actors"), list):
             raise InsufficientPermissionsError(
                 f"Jira returned a role of the project `{project_key}` without its "
@@ -799,9 +812,23 @@ class _ProjectRolesReadCheck(_JiraCheck):
             )
 
 
+_PUBLIC_HOLDER_TYPES = frozenset({HOLDER_TYPE_ANYONE, HOLDER_TYPE_APPLICATION_ROLE})
+
+
+def _is_group_actor(actor: dict[str, Any]) -> bool:
+    return (
+        isinstance(actor.get("actorGroup"), dict)
+        or actor.get("type") == ATLASSIAN_GROUP_ROLE_ACTOR_TYPE
+    )
+
+
 class _PermissionUserEmailsCheck(_JiraCheck):
     """People who hold Browse Projects, directly or through a project role,
-    have emails. Permission sync maps them to Onyx users by email."""
+    have emails. Permission sync maps them to Onyx users by email.
+
+    Passes for a public project (``anyone`` or ``applicationRole``), which syncs
+    without reading users, and for a project with group grants, which give
+    access through group sync."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -815,35 +842,45 @@ class _PermissionUserEmailsCheck(_JiraCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
-        gateway = _gateway(context)
+        config: JiraConnectorConfig = self.config(context)
+        gateway: JiraSourceOperations = _gateway(context)
         project_key, scheme = _read_scheme_for_dependent_check(context, config)
+        holders: list[dict[str, Any]] = _browse_holders(scheme)
+        holder_types: set[str] = {str(holder.get("type")) for holder in holders}
+        if holder_types & _PUBLIC_HOLDER_TYPES or HOLDER_TYPE_GROUP in holder_types:
+            return
         # Direct user grants carry the expanded user.
-        emails = [
+        emails: list[str | None] = [
             holder["user"].get("emailAddress")
-            for holder in _browse_holders(scheme)
+            for holder in holders
             if holder.get("type") == HOLDER_TYPE_USER
             and isinstance(holder.get("user"), dict)
         ]
         try:
-            role = _read_first_role(context, config, project_key, scheme)
+            role: dict[str, Any] | None = _read_first_role(
+                context, config, project_key, scheme
+            )
         except ConnectorValidationError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read the project roles, so this check cannot run. "
                 "jira_project_roles_read reports why."
             ) from e
-        actors = role.get("actors") if role is not None else None
-        role_users = [
-            user
-            for actor in actors or []
-            if isinstance(actor, dict) and (user := _role_actor_user(actor))
+        actors: list[dict[str, Any]] = [
+            actor
+            for actor in (role.get("actors") if role is not None else None) or []
+            if isinstance(actor, dict)
+        ]
+        if any(_is_group_actor(actor) for actor in actors):
+            return
+        role_users: list[dict[str, Any]] = [
+            user for actor in actors if (user := _role_actor_user(actor))
         ]
         for user in role_users[:_SAMPLE_USERS]:
-            lookup_id = _user_lookup_id(gateway, user)
+            lookup_id: str | None = _user_lookup_id(gateway, user)
             if not lookup_id:
                 continue
             try:
-                details = gateway.get_user(user_id=lookup_id)
+                details: dict[str, Any] = gateway.get_user(user_id=lookup_id)
             except JiraApiError as e:
                 _raise_for_api_error(
                     e,
@@ -852,7 +889,7 @@ class _PermissionUserEmailsCheck(_JiraCheck):
                         f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
                     ),
                 )
-            account_type = details.get("accountType")
+            account_type: Any = details.get("accountType")
             if account_type is not None and account_type != _ATLASSIAN_ACCOUNT_TYPE:
                 # Apps and customers never map to Onyx users.
                 continue
@@ -884,7 +921,7 @@ def _list_groups_for_dependent_check(
     context: CapabilityCheckContext, config: JiraConnectorConfig
 ) -> list[str]:
     try:
-        group_names = _list_groups(context, config).group_names
+        group_names: list[str] = _list_groups(context, config).group_names
     except ConnectorValidationError as e:
         raise UnexpectedValidationError(
             "Onyx cannot list Jira groups, so this check cannot run. "
@@ -902,12 +939,12 @@ def _sample_group_members(
     context: CapabilityCheckContext, config: JiraConnectorConfig
 ) -> list[dict[str, Any]]:
     """The first page of members of the first groups that have members."""
-    gateway = _gateway(context)
+    gateway: JiraSourceOperations = _gateway(context)
     for group_name in _list_groups_for_dependent_check(context, config)[
         :_SAMPLE_GROUPS
     ]:
         try:
-            page = gateway.get_group_members_page(
+            page: dict[str, Any] = gateway.get_group_members_page(
                 group_name=group_name,
                 start_at=0,
                 max_results=_GROUP_MEMBER_PAGE_SIZE,
@@ -927,7 +964,7 @@ def _sample_group_members(
                     "Upgrade Jira"
                 ),
             )
-        members = page.get("values")
+        members: Any = page.get("values")
         if isinstance(members, list) and members:
             return members
     return []
@@ -946,7 +983,7 @@ class _GroupListingCheck(_JiraCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
+        config: JiraConnectorConfig = self.config(context)
         if not _list_groups(context, config).group_names:
             # Group sync fails when the listing is empty.
             raise InsufficientPermissionsError(
@@ -973,9 +1010,9 @@ class _GroupListingCompleteCheck(_JiraCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
+        config: JiraConnectorConfig = self.config(context)
         try:
-            page = _list_groups(context, config)
+            page: JiraGroupPage = _list_groups(context, config)
         except ConnectorValidationError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot list Jira groups, so this check cannot run. "
@@ -1003,7 +1040,7 @@ class _GroupMembershipCheck(_JiraCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
+        config: JiraConnectorConfig = self.config(context)
         if not _sample_group_members(context, config):
             # The reads succeeded: the first groups can be empty.
             raise UnexpectedValidationError(
@@ -1025,16 +1062,16 @@ class _GroupMemberEmailsCheck(_JiraCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
+        config: JiraConnectorConfig = self.config(context)
         try:
-            members = _sample_group_members(context, config)
+            members: list[dict[str, Any]] = _sample_group_members(context, config)
         except ConnectorValidationError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read group members, so this check cannot run. "
                 "jira_group_membership reports why."
             ) from e
         # Group sync skips app and customer accounts.
-        people = [
+        people: list[dict[str, Any]] = [
             member
             for member in members
             if member.get("accountType") in (None, _ATLASSIAN_ACCOUNT_TYPE)

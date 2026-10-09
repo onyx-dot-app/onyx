@@ -18,7 +18,7 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
-from onyx.connectors.jira.source_operations import JiraGroupPage
+from onyx.connectors.jira.models import JiraGroupPage
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,

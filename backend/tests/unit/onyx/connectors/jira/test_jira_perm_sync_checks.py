@@ -1,6 +1,8 @@
 from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
+import pytest
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
@@ -12,12 +14,8 @@ from onyx.connectors.jira.capability_checks import (
     build_jira_doc_permission_sync_checks,
     build_jira_group_sync_checks,
 )
-from onyx.connectors.jira.source_operations import (
-    JiraApiError,
-    JiraGroupPage,
-    JiraIssueIdPage,
-    JiraSourceOperations,
-)
+from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
+from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
 from onyx.db.enums import AccessType
 
 _CONFIG = {
@@ -150,6 +148,22 @@ def test_permission_scheme_read_probes_the_project_of_a_jql_match() -> None:
     gateway.get_project_permission_scheme.assert_called_once_with(project_key="AS")
 
 
+def test_permission_scheme_read_is_indeterminate_when_the_jql_matches_nothing() -> None:
+    gateway = _gateway()
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=[], next_page_token=None
+    )
+
+    result = _run(
+        "jira_permission_scheme_read",
+        gateway,
+        {**_CONFIG, "project_key": "", "jql_query": 'project = "EMPTY"'},
+    )
+
+    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    gateway.get_project_permission_scheme.assert_not_called()
+
+
 def test_permission_scheme_read_fails_for_a_scheme_without_grants() -> None:
     gateway = _gateway()
     gateway.get_project_permission_scheme.return_value = {"id": 1}
@@ -222,6 +236,50 @@ def test_permission_user_emails_fails_when_emails_are_hidden() -> None:
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert "Profile and visibility" in result.message
+
+
+@pytest.mark.parametrize(
+    "extra_holder",
+    [
+        {"type": "applicationRole"},
+        {"type": "anyone"},
+        {"type": "group", "parameter": "devs"},
+    ],
+    ids=["application-role", "anyone", "group"],
+)
+def test_permission_user_emails_passes_for_public_or_group_grants(
+    extra_holder: dict[str, Any],
+) -> None:
+    """Public grants sync without reading users; group grants give access
+    through group sync. Hidden user emails must not block either."""
+    gateway = _gateway()
+    gateway.get_project_permission_scheme.return_value = {
+        "permissions": [
+            _browse({"type": "projectRole", "value": "10003"}),
+            _browse(extra_holder),
+        ]
+    }
+    gateway.get_user.return_value = {"accountType": "atlassian", "emailAddress": ""}
+
+    result = _run("jira_permission_user_emails", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    gateway.get_user.assert_not_called()
+
+
+def test_permission_user_emails_passes_when_a_role_holds_a_group() -> None:
+    gateway = _gateway()
+    gateway.get_project_role.return_value = {
+        "actors": [
+            {"actorGroup": {"name": "devs"}},
+            {"actorUser": {"accountId": "acc-1"}},
+        ]
+    }
+    gateway.get_user.return_value = {"accountType": "atlassian", "emailAddress": ""}
+
+    result = _run("jira_permission_user_emails", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
 
 
 def test_permission_user_emails_skips_app_accounts() -> None:
