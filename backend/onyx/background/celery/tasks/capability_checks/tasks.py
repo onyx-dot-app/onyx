@@ -28,10 +28,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     load_draft_run,
     save_draft_run,
 )
-from onyx.connectors.capability_checks.models import (
-    CapabilityCheckResult,
-    compute_connector_config_hash,
-)
+from onyx.connectors.capability_checks.models import CapabilityCheckResult
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
     CAPABILITY_CHECK_TIMEOUT_SECONDS,
@@ -40,6 +37,7 @@ from onyx.connectors.capability_checks.runner import (
     generate_capability_report,
     merge_capability_results,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import get_connector_credential_pair

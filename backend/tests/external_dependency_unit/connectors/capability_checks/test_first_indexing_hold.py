@@ -28,8 +28,8 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CredentialCapability,
     CredentialCapabilityReport,
-    compute_connector_config_hash,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.db.credential_capability import (
     get_capability_report_row,
     mark_capability_report_running,

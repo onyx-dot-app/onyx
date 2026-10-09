@@ -25,8 +25,8 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapability,
     CredentialCapabilityReport,
     compute_capability_verdicts,
-    compute_connector_config_hash,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.credential_capability import (
     upsert_completed_capability_report_unless_granular,
