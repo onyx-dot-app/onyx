@@ -882,6 +882,9 @@
         "jira": {
           "description": "Suivi des tickets Atlassian"
         },
+        "jsm": {
+          "description": "Demandes Jira Service Management"
+        },
         "productboard": {
           "description": "Gestion de produit"
         },

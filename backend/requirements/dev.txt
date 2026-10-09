@@ -1730,6 +1730,10 @@ regex==2025.11.3 \
     --hash=sha256:fd0a5e563c756de210bb964789b5abe4f114dacae9104a47e1a649b910361536 \
     --hash=sha256:ffcca5b9efe948ba0661e9df0fa50d2bc4b097c70b9810212d6b62f05d83b2dd
     # via tiktoken
+responses==0.26.3 \
+    --hash=sha256:74474f799334ac4f37d93b6437ecc3bb1bb5c77a8d31780a338643be2dce0af8 \
+    --hash=sha256:b0c11ca8131b8b227b8d5108e6ed39772222bd5aab030ed430e8f99057c4c409
+    # via onyx
 requests==2.33.0 \
     --hash=sha256:3324635456fa185245e24865e810cecec7b4caf933d7eb133dcde67d48cee69b \
     --hash=sha256:c7ebc5e8b0f21837386ad0e1c8fe8b829fa5f544d8df3b2253bff14ef29d7652
