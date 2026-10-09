@@ -28,7 +28,7 @@ from onyx.connectors.teams.meeting_chats import chat_document_id
 from onyx.connectors.teams.organizers import OrganizerSource
 from onyx.connectors.teams.sources import SLIM_WALK, SlimWalk
 from onyx.connectors.teams.transcripts import transcript_document_id
-from onyx.connectors.teams.utils import DRIVE_SHAREPOINT_IDS_PROPERTY, message_delta_url
+from onyx.connectors.teams.utils import message_delta_url
 from onyx.utils.threadpool_concurrency import drain
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL_ID,
@@ -189,7 +189,7 @@ def test_a_walk_with_readers_gives_each_channel_its_own_rest_context_and_client(
             "parentReference": {"driveId": f"drive-{n}", "siteId": None},
         }
         routes[f"drives/drive-{n}?$select={SHAREPOINT_IDS_PROPERTY}"] = {
-            DRIVE_SHAREPOINT_IDS_PROPERTY: {
+            "sharePointIds": {
                 "listId": f"list-{n}",
                 # One site for both, so a context cached per site alone
                 # would be shared.
