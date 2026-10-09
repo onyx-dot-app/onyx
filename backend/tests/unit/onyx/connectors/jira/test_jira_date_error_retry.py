@@ -11,7 +11,6 @@ from onyx.connectors.jira.connector import (
     JiraConnector,
     JiraConnectorCheckpoint,
 )
-from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
 
 _START = 1_700_000_000.0
 _END = _START + 600
@@ -28,13 +27,6 @@ _METHODS: list[LoadMethod] = [
     JiraConnector.load_from_checkpoint,
     JiraConnector.load_from_checkpoint_with_perm_sync,
 ]
-
-
-@pytest.fixture
-def server_connector(jira_connector: JiraConnector) -> JiraConnector:
-    jira_client: Any = jira_connector._jira_client
-    jira_client._options = {"rest_api_version": JIRA_SERVER_API_VERSION}
-    return jira_connector
 
 
 def _raises(error: Exception) -> Iterator[Any]:
@@ -58,7 +50,7 @@ def _drain(output: Any) -> tuple[list[Any], JiraConnectorCheckpoint]:
 
 @pytest.mark.parametrize("method", _METHODS, ids=lambda method: method.__name__)
 def test_date_error_retries_with_an_earlier_start(
-    server_connector: JiraConnector, method: LoadMethod
+    jira_connector: JiraConnector, method: LoadMethod
 ) -> None:
     searches: list[str] = []
 
@@ -71,10 +63,10 @@ def test_date_error_retries_with_an_earlier_start(
     ):
         items, checkpoint = _drain(
             method(
-                server_connector,
+                jira_connector,
                 _START,
                 _END,
-                server_connector.build_dummy_checkpoint(),
+                jira_connector.build_dummy_checkpoint(),
             )
         )
 
@@ -87,7 +79,7 @@ def test_date_error_retries_with_an_earlier_start(
 
 @pytest.mark.parametrize("method", _METHODS, ids=lambda method: method.__name__)
 def test_other_errors_are_not_retried(
-    server_connector: JiraConnector, method: LoadMethod
+    jira_connector: JiraConnector, method: LoadMethod
 ) -> None:
     search = MagicMock(
         return_value=_raises(ConnectorValidationError("Invalid JQL query."))
@@ -99,10 +91,10 @@ def test_other_errors_are_not_retried(
     ):
         _drain(
             method(
-                server_connector,
+                jira_connector,
                 _START,
                 _END,
-                server_connector.build_dummy_checkpoint(),
+                jira_connector.build_dummy_checkpoint(),
             )
         )
 
@@ -110,7 +102,7 @@ def test_other_errors_are_not_retried(
 
 
 def test_date_error_after_the_first_item_is_not_retried(
-    server_connector: JiraConnector,
+    jira_connector: JiraConnector,
 ) -> None:
     """A retry then would yield the first items again."""
     search = MagicMock(return_value=_one_issue_then(_DATE_ERROR))
@@ -120,8 +112,8 @@ def test_date_error_after_the_first_item_is_not_retried(
         pytest.raises(ConnectorValidationError, match="field 'updated'"),
     ):
         _drain(
-            server_connector.load_from_checkpoint(
-                _START, _END, server_connector.build_dummy_checkpoint()
+            jira_connector.load_from_checkpoint(
+                _START, _END, jira_connector.build_dummy_checkpoint()
             )
         )
 
