@@ -7,12 +7,10 @@ holds an office365 object. The SharePoint and Teams connectors serve the reader
 from the same :class:`SharepointRestReads`.
 """
 
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from typing import Any, Protocol
 from urllib.parse import quote, urlparse
 
-import requests
 from office365.directory.object import DirectoryObject
 from office365.directory.object_collection import DirectoryObjectCollection
 from office365.graph_client import GraphClient
@@ -41,9 +39,7 @@ from onyx.connectors.microsoft_utils.graph_client import (
     GraphApiClient,
     sleep_and_retry,
 )
-from onyx.connectors.microsoft_utils.graph_errors import (
-    microsoft_error_from_exception,
-)
+from onyx.connectors.microsoft_utils.graph_errors import raise_microsoft_errors
 from onyx.connectors.microsoft_utils.models import (
     EntraMember,
     EntraMemberKind,
@@ -334,17 +330,6 @@ def read_entra_group_members(
     return members
 
 
-@contextmanager
-def _microsoft_errors() -> Iterator[None]:
-    """Raises a refusal as ``MicrosoftGraphError``, which carries the status
-    without the SDK. The SDK's ``ClientRequestException`` is a
-    ``RequestException``."""
-    try:
-        yield
-    except requests.RequestException as error:
-        raise microsoft_error_from_exception(error) from error
-
-
 def read_nested_entra_groups(
     graph_client: GraphClient, group_id: str
 ) -> list[EntraGroup]:
@@ -392,45 +377,45 @@ class SharepointRestReads(SharepointPermissionReader):
     def list_role_assignments(
         self, *, site_url: str, securable: SharepointSecurable
     ) -> list[SharepointRoleAssignment]:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return read_role_assignments(self._rest_context(site_url), securable)
 
     def list_site_group_users(
         self, *, site_url: str, group_name: str
     ) -> list[SharepointPrincipal]:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return read_site_group_users(self._rest_context(site_url), group_name)
 
     def get_folder_unique_id(self, *, site_url: str, server_relative_path: str) -> str:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return read_folder_unique_id(
                 self._rest_context(site_url), server_relative_path
             )
 
     def get_list_item_id(self, *, item: DriveItemData) -> int | None:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return read_list_item_id(self._graph_client, item)
 
     def list_sharing_link_scopes(self, *, item: DriveItemData) -> list[str]:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return read_sharing_link_scopes(self._graph_client, item)
 
     def find_entra_group_id(self, *, display_name: str) -> str | None:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return find_entra_group_id(self._graph_client, display_name)
 
     def list_entra_group_members(self, *, group_id: str) -> list[EntraMember]:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return read_entra_group_members(self._graph_client, group_id)
 
     def list_nested_entra_groups(self, *, group_id: str) -> list[EntraGroup]:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return read_nested_entra_groups(self._graph_client, group_id)
 
     def list_entra_groups(
         self, *, next_link: str | None = None
     ) -> EntraPage[EntraGroup]:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return fetch_entra_page(
                 self._graph_api.get_json,
                 url=f"{self._graph_api.graph_api_base}/groups",
@@ -442,7 +427,7 @@ class SharepointRestReads(SharepointPermissionReader):
     def list_entra_group_member_page(
         self, *, group_id: str, next_link: str | None = None
     ) -> EntraPage[EntraDirectoryObject]:
-        with _microsoft_errors():
+        with raise_microsoft_errors():
             return fetch_entra_page(
                 self._graph_api.get_json,
                 url=f"{self._graph_api.graph_api_base}/groups/{quote(group_id)}/members",

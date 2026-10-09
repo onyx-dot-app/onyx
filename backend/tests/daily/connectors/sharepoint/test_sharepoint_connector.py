@@ -843,16 +843,17 @@ def test_resolve_tenant_domain_from_site_urls(
     site_url = os.environ["SHAREPOINT_SITE"]
     connector = SharepointConnector(sites=[site_url])
     connector.load_credentials(sharepoint_cert_credentials)
+    tenant_domain = connector.ops.resolve_tenant_domain()
 
-    assert connector.sp_tenant_domain is not None
-    assert len(connector.sp_tenant_domain) > 0
+    assert tenant_domain is not None
+    assert len(tenant_domain) > 0
     # The tenant domain should match the first label of the site URL hostname
     from urllib.parse import urlsplit
 
     hostname = urlsplit(site_url).hostname
     assert hostname is not None
     expected = hostname.split(".")[0]
-    assert connector.sp_tenant_domain == expected
+    assert tenant_domain == expected
 
 
 def test_resolve_tenant_domain_from_root_site(
@@ -862,9 +863,10 @@ def test_resolve_tenant_domain_from_root_site(
     site endpoint when no site URLs are configured."""
     connector = SharepointConnector(sites=[])
     connector.load_credentials(sharepoint_cert_credentials)
+    tenant_domain = connector.ops.resolve_tenant_domain()
 
-    assert connector.sp_tenant_domain is not None
-    assert len(connector.sp_tenant_domain) > 0
+    assert tenant_domain is not None
+    assert len(tenant_domain) > 0
 
 
 # ---------------------------------------------------------------------------
