@@ -5508,17 +5508,17 @@
         "googleProjectRequired": "必须填写 GCP 项目 ID"
       },
       "vectorQuantization": {
-        "description": "使用更少的位存储文档向量，以减少内存占用。位数越少，搜索质量可能越低。",
+        "description": "使用更少的位存储文档向量，以减少向量搜索的内存占用。位数越少，搜索质量可能越低。仅更改此设置时，将使用已存储的向量重建索引，无需重新嵌入。",
         "none": {
           "description": "完整的 32 位精度。",
           "label": "无"
         },
         "scalar1Bit": {
-          "description": "内存占用降至 1/32。需要 OpenSearch 3.6 或更高版本。",
+          "description": "向量搜索内存占用最低，搜索质量略有下降。推荐用于大型索引。需要 OpenSearch 3.6 或更高版本。",
           "label": "1 位"
         },
         "scalar7Bit": {
-          "description": "内存占用降至 1/4，搜索质量几乎无损。",
+          "description": "向量搜索内存占用降至约 1/4，搜索质量几乎无损。",
           "label": "7 位"
         },
         "title": "向量量化"

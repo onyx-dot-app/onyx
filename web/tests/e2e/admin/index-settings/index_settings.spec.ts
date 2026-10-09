@@ -983,10 +983,33 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
     await loginAs(page, "admin");
   });
 
-  test("the vector quantization control is hidden", async ({ page }) => {
+  test("a quantization change re-indexes with the chosen level", async ({
+    page,
+  }) => {
+    const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+      void page.route(SET_NEW_SETTINGS_API, async (route) => {
+        resolve(
+          JSON.parse(route.request().postData() ?? "{}") as Record<
+            string,
+            unknown
+          >
+        );
+        await route.fulfill({ status: 200, body: JSON.stringify({ id: 1 }) });
+      });
+    });
+
     const indexSettings = new IndexSettingsPage(page);
     await indexSettings.goto();
-    await indexSettings.expectVectorQuantizationHidden();
+    await indexSettings.selectVectorQuantization("1-bit");
+
+    // Quantization is part of the index mapping, so only the re-index
+    // strategies are offered.
+    await indexSettings.expectStrategy(/re-index all connectors/i);
+    await indexSettings.expectStrategyOptionAbsent("Do Not Re-index");
+
+    await indexSettings.applyReindex();
+    const body = await bodyPromise;
+    expect(body.vector_quantization).toBe("scalar_1_bit");
   });
 
   test("a re-index keeps the saved quantization level", async ({ page }) => {
