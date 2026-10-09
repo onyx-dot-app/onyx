@@ -9,7 +9,6 @@ import {
   InputTypeIn,
   SelectCard,
   Tabs,
-  Text,
 } from "@opal/components";
 import {
   Content,
@@ -20,7 +19,7 @@ import {
 } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { SvgExpand, SvgFold, SvgPlusCircle } from "@opal/icons";
+import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential, DraftCredential } from "@/lib/credentials/types";
 import {
   useCredentialCheckReports,
@@ -310,11 +309,15 @@ export default function AuthenticationAccountSection({
         padding={0}
         rightChildren={
           <Section flexDirection="row" alignItems="center" gap={0} width="fit">
-            <Text font="main-ui-body" color="text-03">
-              {t("add.savedAccounts.label", {
+            <Content
+              icon={SvgListTree}
+              title={t("add.savedAccounts.label", {
                 count: credentials?.length ?? 0,
               })}
-            </Text>
+              sizePreset="main-ui"
+              variant="body"
+              width="fit"
+            />
             <Button
               icon={accountsExpanded ? SvgFold : SvgExpand}
               prominence="tertiary"
