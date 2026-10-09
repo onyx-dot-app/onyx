@@ -18,6 +18,12 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
+from onyx.connectors.google_drive.models import GDriveMimeType
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveAuth,
+    GoogleGroupMember,
+)
+from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
@@ -45,8 +51,32 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
     spy.get_space_permissions.side_effect = get_space_permissions
 
 
+def _configure_google_drive_spy(spy: MagicMock) -> None:
+    """A service account whose primary admin sees a Google Doc, a small
+    upload and one shared drive, organized through a group."""
+    admin = "admin@example.com"
+    sample = [
+        {"id": "doc", "name": "doc", "mimeType": GDriveMimeType.DOC.value},
+        {"id": "pdf", "name": "pdf", "mimeType": "application/pdf", "size": "10"},
+    ]
+    spy.authenticate.return_value = GoogleDriveAuth(
+        kind=GoogleCredentialKind.SERVICE_ACCOUNT, primary_admin_email=admin
+    )
+    spy.list_files.side_effect = lambda **_kwargs: iter(sample)
+    spy.list_drives.side_effect = lambda **_kwargs: iter(["drive"])
+    spy.list_drive_members.side_effect = lambda **_kwargs: iter(
+        [{"emailAddress": "team@example.com", "type": "group", "role": "organizer"}]
+    )
+    spy.list_group_members.side_effect = lambda **_kwargs: iter(
+        [GoogleGroupMember(email="organizer@example.com", type="USER")]
+    )
+    spy.list_user_emails.side_effect = lambda **_kwargs: iter([admin])
+    spy.can_list_drive.return_value = True
+
+
 _SPY_CONFIGURATIONS: dict[DocumentSource, Callable[[MagicMock], None]] = {
     DocumentSource.CONFLUENCE: _configure_confluence_spy,
+    DocumentSource.GOOGLE_DRIVE: _configure_google_drive_spy,
 }
 
 
