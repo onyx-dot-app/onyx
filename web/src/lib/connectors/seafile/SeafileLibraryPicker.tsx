@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { TextArrayField } from "@/components/Field";
 import type { Credential } from "@/lib/credentials/types";
 import { Button } from "@opal/components";
-import { SvgRefreshCw, SvgSimpleLoader } from "@opal/icons";
+import { SvgLoader, SvgRefreshCw } from "@opal/icons";
 import { useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 
@@ -177,7 +177,7 @@ export default function SeafileLibraryPicker({
           <Button
             type="button"
             prominence="secondary"
-            icon={isLoading ? SvgSimpleLoader : SvgRefreshCw}
+            icon={isLoading ? SvgLoader : SvgRefreshCw}
             disabled={isLoading}
             onClick={() => void loadLibraries()}
           >

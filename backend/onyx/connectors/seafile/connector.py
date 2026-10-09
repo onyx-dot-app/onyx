@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.seafile.constants import SEAFILE_DEFAULT_MAX_FILE_SIZE_BYTES
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
     tabular_file_to_sections,
@@ -42,6 +41,7 @@ from onyx.connectors.models import (
     TabularSection,
     TextSection,
 )
+from onyx.connectors.seafile.constants import SEAFILE_DEFAULT_MAX_FILE_SIZE_BYTES
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import (
     detect_encoding,

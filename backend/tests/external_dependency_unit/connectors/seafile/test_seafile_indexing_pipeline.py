@@ -19,7 +19,7 @@ from onyx.connectors.seafile.connector import (
     SeafileConnector,
 )
 from onyx.context.search.models import IndexFilters
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, EmbeddingPrecision
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, VectorQuantization
 from onyx.db.hierarchy import (
     get_hierarchy_node_by_raw_id,
     get_source_hierarchy_node,
@@ -32,7 +32,7 @@ from onyx.db.models import (
     DocumentByConnectorCredentialPair,
 )
 from onyx.db.models import Document as DBDocument
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentSectionRequest,
     TenantState,
@@ -219,11 +219,10 @@ def seafile_document_index(
         tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
         index_name=f"test_seafile_{uuid4().hex[:8]}",
         embedding_dim=EMBEDDING_DIM,
-        embedding_precision=EmbeddingPrecision.FLOAT,
+        vector_quantization=VectorQuantization.NONE,
     )
     document_index.verify_and_create_index_if_necessary(
         embedding_dim=EMBEDDING_DIM,
-        embedding_precision=EmbeddingPrecision.FLOAT,
     )
 
     try:
@@ -420,7 +419,7 @@ def test_live_seafile_docs_complete_indexing_pipeline_writes_document_index(
         document_batch=docs,
         request_id="seafile-full-indexing-test",
         embedder=DeterministicIndexingEmbedder(),
-        document_indices=[cast(DocumentIndex, seafile_document_index)],
+        document_index=cast(DocumentIndex, seafile_document_index),
         db_session=db_session,
         tenant_id=TEST_TENANT_ID,
         adapter=adapter,

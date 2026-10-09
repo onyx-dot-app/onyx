@@ -1,9 +1,6 @@
 import time
 from datetime import datetime, timezone
 
-import pytest
-
-import onyx.chat.process_message as process_message_module
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource, IndexAttemptSnapshot
@@ -22,12 +19,16 @@ from tests.integration.common_utils.managers.document_search import (
     DocumentSearchManager,
 )
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
-from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.mock_services.mock_llm_server.models import (
+    Reply,
+    RequestConditions,
+    ToolCall,
+)
 
-_DUMMY_OPENAI_API_KEY = "sk-mock-seafile-e2e-tests"
 _SEARCH_TIMEOUT_SECONDS = 60
 pytest_plugins = ["tests.external_dependency_unit.connectors.seafile.conftest"]
 
@@ -108,12 +109,8 @@ def test_seafile_connector_indexes_via_workers_and_searches(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     seafile_test_library: SeafileTestLibrary,
-    monkeypatch: pytest.MonkeyPatch,
+    mock_llm: MockLLMScript,
 ) -> None:
-    LLMProviderManager.create(
-        user_performing_action=admin_user,
-        api_key=_DUMMY_OPENAI_API_KEY,
-    )
 
     credential = CredentialManager.create(
         source=DocumentSource.SEAFILE,
@@ -194,16 +191,31 @@ def test_seafile_connector_indexes_via_workers_and_searches(
         user_performing_action=admin_user,
         persona_id=persona.id,
     )
-    monkeypatch.setattr(process_message_module, "INTEGRATION_TESTS_MODE", True)
+    search_call_id = "seafile-search"
+    mock_llm.conversation(
+        "seafile-search",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id=search_call_id,
+                    name="internal_search",
+                    arguments={"queries": [search_phrase]},
+                )
+            ],
+            conditions=RequestConditions(
+                offers=["internal_search"], tool_choice="required"
+            ),
+        ),
+        Reply(
+            text="Seafile search complete.",
+            conditions=RequestConditions(has_results_for=[search_call_id]),
+        ),
+    )
     chat_response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message=f"Search for {search_phrase}",
         user_performing_action=admin_user,
         forced_tool_ids=[search_tool_id],
-        mock_llm_response=(
-            '{"name":"internal_search","arguments":'
-            f'{{"queries":["{search_phrase}"]}}}}'
-        ),
     )
 
     assert chat_response.error is None, f"Unexpected chat error: {chat_response.error}"

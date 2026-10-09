@@ -9,19 +9,20 @@ from onyx.connectors.field_policy import (
     ScopeOpaque,
     ScopeOrdered,
 )
-
 from onyx.connectors.seafile.constants import SEAFILE_DEFAULT_MAX_FILE_SIZE_BYTES
 
 
 class SeafileConnectorConfig(BaseUrlCredentialBinding, ConnectorConfig):
     repo_ids: Annotated[
-        list[str], FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=False))
+        list[str],
+        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=False)),
     ]
     path_prefixes: Annotated[
         list[str] | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
     ] = None
     allowed_extensions: Annotated[
-        list[str] | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True))
+        list[str] | None,
+        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
     ] = None
     max_file_size_bytes: Annotated[
         int, FieldPolicy(FieldClass.SCOPE, scope=ScopeOrdered(widens_when_larger=True))
