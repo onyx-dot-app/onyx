@@ -137,17 +137,26 @@ export default function AuthenticationAccountSection({
   const { values, errors, touched, setErrors, setTouched } =
     useFormikContext<Record<string, unknown>>();
 
-  /**
-   * Closes the new-account card. Its values stay, but its errors and touched
-   * marks are cleared, so it opens again without errors.
-   */
-  function closeNewAccount() {
-    close();
+  /** Clears the new account's errors and touched marks; its values stay. */
+  function clearNewAccountErrors() {
     const { [NEW_ACCOUNT_FIELD]: _touched, ...restTouched } = touched;
     const { [NEW_ACCOUNT_FIELD]: _errors, ...restErrors } = errors;
     void setTouched(restTouched, false);
     setErrors(restErrors);
   }
+
+  /** Closes the new-account card, so it opens again without errors. */
+  function closeNewAccount() {
+    close();
+    clearNewAccountErrors();
+  }
+
+  // Picking a saved account clears the new account's errors.
+  const pickedId: number | null = currentCredential?.id ?? null;
+  useEffect(() => {
+    if (pickedId !== null) clearNewAccountErrors();
+    // Only a new pick clears them, not each change to the errors.
+  }, [pickedId]);
   const newAccountValues: NewAccountValues | undefined = getIn(
     values,
     NEW_ACCOUNT_FIELD
