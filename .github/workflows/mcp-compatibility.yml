@@ -105,6 +105,8 @@ jobs:
         working-directory: backend
         run: alembic upgrade head
       - name: Check real Claude Code and Codex OAuth connections
+        env:
+          MCP_PROXY_NGINX_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/library/nginx:1.25.5-alpine
         run: >-
           pytest -q
           backend/tests/external_dependency_unit/oauth_provider/test_native_clients.py
