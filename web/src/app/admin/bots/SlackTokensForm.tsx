@@ -67,14 +67,19 @@ export const SlackTokensForm = ({
           );
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
+          let errorMsg = "An unexpected error occurred please try again.";
+          try {
           const responseJson = await response.json();
-          let errorMsg = responseJson.detail || responseJson.message;
+          errorMsg = responseJson.detail || responseJson.message;
 
           if (errorMsg.includes("Invalid bot token:")) {
             errorMsg = t("tokensForm.invalidBotToken.message");
           } else if (errorMsg.includes("Invalid app token:")) {
             errorMsg = t("tokensForm.invalidAppToken.message");
           }
+        } catch {
+            // Response body wasn't valid JSON — fall back to default message
+        }
           toast.error(
             isUpdate
               ? t("tokensForm.updateError.toast", { error: errorMsg })
