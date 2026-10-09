@@ -45,8 +45,22 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
     spy.get_space_permissions.side_effect = get_space_permissions
 
 
-_SPY_CONFIGURATIONS: dict[DocumentSource, Callable[[MagicMock], None]] = {
-    DocumentSource.CONFLUENCE: _configure_confluence_spy,
+def _configure_jira_cloud_spy(spy: MagicMock) -> None:
+    """A Cloud credential: the checks search with enhanced search and bulk
+    fetch."""
+    spy._is_cloud.return_value = True
+
+
+def _configure_jira_server_spy(spy: MagicMock) -> None:
+    """A Data Center credential: the checks search with the v2 search."""
+    spy._is_cloud.return_value = False
+
+
+# A unit is covered when the checks exercise it under any one configuration:
+# a source whose credential picks the API family needs one per family.
+_SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
+    DocumentSource.CONFLUENCE: [_configure_confluence_spy],
+    DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
 }
 
 
@@ -68,8 +82,12 @@ def test_every_operation_unit_is_exercised_by_a_check(
     checks = get_capability_checks(gateway_class.source)
 
     # Under test.
-    uncovered = compute_uncovered_units(
-        gateway_class, checks, _SPY_CONFIGURATIONS.get(gateway_class.source)
+    configurations = _SPY_CONFIGURATIONS.get(gateway_class.source) or [None]
+    uncovered = set.intersection(
+        *(
+            set(compute_uncovered_units(gateway_class, checks, configure_spy))
+            for configure_spy in configurations
+        )
     )
 
     # Postcondition.

@@ -58,6 +58,35 @@ def test_get_jql_query_with_project(jira_connector: JiraConnector) -> None:
     assert " AND " in query
 
 
+@pytest.mark.parametrize(
+    "project_key,jql_query,expected_scope",
+    [
+        ("   ", None, None),
+        (" AS ", None, 'project = "AS"'),
+        ("AS", "  ", 'project = "AS"'),
+        (None, " project = X ", "(project = X)"),
+    ],
+    ids=["blank-key", "padded-key", "blank-jql", "padded-jql"],
+)
+def test_blank_scope_fields_are_not_set(
+    jira_base_url: str,
+    project_key: str | None,
+    jql_query: str | None,
+    expected_scope: str | None,
+) -> None:
+    """The create form sends blank fields; the connector strips them."""
+    connector = JiraConnector(
+        jira_base_url=jira_base_url, project_key=project_key, jql_query=jql_query
+    )
+
+    query: str = connector._get_jql_query(0, 1)
+
+    if expected_scope is None:
+        assert query.startswith("updated >=")
+    else:
+        assert query.startswith(f"{expected_scope} AND updated >=")
+
+
 def test_get_jql_query_without_project(jira_base_url: str) -> None:
     """Poll windows stay epoch-ms when no project key is set."""
     connector = JiraConnector(jira_base_url=jira_base_url)
