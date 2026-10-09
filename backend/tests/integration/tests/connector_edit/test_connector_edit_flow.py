@@ -126,6 +126,13 @@ def _backfill_count(cc_pair: DATestCCPair, admin: DATestUser) -> int:
     return sum(1 for attempt in attempts if attempt.is_backfill)
 
 
+def _backfills_resolved(cc_pair: DATestCCPair, admin: DATestUser) -> bool:
+    """The indexing beat removes a backfill's request only after its attempt
+    ends, which can be after its documents are searchable."""
+    info = CCPairManager.get_single(cc_pair.id, admin)
+    return info is not None and not info.pending_backfills
+
+
 def test_file_scope_widening_backfills_and_narrowing_prunes(
     admin_user: DATestUser,
 ) -> None:
@@ -151,6 +158,13 @@ def test_file_scope_widening_backfills_and_narrowing_prunes(
     assert [step.kind for step in applied.steps] == [EditStepKind.SCOPED_BACKFILL]
     _wait_until(lambda: _can_find(text_c, admin_user), "c.txt backfilled", MAX_DELAY)
     assert _backfill_count(cc_pair, admin_user) == 1
+    # Planned while the backfill is outstanding, the next edit would also
+    # need a full re-index (SCOPED_BACKFILL_SUPERSEDED).
+    _wait_until(
+        lambda: _backfills_resolved(cc_pair, admin_user),
+        "the backfill request resolved",
+        MAX_DELAY,
+    )
 
     # A plan is single use.
     response = ConnectorEditManager.apply_response(cc_pair.id, plan.plan_id, admin_user)
