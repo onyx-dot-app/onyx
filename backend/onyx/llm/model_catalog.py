@@ -299,26 +299,27 @@ def _remote_section(provider: str) -> dict[str, Any] | None:
         return section
 
 
-def find_remote_model_entry(
+def find_remote_model_obj(
     provider: str, candidates: list[str]
 ) -> dict[str, Any] | None:
-    """Resolve model candidates against the provider's remote section."""
+    """Remote entry rendered in the compat model-map shape."""
     section = _remote_section(provider)
     if section is None:
         return None
     for candidate in candidates:
         entry = _model_in_section(section, candidate)
-        if entry is not None:
-            return entry
+        if entry is None:
+            continue
+        try:
+            return _compat_entry(provider, entry, candidate)
+        except Exception as e:
+            # A malformed remote entry is a remote miss, not an error — the
+            # vendored floor still resolves the lookup.
+            logger.warning(
+                "Malformed remote catalog entry %s/%s: %s", provider, candidate, e
+            )
+            return None
     return None
-
-
-def find_remote_model_obj(
-    provider: str, candidates: list[str]
-) -> dict[str, Any] | None:
-    """Remote entry rendered in the compat model-map shape."""
-    entry = find_remote_model_entry(provider, candidates)
-    return _compat_entry(provider, entry) if entry else None
 
 
 def reset_remote_cache() -> None:

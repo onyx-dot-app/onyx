@@ -502,7 +502,15 @@ def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
         },
     }
 
-    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+    with (
+        patch.object(model_catalog, "_catalog", return_value=mock_catalog),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            side_effect=model_catalog.httpx.ConnectError("offline"),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
         model_map = _fresh_model_map()
         try:
             for name, want_mode in {
@@ -530,6 +538,7 @@ def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
             assert model_catalog.is_embedding_model_name("cohere/command-a") is False
         finally:
             _reset_caches()
+            model_catalog.reset_remote_cache()
 
 
 def test_explicit_mode_wins_over_name_heuristic() -> None:
@@ -547,7 +556,15 @@ def test_explicit_mode_wins_over_name_heuristic() -> None:
         },
     }
 
-    with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
+    with (
+        patch.object(model_catalog, "_catalog", return_value=mock_catalog),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            side_effect=model_catalog.httpx.ConnectError("offline"),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
         model_map = _fresh_model_map()
         try:
             obj = find_model_obj(model_map, "wandb", "vendor/embed-named-chat")
@@ -555,3 +572,43 @@ def test_explicit_mode_wins_over_name_heuristic() -> None:
             assert obj["mode"] == "chat"
         finally:
             _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
+def test_remote_catalog_malformed_entry_falls_back_to_vendored() -> None:
+    """A remote entry _compat_entry can't render is a remote miss, not an
+    error — the vendored floor still resolves the lookup."""
+    vendored: dict[str, Any] = {
+        "wandb": {
+            "models": {
+                "vendor/model": {
+                    "mode": "chat",
+                    "limit": {"context": 8_000},
+                },
+            },
+            "aliases": {},
+        }
+    }
+    remote_section: dict[str, Any] = {
+        "models": {"vendor/model": "not-an-entry"},
+        "aliases": {},
+    }
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value=vendored),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            return_value=_remote_response(remote_section),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "wandb", "vendor/model")
+            assert obj is not None
+            assert obj["litellm_provider"] == "wandb"
+            assert obj["max_tokens"] == 8_000
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
