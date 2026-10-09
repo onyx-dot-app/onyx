@@ -659,13 +659,13 @@ class JiraConnector(
         the call. Jira rejects the query at the first search, before any item;
         an error after the first item is re-raised so no item repeats.
         """
-        output = self._load_from_checkpoint(
+        output: CheckpointOutput[JiraConnectorCheckpoint] = self._load_from_checkpoint(
             self._get_jql_query(start, end),
             checkpoint,
             include_permissions=include_permissions,
         )
         try:
-            first_item = next(output)
+            first_item: Document | HierarchyNode | ConnectorFailure = next(output)
         except StopIteration as stop:
             return stop.value
         except Exception as e:

@@ -1,10 +1,11 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.jira.connector import (
     ONE_HOUR,
     JiraConnector,
@@ -19,7 +20,14 @@ _DATE_ERROR = ConnectorValidationError(
     "is invalid."
 )
 
-_METHODS = ["load_from_checkpoint", "load_from_checkpoint_with_perm_sync"]
+LoadMethod = Callable[
+    [JiraConnector, float, float, JiraConnectorCheckpoint],
+    CheckpointOutput[JiraConnectorCheckpoint],
+]
+_METHODS: list[LoadMethod] = [
+    JiraConnector.load_from_checkpoint,
+    JiraConnector.load_from_checkpoint_with_perm_sync,
+]
 
 
 @pytest.fixture
@@ -48,9 +56,9 @@ def _drain(output: Any) -> tuple[list[Any], JiraConnectorCheckpoint]:
             return items, stop.value
 
 
-@pytest.mark.parametrize("method", _METHODS)
+@pytest.mark.parametrize("method", _METHODS, ids=lambda method: method.__name__)
 def test_date_error_retries_with_an_earlier_start(
-    server_connector: JiraConnector, method: str
+    server_connector: JiraConnector, method: LoadMethod
 ) -> None:
     searches: list[str] = []
 
@@ -62,8 +70,11 @@ def test_date_error_retries_with_an_earlier_start(
         "onyx.connectors.jira.connector._perform_jql_search", side_effect=search
     ):
         items, checkpoint = _drain(
-            getattr(server_connector, method)(  # ods: ignore[getattr]
-                _START, _END, server_connector.build_dummy_checkpoint()
+            method(
+                server_connector,
+                _START,
+                _END,
+                server_connector.build_dummy_checkpoint(),
             )
         )
 
@@ -74,9 +85,9 @@ def test_date_error_retries_with_an_earlier_start(
     assert f"updated >= {int((_START - ONE_HOUR) * 1000)}" in searches[1]
 
 
-@pytest.mark.parametrize("method", _METHODS)
+@pytest.mark.parametrize("method", _METHODS, ids=lambda method: method.__name__)
 def test_other_errors_are_not_retried(
-    server_connector: JiraConnector, method: str
+    server_connector: JiraConnector, method: LoadMethod
 ) -> None:
     search = MagicMock(
         return_value=_raises(ConnectorValidationError("Invalid JQL query."))
@@ -87,8 +98,11 @@ def test_other_errors_are_not_retried(
         pytest.raises(ConnectorValidationError, match="Invalid JQL"),
     ):
         _drain(
-            getattr(server_connector, method)(  # ods: ignore[getattr]
-                _START, _END, server_connector.build_dummy_checkpoint()
+            method(
+                server_connector,
+                _START,
+                _END,
+                server_connector.build_dummy_checkpoint(),
             )
         )
 
