@@ -385,9 +385,10 @@ resending does not scrap the interrupted turn's rendered output today.
 
 Session loading reads persisted messages before waiting for runtime discovery or sandbox restoration.
 Runtime failures keep the loaded transcript and permit another load when the user revisits.
-Sleeping, terminated, and failed cached sandboxes also load again on entry.
+Sleeping, terminated, and failed cached sandboxes also load again on entry, including return from New build.
 Load responses must match the session instance, turn generation, and latest load generation.
-Restoration refreshes directory caches only after the webapp readiness check completes.
+Restoration refreshes directory caches after webapp readiness, even if a newer turn has started.
+Readiness updates preserve the newer turn and require the same session instance, load, and sandbox.
 Cached skill notices accept server state only if no newer turn or skill reload intervened.
 
 

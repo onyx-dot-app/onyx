@@ -774,7 +774,7 @@ describe("loadSession restore status", () => {
   });
 
   it.each(["restore", "readiness"] as const)(
-    "ignores a %s response after a newer turn starts",
+    "finishes %s readiness without replacing a newer turn",
     async (stage) => {
       mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
       const restore =
@@ -797,16 +797,50 @@ describe("loadSession restore status", () => {
         status: "running",
         activeTurnId: "newer-turn",
       });
-      const current = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+
       restore.resolve(runningSession() as never);
       readiness.resolve(webappInfo(true, true) as never);
       await loading;
-      expect(useBuildSessionStore.getState().sessions.get(SESSION_ID)).toBe(
-        current
-      );
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)
+      ).toMatchObject({
+        status: "running",
+        activeTurnId: "newer-turn",
+        sandbox: { status: "running" },
+        filesNeedsRefresh: 1,
+        webappNeedsRemount: 1,
+      });
       expect(mockedApi.fetchArtifacts).not.toHaveBeenCalled();
     }
   );
+
+  it("preserves a newer turn when the older restoration fails", async () => {
+    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+    let rejectRestore: (error: Error) => void = () => {};
+    mockedApi.restoreSession.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectRestore = reject;
+      })
+    );
+    const loading: Promise<void> = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID);
+    await waitFor(() => expect(mockedApi.restoreSession).toHaveBeenCalled());
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      turnGeneration: 1,
+      status: "running",
+      activeTurnId: "newer-turn",
+    });
+    rejectRestore(new Error("Restore unavailable"));
+    await loading;
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      status: "running",
+      activeTurnId: "newer-turn",
+      sandbox: { status: "failed" },
+    });
+  });
 
   it("retries a failed restoration when the session is revisited", async () => {
     mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
@@ -1079,6 +1113,69 @@ describe("loadSession completed transcript handoff", () => {
       messages: [user, answer],
       pendingCompletedTurnId: "completed-turn",
     });
+  });
+
+  it("automatically replaces the held response after server completion", async () => {
+    jest.useFakeTimers();
+    try {
+      mockedApi.fetchActiveTurn.mockResolvedValue({
+        turn_id: "completed-turn",
+        turn_index: 0,
+      } as never);
+      mockedApi.fetchMessages.mockResolvedValue([user]);
+      await useBuildSessionStore
+        .getState()
+        .loadSession(SESSION_ID, { force: true });
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)?.messages
+      ).toEqual([user, answer]);
+      mockedApi.fetchActiveTurn.mockResolvedValue(null);
+      mockedApi.fetchMessages.mockResolvedValue([
+        { ...answer, id: "canonical-answer", content: "Saved answer" },
+      ]);
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)
+      ).toMatchObject({
+        pendingCompletedTurnId: null,
+        messages: [
+          expect.objectContaining({
+            id: "canonical-answer",
+            content: "Saved answer",
+          }),
+        ],
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not replace a newer turn during completion polling", async () => {
+    jest.useFakeTimers();
+    try {
+      mockedApi.fetchActiveTurn.mockResolvedValue({
+        turn_id: "completed-turn",
+        turn_index: 0,
+      } as never);
+      mockedApi.fetchMessages.mockResolvedValue([user]);
+      await useBuildSessionStore
+        .getState()
+        .loadSession(SESSION_ID, { force: true });
+      useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+        turnGeneration: 1,
+        status: "running",
+        activeTurnId: "newer-turn",
+      });
+      const current = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+      mockedApi.fetchActiveTurn.mockResolvedValue(null);
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(useBuildSessionStore.getState().sessions.get(SESSION_ID)).toBe(
+        current
+      );
+      expect(mockedApi.fetchActiveTurn).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("keeps the completed response until its server turn completes, then uses the canonical transcript once", async () => {

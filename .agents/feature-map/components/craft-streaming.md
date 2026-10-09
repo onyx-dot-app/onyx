@@ -247,6 +247,8 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 
 A completed local transcript stays visible while its server turn remains active or cannot be checked.
 Session loading checks turn completion before reading persisted messages.
+Held responses retry completion every second, for at most 30 attempts.
+Revisiting a session with a pending completion starts another load.
 Once completion is confirmed, persisted history replaces the local transcript and clears the pending turn marker.
 Interrupt reconciliation explicitly requests persisted history and bypasses this completion hold.
 Responses from earlier session instances, loads, or turns cannot replace current session data.

@@ -75,6 +75,34 @@ describe("useBuildSessionController", () => {
     }
   });
 
+  it("retries a failed session after visiting New build", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      sandbox: { id: "failed-sandbox", status: "failed" } as never,
+    });
+    const originalLoad = useBuildSessionStore.getState().loadSession;
+    const loadSession = jest.fn(async (sessionId: string) => {
+      useBuildSessionStore.getState().setCurrentSession(sessionId);
+    });
+    useBuildSessionStore.setState({ loadSession });
+    try {
+      const { rerender } = renderHook<
+        ReturnType<typeof useBuildSessionController>,
+        { sessionId: string | null }
+      >(
+        ({ sessionId }: { sessionId: string | null }) =>
+          useBuildSessionController({ existingSessionId: sessionId }),
+        { initialProps: { sessionId: SESSION_ID } }
+      );
+      expect(loadSession).not.toHaveBeenCalled();
+      rerender({ sessionId: null });
+      rerender({ sessionId: SESSION_ID });
+      await waitFor(() => expect(loadSession).toHaveBeenCalledWith(SESSION_ID));
+      expect(loadSession).toHaveBeenCalledTimes(1);
+    } finally {
+      useBuildSessionStore.setState({ loadSession: originalLoad });
+    }
+  });
+
   it("refreshes cached file revisions on entry without opening new outputs", async () => {
     const store = () => useBuildSessionStore.getState();
     store().updateSessionData(SESSION_ID, {

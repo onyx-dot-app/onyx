@@ -155,6 +155,7 @@ export function useBuildSessionController({
       // Reset state when transitioning FROM a session TO new build
       // This ensures we fetch fresh pre-provisioned status from backend
       if (prevExistingSessionId !== null) {
+        setControllerLoaded(null);
         setControllerTriggered(null);
         // Clear pre-provisioned state to force a fresh check from backend
         useBuildSessionStore.setState({ preProvisioning: { status: "idle" } });
