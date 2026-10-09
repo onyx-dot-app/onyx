@@ -58,7 +58,7 @@ it("waits for an updated conversion and reloads slide images at the same paths",
     />
   );
   await waitFor(() => expect(fetchPptxPreview).toHaveBeenCalledTimes(2));
-  expect(screen.getByRole("img")).toBeInTheDocument();
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
   await act(async () => {
     finishConversion(converted);
   });
@@ -270,7 +270,7 @@ it("navigates from thumbnails and ignores keyboard events while its tab is hidde
   });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
   rerender(<PptxPreview sessionId="thumbnails" filePath="outputs/deck.pptx" />);
-  fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+  fireEvent.keyDown(await screen.findByRole("toolbar", { name: "Slides" }), {
     key: "ArrowRight",
   });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");

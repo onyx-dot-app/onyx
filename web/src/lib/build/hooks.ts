@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import {
   isAuthStatusError,
@@ -10,23 +10,25 @@ interface FilePreviewOptions {
   revision?: string;
   refreshKey?: number;
   isActive?: boolean;
-  onRefreshingChange?: (refreshing: boolean) => void;
 }
 
 /** One payload per viewer. Revalidation replaces bytes, rather than caching every revision. */
 export function useFilePreview<T>(
   key: string,
   load: () => Promise<T>,
-  {
-    revision,
-    refreshKey = 0,
-    isActive = true,
-    onRefreshingChange,
-  }: FilePreviewOptions = {}
+  { revision, refreshKey = 0, isActive = true }: FilePreviewOptions = {}
 ) {
+  const [invalidatedError, setInvalidatedError] = useState<
+    | (Error & {
+        revision: string | undefined;
+        refreshKey: number;
+        key: string;
+      })
+    | undefined
+  >();
   const request = { key, revision, refreshKey, isActive };
   const previousRequest = useRef(request);
-  const active = useRef(isActive);
+  const active = useRef<boolean>(isActive);
   active.current = isActive;
   const {
     data: result,
@@ -73,6 +75,16 @@ export function useFilePreview<T>(
     }
   );
 
+  useEffect(() => {
+    if (error && (isAuthStatusError(error) || isNotFoundError(error))) {
+      setInvalidatedError(Object.assign(error, { key }));
+      // Purge accepted bytes so a later transient failure cannot restore them.
+      void mutate(undefined, { revalidate: false });
+    } else if (result) setInvalidatedError(undefined);
+  }, [error, key, mutate, result]);
+
+  const effectiveError =
+    error ?? (invalidatedError?.key === key ? invalidatedError : undefined);
   const isCurrent =
     result?.revision === revision && result?.refreshKey === refreshKey;
   useEffect(() => {
@@ -100,18 +112,15 @@ export function useFilePreview<T>(
   ]);
 
   const currentError: Error | undefined =
-    error?.revision === revision && error?.refreshKey === refreshKey
-      ? error
+    effectiveError?.revision === revision &&
+    effectiveError?.refreshKey === refreshKey
+      ? effectiveError
       : undefined;
-  const isLoading = (!isCurrent || isValidating) && !currentError;
-  useEffect(() => {
-    onRefreshingChange?.(isActive && isLoading);
-    return () => onRefreshingChange?.(false);
-  }, [isActive, isLoading, onRefreshingChange]);
+  const isLoading: boolean = (!isCurrent || isValidating) && !currentError;
 
   return {
     data:
-      isAuthStatusError(error) || isNotFoundError(error)
+      isAuthStatusError(effectiveError) || isNotFoundError(effectiveError)
         ? undefined
         : result?.data,
     error: currentError,

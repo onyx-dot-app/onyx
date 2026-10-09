@@ -22,9 +22,6 @@ script this document's provisioning section maps to code.
 
 ## 1. What the user experiences
 
-File viewers retain accepted content through transient refresh failures.
-Authorization and not-found errors clear retained content.
-Hidden viewers defer new reads and scheduled retries until activation.
 
 A user asks Craft to build a web app. As the agent writes code, a Preview tab
 in the session view shows the running app in an iframe, hot-reloading as the

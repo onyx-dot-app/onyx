@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
+import { IconLoader } from "@opal/loaders";
 import { Section } from "@/layouts/general-layouts";
 import { buildArtifactUrl } from "@/app/craft/services/apiServices";
 
@@ -128,22 +129,29 @@ export default function PdfPreview({
   }
 
   return (
-    <div className="relative h-full">
-      <iframe
-        src={blobUrl}
-        title={filePath.split("/").pop() || t("frame.title")}
-        className={cn("w-full h-full border-none")}
-      />
+    <div className="flex h-full flex-col">
       {error && (
         <div
           role="alert"
-          className="absolute top-0 inset-x-0 bg-background-neutral-00 px-4 py-2"
+          className="shrink-0 bg-background-neutral-00 px-4 py-2"
         >
           <Text font="secondary-body" color="text-03">
             {t("error.description")}
           </Text>
         </div>
       )}
+      <div className="relative min-h-0 flex-1">
+        <iframe
+          src={blobUrl}
+          title={filePath.split("/").pop() || t("frame.title")}
+          className={cn("w-full h-full border-none")}
+        />
+        {isLoading && (
+          <div className="absolute top-2 end-2">
+            <IconLoader aria-label={t("loading.label")} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

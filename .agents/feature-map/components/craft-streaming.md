@@ -313,6 +313,13 @@ Explicit file clicks still open their preview. The inventory keeps updating whil
 is suppressed, so old changes do not appear as new files later.
 Selecting the current history entry preserves Back and Forward history instead of adding a duplicate entry.
 
+Text, image, Markdown, and PDF viewers retain accepted payloads during refreshes and transient failures.
+Retained viewers show refresh progress and failure feedback.
+Authorization and not-found responses purge accepted payloads from the viewer cache.
+Later transient failures cannot restore invalidated content without a successful read.
+Hidden viewers defer scheduled retries until activation.
+Presentation viewers hide cached slides during conversion because conversion replaces slide files.
+
 ## 5. Contracts and invariants
 
 1. **Craft does not reuse chat's `Packet`/`Placement`.** It has its own two

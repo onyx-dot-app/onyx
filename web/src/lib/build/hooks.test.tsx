@@ -213,7 +213,9 @@ it.each([401, 403, 404])(
     const load = jest
       .fn<Promise<string>, []>()
       .mockResolvedValueOnce("private file")
-      .mockRejectedValueOnce(new FetchError("Unavailable", status, null));
+      .mockRejectedValueOnce(new FetchError("Unavailable", status, null))
+      .mockRejectedValueOnce(new FetchError("Offline", 503, null))
+      .mockResolvedValueOnce("new authorized file");
     const { result, rerender } = renderHook(
       ({ refreshKey }) =>
         useFilePreview(`access-loss-${status}`, load, {
@@ -237,6 +239,13 @@ it.each([401, 403, 404])(
     rerender({ refreshKey: 1 });
     await waitFor(() => expect(result.current.error).toBeDefined());
     expect(result.current.data).toBeUndefined();
+    rerender({ refreshKey: 2 });
+    await waitFor(() => expect(result.current.error?.message).toBe("Offline"));
+    expect(result.current.data).toBeUndefined();
+    rerender({ refreshKey: 3 });
+    await waitFor(() =>
+      expect(result.current.data).toBe("new authorized file")
+    );
   }
 );
 

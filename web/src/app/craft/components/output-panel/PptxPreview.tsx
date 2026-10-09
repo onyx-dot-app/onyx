@@ -113,7 +113,7 @@ export default function PptxPreview({
     }
   }
 
-  if (!data && isLoading) {
+  if (isLoading && isActive) {
     return (
       <Section
         height="full"
@@ -128,7 +128,7 @@ export default function PptxPreview({
     );
   }
 
-  if (error && !data) {
+  if (error) {
     return (
       <Section
         height="full"
@@ -171,16 +171,6 @@ export default function PptxPreview({
 
   return (
     <div className="relative h-full min-h-0 flex overflow-hidden">
-      {error && (
-        <div
-          role="alert"
-          className="absolute top-0 inset-x-0 bg-background-neutral-00 px-4 py-2"
-        >
-          <Text font="secondary-body" color="text-03">
-            {t("error.title")}
-          </Text>
-        </div>
-      )}
       <div
         role="toolbar"
         aria-label={t("slides.label")}
