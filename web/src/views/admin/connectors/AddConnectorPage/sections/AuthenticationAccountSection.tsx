@@ -20,7 +20,7 @@ import {
 } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { SvgChevronDown, SvgChevronUp, SvgPlusCircle } from "@opal/icons";
+import { SvgExpand, SvgFold, SvgPlusCircle } from "@opal/icons";
 import type { Credential, DraftCredential } from "@/lib/credentials/types";
 import {
   useCredentialCheckReports,
@@ -316,7 +316,7 @@ export default function AuthenticationAccountSection({
               })}
             </Text>
             <Button
-              icon={accountsExpanded ? SvgChevronUp : SvgChevronDown}
+              icon={accountsExpanded ? SvgFold : SvgExpand}
               prominence="tertiary"
               aria-label={
                 accountsExpanded
