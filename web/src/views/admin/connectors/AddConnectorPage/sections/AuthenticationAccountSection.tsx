@@ -389,12 +389,7 @@ export default function AuthenticationAccountSection({
           )}
         </div>
       }
-      onClick={() => {
-        // Folded, the card opens the whole section with its form.
-        if (!accountsExpanded) setAccountsExpanded(true);
-        if (isCreating) close();
-        else selectMethod(defaultMethod);
-      }}
+      onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
     >
       <Section padding={2} width="full">
         <Content
