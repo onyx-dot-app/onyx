@@ -359,3 +359,86 @@ it("reuses matching revisions across remounts and refreshes changed revisions", 
   );
   expect(load).toHaveBeenCalledTimes(2);
 });
+
+it("keeps access-loss tombstones across remounts and transient failures", async () => {
+  const cache = new Map<string, State>();
+  const load = jest
+    .fn<Promise<string>, []>()
+    .mockResolvedValueOnce("private bytes")
+    .mockRejectedValueOnce(new FetchError("Forbidden", 403, null))
+    .mockRejectedValueOnce(new FetchError("Offline", 503, null));
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <SWRConfig value={{ provider: () => cache, shouldRetryOnError: false }}>
+      {children}
+    </SWRConfig>
+  );
+  const first = renderHook(
+    ({ refreshKey }) =>
+      useFilePreview("remount-access", load, {
+        revision: "v1",
+        refreshKey,
+      }),
+    { wrapper, initialProps: { refreshKey: 0 } }
+  );
+  await waitFor(() => expect(first.result.current.data).toBe("private bytes"));
+  first.rerender({ refreshKey: 1 });
+  await waitFor(() =>
+    expect(first.result.current.error?.message).toBe("Forbidden")
+  );
+  first.unmount();
+  const second = renderHook(
+    () =>
+      useFilePreview("remount-access", load, { revision: "v1", refreshKey: 1 }),
+    { wrapper }
+  );
+  expect(second.result.current.data).toBeUndefined();
+  await waitFor(() =>
+    expect(second.result.current.error?.message).toBe("Offline")
+  );
+  expect(second.result.current.data).toBeUndefined();
+  expect(cache.size).toBe(1);
+});
+
+it("does not let a late access failure purge a newer successful revision", async () => {
+  const old = deferred<string>();
+  const load = jest
+    .fn<Promise<string>, []>()
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValueOnce("new bytes");
+  const { result, rerender } = renderHook(
+    ({ revision }) => useFilePreview("late-access", load, { revision }),
+    {
+      initialProps: { revision: "old" },
+      wrapper: ({ children }) => (
+        <SWRConfig value={{ provider: () => new Map() }}>{children}</SWRConfig>
+      ),
+    }
+  );
+  rerender({ revision: "new" });
+  await waitFor(() => expect(result.current.data).toBe("new bytes"));
+  await act(async () => old.reject(new FetchError("Forbidden", 403, null)));
+  expect(result.current.data).toBe("new bytes");
+  expect(result.current.error).toBeUndefined();
+});
+
+it("does not mutate loader errors when associating failures with requests", async () => {
+  const failure = Object.freeze(new Error("Unavailable"));
+  const load = jest.fn<Promise<string>, []>().mockRejectedValue(failure);
+  const { result, rerender } = renderHook(
+    ({ revision }) => useFilePreview("immutable-error", load, { revision }),
+    {
+      initialProps: { revision: "first" },
+      wrapper: ({ children }) => (
+        <SWRConfig
+          value={{ provider: () => new Map(), shouldRetryOnError: false }}
+        >
+          {children}
+        </SWRConfig>
+      ),
+    }
+  );
+  await waitFor(() => expect(result.current.error).toBe(failure));
+  rerender({ revision: "second" });
+  await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(result.current.error).toBe(failure));
+});

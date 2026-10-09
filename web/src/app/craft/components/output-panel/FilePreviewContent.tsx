@@ -37,21 +37,6 @@ export function FilePreviewContent({
   revision,
   refreshKey,
 }: FilePreviewContentProps) {
-  const [accepted, setAccepted] = useState({
-    sessionId,
-    filePath,
-    revision,
-    refreshKey,
-  });
-  if (
-    accepted.sessionId !== sessionId ||
-    accepted.filePath !== filePath ||
-    (isActive &&
-      (accepted.revision !== revision || accepted.refreshKey !== refreshKey))
-  ) {
-    setAccepted({ sessionId, filePath, revision, refreshKey });
-  }
-
   // The retained viewer owns its bytes. Eviction releases the entire cache.
   return (
     <SWRConfig
@@ -59,12 +44,27 @@ export function FilePreviewContent({
       value={{ provider: () => new Map() }}
     >
       {/\.pptx?$/i.test(filePath) ? (
-        <PptxPreview {...accepted} isActive={isActive} />
+        <PptxPreview
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          isActive={isActive}
+        />
       ) : /\.pdf$/i.test(filePath) ? (
-        <PdfPreview {...accepted} isActive={isActive} />
+        <PdfPreview
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          isActive={isActive}
+        />
       ) : (
         <FetchedFilePreview
-          {...accepted}
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
           fullHeight={fullHeight}
           isActive={isActive}
         />

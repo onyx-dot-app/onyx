@@ -317,7 +317,8 @@ Text, image, Markdown, and PDF viewers retain accepted payloads during refreshes
 Retained viewers show refresh progress and failure feedback.
 Welcome inline image and Markdown previews fill a bounded viewer; plain text grows with its content.
 Authorization and not-found responses purge accepted payloads from the viewer cache.
-File preview remounts reuse matching inventory revisions and reload changed revisions.
+Within a retained cache, preview remounts reuse matching revisions and reload changed revisions.
+Closing or evicting a viewer releases its cache. Reopening it reads the file again.
 Later transient failures cannot restore invalidated content without a successful read.
 Hidden viewers defer scheduled retries until activation.
 Presentation viewers hide cached slides during conversion because conversion replaces slide files.
@@ -517,3 +518,5 @@ work against the default Kubernetes backend, follow
   make the attach endpoint wait rather than force a restart; this is
   deliberate (avoids double-driving a healthy turn) but reads as latency if
   you don't know the constant.
+
+Access-loss results stay in the file cache across remounts. Transient failures cannot restore revoked bytes.
