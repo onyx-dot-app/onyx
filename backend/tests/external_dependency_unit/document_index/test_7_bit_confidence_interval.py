@@ -155,3 +155,33 @@ def test_other_mapping_conflicts_still_raise(
     finally:
         with OpenSearchIndexClient(index_name=index_name) as client:
             client.delete_index()
+
+
+def test_7_bit_fallback_still_checks_vector_dimension(
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """The fallback keeps the old encoder but still sends the rest of the
+    vector mapping, so a dimension mismatch fails startup."""
+    if not wait_for_opensearch_with_timeout():
+        pytest.fail("OpenSearch is not available.")
+
+    index_name: str = f"test_7_bit_ci_{uuid.uuid4().hex[:8]}"
+    other_dim: int = EMBEDDING_DIM // 2
+    with OpenSearchIndexClient(index_name=index_name) as client:
+        client.create_index(
+            mappings=_unset_ci_mappings(),
+            settings=DocumentSchema.get_index_settings_based_on_environment(),
+        )
+        try:
+            with pytest.raises(RequestError, match="conflicts with existing mapper"):
+                OpenSearchDocumentIndex(
+                    tenant_state=TenantState(
+                        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                        multitenant=False,
+                    ),
+                    index_name=index_name,
+                    embedding_dim=other_dim,
+                    vector_quantization=VectorQuantization.SCALAR_7_BIT,
+                ).verify_and_create_index_if_necessary(embedding_dim=other_dim)
+        finally:
+            client.delete_index()

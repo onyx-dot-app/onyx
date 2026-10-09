@@ -313,6 +313,27 @@ def _convert_onyx_chunk_to_opensearch_document(
     )
 
 
+def _with_vector_encoder(
+    mappings: dict[str, Any], encoder: dict[str, Any]
+) -> dict[str, Any]:
+    """A copy of the mappings with the content vector's encoder replaced."""
+    content_vector: dict[str, Any] = mappings["properties"][CONTENT_VECTOR_FIELD_NAME]
+    method: dict[str, Any] = content_vector["method"]
+    return {
+        **mappings,
+        "properties": {
+            **mappings["properties"],
+            CONTENT_VECTOR_FIELD_NAME: {
+                **content_vector,
+                "method": {
+                    **method,
+                    "parameters": {**method["parameters"], "encoder": encoder},
+                },
+            },
+        },
+    }
+
+
 class OpenSearchDocumentIndex(DocumentIndex):
     """OpenSearch-specific implementation of the DocumentIndex interface.
 
@@ -422,24 +443,20 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     settings=index_settings,
                 )
             else:
-                if self._has_unset_7_bit_confidence_interval():
+                legacy_encoder = self._unset_7_bit_confidence_interval_encoder()
+                if legacy_encoder is not None:
                     # OpenSearch cannot change an existing field's encoder, so
-                    # keep this index's 7-bit field until a reindex and apply
-                    # the rest of the mapping.
+                    # keep this index's encoder until a reindex. The rest of the
+                    # vector mapping, such as its dimension, is still checked.
                     logger.warning(
                         "Index %s uses 7-bit quantization without an explicit "
                         "confidence_interval, which clips vector values and "
                         "lowers recall. Reindex to apply the current setting.",
                         self._index_name,
                     )
-                    expected_mappings = {
-                        **expected_mappings,
-                        "properties": {
-                            name: field
-                            for name, field in expected_mappings["properties"].items()
-                            if name != CONTENT_VECTOR_FIELD_NAME
-                        },
-                    }
+                    expected_mappings = _with_vector_encoder(
+                        expected_mappings, legacy_encoder
+                    )
                 # Ensure schema is up to date by applying the current mappings.
                 try:
                     self._client.put_mapping(expected_mappings)
@@ -460,15 +477,18 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     )
                     raise
 
-    def _has_unset_7_bit_confidence_interval(self) -> bool:
-        """True if this 7-bit index was built before confidence_interval was
-        set explicitly, so its encoder carries only the bit count."""
+    def _unset_7_bit_confidence_interval_encoder(self) -> dict[str, Any] | None:
+        """The index's encoder if this 7-bit index was built before
+        confidence_interval was set explicitly (its encoder carries only the bit
+        count), otherwise None."""
         if self._vector_quantization is not VectorQuantization.SCALAR_7_BIT:
-            return False
+            return None
         encoder: dict[str, Any] | None = self._client.get_vector_field_encoder(
             CONTENT_VECTOR_FIELD_NAME
         )
-        return encoder == {"name": "sq", "parameters": {"bits": 7}}
+        if encoder != {"name": "sq", "parameters": {"bits": 7}}:
+            return None
+        return encoder
 
     def index(
         self,
