@@ -27,9 +27,10 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
+from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.credentials import backend_update_credential_json, fetch_credential_by_id
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
-from onyx.db.models import Credential
+from onyx.db.models import ConnectorCredentialPair, Credential
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
@@ -345,6 +346,14 @@ def validate_connector_credential_bindings(
 _SOURCES_WITHOUT_PAIRING_VALIDATION = frozenset(
     {DocumentSource.INGESTION_API, DocumentSource.MOCK_CONNECTOR}
 )
+# Pairing and edit validations run the named checks; indexing and perm-sync
+# attempts keep the legacy validation.
+_NAMED_CHECK_TRIGGERS = frozenset(
+    {
+        CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+        CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE,
+    }
+)
 
 
 def _build_and_validate_connector(
@@ -381,6 +390,7 @@ def validate_proposed_pairing(
     db_session: Session,
     *,
     connector_id: int | None,
+    cc_pair_id: int | None,
     source: DocumentSource,
     input_type: InputType | None,
     connector_specific_config: dict[str, Any],
@@ -389,6 +399,9 @@ def validate_proposed_pairing(
 ) -> ProposedPairingValidation:
     """Validates a proposed pairing as creation does, from the given values
     instead of the stored connector.
+
+    ``cc_pair_id`` is the pair an edit proposes this state for, so fresh
+    results of its dry runs are reused; None for a new pairing.
 
     Writes no capability report, starts no background run, and records no
     validation outcome. Like any construction, ``instantiate_connector`` can
@@ -428,6 +441,7 @@ def validate_proposed_pairing(
         return ProposedPairingValidation()
     run = run_named_checks_within_budget(
         connector_id=connector_id,
+        cc_pair_id=cc_pair_id,
         source=source,
         input_type=input_type,
         connector_specific_config=connector_specific_config,
@@ -497,11 +511,8 @@ def validate_ccpair_for_user(
         has_named_capability_checks,
     )
 
-    # Creation and credential swap run the named checks; indexing and perm-sync
-    # attempts keep the legacy validation.
-    use_named_checks = (
-        trigger == CapabilityCheckTrigger.CC_PAIR_VALIDATION
-        and has_named_capability_checks(source)
+    use_named_checks = trigger in _NAMED_CHECK_TRIGGERS and has_named_capability_checks(
+        source
     )
     try:
         _build_and_validate_connector(
@@ -525,8 +536,16 @@ def validate_ccpair_for_user(
         return False
 
     if use_named_checks:
+        # An applied edit reuses fresh results of the pair's dry runs.
+        edited_cc_pair: ConnectorCredentialPair | None = (
+            get_connector_credential_pair(db_session, connector_id, credential_id)
+            if trigger == CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE
+            else None
+        )
         return validate_pairing_with_named_checks(
             connector_id=connector_id,
+            cc_pair_id=edited_cc_pair.id if edited_cc_pair is not None else None,
+            trigger=trigger,
             source=source,
             input_type=input_type,
             connector_specific_config=connector_specific_config,
