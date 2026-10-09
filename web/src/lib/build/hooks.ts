@@ -31,6 +31,11 @@ export function useFilePreview<T>(
       }
     },
     {
+      // Structural comparison cannot distinguish different Blob contents.
+      compare: (previous, next) =>
+        previous?.revision === next?.revision &&
+        previous?.refreshKey === next?.refreshKey &&
+        Object.is(previous?.data, next?.data),
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       revalidateIfStale: revision === undefined,

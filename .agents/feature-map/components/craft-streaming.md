@@ -296,7 +296,8 @@ after the animation. Hidden file viewers retain their displayed revision and loa
 the latest revision on activation. Files without inventory revisions revalidate
 when their preview mounts or becomes active. Each successful PowerPoint conversion response gives
 slide images a fresh browser cache token; unchanged retained viewers reuse it.
-PDF previews release their object URL on replacement or unmount. Presentation
+PDF activation reads without revisions reuse the displayed Blob when bytes match.
+Changed bytes replace the PDF; previews release their object URL on replacement or unmount. Presentation
 keyboard navigation stays inside the active viewer.
 
 The first automatic output selection, manual tab selection, closing a tab or the panel, and

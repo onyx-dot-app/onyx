@@ -226,7 +226,9 @@ releases its cache; reopening fetches fresh bytes. SWR retries failed requests a
 rejects superseded responses. Viewers show only results and errors for their
 accepted revision and reload counter. Cache misses and reloads bypass the
 browser cache when fetching artifacts. PDF object URLs are revoked when replaced
-or when their viewer unmounts.
+or when their viewer unmounts. Unversioned PDF activation reads compare bytes
+with the displayed PDF. Identical bytes reuse its Blob and object URL, preserving
+the iframe and reading position. Changed bytes replace the displayed PDF.
 
 The output panel keeps its five most recently visited tab bodies mounted, including
 pinned tabs and file previews. Inactive bodies keep their layout but are invisible,
