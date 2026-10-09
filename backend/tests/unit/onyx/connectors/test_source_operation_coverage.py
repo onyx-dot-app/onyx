@@ -53,11 +53,13 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
 
 def _configure_google_drive_spy(spy: MagicMock) -> None:
     """A service account whose primary admin sees a Google Doc, a small
-    upload and one shared drive, organized through a group."""
+    upload, a shared drive file and a folder whose permissions come only by
+    id, and one shared drive, organized through a group."""
     admin = "admin@example.com"
     sample = [
         {"id": "doc", "name": "doc", "mimeType": GDriveMimeType.DOC.value},
         {"id": "pdf", "name": "pdf", "mimeType": "application/pdf", "size": "10"},
+        {"id": "shared", "name": "shared", "permissionIds": ["permission"]},
     ]
     spy.authenticate.return_value = GoogleDriveAuth(
         kind=GoogleCredentialKind.SERVICE_ACCOUNT, primary_admin_email=admin
@@ -72,6 +74,12 @@ def _configure_google_drive_spy(spy: MagicMock) -> None:
     )
     spy.list_user_emails.side_effect = lambda **_kwargs: iter([admin])
     spy.can_list_drive.return_value = True
+    spy.list_folders_with_permissions.side_effect = lambda **_kwargs: iter(
+        [{"id": "folder", "name": "folder", "permissionIds": ["permission"]}]
+    )
+    spy.list_file_permissions.side_effect = lambda **_kwargs: iter(
+        [{"id": "permission"}]
+    )
 
 
 _SPY_CONFIGURATIONS: dict[DocumentSource, Callable[[MagicMock], None]] = {

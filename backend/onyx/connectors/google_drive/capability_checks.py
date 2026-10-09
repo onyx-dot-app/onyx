@@ -969,3 +969,286 @@ def build_google_drive_indexing_checks() -> list[CapabilityCheck]:
         _ContentReadCheck(),
         _DocsApiCheck(),
     ]
+
+
+# Permission sync. The EE registry registers these checks. Doc sync re-lists
+# the files with their permissions and reads the permissions Drive gives only
+# by id (shared drive files, folders). Group sync reads the Workspace
+# directory (users, groups and their members), the members of each shared
+# drive, and the permissions of each folder. Both kinds of credential need a
+# primary admin who is a Workspace admin.
+
+_PERMISSION_SAMPLE_FIELDS = (
+    "nextPageToken, files(id, name, permissionIds, "
+    "permissions(id, emailAddress, type, domain))"
+)
+_PERMISSION_FIELDS = "permissions(id, emailAddress, type),nextPageToken"
+_DIRECTORY_HINT = (
+    "Make the primary admin a Google Workspace admin. Service account: give it "
+    "the admin.directory.user.readonly and admin.directory.group.readonly "
+    "scopes in domain-wide delegation. Turn on the Admin SDK API."
+)
+
+
+def _read_permissions(
+    context: CapabilityCheckContext,
+    ops: GoogleDriveSourceOperations,
+    user_email: str,
+    item: GoogleDriveFileType,
+    kind: str,
+) -> None:
+    """Reads the permissions of a file or folder that lists them only by id,
+    as the sync does. Fails when none comes back."""
+    name = item.get("name") or item["id"]
+    with _google_errors(
+        context,
+        api=_DRIVE_API,
+        denied=f"The credential cannot read who can open the {kind} '{name}'",
+    ):
+        permissions = list(
+            ops.list_file_permissions(
+                user_email=user_email, file_id=item["id"], fields=_PERMISSION_FIELDS
+            )
+        )
+    if not permissions:
+        raise InsufficientPermissionsError(
+            f"Google Drive returned no permissions for the {kind} '{name}', so "
+            "Onyx cannot tell who can open it."
+        )
+
+
+class _FilePermissionsCheck(_GoogleDriveCheck):
+    """Lists files with their permissions as the primary admin, and reads the
+    permissions of a file that has them only by id. Passes when every sampled
+    file carries its permissions."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="google_drive_file_permissions",
+            display_name="File permissions are readable",
+            remediation=(
+                "Give the service account the drive.readonly and "
+                "drive.metadata.readonly scopes (OAuth: connect again and accept "
+                "every permission)."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        ops = _gateway(context)
+        with _google_errors(
+            context,
+            api=_DRIVE_API,
+            denied="The credential cannot list files with their permissions",
+        ):
+            auth = ops.authenticate()
+            files = _files(
+                ops.list_files(
+                    variant=DriveCorpus.ALL_DRIVES,
+                    user_email=auth.primary_admin_email,
+                    query="trashed = false",
+                    fields=_PERMISSION_SAMPLE_FIELDS,
+                    page_size=_SAMPLE_FILES,
+                    max_num_pages=1,
+                ),
+                _SAMPLE_FILES,
+            )
+        by_id_only = next(
+            (
+                file
+                for file in files
+                if file.get("permissionIds") and not file.get("permissions")
+            ),
+            None,
+        )
+        if by_id_only is not None:
+            _read_permissions(
+                context, ops, auth.primary_admin_email, by_id_only, "file"
+            )
+            return
+        if files and not any(file.get("permissions") for file in files):
+            raise InsufficientPermissionsError(
+                "Google Drive listed files without their permissions, so Onyx "
+                "cannot tell who can open them. Give the credential the "
+                "drive.metadata.readonly scope."
+            )
+
+
+class _DirectoryAdminCheck(_GoogleDriveCheck):
+    """Reads the primary admin's directory entry, as group sync does first."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="google_drive_directory_admin",
+            display_name="Primary admin can use the Workspace directory",
+            remediation=_DIRECTORY_HINT,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        ops = _gateway(context)
+        admin = context.credential_json.get(DB_CREDENTIALS_PRIMARY_ADMIN_KEY)
+        with _google_errors(
+            context,
+            api=_ADMIN_API,
+            denied=(
+                f"Primary admin {admin or ''} is not authorized on the Google "
+                "Workspace directory API. Reconnect the connector with an "
+                "account that has admin directory access"
+            ),
+        ):
+            ops.authenticate()
+            ops.get_admin_user()
+
+
+class _DirectoryUsersCheck(_GoogleDriveCheck):
+    """Group sync puts every listed user in the group of the Workspace domain,
+    which "anyone at the domain" shares grant."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="google_drive_directory_users",
+            display_name="Workspace users can be listed",
+            remediation=_DIRECTORY_HINT,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        ops = _gateway(context)
+        with _google_errors(
+            context,
+            api=_ADMIN_API,
+            denied="The primary admin cannot list the Workspace users",
+        ):
+            ops.authenticate()
+            first_user = next(ops.list_user_emails(), None)
+        if first_user is None:
+            raise UnexpectedValidationError(
+                "The Workspace directory listed no user, so Onyx cannot verify "
+                "the user listing."
+            )
+
+
+class _GroupsCheck(_GoogleDriveCheck):
+    """Lists the groups and reads the members of the first. Passes when the
+    domain has no group."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="google_drive_groups",
+            display_name="Groups and their members are readable",
+            remediation=_DIRECTORY_HINT,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        ops = _gateway(context)
+        with _google_errors(
+            context,
+            api=_ADMIN_API,
+            denied="The primary admin cannot read the Workspace groups",
+        ):
+            ops.authenticate()
+            first_group = next(ops.list_groups(), None)
+            if first_group is None:
+                return
+            next(ops.list_group_members(group_email=first_group), None)
+
+
+class _DriveMembershipCheck(_GoogleDriveCheck):
+    """Reads the members of the first shared drive, as group sync reads every
+    drive. A primary admin who is not a Workspace admin reads only the drives
+    it is a member of."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="google_drive_shared_drive_members",
+            display_name="Shared drive members are readable",
+            required=False,
+            remediation=(
+                "Make the primary admin a Workspace admin who can manage shared "
+                "drives. Without it, users get access to shared drive files only "
+                "through the files' own permissions."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        ops = _gateway(context)
+        with _google_errors(
+            context,
+            api=_DRIVE_API,
+            denied="The primary admin cannot read the members of shared drives",
+        ):
+            auth = ops.authenticate()
+            admin_user = ops.get_admin_user()
+            is_admin = admin_user.is_admin or admin_user.is_delegated_admin
+            drive_id = next(
+                ops.list_drives(
+                    user_email=auth.primary_admin_email,
+                    use_domain_admin_access=is_admin,
+                ),
+                None,
+            )
+            if drive_id is not None:
+                next(
+                    ops.list_drive_members(
+                        drive_id=drive_id, use_domain_admin_access=is_admin
+                    ),
+                    None,
+                )
+        if not is_admin:
+            raise InsufficientPermissionsError(
+                f"{auth.primary_admin_email} is not a Workspace admin, so group "
+                "sync reads only the shared drives it is a member of."
+            )
+
+
+class _FolderPermissionsCheck(_GoogleDriveCheck):
+    """Lists folders with their permissions as the primary admin, as group
+    sync does for each user, and reads the permissions of a folder that has
+    them only by id."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="google_drive_folder_permissions",
+            display_name="Folder permissions are readable",
+            required=False,
+            remediation=(
+                "Give the service account the drive.metadata.readonly scope "
+                "(OAuth: connect again and accept every permission). Without it, "
+                "users get access only through each file's own permissions."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        ops = _gateway(context)
+        with _google_errors(
+            context,
+            api=_DRIVE_API,
+            denied="The credential cannot list folders with their permissions",
+        ):
+            auth = ops.authenticate()
+            folder = next(
+                ops.list_folders_with_permissions(user_email=auth.primary_admin_email),
+                None,
+            )
+        if folder is None or folder.get("permissions"):
+            return
+        if folder.get("permissionIds"):
+            _read_permissions(context, ops, auth.primary_admin_email, folder, "folder")
+
+
+def build_google_drive_doc_permission_sync_checks() -> list[CapabilityCheck]:
+    return [_FilePermissionsCheck()]
+
+
+def build_google_drive_group_sync_checks() -> list[CapabilityCheck]:
+    return [
+        _DirectoryAdminCheck(),
+        _DirectoryUsersCheck(),
+        _GroupsCheck(),
+        _DriveMembershipCheck(),
+        _FolderPermissionsCheck(),
+    ]
