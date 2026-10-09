@@ -134,12 +134,25 @@ export default function AuthenticationAccountSection({
     accountRealmFields.map(([key]) => key)
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { values } = useFormikContext<Record<string, unknown>>();
+  const { values, setFieldError, setFieldTouched } =
+    useFormikContext<Record<string, unknown>>();
 
   const newAccountValues: NewAccountValues | undefined = getIn(
     values,
     NEW_ACCOUNT_FIELD
   );
+
+  // Closing the new-account card clears every error inside it. Its values
+  // stay.
+  const newAccountOpen: boolean = openMethod !== null;
+  useEffect(() => {
+    if (newAccountOpen) return;
+    for (const key of Object.keys(newAccountValues ?? {})) {
+      const path = `${NEW_ACCOUNT_FIELD}.${key}`;
+      void setFieldTouched(path, false, false);
+      setFieldError(path, undefined);
+    }
+  }, [newAccountOpen]);
 
   // The credential-bound fields filled in first above, such as the realm,
   // restrict the saved accounts to the ones that work with them.
