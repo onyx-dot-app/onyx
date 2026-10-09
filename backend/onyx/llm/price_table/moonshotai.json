@@ -122,6 +122,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.3,
+        "cache_write": 3,
         "input": 3,
         "output": 15
       },

@@ -3,11 +3,11 @@
 from collections import defaultdict
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import ColumnElement, and_, delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
@@ -17,10 +17,13 @@ from onyx.db.models import (
     HierarchyNode,
     HierarchyNodeByConnectorCredentialPair,
 )
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
+
+_ANCESTOR_SEED_BATCH_SIZE = 1000
 
 # Sources where hierarchy nodes can also be documents.
 # For these sources, pages/items can be both a hierarchy node (with children)
@@ -898,6 +901,83 @@ def remove_stale_hierarchy_node_cc_pair_entries(
         db_session.flush()
 
     return deleted
+
+
+def _get_ids_with_ancestors(db_session: Session, seed: ColumnElement[bool]) -> set[int]:
+    """Ids of the nodes that match ``seed`` and of all their ancestors, in one
+    recursive query over the stored parent links."""
+    walk = (
+        select(HierarchyNode.id, HierarchyNode.parent_id)
+        .where(seed)
+        .cte("hierarchy_ancestors", recursive=True)
+    )
+    parent = aliased(HierarchyNode)
+    # UNION (not UNION ALL) drops repeated rows, so shared ancestors are
+    # walked once and a parent cycle ends the walk.
+    walk = walk.union(
+        select(parent.id, parent.parent_id).join(walk, parent.id == walk.c.parent_id)
+    )
+    return set(db_session.execute(select(walk.c.id)).scalars().all())
+
+
+def source_has_document_hierarchy_nodes(
+    db_session: Session, source: DocumentSource
+) -> bool:
+    """True when a hierarchy node of ``source`` is also a document (e.g. a
+    Confluence page). Without one, a document-id seed matches no node."""
+    return bool(
+        db_session.scalar(
+            select(
+                select(HierarchyNode.id)
+                .where(
+                    HierarchyNode.source == source,
+                    HierarchyNode.document_id.is_not(None),
+                )
+                .exists()
+            )
+        )
+    )
+
+
+def get_hierarchy_node_ids_with_ancestors(
+    db_session: Session,
+    source: DocumentSource,
+    raw_node_ids: set[str],
+    node_ids: set[int],
+    document_ids: set[str] | None = None,
+) -> set[int]:
+    """Ids of the given nodes and of all their ancestors up to the root.
+
+    ``raw_node_ids`` resolve within ``source``. ``document_ids`` select the
+    nodes that are also those documents (e.g. Confluence pages). A seed with
+    no node is skipped. Seeds go in batches, and each batch is one recursive
+    query.
+    """
+    result: set[int] = set()
+    for doc_batch in batch_generator(
+        sorted(document_ids or set()), _ANCESTOR_SEED_BATCH_SIZE
+    ):
+        result |= _get_ids_with_ancestors(
+            db_session,
+            and_(
+                HierarchyNode.source == source,
+                HierarchyNode.document_id.in_(doc_batch),
+            ),
+        )
+    for raw_batch in batch_generator(sorted(raw_node_ids), _ANCESTOR_SEED_BATCH_SIZE):
+        result |= _get_ids_with_ancestors(
+            db_session,
+            and_(
+                HierarchyNode.source == source,
+                HierarchyNode.raw_node_id.in_(raw_batch),
+            ),
+        )
+    # A node already found has its ancestors in the result too.
+    for id_batch in batch_generator(
+        sorted(node_ids - result), _ANCESTOR_SEED_BATCH_SIZE
+    ):
+        result |= _get_ids_with_ancestors(db_session, HierarchyNode.id.in_(id_batch))
+    return result
 
 
 def delete_orphaned_hierarchy_nodes(

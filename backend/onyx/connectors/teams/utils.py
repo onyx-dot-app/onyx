@@ -233,8 +233,9 @@ class UserDirectory:
         self._graph_client = graph_client
         # None records an id Graph did not name, so it is not asked for again.
         self._principal_names: dict[str, str | None] = {}
-        # Workers share one directory, and two asking for the same unknown ids
-        # would each pay for the lookup.
+        # Workers share one directory. The lock guards the cache alone, so one
+        # slow lookup stalls no one else. Two workers may both fetch the same
+        # new ids, which beats serializing on Graph.
         self._lock = threading.Lock()
 
     def principal_names(self, user_ids: list[str]) -> dict[str, str]:
@@ -247,9 +248,15 @@ class UserDirectory:
                 for uid in dict.fromkeys(user_ids)
                 if uid not in self._principal_names
             ]
-            for start in range(0, len(unknown), USER_LOOKUP_BATCH_SIZE):
-                batch = unknown[start : start + USER_LOOKUP_BATCH_SIZE]
-                self._principal_names.update(self._lookup(batch))
+        found: dict[str, str | None] = {}
+        for start in range(0, len(unknown), USER_LOOKUP_BATCH_SIZE):
+            found.update(self._lookup(unknown[start : start + USER_LOOKUP_BATCH_SIZE]))
+        with self._lock:
+            # A name wins over an omission in either order: two lookups may
+            # race, and a user Graph named once must stay a reader.
+            for uid, name in found.items():
+                if name is not None or uid not in self._principal_names:
+                    self._principal_names[uid] = name
             return {
                 uid: name
                 for uid in user_ids
@@ -365,15 +372,70 @@ def fetch_channel_member_emails(
 MESSAGE_PAGE_SIZE = 50
 
 
+def graph_timestamp(when: SecondsSinceUnixEpoch) -> str:
+    return datetime.fromtimestamp(when, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def message_delta_url(
     team_id: str, channel_id: str, start: SecondsSinceUnixEpoch
 ) -> str:
-    startfmt = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
     return (
         f"teams/{team_id}/channels/{channel_id}/messages/delta"
-        f"?$filter=lastModifiedDateTime gt {startfmt}&$top={MESSAGE_PAGE_SIZE}"
+        f"?$filter=lastModifiedDateTime gt {graph_timestamp(start)}"
+        f"&$top={MESSAGE_PAGE_SIZE}"
+    )
+
+
+def export_url(
+    collection: str, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+) -> str:
+    """Every message of every conversation in the collection (a team's
+    channels, a user's chats) changed inside the window, replies included, in
+    one stream. The export API wants both bounds."""
+    return (
+        f"{collection}/getAllMessages"
+        f"?$filter=lastModifiedDateTime gt {graph_timestamp(start)}"
+        f" and lastModifiedDateTime lt {graph_timestamp(end)}"
+        f"&$top={MESSAGE_PAGE_SIZE}"
+    )
+
+
+def export_probe_url(collection: str) -> str:
+    return f"{collection}/getAllMessages?$top=1"
+
+
+def team_export_url(
+    team_id: str, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+) -> str:
+    return export_url(f"teams/{team_id}/channels", start, end)
+
+
+def fetch_team_export(
+    graph_client: GraphClient,
+    team_id: str,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> Generator[Message]:
+    for value in iter_values(graph_client, team_export_url(team_id, start, end)):
+        yield Message(**_sanitize_message_user_display_name(value))
+
+
+def team_export_probe_url(team_id: str) -> str:
+    """One row and no filter: whether the API answers at all is known from
+    the first page, before any filter applies."""
+    return export_probe_url(f"teams/{team_id}/channels")
+
+
+def fetch_root_message(
+    graph_client: GraphClient, team_id: str, channel_id: str, message_id: str
+) -> Message:
+    return Message(
+        **_sanitize_message_user_display_name(
+            get_json_with_retry(
+                graph_client,
+                f"teams/{team_id}/channels/{channel_id}/messages/{message_id}",
+            )
+        )
     )
 
 
@@ -398,11 +460,17 @@ def fetch_messages(
     team_id: str,
     channel_id: str,
     start: SecondsSinceUnixEpoch,
+    before_page: Callable[[], None] | None = None,
 ) -> Generator[Message]:
     for value in iter_values(
-        graph_client, message_delta_url(team_id, channel_id, start)
+        graph_client, message_delta_url(team_id, channel_id, start), before_page
     ):
         yield Message(**_sanitize_message_user_display_name(value))
+
+
+# Graph answers a drive's identity under this key, with a capital P, while
+# drive items and lists answer under SHAREPOINT_IDS_PROPERTY.
+DRIVE_SHAREPOINT_IDS_PROPERTY: str = "sharePointIds"
 
 
 def resolve_channel_library(
@@ -429,7 +497,9 @@ def resolve_channel_library(
         request_url=f"drives/{drive_id}?$select={SHAREPOINT_IDS_PROPERTY}",
     )
     try:
-        sharepoint_ids = parse_graph_sharepoint_ids(drive.get(SHAREPOINT_IDS_PROPERTY))
+        sharepoint_ids = parse_graph_sharepoint_ids(
+            drive.get(DRIVE_SHAREPOINT_IDS_PROPERTY)
+        )
     except ValueError as e:
         raise ChannelFilesUnavailable(
             f"Document library {drive_id} returned malformed identity"

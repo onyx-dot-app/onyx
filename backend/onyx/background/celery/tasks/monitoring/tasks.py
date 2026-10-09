@@ -374,6 +374,8 @@ def _collect_connector_metrics(
                     IndexAttempt.connector_credential_pair_id == cc_pair.id,
                     IndexAttempt.search_settings_id == search_settings.id,
                     IndexAttempt.targeted_reindex_job_id.is_(None),
+                    # start latency compares scheduled runs; a backfill is not one
+                    IndexAttempt.is_backfill.is_(False),
                 )
                 .order_by(IndexAttempt.time_created.desc())
                 .limit(2)

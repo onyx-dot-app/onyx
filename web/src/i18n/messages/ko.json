@@ -12326,6 +12326,11 @@
       },
       "toggleItem": {
         "ariaLabel": "{name} 펼치기/접기"
+      },
+      "status": {
+        "loading": "결과를 불러오는 중…",
+        "incomplete": "일부 결과를 표시하지 못했습니다. 파일을 열어 작업 공간을 확인하세요.",
+        "error": "결과를 새로 고치지 못했습니다. 다시 시도하세요."
       }
     },
     "chatPanel": {
@@ -12471,17 +12476,11 @@
         "description": "빌드 중 생성된 파일이 여기에 표시됩니다",
         "title": "아직 파일이 없습니다"
       },
-      "emptyDirectory": {
-        "label": "이 디렉터리에 파일이 없습니다"
-      },
       "error": {
         "title": "파일 불러오기 오류"
       },
       "loading": {
         "label": "파일을 불러오는 중..."
-      },
-      "loadingChildren": {
-        "label": "불러오는 중..."
       },
       "preparing": {
         "description": "개발 환경을 설정하는 중",
@@ -12641,6 +12640,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} 닫기"
+      },
       "artifactsEmpty": {
         "tooltip": "무언가를 만들기 시작하면 아티팩트가 표시됩니다!"
       },
@@ -12664,6 +12666,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "슬라이드"
+      },
+      "previous": {
+        "label": "이전 슬라이드"
+      },
+      "next": {
+        "label": "다음 슬라이드"
+      },
       "converting": {
         "label": "프레젠테이션 변환 중..."
       },

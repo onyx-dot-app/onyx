@@ -6,7 +6,6 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import (
     AUTO_LLM_CONFIG_URL,
-    AUTO_LLM_UPDATE_INTERVAL_SECONDS,
     DISABLE_VECTOR_DB,
     SCHEDULED_EVAL_DATASET_NAMES,
 )
@@ -21,7 +20,7 @@ from onyx.document_index.opensearch.constants import (
 )
 from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
 from onyx.utils.variable_functionality import is_ee_available
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS, MULTI_TENANT
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
 # we might be able to reduce this greatly if we can run a unified
@@ -135,6 +134,18 @@ beat_task_templates: list[dict] = [
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
             # Run on gated tenants too — they may still have stale checkpoints to clean.
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
+        "name": "check-for-staged-connector-file-cleanup",
+        "task": OnyxCeleryTask.CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still hold staged uploads to delete.
             "skip_gated": False,
             "work_gated": True,
         },

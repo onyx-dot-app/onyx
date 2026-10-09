@@ -12326,6 +12326,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Toggle {name}"
+      },
+      "status": {
+        "loading": "Loading outputs…",
+        "incomplete": "Some outputs could not be listed. Open Files to browse the workspace.",
+        "error": "Could not refresh outputs. Try again."
       }
     },
     "chatPanel": {
@@ -12471,17 +12476,11 @@
         "description": "Files created during the build will appear here",
         "title": "No files yet"
       },
-      "emptyDirectory": {
-        "label": "No files in this directory"
-      },
       "error": {
         "title": "Error loading files"
       },
       "loading": {
         "label": "Loading files..."
-      },
-      "loadingChildren": {
-        "label": "Loading..."
       },
       "preparing": {
         "description": "Setting up your development environment",
@@ -12641,6 +12640,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Close {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Start building something to see artifacts!"
       },
@@ -12664,6 +12666,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Slides"
+      },
+      "previous": {
+        "label": "Previous slide"
+      },
+      "next": {
+        "label": "Next slide"
+      },
       "converting": {
         "label": "Converting presentation..."
       },

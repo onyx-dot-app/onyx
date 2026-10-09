@@ -1,317 +1,157 @@
 "use client";
 
-import { useEffect } from "react";
 import { useTranslations } from "next-intl";
-import useSWR from "swr";
+import { useState } from "react";
+import { SWRConfig } from "swr";
+import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchFileContent } from "@/app/craft/services/apiServices";
 import { Text } from "@opal/components";
+import { cn } from "@opal/utils";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
-import MarkdownFilePreview, {
-  type FileRendererProps,
-} from "@/app/craft/components/output-panel/MarkdownFilePreview";
+import MarkdownFilePreview from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import PptxPreview from "@/app/craft/components/output-panel/PptxPreview";
 import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
-
-// ── Preview registry ─────────────────────────────────────────────────────
-// Unified registry for all file preview types. First match wins.
-//
-// "standalone" — binary formats that handle their own data fetching.
-// "content"    — text-based formats that receive already-fetched content.
-
-interface StandaloneEntry {
-  type: "standalone";
-  matches: (filePath: string) => boolean;
-  component: React.FC<{
-    sessionId: string;
-    filePath: string;
-    refreshKey?: number;
-  }>;
-}
-
-interface ContentEntry {
-  type: "content";
-  matches: (filePath: string, mimeType: string, isImage: boolean) => boolean;
-  component: React.FC<FileRendererProps>;
-}
-
-type PreviewEntry = StandaloneEntry | ContentEntry;
-
-function ImageRendererWrapper({ content, fileName }: FileRendererProps) {
-  return <ImagePreview src={content} fileName={fileName} />;
-}
-
-const PREVIEW_REGISTRY: PreviewEntry[] = [
-  {
-    type: "standalone",
-    matches: (path) => /\.pptx?$/i.test(path),
-    component: PptxPreview,
-  },
-  {
-    type: "standalone",
-    matches: (path) => /\.pdf$/i.test(path),
-    component: PdfPreview,
-  },
-  {
-    type: "content",
-    matches: (_, __, isImage) => isImage,
-    component: ImageRendererWrapper,
-  },
-  {
-    type: "content",
-    matches: (path) => /\.md$/i.test(path),
-    component: MarkdownFilePreview,
-  },
-];
-
-function findStandalonePreview(filePath: string): StandaloneEntry | undefined {
-  return PREVIEW_REGISTRY.find(
-    (e): e is StandaloneEntry => e.type === "standalone" && e.matches(filePath)
-  );
-}
-
-function findContentPreview(
-  filePath: string,
-  mimeType: string,
-  isImage: boolean
-): ContentEntry | undefined {
-  return PREVIEW_REGISTRY.find(
-    (e): e is ContentEntry =>
-      e.type === "content" && e.matches(filePath, mimeType, isImage)
-  );
-}
-
-// ── Public components ────────────────────────────────────────────────────
 
 interface FilePreviewContentProps {
   sessionId: string;
   filePath: string;
+  fullHeight?: boolean;
+  isActive?: boolean;
+  revision?: string;
   /** Changing this value forces the preview to reload its data */
   refreshKey?: number;
 }
 
 /**
- * FilePreviewContent — full-height file preview for the main output panel.
  * Routes to the appropriate preview component based on file type.
  */
 export function FilePreviewContent({
   sessionId,
   filePath,
+  fullHeight = true,
+  isActive = true,
+  revision,
   refreshKey,
 }: FilePreviewContentProps) {
-  const standalone = findStandalonePreview(filePath);
-  if (standalone) {
-    const Comp = standalone.component;
-    return (
-      <Comp sessionId={sessionId} filePath={filePath} refreshKey={refreshKey} />
-    );
+  const [accepted, setAccepted] = useState({
+    sessionId,
+    filePath,
+    revision,
+    refreshKey,
+  });
+  if (
+    accepted.sessionId !== sessionId ||
+    accepted.filePath !== filePath ||
+    (isActive &&
+      (accepted.revision !== revision || accepted.refreshKey !== refreshKey))
+  ) {
+    setAccepted({ sessionId, filePath, revision, refreshKey });
   }
 
+  // The retained viewer owns its bytes. Eviction releases the entire cache.
   return (
-    <FetchedFilePreview
-      sessionId={sessionId}
-      filePath={filePath}
-      fullHeight
-      refreshKey={refreshKey}
-    />
+    <SWRConfig
+      key={`${sessionId}:${filePath}`}
+      value={{ provider: () => new Map() }}
+    >
+      {/\.pptx?$/i.test(filePath) ? (
+        <PptxPreview {...accepted} isActive={isActive} />
+      ) : /\.pdf$/i.test(filePath) ? (
+        <PdfPreview {...accepted} isActive={isActive} />
+      ) : (
+        <FetchedFilePreview
+          {...accepted}
+          fullHeight={fullHeight}
+          isActive={isActive}
+        />
+      )}
+    </SWRConfig>
   );
 }
 
-/**
- * InlineFilePreview — compact file preview for pre-provisioned mode.
- * Same routing logic, without full-height layout.
- */
-export function InlineFilePreview({
-  sessionId,
-  filePath,
-}: FilePreviewContentProps) {
-  const standalone = findStandalonePreview(filePath);
-  if (standalone) {
-    const Comp = standalone.component;
-    return <Comp sessionId={sessionId} filePath={filePath} />;
-  }
-
-  return <FetchedFilePreview sessionId={sessionId} filePath={filePath} />;
-}
-
-// ── FetchedFilePreview (inner) ───────────────────────────────────────────
-
-interface FetchedFilePreviewProps {
-  sessionId: string;
-  filePath: string;
-  fullHeight?: boolean;
-  refreshKey?: number;
-}
-
-/**
- * Fetches file content via SWR, then delegates to the first matching
- * "content" entry in the registry (or falls back to raw monospace text).
- */
+/** Fetch text or image content; unsupported text formats use a plain preview. */
 function FetchedFilePreview({
   sessionId,
   filePath,
   fullHeight,
+  isActive,
+  revision,
   refreshKey,
-}: FetchedFilePreviewProps) {
+}: FilePreviewContentProps) {
   const t = useTranslations("craft.filePreview");
-  const { data, error, isLoading, mutate } = useSWR(
+  const { data, error, isLoading } = useFilePreview(
     SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     () => fetchFileContent(sessionId, filePath),
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 5000,
-    }
+    revision,
+    refreshKey,
+    isActive
   );
 
-  // Re-fetch when refreshKey changes
-  useEffect(() => {
-    if (refreshKey && refreshKey > 0) {
-      mutate();
+  if (isLoading || error || !data || data.error) {
+    let title: string | undefined;
+    let description = t("noContent.label");
+    if (isLoading) {
+      description = t("loading.label");
+    } else if (error) {
+      title = t("error.title");
+      description = fullHeight
+        ? error.message
+        : t("error.inline", { message: error.message });
+    } else if (data?.error) {
+      title = t("cannotPreview.title");
+      description = data.error;
     }
-  }, [refreshKey, mutate]);
-
-  if (isLoading) {
-    if (fullHeight) {
+    const message = (
+      <Text font="secondary-body" color={title ? "text-02" : "text-03"}>
+        {description}
+      </Text>
+    );
+    if (!fullHeight) {
       return (
-        <Section
-          height="full"
-          alignItems="center"
-          justifyContent="center"
-          padding={8}
-        >
-          <Text font="secondary-body" color="text-03">
-            {t("loading.label")}
-          </Text>
-        </Section>
+        <div className={cn("p-4", data?.error && "text-center")}>{message}</div>
       );
     }
     return (
-      <div className="p-4">
-        <Text font="secondary-body" color="text-03">
-          {t("loading.label")}
-        </Text>
-      </div>
-    );
-  }
-
-  if (error) {
-    if (fullHeight) {
-      return (
-        <Section
-          height="full"
-          alignItems="center"
-          justifyContent="center"
-          padding={8}
-        >
-          <SvgFileText size={48} className="stroke-text-02" />
-          <Text font="heading-h3" color="text-03">
-            {t("error.title")}
-          </Text>
-          <Text font="secondary-body" color="text-02">
-            {error.message}
-          </Text>
-        </Section>
-      );
-    }
-    return (
-      <div className="p-4">
-        <Text font="secondary-body" color="text-02">
-          {t("error.inline", { message: error.message })}
-        </Text>
-      </div>
-    );
-  }
-
-  if (!data) {
-    if (fullHeight) {
-      return (
-        <Section
-          height="full"
-          alignItems="center"
-          justifyContent="center"
-          padding={8}
-        >
-          <Text font="secondary-body" color="text-03">
-            {t("noContent.label")}
-          </Text>
-        </Section>
-      );
-    }
-    return (
-      <div className="p-4">
-        <Text font="secondary-body" color="text-03">
-          {t("noContent.label")}
-        </Text>
-      </div>
-    );
-  }
-
-  if (data.error) {
-    if (fullHeight) {
-      return (
-        <Section
-          height="full"
-          alignItems="center"
-          justifyContent="center"
-          padding={8}
-        >
-          <SvgFileText size={48} className="stroke-text-02" />
-          <Text font="heading-h3" color="text-03">
-            {t("cannotPreview.title")}
-          </Text>
-          <div className="text-center max-w-md">
-            <Text font="secondary-body" color="text-02">
-              {data.error}
+      <Section
+        height="full"
+        alignItems="center"
+        justifyContent="center"
+        padding={8}
+      >
+        {title && (
+          <>
+            <SvgFileText size={48} className="stroke-text-02" />
+            <Text font="heading-h3" color="text-03">
+              {title}
             </Text>
-          </div>
-        </Section>
-      );
-    }
-    return (
-      <div className="p-4 text-center">
-        <Text font="secondary-body" color="text-02">
-          {data.error}
-        </Text>
-      </div>
+          </>
+        )}
+        <div className="text-center max-w-md">{message}</div>
+      </Section>
     );
   }
 
-  // Match against content-based renderers
   const fileName = filePath.split("/").pop() || filePath;
-  const mimeType = data.mimeType ?? "text/plain";
-  const isImage = !!data.isImage;
-
-  const contentPreview = findContentPreview(filePath, mimeType, isImage);
-  if (contentPreview) {
-    const Comp = contentPreview.component;
+  if (data.isImage) {
+    return <ImagePreview src={data.content} fileName={fileName} />;
+  }
+  if (/\.md$/i.test(filePath)) {
     return (
-      <Comp
+      <MarkdownFilePreview
         content={data.content}
         fileName={fileName}
         filePath={filePath}
-        mimeType={mimeType}
-        isImage={isImage}
+        mimeType={data.mimeType ?? "text/plain"}
+        isImage={false}
       />
     );
   }
 
-  // Default fallback: raw text
-  if (fullHeight) {
-    return (
-      <div className="h-full flex flex-col">
-        <div className="flex-1 overflow-auto p-4">
-          <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
-            {data.content}
-          </pre>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-4">
+    <div className={cn("p-4", fullHeight && "h-full overflow-auto")}>
       <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
         {data.content}
       </pre>

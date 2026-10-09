@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from onyx.connectors.models import ConnectorFailure, DocumentFailure
 from onyx.db.enums import IndexingStatus
+from onyx.db.index_attempt import get_connector_config_hash_for_cc_pair
 from onyx.db.models import (
     ConnectorCredentialPair,
     IndexAttempt,
@@ -223,6 +224,9 @@ def create_targeted_reindex_job(
     attempt_ids: list[int] = []
     pairs: list[tuple[int, int]] = []
     for cc_pair_id in cc_pair_ids:
+        connector_config_hash = get_connector_config_hash_for_cc_pair(
+            db_session, cc_pair_id
+        )
         for search_settings in active_search_settings:
             attempt = IndexAttempt(
                 connector_credential_pair_id=cc_pair_id,
@@ -232,6 +236,7 @@ def create_targeted_reindex_job(
                 targeted_reindex_job_id=job.id,
                 # Mirror celery_task_id so the orphan sweeper skips this row.
                 celery_task_id=celery_task_id,
+                connector_config_hash=connector_config_hash,
             )
             db_session.add(attempt)
             db_session.flush()

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT, DocumentSource
+from onyx.db.connector_edit_requests import get_reindex_request_backoff
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
@@ -171,6 +172,25 @@ def is_in_repeated_error_state(
     )
 
 
+def _is_reindex_request_due(
+    cc_pair_id: int, search_settings_id: int, db_session: Session
+) -> bool:
+    """A pending re-index request is due at once. After failed attempts it
+    waits for a capped exponential backoff, and then retries."""
+    backoff = get_reindex_request_backoff(db_session, cc_pair_id, search_settings_id)
+    if backoff is None:
+        return True
+    if get_db_current_time(db_session) < backoff.retry_after:
+        return False
+    logger.warning(
+        "Retrying a full re-index request after failed attempts: "
+        "cc_pair=%s failure_count=%s",
+        cc_pair_id,
+        backoff.failure_count,
+    )
+    return True
+
+
 def should_index(
     cc_pair: ConnectorCredentialPair,
     search_settings_instance: SearchSettings,
@@ -279,6 +299,17 @@ def should_index(
         if cc_pair.indexing_trigger is not None:
             # if a manual indexing trigger is on the cc pair, honor it for live search settings
             return True
+        # The first attempt spends the trigger. A pending prune-after-reindex
+        # or full re-index request keeps the pair due until a full re-index
+        # succeeds, even without refresh_freq, with a backoff after failed
+        # attempts.
+        if (
+            cc_pair.prune_after_reindex_requested_at is not None
+            or cc_pair.full_reindex_requested_at is not None
+        ):
+            return _is_reindex_request_due(
+                cc_pair.id, search_settings_instance.id, db_session
+            )
 
     # if no attempt has ever occurred, we should index regardless of refresh_freq
     if not last_index_attempt:

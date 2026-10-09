@@ -1,9 +1,9 @@
 import copy
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
 from itertools import chain
-from typing import Any
+from typing import Any, cast
 
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
@@ -35,18 +35,33 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.teams import groups, listing, threads
-from onyx.connectors.teams.config import MAX_WORKERS
+from onyx.connectors.teams.config import (
+    CHANNEL_BATCH_PER_WORKER,
+    EXPORT_TEAM_WORKERS,
+    MAX_WORKERS,
+)
+from onyx.connectors.teams.export import ExportSource
 from onyx.connectors.teams.files import FileSource
 from onyx.connectors.teams.meeting_chats import (
     ChatSource,
 )
-from onyx.connectors.teams.models import ChannelRef
+from onyx.connectors.teams.models import (
+    ChannelAdvance,
+    ChannelCursor,
+    ChannelRef,
+    TeamExport,
+)
 from onyx.connectors.teams.organizers import (
     Organizer,
     OrganizerSource,
     OrganizerStage,
 )
-from onyx.connectors.teams.refusals import channel_failure, is_permanent, status
+from onyx.connectors.teams.refusals import (
+    ExportProbe,
+    channel_failure,
+    is_permanent,
+    status,
+)
 from onyx.connectors.teams.session import TeamsSession
 from onyx.connectors.teams.sources import SlimWalk
 from onyx.connectors.teams.threads import ThreadSource
@@ -57,7 +72,11 @@ from onyx.connectors.teams.utils import ChannelFilesUnavailable
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_with_timeout
+from onyx.utils.threadpool_concurrency import (
+    drain,
+    run_functions_tuples_in_parallel,
+    run_with_timeout,
+)
 
 logger = setup_logger()
 
@@ -84,10 +103,17 @@ class TeamsCheckpoint(ConnectorCheckpoint):
     # None until the teams are listed.
     todo_team_ids: list[str] | None = None
     todo_channels: list[ChannelRef] = []
-    # A step walks one page of one channel, so a resumed attempt loses at most
-    # a page instead of a whole team. No page url means the channel's first page.
+    # A step walks one page of each active channel, side by side, so a resumed
+    # attempt loses at most a page per channel instead of a whole team.
+    active: list[ChannelCursor] = []
+    # Written by v4.9, which walked one channel at a time. Such a checkpoint
+    # joins ``active`` when it is loaded.
+    # TODO(nmgarza5): drop both once v4.9 checkpoints have aged out.
     current_channel: ChannelRef | None = None
     next_messages_url: str | None = None
+    # Whether the export API answers for this app, decided at the first team
+    # step and kept so every step of the attempt takes the same path.
+    export: bool | None = None
     # The meeting organizers follow the channels. None until their first page is
     # listed, then a batch of organizers per step and a page at a time. Whole
     # organizers ride along, not ids: the documents name the organizer, and a
@@ -106,6 +132,9 @@ class TeamsConnector(
     channel holds is read by one source per content type: its threads, and its
     files when attachments are on. What a scheduled meeting leaves behind is
     listed per organizer, so those sources follow the channels."""
+
+    # The slim listings of files, transcripts and chats ignore `start`.
+    slim_listing_honors_indexing_start = False
 
     def __init__(
         self,
@@ -132,6 +161,8 @@ class TeamsConnector(
         include_meeting_chats: bool = False,
     ) -> None:
         TeamsSession.__init__(self, graph_api_host, authority_host)
+        if max_workers <= 0:
+            raise ConnectorValidationError("max_workers must be positive.")
         self.max_workers = max_workers
         self.requested_team_list: list[str] = teams or []
         self.include_attachments = include_attachments
@@ -145,6 +176,7 @@ class TeamsConnector(
         # page url Graph rejects recovers once per attempt and can never loop.
         self._restarted_channel_ids: set[str] = set()
         self._threads = ThreadSource(self, include_inline_images)
+        self._export = ExportSource(self, self._threads)
         self._files: FileSource | None = (
             FileSource(self, self.requested_team_list, lambda: self.raw_file_callback)
             if include_attachments
@@ -278,6 +310,15 @@ class TeamsConnector(
         graph_client = self.graph()
 
         checkpoint = copy.deepcopy(checkpoint)
+        if checkpoint.current_channel is not None:
+            checkpoint.active.append(
+                ChannelCursor(
+                    channel=checkpoint.current_channel,
+                    next_messages_url=checkpoint.next_messages_url,
+                )
+            )
+            checkpoint.current_channel = None
+            checkpoint.next_messages_url = None
 
         if checkpoint.todo_team_ids is None:
             teams = listing.collect_all_teams(
@@ -285,23 +326,26 @@ class TeamsConnector(
                 requested=self.requested_team_list,
             )
             checkpoint.todo_team_ids = [team.id for team in teams if team.id]
-        elif checkpoint.current_channel is not None or checkpoint.todo_channels:
-            if checkpoint.current_channel is None:
-                checkpoint.current_channel = checkpoint.todo_channels.pop()
-            yield from self._walk_channel_page(checkpoint, start)
+        elif checkpoint.active or checkpoint.todo_channels:
+            yield from self._channel_step(checkpoint, start)
         elif checkpoint.todo_team_ids:
-            team_id = checkpoint.todo_team_ids.pop()
-            team = listing.get_team_by_id(graph_client=graph_client, team_id=team_id)
-            checkpoint.todo_channels = [
-                listing.channel_ref(team_id, channel)
-                for channel in listing.collect_all_channels_from_team(team=team)
-            ]
-            logger.info(
-                "Listed %s channel(s) of team %s; %s team(s) left",
-                len(checkpoint.todo_channels),
-                team_id,
-                len(checkpoint.todo_team_ids),
-            )
+            if checkpoint.export is None:
+                probe = self._export.available(checkpoint.todo_team_ids[-1])
+                # A probe team that is gone or locked says nothing about the
+                # app: it walks its channels and the next team probes again.
+                if probe is not ExportProbe.REFUSED_FOR_ITEM:
+                    checkpoint.export = probe is ExportProbe.ANSWERS
+            if checkpoint.export:
+                yield from self._export_step(checkpoint, start, end)
+            else:
+                team_id = checkpoint.todo_team_ids.pop()
+                checkpoint.todo_channels = listing.team_channels(graph_client, team_id)
+                logger.info(
+                    "Listed %s channel(s) of team %s; %s team(s) left",
+                    len(checkpoint.todo_channels),
+                    team_id,
+                    len(checkpoint.todo_team_ids),
+                )
         elif self._organizers is not None and checkpoint.todo_organizers:
             yield from self._organizers.index_batch(
                 checkpoint.todo_organizers, start, end
@@ -314,7 +358,7 @@ class TeamsConnector(
             )
 
         checkpoint.has_more = bool(
-            checkpoint.current_channel
+            checkpoint.active
             or checkpoint.todo_channels
             or checkpoint.todo_team_ids
             or (
@@ -328,21 +372,137 @@ class TeamsConnector(
         )
         return checkpoint
 
-    def _walk_channel_page(
+    def _export_step(
+        self,
+        checkpoint: TeamsCheckpoint,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> Iterator[Document | ConnectorFailure]:
+        """The threads of a few teams, each team one export stream, side by
+        side and yielded as each team finishes, then the files of their
+        channels. The teams leave the queue only once every one finished, so
+        a raise in one leaves the step to be retried."""
+        if checkpoint.todo_team_ids is None:
+            raise RuntimeError("The teams are listed before any export step")
+        team_ids: list[str] = checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
+        for item in drain(
+            team_ids,
+            lambda team_id: self._export.team(team_id, start, end),
+            EXPORT_TEAM_WORKERS,
+        ):
+            if not isinstance(item, TeamExport):
+                yield item
+                continue
+            export: TeamExport = item
+            if export.refused_to_app:
+                # A 402 applies to the whole tenant, so the teams left walk
+                # their channels without another stream each.
+                checkpoint.export = False
+            if export.fell_back:
+                checkpoint.todo_channels.extend(export.channels)
+                continue
+            yield from self._channel_files_side_by_side(export.channels, start)
+        del checkpoint.todo_team_ids[-EXPORT_TEAM_WORKERS:]
+
+    def _channel_files_side_by_side(
+        self, channels: Sequence[ChannelRef], start: SecondsSinceUnixEpoch
+    ) -> Iterator[Document | ConnectorFailure]:
+        """The files of these channels, max_workers workers draining them a
+        channel at a time. A worker yields each file as it is read, so it
+        buffers no library. The SharePoint REST context behind the readers is
+        per thread."""
+        if self._files is None:
+            return
+        yield from drain(
+            channels,
+            lambda channel: self._opened_channel_files(channel, start),
+            self.max_workers,
+        )
+
+    def _opened_channel_files(
+        self, channel: ChannelRef, start: SecondsSinceUnixEpoch
+    ) -> Iterator[Document | ConnectorFailure]:
+        """A channel's files, library opened and left within this call. A
+        channel Graph describes without a library, or refuses, is one recorded
+        failure. Anything else fails the attempt."""
+        if self._files is None:
+            raise RuntimeError("Channel files are read only when attachments are on")
+        try:
+            refusal = self._open_library(channel)
+            if refusal is not None:
+                yield refusal
+                return
+            yield from self._channel_files(channel, start)
+        finally:
+            self._files.leave(channel)
+
+    def _open_library(self, channel: ChannelRef) -> ConnectorFailure | None:
+        """Opens the channel's library, or returns the one failure a channel
+        without a usable library costs. An outage raises."""
+        if self._files is None:
+            raise RuntimeError("Channel files are read only when attachments are on")
+        try:
+            self._files.open(channel)
+        except ChannelFilesUnavailable as e:
+            return channel_failure(channel, "files", e)
+        except requests.HTTPError as e:
+            if not is_permanent(e):
+                raise
+            return channel_failure(channel, "files", e)
+        return None
+
+    def _channel_step(
         self, checkpoint: TeamsCheckpoint, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
-        """One page of the current channel's threads, and after the last page the
-        channel's files. Moves the checkpoint to the next page, or off the channel
-        when the page was its last or is refused."""
-        channel = checkpoint.current_channel
-        if channel is None:
-            raise RuntimeError("No channel is being walked")
+        """One page of every active channel, side by side, then the files of
+        the channels whose last page this was, side by side too. Cursors are
+        advanced on copies and written back only once every channel finished
+        its page, so a raise in one leaves the whole step to be retried."""
+        while len(checkpoint.active) < self.max_workers and checkpoint.todo_channels:
+            checkpoint.active.append(
+                ChannelCursor(channel=checkpoint.todo_channels.pop())
+            )
+        # One transient failure discards the other channels' finished pages,
+        # up to max_workers - 1 pages of replies calls: cheaper than a partial
+        # write-back the retry would have to reconcile.
+        advances: list[ChannelAdvance] = cast(
+            list[ChannelAdvance],
+            run_functions_tuples_in_parallel(
+                [
+                    (self._advance_channel, (cursor.model_copy(deep=True), start))
+                    for cursor in checkpoint.active
+                ],
+                max_workers=self.max_workers,
+            ),
+        )
+        active: list[ChannelCursor] = []
+        files_due: list[ChannelRef] = []
+        for advance in advances:
+            yield from advance.items
+            if advance.restarted:
+                self._restarted_channel_ids.add(advance.cursor.channel.id)
+            if not advance.done:
+                active.append(advance.cursor)
+            elif advance.files_due:
+                files_due.append(advance.cursor.channel)
+            elif self._files is not None:
+                self._files.leave(advance.cursor.channel)
+        checkpoint.active = active
+        yield from self._channel_files_side_by_side(files_due, start)
+
+    def _advance_channel(
+        self, cursor: ChannelCursor, start: SecondsSinceUnixEpoch
+    ) -> ChannelAdvance:
+        """One page of the cursor's channel: its threads with their replies and
+        images. Done when the page was its last or is refused; the files of a
+        channel read to its last page follow, off this worker."""
+        channel = cursor.channel
+        items: list[Document | ConnectorFailure] = []
 
         type_failure = self._threads.type_failure(channel)
         if type_failure is not None:
-            yield type_failure
-            self._leave_channel(checkpoint)
-            return
+            items.append(type_failure)
+            return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         # No library means the files grant the admin turned on is missing, so a
         # refusal is one channel failure.
@@ -353,56 +513,54 @@ class TeamsConnector(
                 except ChannelFilesUnavailable as e:
                     # Graph describes no usable library for this channel. Its
                     # messages are still readable, so only the files are lost.
-                    yield channel_failure(channel, "files", e)
+                    items.append(channel_failure(channel, "files", e))
         except requests.HTTPError as e:
             if not is_permanent(e):
                 raise
-            yield channel_failure(channel, "files", e)
-            self._leave_channel(checkpoint)
-            return
+            items.append(channel_failure(channel, "files", e))
+            return ChannelAdvance(cursor=cursor, items=items, done=True)
 
         try:
             roots, next_url = self._threads.page(
-                channel, checkpoint.next_messages_url, start
+                channel, cursor.next_messages_url, start
             )
         except requests.HTTPError as e:
-            if _rejects_saved_cursor(e, checkpoint, self._restarted_channel_ids):
+            if _rejects_saved_cursor(e, cursor, self._restarted_channel_ids):
                 logger.warning(
                     "Graph rejected the saved page of channel %s; walking it again "
                     "from its first page",
                     channel.id,
                 )
-                checkpoint.next_messages_url = None
-                self._restarted_channel_ids.add(channel.id)
-                return
+                cursor.next_messages_url = None
+                return ChannelAdvance(cursor=cursor, items=items, restarted=True)
             if not is_permanent(e):
                 raise
-            yield channel_failure(channel, "messages", e)
-            self._leave_channel(checkpoint)
-            return
+            items.append(channel_failure(channel, "messages", e))
+            return ChannelAdvance(cursor=cursor, items=items, done=True)
 
-        yield from self._threads.documents(channel, roots, start)
+        items.extend(self._threads.documents(channel, roots, start))
+        cursor.next_messages_url = next_url
+        return ChannelAdvance(
+            cursor=cursor,
+            items=items,
+            done=next_url is None,
+            files_due=next_url is None,
+        )
 
-        checkpoint.next_messages_url = next_url
-        if next_url is not None:
-            return
-        # The files follow the last page of messages. A refused folder listing on
-        # Graph or a refused site on SharePoint REST (the SDK's own exception) is
-        # one recorded failure for the channel, anything else fails the attempt.
-        if self._files is not None:
-            try:
-                yield from self._files.index(channel, start)
-            except (requests.HTTPError, ClientRequestException) as e:
-                if not is_permanent(e):
-                    raise
-                yield channel_failure(channel, "files", e)
-        self._leave_channel(checkpoint)
-
-    def _leave_channel(self, checkpoint: TeamsCheckpoint) -> None:
-        if checkpoint.current_channel is not None and self._files is not None:
-            self._files.leave(checkpoint.current_channel)
-        checkpoint.current_channel = None
-        checkpoint.next_messages_url = None
+    def _channel_files(
+        self, channel: ChannelRef, start: SecondsSinceUnixEpoch
+    ) -> Iterator[Document | ConnectorFailure]:
+        """A channel's files once its library is open. A refused folder listing
+        on Graph or a refused site on SharePoint REST (the SDK's own exception)
+        is one recorded failure for the channel, anything else fails the attempt."""
+        if self._files is None:
+            raise RuntimeError("Channel files are read only when attachments are on")
+        try:
+            yield from self._files.index(channel, start)
+        except (requests.HTTPError, ClientRequestException) as e:
+            if not is_permanent(e):
+                raise
+            yield channel_failure(channel, "files", e)
 
     def _channels(self, for_group_sync: bool = False) -> Iterator[ChannelRef]:
         """Every channel of the configured teams, listed fresh. The group sync
@@ -526,12 +684,11 @@ class TeamsConnector(
         team or channel is listed either."""
         if not walk.lists_threads and self._files is None:
             return
-        # A file's readers come from SharePoint REST, whose client is not safe
-        # across threads, so only the ids-alone walk reads channels side by side.
         yield from walk.fan_out(
             self._channels(),
             lambda channel: self._slim_channel(channel, walk),
-            1 if walk.with_readers else self.max_workers,
+            self.max_workers,
+            self.max_workers * CHANNEL_BATCH_PER_WORKER,
         )
 
     def _slim_organizers(self, walk: SlimWalk) -> Iterator[SlimDocument]:
@@ -549,17 +706,15 @@ class TeamsConnector(
 
 def _rejects_saved_cursor(
     error: requests.HTTPError,
-    checkpoint: TeamsCheckpoint,
+    cursor: ChannelCursor,
     restarted_channel_ids: set[str],
 ) -> bool:
     """Graph answers a page url it no longer honors with 400 or 410 (measured
     for a tampered skip token). Retrying it would never progress, so the channel
     is walked again from its first page, once per attempt."""
-    channel = checkpoint.current_channel
     return (
-        channel is not None
-        and checkpoint.next_messages_url is not None
-        and channel.id not in restarted_channel_ids
+        cursor.next_messages_url is not None
+        and cursor.channel.id not in restarted_channel_ids
         and status(error) in (400, 410)
     )
 

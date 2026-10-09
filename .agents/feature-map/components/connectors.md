@@ -43,7 +43,8 @@ Drive. Saving creates the connector and kicks off an initial index run. The
 admin watches the connector's status move from indexing to a document count and
 a "last successful index" timestamp on the connector status page. From then on,
 a background job polls for new and changed documents on a schedule the admin
-sets, and a separate job prunes documents that were deleted at the source.
+sets, and a separate job prunes documents that were deleted at the source, or
+that fall before the connector's indexing start.
 
 For connectors that implement `validate_connector_settings` or named capability
 checks (§4), the admin sees a validation error at connector-creation time if
@@ -295,6 +296,14 @@ loads `all_indexed_document_ids` for the cc-pair from Postgres, calls
 `doc_ids_to_remove = all_indexed_document_ids - all_connector_doc_ids.keys()`.
 See §5 for the invariant this depends on.
 
+When the pair has an `indexing_start`, `extract_ids_from_runnable_connector`
+lists only the documents from that time on, if
+`connectors/interfaces.py:prune_listing_honors_indexing_start` says the
+connector's listing filters by the same date as indexing. A slim connector
+opts in with `BaseConnector.slim_listing_honors_indexing_start`. Such a prune
+also removes documents that still exist at the source but were last updated
+before the start. Other connectors list every document.
+
 ### 4.6 Three representative shapes
 
 Do not read all 58 connectors. These three (chosen for the README) span the
@@ -360,6 +369,49 @@ shape the table above does not cover:
   in memory one mailbox per worker, and yields the ids and readers
   `plan_documents` gives, so the slim diff (§4.5) and the doc sync see the
   documents indexing built.
+
+### 4.6.2 Teams: channels side by side, then organizers
+
+`teams/connector.py:TeamsConnector` indexes four kinds of document from one
+credential: channel threads, channel files, meeting transcripts and the days
+of meeting chats.
+
+- **Teams, then channels.** The first step lists every team
+  (`listing.collect_all_teams`). The first team step probes the export API
+  once and keeps the answer in `TeamsCheckpoint.export`. With it, a team step
+  streams four teams at a time, the documents of each team yielded as it finishes (`export.py:ExportSource`): every message of
+  every channel changed in the window, replies included, grouped into threads;
+  a thread whose root was created inside the window is complete in the stream,
+  an older one that changed anywhere gets its replies from Graph, and its root
+  too when the stream lacks it. A team whose stream Graph refuses, or that
+  streams past 100k messages, goes to the channel walk; a probe team that is gone or locked walks its channels and the next team probes again, and a 402 mid-stream sends every team left to the channel walk.
+  An app the export API refuses walks every team the same way: the team's
+  channels into `todo_channels`, then a channel
+  step walks one delta page of up to `max_workers` channels at once
+  (`TeamsCheckpoint.active`, `_channel_step`, `_advance_channel`), the roots
+  of the page, one replies call per root and the images pasted into them.
+  Cursors are advanced on copies and written back only when every channel
+  finished its page, so a raise in one leaves the step to be retried. A
+  checkpoint saved by the one-channel walk joins `active` when it is loaded.
+- **Files.** After a channel's last page, or its team's export stream, its
+  library is read on a worker thread, `max_workers` workers draining the
+  finished channels a channel at a time, each file yielded as it is read
+  (`FileSource.index`): the folder children, each file's text,
+  and its readers through a SharePoint REST context kept per site and per
+  thread, so the files of several channels are read side by side.
+- **Organizers.** The meeting side follows the channels: a page of licensed
+  users per step, then 32 organizers per step drained by eight workers from a
+  queue (`sources.drain`), each organizer read for its transcripts and the
+  days of its meeting chats that changed. On a poll, never the first index,
+  one chats export stream per organizer says which chats changed
+  (`meeting_chats.fetch_touched_days`), so a quiet chat costs no request; an
+  app the export API refuses, or a stream refused or past 250k messages, asks
+  each chat what changed. A slow organizer holds back only its own worker.
+- **Prune and permission sync.** `_slim_docs` relists the channels through the
+  delta, ids only and no replies, in batches of four channels per worker that
+  `max_workers` workers drain, with or without readers (file readers come
+  through a SharePoint REST context kept per site and per thread), then the
+  organizers the same way.
 
 ### 4.7 The `SourceOperations` gateway pattern
 
@@ -573,7 +625,9 @@ lack of a key, ask instead. The shared helper
 
 - No `ConnectorMissingException` at run time for a source with a registry entry.
 - Index count matches the source's actual document count after a full run.
-- A prune run removes only documents actually deleted at the source.
+- A prune run removes only documents deleted at the source, or, for a
+  connector whose listing honors the indexing start, documents last updated
+  before it.
 - A resumed checkpointed run does not reprocess documents from before the
   checkpoint, and does not skip documents added after it.
 

@@ -2,7 +2,8 @@
 them can leave unread."""
 
 import threading
-from datetime import date
+from collections.abc import Iterator
+from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, call
 
@@ -10,8 +11,13 @@ import pytest
 import requests
 from office365.teams.team import Team
 
+from onyx.access.models import ExternalAccess
+from onyx.connectors.microsoft_utils.drive_delta import SHAREPOINT_IDS_PROPERTY
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.models import Document, SlimDocument
+from onyx.connectors.teams import files as files_module
 from onyx.connectors.teams import listing as listing_module
+from onyx.connectors.teams import sources as sources_module
 from onyx.connectors.teams.connector import (
     ORGANIZER_SOURCE_TYPES,
     PREFIXED_DOCUMENT_ID_PREFIXES,
@@ -20,9 +26,10 @@ from onyx.connectors.teams.connector import (
 from onyx.connectors.teams.files import FileSource, file_document_id
 from onyx.connectors.teams.meeting_chats import chat_document_id
 from onyx.connectors.teams.organizers import OrganizerSource
-from onyx.connectors.teams.sources import SLIM_WALK
+from onyx.connectors.teams.sources import SLIM_WALK, SlimWalk
 from onyx.connectors.teams.transcripts import transcript_document_id
 from onyx.connectors.teams.utils import message_delta_url
+from onyx.utils.threadpool_concurrency import drain
 from tests.unit.onyx.connectors.teams.helpers import (
     CHANNEL_ID,
     TEAM_ID,
@@ -150,23 +157,108 @@ def _two_channels(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     )
 
 
-def test_a_walk_with_readers_stays_on_the_calling_thread(
+def test_a_walk_with_readers_reads_channels_side_by_side_too(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _two_channels(monkeypatch)
     answer = client.execute_request_direct.side_effect
-    threads_used: set[str] = set()
+    both_in_flight = threading.Barrier(2, timeout=5)
 
-    def record(url: str) -> Any:
-        threads_used.add(threading.current_thread().name)
+    def meet(url: str) -> Any:
+        if "messages/delta" in url:
+            both_in_flight.wait()
         return answer(url)
 
-    client.execute_request_direct.side_effect = record
+    client.execute_request_direct.side_effect = meet
 
     assert _ids(connector(client).retrieve_all_slim_docs_perm_sync()) == {"m1", "m2"}
-    # A file's readers come from SharePoint REST, whose client is not safe
-    # across threads, so a walk that reads readers takes no worker thread.
-    assert threads_used == {threading.current_thread().name}
+
+
+def test_a_walk_with_readers_gives_each_channel_its_own_rest_context_and_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """File readers come through the SDK's REST context and Graph client, both
+    of which queue requests on the instance, so two channels read side by
+    side must not share either."""
+    _team_with_channels(monkeypatch)
+    routes: dict[str, dict[str, Any]] = {}
+    for n, channel_id in enumerate(CHANNELS):
+        routes[_delta_url(channel_id)] = {"value": [message(f"m{n}", "one")]}
+        routes[f"teams/{TEAM_ID}/channels/{channel_id}/filesFolder"] = {
+            "id": f"folder-{n}",
+            "parentReference": {"driveId": f"drive-{n}", "siteId": None},
+        }
+        routes[f"drives/drive-{n}?$select={SHAREPOINT_IDS_PROPERTY}"] = {
+            "sharePointIds": {
+                "listId": f"list-{n}",
+                # One site for both, so a context cached per site alone
+                # would be shared.
+                "siteUrl": "https://tenant.sharepoint.example/sites/S",
+            }
+        }
+    client = graph_client(routes)
+    both_reading = threading.Barrier(2, timeout=5)
+    seen: list[tuple[int, Any, Any]] = []
+
+    def access(**kwargs: Any) -> ExternalAccess:
+        # Each reader waits for the other, so readers one channel at a time
+        # break the barrier.
+        both_reading.wait()
+        seen.append((threading.get_ident(), kwargs["ctx"], kwargs["graph_client"]))
+        return ExternalAccess(
+            external_user_emails=set(), external_user_group_ids=set(), is_public=False
+        )
+
+    def one_file(_client: Any, drive_id: str, **_kwargs: Any) -> Any:
+        yield DriveItemData(
+            id=f"file-{drive_id}",
+            name="Plan.pdf",
+            web_url="https://tenant.sharepoint.example/Plan.pdf",
+            size=10,
+            mime_type="application/pdf",
+            created_datetime=datetime(2026, 9, 1, tzinfo=timezone.utc),
+            last_modified_datetime=datetime(2026, 9, 2, tzinfo=timezone.utc),
+            drive_id=drive_id,
+        )
+
+    monkeypatch.setattr(files_module, "iter_drive_items_paged", one_file)
+    monkeypatch.setattr(files_module, "get_sharepoint_external_access", access)
+    monkeypatch.setattr(
+        files_module, "ClientContext", MagicMock(side_effect=lambda _: MagicMock())
+    )
+    monkeypatch.setattr(files_module, "acquire_token_for_rest", MagicMock())
+    monkeypatch.setattr(DriveItemData, "to_sdk_driveitem", lambda self, _client: self)
+    teams_connector = connector(client, include_attachments=True)
+    teams_connector._acquire_token = lambda: {"access_token": "token"}
+
+    ids = _ids(teams_connector.retrieve_all_slim_docs_perm_sync())
+
+    assert {file_document_id("file-drive-0"), file_document_id("file-drive-1")} <= ids
+    assert len(seen) == 2
+    assert seen[0][0] != seen[1][0]
+    assert seen[0][1] is not seen[1][1]
+    assert seen[0][2] is not seen[1][2]
+
+
+def test_quiet_channels_report_progress_from_their_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A batch of channels with nothing to list yields no document, so the
+    runner's lock is renewed from the pages the workers read."""
+    _team_with_channels(monkeypatch)
+    client = graph_client(
+        {_delta_url(CHANNELS[0]): {"value": []}, _delta_url(CHANNELS[1]): {"value": []}}
+    )
+    callback: MagicMock = MagicMock()
+    callback.should_stop.return_value = False
+
+    assert (
+        list(connector(client).retrieve_all_slim_docs_perm_sync(callback=callback))
+        == []
+    )
+    reports = [c.args[1] for c in callback.progress.call_args_list]
+    # One report per page of every channel, besides the batch reports.
+    assert reports.count(0) == 2
 
 
 def test_a_refused_channel_fails_the_pruning_walk(
@@ -190,11 +282,14 @@ def test_every_batch_of_channels_reports_progress_and_honors_a_stop(
     client = _two_channels(monkeypatch)
     callback = MagicMock()
     callback.should_stop.side_effect = [False, True]
+    teams_connector = connector(client)
+    # One channel per batch, so the stop lands between the two channels. The
+    # runner's lock lives on the progress reports.
+    teams_connector.max_workers = 1
+    monkeypatch.setattr("onyx.connectors.teams.connector.CHANNEL_BATCH_PER_WORKER", 1)
 
-    # A walk with readers takes one channel per batch. The runner's lock lives
-    # on the progress reports, and a stop is honored before the next channel.
     with pytest.raises(RuntimeError, match="Stop signal"):
-        list(connector(client).retrieve_all_slim_docs_perm_sync(callback=callback))
+        list(teams_connector.retrieve_all_slim_docs_perm_sync(callback=callback))
     assert callback.progress.call_args_list == [call(SLIM_WALK, 1)]
     requested = [c.args[0] for c in client.execute_request_direct.call_args_list]
     assert _delta_url(CHANNELS[1]) not in requested
@@ -259,3 +354,67 @@ def test_a_first_index_writes_nothing_for_a_deleted_thread() -> None:
     items, _ = step(connector(client), channel_checkpoint())
 
     assert items == []
+
+
+def test_a_slow_item_holds_back_only_its_own_worker() -> None:
+    """Three items, two workers: the first item waits for the third to start,
+    which only happens when a worker takes the next item off the queue instead
+    of the batch waiting for its slowest member."""
+    third_started: threading.Event = threading.Event()
+
+    def listing(item: str) -> Iterator[str]:
+        if item == "first":
+            assert third_started.wait(timeout=5), "the third item never started"
+        if item == "third":
+            third_started.set()
+        yield item
+
+    assert sorted(drain(["first", "second", "third"], listing, workers=2)) == [
+        "first",
+        "second",
+        "third",
+    ]
+
+
+def test_a_long_batch_keeps_reporting_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The permission-sync lock is renewed on progress reports, so a batch
+    that outlasts the lock timeout must report while it drains."""
+    monkeypatch.setattr(sources_module, "PROGRESS_EVERY_DOCUMENTS", 2)
+    callback: MagicMock = MagicMock()
+    callback.should_stop.return_value = False
+    walk: SlimWalk = SlimWalk(start=0, callback=callback, with_readers=False)
+
+    def listing(item: int) -> Iterator[SlimDocument]:
+        for n in range(3):
+            yield SlimDocument(id=f"{item}-{n}", external_access=None)
+
+    assert len(list(walk.fan_out([1, 2], listing, workers=2))) == 6
+    # One report for the batch of two items, then one per two documents.
+    assert (
+        callback.progress.call_args_list
+        == [call(SLIM_WALK, 2)] + [call(SLIM_WALK, 0)] * 3
+    )
+
+
+def test_quiet_listings_report_progress_from_their_pages() -> None:
+    """A batch of listings that page for long and yield nothing must still
+    renew the runner's lock, so each page reports from its worker, and the
+    reports are serialized for a callback not built for threads."""
+    callback: MagicMock = MagicMock()
+    callback.should_stop.return_value = False
+    walk: SlimWalk = SlimWalk(start=0, callback=callback, with_readers=False)
+    reporters: set[int] = set()
+
+    def listing(_item: int) -> Iterator[SlimDocument]:
+        for _ in range(2):
+            walk.page_signals()
+            reporters.add(threading.get_ident())
+        yield from ()
+
+    assert list(walk.fan_out([1, 2, 3, 4], listing, workers=2, batch=4)) == []
+    # One report for the batch, then one per page of every listing.
+    assert (
+        callback.progress.call_args_list
+        == [call(SLIM_WALK, 4)] + [call(SLIM_WALK, 0)] * 8
+    )
+    assert threading.get_ident() not in reporters

@@ -229,6 +229,8 @@ class BoxConnector(
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[BoxConnectorCheckpoint],
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         folder_ids: list[str] | None = None,

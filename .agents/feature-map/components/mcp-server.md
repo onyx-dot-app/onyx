@@ -216,7 +216,10 @@ The API ingress also routes `/api/oauth-provider` on the web host in split-host
 deployments, removing `/api` before forwarding to the backend.
 Nginx serves authorization metadata at the RFC 8414 issuer path and the root
 and `/mcp` compatibility aliases. All aliases retain the canonical issuer.
-Discovery is handled by the public proxy, without Next.js rewrite destinations.
+Production discovery is handled by the public proxy, without Next.js rewrite destinations.
+For local OAuth, `next dev` rewrites authorization discovery to `INTERNAL_URL`
+and protected-resource discovery to `MCP_INTERNAL_URL`. These rewrites exist
+only in `PHASE_DEVELOPMENT_SERVER`; production builds and servers omit them.
 
 ### 4.3 A search call, end to end
 
@@ -364,6 +367,27 @@ whatever those endpoints give back.
 ---
 
 ## 8. How to verify a change
+
+The `MCP Compatibility` workflow checks real nginx routing on PRs and merge
+groups. Its native-client job runs Claude Code and Codex OAuth login against
+an isolated Onyx test server with PostgreSQL and Redis, through real nginx
+using the shipped routing configuration, without LLM calls. Each client runs
+OAuth and authenticated tool discovery with both `/mcp` and `/mcp/` URLs.
+PRs use pinned CLI versions; the nightly run uses their latest releases.
+The same job checks the OAuth protocol with omitted resource parameters, which
+legacy Claude Code clients use. Tokens remain bound to the configured MCP URL.
+
+A weekly canary, Mondays at 09:17 UTC, builds the backend under test and starts an isolated Compose
+stack with the API, MCP server, PostgreSQL, Redis, and shipped nginx routing.
+It checks loopback discovery aliases, both endpoint URL forms, the advertised
+resource, MCP auth challenges, and provider routing without creating users or grants.
+It does not use a running deployment or test the Next.js consent UI. Scheduled and
+manual failures post to `#alerts` (`C07K8KBMGKF`) through `slack-post-message`
+with `CVE_REVIEWS_BOT_TOKEN`, matching the channel-addressable bot workflows.
+Messages tag Roshan through the shared `rohoswagger` user mapping.
+The required-client mode fails if either CLI is missing.
+Manual runs with `test_alert=true` send a labeled delivery-test message even
+when compatibility checks pass.
 
 ### Tests
 

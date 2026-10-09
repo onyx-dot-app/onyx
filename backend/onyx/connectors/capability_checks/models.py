@@ -1,5 +1,3 @@
-import hashlib
-import json
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
@@ -254,16 +252,44 @@ class CredentialCapabilityReport(BaseModel):
     check_results: list[CapabilityCheckResult]
 
 
-def compute_connector_config_hash(config: dict[str, Any] | None) -> str | None:
-    """Returns the sha256 of the canonical config JSON a report ran with.
+class NamedCheckRun(BaseModel):
+    """The outcome of the named checks after the blocking budget."""
 
-    This is the staleness signal, shared by every report writer so stored hashes
-    stay comparable.
-    """
-    if config is None:
-        return None
-    canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    # Results of the checks that finished, reused draft results included.
+    finished_results: list[CapabilityCheckResult]
+    # Checks that were still running at the end of the budget.
+    unfinished_check_ids: frozenset[str]
+
+    @property
+    def failed_required_results(self) -> list[CapabilityCheckResult]:
+        """The finished required checks that failed. Only these block a
+        pairing."""
+        return [
+            result
+            for result in self.finished_results
+            if result.required and result.status == CapabilityCheckStatus.FAILED
+        ]
+
+
+class ProposedPairingValidation(BaseModel):
+    """The result of validating a pairing state that is not stored."""
+
+    # Set when the credential binding, the connector construction, or the
+    # legacy validation failed. The named checks do not run then.
+    validation_error: str | None = None
+    # Named checks only: the finished results, and the checks still running at
+    # the end of the blocking budget.
+    check_results: list[CapabilityCheckResult] = []
+    unfinished_check_ids: frozenset[str] = frozenset()
+
+    @property
+    def blocks_pairing(self) -> bool:
+        """True when the validation failed or a finished required check
+        failed."""
+        return self.validation_error is not None or any(
+            result.required and result.status == CapabilityCheckStatus.FAILED
+            for result in self.check_results
+        )
 
 
 def aggregate_capability_verdict(

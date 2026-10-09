@@ -556,6 +556,7 @@ class OnyxRedisLocks:
     )
     CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX = "da_lock:connector_external_group_sync"
     PRUNING_LOCK_PREFIX = "da_lock:pruning"
+    ORPHAN_TAG_SWEEP_LOCK = "da_lock:orphan_tag_sweep"
     INDEXING_METADATA_PREFIX = "da_metadata:indexing"
 
     SLACK_BOT_LOCK = "da_lock:slack_bot"
@@ -576,6 +577,9 @@ class OnyxRedisLocks:
     USER_FILE_PROJECT_SYNC_QUEUED_PREFIX = "da_lock:user_file_project_sync_queued"
     USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
     INCOGNITO_FILE_CLEANUP_BEAT_LOCK = "da_lock:check_incognito_file_cleanup_beat"
+    STAGED_CONNECTOR_FILE_CLEANUP_BEAT_LOCK = (
+        "da_lock:check_staged_connector_file_cleanup_beat"
+    )
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
     # Short-lived key set when a delete task is enqueued; cleared when the worker picks it up.
     # Prevents the beat from re-enqueuing the same file while a delete task is already queued.
@@ -598,6 +602,8 @@ class OnyxRedisSignals:
         "signal:block_validate_permission_sync_fences"
     )
     BLOCK_PRUNING = "signal:block_pruning"
+    # Set by a sweep that skipped because another one held the lock.
+    ORPHAN_TAG_SWEEP_PENDING = "signal:orphan_tag_sweep_pending"
     BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
     BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
     BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = (
@@ -714,6 +720,9 @@ class OnyxCeleryTask:
     RUN_CAPABILITY_CHECKS = "run_capability_checks"
     RUN_DRAFT_CAPABILITY_CHECKS = "run_draft_capability_checks"
     CHECK_FOR_STALE_CAPABILITY_RUNS = "check_for_stale_capability_runs"
+
+    # Files uploaded for a connector edit that no applied plan claimed
+    CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP = "check_for_staged_connector_file_cleanup"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"

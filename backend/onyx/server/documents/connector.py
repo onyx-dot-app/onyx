@@ -1,3 +1,4 @@
+import hashlib
 import json
 import math
 import mimetypes
@@ -5,7 +6,7 @@ import os
 import zipfile
 from datetime import datetime
 from io import BytesIO
-from typing import Any, cast
+from typing import IO, Any, cast
 
 from fastapi import (
     APIRouter,
@@ -68,6 +69,7 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     GoogleOAuthAuthenticationMethod,
 )
+from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.db.connector import (
     create_connector,
     delete_connector,
@@ -136,6 +138,10 @@ from onyx.file_processing.zip_limits import (
     assert_zip_within_limits,
     read_zip_member,
 )
+from onyx.file_store.constants import (
+    CONTENT_SHA256_METADATA_KEY,
+    STAGED_FOR_CC_PAIR_METADATA_KEY,
+)
 from onyx.file_store.file_store import (
     FILE_SIZE_MISSING_SENTINEL,
     FileStore,
@@ -199,6 +205,10 @@ SEEN_ZIP_DETAIL = "Only one zip file is allowed per file connector, \
 use the ingestion APIs for multiple files"
 
 MAX_UNZIPPED_BYTES = 500 * 1024 * 1024
+_CONTENT_HASHED_ORIGINS = frozenset(
+    {FileOrigin.CONNECTOR, FileOrigin.CONNECTOR_FILE_UPLOAD}
+)
+_HASH_CHUNK_BYTES = 1024 * 1024
 
 router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
@@ -289,7 +299,9 @@ def check_drive_tokens(
 
 
 def save_zip_metadata_to_file_store(
-    zf: zipfile.ZipFile, file_store: FileStore
+    zf: zipfile.ZipFile,
+    file_store: FileStore,
+    file_metadata: dict[str, Any] | None = None,
 ) -> tuple[str | None, int]:
     """
     Extract .onyx_metadata.json from zip and save to file store.
@@ -316,6 +328,7 @@ def save_zip_metadata_to_file_store(
             display_name=ONYX_METADATA_FILENAME,
             file_origin=FileOrigin.CONNECTOR_METADATA,
             file_type="application/json",
+            file_metadata=file_metadata,
         )
         return file_id, len(metadata_bytes)
     except KeyError:
@@ -343,16 +356,45 @@ def is_zip_file(file: UploadFile) -> bool:
     )
 
 
+def _sha256_of_stream(stream: IO[bytes]) -> str:
+    """Reads the stream from its position and moves it back there."""
+    start = stream.tell()
+    digest = hashlib.sha256()
+    while chunk := stream.read(_HASH_CHUNK_BYTES):
+        digest.update(chunk)
+    stream.seek(start)
+    return digest.hexdigest()
+
+
+def _uploaded_file_metadata(
+    staged_for_cc_pair_id: int | None, content: IO[bytes] | None = None
+) -> dict[str, Any] | None:
+    """The record metadata of an upload: the sha256 of ``content`` when given,
+    and the staged mark."""
+    metadata: dict[str, Any] = {}
+    if content is not None:
+        metadata[CONTENT_SHA256_METADATA_KEY] = _sha256_of_stream(content)
+    if staged_for_cc_pair_id is not None:
+        metadata[STAGED_FOR_CC_PAIR_METADATA_KEY] = staged_for_cc_pair_id
+    return metadata or None
+
+
 def upload_files(
     files: list[UploadFile],
     file_origin: FileOrigin = FileOrigin.CONNECTOR,
     unzip: bool = True,
+    staged_for_cc_pair_id: int | None = None,
 ) -> FileUploadResponse:
+    """Saves the uploads to the file store. Connector files record the sha256
+    of their bytes. ``staged_for_cc_pair_id`` marks every saved file as
+    staged for that pair's edit (see ``file_connector_staging``)."""
+
     # Skip directories and known macOS metadata entries
     def should_process_file(file_path: str) -> bool:
         normalized_path = os.path.normpath(file_path)
         return not any(part.startswith(".") for part in normalized_path.split(os.sep))
 
+    hashes_content = file_origin in _CONTENT_HASHED_ORIGINS
     deduped_file_paths = []
     deduped_file_names = []
     zip_metadata_file_id: str | None = None
@@ -375,7 +417,11 @@ def upload_files(
                         assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
                         unzipped_bytes: int
                         zip_metadata_file_id, unzipped_bytes = (
-                            save_zip_metadata_to_file_store(zf, file_store)
+                            save_zip_metadata_to_file_store(
+                                zf,
+                                file_store,
+                                _uploaded_file_metadata(staged_for_cc_pair_id),
+                            )
                         )
                         for file_info in zf.namelist():
                             if zf.getinfo(file_info).is_dir():
@@ -398,11 +444,16 @@ def upload_files(
                             if mime_type is None:
                                 mime_type = "application/octet-stream"
 
+                            sub_file = BytesIO(sub_file_bytes)
                             file_id = file_store.save_file(
-                                content=BytesIO(sub_file_bytes),
+                                content=sub_file,
                                 display_name=os.path.basename(file_info),
                                 file_origin=file_origin,
                                 file_type=mime_type,
+                                file_metadata=_uploaded_file_metadata(
+                                    staged_for_cc_pair_id,
+                                    sub_file if hashes_content else None,
+                                ),
                             )
                             deduped_file_paths.append(file_id)
                             deduped_file_names.append(os.path.basename(file_info))
@@ -415,6 +466,9 @@ def upload_files(
                     display_name=file.filename,
                     file_origin=file_origin,
                     file_type=file.content_type or "application/zip",
+                    file_metadata=_uploaded_file_metadata(
+                        staged_for_cc_pair_id, file.file if hashes_content else None
+                    ),
                 )
                 deduped_file_paths.append(file_id)
                 deduped_file_names.append(file.filename)
@@ -425,6 +479,9 @@ def upload_files(
                 display_name=file.filename,
                 file_origin=file_origin,
                 file_type=file.content_type or "text/plain",
+                file_metadata=_uploaded_file_metadata(
+                    staged_for_cc_pair_id, file.file if hashes_content else None
+                ),
             )
             deduped_file_paths.append(file_id)
             deduped_file_names.append(file.filename)
@@ -1598,6 +1655,13 @@ def create_connector_with_mock_credential(
         current_group_ids=[],
         requested_group_ids=connector_data.groups or [],
         is_non_public=connector_data.access_type != AccessType.PUBLIC,
+    )
+    validate_pairing_access(
+        db_session,
+        user=user,
+        source=connector_data.source,
+        access_type=connector_data.access_type,
+        data_access_group_ids=None,
     )
 
     connector_id: int | None = None

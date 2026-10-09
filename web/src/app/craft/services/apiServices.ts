@@ -1,3 +1,4 @@
+import { FetchError } from "@/lib/fetcher";
 import {
   ApiSessionResponse,
   ApiDetailedSessionResponse,
@@ -14,6 +15,7 @@ import {
   DirectoryListing,
   SharingScope,
   ApiSessionSkillsState,
+  type OutputInventory,
 } from "@/app/craft/types/streamingTypes";
 import {
   ApprovalListResponse,
@@ -567,10 +569,12 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
 // =============================================================================
 
 export async function fetchWebappInfo(
-  sessionId: string
+  sessionId: string,
+  signal?: AbortSignal
 ): Promise<ApiWebappInfoResponse> {
   const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/webapp-info`
+    `${BUILD_API_BASE}/sessions/${sessionId}/webapp-info`,
+    { signal }
   );
 
   if (!res.ok) {
@@ -584,9 +588,23 @@ export async function fetchWebappInfo(
 // Files API
 // =============================================================================
 
+export async function fetchOutputInventory(
+  sessionId: string,
+  signal?: AbortSignal
+): Promise<OutputInventory> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/outputs`,
+    { signal }
+  );
+  if (!response.ok)
+    throw new Error(`Failed to fetch output inventory: ${response.status}`);
+  return response.json();
+}
+
 export async function fetchDirectoryListing(
   sessionId: string,
-  path: string = ""
+  path: string = "",
+  signal?: AbortSignal
 ): Promise<DirectoryListing> {
   const url = new URL(
     `${BUILD_API_BASE}/sessions/${sessionId}/files`,
@@ -596,13 +614,27 @@ export async function fetchDirectoryListing(
     url.searchParams.set("path", path);
   }
 
-  const res = await fetch(url.toString());
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch directory listing: ${res.status}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () =>
+      controller.abort(
+        new DOMException("Directory listing timed out", "TimeoutError")
+      ),
+    10_000
+  );
+  try {
+    const res = await fetch(url.toString(), {
+      signal: signal
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch directory listing: ${res.status}`);
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json();
 }
 
 /**
@@ -659,10 +691,16 @@ export async function fetchFileContent(
   sessionId: string,
   path: string
 ): Promise<FileContentResponse> {
-  const res = await fetch(buildArtifactUrl(sessionId, path));
+  const res = await fetch(buildArtifactUrl(sessionId, path), {
+    cache: "no-store",
+  });
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch file content: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch file content: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   const mimeType = res.headers.get("Content-Type") || "text/plain";
@@ -820,13 +858,16 @@ export async function fetchPptxPreview(
     .join("/");
 
   const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`
+    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`,
+    { cache: "no-store" }
   );
 
   if (!res.ok) {
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errorData.detail || `Failed to generate PPTX preview: ${res.status}`
+    throw new FetchError(
+      errorData.detail || `Failed to generate PPTX preview: ${res.status}`,
+      res.status,
+      errorData
     );
   }
 

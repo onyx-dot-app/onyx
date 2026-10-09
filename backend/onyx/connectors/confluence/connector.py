@@ -2,7 +2,6 @@ import copy
 import re
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
-from enum import Enum
 from typing import Any
 from urllib.parse import quote
 
@@ -21,6 +20,10 @@ from onyx.connectors.confluence.access import (
     get_all_space_permissions,
     get_page_restrictions,
     get_page_restrictions_with_per_ancestor_fetch,
+)
+from onyx.connectors.confluence.config import (
+    ConfluenceIndexingMode,
+    get_indexing_mode,
 )
 from onyx.connectors.confluence.source_operations import (
     Confcloud77618Error,
@@ -155,28 +158,6 @@ def _http_status(e: HTTPError) -> int | None:
     return e.response.status_code if e.response is not None else None
 
 
-class ConfluenceIndexingMode(str, Enum):
-    CQL = "cql"
-    PAGE = "page"
-    SPACE = "space"
-    EVERYTHING = "everything"
-
-
-def get_indexing_mode(
-    *, space: str, page_id: str, cql_query: str | None
-) -> ConfluenceIndexingMode:
-    """The scope the connector indexes. The config can hold values for several
-    modes (the form sends every tab's fields); the first set one wins, in this
-    order: CQL query, page id, space, everything. Blank values are not set."""
-    if cql_query and cql_query.strip():
-        return ConfluenceIndexingMode.CQL
-    if page_id.strip():
-        return ConfluenceIndexingMode.PAGE
-    if space.strip():
-        return ConfluenceIndexingMode.SPACE
-    return ConfluenceIndexingMode.EVERYTHING
-
-
 def build_base_page_cql(
     *, space: str, page_id: str, index_recursively: bool, cql_query: str | None
 ) -> str:
@@ -265,6 +246,8 @@ class ConfluenceConnector(
     CredentialsConnector,
     Resolver,
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         wiki_base: str,

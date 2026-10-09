@@ -42,6 +42,7 @@ it.each([false, true])(
     expect(state().sessions.get("message-session")).toMatchObject({
       outputPanelOpen: true,
       activePanelTabId: "file:outputs/Scenic Route.pptx",
+      outputSelectionLocked: true,
     });
     expect(state().sessions.get("other-session")?.outputPanelOpen).toBe(false);
   }

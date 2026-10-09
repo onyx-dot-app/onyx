@@ -12326,6 +12326,11 @@
       },
       "toggleItem": {
         "ariaLabel": "{name} umschalten"
+      },
+      "status": {
+        "loading": "Ausgaben werden geladen…",
+        "incomplete": "Einige Ausgaben konnten nicht aufgelistet werden. Öffne Dateien, um den Arbeitsbereich zu durchsuchen.",
+        "error": "Ausgaben konnten nicht aktualisiert werden. Versuche es erneut."
       }
     },
     "chatPanel": {
@@ -12471,17 +12476,11 @@
         "description": "Während des Builds erstellte Dateien erscheinen hier",
         "title": "Noch keine Dateien"
       },
-      "emptyDirectory": {
-        "label": "Keine Dateien in diesem Verzeichnis"
-      },
       "error": {
         "title": "Fehler beim Laden der Dateien"
       },
       "loading": {
         "label": "Dateien werden geladen..."
-      },
-      "loadingChildren": {
-        "label": "Wird geladen..."
       },
       "preparing": {
         "description": "Deine Entwicklungsumgebung wird eingerichtet",
@@ -12641,6 +12640,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} schließen"
+      },
       "artifactsEmpty": {
         "tooltip": "Beginnen Sie etwas zu bauen, um Artefakte zu sehen!"
       },
@@ -12664,6 +12666,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Folien"
+      },
+      "previous": {
+        "label": "Vorherige Folie"
+      },
+      "next": {
+        "label": "Nächste Folie"
+      },
       "converting": {
         "label": "Präsentation wird konvertiert..."
       },

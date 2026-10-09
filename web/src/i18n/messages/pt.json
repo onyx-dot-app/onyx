@@ -12326,6 +12326,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Alternar {name}"
+      },
+      "status": {
+        "loading": "Carregando resultados…",
+        "incomplete": "Não foi possível listar alguns resultados. Abra Arquivos para explorar o espaço de trabalho.",
+        "error": "Não foi possível atualizar os resultados. Tente novamente."
       }
     },
     "chatPanel": {
@@ -12471,17 +12476,11 @@
         "description": "Arquivos criados durante a construção aparecerão aqui",
         "title": "Ainda não há arquivos"
       },
-      "emptyDirectory": {
-        "label": "Não há arquivos neste diretório"
-      },
       "error": {
         "title": "Erro ao carregar os arquivos"
       },
       "loading": {
         "label": "Carregando arquivos..."
-      },
-      "loadingChildren": {
-        "label": "Carregando..."
       },
       "preparing": {
         "description": "Configurando seu ambiente de desenvolvimento",
@@ -12641,6 +12640,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Fechar {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Comece a construir algo para ver artefatos!"
       },
@@ -12664,6 +12666,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Slides"
+      },
+      "previous": {
+        "label": "Slide anterior"
+      },
+      "next": {
+        "label": "Próximo slide"
+      },
       "converting": {
         "label": "Convertendo apresentação..."
       },
