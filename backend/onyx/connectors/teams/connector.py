@@ -7,7 +7,6 @@ from typing import Any, cast
 
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
-from office365.sharepoint.client_context import ClientContext
 
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -27,6 +26,7 @@ from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
+from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
@@ -57,6 +57,7 @@ from onyx.connectors.teams.organizers import (
     OrganizerStage,
 )
 from onyx.connectors.teams.refusals import (
+    REFUSALS,
     ExportProbe,
     channel_failure,
     is_permanent,
@@ -551,13 +552,13 @@ class TeamsConnector(
         self, channel: ChannelRef, start: SecondsSinceUnixEpoch
     ) -> Iterator[Document | ConnectorFailure]:
         """A channel's files once its library is open. A refused folder listing
-        on Graph or a refused site on SharePoint REST (the SDK's own exception)
-        is one recorded failure for the channel, anything else fails the attempt."""
+        on Graph or a refused site on SharePoint REST is one recorded failure
+        for the channel, anything else fails the attempt."""
         if self._files is None:
             raise RuntimeError("Channel files are read only when attachments are on")
         try:
             yield from self._files.index(channel, start)
-        except (requests.HTTPError, ClientRequestException) as e:
+        except REFUSALS as e:
             if not is_permanent(e):
                 raise
             yield channel_failure(channel, "files", e)
@@ -614,10 +615,10 @@ class TeamsConnector(
             yield channel
         self._group_sync_channel_refs = refs
 
-    def rest_context(self, site_url: str) -> ClientContext:
+    def permission_reader(self) -> SharepointRestReads:
         if self._files is None:
             raise RuntimeError("Channel files are not part of this connector")
-        return self._files.rest_context(site_url)
+        return self._files.permission_reader()
 
     def load_from_checkpoint_with_perm_sync(
         self,

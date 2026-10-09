@@ -11,35 +11,22 @@ group, so the shape here only has to be stable within a source.
 
 This module knows nothing about SharePoint principal types or any other
 source-specific shape. Callers adapt :class:`ResolvedEntraGroup` into their own
-models where they need extra fields.
-
-It sits on the MIT Graph package, ``onyx.connectors.microsoft_utils``, which is
-shared transport rather than a connector. Like that package it imports no
-individual connector.
+models where they need extra fields. Graph is reached only through the
+caller's :class:`EntraGroupReader`.
 """
 
 import re
 from collections.abc import Generator
-from typing import Any
-from urllib.parse import quote
 
-from office365.directory.object_collection import DirectoryObjectCollection
-from office365.graph_client import GraphClient
-from office365.runtime.paths.resource_path import ResourcePath
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
-from onyx.connectors.microsoft_utils.entra import (
-    ENTRA_GROUP_MEMBER_SELECT,
-    ENTRA_NAMED_GROUP_SELECT,
-    EntraDirectoryObject,
-    EntraGroup,
-    fetch_entra_page,
-    iter_entra_items,
+from onyx.connectors.microsoft_utils.entra import iter_entra_items
+from onyx.connectors.microsoft_utils.models import (
+    EntraMemberKind,
 )
-from onyx.connectors.microsoft_utils.graph_client import (
-    GraphApiClient,
-    sleep_and_retry,
+from onyx.connectors.microsoft_utils.sharepoint_rest import (
+    EntraGroupReader,
 )
 from onyx.utils.logger import setup_logger
 
@@ -93,24 +80,15 @@ def extract_guid(text: str) -> str | None:
         return None
 
 
-def find_group_id_by_name(graph_client: GraphClient, display_name: str) -> str | None:
+def find_group_id_by_name(reader: EntraGroupReader, display_name: str) -> str | None:
     try:
-        groups = sleep_and_retry(
-            graph_client.groups.filter(f"displayName eq '{display_name}'").get(),
-            "find_group_id_by_name",
-        )
-
-        if groups and len(groups) > 0:
-            return groups[0].id
-
-        return None
-
+        return reader.find_entra_group_id(display_name=display_name)
     except Exception as e:
         logger.error("Failed to get Entra group id for name %s: %s", display_name, e)
         return None
 
 
-def resolve_group_id(graph_client: GraphClient, identifier: str) -> str | None:
+def resolve_group_id(reader: EntraGroupReader, identifier: str) -> str | None:
     """Resolve a GUID, a SharePoint claims token, or a display name to a group id."""
     try:
         if re.match(f"^{_GUID_RE}$", identifier, re.IGNORECASE):
@@ -122,7 +100,7 @@ def resolve_group_id(graph_client: GraphClient, identifier: str) -> str | None:
                 logger.info("Extracted GUID %s from claims token %s", guid, identifier)
                 return guid
 
-        return find_group_id_by_name(graph_client, identifier)
+        return find_group_id_by_name(reader, identifier)
 
     except Exception as e:
         logger.error("Failed to resolve group id from %s: %s", identifier, e)
@@ -130,126 +108,62 @@ def resolve_group_id(graph_client: GraphClient, identifier: str) -> str | None:
 
 
 def resolve_entra_group_name(
-    graph_client: GraphClient, identifier: str, display_name: str
+    reader: EntraGroupReader, identifier: str, display_name: str
 ) -> str:
     """The external group name for a group known only by an identifier."""
-    return entra_group_name(display_name, resolve_group_id(graph_client, identifier))
-
-
-def list_nested_entra_groups(
-    graph_client: GraphClient, identifier: str
-) -> set[ResolvedEntraGroup]:
-    """One group's direct member groups. Graph filters to groups server side,
-    so a group of thousands of users costs one page instead of every member."""
-    group_id: str | None = resolve_group_id(graph_client, identifier)
-    if not group_id:
-        logger.error("Failed to get Entra group id for %s", identifier)
-        return set()
-    groups: set[ResolvedEntraGroup] = set()
-
-    def process_groups(members: DirectoryObjectCollection) -> None:
-        # Iterating the collection itself re-fetches pages and re-fires this
-        # callback, so only the page just loaded is read.
-        for member in members.current_page:
-            member_data: dict[str, Any] = member.to_json()
-            member_id: str | None = member_data.get("id")
-            display_name: str | None = member_data.get("displayName")
-            if not member_id or not display_name:
-                logger.error("Nested group without an id or name: %s", member_data)
-                continue
-            name: str = resolve_entra_group_name(graph_client, member_id, display_name)
-            groups.add(ResolvedEntraGroup(id=member_id, name=name))
-
-    member_groups: DirectoryObjectCollection = DirectoryObjectCollection(
-        graph_client,
-        ResourcePath(
-            "microsoft.graph.group", graph_client.groups[group_id].members.resource_path
-        ),
-    )
-    sleep_and_retry(
-        member_groups.select(["id", "displayName"]).get_all(page_loaded=process_groups),
-        "list_nested_entra_groups",
-    )
-    return groups
+    return entra_group_name(display_name, resolve_group_id(reader, identifier))
 
 
 def expand_entra_group(
-    graph_client: GraphClient, identifier: str
+    reader: EntraGroupReader, identifier: str
 ) -> tuple[set[ResolvedEntraGroup], set[str]]:
     """Return one group's nested groups and its direct member emails."""
-    group_id = resolve_group_id(graph_client, identifier)
+    group_id = resolve_group_id(reader, identifier)
     if not group_id:
         logger.error("Failed to get Entra group id for %s", identifier)
         return set(), set()
-    group = graph_client.groups[group_id]
     groups: set[ResolvedEntraGroup] = set()
     user_emails: set[str] = set()
 
-    def process_members(members: DirectoryObjectCollection) -> None:
-        nonlocal groups, user_emails
-
-        # Iterate current_page, not the collection. Iterating the collection walks
-        # pages via _get_next().execute_query(), which re-fires this page_loaded
-        # callback and recurses until Python hits its max recursion depth.
-        for member in members.current_page:
-            member_data = member.to_json()
-            logger.debug("Member: %s", member_data)
-            user_principal_name = member_data.get("userPrincipalName")
-            mail = member_data.get("mail")
-            display_name = member_data.get("displayName") or member_data.get(
-                "display_name"
-            )
-
-            is_user = False
-            is_group = False
-
-            # Users typically have userPrincipalName or mail
-            if user_principal_name or (mail and "@" in str(mail)):
-                is_user = True
-            # Groups typically have displayName but no userPrincipalName
-            elif display_name and not user_principal_name:
-                if (
-                    hasattr(member, "groupTypes")
-                    or member_data.get("groupTypes") is not None
-                ):
-                    is_group = True
-                elif member_data.get("id") and not user_principal_name:
-                    is_group = True
-
-            # Check the object type name (fallback)
-            if not is_user and not is_group:
-                obj_type = type(member).__name__.lower()
-                if "user" in obj_type:
-                    is_user = True
-                elif "group" in obj_type:
-                    is_group = True
-
-            if is_user:
-                if user_principal_name:
-                    user_emails.add(normalize_email(user_principal_name))
-                elif mail:
-                    user_emails.add(normalize_email(mail))
-                logger.info("Added user: %s", user_principal_name or mail)
-            elif is_group:
-                if not display_name:
-                    logger.error("No display name for group: %s", member_data.get("id"))
-                    continue
-                member_id = member_data.get("id", "")
-                name = resolve_entra_group_name(graph_client, member_id, display_name)
-                groups.add(ResolvedEntraGroup(id=member_id, name=name))
-                logger.info("Added group: %s", name)
-            else:
-                logger.warning("Could not identify member type for: %s", member_data)
-
-    sleep_and_retry(
-        group.members.get_all(page_loaded=process_members), "expand_entra_group"
-    )
+    for member in reader.list_entra_group_members(group_id=group_id):
+        if member.kind == EntraMemberKind.USER:
+            email = member.user_principal_name or member.mail
+            if email:
+                user_emails.add(normalize_email(email))
+            logger.info("Added user: %s", email)
+        elif member.kind == EntraMemberKind.GROUP:
+            if not member.display_name:
+                logger.error("No display name for group: %s", member.id)
+                continue
+            name = resolve_entra_group_name(reader, member.id, member.display_name)
+            groups.add(ResolvedEntraGroup(id=member.id, name=name))
+            logger.info("Added group: %s", name)
+        else:
+            logger.warning("Could not identify member type for: %s", member)
 
     return groups, user_emails
 
 
+def list_nested_entra_groups(
+    reader: EntraGroupReader, identifier: str
+) -> set[ResolvedEntraGroup]:
+    """One group's direct member groups, without its users."""
+    group_id = resolve_group_id(reader, identifier)
+    if not group_id:
+        logger.error("Failed to get Entra group id for %s", identifier)
+        return set()
+    return {
+        ResolvedEntraGroup(
+            id=group.id,
+            name=resolve_entra_group_name(reader, group.id, group.display_name),
+        )
+        for group in reader.list_nested_entra_groups(group_id=group_id)
+        if group.display_name
+    }
+
+
 def enumerate_entra_groups(
-    client: GraphApiClient,
+    reader: EntraGroupReader,
     already_resolved: set[str],
     threshold: int = ENTRA_GROUP_ENUMERATION_THRESHOLD,
 ) -> Generator[ExternalUserGroup, None, None]:
@@ -261,13 +175,7 @@ def enumerate_entra_groups(
     total_groups = 0
 
     groups = iter_entra_items(
-        lambda next_link: fetch_entra_page(
-            client.get_json,
-            url=f"{client.graph_api_base}/groups",
-            item_model=EntraGroup,
-            select_fields=ENTRA_NAMED_GROUP_SELECT,
-            next_link=next_link,
-        ),
+        lambda next_link: reader.list_entra_groups(next_link=next_link),
         "Entra group listing",
     )
     for group in groups:
@@ -290,12 +198,8 @@ def enumerate_entra_groups(
 
         member_emails: list[str] = []
         members = iter_entra_items(
-            lambda next_link, group_id=group_id: fetch_entra_page(
-                client.get_json,
-                url=f"{client.graph_api_base}/groups/{quote(group_id)}/members",
-                item_model=EntraDirectoryObject,
-                select_fields=ENTRA_GROUP_MEMBER_SELECT,
-                next_link=next_link,
+            lambda next_link, group_id=group_id: reader.list_entra_group_member_page(
+                group_id=group_id, next_link=next_link
             ),
             f"Entra group `{group_id}` members",
         )

@@ -1,10 +1,9 @@
 from typing import Any
 
-from office365.graph_client import GraphClient
-from office365.onedrive.driveitems.driveItem import DriveItem
-from office365.sharepoint.client_context import ClientContext
 from pydantic import BaseModel, Field, field_serializer
 
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
+from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermissionReader
 from onyx.connectors.models import ExternalAccess
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.variable_functionality import (
@@ -39,17 +38,15 @@ def _noop_external_access(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa:
 
 
 def get_sharepoint_external_access(
-    ctx: ClientContext,
-    graph_client: GraphClient,
+    reader: SharepointPermissionReader,
+    site_url: str,
     permission_cache: SharepointPermissionCache,
-    drive_item: DriveItem | None = None,
+    drive_item: DriveItemData | None = None,
     list_id: str | None = None,
     site_page: dict[str, Any] | None = None,
     add_prefix: bool = False,
     treat_sharing_link_as_public: bool = False,
 ) -> ExternalAccess:
-    if drive_item and drive_item.id is None:
-        raise ValueError("DriveItem ID is required")
     if drive_item and not list_id:
         raise ValueError("SharePoint permission lookup requires a list ID")
 
@@ -60,8 +57,8 @@ def get_sharepoint_external_access(
     )
 
     return get_external_access_func(
-        ctx,
-        graph_client,
+        reader,
+        site_url,
         list_id,
         drive_item,
         site_page,
@@ -72,8 +69,8 @@ def get_sharepoint_external_access(
 
 
 def get_sharepoint_hierarchy_node_external_access(
-    ctx: ClientContext,
-    graph_client: GraphClient,
+    reader: SharepointPermissionReader,
+    site_url: str,
     permission_cache: SharepointPermissionCache,
     node_type: HierarchyNodeType,
     list_id: str | None = None,
@@ -88,8 +85,8 @@ def get_sharepoint_hierarchy_node_external_access(
         fallback=_noop_external_access,
     )
     return get_external_access_func(
-        ctx,
-        graph_client,
+        reader,
+        site_url,
         node_type,
         list_id,
         folder_server_relative_path,
