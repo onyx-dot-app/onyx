@@ -394,3 +394,11 @@ def is_embedding_model(model_name: str) -> bool:
     from onyx.llm.model_catalog import is_embedding_model_name
 
     return is_embedding_model_name(model_name)
+
+
+def is_non_chat_model(model_name: str) -> bool:
+    """Should this model stay out of chat-model listings (embedding, rerank,
+    image, audio, ...)?"""
+    from onyx.llm.model_catalog import is_non_chat_model_name
+
+    return is_non_chat_model_name(model_name)
