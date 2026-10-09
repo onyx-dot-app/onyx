@@ -61,7 +61,6 @@ class CacheManager:
 
         Args:
             metadata: Cache metadata to store
-            ttl_seconds: Optional TTL in seconds. If None, uses provider default.
         """
         try:
             cache_key = self._build_cache_key(
