@@ -1,11 +1,10 @@
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel
-
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import FieldClass, FieldPolicy, ScopeInclude
+from onyx.connectors.hubspot.models import HubSpotObjectSpec
 
 
 class HubSpotObjectType(StrEnum):
@@ -13,15 +12,6 @@ class HubSpotObjectType(StrEnum):
     COMPANIES = "companies"
     DEALS = "deals"
     CONTACTS = "contacts"
-
-
-class HubSpotObjectSpec(BaseModel):
-    # HubSpot's id for the type, used in record URLs and HCRNs.
-    type_id: str
-    # Singular noun in document ids, as in hubspot_deal_<id>.
-    document_noun: str
-    # Search filters on this. Contacts name it differently.
-    modified_date_property: str
 
 
 HUBSPOT_OBJECT_SPECS: dict[HubSpotObjectType, HubSpotObjectSpec] = {
