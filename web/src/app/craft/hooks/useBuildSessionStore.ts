@@ -1920,39 +1920,34 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           return;
         }
 
-        // Hold the chip on "restoring" (and poll webapp readiness) until the
-        // webapp actually serves, then flip to the real status below.
         updateSessionData(sessionId, {
           ...(isCurrentLoad() && {
             status: mapApiSessionStatus(sessionData.status),
           }),
-          sandbox: sessionData.sandbox
-            ? { ...sessionData.sandbox, status: "restoring" }
-            : sessionData.sandbox,
+          sandbox: sessionData.sandbox,
           ...(get().sessions.get(sessionId)?.skillsStaleRevision ===
             skillsStaleRevisionBeforeRestore && {
             skillsStale: sessionData.skills_stale,
           }),
-          webappNeedsRefresh:
-            (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
-        });
-
-        // Remount the iframe only once the restored pod serves — the old
-        // page's HMR socket died with the old pod. If readiness times out the
-        // remount still runs: worst case the iframe lands on the offline page,
-        // which reloads itself until the server responds.
-        await waitForWebappReady(sessionId);
-        if (
-          !isCurrentRuntimeLoad() ||
-          get().sessions.get(sessionId)?.sandbox?.id !== sessionData.sandbox?.id
-        )
-          return;
-        updateSessionData(sessionId, {
-          sandbox: sessionData.sandbox,
           filesNeedsRefresh:
             (get().sessions.get(sessionId)?.filesNeedsRefresh ?? 0) + 1,
-          webappNeedsRemount:
-            (get().sessions.get(sessionId)?.webappNeedsRemount || 0) + 1,
+          webappNeedsRefresh:
+            (get().sessions.get(sessionId)?.webappNeedsRefresh ?? 0) + 1,
+        });
+        void get().refreshOutputInventory(sessionId, { silent: true });
+
+        // App readiness controls iframe replacement, not restored filesystem access.
+        void waitForWebappReady(sessionId).then(() => {
+          if (
+            !isCurrentRuntimeLoad() ||
+            get().sessions.get(sessionId)?.sandbox?.id !==
+              sessionData.sandbox?.id
+          )
+            return;
+          updateSessionData(sessionId, {
+            webappNeedsRemount:
+              (get().sessions.get(sessionId)?.webappNeedsRemount ?? 0) + 1,
+          });
         });
 
         // An artifact-fetch failure must NOT flip the sandbox to "failed".
@@ -1961,7 +1956,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           const restoredArtifacts: Artifact[] = await fetchArtifacts(sessionId);
           if (!isCurrentLoad()) return;
           updateSessionData(sessionId, { artifacts: restoredArtifacts });
-          void get().refreshOutputInventory(sessionId, { silent: true });
         } catch (artifactsErr) {
           console.warn(
             "Failed to fetch artifacts after restore:",

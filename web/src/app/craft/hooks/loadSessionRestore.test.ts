@@ -1,5 +1,5 @@
 /** @jest-environment jsdom */
-import { waitFor } from "@tests/setup/test-utils";
+import { act, waitFor } from "@tests/setup/test-utils";
 import {
   useBuildSessionStore,
   waitForWebappReady,
@@ -773,6 +773,47 @@ describe("loadSession restore status", () => {
     expect(mockedApi.fetchArtifacts).not.toHaveBeenCalled();
   });
 
+  it("finishes filesystem restoration before the app is ready", async () => {
+    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+    mockedApi.restoreSession.mockResolvedValue(runningSession() as never);
+    const readiness =
+      deferred<Awaited<ReturnType<typeof api.fetchWebappInfo>>>();
+    mockedApi.fetchWebappInfo.mockReturnValueOnce(readiness.promise);
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      sandbox: { status: "running" },
+      filesNeedsRefresh: 1,
+      webappNeedsRemount: 0,
+    });
+    expect(mockedApi.fetchOutputInventory).toHaveBeenCalled();
+    readiness.resolve(webappInfo(true, true) as never);
+    await waitFor(() =>
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)
+          ?.webappNeedsRemount
+      ).toBe(1)
+    );
+  });
+
+  it("ignores delayed app readiness after the sandbox is replaced", async () => {
+    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+    mockedApi.restoreSession.mockResolvedValue(runningSession() as never);
+    const readiness =
+      deferred<Awaited<ReturnType<typeof api.fetchWebappInfo>>>();
+    mockedApi.fetchWebappInfo.mockReturnValueOnce(readiness.promise);
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    useBuildSessionStore
+      .getState()
+      .updateSessionData(SESSION_ID, { sandbox: null });
+    readiness.resolve(webappInfo(true, true) as never);
+    await act(async () => {});
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({ sandbox: null, webappNeedsRemount: 0 });
+  });
+
   it.each(["restore", "readiness"] as const)(
     "finishes %s readiness without replacing a newer turn",
     async (stage) => {
@@ -801,6 +842,12 @@ describe("loadSession restore status", () => {
       restore.resolve(runningSession() as never);
       readiness.resolve(webappInfo(true, true) as never);
       await loading;
+      await waitFor(() =>
+        expect(
+          useBuildSessionStore.getState().sessions.get(SESSION_ID)
+            ?.webappNeedsRemount
+        ).toBe(1)
+      );
       expect(
         useBuildSessionStore.getState().sessions.get(SESSION_ID)
       ).toMatchObject({
@@ -810,7 +857,9 @@ describe("loadSession restore status", () => {
         filesNeedsRefresh: 1,
         webappNeedsRemount: 1,
       });
-      expect(mockedApi.fetchArtifacts).not.toHaveBeenCalled();
+      expect(mockedApi.fetchArtifacts).toHaveBeenCalledTimes(
+        stage === "readiness" ? 1 : 0
+      );
     }
   );
 
