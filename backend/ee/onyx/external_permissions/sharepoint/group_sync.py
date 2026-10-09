@@ -28,12 +28,6 @@ def sharepoint_group_sync(
     )
     connector.load_credentials(credential_json(cc_pair))
 
-    if not connector.msal_app:
-        raise RuntimeError("MSAL app not initialized in connector")
-
-    if not connector.sp_tenant_domain:
-        raise RuntimeError("Tenant domain not initialized in connector")
-
     # Get site descriptors from connector (either configured sites or all sites)
     site_descriptors = connector.site_descriptors or connector.fetch_sites()
 
@@ -42,9 +36,9 @@ def sharepoint_group_sync(
 
     logger.info("Processing %s sites for group sync", len(site_descriptors))
 
-    # The reader opens each site through the connector, so the site host is
-    # checked against the tenant the REST token is minted for.
-    reader = connector.permission_reader()
+    # The gateway refuses a site host outside the tenant the REST token is
+    # minted for.
+    reader = connector.ops
     for site_descriptor in site_descriptors:
         logger.debug("Processing site: %s", site_descriptor.url)
 

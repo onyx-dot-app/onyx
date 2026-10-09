@@ -4,7 +4,6 @@ from collections import deque
 from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -22,13 +21,17 @@ from onyx.connectors.models import (
     HierarchyNode,
     TextSection,
 )
-from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
     DriveItemData,
     SharepointConnector,
     SharepointConnectorCheckpoint,
     SiteDescriptor,
     SiteDrive,
+)
+from onyx.connectors.sharepoint.source_operations import SharepointSourceOperations
+from tests.unit.onyx.connectors.sharepoint.sharepoint_gateway_fakes import (
+    connector_with_gateway,
+    stub_operation,
 )
 
 SITE_URL = "https://example.sharepoint.com/sites/sample"
@@ -103,21 +106,14 @@ def _failures_from(yielded: list[Any]) -> list[ConnectorFailure]:
     return [y for y in yielded if isinstance(y, ConnectorFailure)]
 
 
-def _setup_connector(monkeypatch: pytest.MonkeyPatch) -> SharepointConnector:
+def _setup_connector() -> SharepointConnector:
     connector = SharepointConnector()
-    connector._graph_client = object()  # ty: ignore[invalid-assignment]
+    connector_with_gateway(connector)
     connector.include_site_pages = False
-
-    def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
-        return "fake-access-token"
-
-    monkeypatch.setattr(
-        SharepointConnector, "_get_graph_access_token", fake_get_access_token
-    )
-    monkeypatch.setattr(
-        sp_connector,
-        "resolve_drive_folder",
-        lambda *_args, **_kwargs: DriveFolderReference(
+    stub_operation(
+        connector.ops,
+        "resolve_folder",
+        lambda *, drive_id, folder_path: DriveFolderReference(  # noqa: ARG005
             id="folder-id", web_url=f"{DRIVE_WEB_URL}/Engineering/Docs"
         ),
     )
@@ -128,12 +124,10 @@ def _mock_convert(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_convert(
         driveitem: DriveItemData,
         drive: SiteDrive,  # noqa: ARG001
-        ctx: Any = None,  # noqa: ARG001
-        graph_client: Any = None,  # noqa: ARG001
-        graph_api_base: str = "",  # noqa: ARG001
+        ops: SharepointSourceOperations,  # noqa: ARG001
+        site_url: str,  # noqa: ARG001
         include_permissions: bool = False,  # noqa: ARG001
         parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
-        access_token: str | None = None,  # noqa: ARG001
         treat_sharing_link_as_public: bool = False,  # noqa: ARG001
         raw_file_callback: Any = None,  # noqa: ARG001
         permission_cache: Any = None,  # noqa: ARG001
@@ -184,15 +178,15 @@ def _build_phase5_checkpoint() -> SharepointConnectorCheckpoint:
 def test_docs_only_indexing_accepts_drive_without_list_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    connector = _setup_connector(monkeypatch)
+    connector = _setup_connector()
     _mock_convert(monkeypatch)
     checkpoint = _build_phase3_checkpoint()
     assert checkpoint.cached_drives is not None
     checkpoint.cached_drives[0].list_id = None
-    monkeypatch.setattr(
-        sp_connector,
-        "fetch_drive_delta_checkpoint_page",
-        lambda *_args, **_kwargs: _delta_result(_make_item("doc")),
+    stub_operation(
+        connector.ops,
+        "get_delta_page",
+        lambda **_kwargs: _delta_result(_make_item("doc")),
     )
 
     yielded, _ = _consume_generator(
@@ -223,13 +217,8 @@ def test_checkpoint_accepts_drive_without_list_id() -> None:
     assert checkpoint.cached_drives[0].list_id is None
 
 
-def test_permission_indexing_skips_drive_without_list_id(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    connector = _setup_connector(monkeypatch)
-    monkeypatch.setattr(
-        connector, "_create_rest_client_context", lambda _site_url: MagicMock()
-    )
+def test_permission_indexing_skips_drive_without_list_id() -> None:
+    connector = _setup_connector()
     checkpoint = _build_phase3_checkpoint()
     assert checkpoint.cached_drives is not None
     checkpoint.cached_drives[0].list_id = None
@@ -252,7 +241,7 @@ def test_drive_init_failure_yields_the_next_site_node(
     """A site whose drives fail to load (e.g. throttled) moves on to the next
     site, which must still get its hierarchy node: its drives use it as
     their parent."""
-    connector = _setup_connector(monkeypatch)
+    connector = _setup_connector()
     next_site_url = "https://example.sharepoint.com/sites/next"
 
     def failing_get_drives(_site_url: str) -> list[SiteDrive]:
@@ -294,24 +283,22 @@ class TestBfsIterationFailure:
     def test_bfs_generator_failure_yields_entity_failure(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        connector = _setup_connector(monkeypatch)
+        connector = _setup_connector()
         _mock_convert(monkeypatch)
 
         good_items = [_make_item("a"), _make_item("b")]
 
         def fake_iter_paged(
-            client: Any,  # noqa: ARG001
+            *,
             drive_id: str,  # noqa: ARG001
-            folder_path: str | None = None,  # noqa: ARG001
-            folder_id: str | None = None,  # noqa: ARG001
-            start: datetime | None = None,  # noqa: ARG001
-            end: datetime | None = None,  # noqa: ARG001
-            page_size: int = 200,  # noqa: ARG001
+            folder_id: str | None,  # noqa: ARG001
+            start: datetime | None,  # noqa: ARG001
+            end: datetime | None,  # noqa: ARG001
         ) -> Generator[DriveItemData, None, None]:
             yield from good_items
             raise RuntimeError("graph 500 mid-page")
 
-        monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_iter_paged)
+        stub_operation(connector.ops, "iter_folder_items", fake_iter_paged)
 
         # folder_path forces BFS mode
         checkpoint = _build_phase3_checkpoint(folder_path="Engineering/Docs")
@@ -340,22 +327,20 @@ class TestBfsIterationFailure:
     ) -> None:
         """A raise before any item is yielded still produces an EntityFailure
         rather than crashing the attempt."""
-        connector = _setup_connector(monkeypatch)
+        connector = _setup_connector()
         _mock_convert(monkeypatch)
 
         def fake_iter_paged(
-            client: Any,  # noqa: ARG001
+            *,
             drive_id: str,  # noqa: ARG001
-            folder_path: str | None = None,  # noqa: ARG001
-            folder_id: str | None = None,  # noqa: ARG001
-            start: datetime | None = None,  # noqa: ARG001
-            end: datetime | None = None,  # noqa: ARG001
-            page_size: int = 200,  # noqa: ARG001
+            folder_id: str | None,  # noqa: ARG001
+            start: datetime | None,  # noqa: ARG001
+            end: datetime | None,  # noqa: ARG001
         ) -> Generator[DriveItemData, None, None]:
             raise RuntimeError("connection reset")
             yield  # pragma: no cover  # make this a generator
 
-        monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_iter_paged)
+        stub_operation(connector.ops, "iter_folder_items", fake_iter_paged)
 
         checkpoint = _build_phase3_checkpoint(folder_path="Engineering/Docs")
         gen = connector._load_from_checkpoint(
@@ -394,7 +379,7 @@ class TestSitePagesFetchFailure:
     def test_runtime_error_in_fetch_yields_entity_failure(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        connector = _setup_connector(monkeypatch)
+        connector = _setup_connector()
         connector.include_site_pages = True
 
         def fake_fetch(
@@ -428,7 +413,7 @@ class TestSitePagesPerPageFailure:
     def test_one_bad_page_yields_document_failure_and_others_succeed(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        connector = _setup_connector(monkeypatch)
+        connector = _setup_connector()
         connector.include_site_pages = True
 
         good_page_1 = {
@@ -459,13 +444,13 @@ class TestSitePagesPerPageFailure:
 
         def fake_convert(
             page: dict[str, Any],
-            drive_name: str | None,  # noqa: ARG001
-            client_ctx: Any,  # noqa: ARG001
-            graph_client: Any,  # noqa: ARG001
+            site_name: str | None,  # noqa: ARG001
+            ops: SharepointSourceOperations,  # noqa: ARG001
+            site_url: str,  # noqa: ARG001
+            permission_cache: Any,  # noqa: ARG001
             include_permissions: bool = False,  # noqa: ARG001
             parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
             treat_sharing_link_as_public: bool = False,  # noqa: ARG001
-            permission_cache: Any = None,  # noqa: ARG001
         ) -> Document:
             if page["id"] == "bad-1":
                 raise ValueError("malformed canvasLayout")
@@ -502,7 +487,7 @@ class TestSitePagesPerPageFailure:
     ) -> None:
         """A page that fails to convert AND has no id falls back to an
         EntityFailure (we don't have anything to attach a DocumentFailure to)."""
-        connector = _setup_connector(monkeypatch)
+        connector = _setup_connector()
         connector.include_site_pages = True
 
         idless_page = {"webUrl": f"{SITE_URL}/SitePages/Orphan.aspx"}
@@ -519,13 +504,13 @@ class TestSitePagesPerPageFailure:
 
         def fake_convert(
             page: dict[str, Any],  # noqa: ARG001
-            drive_name: str | None,  # noqa: ARG001
-            client_ctx: Any,  # noqa: ARG001
-            graph_client: Any,  # noqa: ARG001
+            site_name: str | None,  # noqa: ARG001
+            ops: SharepointSourceOperations,  # noqa: ARG001
+            site_url: str,  # noqa: ARG001
+            permission_cache: Any,  # noqa: ARG001
             include_permissions: bool = False,  # noqa: ARG001
             parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
             treat_sharing_link_as_public: bool = False,  # noqa: ARG001
-            permission_cache: Any = None,  # noqa: ARG001
         ) -> Document:
             raise KeyError("id")
 
@@ -551,7 +536,7 @@ class TestSitePagesPerPageFailure:
     ) -> None:
         """Even when every page fails, the generator completes — one
         ConnectorFailure per page, no crash."""
-        connector = _setup_connector(monkeypatch)
+        connector = _setup_connector()
         connector.include_site_pages = True
 
         pages = [
