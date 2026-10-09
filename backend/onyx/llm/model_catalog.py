@@ -367,8 +367,18 @@ _RERANK_NAME_PATTERN = re.compile(r"rerank", re.IGNORECASE)
 
 
 def is_embedding_model_name(model_name: str) -> bool:
+    """Is this an embedding model? Cataloged entries answer from their mode;
+    uncataloged names fall back to the id pattern."""
+    entry = build_model_map().get(model_name)
+    if entry is not None and entry.get("mode"):
+        return entry["mode"] == "embedding"
+    return bool(_EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1]))
+
+
+def is_non_chat_model_name(model_name: str) -> bool:
     """Should this name stay out of chat-model listings? Cataloged entries
-    answer from their mode; uncataloged names fall back to the id pattern."""
+    answer from their mode (embedding/rerank/image/etc. are all non-chat);
+    uncataloged names fall back to the id pattern."""
     entry = build_model_map().get(model_name)
     if entry is not None and entry.get("mode"):
         return entry["mode"] not in CHAT_MODES
