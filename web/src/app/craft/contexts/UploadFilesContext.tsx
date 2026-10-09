@@ -321,6 +321,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   const activeScopeRef = useRef(activeScope);
   const dismissedAttachmentScopeRef = useRef<AttachmentScope | null>(null);
   const attachmentClearRevisionRef = useRef<number>(0);
+  const attachmentMutationRevisionRef = useRef<number>(0);
   // Track active deletions to prevent refetch race condition
   const activeDeletionsRef = useRef<Set<string>>(new Set());
   // When true, skip the refetch that runs after clearFiles (e.g. Enter to dismiss file)
@@ -436,10 +437,15 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    * Internal function - called automatically by effects.
    */
   const fetchExistingAttachmentsInternal = useCallback(
-    async (sessionId: string, replace: boolean): Promise<void> => {
+    async function fetchAttachments(
+      sessionId: string,
+      replace: boolean
+    ): Promise<void> {
       const scope: AttachmentScope = activeScopeRef.current;
       if (scope.sessionId !== sessionId) return;
       const clearRevision: number = attachmentClearRevisionRef.current;
+      const mutationRevision: number = attachmentMutationRevisionRef.current;
+      let retryAfterMutation: boolean = false;
       // Request deduplication
       if (fetchingSessionRef.current === sessionId) return;
 
@@ -452,6 +458,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
           attachmentClearRevisionRef.current !== clearRevision
         )
           return;
+        if (attachmentMutationRevisionRef.current !== mutationRevision) {
+          retryAfterMutation = true;
+          return;
+        }
 
         // Use deterministic IDs based on session and path for stable React keys
         const attachments: BuildFile[] = listing.entries
@@ -513,7 +523,14 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
           setCurrentMessageFiles((prev) => prev.filter(isLocalAttachment));
         }
       } finally {
-        if (activeScopeRef.current === scope) fetchingSessionRef.current = null;
+        if (activeScopeRef.current === scope) {
+          fetchingSessionRef.current = null;
+          if (
+            retryAfterMutation &&
+            attachmentClearRevisionRef.current === clearRevision
+          )
+            await fetchAttachments(sessionId, replace);
+        }
       }
     },
     [t]
@@ -717,16 +734,22 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       );
       if (!removedFile.path || !activeSessionId) return;
 
+      const deletionClearRevision: number = attachmentClearRevisionRef.current;
       activeDeletionsRef.current.add(deletionKey);
       deleteFileApi(activeSessionId, removedFile.path)
         .then(() => {
+          attachmentMutationRevisionRef.current += 1;
           triggerFilesRefresh(activeSessionId);
           activeDeletionsRef.current.delete(deletionKey);
           if (activeScopeRef.current !== scope) return;
         })
         .catch((error) => {
           activeDeletionsRef.current.delete(deletionKey);
-          if (dismissedAttachmentScopeRef.current === activeScopeRef.current)
+          if (
+            dismissedAttachmentScopeRef.current === activeScopeRef.current &&
+            (activeScopeRef.current !== scope ||
+              attachmentClearRevisionRef.current !== deletionClearRevision)
+          )
             return;
           if (activeScopeRef.current !== scope) {
             if (activeScopeRef.current.sessionId === activeSessionId)

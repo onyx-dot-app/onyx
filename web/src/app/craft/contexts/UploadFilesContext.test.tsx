@@ -506,3 +506,62 @@ it.each(["before recovery", "during recovery"] as const)(
       expect(fetchDirectoryListing).toHaveBeenCalledTimes(2);
   }
 );
+
+it("rolls back a newer deletion after attachments were sent in the same visit", async () => {
+  const deletion: ReturnType<typeof deferred<void>> = deferred<void>();
+  jest.mocked(fetchDirectoryListing).mockResolvedValue(listing("sent.txt"));
+  jest.mocked(uploadFile).mockResolvedValue({
+    path: "attachments/new.txt",
+    filename: "new.txt",
+    size_bytes: 3,
+  });
+  jest.mocked(deleteFile).mockReturnValue(deletion.promise);
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  act(() => result.current.setActiveSession("session-a"));
+  await waitFor(() =>
+    expect(result.current.currentMessageFiles).toHaveLength(1)
+  );
+  act(() => result.current.clearFiles({ suppressRefetch: true }));
+  await act(async () =>
+    result.current.uploadFiles([new File(["new"], "new.txt")])
+  );
+  const file: BuildFile | undefined = result.current.currentMessageFiles[0];
+  if (!file) throw new Error("Attachment missing");
+  act(() => result.current.removeFile(file.id));
+  await act(async () => deletion.reject(new Error("network unavailable")));
+  expect(result.current.currentMessageFiles.map((entry) => entry.name)).toEqual(
+    ["new.txt"]
+  );
+});
+
+it("replaces a late listing captured before deletion completed with a fresh listing", async () => {
+  const deletion: ReturnType<typeof deferred<void>> = deferred<void>();
+  const lateListing: ReturnType<typeof deferred<DirectoryListing>> =
+    deferred<DirectoryListing>();
+  jest.mocked(deleteFile).mockReturnValue(deletion.promise);
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockResolvedValueOnce(listing("deleted.txt"))
+    .mockReturnValueOnce(lateListing.promise)
+    .mockResolvedValueOnce(listing("remaining.txt"));
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  act(() => result.current.setActiveSession("session-a"));
+  await waitFor(() =>
+    expect(result.current.currentMessageFiles).toHaveLength(1)
+  );
+  const file: BuildFile | undefined = result.current.currentMessageFiles[0];
+  if (!file) throw new Error("Attachment missing");
+  act(() => result.current.removeFile(file.id));
+  act(() => result.current.endSessionVisit());
+  act(() => result.current.setActiveSession("session-a"));
+  await waitFor(() => expect(fetchDirectoryListing).toHaveBeenCalledTimes(2));
+  await act(async () => deletion.resolve());
+  await act(async () => lateListing.resolve(listing("deleted.txt")));
+  await waitFor(() =>
+    expect(
+      result.current.currentMessageFiles.map((entry) => entry.name)
+    ).toEqual(["remaining.txt"])
+  );
+  expect(fetchDirectoryListing).toHaveBeenCalledTimes(3);
+  expect(deleteFile).toHaveBeenCalledTimes(1);
+});
