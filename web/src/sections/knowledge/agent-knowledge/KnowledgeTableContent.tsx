@@ -6,6 +6,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { getSourceMetadata } from "@/lib/sources";
+import { searchDocumentSets } from "@/lib/documentSets/search";
 import { useSettings } from "@/lib/settings/hooks";
 import type { AgentAttachedDocument } from "@/lib/agents/types";
 import type { ProjectFile } from "@/lib/projects/types";
@@ -36,11 +37,10 @@ export function DocumentSetsTableContent({
   const t = useTranslations("knowledge");
   const [searchValue, setSearchValue] = useState("");
 
-  const filteredDocumentSets = useMemo(() => {
-    if (!searchValue) return documentSets;
-    const lower = searchValue.toLowerCase();
-    return documentSets.filter((ds) => ds.name.toLowerCase().includes(lower));
-  }, [documentSets, searchValue]);
+  const filteredDocumentSets = useMemo(
+    () => searchDocumentSets(documentSets, searchValue),
+    [documentSets, searchValue]
+  );
 
   const columns: KnowledgeTableColumn<DocumentSetSummary>[] = [
     {

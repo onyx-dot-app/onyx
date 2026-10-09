@@ -3917,6 +3917,9 @@
             "tooltip": "Während der Synchronisierung ist keine Aktualisierung möglich! Warten Sie das Ende der Synchronisierung ab und versuchen Sie es erneut."
           }
         },
+        "empty": {
+          "text": "Erstellen Sie einen Dokumentensatz, um Dokumente aus Ihren Konnektoren zu gruppieren."
+        },
         "federatedBadge": {
           "label": "Föderiert"
         },
@@ -3980,9 +3983,24 @@
         "newButton": {
           "label": "Neuer Dokumentensatz"
         },
+        "noResults": {
+          "description": "Keine Dokumentensätze entsprechen \"{query}\"",
+          "title": "Keine Dokumentensätze gefunden"
+        },
         "notFound": {
           "message": "Dokumentensatz mit der ID {id} nicht gefunden",
           "title": "Dokumentensatz nicht gefunden"
+        },
+        "resultCount": {
+          "filtered": {
+            "label": "{shown, number} von {total, plural, one {# Dokumentensatz} other {# Dokumentensätzen}}"
+          },
+          "total": {
+            "label": "{count, plural, one {# Dokumentensatz} other {# Dokumentensätze}}"
+          }
+        },
+        "search": {
+          "placeholder": "Nach Name, Beschreibung oder Konnektor suchen..."
         },
         "status": {
           "deleting": {
@@ -4010,8 +4028,7 @@
           },
           "status": {
             "header": "Status"
-          },
-          "title": "Vorhandene Dokumentensätze"
+          }
         }
       },
       "visibility": {

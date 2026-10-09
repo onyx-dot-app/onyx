@@ -3917,6 +3917,9 @@
             "tooltip": "同步期间无法更新！请等待同步完成后重试。"
           }
         },
+        "empty": {
+          "text": "创建文档集，将连接器中的文档分组。"
+        },
         "federatedBadge": {
           "label": "联合"
         },
@@ -3980,9 +3983,24 @@
         "newButton": {
           "label": "新建文档集"
         },
+        "noResults": {
+          "description": "没有与“{query}”匹配的文档集",
+          "title": "未找到文档集"
+        },
         "notFound": {
           "message": "未找到 id 为 {id} 的文档集",
           "title": "未找到文档集"
+        },
+        "resultCount": {
+          "filtered": {
+            "label": "{total, plural, other {# 个文档集}}中的 {shown, number} 个"
+          },
+          "total": {
+            "label": "{count, plural, other {# 个文档集}}"
+          }
+        },
+        "search": {
+          "placeholder": "按名称、描述或连接器搜索..."
         },
         "status": {
           "deleting": {
@@ -4010,8 +4028,7 @@
           },
           "status": {
             "header": "状态"
-          },
-          "title": "现有文档集"
+          }
         }
       },
       "visibility": {

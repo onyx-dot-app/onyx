@@ -174,6 +174,7 @@ so verify the callers rather than a single component.
 | `web/src/lib/build/hooks.ts` | craft-webapp-proxy |
 | `web/src/app/admin/connector*/`, `admin/indexing-status/`, `admin/index-settings/`, `admin/document-processing/` | connectors, cc-pairs-and-credentials, indexing-pipeline |
 | `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/` | access-control, auth-and-identity |
+| `web/src/lib/documentSets/` | access-control |
 | `web/src/app/admin/agents/` | agents-personas |
 | `web/src/app/admin/language-models/` | llm-providers |
 | `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |

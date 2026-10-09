@@ -3917,6 +3917,9 @@
             "tooltip": "Cannot update while syncing! Wait for the sync to finish, then try again."
           }
         },
+        "empty": {
+          "text": "Create a document set to group documents from your connectors."
+        },
         "federatedBadge": {
           "label": "Federated"
         },
@@ -3980,9 +3983,24 @@
         "newButton": {
           "label": "New Document Set"
         },
+        "noResults": {
+          "description": "No document sets matching \"{query}\"",
+          "title": "No document sets found"
+        },
         "notFound": {
           "message": "Document set with id {id} not found",
           "title": "Document set not found"
+        },
+        "resultCount": {
+          "filtered": {
+            "label": "{shown, number} of {total, plural, one {# document set} other {# document sets}}"
+          },
+          "total": {
+            "label": "{count, plural, one {# document set} other {# document sets}}"
+          }
+        },
+        "search": {
+          "placeholder": "Search by name, description, or connector..."
         },
         "status": {
           "deleting": {
@@ -4010,8 +4028,7 @@
           },
           "status": {
             "header": "Status"
-          },
-          "title": "Existing Document Sets"
+          }
         }
       },
       "visibility": {

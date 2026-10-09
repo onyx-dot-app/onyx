@@ -4,7 +4,6 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/loaders";
 import { PageSelector } from "@/components/PageSelector";
-import { SvgInfo, SvgPlusCircle } from "@opal/icons";
 import {
   Table,
   TableHead,
@@ -12,17 +11,25 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-import { Button, Divider, Text } from "@opal/components";
-import { escapeMarkdown, markdown } from "@opal/utils";
+import { Text } from "@opal/components";
+import { escapeMarkdown, markdown, richNodes } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import Title from "@/components/ui/title";
-import { DocumentSetSummary } from "@/lib/types";
-import { useState } from "react";
+import { DocumentSetSummary, FederatedConnectorSummary } from "@/lib/types";
+import { useMemo, useState } from "react";
 import { useDocumentSets } from "./hooks";
 import { can } from "@/lib/permissions/resource-actions";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { IllustrationContent, SettingsLayouts, toast } from "@opal/layouts";
+import SvgNoResult from "@opal/illustrations/no-result";
+import AdminListHeader from "@/sections/admin/AdminListHeader";
+import HighlightedText from "@/app/admin/documents/sets/HighlightedText";
+import {
+  getConnectorSourceName,
+  getSearchTerms,
+  matchesSourceOnly,
+  searchDocumentSets,
+} from "@/lib/documentSets/search";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   FiAlertTriangle,
@@ -48,10 +55,12 @@ const numToDisplay = 50;
 // Component to display federated connectors with consistent styling
 const FederatedConnectorTitle = ({
   federatedConnector,
+  terms,
   showMetadata = true,
   isLink = true,
 }: {
-  federatedConnector: any;
+  federatedConnector: FederatedConnectorSummary;
+  terms: string[];
   showMetadata?: boolean;
   isLink?: boolean;
 }) => {
@@ -63,7 +72,7 @@ const FederatedConnectorTitle = ({
     <>
       <SourceIcon sourceType={sourceType as any} iconSize={16} />
       <div className="ms-1 my-auto text-xs font-medium truncate">
-        {federatedConnector.name}
+        <HighlightedText text={federatedConnector.name} terms={terms} />
       </div>
       <Badge variant="outline" className="text-xs ms-2">
         {t("sets.federatedBadge.label")}
@@ -94,7 +103,10 @@ const FederatedConnectorTitle = ({
             .map(([key, value]) => (
               <div key={key} className="truncate">
                 <i>{key}:</i>{" "}
-                {Array.isArray(value) ? value.join(", ") : String(value)}
+                <HighlightedText
+                  text={Array.isArray(value) ? value.join(", ") : String(value)}
+                  terms={terms}
+                />
               </div>
             ))}
         </div>
@@ -106,9 +118,11 @@ const FederatedConnectorTitle = ({
 const EditRow = ({
   documentSet,
   isEditable,
+  terms,
 }: {
   documentSet: DocumentSetSummary;
   isEditable: boolean;
+  terms: string[];
 }) => {
   const t = useTranslations("admin.documents");
   const router = useRouter();
@@ -116,7 +130,7 @@ const EditRow = ({
   if (!isEditable) {
     return (
       <div className="text-text-darker font-medium my-auto p-1">
-        {documentSet.name}
+        <HighlightedText text={documentSet.name} terms={terms} />
       </div>
     );
   }
@@ -146,35 +160,51 @@ const EditRow = ({
           }}
         >
           <FiEdit2 className="me-2 shrink-0" />
-          <span className="font-medium">{documentSet.name}</span>
+          <span className="font-medium">
+            <HighlightedText text={documentSet.name} terms={terms} />
+          </span>
         </button>
       </Tooltip>
     </div>
   );
 };
 
-interface DocumentFeedbackTableProps {
+interface DocumentSetTableProps {
+  /** The sets to show, already searched and ordered. */
   documentSets: DocumentSetSummary[];
+  /** How many sets exist before the search. */
+  totalCount: number;
+  terms: string[];
+  page: number;
+  onPageChange: (page: number) => void;
   refresh: () => void;
 }
 
 const DocumentSetTable = ({
   documentSets,
+  totalCount,
+  terms,
+  page,
+  onPageChange,
   refresh,
-}: DocumentFeedbackTableProps) => {
+}: DocumentSetTableProps) => {
   const t = useTranslations("admin.documents");
-  const [page, setPage] = useState(1);
-
-  // editable rows first, then by name — editability now rides on each row's
-  // permissions map, so no second fetch + set-diff is needed.
-  const sortedDocumentSets = [...documentSets].sort((a, b) => {
-    const editDiff = Number(can(b, "edit")) - Number(can(a, "edit"));
-    return editDiff !== 0 ? editDiff : a.name.localeCompare(b.name);
-  });
+  const totalPages = Math.max(1, Math.ceil(documentSets.length / numToDisplay));
+  // A page from before the search, or from before a delete, can be past the end.
+  const currentPage = Math.min(page, totalPages);
 
   return (
     <div>
-      <Title>{t("sets.table.title")}</Title>
+      <div className="px-4">
+        <Text font="secondary-body" color="text-03">
+          {documentSets.length === totalCount
+            ? t("sets.resultCount.total.label", { count: totalCount })
+            : t("sets.resultCount.filtered.label", {
+                shown: documentSets.length,
+                total: totalCount,
+              })}
+        </Text>
+      </div>
       <Table className="overflow-visible mt-2">
         <TableHeader>
           <TableRow>
@@ -186,8 +216,8 @@ const DocumentSetTable = ({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedDocumentSets
-            .slice((page - 1) * numToDisplay, page * numToDisplay)
+          {documentSets
+            .slice((currentPage - 1) * numToDisplay, currentPage * numToDisplay)
             .map((documentSet) => {
               const isEditable = can(documentSet, "edit");
               return (
@@ -197,8 +227,26 @@ const DocumentSetTable = ({
                       <EditRow
                         documentSet={documentSet}
                         isEditable={isEditable}
+                        terms={terms}
                       />
                     </div>
+                    {documentSet.description && (
+                      <div className="ps-1 break-normal">
+                        <Text
+                          font="secondary-body"
+                          color="text-03"
+                          wordWrap="wrap-break-word"
+                          maxLines={2}
+                        >
+                          {richNodes(
+                            <HighlightedText
+                              text={documentSet.description}
+                              terms={terms}
+                            />
+                          )}
+                        </Text>
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div>
@@ -220,10 +268,36 @@ const DocumentSetTable = ({
                                   iconSize={16}
                                 />
                                 <div className="ms-1 my-auto text-xs font-medium truncate">
-                                  {ccPairSummary.name ||
-                                    t("sets.connector.unnamed.label")}
+                                  {ccPairSummary.name ? (
+                                    <HighlightedText
+                                      text={ccPairSummary.name}
+                                      terms={terms}
+                                    />
+                                  ) : (
+                                    t("sets.connector.unnamed.label")
+                                  )}
                                 </div>
                               </div>
+                              {/* Shows why a set matched when only the
+                                  connector's source holds the term. */}
+                              {matchesSourceOnly(ccPairSummary, terms) && (
+                                <div className="mt-0.5 ps-5">
+                                  <Text
+                                    font="figure-small-value"
+                                    color="text-03"
+                                    wordWrap="whitespace-nowrap"
+                                  >
+                                    {richNodes(
+                                      <HighlightedText
+                                        text={getConnectorSourceName(
+                                          ccPairSummary
+                                        )}
+                                        terms={terms}
+                                      />
+                                    )}
+                                  </Text>
+                                </div>
+                              )}
                             </div>
                           );
                         }
@@ -253,6 +327,7 @@ const DocumentSetTable = ({
                                   >
                                     <FederatedConnectorTitle
                                       federatedConnector={federatedConnector}
+                                      terms={terms}
                                       showMetadata={true}
                                     />
                                   </div>
@@ -333,9 +408,9 @@ const DocumentSetTable = ({
       <div className="mt-3 flex">
         <div className="mx-auto">
           <PageSelector
-            totalPages={Math.ceil(sortedDocumentSets.length / numToDisplay)}
-            currentPage={page}
-            onPageChange={(newPage) => setPage(newPage)}
+            totalPages={totalPages}
+            currentPage={currentPage}
+            onPageChange={onPageChange}
           />
         </div>
       </div>
@@ -346,12 +421,46 @@ const DocumentSetTable = ({
 function Main() {
   const t = useTranslations("admin.documents");
   const { appName } = useSettings();
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageBeforeSearch, setPageBeforeSearch] = useState(1);
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
     error: documentSetsError,
     refreshDocumentSets,
   } = useDocumentSets();
+
+  // editable rows first, then by name — editability now rides on each row's
+  // permissions map, so no second fetch + set-diff is needed.
+  const sortedDocumentSets = useMemo(
+    () =>
+      [...(documentSets ?? [])].sort((a, b) => {
+        const editDiff = Number(can(b, "edit")) - Number(can(a, "edit"));
+        return editDiff !== 0 ? editDiff : a.name.localeCompare(b.name);
+      }),
+    [documentSets]
+  );
+  const matchingDocumentSets = useMemo(
+    () => searchDocumentSets(sortedDocumentSets, searchQuery),
+    [sortedDocumentSets, searchQuery]
+  );
+  const terms = useMemo(() => getSearchTerms(searchQuery), [searchQuery]);
+
+  // A search starts on the first page. Clearing it returns to the page the
+  // admin was on before.
+  function handleSearchQueryChange(query: string) {
+    const wasSearching = searchQuery.trim() !== "";
+    const isSearching = query.trim() !== "";
+    if (isSearching) {
+      if (!wasSearching) setPageBeforeSearch(page);
+      setPage(1);
+    } else if (wasSearching) {
+      setPage(pageBeforeSearch);
+    }
+    setSearchQuery(query);
+  }
 
   if (isDocumentSetsLoading) {
     return (
@@ -376,27 +485,35 @@ function Main() {
       </Text>
       <Spacer rem={0.75} />
 
-      <div className="mb-3"></div>
+      <AdminListHeader
+        hasItems={documentSets.length > 0}
+        searchQuery={searchQuery}
+        onSearchQueryChange={handleSearchQueryChange}
+        placeholder={t("sets.search.placeholder")}
+        emptyStateText={t("sets.empty.text")}
+        onAction={() => router.push("/admin/documents/sets/new")}
+        actionLabel={t("sets.newButton.label")}
+      />
 
-      <div className="flex mb-6">
-        <Button
-          icon={SvgPlusCircle}
-          prominence="secondary"
-          href="/admin/documents/sets/new"
-        >
-          {t("sets.newButton.label")}
-        </Button>
-      </div>
-
-      {documentSets.length > 0 && (
-        <>
-          <Divider />
+      {documentSets.length > 0 &&
+        (matchingDocumentSets.length > 0 ? (
           <DocumentSetTable
-            documentSets={documentSets}
+            documentSets={matchingDocumentSets}
+            totalCount={documentSets.length}
+            terms={terms}
+            page={page}
+            onPageChange={setPage}
             refresh={refreshDocumentSets}
           />
-        </>
-      )}
+        ) : (
+          <IllustrationContent
+            illustration={SvgNoResult}
+            title={t("sets.noResults.title")}
+            description={t("sets.noResults.description", {
+              query: searchQuery.trim(),
+            })}
+          />
+        ))}
     </div>
   );
 }

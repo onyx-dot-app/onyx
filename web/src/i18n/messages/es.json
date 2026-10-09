@@ -3917,6 +3917,9 @@
             "tooltip": "¡No se puede actualizar mientras se sincroniza! Espera a que termine la sincronización e inténtalo de nuevo."
           }
         },
+        "empty": {
+          "text": "Crea un conjunto de documentos para agrupar documentos de tus conectores."
+        },
         "federatedBadge": {
           "label": "Federado"
         },
@@ -3980,9 +3983,24 @@
         "newButton": {
           "label": "Nuevo conjunto de documentos"
         },
+        "noResults": {
+          "description": "No hay conjuntos de documentos que coincidan con \"{query}\"",
+          "title": "No se encontraron conjuntos de documentos"
+        },
         "notFound": {
           "message": "No se encontró el conjunto de documentos con el id {id}",
           "title": "Conjunto de documentos no encontrado"
+        },
+        "resultCount": {
+          "filtered": {
+            "label": "{shown, number} de {total, plural, one {# conjunto de documentos} other {# conjuntos de documentos}}"
+          },
+          "total": {
+            "label": "{count, plural, one {# conjunto de documentos} other {# conjuntos de documentos}}"
+          }
+        },
+        "search": {
+          "placeholder": "Buscar por nombre, descripción o conector..."
         },
         "status": {
           "deleting": {
@@ -4010,8 +4028,7 @@
           },
           "status": {
             "header": "Estado"
-          },
-          "title": "Conjuntos de documentos existentes"
+          }
         }
       },
       "visibility": {

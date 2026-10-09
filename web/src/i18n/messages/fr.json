@@ -3917,6 +3917,9 @@
             "tooltip": "Impossible de mettre à jour pendant la synchronisation ! Attendez la fin de la synchronisation, puis réessayez."
           }
         },
+        "empty": {
+          "text": "Créez un ensemble de documents pour regrouper les documents de vos connecteurs."
+        },
         "federatedBadge": {
           "label": "Fédéré"
         },
@@ -3980,9 +3983,24 @@
         "newButton": {
           "label": "Nouvel ensemble de documents"
         },
+        "noResults": {
+          "description": "Aucun ensemble de documents ne correspond à \"{query}\"",
+          "title": "Aucun ensemble de documents trouvé"
+        },
         "notFound": {
           "message": "Ensemble de documents avec l'id {id} introuvable",
           "title": "Ensemble de documents introuvable"
+        },
+        "resultCount": {
+          "filtered": {
+            "label": "{shown, number} sur {total, plural, one {# ensemble de documents} other {# ensembles de documents}}"
+          },
+          "total": {
+            "label": "{count, plural, one {# ensemble de documents} other {# ensembles de documents}}"
+          }
+        },
+        "search": {
+          "placeholder": "Rechercher par nom, description ou connecteur..."
         },
         "status": {
           "deleting": {
@@ -4010,8 +4028,7 @@
           },
           "status": {
             "header": "Statut"
-          },
-          "title": "Ensembles de documents existants"
+          }
         }
       },
       "visibility": {

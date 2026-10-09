@@ -30,6 +30,21 @@ export class AdminDocumentSetsPage {
     await expect(this.row(name)).toBeVisible({ timeout: 30000 });
   }
 
+  async expectNotListed(name: string): Promise<void> {
+    await expect(this.row(name)).toHaveCount(0);
+  }
+
+  /** The search box matches names, descriptions and connectors. */
+  async search(query: string): Promise<void> {
+    await this.page
+      .getByPlaceholder("Search by name, description, or connector...")
+      .fill(query);
+  }
+
+  async expectNoResults(): Promise<void> {
+    await expect(this.page.getByText("No document sets found")).toBeVisible();
+  }
+
   async expectEditable(name: string, documentSetId: number): Promise<void> {
     await this.row(name).getByText(name, { exact: true }).click();
     await expect(this.page).toHaveURL(

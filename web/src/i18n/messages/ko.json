@@ -3917,6 +3917,9 @@
             "tooltip": "동기화 중에는 업데이트할 수 없습니다! 동기화가 끝난 후 다시 시도하세요."
           }
         },
+        "empty": {
+          "text": "문서 세트를 만들어 커넥터의 문서를 그룹화하세요."
+        },
         "federatedBadge": {
           "label": "페더레이션"
         },
@@ -3980,9 +3983,24 @@
         "newButton": {
           "label": "새 문서 세트"
         },
+        "noResults": {
+          "description": "\"{query}\"와(과) 일치하는 문서 세트가 없습니다",
+          "title": "문서 세트를 찾을 수 없습니다"
+        },
         "notFound": {
           "message": "id가 {id}인 문서 세트를 찾을 수 없습니다",
           "title": "문서 세트를 찾을 수 없습니다"
+        },
+        "resultCount": {
+          "filtered": {
+            "label": "문서 세트 {total, plural, other {#개}} 중 {shown, number}개"
+          },
+          "total": {
+            "label": "{count, plural, other {문서 세트 #개}}"
+          }
+        },
+        "search": {
+          "placeholder": "이름, 설명 또는 커넥터로 검색..."
         },
         "status": {
           "deleting": {
@@ -4010,8 +4028,7 @@
           },
           "status": {
             "header": "상태"
-          },
-          "title": "기존 문서 세트"
+          }
         }
       },
       "visibility": {

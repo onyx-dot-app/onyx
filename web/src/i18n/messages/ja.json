@@ -3917,6 +3917,9 @@
             "tooltip": "同期中は更新できません。同期の完了後に、もう一度お試しください。"
           }
         },
+        "empty": {
+          "text": "ドキュメントセットを作成して、コネクターのドキュメントをまとめましょう。"
+        },
         "federatedBadge": {
           "label": "フェデレーテッド"
         },
@@ -3980,9 +3983,24 @@
         "newButton": {
           "label": "新しいドキュメントセット"
         },
+        "noResults": {
+          "description": "「{query}」に一致するドキュメントセットはありません",
+          "title": "ドキュメントセットが見つかりません"
+        },
         "notFound": {
           "message": "id が {id} のドキュメントセットは見つかりません",
           "title": "ドキュメントセットが見つかりません"
+        },
+        "resultCount": {
+          "filtered": {
+            "label": "{total, plural, other {# 個}}のドキュメントセットのうち {shown, number} 個"
+          },
+          "total": {
+            "label": "{count, plural, other {# 個のドキュメントセット}}"
+          }
+        },
+        "search": {
+          "placeholder": "名前、説明、コネクターで検索..."
         },
         "status": {
           "deleting": {
@@ -4010,8 +4028,7 @@
           },
           "status": {
             "header": "ステータス"
-          },
-          "title": "既存のドキュメントセット"
+          }
         }
       },
       "visibility": {
