@@ -5227,6 +5227,9 @@
           "title": "Clé d'API"
         },
         "googleCredentials": {
+          "description": "Téléchargez une [clé de compte de service]({link}) depuis Google Cloud. Cliquez ensuite sur le trombone pour téléverser le fichier JSON, ou collez son contenu.",
+          "placeholder": "Téléversez ou collez la clé JSON de votre compte de service",
+          "savedPlaceholder": "Clé enregistrée. Téléversez ou collez une nouvelle clé pour la remplacer.",
           "title": "Téléverser le fichier d'identifiants JSON"
         },
         "modelDim": {

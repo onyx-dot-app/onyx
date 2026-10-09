@@ -5227,6 +5227,9 @@
           "title": "مفتاح API"
         },
         "googleCredentials": {
+          "description": "نزّل [مفتاح حساب الخدمة]({link}) من Google Cloud. ثم انقر على مشبك الورق لرفع ملف JSON، أو الصق محتواه.",
+          "placeholder": "ارفع أو الصق مفتاح JSON لحساب الخدمة",
+          "savedPlaceholder": "تم حفظ المفتاح. ارفع مفتاحًا جديدًا أو الصقه لاستبداله.",
           "title": "ارفع ملف بيانات اعتماد JSON"
         },
         "modelDim": {

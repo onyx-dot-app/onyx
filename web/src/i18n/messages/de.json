@@ -5227,6 +5227,9 @@
           "title": "API-Schlüssel"
         },
         "googleCredentials": {
+          "description": "Laden Sie einen [Dienstkontoschlüssel]({link}) aus Google Cloud herunter. Klicken Sie dann auf die Büroklammer, um die JSON-Datei hochzuladen, oder fügen Sie ihren Inhalt ein.",
+          "placeholder": "Laden Sie den JSON-Schlüssel Ihres Dienstkontos hoch oder fügen Sie ihn ein",
+          "savedPlaceholder": "Schlüssel gespeichert. Laden Sie einen neuen Schlüssel hoch oder fügen Sie ihn ein, um ihn zu ersetzen.",
           "title": "JSON-Datei mit Anmeldedaten hochladen"
         },
         "modelDim": {

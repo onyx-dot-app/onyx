@@ -72,15 +72,34 @@ export function ApiUrlField({
   );
 }
 
-export function GoogleCredentialsField() {
+interface GoogleCredentialsFieldProps {
+  provider: EmbeddingProvider;
+  /** A service account key is already saved; an empty field keeps it. */
+  hasSavedKey: boolean;
+}
+
+export function GoogleCredentialsField({
+  provider,
+  hasSavedKey,
+}: GoogleCredentialsFieldProps) {
   const t = useTranslations("admin.indexSettings");
   const [, meta, helpers] = useField<string>("apiKey");
   return (
     <InputVertical
       title={t("fields.googleCredentials.title")}
       withLabel="apiKey"
+      subDescription={markdown(
+        t("fields.googleCredentials.description", {
+          link: provider.apiLink ?? "",
+        })
+      )}
     >
       <InputFile
+        placeholder={
+          hasSavedKey
+            ? t("fields.googleCredentials.savedPlaceholder")
+            : t("fields.googleCredentials.placeholder")
+        }
         id="apiKey"
         name="apiKey"
         error={meta.touched && !!meta.error}
@@ -93,7 +112,7 @@ export function GoogleCredentialsField() {
         onBlur={() => {
           void helpers.setTouched(true);
         }}
-        accept=".json"
+        accept=".json,application/json"
       />
     </InputVertical>
   );

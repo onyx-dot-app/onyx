@@ -232,7 +232,15 @@ interface GoogleFormValues {
   location: string;
 }
 
-function GoogleAuthenticationFields() {
+interface GoogleAuthenticationFieldsProps {
+  provider: EmbeddingProvider;
+  hasSavedKey: boolean;
+}
+
+function GoogleAuthenticationFields({
+  provider,
+  hasSavedKey,
+}: GoogleAuthenticationFieldsProps) {
   const t = useTranslations("admin.indexSettings");
   const tVertex = useTranslations("admin.languageModels.modals.vertexAi");
   const tSelect = useTranslations("common.inputSelect");
@@ -273,7 +281,7 @@ function GoogleAuthenticationFields() {
           placeholder={tVertex("projectField.placeholder")}
         />
       ) : (
-        <GoogleCredentialsField />
+        <GoogleCredentialsField provider={provider} hasSavedKey={hasSavedKey} />
       )}
       <TextField
         name="location"
@@ -370,7 +378,12 @@ function GoogleProviderModal({
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing}>
-        <GoogleAuthenticationFields />
+        <GoogleAuthenticationFields
+          provider={provider}
+          hasSavedKey={
+            isEditing && existingConfig?.auth_method !== "workload_identity"
+          }
+        />
       </ModalShell>
     </Formik>
   );

@@ -5227,6 +5227,9 @@
           "title": "API 키"
         },
         "googleCredentials": {
+          "description": "Google Cloud에서 [서비스 계정 키]({link})를 다운로드하세요. 그런 다음 클립 아이콘을 클릭해 JSON 파일을 업로드하거나 내용을 붙여 넣으세요.",
+          "placeholder": "서비스 계정 JSON 키를 업로드하거나 붙여 넣으세요",
+          "savedPlaceholder": "키가 저장되었습니다. 바꾸려면 새 키를 업로드하거나 붙여 넣으세요.",
           "title": "JSON 자격 증명 파일 업로드"
         },
         "modelDim": {

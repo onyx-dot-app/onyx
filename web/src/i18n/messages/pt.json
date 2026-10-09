@@ -5227,6 +5227,9 @@
           "title": "Chave de API"
         },
         "googleCredentials": {
+          "description": "Baixe uma [chave de conta de serviço]({link}) do Google Cloud. Depois clique no clipe para enviar o arquivo JSON ou cole o conteúdo dele.",
+          "placeholder": "Envie ou cole a chave JSON da sua conta de serviço",
+          "savedPlaceholder": "Chave salva. Envie ou cole uma nova chave para substituí-la.",
           "title": "Enviar arquivo de credenciais JSON"
         },
         "modelDim": {

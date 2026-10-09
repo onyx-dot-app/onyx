@@ -5227,6 +5227,9 @@
           "title": "API キー"
         },
         "googleCredentials": {
+          "description": "Google Cloud から[サービスアカウントキー]({link})をダウンロードします。次にクリップのアイコンをクリックして JSON ファイルをアップロードするか、内容を貼り付けます。",
+          "placeholder": "サービスアカウントの JSON キーをアップロードまたは貼り付け",
+          "savedPlaceholder": "キーは保存済みです。置き換えるには新しいキーをアップロードまたは貼り付けます。",
           "title": "JSON 認証情報ファイルをアップロード"
         },
         "modelDim": {

@@ -5227,6 +5227,9 @@
           "title": "Clave de API"
         },
         "googleCredentials": {
+          "description": "Descarga una [clave de cuenta de servicio]({link}) de Google Cloud. Luego haz clic en el clip para subir el archivo JSON o pega su contenido.",
+          "placeholder": "Sube o pega la clave JSON de tu cuenta de servicio",
+          "savedPlaceholder": "Clave guardada. Sube o pega una clave nueva para reemplazarla.",
           "title": "Sube el archivo de credenciales JSON"
         },
         "modelDim": {

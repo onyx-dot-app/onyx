@@ -5227,6 +5227,9 @@
           "title": "API 密钥"
         },
         "googleCredentials": {
+          "description": "从 Google Cloud 下载[服务账号密钥]({link})。然后点击回形针图标上传 JSON 文件，或粘贴其内容。",
+          "placeholder": "上传或粘贴您的服务账号 JSON 密钥",
+          "savedPlaceholder": "密钥已保存。上传或粘贴新密钥即可替换。",
           "title": "上传 JSON 凭证文件"
         },
         "modelDim": {

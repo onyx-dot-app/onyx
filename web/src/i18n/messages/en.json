@@ -5227,6 +5227,9 @@
           "title": "API Key"
         },
         "googleCredentials": {
+          "description": "Download a [service account key]({link}) from Google Cloud. Then click the paperclip to upload the JSON file, or paste its contents.",
+          "placeholder": "Upload or paste your service account JSON key",
+          "savedPlaceholder": "Key saved. Upload or paste a new key to replace it.",
           "title": "Upload JSON credentials file"
         },
         "modelDim": {
