@@ -381,6 +381,7 @@ class TestAttachmentFailureIsolation:
             )
         assert ticket_doc_id in connector._attachment_admission_failures
 
+    @pytest.mark.usefixtures("mock_extract")
     def test_slim_pass_admits_only_attachments_that_produced_documents(
         self,
         make_jsm_connector: Callable[..., JiraServiceManagementConnector],
