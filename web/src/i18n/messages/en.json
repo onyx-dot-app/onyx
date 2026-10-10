@@ -2634,6 +2634,17 @@
           "description": "Microsoft Graph host. Use https://graph.microsoft.us for GCC High or DoD."
         }
       },
+      "linear": {
+        "description": "Configure Linear connector",
+        "teams": {
+          "label": "Teams",
+          "description": "Linear team keys (e.g. ENG) to index. Leave empty to index every team the connected user can see."
+        },
+        "projects": {
+          "label": "Projects",
+          "description": "Linear project names or URLs to index. Leave empty to index every project. With teams set too, an issue must match both."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "Authorize with {source}",

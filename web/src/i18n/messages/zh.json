@@ -2634,6 +2634,17 @@
           "description": "Microsoft Graph 主机。GCC High 或 DoD 请使用 https://graph.microsoft.us。"
         }
       },
+      "linear": {
+        "description": "配置 Linear 连接器",
+        "teams": {
+          "label": "团队",
+          "description": "要索引的 Linear 团队键（例如 ENG）。留空则索引已连接用户可见的所有团队。"
+        },
+        "projects": {
+          "label": "项目",
+          "description": "要索引的 Linear 项目名称或 URL。留空则索引所有项目。若同时设置了团队，问题必须同时匹配两者。"
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "使用 {source} 授权",
