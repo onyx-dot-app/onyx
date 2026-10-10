@@ -16,6 +16,8 @@ from ee.onyx.configs.app_configs import (
     GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
     JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
     JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
+    LINEAR_PERMISSION_DOC_SYNC_FREQUENCY,
+    LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY,
     ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY_S,
     ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S,
     OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY,
@@ -209,6 +211,18 @@ def _load_teams_group_sync() -> GroupSyncFuncType:
     return teams_group_sync
 
 
+def _load_linear_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.linear.doc_sync import linear_doc_sync
+
+    return linear_doc_sync
+
+
+def _load_linear_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.linear.group_sync import linear_group_sync
+
+    return linear_group_sync
+
+
 def _load_zoom_doc_sync() -> DocSyncFuncType:
     from ee.onyx.external_permissions.zoom.doc_sync import zoom_doc_sync
 
@@ -362,6 +376,20 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY,
             group_sync_func=_lazy_group_sync(_load_zoom_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.LINEAR: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=LINEAR_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_linear_doc_sync),
+            # The runner tells only checkpointed connectors to carry access, so
+            # an issue stays private until the first doc sync lists it.
+            initial_index_should_sync=False,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_linear_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),

@@ -93,6 +93,7 @@ only added to `beat_task_templates` when the build ships the EE code
 | OneDrive | `ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
 | Gmail | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync |
 | Zoom | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY`, but `doc_sync_func=mock_doc_sync` (a no-op; see §4.3) | no group sync |
+| Linear | `LINEAR_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` because `ConnectorRunner` passes `include_permissions` only to checkpointed connectors, so an issue stays private until the first doc sync lists it | `LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min); one group per team the token can see plus `workspace_members:<organization id>`; a public team's issues name both, a restricted sub-team's its private parent too |
 | Salesforce | none (`doc_sync_config=None`) | none; `censoring_config` only (§4.5) |
 
 Every value is env-overridable and is additionally multiplied by

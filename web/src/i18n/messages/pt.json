@@ -2643,7 +2643,8 @@
         "projects": {
           "label": "Projetos",
           "description": "Nomes ou URLs de projetos do Linear a indexar. Deixe vazio para indexar todos os projetos. Com equipes definidas também, um issue deve corresponder a ambos."
-        }
+        },
+        "syncNotice": "Conecte-se como membro do workspace, não como convidado, que pertença a todas as equipes privadas que você quer indexar. O Onyx não vê equipes privadas das quais o usuário conectado não faz parte. Issues de equipes públicas podem ser pesquisados por todos os membros do workspace, e os de equipes privadas ou restritas, por seus membros."
       },
       "add": {
         "authorizeButton": {
