@@ -15,7 +15,6 @@ models where they need extra fields. Graph is reached only through the
 caller's :class:`EntraGroupReader`.
 """
 
-import re
 from collections.abc import Generator
 
 from pydantic import BaseModel
@@ -25,6 +24,7 @@ from onyx.connectors.microsoft_utils.entra import iter_entra_items
 from onyx.connectors.microsoft_utils.models import (
     EntraMemberKind,
 )
+from onyx.connectors.microsoft_utils.sharepoint_principals import resolve_group_id
 from onyx.connectors.microsoft_utils.sharepoint_rest import (
     EntraGroupReader,
 )
@@ -39,8 +39,6 @@ MICROSOFT_DOMAIN = ".onmicrosoft"
 # leaves the rest to be resolved from the source's own references.
 ENTRA_GROUP_ENUMERATION_THRESHOLD = 100_000
 ENTRA_GROUP_MEMBER_THRESHOLD = 1_000_000
-
-_GUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 
 class ResolvedEntraGroup(BaseModel):
@@ -64,47 +62,6 @@ def entra_group_name(display_name: str, group_id: str | None) -> str:
     carry that name, so it must keep matching.
     """
     return f"{display_name}_{group_id}"
-
-
-def extract_guid(text: str) -> str | None:
-    """Pull the first GUID out of a string such as a SharePoint claims token."""
-    try:
-        match = re.search(f"({_GUID_RE})", text, re.IGNORECASE)
-        if match:
-            return match.group(1)
-
-        return None
-
-    except Exception as e:
-        logger.error("Failed to extract GUID from %s: %s", text, e)
-        return None
-
-
-def find_group_id_by_name(reader: EntraGroupReader, display_name: str) -> str | None:
-    try:
-        return reader.find_entra_group_id(display_name=display_name)
-    except Exception as e:
-        logger.error("Failed to get Entra group id for name %s: %s", display_name, e)
-        return None
-
-
-def resolve_group_id(reader: EntraGroupReader, identifier: str) -> str | None:
-    """Resolve a GUID, a SharePoint claims token, or a display name to a group id."""
-    try:
-        if re.match(f"^{_GUID_RE}$", identifier, re.IGNORECASE):
-            return identifier
-
-        if identifier.startswith("c:0") and "|" in identifier:
-            guid = extract_guid(identifier)
-            if guid:
-                logger.info("Extracted GUID %s from claims token %s", guid, identifier)
-                return guid
-
-        return find_group_id_by_name(reader, identifier)
-
-    except Exception as e:
-        logger.error("Failed to resolve group id from %s: %s", identifier, e)
-        return None
 
 
 def resolve_entra_group_name(
