@@ -42,4 +42,9 @@ jobs:
             -r backend/requirements/ee.txt
       - name: Run targeted JSM unit tests
         run: |
-          .venv/bin/python -m pytest -q backend/tests/unit/onyx/connectors/jira_service_management
+          .venv/bin/python -m pytest -q \
+            backend/tests/unit/onyx/connectors/jira \
+            backend/tests/unit/onyx/connectors/jira_service_management \
+            backend/tests/unit/onyx/connectors/test_source_operation_coverage.py \
+            backend/tests/unit/onyx/connectors/test_source_operation_import_fence.py \
+            backend/tests/unit/onyx/connectors/test_source_operations.py
