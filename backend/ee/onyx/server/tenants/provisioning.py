@@ -1,14 +1,19 @@
 import asyncio
+import hashlib
+import time
 import uuid
+from collections.abc import Callable
 
 import aiohttp  # Async HTTP client
 import httpx
 import requests
-from fastapi import HTTPException, Request
+from fastapi import Request
+from redis.lock import Lock as RedisLock
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
+from ee.onyx.db.available_tenant import take_available_tenant
 from ee.onyx.db.user_tenant_mapping import (
     add_users_to_tenant,
     resolve_tenant_id,
@@ -24,8 +29,10 @@ from ee.onyx.server.tenants.schema_management import (
     build_tenant_schema,
     create_schema_if_not_exists,
     drop_schema,
+    get_alembic_head_revision,
     run_alembic_migrations,
 )
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import (
     ANTHROPIC_DEFAULT_API_KEY,
     AUTO_PROVISION_DEFAULT_LLM_PROVIDERS,
@@ -34,8 +41,18 @@ from onyx.configs.app_configs import (
     DEV_MODE,
     OPENAI_DEFAULT_API_KEY,
     OPENROUTER_DEFAULT_API_KEY,
+    TENANT_PROVISIONING_WAIT_SECONDS,
     VERTEXAI_DEFAULT_CREDENTIALS,
     VERTEXAI_DEFAULT_LOCATION,
+)
+from onyx.configs.constants import (
+    ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY,
+    ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX,
+    ONYX_CLOUD_TENANT_ID,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
 )
 from onyx.db.engine.shard_routing import get_shard_for_new_tenant
 from onyx.db.engine.sql_engine import (
@@ -57,6 +74,8 @@ from onyx.db.models import (
     UserTenantMapping,
 )
 from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import (
     ANTHROPIC_PROVIDER_NAME,
@@ -70,6 +89,7 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     get_recommendations,
     model_configurations_for_provider,
 )
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
@@ -90,6 +110,26 @@ logger = setup_logger()
 # Matches billing.py. Without it a hung control plane pins the caller forever.
 _CONTROL_PLANE_TIMEOUT_S = 30
 
+# A signup polls for its worker-built tenant at this interval.
+_PROVISIONING_POLL_INTERVAL_S = 1.0
+
+_CONTROL_PLANE_DELETE_ATTEMPTS = 3
+_CONTROL_PLANE_DELETE_BACKOFF_S = 2.0
+
+
+def _provisioning_failed_error() -> OnyxError:
+    return OnyxError(
+        OnyxErrorCode.INTERNAL_ERROR,
+        "Failed to provision tenant. Please try again later.",
+    )
+
+
+def _still_provisioning_error() -> OnyxError:
+    return OnyxError(
+        OnyxErrorCode.SERVICE_UNAVAILABLE,
+        "Your workspace is still being set up. Try again in a minute.",
+    )
+
 
 async def get_or_provision_tenant(
     email: str,
@@ -105,6 +145,11 @@ async def get_or_provision_tenant(
 
     When the caller knows the IdP subject it is tried before the email, which is
     what stops a renamed user being treated as a brand new signup.
+
+    Alembic never runs in the api server. A pool tenant that is already at the
+    code's head revision is assigned here. Anything that needs a migration is
+    built by a worker while this request waits for the mapping to appear, or
+    for the refill task to add a pool tenant this request can take itself.
     """
     # Early return for non-multi-tenant mode
     if not MULTI_TENANT:
@@ -117,57 +162,300 @@ async def get_or_provision_tenant(
     if tenant_id:
         return tenant_id
 
+    # The same lock the worker task takes. Two overlapping signups for one
+    # email (a double submit, two tabs) must not each take a pool tenant.
+    # Its TTL is the whole signup budget so a slow control plane cannot outlive it.
+    deadline = time.monotonic() + TENANT_PROVISIONING_WAIT_SECONDS
+    lock = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).lock(
+        user_provision_lock_name(email), timeout=TENANT_PROVISIONING_WAIT_SECONDS
+    )
+    await _acquire_signup_lock(lock, deadline)
+
     try:
-        # Try to get a pre-provisioned tenant
-        tenant_id = await get_available_tenant()
-
-        if tenant_id:
-            # Run migrations to ensure the pre-provisioned tenant schema is current.
-            # Pool tenants may have been created before a new migration was deployed.
-            # Capture as a non-optional local so type-checking can type the lambda correctly.
-            _tenant_id: str = tenant_id
-            loop = asyncio.get_running_loop()
-            try:
-                await loop.run_in_executor(
-                    None, lambda: run_alembic_migrations(_tenant_id)
-                )
-            except Exception:
-                # The tenant was already dequeued from the pool — roll it back so
-                # it doesn't end up orphaned (schema exists, but not assigned to anyone).
-                logger.exception(
-                    "Migration failed for pre-provisioned tenant %s; rolling back",
-                    _tenant_id,
-                )
-                try:
-                    await rollback_tenant_provisioning(_tenant_id)
-                except Exception:
-                    logger.exception(
-                        "Failed to rollback orphaned tenant %s", _tenant_id
-                    )
-                raise
-            # If we have a pre-provisioned tenant, assign it to the user
-            await assign_tenant_to_user(tenant_id, email, referral_source)
-            logger.info(
-                "Assigned pre-provisioned tenant %s to user %s", tenant_id, email
+        tenant_id = await asyncio.shield(
+            _claim_pool_tenant_under_lock(
+                lock, email, oauth_name, account_id, referral_source
             )
-        else:
-            # If no pre-provisioned tenant is available, create a new one on-demand
-            tenant_id = await create_tenant(email, referral_source)
+        )
+        if tenant_id is not None:
+            return tenant_id
+        attempt_id = _enqueue_user_provisioning(email, referral_source)
+    except OnyxError:
+        raise
+    except Exception as e:
+        logger.error("Failed to provision tenant", exc_info=e)
+        raise _provisioning_failed_error()
 
-        # Notify control plane if we have created / assigned a new tenant
+    return await _wait_for_tenant(
+        email, oauth_name, account_id, referral_source, attempt_id, deadline, lock
+    )
+
+
+async def _claim_pool_tenant_under_lock(
+    lock: RedisLock,
+    email: str,
+    oauth_name: str | None,
+    account_id: str | None,
+    referral_source: str | None,
+) -> str | None:
+    """Runs with the per-email lock held and releases it when done. Callers
+    shield it from request cancellation: once a row leaves the pool only this
+    coroutine can assign or roll it back, and the lock must last that long or
+    a retried signup could take a second tenant meanwhile."""
+    try:
+        # The holder this waited on may have finished the job.
+        tenant_id = await asyncio.to_thread(
+            resolve_tenant_id, email, oauth_name, account_id
+        )
+        if tenant_id:
+            return tenant_id
+        tenant_id = await get_available_tenant()
+        if tenant_id is None:
+            return None
+        await _finish_tenant_assignment(tenant_id, email, referral_source)
+        return tenant_id
+    finally:
+        _release_signup_lock(lock)
+
+
+def _release_signup_lock(lock: RedisLock) -> None:
+    try:
+        lock.release()
+    except Exception:
+        logger.warning("Could not release the signup lock (likely expired)")
+
+
+async def _acquire_signup_lock(lock: RedisLock, deadline: float) -> None:
+    """Poll for the lock without blocking the event loop. The non-blocking
+    acquire is one round trip and must stay on this thread: the token that
+    release() checks is thread-local."""
+    while not lock.acquire(blocking=False):
+        if time.monotonic() >= deadline:
+            raise _still_provisioning_error()
+        await asyncio.sleep(_PROVISIONING_POLL_INTERVAL_S)
+
+
+def user_provision_lock_name(email: str) -> str:
+    # Lowercased like the mapping table, so one person means one lock.
+    digest = hashlib.sha256(email.lower().encode()).hexdigest()
+    return f"{OnyxRedisLocks.CLOUD_PROVISION_TENANT_FOR_USER_LOCK_PREFIX}:{digest}"
+
+
+def provision_attempt_failure_key(attempt_id: str) -> str:
+    """Set by the worker when this attempt fails, so the request that
+    enqueued it fails now instead of polling until its deadline."""
+    return f"{ONYX_CLOUD_PROVISION_FAILURE_KEY_PREFIX}:{attempt_id}"
+
+
+async def _finish_tenant_assignment(
+    tenant_id: str, email: str, referral_source: str | None
+) -> None:
+    """Notify the control plane, then write the mapping that makes the tenant
+    visible. A failed notification then never leaves a workspace billing has not
+    heard of. On failure both planes roll back, the tenant is already out of the pool."""
+    control_plane_may_know = False
+    try:
         if not DEV_MODE:
+            # Once the request is on the wire the record may exist even if
+            # the response never arrives, so compensate from here on.
+            control_plane_may_know = True
             await notify_control_plane(tenant_id, email, referral_source)
+        await assign_tenant_to_user(tenant_id, email, referral_source)
+    except Exception:
+        logger.exception("Failed to assign tenant %s, rolling it back", tenant_id)
+        if control_plane_may_know:
+            await _remove_tenant_from_control_plane(tenant_id, email)
+        try:
+            await rollback_tenant_provisioning(tenant_id)
+        except Exception:
+            logger.exception("Failed to rollback tenant %s", tenant_id)
+        raise
+    logger.info("Assigned tenant %s to user %s", tenant_id, email)
 
+
+async def _remove_tenant_from_control_plane(tenant_id: str, email: str) -> None:
+    """Compensate a control-plane record for a tenant that is being rolled back.
+    Retries a few times, then queues the pair for the refill task to retry: the
+    control plane is the billing record, so a leftover charges for nothing."""
+    for attempt in range(1, _CONTROL_PLANE_DELETE_ATTEMPTS + 1):
+        try:
+            await delete_user_from_control_plane(tenant_id, email)
+            return
+        except Exception:
+            logger.exception(
+                "Control plane delete for tenant %s failed (attempt %s of %s)",
+                tenant_id,
+                attempt,
+                _CONTROL_PLANE_DELETE_ATTEMPTS,
+            )
+            if attempt < _CONTROL_PLANE_DELETE_ATTEMPTS:
+                await asyncio.sleep(_CONTROL_PLANE_DELETE_BACKOFF_S * attempt)
+    # Best effort: the caller still has the data plane to roll back.
+    try:
+        get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).sadd(
+            ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY, f"{tenant_id} {email}"
+        )
+    except Exception:
+        logger.exception(
+            "Control plane still has tenant %s for %s and it could not be queued "
+            "for reconciliation",
+            tenant_id,
+            email,
+        )
+        return
+    logger.error(
+        "Control plane still has tenant %s for %s, queued for reconciliation",
+        tenant_id,
+        email,
+    )
+
+
+async def reconcile_control_plane_orphans() -> int:
+    """Retry the control-plane deletes that failed during a rollback.
+    Run by the refill task. Returns how many records were removed."""
+    redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    removed = 0
+    for member in redis_client.smembers(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY):
+        entry = member.decode() if isinstance(member, bytes) else member
+        tenant_id, email = entry.split(" ", 1)
+        try:
+            await delete_user_from_control_plane(tenant_id, email)
+        except Exception:
+            logger.exception(
+                "Control plane delete for tenant %s still failing", tenant_id
+            )
+            continue
+        redis_client.srem(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY, member)
+        removed += 1
+    return removed
+
+
+def _enqueue_user_provisioning(email: str, referral_source: str | None) -> str:
+    """Returns the attempt id the worker reports failure under."""
+    attempt_id = str(uuid.uuid4())
+    client_app.send_task(
+        OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
+        kwargs={
+            "tenant_id": ONYX_CLOUD_TENANT_ID,
+            "email": email,
+            "attempt_id": attempt_id,
+            "referral_source": referral_source,
+        },
+        queue=OnyxCeleryQueues.MONITORING,
+        priority=OnyxCeleryPriority.HIGH,
+        # Past this the request has already failed and the user retries, which
+        # enqueues again. Dropping the stale task keeps abandoned signups from
+        # occupying the worker.
+        expires=TENANT_PROVISIONING_WAIT_SECONDS,
+    )
+    return attempt_id
+
+
+async def _wait_for_tenant(
+    email: str,
+    oauth_name: str | None,
+    account_id: str | None,
+    referral_source: str | None,
+    attempt_id: str,
+    deadline: float,
+    lock: RedisLock,
+) -> str:
+    redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    failure_key = provision_attempt_failure_key(attempt_id)
+    # The sync clients run on the default executor, which no longer runs
+    # alembic, so a slow database or Redis stalls this request alone.
+    while time.monotonic() < deadline:
+        tenant_id = await asyncio.to_thread(
+            resolve_tenant_id, email, oauth_name, account_id
+        )
+        if tenant_id:
+            return tenant_id
+        if await asyncio.to_thread(redis_client.get, failure_key) is not None:
+            raise _provisioning_failed_error()
+        tenant_id = await _take_pool_tenant_while_waiting(
+            lock, email, oauth_name, account_id, referral_source
+        )
+        if tenant_id:
+            return tenant_id
+        await asyncio.sleep(_PROVISIONING_POLL_INTERVAL_S)
+    logger.warning("Timed out waiting for tenant provisioning for user %s", email)
+    raise _still_provisioning_error()
+
+
+async def _take_pool_tenant_while_waiting(
+    lock: RedisLock,
+    email: str,
+    oauth_name: str | None,
+    account_id: str | None,
+    referral_source: str | None,
+) -> str | None:
+    """The refill task may add a head-revision tenant while this signup waits,
+    and taking it here beats waiting for the worker to build one. Skipped when
+    the worker holds the lock, since it is then already building for this email."""
+    if not lock.acquire(blocking=False):
+        return None
+    try:
+        return await asyncio.shield(
+            _claim_pool_tenant_under_lock(
+                lock, email, oauth_name, account_id, referral_source
+            )
+        )
+    except Exception as e:
+        logger.error("Failed to provision tenant", exc_info=e)
+        raise _provisioning_failed_error()
+
+
+async def provision_user_tenant(
+    email: str,
+    referral_source: str | None,
+    lock_owned: Callable[[], bool] = lambda: True,
+) -> str:
+    """Worker side of a signup that found no current pool tenant.
+
+    Takes any pool tenant and brings it to head, or builds one from scratch,
+    then tells the control plane and assigns it. Returns the tenant id.
+
+    ``lock_owned`` is checked once the build is done: a build that outlived
+    the per-email lock may race a retried signup, so it is rolled back instead
+    of assigned.
+    """
+    tenant_id = resolve_tenant_id(email)
+    if tenant_id:
         return tenant_id
 
-    except Exception as e:
-        # If we've encountered an error, log and raise an exception
-        error_msg = "Failed to provision tenant"
-        logger.error(error_msg, exc_info=e)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to provision tenant. Please try again later.",
+    tenant_id = await get_available_tenant(allow_stale=True)
+    if tenant_id is not None:
+        await _migrate_pool_tenant(tenant_id)
+    else:
+        tenant_id = await create_tenant(email, referral_source)
+
+    if not lock_owned():
+        logger.error(
+            "Provisioning for %s outlived its lock, rolling back tenant %s",
+            email,
+            tenant_id,
         )
+        await rollback_tenant_provisioning(tenant_id)
+        raise RuntimeError("tenant build outlived the per-user lock")
+
+    await _finish_tenant_assignment(tenant_id, email, referral_source)
+    return tenant_id
+
+
+async def _migrate_pool_tenant(tenant_id: str) -> None:
+    """Bring a pool tenant to head. It is already out of the pool, so a failed
+    migration rolls it back rather than leaving a schema assigned to nobody."""
+    try:
+        await asyncio.to_thread(run_alembic_migrations, tenant_id)
+    except Exception:
+        logger.exception(
+            "Migration failed for pre-provisioned tenant %s, rolling back", tenant_id
+        )
+        try:
+            await rollback_tenant_provisioning(tenant_id)
+        except Exception:
+            logger.exception("Failed to rollback orphaned tenant %s", tenant_id)
+        raise
 
 
 async def create_tenant(
@@ -193,18 +481,20 @@ async def create_tenant(
             await rollback_tenant_provisioning(tenant_id)
         except Exception:
             logger.exception("Failed to rollback tenant provisioning for %s", tenant_id)
-        raise HTTPException(status_code=500, detail="Failed to provision tenant.")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to provision tenant.")
 
     return tenant_id
 
 
 async def provision_tenant(tenant_id: str, email: str) -> None:
     if not MULTI_TENANT:
-        raise HTTPException(status_code=403, detail="Multi-tenancy is not enabled")
+        raise OnyxError(
+            OnyxErrorCode.DEPLOYMENT_UNSUPPORTED, "Multi-tenancy is not enabled"
+        )
 
     if user_owns_a_tenant(email):
-        raise HTTPException(
-            status_code=409, detail="User already belongs to an organization"
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "User already belongs to an organization"
         )
 
     shard_name = get_shard_for_new_tenant()
@@ -222,16 +512,14 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
         else:
             logger.debug("Schema already exists for tenant %s", tenant_id)
 
-        # Set up the tenant with all necessary configurations
+        # Set up the tenant with all necessary configurations. The caller
+        # notifies the control plane and assigns the tenant afterwards.
         await setup_tenant(tenant_id)
-
-        # Assign the tenant to the user
-        await assign_tenant_to_user(tenant_id, email)
 
     except Exception as e:
         logger.exception("Failed to create tenant %s", tenant_id)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to create tenant: {str(e)}"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, f"Failed to create tenant: {str(e)}"
         )
 
 
@@ -248,7 +536,9 @@ async def notify_control_plane(
         tenant_id=tenant_id, email=email, referral_source=referral_source
     )
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=_CONTROL_PLANE_TIMEOUT_S)
+    ) as session:
         async with session.post(
             f"{CONTROL_PLANE_API_BASE_URL}/tenants/create",
             headers=headers,
@@ -630,15 +920,21 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
     }
     payload = TenantDeletionPayload(tenant_id=tenant_id, email=email)
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=_CONTROL_PLANE_TIMEOUT_S)
+    ) as session:
         async with session.delete(
             f"{CONTROL_PLANE_API_BASE_URL}/tenants/delete",
             headers=headers,
             json=payload.model_dump(),
         ) as response:
+            # A compensating delete for a create whose response was lost may
+            # find nothing to delete, which is the outcome it wanted.
+            if response.status == 404:
+                return
             if response.status != 200:
                 error_text = await response.text()
-                logger.error("Control plane tenant creation failed: %s", error_text)
+                logger.error("Control plane tenant deletion failed: %s", error_text)
                 raise Exception(
                     f"Failed to delete tenant on control plane: {error_text}"
                 )
@@ -689,42 +985,27 @@ def get_tenant_by_domain_from_control_plane(
         return None
 
 
-async def get_available_tenant() -> str | None:
+async def get_available_tenant(allow_stale: bool = False) -> str | None:
     """
-    Get an available pre-provisioned tenant from the NewAvailableTenant table.
-    Returns the tenant_id if one is available, None otherwise.
-    Uses row-level locking to prevent race conditions when multiple processes
-    try to get an available tenant simultaneously.
+    Take the oldest pre-provisioned tenant out of the pool, or None if the pool
+    is empty. Uses row-level locking to prevent race conditions when multiple
+    processes try to get an available tenant simultaneously.
+
+    A tenant behind the code's head revision stays in the pool unless
+    ``allow_stale`` is set, since only a worker may migrate it. The refill task
+    migrates pool tenants every run, so a stale pool is short-lived.
     """
     if not MULTI_TENANT:
         return None
 
-    with get_session_with_shared_schema() as db_session:
-        try:
-            db_session.begin()
-
-            # Get the oldest available tenant with FOR UPDATE lock to prevent race conditions
-            available_tenant = (
-                db_session.query(AvailableTenant)
-                .order_by(AvailableTenant.date_created)
-                .with_for_update(skip_locked=True)  # Skip locked rows to avoid blocking
-                .first()
-            )
-
-            if available_tenant:
-                tenant_id = available_tenant.tenant_id
-                # Remove the tenant from the available tenants table
-                db_session.delete(available_tenant)
-                db_session.commit()
-                logger.info("Using pre-provisioned tenant %s", tenant_id)
-                return tenant_id
-            else:
-                db_session.rollback()
-                return None
-        except Exception:
-            logger.exception("Error getting available tenant")
-            db_session.rollback()
-            return None
+    # A query failure raises: treating it as an empty pool would build a tenant
+    # from scratch while a ready one sits in the pool.
+    at_revision = None if allow_stale else get_alembic_head_revision()
+    # Off the event loop: the api server calls this while a signup waits.
+    tenant_id = await asyncio.to_thread(take_available_tenant, at_revision)
+    if tenant_id is not None:
+        logger.info("Using pre-provisioned tenant %s", tenant_id)
+    return tenant_id
 
 
 async def setup_tenant(tenant_id: str) -> None:
