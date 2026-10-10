@@ -212,7 +212,7 @@ const CraftInputBar = memo(
             currentMessageFiles
           );
           setActiveEntries([]);
-          clearFiles({ suppressRefetch: true });
+          clearFiles();
         },
         [activeEntries, currentMessageFiles, onSubmit, clearFiles]
       );
@@ -225,7 +225,7 @@ const CraftInputBar = memo(
             currentMessageFiles
           );
           setActiveEntries([]);
-          clearFiles({ suppressRefetch: true });
+          clearFiles();
         },
         [activeEntries, currentMessageFiles, onQueueMessage, clearFiles]
       );

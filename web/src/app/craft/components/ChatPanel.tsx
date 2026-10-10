@@ -236,6 +236,7 @@ export default function BuildChatPanel({
     currentMessageFiles,
     hasUploadingFiles,
     setActiveSession,
+    endSessionVisit,
     uploadFiles,
   } = useUploadFilesContext();
 
@@ -252,8 +253,12 @@ export default function BuildChatPanel({
    */
   useEffect(() => {
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
-    setActiveSession(activeSession);
+    setActiveSession(activeSession, { draftId: existingSessionId ?? null });
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
+
+  useEffect(() => {
+    return endSessionVisit;
+  }, [endSessionVisit]);
 
   const maybeAutoOpenWebapp = useBuildSessionStore(
     (s) => s.maybeAutoOpenWebapp
