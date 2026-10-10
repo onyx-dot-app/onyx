@@ -1,5 +1,11 @@
 import type { State } from "swr";
-import { render, screen, waitFor } from "@tests/setup/test-utils";
+import {
+  act,
+  deferred,
+  render,
+  screen,
+  waitFor,
+} from "@tests/setup/test-utils";
 
 import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
 import { fetchFileContent } from "@/app/craft/services/apiServices";
@@ -264,3 +270,70 @@ it("revalidates retained source files on activation without resetting their scro
   expect(screen.getByText("updated source")).toBe(source);
   expect(scroller.scrollTop).toBe(120);
 });
+
+it.each(["png", "md"])(
+  "shows refresh progress and errors over retained %s previews",
+  async (extension) => {
+    const original = {
+      content:
+        extension === "png" ? "data:image/png;base64,abc" : "retained markdown",
+      mimeType: extension === "png" ? "image/png" : "text/markdown",
+      isImage: extension === "png",
+    };
+    const refresh = deferred<typeof original>();
+    jest
+      .mocked(fetchFileContent)
+      .mockReset()
+      .mockResolvedValueOnce(original)
+      .mockReturnValueOnce(refresh.promise);
+    const props = {
+      sessionId: `feedback-${extension}`,
+      filePath: `outputs/file.${extension}`,
+      revision: "original",
+    };
+    const { rerender } = render(
+      <FilePreviewContent {...props} refreshKey={0} />
+    );
+    await waitFor(() => expect(fetchFileContent).toHaveBeenCalledTimes(1));
+    if (extension === "png")
+      expect(await screen.findByRole("img")).toBeInTheDocument();
+    else
+      expect(await screen.findByText("retained markdown")).toBeInTheDocument();
+    rerender(<FilePreviewContent {...props} refreshKey={1} />);
+    expect(
+      screen.getByRole("status", { name: "Loading file..." })
+    ).toBeInTheDocument();
+    await act(async () => refresh.reject(new Error("refresh failed")));
+    expect(screen.getByRole("alert")).toHaveTextContent("refresh failed");
+    if (extension === "png")
+      expect(screen.getByRole("img")).toBeInTheDocument();
+    else expect(screen.getByText("retained markdown")).toBeInTheDocument();
+  }
+);
+
+it.each(["md", "png", "txt"])(
+  "keeps inline %s previews at their required height",
+  async (extension) => {
+    const isImage = extension === "png";
+    jest
+      .mocked(fetchFileContent)
+      .mockReset()
+      .mockResolvedValue({
+        content: isImage ? "data:image/png;base64,abc" : "inline document",
+        mimeType: isImage ? "image/png" : "text/plain",
+        isImage,
+      });
+    const { container } = render(
+      <FilePreviewContent
+        fullHeight={false}
+        sessionId={`inline-height-${extension}`}
+        filePath={`outputs/file.${extension}`}
+      />
+    );
+    if (isImage) await screen.findByRole("img");
+    else await screen.findByText("inline document");
+    const viewer = container.firstElementChild;
+    if (extension === "txt") expect(viewer).not.toHaveClass("h-full");
+    else expect(viewer).toHaveClass("h-full");
+  }
+);

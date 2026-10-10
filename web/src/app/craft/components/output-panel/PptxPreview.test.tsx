@@ -270,7 +270,7 @@ it("navigates from thumbnails and ignores keyboard events while its tab is hidde
   });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
   rerender(<PptxPreview sessionId="thumbnails" filePath="outputs/deck.pptx" />);
-  fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+  fireEvent.keyDown(await screen.findByRole("toolbar", { name: "Slides" }), {
     key: "ArrowRight",
   });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");

@@ -1,70 +1,134 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
 import useSWR from "swr";
+import type { FilePreviewResult } from "@/lib/build/types";
+import {
+  isAuthStatusError,
+  isNotFoundError,
+  skipRetryOnAuthError,
+} from "@/lib/fetcher";
+
+interface FilePreviewOptions {
+  revision?: string;
+  refreshKey?: number;
+  isActive?: boolean;
+}
+
+class FilePreviewError extends Error {
+  constructor(
+    readonly identity: string,
+    readonly failure: Error
+  ) {
+    super(failure.message, { cause: failure });
+  }
+}
 
 /** One payload per viewer. Revalidation replaces bytes, rather than caching every revision. */
 export function useFilePreview<T>(
   key: string,
   load: () => Promise<T>,
-  revision?: string,
-  refreshKey = 0,
-  isActive = true
+  { revision, refreshKey = 0, isActive = true }: FilePreviewOptions = {}
 ) {
-  const request = { key, revision, refreshKey, isActive };
-  const previousRequest = useRef(request);
+  const identity = JSON.stringify([key, revision, refreshKey]);
+  const lifecycle = useRef<{
+    identity: string;
+    isActive: boolean;
+    error?: FilePreviewError;
+  }>({ identity, isActive });
+  const pendingValidation = useRef<{ identity: string } | null>(null);
   const {
     data: result,
     error,
     mutate,
-  } = useSWR<
-    { revision: string | undefined; refreshKey: number; data: T },
-    Error & { revision: string | undefined; refreshKey: number }
-  >(
+    isValidating,
+  } = useSWR<FilePreviewResult<T>, FilePreviewError>(
     key,
     async () => {
       try {
-        return { revision, refreshKey, data: await load() };
-      } catch (error) {
-        throw Object.assign(
-          error instanceof Error ? error : new Error(String(error)),
-          { revision, refreshKey }
-        );
+        return { identity, data: await load() };
+      } catch (failure) {
+        const error =
+          failure instanceof Error ? failure : new Error(String(failure));
+        if (isAuthStatusError(error) || isNotFoundError(error)) {
+          // A cached failure replaces bytes, so later failures cannot restore them.
+          return { identity, error };
+        }
+        throw new FilePreviewError(identity, error);
       }
     },
     {
       // Structural comparison cannot distinguish different Blob contents.
       compare: (previous, next) =>
-        previous?.revision === next?.revision &&
-        previous?.refreshKey === next?.refreshKey &&
-        Object.is(previous?.data, next?.data),
+        previous?.identity === next?.identity &&
+        Object.is(previous?.data, next?.data) &&
+        previous?.error === next?.error,
+      onErrorRetry: (error, key, config, revalidate, options) => {
+        if (
+          !lifecycle.current.isActive ||
+          lifecycle.current.identity !== error.identity
+        )
+          return;
+        skipRetryOnAuthError(
+          error.failure,
+          key,
+          config,
+          (retryOptions) => {
+            if (
+              lifecycle.current.isActive &&
+              lifecycle.current.identity === error.identity &&
+              lifecycle.current.error === error
+            )
+              revalidate(retryOptions);
+          },
+          options
+        );
+      },
+      revalidateOnMount: false,
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      revalidateIfStale: revision === undefined,
+      revalidateIfStale: false,
     }
   );
 
-  useEffect(() => {
-    const previous = previousRequest.current;
-    previousRequest.current = { key, revision, refreshKey, isActive };
-    if (
-      previous.key === key &&
-      (previous.revision !== revision ||
-        previous.refreshKey !== refreshKey ||
-        (isActive && !previous.isActive && revision === undefined))
-    ) {
-      // SWR discards an older in-flight request when this revalidation starts.
-      void mutate();
-    }
-  }, [key, revision, refreshKey, isActive, mutate]);
+  useLayoutEffect(() => {
+    lifecycle.current = { identity, isActive, error };
+    return () => {
+      lifecycle.current.isActive = false;
+    };
+  }, [identity, isActive, error]);
 
-  const isCurrent =
-    result?.revision === revision && result?.refreshKey === refreshKey;
+  const validate = useEffectEvent(() => {
+    const reusable =
+      revision !== undefined &&
+      result?.identity === identity &&
+      !result.error &&
+      !error;
+    if (reusable || pendingValidation.current?.identity === identity) return;
+    // SWR mutate forces revalidation; reuse StrictMode's replay of this request.
+    const pending = { identity };
+    pendingValidation.current = pending;
+    void mutate()
+      .catch(() => undefined)
+      .finally(() => {
+        if (pendingValidation.current === pending)
+          pendingValidation.current = null;
+      });
+  });
+  useEffect(() => {
+    if (isActive) validate();
+  }, [identity, isActive]);
+
   const currentError: Error | undefined =
-    error?.revision === revision && error?.refreshKey === refreshKey
-      ? error
-      : undefined;
+    error?.identity === identity
+      ? error.failure
+      : result?.identity === identity
+        ? result.error
+        : undefined;
+  const isLoading =
+    (result?.identity !== identity || isValidating) && !currentError;
+
   return {
-    data: isCurrent ? result?.data : undefined,
+    data: result?.data,
     error: currentError,
-    isLoading: !isCurrent && !currentError,
+    isLoading,
   };
 }

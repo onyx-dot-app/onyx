@@ -51,9 +51,7 @@ export default function PptxPreview({
       ...(await fetchPptxPreview(sessionId, filePath)),
       imageRevision: crypto.randomUUID(),
     }),
-    revision,
-    refreshKey,
-    isActive
+    { revision, refreshKey, isActive }
   );
 
   const slideCount = data?.slide_count ?? 0;
@@ -115,7 +113,7 @@ export default function PptxPreview({
     }
   }
 
-  if (isLoading) {
+  if (isLoading && isActive) {
     return (
       <Section
         height="full"
@@ -172,7 +170,7 @@ export default function PptxPreview({
   const slideUrl = `${buildArtifactUrl(sessionId, slidePath)}?revision=${data.imageRevision}`;
 
   return (
-    <div className="h-full min-h-0 flex overflow-hidden">
+    <div className="relative h-full min-h-0 flex overflow-hidden">
       <div
         role="toolbar"
         aria-label={t("slides.label")}

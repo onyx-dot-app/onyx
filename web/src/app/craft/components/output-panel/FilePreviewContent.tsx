@@ -1,13 +1,14 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { type ReactNode } from "react";
 import { SWRConfig } from "swr";
 import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchFileContent } from "@/app/craft/services/apiServices";
 import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
+import { IconLoader } from "@opal/loaders";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
@@ -36,21 +37,6 @@ export function FilePreviewContent({
   revision,
   refreshKey,
 }: FilePreviewContentProps) {
-  const [accepted, setAccepted] = useState({
-    sessionId,
-    filePath,
-    revision,
-    refreshKey,
-  });
-  if (
-    accepted.sessionId !== sessionId ||
-    accepted.filePath !== filePath ||
-    (isActive &&
-      (accepted.revision !== revision || accepted.refreshKey !== refreshKey))
-  ) {
-    setAccepted({ sessionId, filePath, revision, refreshKey });
-  }
-
   // The retained viewer owns its bytes. Eviction releases the entire cache.
   return (
     <SWRConfig
@@ -58,12 +44,27 @@ export function FilePreviewContent({
       value={{ provider: () => new Map() }}
     >
       {/\.pptx?$/i.test(filePath) ? (
-        <PptxPreview {...accepted} isActive={isActive} />
+        <PptxPreview
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          isActive={isActive}
+        />
       ) : /\.pdf$/i.test(filePath) ? (
-        <PdfPreview {...accepted} isActive={isActive} />
+        <PdfPreview
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          isActive={isActive}
+        />
       ) : (
         <FetchedFilePreview
-          {...accepted}
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
           fullHeight={fullHeight}
           isActive={isActive}
         />
@@ -85,12 +86,10 @@ function FetchedFilePreview({
   const { data, error, isLoading } = useFilePreview(
     SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     () => fetchFileContent(sessionId, filePath),
-    revision,
-    refreshKey,
-    isActive
+    { revision, refreshKey, isActive }
   );
 
-  if (isLoading || error || !data || data.error) {
+  if (!data || data.error) {
     let title: string | undefined;
     let description = t("noContent.label");
     if (isLoading) {
@@ -135,11 +134,11 @@ function FetchedFilePreview({
   }
 
   const fileName = filePath.split("/").pop() || filePath;
+  let viewer: ReactNode;
   if (data.isImage) {
-    return <ImagePreview src={data.content} fileName={fileName} />;
-  }
-  if (/\.md$/i.test(filePath)) {
-    return (
+    viewer = <ImagePreview src={data.content} fileName={fileName} />;
+  } else if (/\.md$/i.test(filePath)) {
+    viewer = (
       <MarkdownFilePreview
         content={data.content}
         fileName={fileName}
@@ -148,13 +147,37 @@ function FetchedFilePreview({
         isImage={false}
       />
     );
+  } else {
+    viewer = (
+      <div className={cn("p-4", fullHeight && "h-full overflow-auto")}>
+        <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
+          {data.content}
+        </pre>
+      </div>
+    );
   }
-
+  const boundedViewer: boolean =
+    fullHeight || data.isImage || /\.md$/i.test(filePath);
   return (
-    <div className={cn("p-4", fullHeight && "h-full overflow-auto")}>
-      <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
-        {data.content}
-      </pre>
+    <div className={cn("flex flex-col", boundedViewer && "h-full")}>
+      {error && (
+        <div
+          role="alert"
+          className="shrink-0 bg-background-neutral-00 px-4 py-2"
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("error.inline", { message: error.message })}
+          </Text>
+        </div>
+      )}
+      <div className="relative min-h-0 flex-1">
+        {viewer}
+        {isLoading && (
+          <div className="absolute top-2 end-2">
+            <IconLoader aria-label={t("loading.label")} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
