@@ -15,6 +15,80 @@ csv.field_size_limit(_CSV_FIELD_SIZE_LIMIT_BYTES)
 
 _NEWLINE_CSV_ERROR = "new-line character seen in unquoted field"
 
+# The separators a spreadsheet actually writes into a file named ".csv". Excel
+# writes the list separator of the machine's locale, which is a semicolon across
+# most of Europe, and a tab-separated export is routinely saved as .csv.
+CSV_DELIMITERS = (",", ";", "\t", "|")
+
+# How much of the file the detection looks at. A separator that holds for the
+# first rows holds for the file.
+_DELIMITER_SAMPLE_CHARS = 64 * 1024
+_DELIMITER_SAMPLE_ROWS = 20
+
+
+def _consistent_column_count(sample: str, delimiter: str, truncated: bool) -> int:
+    """Columns per row under `delimiter`, or 0 when the rows disagree.
+
+    A separator the file was not written with either does not occur at all (one
+    column) or occurs by accident, and then the rows do not line up. Requiring
+    the same count on every row is what keeps a comma inside a sentence, or a
+    semicolon inside a quoted field, from being read as a separator.
+
+    When `truncated` is set, the sample is a prefix of a longer file, so the row
+    it ends in stops wherever the read did, between two fields or inside a
+    quoted one. That row is left out rather than counted as having fewer columns.
+    """
+    rows: list[list[str]] = []
+    try:
+        for index, row in enumerate(
+            csv.reader(io.StringIO(sample, newline=""), delimiter=delimiter)
+        ):
+            if index >= _DELIMITER_SAMPLE_ROWS:
+                break
+            # A blank or whitespace-only line says nothing about the separator.
+            if any(cell.strip() for cell in row):
+                rows.append(row)
+        else:
+            if truncated and len(rows) > 1:
+                rows.pop()
+    except csv.Error:
+        return 0
+    count = 0
+    for row in rows:
+        if count and len(row) != count:
+            return 0
+        count = len(row)
+    return count if count > 1 else 0
+
+
+def detect_csv_delimiter(csv_text: str) -> str:
+    """Return the separator `csv_text` was written with, defaulting to a comma.
+
+    `csv.reader` defaults to a comma, and reading a semicolon-separated export
+    with one does not fail: every row comes back as a single field holding the
+    whole line.
+
+    A comma that lines up is kept: it is the format's own separator, so a `;` or
+    `|` that happens to occur the same number of times in every row is data.
+    Otherwise the separator that lines up into the most columns wins.
+
+    Python's own `csv.Sniffer` is not used: it searches the whole candidate
+    space and on a single-column file splits the header `Note` into `No` and
+    `e`. Choosing among a fixed set, and only when the column counts line up,
+    cannot do that.
+    """
+    truncated = len(csv_text) > _DELIMITER_SAMPLE_CHARS
+    sample = csv_text[:_DELIMITER_SAMPLE_CHARS]
+    if _consistent_column_count(sample, ",", truncated):
+        return ","
+    best_delimiter, best_columns = ",", 0
+    for delimiter in CSV_DELIMITERS:
+        columns = _consistent_column_count(sample, delimiter, truncated)
+        if columns > best_columns:
+            best_delimiter, best_columns = delimiter, columns
+    return best_delimiter
+
+
 # Leading characters that spreadsheet software (Excel, LibreOffice, Google
 # Sheets) interprets as the start of a formula. Exporting user-supplied text
 # beginning with one of these enables CSV/formula injection (e.g. DDE payloads
