@@ -33,6 +33,7 @@ import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/lib/projects/providers";
+import { filterOutStagedViewerFiles } from "./agentViewerFileUtils";
 import {
   getFinalLLM,
   modelSupportsImageInput,
@@ -141,6 +142,8 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   // chat this modal hands off to can pick them up. Track their ids so a close
   // without sending can remove exactly those files again.
   const stagedFileIdsRef = useRef<Set<string>>(new Set());
+  const isActiveRef = useRef(true);
+  const handedOffRef = useRef(false);
 
   // This send navigates in order to send, so the configuration is left where
   // that page will find it rather than travelling with the call. Releasing
@@ -148,6 +151,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   // leaves the uploaded files in place for the chat that is about to open.
   const submit = useCallback(
     (message: string) => {
+      handedOffRef.current = true;
       stagedFileIdsRef.current.clear();
       toolConfiguration.handOffToNewChatWith(agent.id);
       onSubmit(message);
@@ -158,17 +162,21 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   // A close without sending must not leak the staged uploads into the next
   // chat: remove exactly the files this input staged. After a send this is a
   // no-op because submit already released the staged ids.
-  useEffect(
-    () => () => {
-      const staged = stagedFileIdsRef.current;
-      if (staged.size === 0) return;
+  useEffect(() => {
+    isActiveRef.current = true;
+    return () => {
+      isActiveRef.current = false;
+      if (handedOffRef.current) return;
+      // Capture IDs before scheduling React's state updater: clearing the
+      // mutable ref first must not make the queued cleanup a no-op.
+      const stagedIds = new Set(stagedFileIdsRef.current);
+      stagedFileIdsRef.current.clear();
+      if (stagedIds.size === 0) return;
       setCurrentMessageFiles((prev) =>
-        prev.filter((file) => !staged.has(file.id))
+        filterOutStagedViewerFiles(prev, stagedIds)
       );
-      staged.clear();
-    },
-    [setCurrentMessageFiles]
-  );
+    };
+  }, [setCurrentMessageFiles]);
 
   // Mirrors the chat page's upload path (useChatController's
   // handleMessageSpecificFileUpload): vision-gate images, upload through the
@@ -208,6 +216,9 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       }
 
       const uploadedMessageFiles = await beginUpload(acceptedFiles, null);
+      // A picker can resolve after the modal closes (or after handoff).
+      // Never attach those files to an unrelated subsequent chat.
+      if (!isActiveRef.current || handedOffRef.current) return;
       uploadedMessageFiles.forEach((file) =>
         stagedFileIdsRef.current.add(file.id)
       );
