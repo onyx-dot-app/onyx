@@ -47,6 +47,7 @@ from ee.onyx.server.user_group.models import (
 )
 from onyx.auth.permission_projection import user_group_permissions
 from onyx.auth.permissions import (
+    LEGACY_NOOP_PERMISSIONS,
     NON_TOGGLEABLE_PERMISSIONS,
     PERMISSION_REGISTRY,
     PermissionRegistryEntry,
@@ -246,7 +247,8 @@ def set_user_group_permissions(
         db_session, user_group_id, "change the permissions of"
     )
 
-    non_toggleable = [p for p in request.permissions if p in NON_TOGGLEABLE_PERMISSIONS]
+    requested: set[Permission] = set(request.permissions) - LEGACY_NOOP_PERMISSIONS
+    non_toggleable = [p for p in requested if p in NON_TOGGLEABLE_PERMISSIONS]
     if non_toggleable:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -257,7 +259,7 @@ def set_user_group_permissions(
 
     change = set_group_permissions_bulk__no_commit(
         group_id=user_group_id,
-        desired_permissions=set(request.permissions),
+        desired_permissions=requested,
         granted_by=user.id,
         db_session=db_session,
     )

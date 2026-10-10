@@ -57,6 +57,7 @@ class TestResolveEffectivePermissions:
             "write:chat",
             "generate:image",
             "use:llm_gateway",
+            "create:user_api_keys",
         }
 
     def test_write_chat_implies_read_chat(self) -> None:
@@ -160,6 +161,7 @@ class TestResolveEffectivePermissions:
             "write:chat",
             "generate:image",
             "use:llm_gateway",
+            "create:user_api_keys",
             "add:agents",
             "manage:connectors",
             "read:connectors",
@@ -231,6 +233,7 @@ class TestGetEffectivePermissions:
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
             Permission.USE_LLM_GATEWAY,
+            Permission.CREATE_USER_API_KEYS,
         }
 
     def test_empty_column_in_ee(self) -> None:
@@ -277,6 +280,7 @@ class TestCEUngatedPermissions:
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
             Permission.USE_LLM_GATEWAY,
+            Permission.CREATE_USER_API_KEYS,
         }
 
     def test_admin_unaffected_by_ce_ungating(self) -> None:
@@ -439,6 +443,8 @@ class TestAnonymousUserPermissions:
             Permission.WRITE_CHAT,
             Permission.GENERATE_IMAGE,
             Permission.USE_LLM_GATEWAY,
+            # Held but unusable: no route gated on it sets allow_anonymous.
+            Permission.CREATE_USER_API_KEYS,
         }
 
     @pytest.mark.asyncio
@@ -582,9 +588,9 @@ class TestHasPermissionAuthority:
 
 
 class TestApiSurfaceScopeRegistration:
-    # Hardcoded spec: the complete implied-only set (4 READ_* capability reads
-    # + 6 API-surface scopes). Equality, not subset, so an accidentally
-    # over-broad set (a real capability made un-grantable) is also caught.
+    # Hardcoded spec: the complete implied-only set. Equality, not subset, so an
+    # accidentally over-broad set (a real capability made un-grantable) is also
+    # caught.
     EXPECTED_IMPLIED = {
         "read:connectors",
         "read:document_sets",
@@ -597,6 +603,7 @@ class TestApiSurfaceScopeRegistration:
         "generate:image",
         "use:llm_gateway",
         "read:admin",
+        "create:user_api_keys",
     }
 
     def test_implied_set_matches_spec(self) -> None:
@@ -615,6 +622,7 @@ class TestApiSurfaceScopeRegistration:
             "write:chat",
             "generate:image",
             "use:llm_gateway",
+            "create:user_api_keys",
         }
         assert IMPLIED_PERMISSIONS["write:chat"] == {"read:chat"}
         # The craft role scope grants company-search and image generation, never

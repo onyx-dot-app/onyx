@@ -60,6 +60,8 @@ ENDPOINTS: list[Endpoint] = [
 IMPLIED_ENDPOINTS: list[Endpoint] = [
     # basic ⇒ read:search
     ("GET", "/query/valid-tags", None),
+    # basic ⇒ create:user_api_keys
+    ("POST", "/user/pats", {"name": "basic-implied-pat", "expiration_days": 7}),
 ]
 
 

@@ -64,15 +64,16 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.MANAGE_ACTIONS.value: {
         Permission.READ_USER_GROUPS.value,
     },
-    # basic grants the search/chat surfaces; admin grants read:admin (and the
-    # rest) via the FULL_ADMIN_PANEL_ACCESS short-circuit in
-    # resolve_effective_permissions.
+    # basic grants the search/chat surfaces, self-issued PATs and OAuth app
+    # consent. admin grants read:admin (and the rest) via the
+    # FULL_ADMIN_PANEL_ACCESS short-circuit in resolve_effective_permissions.
     Permission.BASIC_ACCESS.value: {
         Permission.READ_SEARCH.value,
         Permission.READ_CHAT.value,
         Permission.WRITE_CHAT.value,
         Permission.GENERATE_IMAGE.value,
         Permission.USE_LLM_GATEWAY.value,
+        Permission.CREATE_USER_API_KEYS.value,
     },
     Permission.WRITE_CHAT.value: {Permission.READ_CHAT.value},
     Permission.CRAFT_SANDBOX.value: {
@@ -84,8 +85,7 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
 
 # Permissions that cannot be toggled via the group-permission API.
 # BASIC_ACCESS is always granted, FULL_ADMIN_PANEL_ACCESS is too broad,
-# and implied permissions (READ_* and the API-surface scopes) are never
-# stored directly. MANAGE_SKILLS is the old curator role: a scoped manager
+# and implied permissions (Permission.IMPLIED) are never stored directly. MANAGE_SKILLS is the old curator role: a scoped manager
 # resolves it from the bundle below, an admin from the full-admin short-circuit,
 # so nothing grants it — and there is no global curator to grant it to.
 NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
@@ -96,6 +96,13 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.MANAGE_SKILLS,
     }
     | Permission.IMPLIED
+)
+
+# Former group toggles that basic now implies. Terraform configs and scripts
+# written against the old registry still send them, so the group-permission
+# API drops them instead of rejecting the request.
+LEGACY_NOOP_PERMISSIONS: frozenset[Permission] = frozenset(
+    {Permission.CREATE_USER_API_KEYS}
 )
 
 # Permissions auto-granted to all users in Community Edition.
@@ -128,8 +135,8 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
 class PermissionRegistryEntry(BaseModel):
     """A UI-facing permission row served by GET /admin/permissions/registry.
 
-    The field_validator ensures non-toggleable permissions (BASIC_ACCESS,
-    FULL_ADMIN_PANEL_ACCESS, READ_*) can never appear in the registry.
+    The field_validator rejects anything in NON_TOGGLEABLE_PERMISSIONS, so
+    implied or always-held permissions never reach the registry.
     """
 
     id: str
@@ -231,13 +238,6 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
         display_name="View Query History",
         description="View query history of everyone in the organization.",
         permissions=[Permission.READ_QUERY_HISTORY],
-        group=3,
-    ),
-    PermissionRegistryEntry(
-        id="create_user_access_token",
-        display_name="Create User Access Token",
-        description="Add and update the user's personal access tokens.",
-        permissions=[Permission.CREATE_USER_API_KEYS],
         group=3,
     ),
 ]

@@ -115,7 +115,7 @@ func (r *userGroupResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				MarkdownDescription: "Permission grants, written as Onyx's own tokens: " +
 					"`manage:connectors`, `manage:document_sets`, `manage:llms`, `manage:actions`, " +
 					"`manage:agents`, `add:agents`, `manage:user_groups`, `manage:bots`, " +
-					"`manage:service_account_api_keys`, `create:user_api_keys`, " +
+					"`manage:service_account_api_keys`, " +
 					"`read:agent_analytics`, `read:query_history`. Note these are the wire values, " +
 					"not the enum names.\n\n" +
 					"The configuration owns the list, so leaving it out revokes every grant the " +

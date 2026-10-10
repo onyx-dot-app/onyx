@@ -699,6 +699,9 @@ class Permission(str, PyEnum):
     GENERATE_IMAGE = "generate:image"
     USE_LLM_GATEWAY = "use:llm_gateway"
 
+    # Self-issued PATs and OAuth app consent. Implied by basic, never granted.
+    CREATE_USER_API_KEYS = "create:user_api_keys"
+
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
     MANAGE_AGENTS = "manage:agents"
@@ -712,7 +715,6 @@ class Permission(str, PyEnum):
     MANAGE_SKILLS = "manage:skills"
     READ_QUERY_HISTORY = "read:query_history"
     MANAGE_USER_GROUPS = "manage:user_groups"
-    CREATE_USER_API_KEYS = "create:user_api_keys"
     MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys"
     MANAGE_BOTS = "manage:bots"
 
@@ -741,6 +743,7 @@ Permission.IMPLIED = frozenset(
         Permission.READ_ADMIN,
         Permission.GENERATE_IMAGE,
         Permission.USE_LLM_GATEWAY,
+        Permission.CREATE_USER_API_KEYS,
     }
 )
 
