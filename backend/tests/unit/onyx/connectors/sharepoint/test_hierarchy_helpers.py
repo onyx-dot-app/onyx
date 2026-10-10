@@ -37,6 +37,24 @@ def test_resolve_drive_folder_requests_canonical_web_url() -> None:
     )
 
 
+def test_folder_url_uses_localized_drive_web_url() -> None:
+    site_url = "https://company.sharepoint.com/sites/marketing"
+    drive = SiteDrive(
+        drive_id="drive-id",
+        list_id="list-id",
+        display_name="Dokumente",
+        web_url=f"{site_url}/Freigegebene%20Dokumente",
+    )
+
+    result = SharepointConnector._folder_url(
+        drive,
+        "Berichte/2026",
+        SharepointConnectorCheckpoint(has_more=True),
+    )
+
+    assert result == f"{site_url}/Freigegebene%20Dokumente/Berichte/2026"
+
+
 @patch(
     "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access"
 )
