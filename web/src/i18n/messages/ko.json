@@ -12366,6 +12366,17 @@
         "operationWait": "현재 작업이 완료될 때까지 기다려 주세요.",
         "sandboxWait": "샌드박스가 초기화될 때까지 기다려 주세요",
         "scheduledRunWait": "예약된 실행이 완료될 때까지 기다려 주세요."
+      },
+      "loadError": {
+        "title": "세션을 불러올 수 없습니다",
+        "retry": "다시 시도"
+      },
+      "queuedSendError": {
+        "title": "대기 중인 메시지를 보내지 못했습니다"
+      },
+      "settlementError": {
+        "title": "작업 완료를 확인할 수 없습니다",
+        "description": "다시 시도하여 작업을 확인하고 저장된 응답을 불러오세요."
       }
     },
     "compaction": {

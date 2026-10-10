@@ -245,6 +245,17 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 
 ---
 
+The streamed response remains visible until the server confirms completion and persisted history is available.
+`turnSettlement` owns this handoff with reconciling, failed, and ready states.
+Normal completion and interruption use the same settlement path.
+Settlement reads turn status and messages independently of runtime discovery, artifacts, and navigation.
+Failures retain the transcript and expose a retry for that same settlement.
+The streaming hook claims ready queue work atomically, so repeated events or multiple mounted hooks cannot duplicate a send.
+A queued prompt remains in the queue until the server accepts its turn.
+Rejected starts remain available for explicit retry with the same request identity.
+Earlier session instances and turns cannot publish settlement results.
+Session metadata and artifacts may finish after a newer turn starts without replacing its transcript or status.
+
 ### Output inventory and panel navigation
 
 The frontend keeps a temporary output inventory in each Zustand session.

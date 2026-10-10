@@ -12366,6 +12366,17 @@
         "operationWait": "Please wait for the current operation to complete.",
         "sandboxWait": "Please wait for sandbox to initialize",
         "scheduledRunWait": "Please wait for the scheduled run to finish."
+      },
+      "loadError": {
+        "title": "Could not load the session",
+        "retry": "Try again"
+      },
+      "queuedSendError": {
+        "title": "Could not send the queued message"
+      },
+      "settlementError": {
+        "title": "Could not confirm task completion",
+        "description": "Try again to check the task and load its saved response."
       }
     },
     "compaction": {

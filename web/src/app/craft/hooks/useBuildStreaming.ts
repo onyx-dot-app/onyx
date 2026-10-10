@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useSWRConfig } from "swr";
 
 import {
@@ -195,7 +195,8 @@ export function useBuildStreaming() {
     async (
       sessionId: string,
       interruptedTurnId: string | null,
-      generation: number
+      generation: number,
+      instanceId: string
     ): Promise<void> => {
       // Only act while this is still the interrupt we launched for; otherwise a
       // newer turn (a queued auto-send bumps the generation) would be clobbered.
@@ -203,29 +204,18 @@ export function useBuildStreaming() {
         const s = useBuildSessionStore.getState().sessions.get(sessionId);
         return (
           !!s &&
+          s.instanceId === instanceId &&
           s.turnGeneration === generation &&
           s.status === "running" &&
           (turnId === null || !s.activeTurnId || s.activeTurnId === turnId)
         );
       };
 
-      // Reload BEFORE the flip to "active": the flip triggers the queued
-      // auto-send, so reloading after would race the freshly-started next turn.
       const settle = async (): Promise<void> => {
+        if (!ownsInterrupt(null)) return;
         await useBuildSessionStore
           .getState()
-          .loadSession(sessionId, { force: true, preferPersisted: true })
-          .catch((err) =>
-            console.warn("[Streaming] Failed to reload settled turn:", err)
-          );
-        if (!ownsInterrupt(null)) return;
-        updateSessionData(sessionId, {
-          status: "active",
-          isInterrupting: false,
-          activeTurnId: null,
-          activeTurnIndex: null,
-          activeTurnLocalOwner: false,
-        });
+          .beginTurnSettlement(sessionId, interruptedTurnId, generation);
       };
 
       let turnId = interruptedTurnId;
@@ -783,14 +773,14 @@ export function useBuildStreaming() {
               // in-flight cancel → "Concurrent turn in flight"); just clear persisted streamItems.
               updateSessionData(sessionId, { streamItems: [] });
             } else {
-              updateSessionData(sessionId, {
-                status: "active",
-                streamItems: [],
-                isInterrupting: false,
-                activeTurnId: null,
-                activeTurnIndex: null,
-                activeTurnLocalOwner: false,
-              });
+              updateSessionData(sessionId, { streamItems: [] });
+              void useBuildSessionStore
+                .getState()
+                .beginTurnSettlement(
+                  sessionId,
+                  options?.expectedTurnId ?? session?.activeTurnId ?? null,
+                  session?.turnGeneration ?? 0
+                );
             }
             options?.onPromptResponse?.();
             break;
@@ -931,35 +921,18 @@ export function useBuildStreaming() {
           onSettled?.();
         },
       });
-      const clearTurnIfCurrent = (
-        updates: Partial<{
-          status: "active" | "failed";
-          error: string;
-          isInterrupting: boolean;
-        }>
-      ) => {
-        const currentSession = useBuildSessionStore
-          .getState()
-          .sessions.get(sessionId);
-        if (currentSession?.activeTurnId !== turnId) {
-          return;
-        }
-        updateSessionData(sessionId, {
-          ...updates,
-          activeTurnId: null,
-          activeTurnIndex: null,
-          activeTurnLocalOwner: false,
-        });
-      };
 
       try {
         const response = await fetchTurnEventStream(sessionId, turnId, signal);
         if (!response) {
           void processor.finalizeOutputs();
-          clearTurnIfCurrent({
-            status: "active",
-            isInterrupting: false,
-          });
+          void useBuildSessionStore
+            .getState()
+            .beginTurnSettlement(
+              sessionId,
+              turnId,
+              existingSession?.turnGeneration ?? 0
+            );
           return;
         }
         await processSSEStream(response, processor.processPacket);
@@ -992,31 +965,26 @@ export function useBuildStreaming() {
           const currentSession = useBuildSessionStore
             .getState()
             .sessions.get(sessionId);
-          // While interrupting, reconcileInterruptedTurn owns settlement; settling here races it and strands the queued auto-send.
-          if (!currentSession?.isInterrupting) {
+          if (
+            !currentSession?.isInterrupting &&
+            !currentSession?.turnSettlement
+          ) {
             if (
               !transportError &&
               currentSession?.status === "running" &&
-              currentSession?.activeTurnId === turnId
+              currentSession.activeTurnId === turnId
             ) {
-              clearTurnIfCurrent({
-                status: "active",
-                isInterrupting: false,
-              });
-            }
-            const settledStatus = useBuildSessionStore
-              .getState()
-              .sessions.get(sessionId)?.status;
-            if (settledStatus !== "failed") {
+              void useBuildSessionStore
+                .getState()
+                .beginTurnSettlement(
+                  sessionId,
+                  turnId,
+                  currentSession.turnGeneration
+                );
+            } else if (transportError) {
               await useBuildSessionStore
                 .getState()
-                .loadSession(sessionId, { force: true })
-                .catch((err) =>
-                  console.warn(
-                    "[Streaming] Failed to reload settled turn:",
-                    err
-                  )
-                );
+                .loadSession(sessionId, { force: true });
             }
           }
           if (!settledFromPromptResponse) {
@@ -1037,7 +1005,8 @@ export function useBuildStreaming() {
       sessionId: string,
       content: string,
       model?: BuildLlmSelection | null,
-      attachments: BuildMessageAttachment[] = []
+      attachments: BuildMessageAttachment[] = [],
+      queuedMessageId?: number
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
@@ -1047,6 +1016,14 @@ export function useBuildStreaming() {
         existingSession.abortController.abort();
       }
 
+      const generation = (existingSession?.turnGeneration ?? 0) + 1;
+      const ownsTurn = () => {
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        return (
+          current?.instanceId === existingSession?.instanceId &&
+          current?.turnGeneration === generation
+        );
+      };
       const controller = new AbortController();
       setAbortController(sessionId, controller);
 
@@ -1056,7 +1033,8 @@ export function useBuildStreaming() {
         isInterrupting: false,
         wasInterrupted: false,
         outputSelectionLocked: false,
-        turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
+        turnGeneration: generation,
+        turnSettlement: null,
         activeTurnId: null,
         activeTurnIndex: null,
         activeTurnLocalOwner: true,
@@ -1067,11 +1045,32 @@ export function useBuildStreaming() {
         const turn = await createTurn(
           sessionId,
           content,
-          crypto.randomUUID(),
+          queuedMessageId === undefined
+            ? crypto.randomUUID()
+            : `queue:${existingSession?.instanceId}:${queuedMessageId}`,
           controller.signal,
           model,
           attachments
         );
+        if (!ownsTurn()) return;
+        if (queuedMessageId !== undefined) {
+          appendMessageToSession(sessionId, {
+            id: genId("user-msg"),
+            type: "user",
+            content,
+            attachments,
+            timestamp: new Date(),
+            turn_index: turn.turn_index,
+          });
+          const queued =
+            useBuildSessionStore.getState().sessions.get(sessionId)
+              ?.queuedMessages ?? [];
+          updateSessionData(sessionId, {
+            queuedMessages: queued.filter(
+              (message) => message.id !== queuedMessageId
+            ),
+          });
+        }
         const currentSession = useBuildSessionStore
           .getState()
           .sessions.get(sessionId);
@@ -1086,6 +1085,20 @@ export function useBuildStreaming() {
 
         await streamTurnEvents(sessionId, turn.turn_id, controller.signal);
       } catch (err) {
+        if (!ownsTurn()) return;
+        if (queuedMessageId !== undefined) {
+          const current = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId);
+          if (current)
+            updateSessionData(sessionId, {
+              queuedMessages: current.queuedMessages.map((message) =>
+                message.id === queuedMessageId
+                  ? { ...message, phase: "waiting" }
+                  : message
+              ),
+            });
+        }
         if ((err as Error).name === "AbortError") {
           updateSessionData(sessionId, { isInterrupting: false });
         } else if (err instanceof RateLimitedError) {
@@ -1131,10 +1144,59 @@ export function useBuildStreaming() {
       setAbortController,
       updateSessionData,
       appendStreamItem,
+      appendMessageToSession,
       clearStreamItems,
       streamTurnEvents,
     ]
   );
+
+  const retryQueuedMessage = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const session = useBuildSessionStore.getState().sessions.get(sessionId);
+      const message = session?.queuedMessages[0];
+      if (
+        !message ||
+        message.phase !== "waiting" ||
+        !session.error ||
+        session.activeTurnId !== null ||
+        (session.status !== "active" && session.status !== "failed")
+      )
+        return;
+      updateSessionData(sessionId, {
+        queuedMessages: session.queuedMessages.map((item) =>
+          item.id === message.id ? { ...item, phase: "starting" } : item
+        ),
+      });
+      await streamMessage(
+        sessionId,
+        message.text,
+        message.model,
+        message.attachments,
+        message.id
+      );
+    },
+    [streamMessage, updateSessionData]
+  );
+
+  useEffect(() => {
+    const dispatch = () => {
+      const state = useBuildSessionStore.getState();
+      for (const sessionId of state.sessions.keys()) {
+        const message = state.claimQueuedMessage(sessionId);
+        if (message)
+          void streamMessage(
+            sessionId,
+            message.text,
+            message.model,
+            message.attachments,
+            message.id
+          );
+      }
+    };
+    const unsubscribe = useBuildSessionStore.subscribe(dispatch);
+    dispatch();
+    return unsubscribe;
+  }, [streamMessage]);
 
   /**
    * Interrupt the in-flight turn for a session. The open SSE stream terminates
@@ -1156,7 +1218,12 @@ export function useBuildStreaming() {
       cancelLatestInFlightToolCallStreamItem(sessionId);
       try {
         await interruptMessageStream(sessionId);
-        void reconcileInterruptedTurn(sessionId, interruptedTurnId, generation);
+        void reconcileInterruptedTurn(
+          sessionId,
+          interruptedTurnId,
+          generation,
+          session.instanceId
+        );
       } catch (err) {
         console.error("[Streaming] Failed to interrupt:", err);
         updateSessionData(sessionId, {
@@ -1228,12 +1295,14 @@ export function useBuildStreaming() {
   return useMemo(
     () => ({
       streamMessage,
+      retryQueuedMessage,
       interruptStreaming,
       streamScheduledRunEvents,
       streamTurnEvents,
     }),
     [
       streamMessage,
+      retryQueuedMessage,
       interruptStreaming,
       streamScheduledRunEvents,
       streamTurnEvents,

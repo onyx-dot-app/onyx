@@ -12366,6 +12366,17 @@
         "operationWait": "現在の操作が完了するまでお待ちください。",
         "sandboxWait": "サンドボックスの初期化をお待ちください",
         "scheduledRunWait": "スケジュール実行が完了するまでお待ちください。"
+      },
+      "loadError": {
+        "title": "セッションを読み込めませんでした",
+        "retry": "再試行"
+      },
+      "queuedSendError": {
+        "title": "待機中のメッセージを送信できませんでした"
+      },
+      "settlementError": {
+        "title": "タスクの完了を確認できませんでした",
+        "description": "もう一度試して、タスクを確認し、保存された回答を読み込んでください。"
       }
     },
     "compaction": {

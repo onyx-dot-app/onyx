@@ -12366,6 +12366,17 @@
         "operationWait": "请等待当前操作完成。",
         "sandboxWait": "请等待沙箱初始化",
         "scheduledRunWait": "请等待计划运行结束。"
+      },
+      "loadError": {
+        "title": "无法加载会话",
+        "retry": "重试"
+      },
+      "queuedSendError": {
+        "title": "无法发送排队中的消息"
+      },
+      "settlementError": {
+        "title": "无法确认任务是否完成",
+        "description": "请重试以检查任务并加载已保存的回复。"
       }
     },
     "compaction": {

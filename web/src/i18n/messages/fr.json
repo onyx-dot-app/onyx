@@ -12366,6 +12366,17 @@
         "operationWait": "Veuillez attendre la fin de l'opération en cours.",
         "sandboxWait": "Veuillez attendre l'initialisation du bac à sable",
         "scheduledRunWait": "Veuillez attendre la fin de l'exécution planifiée."
+      },
+      "loadError": {
+        "title": "Impossible de charger la session",
+        "retry": "Réessayer"
+      },
+      "queuedSendError": {
+        "title": "Impossible d’envoyer le message en attente"
+      },
+      "settlementError": {
+        "title": "Impossible de confirmer la fin de la tâche",
+        "description": "Réessayez pour vérifier la tâche et charger sa réponse enregistrée."
       }
     },
     "compaction": {
