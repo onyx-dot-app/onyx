@@ -26,6 +26,17 @@ class LinearUser(BaseModel):
     app: bool
 
 
+class LinearViewer(BaseModel):
+    """The token's own user."""
+
+    guest: bool
+
+
+class LinearProject(BaseModel):
+    name: str
+    slug_id: str
+
+
 class IssueShare(BaseModel):
     """What an issue adds to sharing: the people it names, and whether it
     takes its parent's."""
@@ -33,6 +44,29 @@ class IssueShare(BaseModel):
     parent_id: str | None
     inherits: bool
     emails: set[str]
+
+
+class IssueAccess(BaseModel):
+    """One issue of the permission walk: who may read it, before shared
+    ancestors are resolved."""
+
+    id: str
+    team: LinearTeam
+    share: IssueShare
+
+
+class IssueAccessPage(BaseModel):
+    organization_id: str
+    issues: list[IssueAccess]
+
+
+class WorkspaceUsers(BaseModel):
+    """Every user Linear listed, with the count it reported so a short
+    listing can be told from a complete one."""
+
+    organization_id: str
+    user_count: int
+    users: list[LinearUser]
 
 
 class WorkspaceMembers(BaseModel):

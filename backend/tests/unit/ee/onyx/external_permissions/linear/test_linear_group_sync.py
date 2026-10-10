@@ -1,8 +1,8 @@
 """The group sync fills one group per team the token can see and the
-workspace members group, and refuses a members listing Linear cut short."""
+workspace members group, and refuses a users listing Linear cut short."""
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
@@ -16,57 +16,59 @@ from ee.onyx.external_permissions.sync_params import (
     source_requires_external_group_sync,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.linear.connector import LinearConnector
-from onyx.connectors.linear.models import LinearTeam, WorkspaceMembers
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.linear.models import LinearTeam, LinearUser, WorkspaceUsers
+from onyx.connectors.linear.source_operations import LinearSourceOperations
 
-MODULE = "onyx.connectors.linear.connector"
 CONNECTOR = "ee.onyx.external_permissions.linear.connector"
 
 
-def _user(email: str, **flags: bool) -> dict[str, Any]:
-    return {
-        "email": email,
-        "active": flags.get("active", True),
-        "guest": flags.get("guest", False),
-        "app": flags.get("app", False),
-    }
+def _user(email: str, **flags: bool) -> LinearUser:
+    return LinearUser(
+        email=email,
+        active=flags.get("active", True),
+        guest=flags.get("guest", False),
+        app=flags.get("app", False),
+    )
 
 
-def _response(data: dict[str, Any]) -> MagicMock:
-    response = MagicMock()
-    response.json.return_value = {"data": data}
-    return response
-
-
-def _page_info(end_cursor: str | None = None) -> dict[str, Any]:
-    return {"hasNextPage": end_cursor is not None, "endCursor": end_cursor}
-
-
-def _connector() -> LinearConnector:
-    connector = LinearConnector()
-    connector.load_credentials({"linear_api_key": "lin_api_test"})
-    return connector
+def _ops(
+    users: list[LinearUser],
+    user_count: int,
+    teams: list[LinearTeam],
+    members: dict[str, list[LinearUser]],
+) -> MagicMock:
+    ops = create_autospec(LinearSourceOperations, instance=True)
+    ops.list_workspace_users.return_value = WorkspaceUsers(
+        organization_id="org-1", user_count=user_count, users=users
+    )
+    ops.list_teams.return_value = teams
+    ops.list_team_members.side_effect = lambda *, team_id: members[team_id]
+    return ops
 
 
 def test_groups_are_the_workspace_and_every_visible_team() -> None:
-    connector = MagicMock(spec=LinearConnector)
-    connector.workspace_members.return_value = WorkspaceMembers(
-        organization_id="org-1", emails={"b@x", "a@x"}
+    ops = _ops(
+        users=[
+            _user("B@x"),
+            _user("a@x"),
+            _user("guest@y", guest=True),
+            _user("bot@x", app=True),
+            _user("gone@x", active=False),
+        ],
+        user_count=5,
+        teams=[
+            LinearTeam(id="p", key="P", visibility="private"),
+            LinearTeam(id="r", key="R", visibility="restricted", parent_id="p"),
+            LinearTeam(id="empty", key="E", visibility="public"),
+        ],
+        members={"p": [_user("a@x")], "r": [_user("guest@y", guest=True)], "empty": []},
     )
-    connector.list_teams.return_value = [
-        LinearTeam(id="p", key="P", visibility="private"),
-        LinearTeam(id="r", key="R", visibility="restricted", parent_id="p"),
-        LinearTeam(id="empty", key="E", visibility="public"),
-    ]
-    connector.team_member_emails.side_effect = lambda team_id: {
-        "p": {"a@x"},
-        "r": {"guest@y"},
-        "empty": set(),
-    }[team_id]
 
-    groups = {group.id: group.user_emails for group in team_groups(connector)}
+    groups = {group.id: group.user_emails for group in team_groups(ops)}
 
-    # Bare ids: the source prefix is added when the groups are stored.
+    # Bare ids: the source prefix is added when the groups are stored. Guests
+    # are in their teams' groups, never in the workspace group.
     assert groups == {
         "workspace_members:org-1": ["a@x", "b@x"],
         "p": ["a@x"],
@@ -74,93 +76,11 @@ def test_groups_are_the_workspace_and_every_visible_team() -> None:
     }
 
 
-def test_workspace_members_leave_out_guests_apps_and_the_deactivated() -> None:
-    connector = _connector()
-    pages = [
-        _response(
-            {
-                "organization": {"id": "org-1", "userCount": 3},
-                "users": {
-                    "nodes": [_user("Ann@x"), _user("guest@y", guest=True)],
-                    "pageInfo": _page_info("c1"),
-                },
-            }
-        ),
-        _response(
-            {
-                "organization": {"id": "org-1", "userCount": 3},
-                "users": {
-                    "nodes": [_user("bot@x", app=True), _user("gone@x", active=False)],
-                    "pageInfo": _page_info(),
-                },
-            }
-        ),
-    ]
-    with patch(f"{MODULE}._make_query", side_effect=pages):
-        assert connector.workspace_members() == WorkspaceMembers(
-            organization_id="org-1", emails={"ann@x"}
-        )
-
-
 def test_a_short_users_listing_is_refused() -> None:
-    connector = _connector()
-    page = _response(
-        {
-            "organization": {"id": "org-1", "userCount": 5},
-            "users": {"nodes": [_user("ann@x")], "pageInfo": _page_info()},
-        }
-    )
-    with (
-        patch(f"{MODULE}._make_query", return_value=page),
-        pytest.raises(RuntimeError, match="listed 1 of the 5 users"),
-    ):
-        connector.workspace_members()
+    ops = _ops(users=[_user("ann@x")], user_count=5, teams=[], members={})
 
-
-def test_team_members_are_paged_per_team() -> None:
-    connector = _connector()
-    pages = [
-        _response(
-            {
-                "team": {
-                    "memberships": {
-                        "nodes": [{"user": _user("ann@x")}],
-                        "pageInfo": _page_info("c1"),
-                    }
-                }
-            }
-        ),
-        _response(
-            {
-                "team": {
-                    "memberships": {
-                        "nodes": [{"user": _user("bob@x")}],
-                        "pageInfo": _page_info(),
-                    }
-                }
-            }
-        ),
-    ]
-    with patch(f"{MODULE}._make_query", side_effect=pages) as query:
-        assert connector.team_member_emails("t1") == {"ann@x", "bob@x"}
-
-    sent = [call.args[0]["variables"] for call in query.call_args_list]
-    assert sent == [
-        {"teamId": "t1", "first": 100, "after": None},
-        {"teamId": "t1", "first": 100, "after": "c1"},
-    ]
-
-
-def test_a_cursor_that_stops_advancing_is_refused() -> None:
-    connector = _connector()
-    page = _response(
-        {"teams": {"nodes": [], "pageInfo": _page_info("same")}},
-    )
-    with (
-        patch(f"{MODULE}._make_query", return_value=page),
-        pytest.raises(RuntimeError, match="stopped advancing"),
-    ):
-        connector.list_teams()
+    with pytest.raises(ConnectorValidationError, match="listed 1 of the 5 users"):
+        list(team_groups(ops))
 
 
 def test_the_sync_builds_the_connector_on_the_db_provider() -> None:
@@ -181,10 +101,9 @@ def test_the_sync_builds_the_connector_on_the_db_provider() -> None:
         assert list(linear_group_sync("tenant", cc_pair)) == []
 
     build.assert_called_once_with(DocumentSource.LINEAR, 3)
-    connector: Any = groups.call_args.args[0]
-    assert isinstance(connector, LinearConnector)
-    assert connector.team_keys == ["ENG"]
-    assert connector._credentials_provider is provider
+    ops: Any = groups.call_args.args[0]
+    assert isinstance(ops, LinearSourceOperations)
+    assert ops.credentials_provider is provider
 
 
 def test_linear_is_registered_for_group_sync() -> None:

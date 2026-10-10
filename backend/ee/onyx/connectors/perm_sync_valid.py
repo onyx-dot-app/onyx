@@ -9,6 +9,10 @@ from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.linear.capability_checks import (
+    build_linear_doc_permission_sync_checks,
+    build_linear_group_sync_checks,
+)
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_doc_permission_sync_checks,
@@ -91,12 +95,23 @@ def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
 
 
 def validate_linear_perm_sync(connector: LinearConnector) -> None:
-    """
-    A guest's token sees only the guest's own teams and cannot list the
-    workspace's members, so every public issue would end up readable by
-    nobody. Probe the token's user here so that fails at connector creation.
-    """
-    connector.probe_perm_sync_access()
+    """Scheduled syncs validate through here, not the named-check runner, so
+    the same checks run before each sync: a user who became a guest after
+    setup would otherwise hide every issue outside the guest's own teams."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.LINEAR,
+        credential_json={},
+        connector=connector,
+        connector_specific_config={
+            "team_keys": connector.team_keys,
+            "projects": connector.projects,
+        },
+        source_operations=connector.ops,
+    )
+    for check in (
+        build_linear_doc_permission_sync_checks() + build_linear_group_sync_checks()
+    ):
+        check.run(context)
 
 
 def validate_zoom_perm_sync(connector: ZoomConnector) -> None:

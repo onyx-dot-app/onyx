@@ -5,6 +5,7 @@ from pydantic import field_validator
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import FieldClass, FieldPolicy, ScopeInclude
+from onyx.connectors.linear.scope import normalize_team_keys
 
 
 class LinearConnectorConfig(ConnectorConfig):
@@ -29,7 +30,7 @@ class LinearConnectorConfig(ConnectorConfig):
     def _normalize_team_keys(cls, value: Any) -> Any:
         if not _is_string_list(value):
             return value
-        return [key.strip().upper() for key in value if key.strip()]
+        return normalize_team_keys(value)
 
     @field_validator("projects", mode="before")
     @classmethod
