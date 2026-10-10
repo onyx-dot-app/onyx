@@ -417,3 +417,39 @@ def test_issue_read_leaves_a_bad_scope_to_the_scope_checks() -> None:
     )
 
     assert result.status == CapabilityCheckStatus.INDETERMINATE
+
+
+def test_optional_jsm_attachment_probe_reads_a_small_attachment() -> None:
+    gateway = _gateway(is_cloud=True)
+    gateway.list_fields.return_value = [{"id": "summary", "name": "Summary"}]
+    gateway.list_issue_attachments.return_value = [{"id": "att-1", "size": 100}]
+    gateway.download_attachment.return_value = b"data"
+
+    result = _run("jira_optional_jsm_attachment_access", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    gateway.list_fields.assert_called_once_with()
+    gateway.list_issue_attachments.assert_called_once_with(issue_key="AS-1")
+    gateway.download_attachment.assert_called_once_with(attachment_id="att-1")
+
+
+def test_optional_jsm_attachment_probe_never_fetches_large_file() -> None:
+    gateway = _gateway(is_cloud=True)
+    gateway.list_issue_attachments.return_value = [
+        {"id": "att-large", "size": 50_000_000}
+    ]
+
+    result = _run("jira_optional_jsm_attachment_access", gateway)
+
+    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    gateway.download_attachment.assert_not_called()
+
+
+def test_optional_jsm_attachment_probe_cannot_gate_jira_indexing() -> None:
+    gateway = _gateway(is_cloud=True)
+    gateway.list_fields.side_effect = _api_error(403)
+
+    result = _run("jira_optional_jsm_attachment_access", gateway)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_type == "InsufficientPermissionsError"
