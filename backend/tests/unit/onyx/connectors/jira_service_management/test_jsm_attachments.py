@@ -17,7 +17,6 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from jira import JIRA
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
@@ -30,8 +29,8 @@ from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.jira_service_management.conftest import (
     TEST_BASE_URL,
     TEST_PROJECT_KEY,
-    make_mock_jsm_issue,
     legacy_jira_client,
+    make_mock_jsm_issue,
 )
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
