@@ -253,7 +253,7 @@ def make_jsm_connector(
         gateway.download_attachment.side_effect = download_attachment
         gateway.get_project.side_effect = get_project
         connector._source_operations = gateway
-        setattr(connector, "_jira_client", mock_jira_client)  # Test-only shim.
+        connector.__dict__["_jira_client"] = mock_jira_client  # Test-only shim.
         return connector
 
     return _make
@@ -261,4 +261,4 @@ def make_jsm_connector(
 
 def legacy_jira_client(connector: JiraServiceManagementConnector) -> JIRA:
     """Retrieve the SDK stand-in installed only by the legacy test factory."""
-    return cast(JIRA, getattr(connector, "_jira_client"))
+    return cast(JIRA, connector.__dict__["_jira_client"])
