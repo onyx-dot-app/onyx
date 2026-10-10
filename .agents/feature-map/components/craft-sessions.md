@@ -504,10 +504,10 @@ ChatPanel ends the attachment visit on unmount, including pending welcome files 
 Pending deletions use session and path guards across visits; listings omit those paths until deletion finishes.
 Clearing sent attachments blocks stale deletion recovery and invalidates pending attachment listings for that visit.
 New deletions after a clear still roll back on failure. Listings that predate completed deletions retry against current files.
-Welcome drafts own their source files until send or visit end.
+Welcome drafts own their source files until send or visit end. URL session identity owns the draft; its provisional sandbox is a replaceable destination. New Build ends the previous session draft.
 Replacing a provisional sandbox preserves those sources, clears old paths, and uploads into the replacement.
 Session activation starts listing and pending uploads directly; list-length effects do not infer attachment actions.
-Visit scopes own listing and dismissal state. Mutation errors retain HTTP status instead of relying on error wording.
+Visit scopes own listing and dismissal state. Matching listings preserve local draft sources. Deletion requests have a ten-second bound so failed requests release pending path guards. Mutation errors retain HTTP status; subscription failures keep their backend detail.
 
 ### 4.8 User library
 

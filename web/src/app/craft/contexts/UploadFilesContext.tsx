@@ -17,7 +17,7 @@ import {
   fetchDirectoryListing,
 } from "@/app/craft/services/apiServices";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
-import { FetchError, isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
+import { FetchError, isNotFoundError } from "@/lib/fetcher";
 
 /**
  * Upload File Status - tracks the state of files being uploaded
@@ -164,17 +164,32 @@ function createOptimisticFile(file: File): BuildFile {
 
 interface AttachmentScope {
   sessionId: string | null;
+  // URL session owns a draft; null identifies the mounted welcome draft.
+  draftId: string | null;
   fetching: boolean;
   dismissed: boolean;
   clearRevision: number;
 }
 
-function createAttachmentScope(sessionId: string | null): AttachmentScope {
-  return { sessionId, fetching: false, dismissed: false, clearRevision: 0 };
+function createAttachmentScope(
+  sessionId: string | null,
+  draftId: string | null = sessionId
+): AttachmentScope {
+  return {
+    sessionId,
+    draftId,
+    fetching: false,
+    dismissed: false,
+    clearRevision: 0,
+  };
 }
 
 function attachmentErrorMessage(error: unknown, t: UploadTranslate): string {
-  if (isAuthStatusError(error)) return t("errors.sessionExpired");
+  if (
+    error instanceof FetchError &&
+    (error.status === 401 || error.status === 403)
+  )
+    return t("errors.sessionExpired");
   if (isNotFoundError(error)) return t("errors.notFound");
   if (error instanceof FetchError && error.status >= 500)
     return t("errors.server");
@@ -224,10 +239,11 @@ interface UploadFilesContextValue {
    * Call this when:
    * - Session ID changes in URL
    * - Pre-provisioned session becomes available
+   * Pass the URL session as draftId; null keeps one welcome draft across sandbox replacements.
    */
   setActiveSession: (
     sessionId: string | null,
-    options?: { preserveDraft: boolean }
+    options?: { draftId: string | null }
   ) => void;
 
   /** End the current chat visit, including a pending welcome session. */
@@ -460,13 +476,12 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
             // Keep files that are still in-flight or don't have a path yet
             const localOnlyFiles = prev.filter(isLocalAttachment);
 
-            // Merge: backend attachments + local-only files (avoiding duplicates by path)
-            const backendPaths = new Set(attachments.map((f) => f.path));
-            const nonDuplicateLocalFiles = localOnlyFiles.filter(
-              (f) => !f.path || !backendPaths.has(f.path)
-            );
-
-            return [...attachments, ...nonDuplicateLocalFiles];
+            // Local records own draft sources, including when the server lists their path.
+            const localPaths = new Set(localOnlyFiles.map((file) => file.path));
+            return [
+              ...attachments.filter((file) => !localPaths.has(file.path)),
+              ...localOnlyFiles,
+            ];
           });
         } else if (attachments.length > 0) {
           setCurrentMessageFiles((prev) => {
@@ -512,8 +527,12 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    * Set the active session. Triggers fetching/clearing as needed.
    */
   const resetActiveScope = useCallback(
-    (sessionId: string | null, preserveFiles: boolean) => {
-      const nextScope = createAttachmentScope(sessionId);
+    (
+      sessionId: string | null,
+      preserveFiles: boolean,
+      draftId: string | null = sessionId
+    ) => {
+      const nextScope = createAttachmentScope(sessionId, draftId);
       activeScopeRef.current = nextScope;
       if (!preserveFiles) {
         setCurrentMessageFiles([]);
@@ -534,10 +553,22 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   );
 
   const setActiveSession = useCallback(
-    (sessionId: string | null, options?: { preserveDraft: boolean }) => {
+    (sessionId: string | null, options?: { draftId: string | null }) => {
       const previous: AttachmentScope = activeScopeRef.current;
-      if (previous.sessionId === sessionId) return;
-      if (options?.preserveDraft) {
+      const draftId = options ? options.draftId : sessionId;
+      if (previous.sessionId === sessionId && previous.draftId === draftId)
+        return;
+      // Claiming the welcome sandbox continues the same draft and pending operations.
+      if (
+        previous.sessionId === sessionId &&
+        previous.draftId === null &&
+        draftId === sessionId
+      ) {
+        previous.draftId = draftId;
+        return;
+      }
+      const sameDraft = previous.draftId === draftId;
+      if (sameDraft && draftId === null) {
         setCurrentMessageFiles((files) =>
           files
             .filter((file) => file.file)
@@ -549,10 +580,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
             }))
         );
       }
-      resetActiveScope(
-        sessionId,
-        !!options?.preserveDraft || previous.sessionId === null
-      );
+      resetActiveScope(sessionId, sameDraft, draftId);
     },
     [resetActiveScope, setCurrentMessageFiles]
   );

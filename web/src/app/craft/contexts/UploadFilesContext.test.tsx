@@ -147,7 +147,7 @@ it("uploads pending welcome files once when a session becomes available", async 
   expect(result.current.currentMessageFiles[0]?.status).toBe(
     UploadFileStatus.PENDING
   );
-  act(() => result.current.setActiveSession("session-a"));
+  act(() => result.current.setActiveSession("session-a", { draftId: null }));
   await waitFor(() =>
     expect(result.current.currentMessageFiles[0]?.status).toBe(
       UploadFileStatus.COMPLETED
@@ -639,7 +639,7 @@ it.each([false, true])(
     const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
     const file = new File(["draft"], "draft.txt");
     await act(async () => result.current.uploadFiles([file]));
-    act(() => result.current.setActiveSession("old", { preserveDraft: true }));
+    act(() => result.current.setActiveSession("old", { draftId: null }));
     await waitFor(() => expect(uploadFile).toHaveBeenCalledTimes(1));
     if (completed) {
       await act(async () =>
@@ -651,14 +651,14 @@ it.each([false, true])(
       );
       expect(result.current.currentMessageFiles[0]?.file).toBe(file);
     }
-    act(() => result.current.setActiveSession(null, { preserveDraft: true }));
+    act(() => result.current.setActiveSession(null, { draftId: null }));
     expect(result.current.currentMessageFiles[0]).toMatchObject({
       status: UploadFileStatus.PENDING,
       file,
     });
     expect(result.current.currentMessageFiles[0]?.path).toBeUndefined();
     act(() =>
-      result.current.setActiveSession("replacement", { preserveDraft: true })
+      result.current.setActiveSession("replacement", { draftId: null })
     );
     await waitFor(() =>
       expect(result.current.currentMessageFiles[0]?.path).toBe(
@@ -696,7 +696,7 @@ it.each(["send", "end"])(
     await act(async () =>
       result.current.uploadFiles([new File(["draft"], "draft.txt")])
     );
-    act(() => result.current.setActiveSession("old", { preserveDraft: true }));
+    act(() => result.current.setActiveSession("old", { draftId: null }));
     await waitFor(() =>
       expect(result.current.currentMessageFiles[0]?.status).toBe(
         UploadFileStatus.COMPLETED
@@ -707,12 +707,120 @@ it.each(["send", "end"])(
         result.current.clearFiles({ suppressRefetch: true });
       else result.current.endSessionVisit();
     });
-    act(() => result.current.setActiveSession(null, { preserveDraft: true }));
+    act(() => result.current.setActiveSession(null, { draftId: null }));
     act(() =>
-      result.current.setActiveSession("replacement", { preserveDraft: true })
+      result.current.setActiveSession("replacement", { draftId: null })
     );
     await act(async () => {});
     expect(result.current.currentMessageFiles).toEqual([]);
     expect(uploadFile).toHaveBeenCalledTimes(1);
   }
 );
+
+it.each(["welcome", "existing"])(
+  "does not carry an existing session draft into New Build (%s destination)",
+  async (destination) => {
+    jest
+      .mocked(fetchDirectoryListing)
+      .mockResolvedValue({ path: "attachments", entries: [] });
+    jest.mocked(uploadFile).mockResolvedValue({
+      path: "attachments/private.txt",
+      filename: "private.txt",
+      size_bytes: 7,
+    });
+    const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+    act(() => result.current.setActiveSession("existing"));
+    await act(async () =>
+      result.current.uploadFiles([new File(["private"], "private.txt")])
+    );
+    act(() => result.current.setActiveSession(destination, { draftId: null }));
+    await act(async () => {});
+    expect(result.current.currentMessageFiles).toEqual([]);
+    expect(uploadFile).toHaveBeenCalledTimes(1);
+  }
+);
+
+it("keeps the welcome source when its listing catches up with upload", async () => {
+  const firstListing = deferred<DirectoryListing>();
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockReturnValueOnce(firstListing.promise)
+    .mockResolvedValue({ path: "attachments", entries: [] });
+  jest.mocked(uploadFile).mockResolvedValue({
+    path: "attachments/draft.txt",
+    filename: "draft.txt",
+    size_bytes: 5,
+  });
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  const file = new File(["draft"], "draft.txt");
+  await act(async () => result.current.uploadFiles([file]));
+  act(() => result.current.setActiveSession("old", { draftId: null }));
+  await waitFor(() =>
+    expect(result.current.currentMessageFiles[0]?.status).toBe(
+      UploadFileStatus.COMPLETED
+    )
+  );
+  await act(async () => firstListing.resolve(listing("draft.txt")));
+  expect(result.current.currentMessageFiles).toHaveLength(1);
+  expect(result.current.currentMessageFiles[0]?.file).toBe(file);
+  act(() => result.current.setActiveSession("replacement", { draftId: null }));
+  await waitFor(() => expect(uploadFile).toHaveBeenCalledTimes(2));
+});
+
+it("keeps the backend subscription detail on HTTP 402", async () => {
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockResolvedValue({ path: "attachments", entries: [] });
+  jest
+    .mocked(uploadFile)
+    .mockRejectedValue(new FetchError("Subscription inactive", 402, null));
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  act(() => result.current.setActiveSession("session"));
+  await act(async () =>
+    result.current.uploadFiles([new File(["body"], "draft.txt")])
+  );
+  expect(result.current.currentMessageFiles[0]?.error).toBe(
+    "Subscription inactive"
+  );
+});
+
+it("keeps the same welcome draft on rerender and transfers it when its sandbox is claimed", async () => {
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockResolvedValue({ path: "attachments", entries: [] });
+  jest.mocked(uploadFile).mockResolvedValue({
+    path: "attachments/draft.txt",
+    filename: "draft.txt",
+    size_bytes: 5,
+  });
+  const { result, rerender } = renderHook(useUploadFilesContext, {
+    wrapper: Provider,
+  });
+  act(() => result.current.setActiveSession("sandbox", { draftId: null }));
+  await act(async () =>
+    result.current.uploadFiles([new File(["draft"], "draft.txt")])
+  );
+  const draft = result.current.currentMessageFiles;
+  rerender();
+  act(() => result.current.setActiveSession("sandbox", { draftId: null }));
+  expect(result.current.currentMessageFiles).toBe(draft);
+  act(() => result.current.setActiveSession("sandbox", { draftId: "sandbox" }));
+  expect(result.current.currentMessageFiles).toBe(draft);
+  expect(uploadFile).toHaveBeenCalledTimes(1);
+});
+
+it("ends a pending welcome draft when navigating to an existing session", async () => {
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockResolvedValue({ path: "attachments", entries: [] });
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  await act(async () =>
+    result.current.uploadFiles([new File(["draft"], "draft.txt")])
+  );
+  act(() =>
+    result.current.setActiveSession("existing", { draftId: "existing" })
+  );
+  await act(async () => {});
+  expect(result.current.currentMessageFiles).toEqual([]);
+  expect(uploadFile).not.toHaveBeenCalled();
+});

@@ -798,20 +798,33 @@ export async function deleteFile(
     .map((segment) => encodeURIComponent(segment))
     .join("/");
 
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/files/${encodedPath}`,
-    {
-      method: "DELETE",
-    }
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () =>
+      controller.abort(
+        new DOMException("File deletion timed out", "TimeoutError")
+      ),
+    10_000
   );
-
-  if (!res.ok) {
-    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new FetchError(
-      errorData.detail || `Failed to delete file: ${res.status}`,
-      res.status,
-      errorData
+  try {
+    const res = await fetch(
+      `${BUILD_API_BASE}/sessions/${sessionId}/files/${encodedPath}`,
+      {
+        method: "DELETE",
+        signal: controller.signal,
+      }
     );
+
+    if (!res.ok) {
+      const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
+      throw new FetchError(
+        errorData.detail || `Failed to delete file: ${res.status}`,
+        res.status,
+        errorData
+      );
+    }
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
