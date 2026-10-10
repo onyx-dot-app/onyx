@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { act, deferred, renderHook, waitFor } from "@tests/setup/test-utils";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import { FetchError } from "@/lib/fetcher";
 import englishMessages from "@/i18n/messages/en.json";
 import {
   UploadFilesProvider,
@@ -109,6 +110,7 @@ it("rejects an earlier response after leaving and returning to the same session"
     .mockResolvedValueOnce(listing("new-a.txt"));
   const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
   act(() => result.current.setActiveSession("session-a"));
+  await waitFor(() => expect(fetchDirectoryListing).toHaveBeenCalledTimes(1));
   act(() => result.current.setActiveSession("session-b"));
   await waitFor(() =>
     expect(result.current.currentMessageFiles.map((file) => file.path)).toEqual(
@@ -565,3 +567,152 @@ it("replaces a late listing captured before deletion completed with a fresh list
   expect(fetchDirectoryListing).toHaveBeenCalledTimes(3);
   expect(deleteFile).toHaveBeenCalledTimes(1);
 });
+
+// Event-owned transitions.
+it("refreshes attachments when explicitly cleared, without observing list length", async () => {
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockResolvedValueOnce(listing("first.txt"))
+    .mockResolvedValueOnce(listing("updated.txt"));
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  act(() => result.current.setActiveSession("session"));
+  await waitFor(() =>
+    expect(result.current.currentMessageFiles[0]?.name).toBe("first.txt")
+  );
+  act(() => result.current.clearFiles());
+  expect(result.current.currentMessageFiles).toEqual([]);
+  await waitFor(() =>
+    expect(result.current.currentMessageFiles[0]?.name).toBe("updated.txt")
+  );
+  expect(fetchDirectoryListing).toHaveBeenCalledTimes(2);
+});
+
+it("keeps an explicit clear suppressed across later renders", async () => {
+  jest.mocked(fetchDirectoryListing).mockResolvedValue(listing("first.txt"));
+  const { result, rerender } = renderHook(useUploadFilesContext, {
+    wrapper: Provider,
+  });
+  act(() => result.current.setActiveSession("session"));
+  await waitFor(() =>
+    expect(result.current.currentMessageFiles).toHaveLength(1)
+  );
+  act(() => result.current.clearFiles({ suppressRefetch: true }));
+  rerender();
+  expect(result.current.currentMessageFiles).toEqual([]);
+  expect(fetchDirectoryListing).toHaveBeenCalledTimes(1);
+});
+
+// Typed attachment failures.
+it("classifies an authentication failure without inspecting server wording", async () => {
+  jest
+    .mocked(fetchDirectoryListing)
+    .mockResolvedValue({ path: "attachments", entries: [] });
+  jest
+    .mocked(uploadFile)
+    .mockRejectedValue(new FetchError("Access denied", 401, null));
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  act(() => result.current.setActiveSession("session-a"));
+  await act(async () =>
+    result.current.uploadFiles([new File(["body"], "notes.txt")])
+  );
+  expect(result.current.currentMessageFiles[0]).toMatchObject({
+    status: UploadFileStatus.FAILED,
+    error: englishMessages.craft.uploadFiles.errors.sessionExpired,
+  });
+});
+
+it.each([false, true])(
+  "reuploads a welcome draft into a replacement sandbox (completed: %s)",
+  async (completed) => {
+    const oldUpload = deferred<Awaited<ReturnType<typeof uploadFile>>>();
+    jest
+      .mocked(fetchDirectoryListing)
+      .mockResolvedValue({ path: "attachments", entries: [] });
+    jest
+      .mocked(uploadFile)
+      .mockReturnValueOnce(oldUpload.promise)
+      .mockResolvedValue({
+        path: "attachments/replacement.txt",
+        filename: "draft.txt",
+        size_bytes: 5,
+      });
+    const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+    const file = new File(["draft"], "draft.txt");
+    await act(async () => result.current.uploadFiles([file]));
+    act(() => result.current.setActiveSession("old", { preserveDraft: true }));
+    await waitFor(() => expect(uploadFile).toHaveBeenCalledTimes(1));
+    if (completed) {
+      await act(async () =>
+        oldUpload.resolve({
+          path: "attachments/old.txt",
+          filename: "draft.txt",
+          size_bytes: 5,
+        })
+      );
+      expect(result.current.currentMessageFiles[0]?.sourceFile).toBe(file);
+    }
+    act(() => result.current.setActiveSession(null, { preserveDraft: true }));
+    expect(result.current.currentMessageFiles[0]).toMatchObject({
+      status: UploadFileStatus.PENDING,
+      sourceFile: file,
+    });
+    expect(result.current.currentMessageFiles[0]?.path).toBeUndefined();
+    act(() =>
+      result.current.setActiveSession("replacement", { preserveDraft: true })
+    );
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[0]?.path).toBe(
+        "attachments/replacement.txt"
+      )
+    );
+    expect(uploadFile).toHaveBeenLastCalledWith("replacement", file);
+    if (!completed) {
+      await act(async () =>
+        oldUpload.resolve({
+          path: "attachments/old.txt",
+          filename: "draft.txt",
+          size_bytes: 5,
+        })
+      );
+      expect(result.current.currentMessageFiles[0]?.path).toBe(
+        "attachments/replacement.txt"
+      );
+    }
+  }
+);
+
+it.each(["send", "end"])(
+  "does not retain welcome sources after %s",
+  async (action) => {
+    jest
+      .mocked(fetchDirectoryListing)
+      .mockResolvedValue({ path: "attachments", entries: [] });
+    jest.mocked(uploadFile).mockResolvedValue({
+      path: "attachments/draft.txt",
+      filename: "draft.txt",
+      size_bytes: 5,
+    });
+    const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+    await act(async () =>
+      result.current.uploadFiles([new File(["draft"], "draft.txt")])
+    );
+    act(() => result.current.setActiveSession("old", { preserveDraft: true }));
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[0]?.status).toBe(
+        UploadFileStatus.COMPLETED
+      )
+    );
+    act(() => {
+      if (action === "send")
+        result.current.clearFiles({ suppressRefetch: true });
+      else result.current.endSessionVisit();
+    });
+    act(() => result.current.setActiveSession(null, { preserveDraft: true }));
+    act(() =>
+      result.current.setActiveSession("replacement", { preserveDraft: true })
+    );
+    await act(async () => {});
+    expect(result.current.currentMessageFiles).toEqual([]);
+    expect(uploadFile).toHaveBeenCalledTimes(1);
+  }
+);

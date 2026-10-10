@@ -253,7 +253,7 @@ export default function BuildChatPanel({
    */
   useEffect(() => {
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
-    setActiveSession(activeSession);
+    setActiveSession(activeSession, { preserveDraft: !existingSessionId });
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
   useEffect(() => {

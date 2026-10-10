@@ -504,7 +504,10 @@ ChatPanel ends the attachment visit on unmount, including pending welcome files 
 Pending deletions use session and path guards across visits; listings omit those paths until deletion finishes.
 Clearing sent attachments blocks stale deletion recovery and invalidates pending attachment listings for that visit.
 New deletions after a clear still roll back on failure. Listings that predate completed deletions retry against current files.
-Pending welcome attachments upload when the first session becomes available.
+Welcome drafts own their source files until send or visit end.
+Replacing a provisional sandbox preserves those sources, clears old paths, and uploads into the replacement.
+Session activation starts listing and pending uploads directly; list-length effects do not infer attachment actions.
+Visit scopes own listing and dismissal state. Mutation errors retain HTTP status instead of relying on error wording.
 
 ### 4.8 User library
 

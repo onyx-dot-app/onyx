@@ -7,8 +7,8 @@ import {
   useCallback,
   useMemo,
   useRef,
-  useEffect,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -17,6 +17,7 @@ import {
   fetchDirectoryListing,
 } from "@/app/craft/services/apiServices";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import { FetchError, isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
 
 /**
  * Upload File Status - tracks the state of files being uploaded
@@ -46,6 +47,8 @@ export interface BuildFile {
   created_at: string;
   // Original File object for upload
   file?: File;
+  // Draft source retained until send or visit end, including sandbox replacement.
+  sourceFile?: File;
   // Path in sandbox after upload (e.g., "attachments/doc.pdf")
   path?: string;
   // Error message if upload failed
@@ -158,56 +161,28 @@ function createOptimisticFile(file: File): BuildFile {
     size: file.size,
     created_at: new Date().toISOString(),
     file,
+    sourceFile: file,
   };
-}
-
-/**
- * Error types for better error handling
- */
-export enum UploadErrorType {
-  NETWORK = "NETWORK",
-  AUTH = "AUTH",
-  NOT_FOUND = "NOT_FOUND",
-  SERVER = "SERVER",
-  UNKNOWN = "UNKNOWN",
 }
 
 interface AttachmentScope {
   sessionId: string | null;
+  fetching: boolean;
+  dismissed: boolean;
+  clearRevision: number;
 }
 
-interface ClassifiedUploadError {
-  type: UploadErrorType;
-  message: string;
+function createAttachmentScope(sessionId: string | null): AttachmentScope {
+  return { sessionId, fetching: false, dismissed: false, clearRevision: 0 };
 }
 
-function classifyError(
-  error: unknown,
-  t: UploadTranslate
-): ClassifiedUploadError {
-  if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-    if (message.includes("401") || message.includes("unauthorized")) {
-      return {
-        type: UploadErrorType.AUTH,
-        message: t("errors.sessionExpired"),
-      };
-    }
-    if (message.includes("404") || message.includes("not found")) {
-      return {
-        type: UploadErrorType.NOT_FOUND,
-        message: t("errors.notFound"),
-      };
-    }
-    if (message.includes("500") || message.includes("server")) {
-      return { type: UploadErrorType.SERVER, message: t("errors.server") };
-    }
-    if (message.includes("network") || message.includes("fetch")) {
-      return { type: UploadErrorType.NETWORK, message: t("errors.network") };
-    }
-    return { type: UploadErrorType.UNKNOWN, message: error.message };
-  }
-  return { type: UploadErrorType.UNKNOWN, message: t("errors.uploadFailed") };
+function attachmentErrorMessage(error: unknown, t: UploadTranslate): string {
+  if (isAuthStatusError(error)) return t("errors.sessionExpired");
+  if (isNotFoundError(error)) return t("errors.notFound");
+  if (error instanceof FetchError && error.status >= 500)
+    return t("errors.server");
+  if (error instanceof TypeError) return t("errors.network");
+  return error instanceof Error ? error.message : t("errors.uploadFailed");
 }
 
 function isLocalAttachment(file: BuildFile): boolean {
@@ -238,6 +213,7 @@ function isLocalAttachment(file: BuildFile): boolean {
 interface UploadFilesContextValue {
   // Current message files (attached to the input bar)
   currentMessageFiles: BuildFile[];
+  getCurrentMessageFiles: () => BuildFile[];
 
   // Active session ID (set by parent components)
   activeSessionId: string | null;
@@ -252,7 +228,10 @@ interface UploadFilesContextValue {
    * - Session ID changes in URL
    * - Pre-provisioned session becomes available
    */
-  setActiveSession: (sessionId: string | null) => void;
+  setActiveSession: (
+    sessionId: string | null,
+    options?: { preserveDraft: boolean }
+  ) => void;
 
   /** End the current chat visit, including a pending welcome session. */
   endSessionVisit: () => void;
@@ -298,13 +277,27 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   // State
   // =========================================================================
 
-  const [currentMessageFiles, setCurrentMessageFiles] = useState<BuildFile[]>(
+  const [currentMessageFiles, setRenderedFiles] = useState<BuildFile[]>([]);
+  const currentMessageFilesRef = useRef<BuildFile[]>([]);
+  // Actions publish one accepted value to React and asynchronous operations.
+  const setCurrentMessageFiles = useCallback(
+    (update: SetStateAction<BuildFile[]>) => {
+      const next =
+        typeof update === "function"
+          ? update(currentMessageFilesRef.current)
+          : update;
+      currentMessageFilesRef.current = next;
+      setRenderedFiles(next);
+    },
     []
   );
-  const currentMessageFilesRef = useRef<BuildFile[]>([]);
-  const [activeScope, setActiveScope] = useState<AttachmentScope>({
-    sessionId: null,
-  });
+  const getCurrentMessageFiles = useCallback(
+    () => currentMessageFilesRef.current,
+    []
+  );
+  const [activeScope, setActiveScope] = useState(() =>
+    createAttachmentScope(null)
+  );
   const activeSessionId = activeScope.sessionId;
 
   // Get triggerFilesRefresh from the store to refresh the file explorer
@@ -316,16 +309,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   // Refs for race condition protection
   // =========================================================================
 
-  const isUploadingPendingRef = useRef(false);
-  const fetchingSessionRef = useRef<string | null>(null);
   const activeScopeRef = useRef(activeScope);
-  const dismissedAttachmentScopeRef = useRef<AttachmentScope | null>(null);
-  const attachmentClearRevisionRef = useRef<number>(0);
   const attachmentMutationRevisionRef = useRef<number>(0);
   // Track active deletions to prevent refetch race condition
   const activeDeletionsRef = useRef<Set<string>>(new Set());
-  // When true, skip the refetch that runs after clearFiles (e.g. Enter to dismiss file)
-  const suppressRefetchRef = useRef(false);
 
   // =========================================================================
   // Derived state
@@ -341,10 +328,6 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     return currentMessageFiles.some(
       (file) => file.status === UploadFileStatus.PENDING
     );
-  }, [currentMessageFiles]);
-
-  useEffect(() => {
-    currentMessageFilesRef.current = currentMessageFiles;
   }, [currentMessageFiles]);
 
   // =========================================================================
@@ -366,7 +349,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
             return {
               id: file.id,
               success: false as const,
-              errorMessage: classifyError(error, t).message,
+              errorMessage: attachmentErrorMessage(error, t),
             };
           }
         })
@@ -399,19 +382,17 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         })
       );
     },
-    [triggerFilesRefresh, t]
+    [triggerFilesRefresh, t, setCurrentMessageFiles]
   );
 
   const uploadPendingFilesInternal = useCallback(
     async (sessionId: string): Promise<void> => {
       const scope: AttachmentScope = activeScopeRef.current;
-      if (scope.sessionId !== sessionId || isUploadingPendingRef.current)
-        return;
+      if (scope.sessionId !== sessionId) return;
       const pendingFiles = currentMessageFilesRef.current.filter(
         (file) => file.status === UploadFileStatus.PENDING && file.file
       );
       if (pendingFiles.length === 0) return;
-      isUploadingPendingRef.current = true;
       const pendingIds: Set<string> = new Set(
         pendingFiles.map((file) => file.id)
       );
@@ -422,19 +403,14 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
             : file
         )
       );
-      try {
-        await uploadAttachedFiles(sessionId, pendingFiles);
-      } finally {
-        if (activeScopeRef.current === scope)
-          isUploadingPendingRef.current = false;
-      }
+      await uploadAttachedFiles(sessionId, pendingFiles);
     },
-    [uploadAttachedFiles]
+    [uploadAttachedFiles, setCurrentMessageFiles]
   );
 
   /**
    * Fetch existing attachments from the backend.
-   * Internal function - called automatically by effects.
+   * Session activation and attachment actions call this function.
    */
   const fetchExistingAttachmentsInternal = useCallback(
     async function fetchAttachments(
@@ -443,19 +419,19 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     ): Promise<void> {
       const scope: AttachmentScope = activeScopeRef.current;
       if (scope.sessionId !== sessionId) return;
-      const clearRevision: number = attachmentClearRevisionRef.current;
+      const clearRevision = scope.clearRevision;
       const mutationRevision: number = attachmentMutationRevisionRef.current;
       let retryAfterMutation: boolean = false;
       // Request deduplication
-      if (fetchingSessionRef.current === sessionId) return;
+      if (scope.fetching) return;
 
-      fetchingSessionRef.current = sessionId;
+      scope.fetching = true;
 
       try {
         const listing = await fetchDirectoryListing(sessionId, "attachments");
         if (
           activeScopeRef.current !== scope ||
-          attachmentClearRevisionRef.current !== clearRevision
+          scope.clearRevision !== clearRevision
         )
           return;
         if (attachmentMutationRevisionRef.current !== mutationRevision) {
@@ -508,11 +484,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       } catch (error) {
         if (
           activeScopeRef.current !== scope ||
-          attachmentClearRevisionRef.current !== clearRevision
+          scope.clearRevision !== clearRevision
         )
           return;
-        const { type } = classifyError(error, t);
-        if (type !== UploadErrorType.NOT_FOUND) {
+        if (!isNotFoundError(error)) {
           console.error(
             "[UploadFilesContext] fetchExistingAttachments error:",
             error
@@ -524,87 +499,14 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         }
       } finally {
         if (activeScopeRef.current === scope) {
-          fetchingSessionRef.current = null;
-          if (
-            retryAfterMutation &&
-            attachmentClearRevisionRef.current === clearRevision
-          )
+          scope.fetching = false;
+          if (retryAfterMutation && scope.clearRevision === clearRevision)
             await fetchAttachments(sessionId, replace);
         }
       }
     },
-    [t]
+    [t, setCurrentMessageFiles]
   );
-
-  // =========================================================================
-  // Effects - Automatic state machine transitions
-  // =========================================================================
-
-  useEffect(() => {
-    if (activeScope.sessionId)
-      fetchExistingAttachmentsInternal(activeScope.sessionId, true);
-  }, [activeScope, fetchExistingAttachmentsInternal]);
-
-  /**
-   * Effect: Auto-upload pending files when session becomes available
-   *
-   * This handles the case where user attaches files before session is ready.
-   */
-  useEffect(() => {
-    if (activeSessionId && hasPendingFiles) {
-      uploadPendingFilesInternal(activeSessionId);
-    }
-  }, [
-    activeScope,
-    activeSessionId,
-    hasPendingFiles,
-    uploadPendingFilesInternal,
-  ]);
-
-  /**
-   * Effect: Refetch attachments after files are cleared
-   *
-   * When files are cleared (e.g., after sending a message) but we're still
-   * on the same session, refetch to restore any backend attachments.
-   *
-   * IMPORTANT: Skip refetch if files went to 0 due to active deletions.
-   * This prevents a race condition where refetch returns the file before
-   * backend deletion completes, causing the file pill to persist.
-   */
-  const prevFilesLengthRef = useRef(currentMessageFiles.length);
-  useEffect(() => {
-    const prevLength = prevFilesLengthRef.current;
-    const currentLength = currentMessageFiles.length;
-    prevFilesLengthRef.current = currentLength;
-
-    // Files were just cleared (went from >0 to 0)
-    const filesWereCleared = prevLength > 0 && currentLength === 0;
-
-    // Skip refetch if there are active deletions in progress
-    // This prevents the deleted file from being re-added before backend deletion completes
-    const hasActiveDeletions: boolean = [...activeDeletionsRef.current].some(
-      (key) => key.startsWith(`${activeSessionId}:`)
-    );
-    // Skip refetch if caller explicitly suppressed (e.g. user hit Enter to dismiss file)
-    const shouldSuppressRefetch = suppressRefetchRef.current;
-    if (shouldSuppressRefetch) {
-      suppressRefetchRef.current = false;
-    }
-
-    // Refetch if on same session and files were cleared (not deleted)
-    if (
-      filesWereCleared &&
-      activeSessionId &&
-      !hasActiveDeletions &&
-      !shouldSuppressRefetch
-    ) {
-      fetchExistingAttachmentsInternal(activeSessionId, false);
-    }
-  }, [
-    currentMessageFiles.length,
-    activeSessionId,
-    fetchExistingAttachmentsInternal,
-  ]);
 
   // =========================================================================
   // Public API
@@ -615,28 +517,49 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    */
   const resetActiveScope = useCallback(
     (sessionId: string | null, preserveFiles: boolean) => {
-      const nextScope: AttachmentScope = { sessionId };
+      const nextScope = createAttachmentScope(sessionId);
       activeScopeRef.current = nextScope;
-      dismissedAttachmentScopeRef.current = null;
-      fetchingSessionRef.current = null;
-      isUploadingPendingRef.current = false;
       if (!preserveFiles) {
-        currentMessageFilesRef.current = [];
         setCurrentMessageFiles([]);
       }
-      suppressRefetchRef.current = false;
       setActiveScope(nextScope);
+      if (sessionId)
+        queueMicrotask(() => {
+          if (activeScopeRef.current !== nextScope) return;
+          void fetchExistingAttachmentsInternal(sessionId, true);
+          void uploadPendingFilesInternal(sessionId);
+        });
     },
-    []
+    [
+      fetchExistingAttachmentsInternal,
+      uploadPendingFilesInternal,
+      setCurrentMessageFiles,
+    ]
   );
 
   const setActiveSession = useCallback(
-    (sessionId: string | null) => {
+    (sessionId: string | null, options?: { preserveDraft: boolean }) => {
       const previous: AttachmentScope = activeScopeRef.current;
       if (previous.sessionId === sessionId) return;
-      resetActiveScope(sessionId, previous.sessionId === null);
+      if (options?.preserveDraft) {
+        setCurrentMessageFiles((files) =>
+          files
+            .filter((file) => file.sourceFile)
+            .map((file) => ({
+              ...file,
+              file: file.sourceFile,
+              path: undefined,
+              error: undefined,
+              status: UploadFileStatus.PENDING,
+            }))
+        );
+      }
+      resetActiveScope(
+        sessionId,
+        !!options?.preserveDraft || previous.sessionId === null
+      );
     },
-    [resetActiveScope]
+    [resetActiveScope, setCurrentMessageFiles]
   );
 
   const endSessionVisit = useCallback(
@@ -653,7 +576,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       const scope: AttachmentScope = activeScopeRef.current;
       if (scope !== activeScope) return [];
       // Get current files for batch validation
-      const existingFiles = currentMessageFiles;
+      const existingFiles = currentMessageFilesRef.current;
 
       // Validate batch constraints first
       const batchValidation = validateBatch(files, existingFiles, t);
@@ -701,7 +624,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         await uploadAttachedFiles(sessionId, optimisticFiles);
         if (activeScopeRef.current !== scope) return [];
       } else {
-        // No session yet - mark as PENDING (effect will auto-upload when session available)
+        // No session yet; session activation starts pending uploads.
         setCurrentMessageFiles((prev) =>
           prev.map((f) =>
             optimisticFiles.some((of) => of.id === f.id)
@@ -713,7 +636,13 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
       return [...failedFiles, ...optimisticFiles];
     },
-    [activeScope, activeSessionId, currentMessageFiles, uploadAttachedFiles, t]
+    [
+      activeScope,
+      activeSessionId,
+      uploadAttachedFiles,
+      t,
+      setCurrentMessageFiles,
+    ]
   );
 
   const removeFile = useCallback(
@@ -727,14 +656,12 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       const deletionKey: string = `${activeSessionId}:${removedFile.path}`;
       if (activeDeletionsRef.current.has(deletionKey)) return;
 
-      // Removal must not trigger the refetch used after sending a message.
-      suppressRefetchRef.current = true;
       setCurrentMessageFiles((files) =>
         files.filter((file) => file.id !== fileId)
       );
       if (!removedFile.path || !activeSessionId) return;
 
-      const deletionClearRevision: number = attachmentClearRevisionRef.current;
+      const deletionClearRevision = scope.clearRevision;
       activeDeletionsRef.current.add(deletionKey);
       deleteFileApi(activeSessionId, removedFile.path)
         .then(() => {
@@ -746,9 +673,9 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         .catch((error) => {
           activeDeletionsRef.current.delete(deletionKey);
           if (
-            dismissedAttachmentScopeRef.current === activeScopeRef.current &&
+            activeScopeRef.current.dismissed &&
             (activeScopeRef.current !== scope ||
-              attachmentClearRevisionRef.current !== deletionClearRevision)
+              scope.clearRevision !== deletionClearRevision)
           )
             return;
           if (activeScopeRef.current !== scope) {
@@ -777,6 +704,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       activeSessionId,
       triggerFilesRefresh,
       fetchExistingAttachmentsInternal,
+      setCurrentMessageFiles,
     ]
   );
 
@@ -787,13 +715,20 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     (options?: { suppressRefetch?: boolean }) => {
       if (activeScopeRef.current !== activeScope) return;
       if (options?.suppressRefetch) {
-        suppressRefetchRef.current = true;
-        dismissedAttachmentScopeRef.current = activeScope;
-        attachmentClearRevisionRef.current += 1;
+        activeScope.dismissed = true;
+        activeScope.clearRevision += 1;
       }
+      const hadFiles = currentMessageFilesRef.current.length > 0;
       setCurrentMessageFiles([]);
+      if (hadFiles && activeSessionId && !options?.suppressRefetch)
+        void fetchExistingAttachmentsInternal(activeSessionId, false);
     },
-    [activeScope]
+    [
+      activeScope,
+      activeSessionId,
+      fetchExistingAttachmentsInternal,
+      setCurrentMessageFiles,
+    ]
   );
 
   // =========================================================================
@@ -803,6 +738,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   const value = useMemo<UploadFilesContextValue>(
     () => ({
       currentMessageFiles,
+      getCurrentMessageFiles,
       activeSessionId,
       setActiveSession,
       endSessionVisit,
@@ -814,6 +750,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     }),
     [
       currentMessageFiles,
+      getCurrentMessageFiles,
       activeSessionId,
       setActiveSession,
       endSessionVisit,
