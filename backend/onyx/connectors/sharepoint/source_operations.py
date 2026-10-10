@@ -305,7 +305,10 @@ class SharepointSourceOperations(SourceOperations):
         )
 
     @source_operation(
-        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        capabilities={
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
         consumes=OperationConsumes.CREDENTIAL,
     )
     def get_auth_method(self) -> MicrosoftAuthMethod:
@@ -547,7 +550,10 @@ class SharepointSourceOperations(SourceOperations):
         )
 
     @source_operation(
-        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        capabilities={
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_role_assignments(
@@ -562,7 +568,10 @@ class SharepointSourceOperations(SourceOperations):
         )
 
     @source_operation(
-        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        capabilities={
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_site_group_users(
@@ -602,7 +611,10 @@ class SharepointSourceOperations(SourceOperations):
         return self._reads().list_sharing_link_scopes(item=item, max_rows=max_rows)
 
     @source_operation(
-        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        capabilities={
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
         consumes=OperationConsumes.CREDENTIAL,
     )
     def find_entra_group_id(self, *, display_name: str) -> str | None:
@@ -611,7 +623,10 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested="The group-sync checks land in the next PR of the stack.",
+        untested=(
+            "Reads every member of a group. The group members check reads one "
+            "page through list_entra_group_member_page under the same grant."
+        ),
     )
     def list_entra_group_members(self, *, group_id: str) -> list[EntraMember]:
         return self._reads().list_entra_group_members(group_id=group_id)
@@ -630,7 +645,6 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested="The group-sync checks land in the next PR of the stack.",
     )
     def list_entra_groups(
         self, *, next_link: str | None = None, page_size: int = ENTRA_PAGE_SIZE
@@ -649,7 +663,6 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested="The group-sync checks land in the next PR of the stack.",
     )
     def list_entra_group_member_page(
         self, *, group_id: str, next_link: str | None = None

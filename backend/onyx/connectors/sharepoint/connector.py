@@ -779,38 +779,6 @@ class SharepointConnector(
         )
         validate_site_url(site_url, self.sharepoint_domain_suffix, tenant_domain)
 
-    def probe_group_members_permission(self) -> None:
-        """Verify the Azure AD app can enumerate Azure AD group members via Graph.
-
-        Required for permission sync, which expands Azure AD groups attached to
-        SharePoint role assignments via `GET /v1.0/groups/{id}/members`. Tested
-        via `GET /v1.0/groups?$top=1`, which requires the same permission set
-        (GroupMember.Read.All / Group.Read.All / Directory.Read.All) so a 403
-        here reliably predicts a 403 on the members call. Only runs when
-        credentials have been loaded.
-        """
-        if self._ops is None:
-            return
-        try:
-            self.ops.list_entra_groups(page_size=1)
-        except MicrosoftGraphError as error:
-            if error.status in (401, 403):
-                raise ConnectorValidationError(
-                    "The Azure AD app registration is missing the required Microsoft Graph "
-                    "permission to enumerate Azure AD group members. Please grant "
-                    "'GroupMember.Read.All' (application permission) in the Azure portal "
-                    "and re-run admin consent."
-                ) from error
-            logger.warning(
-                "Group members permission probe failed (non-blocking): %s", error
-            )
-        except ConnectorValidationError:
-            raise
-        except Exception as e:
-            logger.warning(
-                "Group members permission probe failed (non-blocking): %s", e
-            )
-
     @property
     def ops(self) -> SharepointSourceOperations:
         if self._ops is None:

@@ -26,6 +26,7 @@ from onyx.connectors.onedrive.capability_checks import (
 from onyx.connectors.onedrive.connector import OneDriveConnector
 from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_doc_permission_sync_checks,
+    build_sharepoint_group_sync_checks,
 )
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.zoom.connector import ZoomConnector
@@ -72,9 +73,9 @@ def validate_box_perm_sync(connector: BoxConnector) -> None:
 
 
 def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
-    """Runs the named document-sync checks the way the runner does, so a
-    check whose setting is off stays skipped, and the Graph group probe. A
-    failed or inconclusive required check raises, the way the probes do."""
+    """Runs the named checks the way the runner does, so a check whose
+    setting is off stays skipped. A failed or inconclusive required check
+    raises, the way the old probes did."""
     context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.SHAREPOINT,
         credential_json={},
@@ -92,7 +93,10 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
         },
         source_operations=connector.ops,
     )
-    checks: list[CapabilityCheck] = build_sharepoint_doc_permission_sync_checks()
+    checks: list[CapabilityCheck] = (
+        build_sharepoint_doc_permission_sync_checks()
+        + build_sharepoint_group_sync_checks()
+    )
     results: list[CapabilityCheckResult] = run_capability_checks(checks, context)
     for result in results:
         if not result.required:
@@ -101,7 +105,6 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
             raise ConnectorValidationError(result.message)
         if result.status is CapabilityCheckStatus.INDETERMINATE:
             raise UnexpectedValidationError(result.message)
-    connector.probe_group_members_permission()
 
 
 def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:

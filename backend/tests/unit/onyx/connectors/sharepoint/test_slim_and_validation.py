@@ -1,15 +1,10 @@
-"""Unit tests for SharepointConnector site-page slim resilience and the
-perm-sync Graph group-members probe."""
+"""Unit tests for SharepointConnector site-page slim resilience."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
-from onyx.connectors.microsoft_utils.entra import EntraGroup, EntraPage
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.models import ExternalAccess, SlimDocument
 from onyx.connectors.sharepoint.connector import (
@@ -23,7 +18,6 @@ from onyx.connectors.sharepoint.connector_utils import SharepointPermissionCache
 from tests.unit.onyx.connectors.sharepoint.sharepoint_gateway_fakes import (
     connector_with_gateway,
     fake_gateway,
-    stub_operation,
 )
 
 SITE_URL = "https://tenant.sharepoint.com/sites/MySite"
@@ -328,34 +322,3 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     assert any(d.id == "page-1" for d in results)
     for doc in results:
         assert doc.external_access == ExternalAccess.empty()
-
-
-# ---------------------------------------------------------------------------
-# probe_group_members_permission — perm-sync Graph group-members probe
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("status_code", [401, 403])
-def test_probe_group_members_raises_on_401_or_403(status_code: int) -> None:
-    """probe raises ConnectorValidationError naming GroupMember.Read.All when Graph rejects."""
-    connector = _make_connector()
-
-    def list_entra_groups(**_kwargs: object) -> EntraPage[EntraGroup]:
-        raise MicrosoftGraphError(status_code, "accessDenied", "x")
-
-    stub_operation(connector.ops, "list_entra_groups", list_entra_groups)
-
-    with pytest.raises(ConnectorValidationError, match="GroupMember.Read.All"):
-        connector.probe_group_members_permission()
-
-
-def test_probe_group_members_passes_on_200() -> None:
-    """A listing that Graph answers means the app has the required permission."""
-    connector = _make_connector()
-
-    def list_entra_groups(**_kwargs: object) -> EntraPage[EntraGroup]:
-        return EntraPage(items=[])
-
-    stub_operation(connector.ops, "list_entra_groups", list_entra_groups)
-
-    connector.probe_group_members_permission()  # should not raise
