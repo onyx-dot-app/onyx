@@ -37,6 +37,7 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
 )
 from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_doc_permission_sync_checks,
+    build_sharepoint_group_sync_checks,
 )
 from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
 from onyx.connectors.sharepoint.source_operations import SharepointSourceOperations
@@ -60,12 +61,18 @@ ITEM_JSON: dict[str, Any] = {
     "file": {"mimeType": "application/pdf"},
     "parentReference": {"driveId": "drive-id", "path": "/drives/d/root:/Plans"},
 }
-# The Graph expansion the nested-groups check makes on the group it found.
+# The Graph expansion each capability's check makes on the group it found.
 _EXPANSIONS: list[tuple[str, Callable[[MagicMock], MagicMock]]] = [
     ("sharepoint_entra_nested_groups_read", lambda g: g.list_nested_entra_groups),
+    ("sharepoint_entra_group_members_read", lambda g: g.list_entra_group_member_page),
 ]
+# The group members check falls back to a listed group, so the "nothing to
+# expand" cases hold for the nested-groups check alone.
+_NESTED_ONLY: list[tuple[str, Callable[[MagicMock], MagicMock]]] = _EXPANSIONS[:1]
 _CHECKS_BY_ID = {
-    check.check_id: check for check in build_sharepoint_doc_permission_sync_checks()
+    check.check_id: check
+    for check in build_sharepoint_doc_permission_sync_checks()
+    + build_sharepoint_group_sync_checks()
 }
 
 
@@ -171,33 +178,55 @@ def _securable_kinds(gateway: MagicMock) -> list[SharepointSecurableKind]:
 def test_every_check_passes_on_a_healthy_tenant() -> None:
     results = run_capability_checks(
         get_perm_sync_capability_checks(DocumentSource.SHAREPOINT),
-        _context(_gateway(), _config()),
+        _context(_gateway(), _config(exhaustive_ad_enumeration=True)),
     )
 
-    # Group sync keeps the legacy probe, which needs a connector instance.
-    expected: dict[tuple[str, CredentialCapability], CapabilityCheckStatus] = {
-        ("sharepoint_group_members_probe", CredentialCapability.EXTERNAL_GROUP_SYNC): (
-            CapabilityCheckStatus.SKIPPED
-        )
-    }
-    expected.update(
-        {
-            (check_id, CredentialCapability.DOC_PERMISSION_SYNC): (
-                CapabilityCheckStatus.PASSED
-            )
-            for check_id in (
-                "sharepoint_certificate_auth",
-                "sharepoint_site_permissions_read",
-                "sharepoint_site_group_members_read",
-                "sharepoint_entra_nested_groups_read",
-                "sharepoint_document_permissions_read",
-                "sharepoint_page_permissions_read",
-            )
-        }
-    )
     assert {
         (result.check_id, result.capability): result.status for result in results
-    } == expected
+    } == {
+        ("sharepoint_certificate_auth", CredentialCapability.DOC_PERMISSION_SYNC): (
+            CapabilityCheckStatus.PASSED
+        ),
+        ("sharepoint_certificate_auth", CredentialCapability.EXTERNAL_GROUP_SYNC): (
+            CapabilityCheckStatus.PASSED
+        ),
+        (
+            "sharepoint_site_permissions_read",
+            CredentialCapability.DOC_PERMISSION_SYNC,
+        ): CapabilityCheckStatus.PASSED,
+        (
+            "sharepoint_site_permissions_read",
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ): CapabilityCheckStatus.PASSED,
+        (
+            "sharepoint_site_group_members_read",
+            CredentialCapability.DOC_PERMISSION_SYNC,
+        ): CapabilityCheckStatus.PASSED,
+        (
+            "sharepoint_site_group_members_read",
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ): CapabilityCheckStatus.PASSED,
+        (
+            "sharepoint_entra_nested_groups_read",
+            CredentialCapability.DOC_PERMISSION_SYNC,
+        ): CapabilityCheckStatus.PASSED,
+        (
+            "sharepoint_document_permissions_read",
+            CredentialCapability.DOC_PERMISSION_SYNC,
+        ): CapabilityCheckStatus.PASSED,
+        (
+            "sharepoint_page_permissions_read",
+            CredentialCapability.DOC_PERMISSION_SYNC,
+        ): CapabilityCheckStatus.PASSED,
+        (
+            "sharepoint_entra_group_members_read",
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ): CapabilityCheckStatus.PASSED,
+        (
+            "sharepoint_entra_group_enumeration",
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ): CapabilityCheckStatus.PASSED,
+    }
 
 
 def test_every_check_waits_for_a_config() -> None:
@@ -312,7 +341,7 @@ def test_refused_site_group_members_name_the_rest_grant() -> None:
         _run("sharepoint_site_group_members_read", _context(gateway, _config()))
 
 
-# sharepoint_entra_nested_groups_read
+# sharepoint_entra_nested_groups_read and sharepoint_entra_group_members_read
 
 
 @pytest.mark.parametrize(("check_id", "expansion"), _EXPANSIONS)
@@ -323,11 +352,15 @@ def test_entra_group_is_resolved_from_its_claims_login(
 
     _run(check_id, _context(gateway, _config()))
 
-    expansion(gateway).assert_called_once_with(group_id=GROUP_ID, max_rows=50)
+    expansion(gateway).assert_called_once()
+    assert expansion(gateway).call_args.kwargs["group_id"] == GROUP_ID
     gateway.find_entra_group_id.assert_not_called()
 
 
-@pytest.mark.parametrize("check_id", ["sharepoint_entra_nested_groups_read"])
+@pytest.mark.parametrize(
+    "check_id",
+    ["sharepoint_entra_nested_groups_read", "sharepoint_entra_group_members_read"],
+)
 def test_entra_group_named_by_title_is_looked_up(check_id: str) -> None:
     gateway = _gateway()
     gateway.list_role_assignments.return_value = [
@@ -339,7 +372,10 @@ def test_entra_group_named_by_title_is_looked_up(check_id: str) -> None:
     gateway.find_entra_group_id.assert_called_once_with(display_name="Engineering")
 
 
-@pytest.mark.parametrize("check_id", ["sharepoint_entra_nested_groups_read"])
+@pytest.mark.parametrize(
+    "check_id",
+    ["sharepoint_entra_nested_groups_read", "sharepoint_entra_group_members_read"],
+)
 def test_refused_entra_group_lookup_names_the_graph_grant(check_id: str) -> None:
     gateway = _gateway()
     gateway.list_role_assignments.return_value = [
@@ -351,7 +387,7 @@ def test_refused_entra_group_lookup_names_the_graph_grant(check_id: str) -> None
         _run(check_id, _context(gateway, _config()))
 
 
-@pytest.mark.parametrize(("check_id", "expansion"), _EXPANSIONS)
+@pytest.mark.parametrize(("check_id", "expansion"), _NESTED_ONLY)
 def test_a_group_entra_no_longer_knows_by_name_is_skipped(
     check_id: str, expansion: Callable[[MagicMock], MagicMock]
 ) -> None:
@@ -367,7 +403,7 @@ def test_a_group_entra_no_longer_knows_by_name_is_skipped(
     expansion(gateway).assert_not_called()
 
 
-@pytest.mark.parametrize(("check_id", "expansion"), _EXPANSIONS)
+@pytest.mark.parametrize(("check_id", "expansion"), _NESTED_ONLY)
 def test_public_and_limited_entra_groups_are_not_expanded(
     check_id: str, expansion: Callable[[MagicMock], MagicMock]
 ) -> None:
@@ -427,19 +463,76 @@ def test_entra_group_inside_a_site_group_is_found(
     gateway.list_site_group_users.assert_called_once_with(
         site_url=SITE_URL, group_name="Eng Members", max_rows=50
     )
-    expansion(gateway).assert_called_once_with(group_id=GROUP_ID, max_rows=50)
+    expansion(gateway).assert_called_once()
+    assert expansion(gateway).call_args.kwargs["group_id"] == GROUP_ID
 
 
-@pytest.mark.parametrize(("check_id", "expansion"), _EXPANSIONS)
-def test_no_entra_group_anywhere_passes_without_a_graph_read(
-    check_id: str, expansion: Callable[[MagicMock], MagicMock]
-) -> None:
+def test_no_entra_group_anywhere_passes_the_nested_check_without_a_read() -> None:
+    """Document sync expands only the groups its sites name."""
     gateway = _gateway()
     gateway.list_role_assignments.return_value = [SITE_GROUP]
 
-    _run(check_id, _context(gateway, _config()))
+    _run("sharepoint_entra_nested_groups_read", _context(gateway, _config()))
 
-    expansion(gateway).assert_not_called()
+    gateway.list_nested_entra_groups.assert_not_called()
+    gateway.list_entra_groups.assert_not_called()
+
+
+def test_group_members_fall_back_to_a_listed_group() -> None:
+    """A later site may name an Entra group, so the grant is proven on any
+    group when the probe sites name none."""
+    gateway = _gateway()
+    gateway.list_role_assignments.return_value = [SITE_GROUP]
+
+    _run("sharepoint_entra_group_members_read", _context(gateway, _config()))
+
+    gateway.list_entra_groups.assert_called_once_with(page_size=1)
+    gateway.list_entra_group_member_page.assert_called_once_with(group_id=GROUP_ID)
+
+
+def test_group_members_pass_when_the_tenant_lists_no_group() -> None:
+    gateway = _gateway()
+    gateway.list_role_assignments.return_value = [SITE_GROUP]
+    gateway.list_entra_groups.return_value = EntraPage(items=[])
+
+    _run("sharepoint_entra_group_members_read", _context(gateway, _config()))
+
+    gateway.list_entra_group_member_page.assert_not_called()
+
+
+def test_refused_group_listing_in_the_fallback_names_the_graph_grant() -> None:
+    gateway = _gateway()
+    gateway.list_role_assignments.return_value = [SITE_GROUP]
+    gateway.list_entra_groups.side_effect = _refusal(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="GroupMember.Read.All"):
+        _run("sharepoint_entra_group_members_read", _context(gateway, _config()))
+
+
+def test_enumeration_reads_one_group_page_and_its_members() -> None:
+    gateway = _gateway()
+
+    _run("sharepoint_entra_group_enumeration", _context(gateway, _config()))
+
+    gateway.list_entra_groups.assert_called_once_with(page_size=1)
+    gateway.list_entra_group_member_page.assert_called_once_with(group_id=GROUP_ID)
+
+
+def test_enumeration_is_skipped_unless_exhaustive() -> None:
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["sharepoint_entra_group_enumeration"]],
+        _context(_gateway(), _config()),
+    )
+
+    assert result.status is CapabilityCheckStatus.SKIPPED
+
+
+def test_refused_enumeration_names_the_graph_grant() -> None:
+    gateway = _gateway()
+    gateway.list_entra_groups.side_effect = _refusal(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="GroupMember.Read.All"):
+        _run("sharepoint_entra_group_enumeration", _context(gateway, _config()))
 
 
 # sharepoint_document_permissions_read

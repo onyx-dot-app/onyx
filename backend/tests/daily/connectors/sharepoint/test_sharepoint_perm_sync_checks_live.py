@@ -30,7 +30,10 @@ pytestmark = pytest.mark.secrets(
     TestSecret.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD,
     TestSecret.PERM_SYNC_SHAREPOINT_DIRECTORY_ID,
 )
-_CAPABILITIES = {CredentialCapability.DOC_PERMISSION_SYNC}
+_CAPABILITIES = {
+    CredentialCapability.DOC_PERMISSION_SYNC,
+    CredentialCapability.EXTERNAL_GROUP_SYNC,
+}
 
 
 def _certificate_credentials(test_secrets: dict[TestSecret, str]) -> dict[str, Any]:

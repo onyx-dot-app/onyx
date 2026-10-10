@@ -1,7 +1,7 @@
 """Capability checks for the SharePoint connector.
 
-The indexing checks register in ``registry.py``, the document permission-sync
-checks in the EE registry. Each check makes small probes (one page, one item, one group)
+The indexing checks register in ``registry.py``, the permission-sync checks in
+the EE registry. Each check makes small probes (one page, one item, one group)
 with the gateway operations the connector calls, on probe sites: the first few
 configured sites, else the first few Graph lists.
 
@@ -33,6 +33,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     build_item_relative_path,
     is_path_excluded,
 )
+from onyx.connectors.microsoft_utils.entra import EntraGroup, EntraPage
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_env import (
     MicrosoftGraphEnvironment,
@@ -60,7 +61,6 @@ from onyx.connectors.sharepoint.config import SharepointConnectorConfig
 from onyx.connectors.sharepoint.connector import (
     ONEDRIVE_HOST_MARKER,
     PERSONAL_SITE_URL_MARKER,
-    SharepointConnector,
     SiteDescriptor,
     SiteDrive,
     build_folder_server_relative_path,
@@ -763,9 +763,9 @@ class _CertificateAuthCheck(_SharepointCheck):
     """SharePoint REST accepts an app-only token only from a certificate, so
     no grant makes a client-secret credential sync permissions."""
 
-    def __init__(self) -> None:
+    def __init__(self, capability: CredentialCapability) -> None:
         super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            capability=capability,
             check_id="sharepoint_certificate_auth",
             display_name="Credential can reach SharePoint REST",
             remediation=_CERTIFICATE_REMEDIATION,
@@ -786,9 +786,9 @@ class _CertificateAuthCheck(_SharepointCheck):
 
 
 class _SitePermissionsCheck(_SharepointCheck):
-    def __init__(self) -> None:
+    def __init__(self, capability: CredentialCapability) -> None:
         super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            capability=capability,
             check_id="sharepoint_site_permissions_read",
             display_name="Site permissions are readable",
             remediation=_REST_REMEDIATION,
@@ -804,9 +804,9 @@ class _SiteGroupMembersCheck(_SharepointCheck):
     """The members of a SharePoint group a probe site names, the REST read
     that expands site groups. A site naming none has nothing to expand."""
 
-    def __init__(self) -> None:
+    def __init__(self, capability: CredentialCapability) -> None:
         super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            capability=capability,
             check_id="sharepoint_site_group_members_read",
             display_name="Site group members are readable",
             remediation=_REST_REMEDIATION,
@@ -872,27 +872,95 @@ class _EntraNestedGroupsCheck(_SharepointCheck):
             return
 
 
-class _GroupMembersProbeCheck(CapabilityCheck):
-    """The connector's Graph group probe as a named check, until the group-sync
-    checks replace it: it keeps the group-sync fallback from re-running the
-    document checks."""
+class _EntraGroupMembersCheck(_SharepointCheck):
+    """One page of the members of an Entra group a probe site names, under
+    the grant group sync expands groups with. One page proves the grant
+    without walking a large group. When no probe site names an Entra group,
+    one listed group stands in, since a later site may name one."""
 
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="sharepoint_group_members_probe",
-            display_name="Entra groups are readable",
-            requires_connector_config=True,
+            check_id="sharepoint_entra_group_members_read",
+            display_name="Entra group members are readable",
             remediation=_GROUPS_REMEDIATION,
-            docs_link=_DOCS_LINK,
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        if not isinstance(context.connector, SharepointConnector):
-            raise TypeError(
-                "The SharePoint group probe needs the SharePoint connector."
+        gateway: SharepointSourceOperations = _gateway(context)
+        for site in _perm_probe_sites(context):
+            group_id: str | None = _entra_group_id(
+                gateway, site, _site_assignments(gateway, site)
             )
-        context.connector.probe_group_members_permission()
+            if group_id is None:
+                continue
+            if self._read_member_page(gateway, group_id):
+                return
+        fallback: EntraGroup | None = _first_listed_group(gateway)
+        if fallback is not None:
+            self._read_member_page(gateway, fallback.id)
+
+    def _read_member_page(
+        self, gateway: SharepointSourceOperations, group_id: str
+    ) -> bool:
+        """False for a group Entra no longer has, which the sync skips."""
+        try:
+            gateway.list_entra_group_member_page(group_id=group_id)
+        except MicrosoftGraphError as error:
+            if error.status == 404:
+                return False
+            raise_for_graph_error(
+                error,
+                f"The app cannot read the members of Entra group {group_id}.",
+                remediation=_GROUPS_REMEDIATION,
+            )
+        return True
+
+
+def _first_listed_group(gateway: SharepointSourceOperations) -> EntraGroup | None:
+    """The first named group of the tenant-wide listing, under the group
+    listing grant."""
+    try:
+        page: EntraPage[EntraGroup] = gateway.list_entra_groups(page_size=1)
+    except MicrosoftGraphError as error:
+        raise_for_graph_error(
+            error,
+            "The app cannot list the tenant's Entra groups.",
+            remediation=_GROUPS_REMEDIATION,
+        )
+    return next(
+        (group for group in page.items if group.id and group.display_name), None
+    )
+
+
+class _EntraGroupEnumerationCheck(_SharepointCheck):
+    """The tenant-wide group listing and one member page, the reads behind
+    exhaustive Entra enumeration."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="sharepoint_entra_group_enumeration",
+            display_name="Entra groups can be enumerated",
+            remediation=_GROUPS_REMEDIATION,
+        )
+
+    def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
+        return form_state.config.exhaustive_ad_enumeration
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        gateway: SharepointSourceOperations = _gateway(context)
+        group: EntraGroup | None = _first_listed_group(gateway)
+        if group is None:
+            return
+        try:
+            gateway.list_entra_group_member_page(group_id=group.id)
+        except MicrosoftGraphError as error:
+            raise_for_graph_error(
+                error,
+                f"The app cannot read the members of Entra group {group.id}.",
+                remediation=_GROUPS_REMEDIATION,
+            )
 
 
 class _DocumentPermissionsCheck(_SharepointCheck):
@@ -1147,10 +1215,11 @@ def build_sharepoint_indexing_checks() -> list[CapabilityCheck]:
 
 
 def build_sharepoint_doc_permission_sync_checks() -> list[CapabilityCheck]:
+    capability: CredentialCapability = CredentialCapability.DOC_PERMISSION_SYNC
     return [
-        _CertificateAuthCheck(),
-        _SitePermissionsCheck(),
-        _SiteGroupMembersCheck(),
+        _CertificateAuthCheck(capability),
+        _SitePermissionsCheck(capability),
+        _SiteGroupMembersCheck(capability),
         _EntraNestedGroupsCheck(),
         _DocumentPermissionsCheck(),
         _PagePermissionsCheck(),
@@ -1158,4 +1227,11 @@ def build_sharepoint_doc_permission_sync_checks() -> list[CapabilityCheck]:
 
 
 def build_sharepoint_group_sync_checks() -> list[CapabilityCheck]:
-    return [_GroupMembersProbeCheck()]
+    capability: CredentialCapability = CredentialCapability.EXTERNAL_GROUP_SYNC
+    return [
+        _CertificateAuthCheck(capability),
+        _SitePermissionsCheck(capability),
+        _SiteGroupMembersCheck(capability),
+        _EntraGroupMembersCheck(),
+        _EntraGroupEnumerationCheck(),
+    ]
