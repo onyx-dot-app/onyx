@@ -48,3 +48,17 @@ jobs:
             backend/tests/unit/onyx/connectors/test_source_operation_coverage.py \
             backend/tests/unit/onyx/connectors/test_source_operation_import_fence.py \
             backend/tests/unit/onyx/connectors/test_source_operations.py
+      - name: Lint and format changed Python files
+        run: |
+          files=(
+            backend/onyx/connectors/jira/connector.py
+            backend/onyx/connectors/jira/source_operations.py
+            backend/onyx/connectors/jira/capability_checks.py
+            backend/onyx/connectors/jira_service_management
+            backend/tests/unit/onyx/connectors/jira/test_jira_source_operations.py
+            backend/tests/unit/onyx/connectors/jira/test_jira_capability_checks.py
+            backend/tests/unit/onyx/connectors/jira_service_management
+            backend/tests/unit/onyx/connectors/test_source_operation_coverage.py
+          )
+          .venv/bin/ruff check "${files[@]}"
+          .venv/bin/ruff format --check "${files[@]}"
