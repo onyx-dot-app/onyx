@@ -336,12 +336,12 @@ class JiraServiceManagementConnector(JiraConnector):
         #    the documents the main pass actually produced. Healthy siblings
         #    are unaffected.
         if ticket_document_id in self._attachment_admission_failures:
-            logger.warning(
-                "Skipping slim admission for %s: attachment listing failed in "
-                "the main pass for this issue",
-                issue.key,
+            # Missing enumeration does not mean "no attachments": returning
+            # an empty slim set would prune previously indexed documents.
+            raise RuntimeError(
+                f"Cannot enumerate JSM attachments for {issue.key}: "
+                "listing failed during the main pass"
             )
-            return []
         failed_ids = self._failed_attachment_doc_ids.get(
             ticket_document_id, set()
         )
@@ -349,15 +349,11 @@ class JiraServiceManagementConnector(JiraConnector):
         try:
             attachments = self._fetch_issue_attachments(issue.key)
         except Exception:
-            # Mirrors the main pass: when listing fails, no attachment IDs
-            # are admitted there either (the whole set is recorded as a
-            # failure), so emitting nothing here keeps the ID sets aligned.
-            # The failure is logged loudly (and recorded for the main pass
-            # set as well) rather than silently treated as "no attachments",
-            # so pruning can never act on an unavailable enumeration.
+            # Do not turn a transient listing failure into an empty slim set:
+            # downstream pruning would delete healthy indexed attachments.
             logger.exception("Failed to list attachment slim docs for %s", issue.key)
             self._attachment_admission_failures.add(ticket_document_id)
-            return []
+            raise
 
         external_access = (
             self._get_project_permissions(project_key)
