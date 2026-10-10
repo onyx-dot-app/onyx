@@ -49,7 +49,10 @@ def discover_jsm_fields(jira_client: JiraSourceOperations | Any) -> JsmFieldMap:
         # may still expose the old SDK fields() method.
         all_fields = (
             jira_client.list_fields()
-            if isinstance(jira_client, JiraSourceOperations)
+            if (
+                isinstance(jira_client, JiraSourceOperations)
+                or hasattr(jira_client, "list_fields")
+            )
             else jira_client.fields()
         )
     except Exception:
