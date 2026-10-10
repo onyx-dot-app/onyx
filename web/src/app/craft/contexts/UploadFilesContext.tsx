@@ -45,10 +45,8 @@ export interface BuildFile {
   file_type: string;
   size: number;
   created_at: string;
-  // Original File object for upload
-  file?: File;
   // Draft source retained until send or visit end, including sandbox replacement.
-  sourceFile?: File;
+  file?: File;
   // Path in sandbox after upload (e.g., "attachments/doc.pdf")
   path?: string;
   // Error message if upload failed
@@ -161,7 +159,6 @@ function createOptimisticFile(file: File): BuildFile {
     size: file.size,
     created_at: new Date().toISOString(),
     file,
-    sourceFile: file,
   };
 }
 
@@ -372,7 +369,6 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
                 status: UploadFileStatus.COMPLETED,
                 path: result.result.path,
                 name: result.result.filename,
-                file: undefined,
               }
             : {
                 ...file,
@@ -544,10 +540,9 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       if (options?.preserveDraft) {
         setCurrentMessageFiles((files) =>
           files
-            .filter((file) => file.sourceFile)
+            .filter((file) => file.file)
             .map((file) => ({
               ...file,
-              file: file.sourceFile,
               path: undefined,
               error: undefined,
               status: UploadFileStatus.PENDING,

@@ -155,7 +155,7 @@ it("uploads pending welcome files once when a session becomes available", async 
   );
   expect(uploadFile).toHaveBeenCalledTimes(1);
   expect(uploadFile).toHaveBeenCalledWith("session-a", file);
-  expect(result.current.currentMessageFiles[0]?.file).toBeUndefined();
+  expect(result.current.currentMessageFiles[0]?.file).toBe(file);
 });
 
 it("rejects upload completion from a previous visit to the session", async () => {
@@ -208,7 +208,7 @@ it("uses the same completion flow for immediate upload success and failure", asy
   expect(result.current.currentMessageFiles.map((file) => file.status)).toEqual(
     [UploadFileStatus.COMPLETED, UploadFileStatus.FAILED]
   );
-  expect(result.current.currentMessageFiles[0]?.file).toBeUndefined();
+  expect(result.current.currentMessageFiles[0]?.file?.name).toBe("ok.txt");
   expect(result.current.currentMessageFiles[1]?.error).toBeTruthy();
 });
 
@@ -649,12 +649,12 @@ it.each([false, true])(
           size_bytes: 5,
         })
       );
-      expect(result.current.currentMessageFiles[0]?.sourceFile).toBe(file);
+      expect(result.current.currentMessageFiles[0]?.file).toBe(file);
     }
     act(() => result.current.setActiveSession(null, { preserveDraft: true }));
     expect(result.current.currentMessageFiles[0]).toMatchObject({
       status: UploadFileStatus.PENDING,
-      sourceFile: file,
+      file,
     });
     expect(result.current.currentMessageFiles[0]?.path).toBeUndefined();
     act(() =>
