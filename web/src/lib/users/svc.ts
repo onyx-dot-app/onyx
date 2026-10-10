@@ -1,4 +1,5 @@
 import { mutate } from "swr";
+import { nameInitials } from "@/lib/nameInitials";
 import { User, UserPersonalization } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { CustomRefreshTokenResponse } from "@/lib/users/types";
@@ -129,29 +130,21 @@ export function getUserEmail(user: User | null): string {
 /**
  * Derive display initials from a user's name or email.
  *
- * - If a name is provided, uses the first letter of the first two words.
+ * - A name resolves per its own script (see nameInitials): two Latin
+ *   initials, or one grapheme for RTL-script and CJK names.
  * - Falls back to the email local part, splitting on `.`, `_`, or `-`.
- * - Returns `null` when no valid alpha initials can be derived.
+ * - Returns `null` when no valid initials can be derived.
  */
 export function getUserInitials(
   name: string | null,
   email: string
 ): string | null {
   if (name) {
-    const words = name.trim().split(/\s+/);
-    if (words.length >= 2) {
-      const first = words[0]?.[0];
-      const second = words[1]?.[0];
-      if (first && second) {
-        const result = (first + second).toUpperCase();
-        if (/^[A-Z]{2}$/.test(result)) return result;
-      }
-      return null;
-    }
-    if (name.trim().length >= 1) {
-      const result = name.trim().slice(0, 2).toUpperCase();
-      if (/^[A-Z]{1,2}$/.test(result)) return result;
-    }
+    const fromName = nameInitials(name, 2);
+    if (fromName) return fromName;
+    // A multi-word name never falls back to email, keeping the previous
+    // contract where a bad second word invalidates the initials.
+    if (name.trim().split(/\s+/).length >= 2) return null;
   }
 
   const local = email.split("@")[0];
