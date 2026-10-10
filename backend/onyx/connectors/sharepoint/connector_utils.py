@@ -1,7 +1,9 @@
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_serializer
 
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermissionReader
 from onyx.connectors.models import ExternalAccess
@@ -92,3 +94,60 @@ def get_sharepoint_hierarchy_node_external_access(
         folder_server_relative_path,
         permission_cache,
     )
+
+
+# OneDrive sites live on '<tenant>-my.<suffix>' instead of '<tenant>.<suffix>'.
+ONEDRIVE_HOST_SUFFIX = "-my"
+
+
+def tenant_domain_from_site_urls(site_urls: list[str]) -> str | None:
+    """The first label of a site hostname, e.g. "contoso" for
+    https://contoso.sharepoint.com/sites/eng. None when no URL parses."""
+    for site_url in site_urls:
+        try:
+            hostname = urlsplit(site_url.strip()).hostname
+        except ValueError:
+            continue
+        if not hostname:
+            continue
+        tenant = hostname.split(".")[0]
+        if tenant:
+            return tenant
+    return None
+
+
+def _expected_site_hostnames(
+    tenant_domain: str, sharepoint_domain_suffix: str
+) -> set[str]:
+    """The hosts the REST token is valid for. OneDrive lives on the ``-my``
+    sibling of the tenant host, so both forms of the tenant label are
+    accepted."""
+    tenant = tenant_domain.lower().removesuffix(ONEDRIVE_HOST_SUFFIX)
+    suffix = sharepoint_domain_suffix.lower()
+    return {f"{tenant}.{suffix}", f"{tenant}{ONEDRIVE_HOST_SUFFIX}.{suffix}"}
+
+
+def validate_site_url_host(
+    site_url: str, sharepoint_domain_suffix: str, tenant_domain: str | None
+) -> None:
+    """Reject a site URL the REST token must not be sent to.
+
+    The token is minted for one tenant, so a host like
+    'tenant.attacker.example/sites/x' would leak it to the attacker, and
+    another tenant under the same cloud suffix would receive a token it has
+    no claim to. Without a tenant domain only the suffix is checked.
+    """
+    suffix = sharepoint_domain_suffix.lower()
+    hostname = (urlsplit(site_url).hostname or "").lower()
+    if hostname != suffix and not hostname.endswith(f".{suffix}"):
+        raise ConnectorValidationError(
+            f"Site URL '{site_url}' must be on the '{suffix}' domain."
+        )
+    if tenant_domain is None:
+        return
+    expected = _expected_site_hostnames(tenant_domain, sharepoint_domain_suffix)
+    if hostname not in expected:
+        raise ConnectorValidationError(
+            f"Site URL '{site_url}' is not on this tenant's SharePoint host "
+            f"(expected one of: {', '.join(sorted(expected))})."
+        )

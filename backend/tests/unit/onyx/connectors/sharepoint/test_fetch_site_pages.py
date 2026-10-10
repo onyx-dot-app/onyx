@@ -2,27 +2,29 @@
 
 Covers 404 handling (classic sites / no modern pages) and 400
 canvasLayout fallback (corrupt pages causing $expand=canvasLayout to
-fail on the LIST endpoint), plus propagation of `site.execute_query()`
-404s out of `_fetch_site_pages` so the Phase 5 wrap in
-`_load_from_checkpoint` can convert them into a ConnectorFailure instead
+fail on the LIST endpoint), plus propagation of a site lookup that
+raises out of `_fetch_site_pages` so the Phase 5 wrap in
+`_load_from_checkpoint` can convert it into a ConnectorFailure instead
 of crashing the connector run.
 """
-
-from __future__ import annotations
 
 import json
 from typing import Any
 
 import pytest
-from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
-from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
+from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.sharepoint.connector import (
     GRAPH_INVALID_REQUEST_CODE,
     SharepointConnector,
     SiteDescriptor,
+)
+from tests.unit.onyx.connectors.sharepoint.sharepoint_gateway_fakes import (
+    GetJson,
+    connector_with_gateway,
+    stub_operation,
 )
 
 SITE_URL = "https://tenant.sharepoint.com/sites/ClassicSite"
@@ -48,114 +50,64 @@ def _make_http_error(
     return HTTPError(response=response)
 
 
-def _make_client_request_exception(
-    status_code: int,
-    error_code: str = "itemNotFound",
-    message: str = "Requested site could not be found",
-) -> ClientRequestException:
-    body = {"error": {"code": error_code, "message": message}}
-    response = Response()
-    response.status_code = status_code
-    response._content = json.dumps(body).encode()
-    response.headers["Content-Type"] = "application/json"
-    return ClientRequestException(f"{status_code} Client Error", response=response)
-
-
-def _setup_connector(
-    monkeypatch: pytest.MonkeyPatch,  # noqa: ARG001
-) -> SharepointConnector:
-    """Create a connector with the graph client and site resolution mocked."""
+def _setup_connector(fake_get_json: GetJson) -> SharepointConnector:
+    """A connector whose Graph transport answers from ``fake_get_json`` and
+    whose site lookup resolves to ``FAKE_SITE_ID``."""
     connector = SharepointConnector(sites=[SITE_URL])
-    connector.graph_api_base = "https://graph.microsoft.com/v1.0"
-
-    mock_sites = type(
-        "FakeSites",
-        (),
-        {
-            "get_by_url": staticmethod(
-                lambda url: type(  # noqa: ARG005
-                    "Q",
-                    (),
-                    {
-                        "execute_query": lambda self: None,  # noqa: ARG005
-                        "id": FAKE_SITE_ID,
-                    },
-                )()
-            ),
-        },
-    )()
-    connector._graph_client = type(  # ty: ignore[invalid-assignment]
-        "FakeGraphClient", (), {"sites": mock_sites}
-    )()
-
+    gateway = connector_with_gateway(connector, get_json=fake_get_json)
+    stub_operation(
+        gateway,
+        "get_site_id",
+        lambda *, site_url: FAKE_SITE_ID,  # noqa: ARG005
+    )
     return connector
 
 
-def _patch_graph_api_get_json(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_fn: Any,
-) -> None:
-    """Site pages go through the shared Graph client, so intercept it there."""
-    monkeypatch.setattr(GraphApiClient, "get_json", fake_fn)
-
-
 class TestFetchSitePages404:
-    def test_404_yields_no_pages(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_404_yields_no_pages(self) -> None:
         """A 404 from the Pages API should result in zero yielded pages."""
-        connector = _setup_connector(monkeypatch)
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
             url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            params: dict[str, str] | None,  # noqa: ARG001
         ) -> dict[str, Any]:
             raise _make_http_error(404)
 
-        _patch_graph_api_get_json(monkeypatch, fake_get_json)
+        connector = _setup_connector(fake_get_json)
 
         pages = list(connector._fetch_site_pages(_site_descriptor()))
         assert pages == []
 
-    def test_404_does_not_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_404_does_not_raise(self) -> None:
         """A 404 must not propagate as an exception."""
-        connector = _setup_connector(monkeypatch)
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
             url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            params: dict[str, str] | None,  # noqa: ARG001
         ) -> dict[str, Any]:
             raise _make_http_error(404)
 
-        _patch_graph_api_get_json(monkeypatch, fake_get_json)
+        connector = _setup_connector(fake_get_json)
 
         for _ in connector._fetch_site_pages(_site_descriptor()):
             pass
 
-    def test_non_404_http_error_still_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_non_404_http_error_still_raises(self) -> None:
         """Non-404 HTTP errors (e.g. 403) must still propagate."""
-        connector = _setup_connector(monkeypatch)
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
             url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            params: dict[str, str] | None,  # noqa: ARG001
         ) -> dict[str, Any]:
             raise _make_http_error(403)
 
-        _patch_graph_api_get_json(monkeypatch, fake_get_json)
+        connector = _setup_connector(fake_get_json)
 
-        with pytest.raises(HTTPError):
+        with pytest.raises(MicrosoftGraphError):
             list(connector._fetch_site_pages(_site_descriptor()))
 
-    def test_successful_fetch_yields_pages(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_successful_fetch_yields_pages(self) -> None:
         """When the API succeeds, pages should be yielded normally."""
-        connector = _setup_connector(monkeypatch)
-
         fake_page = {
             "id": "page-1",
             "title": "Hello World",
@@ -164,25 +116,20 @@ class TestFetchSitePages404:
         }
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
             url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            params: dict[str, str] | None,  # noqa: ARG001
         ) -> dict[str, Any]:
             return {"value": [fake_page]}
 
-        _patch_graph_api_get_json(monkeypatch, fake_get_json)
+        connector = _setup_connector(fake_get_json)
 
         pages = list(connector._fetch_site_pages(_site_descriptor()))
         assert len(pages) == 1
         assert pages[0]["id"] == "page-1"
 
-    def test_404_on_second_page_stops_pagination(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_404_on_second_page_stops_pagination(self) -> None:
         """If the first API page succeeds but a nextLink returns 404,
         already-yielded pages are kept and iteration stops cleanly."""
-        connector = _setup_connector(monkeypatch)
-
         call_count = 0
         first_page = {
             "id": "page-1",
@@ -192,9 +139,8 @@ class TestFetchSitePages404:
         }
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
             url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            params: dict[str, str] | None,  # noqa: ARG001
         ) -> dict[str, Any]:
             nonlocal call_count
             call_count += 1
@@ -205,7 +151,7 @@ class TestFetchSitePages404:
                 }
             raise _make_http_error(404)
 
-        _patch_graph_api_get_json(monkeypatch, fake_get_json)
+        connector = _setup_connector(fake_get_json)
 
         pages = list(connector._fetch_site_pages(_site_descriptor()))
         assert len(pages) == 1
@@ -234,20 +180,16 @@ class TestFetchSitePages400Fallback:
         "canvasLayout": {"horizontalSections": []},
     }
 
-    def test_fallback_expands_good_pages_individually(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_fallback_expands_good_pages_individually(self) -> None:
         """On 400 from the LIST expand, the connector should list without
         expand, then GET each page individually with $expand=canvasLayout."""
-        connector = _setup_connector(monkeypatch)
         good_page = self.GOOD_PAGE
         bad_page = self.BAD_PAGE
         good_page_expanded = self.GOOD_PAGE_EXPANDED
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
             url: str,
-            params: dict[str, str] | None = None,
+            params: dict[str, str] | None,
         ) -> dict[str, Any]:
             if url == SITE_PAGES_BASE and params == {"$expand": "canvasLayout"}:
                 raise _make_http_error(
@@ -266,7 +208,7 @@ class TestFetchSitePages400Fallback:
                 )
             raise AssertionError(f"Unexpected call: {url} {params}")
 
-        _patch_graph_api_get_json(monkeypatch, fake_get_json)
+        connector = _setup_connector(fake_get_json)
         pages = list(connector._fetch_site_pages(_site_descriptor()))
 
         assert len(pages) == 2
@@ -274,13 +216,10 @@ class TestFetchSitePages400Fallback:
         assert pages[1].get("canvasLayout") is None
         assert pages[1]["id"] == "bad-1"
 
-    def test_mid_pagination_400_does_not_duplicate(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_mid_pagination_400_does_not_duplicate(self) -> None:
         """If the first paginated batch succeeds but a later nextLink
         returns 400, pages from the first batch must not be re-yielded
         by the fallback."""
-        connector = _setup_connector(monkeypatch)
         good_page = self.GOOD_PAGE
         good_page_expanded = self.GOOD_PAGE_EXPANDED
         bad_page = self.BAD_PAGE
@@ -293,9 +232,8 @@ class TestFetchSitePages400Fallback:
         next_link = "https://graph.microsoft.com/v1.0/next-page-link"
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
             url: str,
-            params: dict[str, str] | None = None,
+            params: dict[str, str] | None,
         ) -> dict[str, Any]:
             if url == SITE_PAGES_BASE and params == {"$expand": "canvasLayout"}:
                 return {
@@ -322,35 +260,31 @@ class TestFetchSitePages400Fallback:
                 return {**second_page, "canvasLayout": {"horizontalSections": []}}
             raise AssertionError(f"Unexpected call: {url} {params}")
 
-        _patch_graph_api_get_json(monkeypatch, fake_get_json)
+        connector = _setup_connector(fake_get_json)
         pages = list(connector._fetch_site_pages(_site_descriptor()))
 
         ids = [p["id"] for p in pages]
         assert ids == ["good-1", "bad-1", "page-2"]
 
-    def test_non_invalid_request_400_still_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_non_invalid_request_400_still_raises(self) -> None:
         """A 400 with a different error code (not invalidRequest) should
         propagate, not trigger the fallback."""
-        connector = _setup_connector(monkeypatch)
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
             url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            params: dict[str, str] | None,  # noqa: ARG001
         ) -> dict[str, Any]:
             raise _make_http_error(400, "badRequest", "Something else went wrong")
 
-        _patch_graph_api_get_json(monkeypatch, fake_get_json)
+        connector = _setup_connector(fake_get_json)
 
-        with pytest.raises(HTTPError):
+        with pytest.raises(MicrosoftGraphError):
             list(connector._fetch_site_pages(_site_descriptor()))
 
 
 class TestFetchSitePagesPropagatesSiteLookup404:
-    """When `site.execute_query()` itself raises (the site URL no longer
-    resolves), `_fetch_site_pages` must let the exception propagate so
+    """When the site lookup itself raises (the site URL does not resolve),
+    `_fetch_site_pages` must let the exception propagate so
     the outer Phase 5 wrap can convert it into a ConnectorFailure and
     continue to the next site.
     """
@@ -359,40 +293,25 @@ class TestFetchSitePagesPropagatesSiteLookup404:
         self, status_code: int
     ) -> SharepointConnector:
         connector = SharepointConnector(sites=[SITE_URL])
-        connector.graph_api_base = "https://graph.microsoft.com/v1.0"
+        gateway = connector_with_gateway(connector)
+        error = MicrosoftGraphError(
+            status_code, "itemNotFound", "Requested site could not be found"
+        )
 
-        exc = _make_client_request_exception(status_code)
+        def raising_get_site(*, site_url: str) -> str:  # noqa: ARG001
+            raise error
 
-        def raising_execute_query(self: Any) -> None:  # noqa: ARG001
-            raise exc
-
-        fake_site_query = type(
-            "Q",
-            (),
-            {"execute_query": raising_execute_query, "id": None},
-        )()
-        mock_sites = type(
-            "FakeSites",
-            (),
-            {
-                "get_by_url": staticmethod(
-                    lambda url: fake_site_query  # noqa: ARG005
-                ),
-            },
-        )()
-        connector._graph_client = type(  # ty: ignore[invalid-assignment]
-            "FakeGraphClient", (), {"sites": mock_sites}
-        )()
+        stub_operation(gateway, "get_site_id", raising_get_site)
         return connector
 
     def test_404_propagates_so_outer_handler_can_skip(self) -> None:
         connector = self._setup_connector_with_failing_site_lookup(404)
 
-        with pytest.raises(ClientRequestException):
+        with pytest.raises(MicrosoftGraphError):
             list(connector._fetch_site_pages(_site_descriptor()))
 
     def test_401_propagates(self) -> None:
         connector = self._setup_connector_with_failing_site_lookup(401)
 
-        with pytest.raises(ClientRequestException):
+        with pytest.raises(MicrosoftGraphError):
             list(connector._fetch_site_pages(_site_descriptor()))
