@@ -126,7 +126,10 @@ export default function PptxPreview({
   }
 
   const slideCount = data?.slide_count ?? 0;
-  const activeSlide = Math.min(currentSlide, Math.max(0, slideCount - 1));
+  const activeSlide = Math.max(
+    0,
+    Math.min(currentSlide, Math.max(0, slideCount - 1))
+  );
 
   // Keep the selection in bounds before rendering a replacement deck.
   if (data && currentSlide !== activeSlide) setCurrentSlide(activeSlide);
@@ -355,26 +358,34 @@ interface SlideImageProps {
 
 function SlideImage({ src, alt }: SlideImageProps) {
   const t = useTranslations("craft.pptxPreview");
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<"loading" | "loaded" | "failed">(
+    "loading"
+  );
   return (
     <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden">
-      {loading && (
+      {status === "loading" && (
         <div className="absolute">
           <Text font="secondary-body" color="text-03">
             {t("loadingSlide.label")}
           </Text>
         </div>
       )}
-      <img
-        src={src}
-        alt={alt}
-        className={cn(
-          "max-w-full max-h-full object-contain transition-opacity",
-          loading ? "opacity-0" : "opacity-100"
-        )}
-        onLoad={() => setLoading(false)}
-        onError={() => setLoading(false)}
-      />
+      {status === "failed" ? (
+        <Text font="secondary-body" color="text-03">
+          {t("error.title")}
+        </Text>
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          className={cn(
+            "max-w-full max-h-full object-contain transition-opacity",
+            status === "loading" ? "opacity-0" : "opacity-100"
+          )}
+          onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("failed")}
+        />
+      )}
     </div>
   );
 }

@@ -483,3 +483,22 @@ it("owns loading readiness by slide image URL", async () => {
   fireEvent.load(screen.getByRole("img"));
   expect(screen.getByRole("img")).toHaveClass("opacity-100");
 });
+
+it("shows an image error and clears it when another slide loads", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 2,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg"],
+    cached: true,
+  });
+  render(<PptxPreview sessionId="failed-image" filePath="outputs/deck.pptx" />);
+  fireEvent.error(await screen.findByRole("img"));
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.getByText("Cannot preview presentation")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Slide 2 of 2" }));
+  expect(screen.getByRole("img")).toHaveClass("opacity-0");
+  expect(
+    screen.queryByText("Cannot preview presentation")
+  ).not.toBeInTheDocument();
+  fireEvent.load(screen.getByRole("img"));
+  expect(screen.getByRole("img")).toHaveClass("opacity-100");
+});

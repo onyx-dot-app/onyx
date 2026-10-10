@@ -516,3 +516,5 @@ work against the default Kubernetes backend, follow
   you don't know the constant.
 
 Welcome inline previews offer an original-file download. Presentation slide images own loading state by their URL.
+
+A failed presentation image displays an error. Changing the slide starts a new image load.
