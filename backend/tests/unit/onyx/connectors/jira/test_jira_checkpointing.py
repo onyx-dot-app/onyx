@@ -1,12 +1,10 @@
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from jira import JIRA, JIRAError
-from jira.resources import Issue
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
@@ -16,7 +14,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
-from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
+from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
 from onyx.connectors.models import ConnectorFailure, Document, SlimDocument
 from onyx.utils.logger import setup_logger
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
@@ -24,120 +22,26 @@ from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_con
 logger = setup_logger()
 PAGE_SIZE = 2
 
-
-@pytest.fixture
-def jira_connector(
-    jira_base_url: str, project_key: str, mock_jira_client: MagicMock
-) -> Generator[JiraConnector, None, None]:
-    connector = JiraConnector(
-        jira_base_url=jira_base_url,
-        project_key=project_key,
-        comment_email_blacklist=["blacklist@example.com"],
-        labels_to_skip=["secret", "sensitive"],
-    )
-    connector._jira_client = mock_jira_client
-    connector._jira_client.client_info.return_value = jira_base_url
-    connector._jira_client._options = MagicMock()
-    connector._jira_client._options.return_value = {
-        "rest_api_version": JIRA_SERVER_API_VERSION
-    }
-    with patch("onyx.connectors.jira.connector._JIRA_FULL_PAGE_SIZE", 2):
-        yield connector
-
-
-@pytest.fixture
-def create_mock_issue() -> Callable[..., MagicMock]:
-    def _create_mock_issue(
-        key: str = "TEST-123",
-        summary: str = "Test Issue",
-        updated: str = "2023-01-01T12:00:00.000+0000",
-        created: str = "2023-01-01T12:00:00.000+0000",
-        description: str = "Test Description",
-        labels: list[str] | None = None,
-        project_key: str = "TEST",
-        project_name: str = "Test Project",
-        issuetype_name: str = "Story",
-        parent_key: str | None = None,
-        parent_issuetype_name: str | None = None,
-    ) -> MagicMock:
-        """Helper to create a mock Issue object"""
-        mock_issue = MagicMock(spec=Issue)
-        # Create fields attribute first
-        mock_issue.fields = MagicMock()
-        mock_issue.key = key
-        mock_issue.fields.summary = summary
-        mock_issue.fields.updated = updated
-        mock_issue.fields.created = created
-        mock_issue.fields.description = description
-        mock_issue.fields.labels = labels or []
-
-        # Set up creator and assignee for testing owner extraction
-        mock_issue.fields.reporter = MagicMock()
-        mock_issue.fields.reporter.displayName = "Test Creator"
-        mock_issue.fields.reporter.emailAddress = "creator@example.com"
-
-        mock_issue.fields.assignee = MagicMock()
-        mock_issue.fields.assignee.displayName = "Test Assignee"
-        mock_issue.fields.assignee.emailAddress = "assignee@example.com"
-
-        # Set up priority, status, and resolution
-        mock_issue.fields.priority = MagicMock()
-        mock_issue.fields.priority.name = "High"
-
-        mock_issue.fields.status = MagicMock()
-        mock_issue.fields.status.name = "In Progress"
-
-        mock_issue.fields.resolution = MagicMock()
-        mock_issue.fields.resolution.name = "Fixed"
-
-        # Set up project for hierarchy node generation
-        mock_issue.fields.project = MagicMock()
-        mock_issue.fields.project.key = project_key
-        mock_issue.fields.project.name = project_name
-
-        # Set up issuetype for epic detection
-        mock_issue.fields.issuetype = MagicMock()
-        mock_issue.fields.issuetype.name = issuetype_name
-
-        # Set up parent field for hierarchy
-        if parent_key:
-            mock_issue.fields.parent = MagicMock()
-            mock_issue.fields.parent.key = parent_key
-            mock_issue.fields.parent.fields = MagicMock()
-            mock_issue.fields.parent.fields.issuetype = MagicMock()
-            mock_issue.fields.parent.fields.issuetype.name = (
-                parent_issuetype_name or "Story"
-            )
-            mock_issue.fields.parent.fields.summary = f"Parent {parent_key}"
-        else:
-            mock_issue.fields.parent = None
-
-        # Add raw field for accessing through API version check
-        mock_issue.raw = {"fields": {"description": description}}
-
-        return mock_issue
-
-    return _create_mock_issue
+RawIssueFactory = Callable[..., dict[str, Any]]
 
 
 def test_load_credentials(jira_connector: JiraConnector) -> None:
-    """Test loading credentials"""
-    with patch("onyx.connectors.jira.connector.build_jira_client") as mock_build_client:
-        mock_build_client.return_value = jira_connector._jira_client
-        credentials = {
-            "jira_user_email": "user@example.com",
-            "jira_api_token": "token123",
-        }
+    """Loading credentials builds a gateway bound to the connector's site."""
+    credentials = {
+        "jira_user_email": "user@example.com",
+        "jira_api_token": "token123",
+    }
 
-        result = jira_connector.load_credentials(credentials)
+    result = jira_connector.load_credentials(credentials)
 
-        mock_build_client.assert_called_once_with(
-            credentials=credentials,
-            jira_base=jira_connector.jira_base,
-            scoped_token=False,
-        )
-        assert result is None
-        assert jira_connector._jira_client == mock_build_client.return_value
+    assert result is None
+    gateway = jira_connector.source_operations
+    assert isinstance(gateway, JiraSourceOperations)
+    assert gateway.connector_specific_config == {
+        "jira_base_url": jira_connector.jira_base,
+        "scoped_token": False,
+    }
+    assert gateway.credentials_provider.get_credentials() == credentials
 
 
 def test_get_jql_query_with_project(jira_connector: JiraConnector) -> None:
@@ -152,6 +56,35 @@ def test_get_jql_query_with_project(jira_connector: JiraConnector) -> None:
     assert f"updated <= {int(end * 1000)}" in query
     assert "2023-01-01 00:00" not in query
     assert " AND " in query
+
+
+@pytest.mark.parametrize(
+    "project_key,jql_query,expected_scope",
+    [
+        ("   ", None, None),
+        (" AS ", None, 'project = "AS"'),
+        ("AS", "  ", 'project = "AS"'),
+        (None, " project = X ", "(project = X)"),
+    ],
+    ids=["blank-key", "padded-key", "blank-jql", "padded-jql"],
+)
+def test_blank_scope_fields_are_not_set(
+    jira_base_url: str,
+    project_key: str | None,
+    jql_query: str | None,
+    expected_scope: str | None,
+) -> None:
+    """The create form sends blank fields; the connector strips them."""
+    connector = JiraConnector(
+        jira_base_url=jira_base_url, project_key=project_key, jql_query=jql_query
+    )
+
+    query: str = connector._get_jql_query(0, 1)
+
+    if expected_scope is None:
+        assert query.startswith("updated >=")
+    else:
+        assert query.startswith(f"{expected_scope} AND updated >=")
 
 
 def test_get_jql_query_without_project(jira_base_url: str) -> None:
@@ -170,7 +103,9 @@ def test_get_jql_query_without_project(jira_base_url: str) -> None:
 
 
 def test_load_from_checkpoint_happy_path(
-    jira_connector: JiraConnector, create_mock_issue: Callable[..., MagicMock]
+    jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
+    create_mock_issue: RawIssueFactory,
 ) -> None:
     """Test loading from checkpoint - happy path"""
     # Set up mocked issues
@@ -179,8 +114,7 @@ def test_load_from_checkpoint_happy_path(
     mock_issue3 = create_mock_issue(key="TEST-3", summary="Issue 3")
 
     # Only mock the search_issues method
-    jira_client = cast(JIRA, jira_connector._jira_client)
-    search_issues_mock = cast(MagicMock, jira_client.search_issues)
+    search_issues_mock = mock_source_operations.search_issues
     search_issues_mock.side_effect = [
         [mock_issue1, mock_issue2],
         [mock_issue3],
@@ -222,16 +156,18 @@ def test_load_from_checkpoint_happy_path(
     # Check that search_issues was called with the right parameters
     assert search_issues_mock.call_count == 2
     args, kwargs = search_issues_mock.call_args_list[0]
-    assert kwargs["startAt"] == 0
-    assert kwargs["maxResults"] == PAGE_SIZE
+    assert kwargs["start_at"] == 0
+    assert kwargs["max_results"] == PAGE_SIZE
 
     args, kwargs = search_issues_mock.call_args_list[1]
-    assert kwargs["startAt"] == 2
-    assert kwargs["maxResults"] == PAGE_SIZE
+    assert kwargs["start_at"] == 2
+    assert kwargs["max_results"] == PAGE_SIZE
 
 
 def test_load_from_checkpoint_with_issue_processing_error(
-    jira_connector: JiraConnector, create_mock_issue: Callable[..., MagicMock]
+    jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
+    create_mock_issue: RawIssueFactory,
 ) -> None:
     """Test loading from checkpoint with a mix of successful and failed issue processing across multiple batches"""
     # Set up mocked issues for first batch
@@ -242,8 +178,7 @@ def test_load_from_checkpoint_with_issue_processing_error(
     mock_issue4 = create_mock_issue(key="TEST-4", summary="Issue 4")
 
     # Mock search_issues to return our mock issues in batches
-    jira_client = cast(JIRA, jira_connector._jira_client)
-    search_issues_mock = cast(MagicMock, jira_client.search_issues)
+    search_issues_mock = mock_source_operations.search_issues
     search_issues_mock.side_effect = [
         [mock_issue1, mock_issue2],  # First batch
         [mock_issue3, mock_issue4],  # Second batch
@@ -253,21 +188,22 @@ def test_load_from_checkpoint_with_issue_processing_error(
     # Mock process_jira_issue to succeed for some issues and fail for others
     def mock_process_side_effect(
         jira_base_url: str,  # noqa: ARG001
-        issue: Issue,
+        issue: dict[str, Any],
         *args: Any,  # noqa: ARG001
         **kwargs: Any,  # noqa: ARG001
     ) -> Document | None:
-        if issue.key in ["TEST-1", "TEST-3"]:
+        key = issue["key"]
+        if key in ["TEST-1", "TEST-3"]:
             return Document(
-                id=f"https://jira.example.com/browse/{issue.key}",
+                id=f"https://jira.example.com/browse/{key}",
                 sections=[],
                 source=DocumentSource.JIRA,
-                semantic_identifier=f"{issue.key}: {issue.fields.summary}",
-                title=f"{issue.key} {issue.fields.summary}",
+                semantic_identifier=f"{key}: {issue['fields']['summary']}",
+                title=f"{key} {issue['fields']['summary']}",
                 metadata={},
             )
         else:
-            raise Exception(f"Processing error for {issue.key}")
+            raise Exception(f"Processing error for {key}")
 
     with patch("onyx.connectors.jira.connector.process_jira_issue") as mock_process:
         mock_process.side_effect = mock_process_side_effect
@@ -324,7 +260,9 @@ def test_load_from_checkpoint_with_issue_processing_error(
 
 
 def test_load_from_checkpoint_with_skipped_issue(
-    jira_connector: JiraConnector, create_mock_issue: Callable[..., MagicMock]
+    jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
+    create_mock_issue: RawIssueFactory,
 ) -> None:
     """Test loading from checkpoint with an issue that should be skipped due to labels"""
     LABEL_TO_SKIP = "secret"
@@ -336,8 +274,7 @@ def test_load_from_checkpoint_with_skipped_issue(
     )
 
     # Mock search_issues to return our mock issue
-    jira_client = cast(JIRA, jira_connector._jira_client)
-    search_issues_mock = cast(MagicMock, jira_client.search_issues)
+    search_issues_mock = mock_source_operations.search_issues
     search_issues_mock.return_value = [mock_issue]
 
     # Call load_from_checkpoint
@@ -351,7 +288,9 @@ def test_load_from_checkpoint_with_skipped_issue(
 
 
 def test_retrieve_all_slim_docs_perm_sync(
-    jira_connector: JiraConnector, create_mock_issue: Any
+    jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
+    create_mock_issue: RawIssueFactory,
 ) -> None:
     """Test retrieving all slim documents"""
     # Set up mocked issues with proper project fields
@@ -359,8 +298,7 @@ def test_retrieve_all_slim_docs_perm_sync(
     mock_issue2 = create_mock_issue(key="TEST-2", project_key="TEST")
 
     # Mock search_issues to return our mock issues
-    jira_client = cast(JIRA, jira_connector._jira_client)
-    search_issues_mock = cast(MagicMock, jira_client.search_issues)
+    search_issues_mock = mock_source_operations.search_issues
     search_issues_mock.return_value = [mock_issue1, mock_issue2]
 
     # Call retrieve_all_slim_docs_perm_sync
@@ -409,16 +347,15 @@ def test_retrieve_all_slim_docs_perm_sync(
 )
 def test_validate_connector_settings_errors(
     jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
     status_code: int,
     expected_exception: type[Exception],
     expected_message: str,
 ) -> None:
     """Test validation with various error scenarios"""
-    error = JIRAError(status_code=status_code)
+    error = JiraApiError("error", status_code=status_code, text=None)
 
-    jira_client = cast(JIRA, jira_connector._jira_client)
-    project_mock = cast(MagicMock, jira_client.project)
-    project_mock.side_effect = error
+    mock_source_operations.get_project.side_effect = error
 
     with pytest.raises(expected_exception) as excinfo:
         jira_connector.validate_connector_settings()
@@ -427,22 +364,24 @@ def test_validate_connector_settings_errors(
 
 def test_validate_connector_settings_with_project_success(
     jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
 ) -> None:
     """Test successful validation with project specified"""
-    jira_client = cast(JIRA, jira_connector._jira_client)
-    project_mock = cast(MagicMock, jira_client.project)
-    project_mock.return_value = MagicMock()
+    mock_source_operations.get_project.return_value = {"key": "TEST"}
     jira_connector.validate_connector_settings()
-    project_mock.assert_called_once_with(jira_connector.jira_project)
+    mock_source_operations.get_project.assert_called_once_with(
+        project_key=jira_connector.jira_project
+    )
 
 
 def test_validate_connector_settings_without_project_success(
     jira_base_url: str,
+    mock_source_operations: MagicMock,
 ) -> None:
     """Test successful validation without project specified"""
     connector = JiraConnector(jira_base_url=jira_base_url)
-    connector._jira_client = MagicMock()
-    connector._jira_client.projects.return_value = [MagicMock()]
+    connector._source_operations = mock_source_operations
+    mock_source_operations.list_projects.return_value = [{"key": "TEST"}]
 
     connector.validate_connector_settings()
-    connector._jira_client.projects.assert_called_once()
+    mock_source_operations.list_projects.assert_called_once()

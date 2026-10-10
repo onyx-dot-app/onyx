@@ -12479,6 +12479,10 @@
       },
       "noContent": {
         "label": "Sem conteúdo"
+      },
+      "csv": {
+        "truncated": "Prévia limitada a {rows, number} linhas, {columns, number} colunas e {cells, number} células. Baixe o original para todos os dados.",
+        "malformed": "Este CSV contém um campo entre aspas inválido. Baixe o original para verificá-lo."
       }
     },
     "filesTab": {
@@ -12507,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "Pré-visualização de {name}"
+      },
+      "background": {
+        "contrast": "Fundo de contraste"
       }
     },
     "inputBar": {
@@ -12699,6 +12706,9 @@
       },
       "slide": {
         "counter": "Slide {current} de {total}"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionar miniaturas dos slides"
       }
     },
     "previewTab": {

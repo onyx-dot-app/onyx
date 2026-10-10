@@ -15,6 +15,7 @@ from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import inspect
 
 from onyx.configs.constants import RETURN_SEPARATOR, DocumentSource
 from onyx.configs.model_configs import (
@@ -28,18 +29,23 @@ from onyx.connectors.models import (
     convert_metadata_dict_to_list_of_strings,
     convert_metadata_list_of_strings_to_dict,
 )
+from onyx.db.enums import VectorQuantization
 from onyx.db.models import SearchSettings
 from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_embedding,
 )
 from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
+from onyx.document_index.opensearch.schema import (
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+)
 from onyx.indexing.chunker import get_metadata_suffix_for_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 from onyx.indexing.port_reembed import (
     CONTEXTUAL_RAG_REEMBED_TRACE_NAME,
+    VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS,
     AugmentationReembedContext,
     ReembedStrategy,
     _bare_contents,
@@ -49,6 +55,7 @@ from onyx.indexing.port_reembed import (
     rebuild_semantic_tail,
     recover_embedding_input,
     select_reembed_strategy,
+    split_copyable_chunks,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tracing.framework.traces import TraceContentMode
@@ -131,8 +138,11 @@ class _ContentVecEmbedder:
 def _ss(
     enable_contextual_rag: bool = False,
     contextual_rag_model_configuration_id: int | None = None,
+    model_name: str = "model-a",
 ) -> SearchSettings:
-    return SearchSettings(
+    return _vector_ss(
+        VectorQuantization.NONE,
+        model_name=model_name,
         enable_contextual_rag=enable_contextual_rag,
         contextual_rag_model_configuration_id=contextual_rag_model_configuration_id,
     )
@@ -140,7 +150,10 @@ def _ss(
 
 def test_select_reembed_strategy() -> None:
     base = _ss()
-    assert select_reembed_strategy(base, _ss()) is ReembedStrategy.MODEL_ONLY
+    assert (
+        select_reembed_strategy(base, _ss(model_name="model-b"))
+        is ReembedStrategy.MODEL_ONLY
+    )
     assert (
         select_reembed_strategy(base, _ss(enable_contextual_rag=True))
         is ReembedStrategy.AUGMENTATION
@@ -153,11 +166,15 @@ def test_select_reembed_strategy() -> None:
         )
         is ReembedStrategy.AUGMENTATION
     )
-    # RAG on in both, same model -> only the embedder could differ -> MODEL_ONLY
+    # RAG on in both, same LLM, new embedder -> MODEL_ONLY
     assert (
         select_reembed_strategy(
             _ss(enable_contextual_rag=True, contextual_rag_model_configuration_id=1),
-            _ss(enable_contextual_rag=True, contextual_rag_model_configuration_id=1),
+            _ss(
+                enable_contextual_rag=True,
+                contextual_rag_model_configuration_id=1,
+                model_name="model-b",
+            ),
         )
         is ReembedStrategy.MODEL_ONLY
     )
@@ -166,9 +183,113 @@ def test_select_reembed_strategy() -> None:
     assert (
         select_reembed_strategy(
             _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=1),
-            _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=2),
+            _ss(
+                enable_contextual_rag=False,
+                contextual_rag_model_configuration_id=2,
+                model_name="model-b",
+            ),
         )
         is ReembedStrategy.MODEL_ONLY
+    )
+
+
+def _vector_ss(
+    vector_quantization: VectorQuantization,
+    model_name: str = "model-a",
+    enable_contextual_rag: bool = False,
+    contextual_rag_model_configuration_id: int | None = None,
+) -> SearchSettings:
+    return SearchSettings(
+        model_name=model_name,
+        model_dim=8,
+        normalize=True,
+        query_prefix=None,
+        passage_prefix=None,
+        provider_type=None,
+        reduced_dimension=None,
+        enable_contextual_rag=enable_contextual_rag,
+        contextual_rag_model_configuration_id=contextual_rag_model_configuration_id,
+        vector_quantization=vector_quantization,
+    )
+
+
+def test_select_reembed_strategy_copies_vectors_on_quantization_only_change() -> None:
+    none: VectorQuantization = VectorQuantization.NONE
+    one_bit: VectorQuantization = VectorQuantization.SCALAR_1_BIT
+    # Only quantization differs -> the stored vector is reused.
+    assert (
+        select_reembed_strategy(_vector_ss(none), _vector_ss(one_bit))
+        is ReembedStrategy.COPY_VECTORS
+    )
+    assert (
+        select_reembed_strategy(_vector_ss(one_bit), _vector_ss(none))
+        is ReembedStrategy.COPY_VECTORS
+    )
+    # Quantization plus a model change -> the vector changes -> re-embed.
+    assert (
+        select_reembed_strategy(
+            _vector_ss(none), _vector_ss(one_bit, model_name="model-b")
+        )
+        is ReembedStrategy.MODEL_ONLY
+    )
+    # Nothing changed (a re-index to apply a new mapping) -> the vector is reused.
+    assert (
+        select_reembed_strategy(_vector_ss(none), _vector_ss(none))
+        is ReembedStrategy.COPY_VECTORS
+    )
+    # Quantization plus a contextual-RAG change -> the text changes.
+    assert (
+        select_reembed_strategy(
+            _vector_ss(none), _vector_ss(one_bit, enable_contextual_rag=True)
+        )
+        is ReembedStrategy.AUGMENTATION
+    )
+
+
+_SEARCH_SETTINGS_COLUMNS: list[str] = sorted(
+    column.key for column in inspect(SearchSettings).column_attrs
+)
+
+
+def test_vector_neutral_columns_are_search_settings_columns() -> None:
+    """A renamed or removed column must not linger in the neutral list."""
+    assert VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS <= set(_SEARCH_SETTINGS_COLUMNS)
+
+
+@pytest.mark.parametrize("column", _SEARCH_SETTINGS_COLUMNS)
+def test_single_column_change_copies_only_if_vector_neutral(column: str) -> None:
+    """Changing one column copies vectors only when the column is listed as
+    vector-neutral; any other column, including one added later, re-embeds."""
+    present: SearchSettings = _vector_ss(VectorQuantization.NONE)
+    future: SearchSettings = _vector_ss(VectorQuantization.NONE)
+    setattr(future, column, object())
+    expected: ReembedStrategy
+    if column == "enable_contextual_rag":
+        expected = ReembedStrategy.AUGMENTATION
+    elif column in VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS:
+        expected = ReembedStrategy.COPY_VECTORS
+    else:
+        expected = ReembedStrategy.MODEL_ONLY
+    assert select_reembed_strategy(present, future) is expected
+
+
+def test_split_copyable_chunks_reembeds_only_stripped_context() -> None:
+    plain: DocumentChunk = DocumentChunk(
+        **dict(_stored_chunk("plain")), content_vector=[0.1]
+    )
+    with_context: DocumentChunk = DocumentChunk(
+        **dict(_stored_chunk("ctx", chunk_index=1, chunk_context=" more context")),
+        content_vector=[0.2],
+    )
+    # FUTURE keeps contextual RAG on -> nothing is stripped -> copy everything.
+    assert split_copyable_chunks([plain, with_context], False) == (
+        [plain, with_context],
+        [],
+    )
+    # FUTURE has it off -> a chunk still holding context must be re-embedded.
+    assert split_copyable_chunks([plain, with_context], True) == (
+        [plain],
+        [with_context],
     )
 
 

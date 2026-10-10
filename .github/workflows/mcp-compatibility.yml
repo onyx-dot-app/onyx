@@ -23,12 +23,21 @@ concurrency:
 jobs:
   routing:
     if: github.event_name != 'schedule' || github.event.schedule == '37 9 * * *'
-    runs-on: ubuntu-latest
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - spot=false
+      - "run-id=${{ github.run_id }}-mcp-routing"
     timeout-minutes: 10
     steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
       - uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
         with:
           version: "0.11.25"
@@ -36,11 +45,17 @@ jobs:
         with:
           version: v3.19.0
       - name: Check rendered ingress and real nginx routing
+        env:
+          MCP_PROXY_NGINX_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/library/nginx:1.25.5-alpine
         run: uv run --frozen --only-group dev pytest -q deployment/tests
 
   native-clients:
     if: github.event_name != 'schedule' || github.event.schedule == '37 9 * * *'
-    runs-on: ubuntu-latest
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-x64
+      - spot=false
+      - "run-id=${{ github.run_id }}-mcp-native-clients"
     timeout-minutes: 20
     env:
       PYTHONPATH: backend
@@ -55,28 +70,20 @@ jobs:
       CACHE_BACKEND: redis
       MCP_NATIVE_CLIENTS_REQUIRED: "true"
       DISABLE_TELEMETRY: "true"
-    services:
-      postgres:
-        image: postgres:15.2-alpine
-        env:
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s --health-timeout 5s --health-retries 20
-      redis:
-        image: redis:7.4-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+      - name: Start Postgres and Redis
+        working-directory: deployment/docker_compose
+        run: >-
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml
+          up -d --wait relational_db cache
       - uses: ./.github/actions/setup-python-and-install-dependencies
         with:
           requirements: |
@@ -98,6 +105,8 @@ jobs:
         working-directory: backend
         run: alembic upgrade head
       - name: Check real Claude Code and Codex OAuth connections
+        env:
+          MCP_PROXY_NGINX_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/library/nginx:1.25.5-alpine
         run: >-
           pytest -q
           backend/tests/external_dependency_unit/oauth_provider/test_native_clients.py
@@ -107,7 +116,12 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' && github.event.schedule == '17 9 * * 1')
-    runs-on: ubuntu-latest
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-x64
+      - spot=false
+      - volume=60gb
+      - "run-id=${{ github.run_id }}-mcp-compose-smoke"
     timeout-minutes: 30
     env:
       COMPOSE_FILE: deployment/docker_compose/docker-compose.mcp-ci.yml
@@ -115,9 +129,14 @@ jobs:
       ONYX_BACKEND_IMAGE: onyx-mcp-ci-backend:ci
       MCP_CANARY_PORT: "18080"
     steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
       - name: Build the backend under test
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
@@ -125,6 +144,7 @@ jobs:
           context: backend
           file: backend/Dockerfile
           target: runtime
+          build-args: BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           load: true
           tags: ${{ env.ONYX_BACKEND_IMAGE }}
           cache-from: type=gha,scope=mcp-compose-canary

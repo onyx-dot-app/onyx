@@ -160,6 +160,8 @@ class CredentialSnapshot(CredentialBase):
     id: int
     user_id: UUID | None
     user_email: str | None = None
+    # The creator's display name; None when they never set one.
+    user_personal_name: str | None = None
     time_created: datetime
     time_updated: datetime
 
@@ -201,6 +203,9 @@ class CredentialSnapshot(CredentialBase):
             credential_json=credential_json_value,
             user_id=credential.user_id,
             user_email=credential.user.email if credential.user else None,
+            user_personal_name=(
+                credential.user.personal_name if credential.user else None
+            ),
             admin_public=credential.admin_public,
             time_created=credential.time_created,
             time_updated=credential.time_updated,
@@ -820,6 +825,26 @@ def manage_access_by_group(
     return {entry.group_id: entry.role for entry in entries}
 
 
+NAMES_A_CREDENTIAL = "Give credential_id, credential_json or both."
+
+
+def names_a_credential(
+    credential_id: int | None, credential_json: dict[str, Any] | None
+) -> bool:
+    """A connector form's request names a saved credential or draft, a new
+    account's values, or both (see onyx/server/documents/draft_credentials.py)."""
+    return credential_id is not None or credential_json is not None
+
+
+class CredentialSharing(BaseModel):
+    """Who may reuse a new credential: ``CredentialBase``'s sharing fields."""
+
+    admin_public: bool = True
+    curator_public: bool = False
+    groups: list[int] = Field(default_factory=list)
+    name: str | None = None
+
+
 class ConnectorCredentialPairMetadata(BaseModel):
     name: str
     access_type: AccessType
@@ -844,6 +869,28 @@ class ConnectorCredentialPairMetadata(BaseModel):
         if self.manage_access:
             return manage_access_by_group(self.manage_access)
         return dict.fromkeys(self.groups, ConnectorManageRole.EDITOR)
+
+
+class ConnectorWithCredentialCreateRequest(BaseModel):
+    """Creates a connector and pairs it with a credential in one request: a
+    saved credential, or a new account that this request saves (see
+    onyx/server/documents/draft_credentials.py)."""
+
+    connector: ConnectorUpdateRequest
+    pairing: ConnectorCredentialPairMetadata
+    # A saved credential or the user's draft, a new account's values, or a
+    # draft with its changed values.
+    credential_id: int | None = None
+    credential_json: dict[str, Any] | None = None
+    # How a new account (a draft) is shared once saved. Rejected for a saved
+    # credential.
+    credential_sharing: CredentialSharing | None = None
+
+    @model_validator(mode="after")
+    def _names_a_credential(self) -> Self:
+        if not names_a_credential(self.credential_id, self.credential_json):
+            raise ValueError(NAMES_A_CREDENTIAL)
+        return self
 
 
 class CCStatusUpdateRequest(BaseModel):

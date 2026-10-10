@@ -22,6 +22,7 @@ script this document's provisioning section maps to code.
 
 ## 1. What the user experiences
 
+
 A user asks Craft to build a web app. As the agent writes code, a Preview tab
 in the session view shows the running app in an iframe, hot-reloading as the
 agent edits files. The user never runs a command to see this; the dev server

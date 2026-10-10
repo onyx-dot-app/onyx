@@ -638,3 +638,13 @@ export interface IndexingStatusRequest {
   source?: ValidSources;
   get_all_connectors?: boolean;
 }
+
+export interface SpreadsheetSheet {
+  name: string;
+  csv: string;
+  truncated: boolean;
+}
+
+export interface SpreadsheetPreviewData {
+  sheets: SpreadsheetSheet[];
+}

@@ -38,6 +38,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from sqlalchemy import inspect
+
 from onyx.configs.constants import RETURN_SEPARATOR, DocumentSource
 from onyx.connectors.models import (
     Document,
@@ -75,6 +77,10 @@ class ReembedStrategy(enum.Enum):
     MODEL_ONLY = "model_only"
     # The contextual-RAG enrichment changed; rebuild the text, then re-embed.
     AUGMENTATION = "augmentation"
+    # No setting that shapes the content vector changed (e.g. only the vector
+    # quantization did): the stored vector is what re-embedding would produce,
+    # so copy it.
+    COPY_VECTORS = "copy_vectors"
 
 
 @dataclass
@@ -97,7 +103,9 @@ def select_reembed_strategy(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> ReembedStrategy:
     """AUGMENTATION when the contextual-RAG *enrichment* differs (the embedded
-    text changes), otherwise MODEL_ONLY. A change in
+    text changes); COPY_VECTORS when the stored vector is still valid (e.g. only
+    the vector quantization differs, or a re-index applies a new mapping);
+    otherwise MODEL_ONLY. A change in
     `contextual_rag_model_configuration_id` only matters when contextual RAG is
     on in present or future — if it is off in both, no enrichment exists in
     either index, so a stale model-id difference must not force AUGMENTATION.
@@ -113,11 +121,69 @@ def select_reembed_strategy(
             != future_ss.contextual_rag_model_configuration_id
         )
     )
-    return (
-        ReembedStrategy.AUGMENTATION
-        if augmentation_changed
-        else ReembedStrategy.MODEL_ONLY
+    if augmentation_changed:
+        return ReembedStrategy.AUGMENTATION
+    if _stored_vectors_reusable(present_ss, future_ss):
+        return ReembedStrategy.COPY_VECTORS
+    return ReembedStrategy.MODEL_ONLY
+
+
+# SearchSettings columns that may differ without changing a stored content vector.
+# Every other column must match for COPY_VECTORS, so a newly added column forces a
+# re-embed until it is listed here. The contextual-RAG columns are listed because
+# select_reembed_strategy handles them before this check.
+VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS: frozenset[str] = frozenset(
+    {
+        "id",
+        "status",
+        "index_name",
+        "switchover_type",
+        "use_port_flow",
+        "port_backfill_source_id",
+        "reclaim_status",
+        "reclaim_stopped_reading_at",
+        "reclaim_attempts",
+        "reclaim_last_error",
+        "pending_cc_pair_deletions",
+        "vector_quantization",
+        "enable_contextual_rag",
+        "contextual_rag_model_configuration_id",
+    }
+)
+
+
+def _stored_vectors_reusable(
+    present_ss: SearchSettings, future_ss: SearchSettings
+) -> bool:
+    """True when every SearchSettings column outside
+    VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS is unchanged, so the PRESENT vector is
+    what re-embedding under FUTURE would produce."""
+    present_state = inspect(present_ss)
+    future_state = inspect(future_ss)
+    return all(
+        present_state.attrs[column.key].value == future_state.attrs[column.key].value
+        for column in inspect(SearchSettings).column_attrs
+        if column.key not in VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS
     )
+
+
+def split_copyable_chunks(
+    stored_chunks: list[DocumentChunk], strip_stored_context: bool
+) -> tuple[list[DocumentChunk], list[DocumentChunk]]:
+    """Splits COPY_VECTORS chunks into (copy as is, re-embed).
+
+    A chunk keeps its stored vector unless the FUTURE strips stored context
+    (contextual RAG off) and the chunk still holds some: then its vector encodes
+    text the FUTURE no longer has, so it must be re-embedded.
+    """
+    copy: list[DocumentChunk] = []
+    reembed: list[DocumentChunk] = []
+    for chunk in stored_chunks:
+        if strip_stored_context and (chunk.doc_summary or chunk.chunk_context):
+            reembed.append(chunk)
+        else:
+            copy.append(chunk)
+    return copy, reembed
 
 
 def rebuild_semantic_tail(chunk: DocumentChunkWithoutVectors) -> str:

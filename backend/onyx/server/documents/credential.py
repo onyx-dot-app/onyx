@@ -205,7 +205,7 @@ def swap_credentials_for_connector(
     )
 
 
-def _assert_credential_share_within_scope(
+def assert_credential_share_within_scope(
     credential_info: CredentialBase, user: User, db_session: Session
 ) -> None:
     """GATE 2 for both create paths — they build the same CredentialBase, so the gate
@@ -232,7 +232,7 @@ def create_credential_from_model(
     ),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    _assert_credential_share_within_scope(credential_info, user, db_session)
+    assert_credential_share_within_scope(credential_info, user, db_session)
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
@@ -297,7 +297,7 @@ def create_credential_with_private_key(
         name=name,
         source=DocumentSource(source),
     )
-    _assert_credential_share_within_scope(credential_info, user, db_session)
+    assert_credential_share_within_scope(credential_info, user, db_session)
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(

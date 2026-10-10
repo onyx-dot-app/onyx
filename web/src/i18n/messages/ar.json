@@ -12479,6 +12479,10 @@
       },
       "noContent": {
         "label": "لا يوجد محتوى"
+      },
+      "csv": {
+        "truncated": "المعاينة محدودة بـ {rows, number} صف و{columns, number} عمود و{cells, number} خلية. نزّل الملف الأصلي للحصول على جميع البيانات.",
+        "malformed": "يحتوي ملف CSV هذا على حقل غير صالح بين علامتي اقتباس. نزّل الملف الأصلي لفحصه."
       }
     },
     "filesTab": {
@@ -12507,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "معاينة {name}"
+      },
+      "background": {
+        "contrast": "خلفية متباينة"
       }
     },
     "inputBar": {
@@ -12699,6 +12706,9 @@
       },
       "slide": {
         "counter": "الشريحة {current} من {total}"
+      },
+      "resize": {
+        "ariaLabel": "تغيير حجم الصور المصغّرة للشرائح"
       }
     },
     "previewTab": {

@@ -12479,6 +12479,10 @@
       },
       "noContent": {
         "label": "コンテンツがありません"
+      },
+      "csv": {
+        "truncated": "プレビューは{rows, number}行、{columns, number}列、{cells, number}セルまでです。すべてのデータを見るには元のファイルをダウンロードしてください。",
+        "malformed": "このCSVには引用符で囲まれた無効なフィールドがあります。確認するには元のファイルをダウンロードしてください。"
       }
     },
     "filesTab": {
@@ -12507,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "{name} のプレビュー"
+      },
+      "background": {
+        "contrast": "コントラスト背景"
       }
     },
     "inputBar": {
@@ -12699,6 +12706,9 @@
       },
       "slide": {
         "counter": "スライド {current} / {total}"
+      },
+      "resize": {
+        "ariaLabel": "スライドのサムネイルの幅を変更"
       }
     },
     "previewTab": {

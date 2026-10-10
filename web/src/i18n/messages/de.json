@@ -12479,6 +12479,10 @@
       },
       "noContent": {
         "label": "Kein Inhalt"
+      },
+      "csv": {
+        "truncated": "Vorschau auf {rows, number} Zeilen, {columns, number} Spalten und {cells, number} Zellen begrenzt. Laden Sie das Original für alle Daten herunter.",
+        "malformed": "Diese CSV-Datei enthält ein ungültiges Feld in Anführungszeichen. Laden Sie das Original zur Prüfung herunter."
       }
     },
     "filesTab": {
@@ -12507,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "Vorschau von {name}"
+      },
+      "background": {
+        "contrast": "Kontrasthintergrund"
       }
     },
     "inputBar": {
@@ -12699,6 +12706,9 @@
       },
       "slide": {
         "counter": "Folie {current} von {total}"
+      },
+      "resize": {
+        "ariaLabel": "Folienminiaturen skalieren"
       }
     },
     "previewTab": {

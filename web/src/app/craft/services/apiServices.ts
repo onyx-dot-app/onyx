@@ -1,3 +1,4 @@
+import { downloadFile } from "@/lib/download";
 import { FetchError } from "@/lib/fetcher";
 import {
   ApiSessionResponse,
@@ -649,12 +650,9 @@ export function buildArtifactUrl(sessionId: string, path: string): string {
 }
 
 export function downloadArtifactFile(sessionId: string, path: string): void {
-  const link = document.createElement("a");
-  link.href = buildArtifactUrl(sessionId, path);
-  link.download = path.split("/").pop() || path;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadFile(path.split("/").pop() || path, {
+    url: buildArtifactUrl(sessionId, path),
+  });
 }
 
 /**
@@ -665,12 +663,9 @@ export function downloadDirectory(sessionId: string, path: string): void {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-  const link = document.createElement("a");
-  link.href = `${BUILD_API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`;
-  link.download = "";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadFile("", {
+    url: `${BUILD_API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`,
+  });
 }
 
 export interface FileContentResponse {

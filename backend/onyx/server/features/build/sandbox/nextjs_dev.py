@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR, BUN_IMAGE_CACHE_DIR
+from onyx.server.features.build.configs import BUN_CACHE_DIR, BUN_IMAGE_CACHE_DIR
 
 _TEMPLATE_NEXT_CONFIG = (
     Path(__file__).parent / "image" / "templates" / "outputs" / "web" / "next.config.ts"

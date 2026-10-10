@@ -1463,13 +1463,13 @@ class SessionManager:
             raise ValueError("Only .ppt and .pptx files are supported for preview")
 
         # Compute cache directory from path hash
-        path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
+        path_hash: str = hashlib.sha256(path.encode()).hexdigest()[:12]
         cache_dir = f"outputs/.pptx-preview/{path_hash}"
 
-        slide_paths, cached = self._sandbox_manager.generate_pptx_preview(
+        slide_paths, cached = self._sandbox_manager.generate_document_preview(
             sandbox_id=sandbox.id,
             session_id=session_id,
-            pptx_path=path,
+            document_path=path,
             cache_dir=cache_dir,
         )
 
@@ -1478,6 +1478,33 @@ class SessionManager:
             "slide_paths": slide_paths,
             "cached": cached,
         }
+
+    def get_output_thumbnail(
+        self, session_id: UUID, user_id: UUID, path: str
+    ) -> bytes | None:
+        """Render a cached first page using the sandbox document converter."""
+        resolved = self._resolve_owned_session_and_sandbox(session_id, user_id)
+        if resolved is None:
+            return None
+        _, sandbox = resolved
+        source: Path = Path(path)
+        if source.is_absolute() or ".." in source.parts:
+            raise ValueError("Path traversal is not allowed")
+        if source.suffix.lower() not in {".pdf", ".ppt", ".pptx"}:
+            raise ValueError("Only PDF and PowerPoint files support thumbnails")
+        path_hash: str = hashlib.sha256(path.encode()).hexdigest()[:12]
+        pages, _ = self._sandbox_manager.generate_document_preview(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+            document_path=path,
+            cache_dir=f"outputs/.document-thumbnails/{path_hash}",
+            first_page_only=True,
+        )
+        if not pages:
+            raise ValueError("Document produced no thumbnail")
+        return self._sandbox_manager.read_file(
+            sandbox_id=sandbox.id, session_id=session_id, path=pages[0]
+        )
 
     def get_webapp_info(
         self,

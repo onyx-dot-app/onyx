@@ -12479,6 +12479,10 @@
       },
       "noContent": {
         "label": "Sin contenido"
+      },
+      "csv": {
+        "truncated": "Vista previa limitada a {rows, number} filas, {columns, number} columnas y {cells, number} celdas. Descarga el original para ver todos los datos.",
+        "malformed": "Este CSV contiene un campo entre comillas no válido. Descarga el original para revisarlo."
       }
     },
     "filesTab": {
@@ -12507,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "Vista previa de {name}"
+      },
+      "background": {
+        "contrast": "Fondo de contraste"
       }
     },
     "inputBar": {
@@ -12699,6 +12706,9 @@
       },
       "slide": {
         "counter": "Diapositiva {current} de {total}"
+      },
+      "resize": {
+        "ariaLabel": "Cambiar el tamaño de las miniaturas"
       }
     },
     "previewTab": {

@@ -2,12 +2,11 @@ import json
 from collections.abc import Generator
 from typing import Any
 
-from jira import JIRA
-from jira.exceptions import JIRAError
-
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.utils import credential_json
-from onyx.connectors.jira.utils import build_jira_client
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
@@ -25,11 +24,8 @@ class _JiraGroupNotFoundError(RuntimeError):
     pass
 
 
-def _get_jira_error_text(error: JIRAError) -> str:
-    raw_text = getattr(error, "text", "")  # ods: ignore[getattr]
-    if not isinstance(raw_text, str):
-        return str(raw_text)
-
+def _get_jira_error_text(error: JiraApiError) -> str:
+    raw_text = error.text or ""
     try:
         payload = json.loads(raw_text)
     except json.JSONDecodeError:
@@ -47,38 +43,24 @@ def _get_jira_error_text(error: JIRAError) -> str:
     return raw_text
 
 
-def _is_group_not_found_error(error: JIRAError) -> bool:
+def _is_group_not_found_error(error: JiraApiError) -> bool:
     error_text = _get_jira_error_text(error).lower()
     return "the group named" in error_text and "does not exist" in error_text
 
 
 def _fetch_group_member_page(
-    jira_client: JIRA,
+    source_operations: JiraSourceOperations,
     group_name: str,
     start_at: int,
 ) -> dict[str, Any]:
-    """Fetch a single page from the non-deprecated GET /group/member endpoint.
-
-    The old GET /group endpoint (used by jira_client.group_members()) is deprecated
-    and decommissioned in Jira Server 10.3+. This uses the replacement endpoint
-    directly via the library's internal _get_json helper, following the same pattern
-    as enhanced_search_ids / bulk_fetch_issues in connector.py.
-
-    There is an open PR to the library to switch to this endpoint since last year:
-    https://github.com/pycontribs/jira/pull/2356
-    so once it is merged and released, we can switch to using the library function.
-    """
+    """Fetch a single page from the non-deprecated GET /group/member endpoint."""
     try:
-        return jira_client._get_json(
-            "group/member",
-            params={
-                "groupname": group_name,
-                "includeInactiveUsers": "false",
-                "startAt": start_at,
-                "maxResults": _GROUP_MEMBER_PAGE_SIZE,
-            },
+        return source_operations.get_group_members_page(
+            group_name=group_name,
+            start_at=start_at,
+            max_results=_GROUP_MEMBER_PAGE_SIZE,
         )
-    except JIRAError as e:
+    except JiraApiError as e:
         if e.status_code == 404:
             if _is_group_not_found_error(e):
                 raise _JiraGroupNotFoundError(
@@ -95,7 +77,7 @@ def _fetch_group_member_page(
 
 
 def _get_group_member_emails(
-    jira_client: JIRA,
+    source_operations: JiraSourceOperations,
     group_name: str,
 ) -> set[str]:
     """Get all member emails for a single Jira group.
@@ -109,7 +91,7 @@ def _get_group_member_emails(
 
     while True:
         try:
-            page = _fetch_group_member_page(jira_client, group_name, start_at)
+            page = _fetch_group_member_page(source_operations, group_name, start_at)
         except _JiraGroupNotFoundError:
             logger.warning(
                 "Jira returned group %s from groups() but /group/member says it no "
@@ -162,13 +144,17 @@ def jira_group_sync(
     if not jira_base_url:
         raise ValueError("No jira_base_url found in connector config")
 
-    jira_client = build_jira_client(
-        credentials=credential_json(cc_pair),
-        jira_base=jira_base_url,
-        scoped_token=scoped_token,
+    source_operations = JiraSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, DocumentSource.JIRA.value, credential_json(cc_pair)
+        ),
+        connector_specific_config={
+            "jira_base_url": jira_base_url,
+            "scoped_token": scoped_token,
+        },
     )
 
-    group_names = jira_client.groups()
+    group_names = source_operations.list_groups().group_names
     if not group_names:
         raise ValueError(f"No groups found for cc_pair_id={cc_pair.id}")
 
@@ -179,7 +165,7 @@ def jira_group_sync(
             continue
 
         member_emails = _get_group_member_emails(
-            jira_client=jira_client,
+            source_operations=source_operations,
             group_name=group_name,
         )
         if not member_emails:

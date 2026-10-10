@@ -45,6 +45,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     IndexingStatus,
     Permission,
     PermissionSyncStatus,
@@ -849,24 +850,12 @@ def get_cc_pair_indexing_errors(
     )
 
 
-@router.put(
-    "/connector/{connector_id}/credential/{credential_id}", tags=PUBLIC_API_TAGS
-)
-def associate_credential_to_connector(
-    connector_id: int,
-    credential_id: int,
-    metadata: ConnectorCredentialPairMetadata,
-    user: User = Depends(
-        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
-    ),
-    db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
-) -> StatusResponse[int]:
-    """NOTE(rkuo): internally discussed and the consensus is this endpoint
-    and create_connector_with_mock_credential should be combined.
-
-    The intent of this endpoint is to handle connectors that actually need credentials.
-    """
+def authorize_pairing(
+    metadata: ConnectorCredentialPairMetadata, user: User, db_session: Session
+) -> dict[int, ConnectorManageRole]:
+    """Runs the GATE 2 scope check for a new pair's manage groups, and returns
+    them. Shared by every path that pairs a connector with a credential. The
+    access-type rules are ``validate_pairing_access``."""
 
     # GATE 2 write authorization (see assert_within_scope).
     #
@@ -887,6 +876,29 @@ def associate_credential_to_connector(
             requested_group_ids=manage_access.keys(),
             is_non_public=metadata.access_type != AccessType.PUBLIC,
         )
+    return manage_access
+
+
+@router.put(
+    "/connector/{connector_id}/credential/{credential_id}", tags=PUBLIC_API_TAGS
+)
+def associate_credential_to_connector(
+    connector_id: int,
+    credential_id: int,
+    metadata: ConnectorCredentialPairMetadata,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> StatusResponse[int]:
+    """NOTE(rkuo): internally discussed and the consensus is this endpoint
+    and create_connector_with_mock_credential should be combined.
+
+    The intent of this endpoint is to handle connectors that actually need credentials.
+    """
+
+    manage_access = authorize_pairing(metadata, user, db_session)
 
     # GATE 2 on the connector: it carries no creator or groups, so its pairs are what
     # says who may edit it. Empty means nobody owns it yet (create-then-associate)

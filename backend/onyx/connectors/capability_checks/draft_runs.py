@@ -409,6 +409,13 @@ def is_superseded(run: StoredDraftRun) -> bool:
     return latest is None or latest.decode() != str(run.snapshot.run_id)
 
 
+def clear_latest_draft_run(run: StoredDraftRun) -> None:
+    """Drops the run's draft key's latest-run marker, so the run reads as
+    superseded. Hold ``draft_run_start_lock`` and check ``is_superseded``
+    first, or a newer run's marker goes too."""
+    get_cache_backend().delete(_latest_run_key(run.user_id, run.snapshot.draft_key))
+
+
 def read_draft_run_for_user(
     run_id: UUID, user_id: UUID
 ) -> DraftCheckRunSnapshot | None:

@@ -229,6 +229,17 @@ that creates `/workspace/sessions/$id/{outputs,attachments}`, symlinks `.opencod
 `user_library` to the sandbox-wide managed directories, writes `AGENTS.md` and
 `opencode.json`, and (if the session has a port) writes `start-webapp.sh`. It
 never scaffolds or starts the dev server itself (`[[craft-webapp-proxy]]` owns that).
+New session config directories copy the image's preinstalled OpenCode plugin SDK
+from `/workspace/templates/opencode`. Existing dependencies and package manifests
+remain intact. Older images without this template use OpenCode's install fallback.
+The image-owned script handles SDK copies
+(`backend/onyx/server/features/build/sandbox/image/seed-opencode-dependencies.sh`).
+Configuration regeneration also calls this script after snapshot restore.
+A session seed lock serializes copies. Dependencies publish by rename after copying.
+Kubernetes verifies a completion sentinel before reporting configuration regeneration success.
+SDK files stay outside snapshots, which contain outputs and attachments.
+Global configuration directories hardlink template dependencies to save image space.
+Their manifests and all session dependency copies remain independent.
 A completion sentinel (`ONYX_WORKSPACE_SETUP_COMPLETE`) is the only reliable
 success signal, because the K8s exec client returns buffered output without
 raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
@@ -521,7 +532,7 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    `SESSIONS_ROOT` is defined twice (`session_workspace.py:19` on the
    api-server side, `image/sandbox_daemon/snapshot.py:18` inside the image)
    because the daemon cannot import the api-server package at runtime
-   (`base.py:62-67`). A path change on one side without the other silently
+   (`backend/onyx/server/features/build/configs.py`). A path change on one side without the other silently
    breaks snapshot/restore or workspace setup.
 6. **Every sidecar-mutating request must be Ed25519-signed and fresh.**
    `_verify_signature` (`sandbox_daemon/server.py`) checks both the signature
@@ -718,3 +729,24 @@ set.
   it (rare, but the sidecar's SQLite backup step exists specifically to avoid
   copying a hot, inconsistent DB file) has no fallback prior version to
   restore from the way a session's outputs/attachments do.
+
+### Document thumbnail conversion
+
+Both providers use `SandboxManager.generate_document_preview` for PowerPoint slides
+and first-page PDF or PowerPoint thumbnails. They deploy the shared converter and
+LibreOffice helper as real files in a versioned bundle through the existing sandbox
+push API. This bundle is independent of enabled agent skills.
+
+The converter checks session workspace confinement. The 20 MiB thumbnail size
+check is advisory preflight. Concurrent edits can change input during rendering.
+A 30-second thumbnail deadline and 120-second full-slide deadline bound lock waiting
+and conversion time. The lock opens without blocking and must be a regular file.
+
+Finished JPEGs replace cached files atomically. Failed conversion retains the last
+complete image. Source revision checks reject changed input; cache metadata records
+the rendered revision. Missing, invalid, or non-regular metadata causes regeneration. Metadata opens do not block on special files or follow symlinks.
+Both providers validate conversion status and session-relative JPEG paths with one parser.
+
+Thumbnails live under `outputs/.document-thumbnails`, which inventory rules hide.
+Both providers exclude this root cache from snapshots. Nested user directories
+with the same name remain in snapshots.

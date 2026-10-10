@@ -79,6 +79,8 @@ frontend changes a new connector requires.
 | Method | Path | Notes |
 |---|---|---|
 | POST | `/admin/connector` | Create a `Connector` row (`create_connector_from_model`). |
+| POST | `/admin/connector-with-credential` | Create a connector and pair it with a saved credential or the user's draft (`create_connector_with_credential`). The request names the credential by `credential_id`, `credential_json` or both, as for draft runs. A draft is promoted to a saved credential with `credential_sharing`. A failure removes the connector and makes a promoted draft a draft again. The add-connector page uses it. |
+| POST | `/admin/draft-credential/binding-check` | Check a form's bound fields against a new account's `credential_json`, which is saved as (or updates) the user's draft first; the response returns the draft's `credential_id` (`server/documents/draft_credentials.py`). |
 | PATCH | `/admin/connector/{connector_id}` | Update config, schedule, etc. |
 | DELETE | `/admin/connector/{connector_id}` | |
 | POST | `/admin/connector/run-once` | On-demand index trigger. |
@@ -88,7 +90,7 @@ frontend changes a new connector requires.
 | GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | Google-specific OAuth flows in `connector.py`. |
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
 | POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). |
-| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`). |
+| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. |
 | POST | `/admin/connector-checks/plan` | The checks a draft run would hold for an unsaved form, each in its state before anything runs (pending, waiting, not applicable). Needs no credential and starts no run. |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
@@ -424,7 +426,7 @@ whose required permission depends on an argument) onto each public method;
 method on the subclass lacks the stamp, or if the subclass overrides
 `__init__`. Operations must return plain data, never live SDK objects, because
 lazily-evaluated SDK attribute access (PyGithub, office365) can fire network
-calls outside any wrapper. Only Slack, Confluence, OneDrive, and Outlook have a gateway today
+calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, and Jira have a gateway today
 (`<source>/source_operations.py`); most connectors still call their SDK directly.
 
 ### 4.8 Capabilities and capability checks
@@ -433,7 +435,7 @@ calls outside any wrapper. Only Slack, Confluence, OneDrive, and Outlook have a 
 `EXTERNAL_GROUP_SYNC`) is the vocabulary. `capability_checks/applicability.py`
 decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
-source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, and Outlook register real ones
+source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, and Jira register real ones
 today; every other source gets a synthesized fallback wrapping
 `validate_connector_settings`). A source with named checks must have a
 `SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
@@ -460,7 +462,9 @@ within the blocking budget blocks the pairing. Indexing and perm-sync attempts k
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
 on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
 retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
-reuse their result at creation when the form is unchanged. The plan endpoint
+reuse their result at creation when the form is unchanged. A newer run with the
+same draft key supersedes an older one, and the cancel endpoint does the same
+without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
 
@@ -668,8 +672,8 @@ lack of a key, ask instead. The shared helper
   not assume a checkpoint is small or simple when reasoning about serialization
   changes.
 - **`SourceOperations` is opt-in and mostly unused.** Only Slack, Confluence,
-  OneDrive, and Outlook have a gateway; most connectors still make source-API calls inline, so the
-  "one file that talks to the source" guarantee only holds for those four today.
+  OneDrive, Outlook, and Jira have a gateway; most connectors still make source-API calls inline, so the
+  "one file that talks to the source" guarantee only holds for those five today.
 - **`include_attachments` default differs by connector age.** New connectors
   default to `False`; connectors retrofitted with the flag default to `True`
   to preserve existing behavior for connector rows that predate the setting.

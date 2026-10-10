@@ -133,7 +133,8 @@ Connector id `0` is a permanent seeded row for the Ingestion API
 | `user_id` | UUID, nullable, FK `user.id` ON DELETE CASCADE | Owner. `None` for the seeded public credential and for admin-created shared credentials. |
 | `admin_public` | bool, default `True` | If true, any admin can use this credential regardless of owner. |
 | `curator_public` | bool, default `False` | If true, curators (see [[access-control]]) can use it within their scope. |
-| `time_created`, `time_updated` | | |
+| `is_draft` | bool, default `False` | A new account in a connector form, saved before its connector (`server/documents/draft_credentials.py`). Credential listings and lookups leave drafts out; only the owner's form reads its own. `POST /admin/connector-with-credential` promotes it, and `CLEANUP_STALE_DRAFT_CREDENTIALS` deletes drafts unchanged for 7 days. See [[connectors]]. |
+| `time_created`, `time_updated` | | A draft's `time_updated` names it in the draft check-result cache, so promotion keeps it. |
 
 ### `connector_credential_pair`
 
